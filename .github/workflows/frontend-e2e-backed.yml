@@ -1,0 +1,88 @@
+name: frontend-e2e-backed
+
+# Backend-backed end-to-end tests: drive the vidra-user UI against a REAL
+# vidra-core + PostgreSQL (the docker-compose `core` profile) to prove that
+# data-mutating flows actually persist. This is an ADDITIONAL integration check,
+# deliberately SEPARATE from the canonical `npm run ci` gate (which stays
+# mocked/fast in frontend-ci.yml).
+#
+# Since the split, vidra-core is a separate PUBLIC repo, so this checks it out into
+# ./.core (no token needed) and brings up its compose stack.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-backed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # vidra-user
+
+      - name: Check out vidra-core (public — no token needed)
+        uses: actions/checkout@v4
+        with:
+          repository: yegamble/vidra-core
+          path: .core
+
+      # Bring up postgres + redis + migrations + the api (port 8080 is free on
+      # the runner). The compose env defaults (vidra/vidra) need no .env file.
+      # RATE_LIMIT_ENABLED=false so the suite's many register/login calls from one
+      # runner IP are not throttled. DEV_MAIL_CAPTURE_ENABLED=true exposes the dev
+      # email-token endpoint for the reset/verify flows (test seam only).
+      - name: Start vidra-core stack
+        working-directory: .core
+        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true docker compose --profile core up -d --build
+
+      - name: Wait for the API to be healthy
+        working-directory: .core
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then
+              echo "api healthy after ${i} tries"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::vidra-core API did not become healthy in time"
+          docker compose --profile core logs --no-color | tail -200
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # NEXT_PUBLIC_* is baked at build time, so the app must be built pointing at
+      # the live backend for the un-mocked tests to actually call it.
+      - name: Build against the live backend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+        run: npm run build
+
+      - name: Run backend-backed e2e
+        run: npm run e2e:backed
+
+      - name: Tail backend logs on failure
+        if: failure()
+        working-directory: .core
+        run: docker compose --profile core logs --no-color | tail -200
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-backed-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

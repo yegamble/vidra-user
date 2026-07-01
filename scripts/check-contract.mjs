@@ -9,16 +9,43 @@
 // {videoId} both normalize to {}), so it is name-agnostic and not flaky. It does NOT
 // check HTTP methods or field shapes — that needs generated types (a later step).
 //
-// Run: node vidra-user/scripts/check-contract.mjs   (exit 1 on drift)
+// Since the monorepo split, vidra-core is a SEPARATE repo. The spec is resolved in
+// priority order:
+//   1. $OPENAPI_PATH        — explicit path (CI downloads the public spec to here)
+//   2. ../vidra-core/...     — sibling checkout (meta-repo `bootstrap.sh` layout)
+//   3. ../../vidra-core/...  — legacy in-monorepo layout
+//
+// Run: node scripts/check-contract.mjs            (exit 1 on drift)
+//   or OPENAPI_PATH=/path/to/openapi.yaml node scripts/check-contract.mjs
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(here, "..", "..");
-const OPENAPI = join(repoRoot, "vidra-core", "api", "openapi.yaml");
-const API_DIR = join(repoRoot, "vidra-user", "lib", "api");
+const userRoot = resolve(here, ".."); // vidra-user repo root
+
+function resolveOpenapi() {
+  if (process.env.OPENAPI_PATH) return resolve(process.env.OPENAPI_PATH);
+  const candidates = [
+    resolve(userRoot, "..", "vidra-core", "api", "openapi.yaml"),
+    resolve(userRoot, "..", "..", "vidra-core", "api", "openapi.yaml"),
+  ];
+  return candidates.find((c) => existsSync(c)) ?? candidates[0];
+}
+
+const OPENAPI = resolveOpenapi();
+const API_DIR = join(userRoot, "lib", "api");
+
+if (!existsSync(OPENAPI)) {
+  console.error(`contract: OpenAPI spec not found at ${OPENAPI}`);
+  console.error(
+    "Set OPENAPI_PATH, or check out vidra-core as a sibling directory " +
+      "(the meta-repo `bootstrap.sh` does this). CI downloads it from the public " +
+      "vidra-core repo.",
+  );
+  process.exit(2);
+}
 
 // Collapse path params and trailing noise so /api/v1/videos/{id} (backend) and
 // /api/v1/videos/${encodeURIComponent(id)} (frontend) compare equal.
@@ -75,9 +102,11 @@ for (const f of readdirSync(API_DIR)) {
 const missing = refs.filter((r) => !backend.has(r.norm));
 const referenced = new Set(refs.map((r) => r.norm));
 
-console.log(`contract: ${backend.size} backend paths, ${referenced.size} referenced by the frontend client`);
+console.log(
+  `contract: ${backend.size} backend paths (${OPENAPI}), ${referenced.size} referenced by the frontend client`,
+);
 if (missing.length) {
-  console.error("\n❌ Frontend calls paths that do NOT exist in vidra-core/api/openapi.yaml:");
+  console.error("\n❌ Frontend calls paths that do NOT exist in vidra-core's openapi.yaml:");
   for (const r of missing) console.error(`  ${r.raw}  (${r.file}:${r.line})  -> normalized ${r.norm}`);
   console.error("\nFix the frontend path, or update the backend OpenAPI spec to match.");
   process.exit(1);
