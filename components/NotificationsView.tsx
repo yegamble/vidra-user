@@ -22,6 +22,12 @@ function describe(n: Notification): { text: string; href: string } {
       href: n.video_id ? `/videos/${n.video_id}` : "#",
     };
   }
+  if (n.type === "message") {
+    return {
+      text: `${actor} sent you a message`,
+      href: n.conversation_id ? `/messages/${n.conversation_id}` : "#",
+    };
+  }
   // follow
   const channel = n.channel_display_name || n.channel_handle || "your channel";
   return {

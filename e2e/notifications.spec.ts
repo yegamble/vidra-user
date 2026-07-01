@@ -33,6 +33,17 @@ function commentNotif(id: string, read: boolean) {
   };
 }
 
+function messageNotif(id: string, read: boolean) {
+  return {
+    id,
+    type: "message",
+    read,
+    created_at: new Date().toISOString(),
+    actor: { username: "dave", display_name: "Dave" },
+    conversation_id: "c1",
+  };
+}
+
 const session = {
   token: "acc",
   refresh_token: "ref",
@@ -138,4 +149,22 @@ test("the notifications list shows an empty state", async ({ page }) => {
   );
   await page.getByRole("link", { name: /Notifications/ }).click();
   await expect(page.getByText("No notifications yet")).toBeVisible();
+});
+
+test("a message notification links to the conversation thread", async ({ page }) => {
+  await signIn(page, 1);
+  await page.route(LIST, (route) =>
+    route.fulfill({
+      json: {
+        notifications: [messageNotif("n1", false)],
+        unread_count: 1,
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.getByRole("link", { name: /Notifications/ }).click();
+  const link = page.getByRole("link", { name: "Dave sent you a message" });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("href", "/messages/c1");
 });

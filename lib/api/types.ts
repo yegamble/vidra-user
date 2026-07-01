@@ -554,7 +554,7 @@ export interface WatchHistoryResponse {
   offset: number;
 }
 
-export type NotificationType = "follow" | "comment";
+export type NotificationType = "follow" | "comment" | "message";
 
 /** Who triggered a notification. */
 export interface NotificationActor {
@@ -564,8 +564,8 @@ export interface NotificationActor {
 
 /**
  * A user notification. Context fields are type-dependent: follow carries the
- * channel, comment carries the video (+ comment id). Mirrors the backend
- * Notification schema.
+ * channel, comment carries the video (+ comment id), message carries the
+ * conversation. Mirrors the backend Notification schema.
  */
 export interface Notification {
   id: string;
@@ -580,6 +580,8 @@ export interface Notification {
   video_id?: string;
   video_title?: string;
   comment_id?: string;
+  // Message context.
+  conversation_id?: string;
 }
 
 export interface NotificationListResponse {

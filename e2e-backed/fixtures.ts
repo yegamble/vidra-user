@@ -327,6 +327,31 @@ export async function channelVideos(
 }
 
 /**
+ * sendDirectMessage starts (or reopens) the 1:1 conversation from sender → recipient
+ * and posts one message, via the API as the sender. Returns the conversation id.
+ * Used to seed a real message so the recipient's message-notification can be proven
+ * in the UI.
+ */
+export async function sendDirectMessage(
+  request: APIRequestContext,
+  senderToken: string,
+  recipientId: string,
+  body: string,
+): Promise<string> {
+  const auth = { Authorization: `Bearer ${senderToken}` };
+  const conv = await request.post(`${API_URL}/api/v1/conversations`, {
+    headers: auth,
+    data: { recipient_id: recipientId },
+  });
+  const conversationId = ((await conv.json()) as { id: string }).id;
+  await request.post(`${API_URL}/api/v1/conversations/${conversationId}/messages`, {
+    headers: auth,
+    data: { body },
+  });
+  return conversationId;
+}
+
+/**
  * conversationsFor reads a user's direct-message inbox via the API (as that
  * user's token), returning the other participant and last-message preview per
  * conversation — so a test can prove a message persisted for BOTH participants.

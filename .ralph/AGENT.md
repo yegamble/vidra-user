@@ -79,8 +79,13 @@ message); a 404 renders a "Conversation not found" state. The entry point is a
 `POST /conversations` start-or-get by `Comment.author_id` → routes to the thread).
 DB-effect VERIFIED in `e2e-backed/messaging.spec.ts` (message from a comment → thread →
 fresh inbox refetch → recipient's inbox read via the API carries the body; psql-confirmed
-`messages` row). Note: normal (plaintext) DM only — attachments/receipts/link-previews/
-per-message delete/E2EE are DEFERRED on absent backend contracts. Admin: the admin-only users
+`messages` row). Receiving a DM also raises a **notification**: `NotificationsView`
+renders `type=message` as "{actor} sent you a message" linking `/messages/{conversation_id}`
+(consuming vidra-core's message-notification contract) — DB-effect VERIFIED in
+`e2e-backed/notifications.spec.ts` (API-seeded DM → recipient logs in → unread bell badge →
+click the notification → real thread with the message body). Note: normal (plaintext) DM
+only — attachments/receipts/link-previews/per-message delete/E2EE are DEFERRED on absent
+backend contracts. Admin: the admin-only users
 page (`app/admin/users` → `components/AdminUsersView.tsx`, reached via the admin-only
 `AdminNavLink`) lists/searches accounts (`GET /admin/users?q=`) and edits each user's
 role + active flag (`PATCH /admin/users/:id`), disabling the admin's own row — DB-effect
