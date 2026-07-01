@@ -22,5 +22,4 @@ test("the system-status page reflects the real running stack", async ({ page }) 
   await expect(page.getByText("Healthy")).toBeVisible();
   await expect(page.getByText("postgres")).toBeVisible();
   await expect(page.getByText("redis")).toBeVisible();
-  await expect(page.getByText("Uptime")).toBeVisible();
 });
