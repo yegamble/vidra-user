@@ -16,6 +16,10 @@ import type {
   ChannelListResponse,
   Comment,
   CommentListResponse,
+  Conversation,
+  ConversationListResponse,
+  MessageListResponse,
+  Message,
   MutedAccountListResponse,
   CreateChannelRequest,
   UpdateChannelRequest,
@@ -215,6 +219,48 @@ export const api = {
     apiRequest<MutedAccountListResponse>("/api/v1/me/mutes/accounts", {
       query: { limit: params.limit, offset: params.offset },
       signal,
+    }),
+
+  /**
+   * POST /api/v1/conversations — start (or get) the 1:1 conversation with a
+   * recipient (auth). Idempotent: the same pair always maps to one conversation.
+   * Messaging yourself → 422; an unknown recipient → 404.
+   */
+  startConversation: (recipientId: string) =>
+    apiRequest<Conversation>("/api/v1/conversations", {
+      method: "POST",
+      body: { recipient_id: recipientId },
+    }),
+
+  /** GET /api/v1/me/conversations — the caller's inbox, most-recently-active first (auth). */
+  getConversations: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+    apiRequest<ConversationListResponse>("/api/v1/me/conversations", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * GET /api/v1/conversations/{id}/messages — a conversation's messages, newest
+   * first (auth). A non-participant (or unknown conversation) is 404.
+   */
+  getMessages: (
+    conversationId: string,
+    params: { limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<MessageListResponse>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
+      { query: { limit: params.limit, offset: params.offset }, signal },
+    ),
+
+  /**
+   * POST /api/v1/conversations/{id}/messages — post a message to a conversation
+   * (auth). A non-participant (or unknown conversation) is 404; body 1–5000 chars.
+   */
+  sendMessage: (conversationId: string, body: string) =>
+    apiRequest<Message>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
+      method: "POST",
+      body: { body },
     }),
 
   /** POST /api/v1/videos/{id}/report — file an abuse report on a video (auth; idempotent 204). */

@@ -363,16 +363,16 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 
 ## P8.1 Normal Messaging
 
-- [ ] Implement conversations list.
-- [ ] Implement conversation detail.
-- [ ] Implement message compose box.
-- [ ] Implement attachment upload UI.
-- [ ] Implement link preview display.
-- [ ] Implement read receipt display if in-scope.
-- [ ] Implement message deletion/reporting/blocking controls.
-- [ ] Implement empty/error/loading states.
-- [ ] Add Playwright messaging smoke test with mocked API.
-- [ ] Add backend-backed e2e proving a sent message persists to the database and appears in the thread after refetch.
+- [x] Implement conversations list. (`components/MessagesView.tsx` at `/messages`: signed-in inbox via `GET /api/v1/me/conversations`, one row per conversation showing the other participant (`other_display_name || other_username`) + last-message preview + relative time, each linking to `/messages/[id]`. Anon → sign-in prompt. **VERIFIED** end-to-end below.)
+- [x] Implement conversation detail. (`components/ConversationView.tsx` at `/messages/[id]`: loads `GET /api/v1/conversations/:id/messages` (newest-first from the API, rendered oldest→newest, mine right / theirs left), header shows the other participant derived from a message that isn't mine; a 404 (non-participant/unknown) renders a "Conversation not found" state. **VERIFIED** below.)
+- [x] Implement message compose box. (`Composer` in `ConversationView`: textarea (≤5000) + Send → `POST /api/v1/conversations/:id/messages`; the returned message is appended and the box clears; disabled-while-sending + blank guard + error message. Entry point: a **Message** button on each non-authored comment (`components/MessageButton.tsx`) → `POST /api/v1/conversations` (start-or-get) → routes to the thread. **VERIFIED** below.)
+- [ ] Implement attachment upload UI. (DEFERRED — no backend attachments contract; backend P11.1 attachments deferred.)
+- [ ] Implement link preview display. (DEFERRED — no backend link-preview contract.)
+- [ ] Implement read receipt display if in-scope. (DEFERRED — no backend read-receipt contract.)
+- [ ] Implement message deletion/reporting/blocking controls. (DEFERRED — no per-message delete/report contract; account report/mute already exist elsewhere. Blocking integration tracked in backend P11.1.)
+- [x] Implement empty/error/loading states. (Inbox + thread each have Spinner (loading) / ErrorState+retry (error) / EmptyState (no conversations / "No messages yet. Say hello."). Thread's not-found is a distinct non-retry state.)
+- [x] Add Playwright messaging smoke test with mocked API. (`e2e/messaging.spec.ts` — 5 tests: anon prompt, inbox lists a conversation, open thread + send appends, thread not-found (404). Threads reached via client-side nav to keep the in-memory session. API client unit tests cover `startConversation`/`getConversations`/`getMessages`/`sendMessage` — `lib/api/endpoints.test.ts`.)
+- [x] Add backend-backed e2e proving a sent message persists to the database and appears in the thread after refetch. (`e2e-backed/messaging.spec.ts` "a viewer can message a commenter and the message persists": seed a published video + a comment by a separate account → a fresh viewer signs up → from the comment clicks **Message** (awaited `POST /conversations`) → types + sends (awaited `POST .../messages`) → the message shows in the thread → a fresh **`/messages` inbox refetch** shows the conversation + preview → the **recipient's inbox is read via the API with the recipient's own token** and carries the body (cross-user DB persistence). Confirmed at the row level in Postgres (`conversations`=1, `conversation_participants`=2, `messages`=1 with the sent body). Runs in CI via `frontend-e2e-backed.yml` against a real vidra-core (backend P11.1). **VERIFIED.**)
 
 ## P8.2 Encrypted Messaging
 

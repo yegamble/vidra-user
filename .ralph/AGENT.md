@@ -69,7 +69,18 @@ restriction without adding `crossorigin` to the media element (the Range stream 
 untouched) — via the `videoCaptionUrl` helper. VERIFIED in
 `e2e-backed/captions-watch.spec.ts` (the cross-origin VTT fetch works under the
 backend CORS allowlist; that origin must be allowed — see the CORS caveat above).
-Admin: the admin-only users
+Direct messaging: the inbox (`app/messages` → `components/MessagesView.tsx`, header
+"Messages" link) lists the caller's conversations (`GET /me/conversations`) and each
+opens a thread (`app/messages/[id]` → `components/ConversationView.tsx`) that loads
+(`GET /conversations/:id/messages`, newest-first → shown oldest→newest, mine right/
+theirs left) and sends (`POST /conversations/:id/messages`, ≤5000, appends the returned
+message); a 404 renders a "Conversation not found" state. The entry point is a
+**Message** button on each non-authored comment (`components/MessageButton.tsx` →
+`POST /conversations` start-or-get by `Comment.author_id` → routes to the thread).
+DB-effect VERIFIED in `e2e-backed/messaging.spec.ts` (message from a comment → thread →
+fresh inbox refetch → recipient's inbox read via the API carries the body; psql-confirmed
+`messages` row). Note: normal (plaintext) DM only — attachments/receipts/link-previews/
+per-message delete/E2EE are DEFERRED on absent backend contracts. Admin: the admin-only users
 page (`app/admin/users` → `components/AdminUsersView.tsx`, reached via the admin-only
 `AdminNavLink`) lists/searches accounts (`GET /admin/users?q=`) and edits each user's
 role + active flag (`PATCH /admin/users/:id`), disabling the admin's own row — DB-effect

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { MessageButton } from "@/components/MessageButton";
 import { ReportButton } from "@/components/ReportButton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -220,6 +221,7 @@ function CommentItem({
             >
               {muting ? "Muting…" : "Mute"}
             </button>
+            <MessageButton recipientId={comment.author_id} />
             <ReportButton kind="account" targetId={comment.author_id} variant="link" />
             <ReportButton kind="comment" targetId={comment.id} variant="link" />
           </span>

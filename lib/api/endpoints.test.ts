@@ -339,6 +339,32 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/mutes/accounts?limit=100");
   });
 
+  it("startConversation POSTs the recipient id to the conversations endpoint", async () => {
+    await api.startConversation("u2");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/conversations");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ recipient_id: "u2" });
+  });
+
+  it("getConversations targets the inbox endpoint with pagination", async () => {
+    await api.getConversations({ limit: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/conversations?limit=20");
+  });
+
+  it("getMessages targets a conversation's messages with pagination", async () => {
+    await api.getMessages("c1", { limit: 50 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/conversations/c1/messages?limit=50");
+  });
+
+  it("sendMessage POSTs the body to a conversation's messages", async () => {
+    await api.sendMessage("c1", "hi");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/conversations/c1/messages");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ body: "hi" });
+  });
+
   it("getAdminVideos targets the admin videos overview with the q filter", async () => {
     await api.getAdminVideos({ q: "cat", limit: 100 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/videos?q=cat&limit=100");

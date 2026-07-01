@@ -33,6 +33,9 @@ export function Header() {
           <Link href="/history" className="hover:text-zinc-900 dark:hover:text-zinc-100">
             History
           </Link>
+          <Link href="/messages" className="hover:text-zinc-900 dark:hover:text-zinc-100">
+            Messages
+          </Link>
           <Link href="/studio" className="hover:text-zinc-900 dark:hover:text-zinc-100">
             Studio
           </Link>

@@ -326,6 +326,25 @@ export async function channelVideos(
   ).videos;
 }
 
+/**
+ * conversationsFor reads a user's direct-message inbox via the API (as that
+ * user's token), returning the other participant and last-message preview per
+ * conversation — so a test can prove a message persisted for BOTH participants.
+ */
+export async function conversationsFor(
+  request: APIRequestContext,
+  token: string,
+): Promise<Array<{ other_username: string; last_message_body: string }>> {
+  const res = await request.get(`${API_URL}/api/v1/me/conversations?limit=100`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (
+    (await res.json()) as {
+      conversations: Array<{ other_username: string; last_message_body: string }>;
+    }
+  ).conversations;
+}
+
 /** videoRating reads a video's persisted like/dislike counts via the public API. */
 export async function videoRating(
   request: APIRequestContext,

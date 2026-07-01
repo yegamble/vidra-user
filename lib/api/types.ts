@@ -476,6 +476,54 @@ export interface MutedAccountListResponse {
   offset: number;
 }
 
+/** A 1:1 conversation (normal, non-E2EE direct messaging). */
+export interface Conversation {
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * A conversation as shown in the inbox: the other participant plus a preview of
+ * the last message. Mirrors the backend ConversationSummary schema.
+ * `last_message_body` is "" when the conversation has no messages yet.
+ */
+export interface ConversationSummary {
+  id: string;
+  updated_at: string;
+  other_user_id: string;
+  other_username: string;
+  other_display_name: string;
+  last_message_body: string;
+  last_message_at: string;
+}
+
+export interface ConversationListResponse {
+  conversations: ConversationSummary[];
+  limit: number;
+  offset: number;
+}
+
+/**
+ * A single direct message. sender_username/sender_display_name are populated on
+ * list and on the send response (the authenticated sender).
+ */
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  sender_username?: string;
+  sender_display_name?: string;
+  body: string;
+  created_at: string;
+}
+
+export interface MessageListResponse {
+  messages: Message[];
+  limit: number;
+  offset: number;
+}
+
 export type RatingValue = "like" | "dislike";
 
 export interface VideoRating {
