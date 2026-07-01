@@ -398,6 +398,26 @@ export interface CreateWatchedWordRequest {
   word: string;
 }
 
+/**
+ * A comment flagged by the watched-words list (matched a term when posted).
+ * Mirrors the backend WatchedWordMatch schema.
+ */
+export interface WatchedWordMatch {
+  id: string;
+  word: string;
+  comment_id: string;
+  comment_body: string;
+  video_id: string;
+  author_username: string;
+  created_at: string;
+}
+
+export interface WatchedWordMatchListResponse {
+  matches: WatchedWordMatch[];
+  limit: number;
+  offset: number;
+}
+
 /** PATCH /api/v1/videos/{id} body; provide at least one field, omitted ones unchanged. */
 export interface UpdateVideoRequest {
   title?: string;

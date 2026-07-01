@@ -383,6 +383,11 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/watched-words?limit=100");
   });
 
+  it("getWatchedWordMatches targets the watched-word-matches endpoint", async () => {
+    await api.getWatchedWordMatches({ limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/watched-word-matches?limit=100");
+  });
+
   it("addWatchedWord POSTs the word", async () => {
     await api.addWatchedWord("spam");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

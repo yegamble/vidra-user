@@ -43,6 +43,7 @@ import type {
   VideoSearchResponse,
   WatchedWord,
   WatchedWordListResponse,
+  WatchedWordMatchListResponse,
   WatchHistoryResponse,
   WatchProgress,
 } from "./types";
@@ -448,6 +449,13 @@ export const api = {
   /** GET /api/v1/admin/watched-words — the watched-words list, newest first (moderator/admin). */
   getWatchedWords: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
     apiRequest<WatchedWordListResponse>("/api/v1/admin/watched-words", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /** GET /api/v1/admin/watched-word-matches — comments flagged by a watched term (mod/admin). */
+  getWatchedWordMatches: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+    apiRequest<WatchedWordMatchListResponse>("/api/v1/admin/watched-word-matches", {
       query: { limit: params.limit, offset: params.offset },
       signal,
     }),
