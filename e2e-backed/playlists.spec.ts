@@ -53,3 +53,46 @@ test("create a playlist, add a video from the watch page, then remove it", async
   await page.getByRole("link", { name: /My Mix/ }).click();
   await expect(page.getByText("This playlist is empty")).toBeVisible();
 });
+
+// Proves the playlist edit round trip: an owner renames a playlist and changes
+// its visibility, and the change survives a fresh refetch (a real backend GET),
+// confirming the PATCH persisted to PostgreSQL.
+test("an owner can edit a playlist's title and visibility, and it persists", async ({ page }) => {
+  const id = uniqueId();
+  await page.goto("/signup");
+  await page.getByLabel("Username").fill(`fan${id}`);
+  await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
+  await page.getByLabel("Password").fill("supersecret-e2e");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  // Create a playlist from the /playlists inline form.
+  await page.getByRole("link", { name: "Playlists" }).click();
+  await page.getByLabel("Playlist title").fill(`Mix ${id}`);
+  const created = page.waitForResponse(
+    (r) => /\/api\/v1\/playlists$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create" }).click();
+  await created;
+
+  await page.getByRole("link", { name: new RegExp(`Mix ${id}`) }).click();
+  await expect(page.getByRole("heading", { name: `Mix ${id}` })).toBeVisible();
+
+  // Edit: rename + make public.
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Playlist title").fill(`Renamed ${id}`);
+  await page.getByLabel("Playlist visibility").selectOption("public");
+  const patched = page.waitForResponse(
+    (r) => /\/api\/v1\/playlists\/[^/]+$/.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Save" }).click();
+  await patched;
+  await expect(page.getByRole("heading", { name: `Renamed ${id}` })).toBeVisible();
+
+  // Persisted: navigate away and back → a fresh backend detail fetch still shows
+  // the new title and visibility.
+  await page.getByRole("link", { name: "Playlists" }).click();
+  await page.getByRole("link", { name: new RegExp(`Renamed ${id}`) }).click();
+  await expect(page.getByRole("heading", { name: `Renamed ${id}` })).toBeVisible();
+  await expect(page.getByText(/· public/)).toBeVisible();
+});

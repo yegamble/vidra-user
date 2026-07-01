@@ -114,6 +114,40 @@ test("the playlist detail shows videos and the owner can remove one", async ({ p
   await expect(page.getByRole("heading", { name: "Clip" })).toBeHidden();
 });
 
+test("the owner can edit a playlist's title and visibility", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_PLAYLISTS, (route) =>
+    route.fulfill({ json: { playlists: [playlist("p1", "My Mix", 1)] } }),
+  );
+  // One handler serves GET (detail) and PATCH (update) on /playlists/p1; the
+  // mutable `current` lets the post-save refetch reflect the change.
+  let current = { ...playlist("p1", "My Mix", 1), videos: [video("v1", "Clip")] };
+  await page.route(DETAIL, (route) => {
+    if (route.request().method() === "PATCH") {
+      current = { ...current, ...route.request().postDataJSON() };
+      return route.fulfill({ json: current });
+    }
+    return route.fulfill({ json: current });
+  });
+
+  await page.getByRole("link", { name: "Playlists" }).click();
+  await page.getByRole("link", { name: /My Mix/ }).click();
+  await expect(page.getByRole("heading", { name: "My Mix" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Playlist title").fill("My Renamed Mix");
+  await page.getByLabel("Playlist visibility").selectOption("public");
+  const patched = page.waitForRequest(
+    (r) => /\/api\/v1\/playlists\/p1$/.test(r.url()) && r.method() === "PATCH",
+  );
+  await page.getByRole("button", { name: "Save" }).click();
+  const req = await patched;
+  expect(req.postDataJSON()).toMatchObject({ title: "My Renamed Mix", visibility: "public" });
+
+  await expect(page.getByRole("heading", { name: "My Renamed Mix" })).toBeVisible();
+  await expect(page.getByText(/· public/)).toBeVisible();
+});
+
 test("the owner can delete a playlist", async ({ page }) => {
   await signIn(page);
   await page.route(MY_PLAYLISTS, (route) =>
