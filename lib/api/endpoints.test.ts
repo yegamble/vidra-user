@@ -215,6 +215,14 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ reason: "abuse" });
   });
 
+  it("reportAccount POSTs the reason to the user report endpoint", async () => {
+    await api.reportAccount("u1", "impersonation");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/users/u1/report");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ reason: "impersonation" });
+  });
+
   it("updateVideo PATCHes the metadata to the video endpoint", async () => {
     await api.updateVideo("v1", { title: "New title", privacy: "unlisted" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

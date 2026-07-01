@@ -81,3 +81,38 @@ test("reporting a comment from the watch page persists to the moderation queue",
   expect(mine).toBeTruthy();
   expect(mine?.target_type).toBe("comment");
 });
+
+// Proves the account-report round trip: a viewer reports the comment author's
+// account ("Report user") from the watch page, and it appears in the queue as an
+// account report.
+test("reporting an account from a comment persists to the moderation queue", async ({
+  page,
+  request,
+}) => {
+  const { videoId, videoTitle, token: ownerToken } = await seedPublishedChannel(request);
+  const id = uniqueId();
+  const reason = `acct-report-${id}`;
+  const commentBody = `seeded comment ${id}`;
+  await seedComment(request, videoId, ownerToken, commentBody);
+
+  await signUpViewer(page, id);
+
+  await page.getByRole("heading", { name: videoTitle }).click();
+  await expect(page.getByText(commentBody)).toBeVisible();
+
+  await page.getByRole("button", { name: "Report this user" }).click();
+  const dialog = page.getByRole("dialog", { name: "Report this user" });
+  await dialog.getByLabel("Reason for report").fill(reason);
+  const reported = page.waitForResponse(
+    (r) => /\/users\/[^/]+\/report$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await dialog.getByRole("button", { name: "Submit report" }).click();
+  await reported;
+  await expect(page.getByText("your report has been sent to the moderators")).toBeVisible();
+
+  // Persisted: the account report shows up in the admin moderation queue.
+  const token = await adminToken(request);
+  const mine = (await reportsQueue(request, token)).find((r) => r.reason === reason);
+  expect(mine).toBeTruthy();
+  expect(mine?.target_type).toBe("account");
+});

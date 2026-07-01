@@ -49,6 +49,7 @@ function comment(id: string, body: string, username = "bob", display = "Bob Jone
     id,
     video_id: "v1",
     body,
+    author_id: `author-${id}`,
     author_username: username,
     author_display_name: display,
     created_at: new Date().toISOString(),
@@ -107,6 +108,28 @@ test("an authenticated viewer can report a video", async ({ page }) => {
   const dialog = page.getByRole("dialog", { name: "Report this video" });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel("Reason for report").fill("This is spam");
+  await dialog.getByRole("button", { name: "Submit report" }).click();
+
+  await expect(page.getByText("your report has been sent to the moderators")).toBeVisible();
+  expect(posted).toBe(true);
+});
+
+test("an authenticated viewer can report a comment author's account", async ({ page }) => {
+  await signIn(page);
+  await mockWatch(page, [comment("c1", "Rude behaviour")]);
+  let posted = false;
+  await page.route(/\/api\/v1\/users\/author-c1\/report$/, (route) => {
+    posted = true;
+    return route.fulfill({ status: 204 });
+  });
+
+  await page.getByRole("heading", { name: "Watch Me" }).click();
+  await expect(page.getByText("Rude behaviour")).toBeVisible();
+  await page.getByRole("button", { name: "Report this user" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Report this user" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("Reason for report").fill("Harassment across videos");
   await dialog.getByRole("button", { name: "Submit report" }).click();
 
   await expect(page.getByText("your report has been sent to the moderators")).toBeVisible();

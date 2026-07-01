@@ -298,7 +298,8 @@ function ReportRow({
 }
 
 // ReportTarget shows the reported content: a link to the video for video reports,
-// or the quoted comment body for comment reports.
+// the quoted comment body for comment reports, or the reported account for
+// account reports.
 function ReportTarget({ report }: { report: Report }) {
   if (report.target_type === "video" && report.video_id) {
     return (
@@ -317,6 +318,16 @@ function ReportTarget({ report }: { report: Report }) {
       <blockquote className="mt-2 border-l-2 border-zinc-300 pl-3 text-sm text-zinc-700 italic dark:border-zinc-700 dark:text-zinc-300">
         {report.comment_body || "(comment unavailable)"}
       </blockquote>
+    );
+  }
+  if (report.target_type === "account") {
+    return (
+      <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
+        Reported account:{" "}
+        <span className="font-medium text-zinc-900 dark:text-zinc-100">
+          {report.reported_username || "(account unavailable)"}
+        </span>
+      </p>
     );
   }
   return null;

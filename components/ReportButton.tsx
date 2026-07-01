@@ -8,12 +8,17 @@ import { ApiError, api } from "@/lib/api";
 
 const MAX_REASON_LEN = 2000;
 
-export type ReportKind = "video" | "comment";
+export type ReportKind = "video" | "comment" | "account";
 
-// ReportButton lets an authenticated viewer file an abuse report against a video
-// or a comment. Anonymous viewers get a sign-in link instead. Clicking opens an
-// accessible modal with a required reason; on success it confirms and the backend
-// treats repeat reports idempotently.
+// reportNoun is the human word for a report kind ("account" reads as "user").
+function reportNoun(kind: ReportKind): string {
+  return kind === "account" ? "user" : kind;
+}
+
+// ReportButton lets an authenticated viewer file an abuse report against a video,
+// a comment, or an account. Anonymous viewers get a sign-in link instead.
+// Clicking opens an accessible modal with a required reason; on success it
+// confirms and the backend treats repeat reports idempotently.
 export function ReportButton({
   kind,
   targetId,
@@ -45,7 +50,7 @@ export function ReportButton({
     <>
       <button
         type="button"
-        aria-label={`Report this ${kind}`}
+        aria-label={`Report this ${reportNoun(kind)}`}
         onClick={() => setOpen(true)}
         className={
           variant === "pill"
@@ -54,7 +59,7 @@ export function ReportButton({
         }
       >
         {variant === "pill" ? <span aria-hidden>⚑</span> : null}
-        <span>Report</span>
+        <span>{kind === "account" ? "Report user" : "Report"}</span>
       </button>
       {open ? (
         <ReportDialog kind={kind} targetId={targetId} onClose={() => setOpen(false)} />
@@ -97,8 +102,10 @@ function ReportDialog({
     try {
       if (kind === "video") {
         await api.reportVideo(targetId, trimmed);
-      } else {
+      } else if (kind === "comment") {
         await api.reportComment(targetId, trimmed);
+      } else {
+        await api.reportAccount(targetId, trimmed);
       }
       setState("done");
     } catch (err) {
@@ -111,7 +118,7 @@ function ReportDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Report this ${kind}`}
+      aria-label={`Report this ${reportNoun(kind)}`}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -119,7 +126,7 @@ function ReportDialog({
     >
       <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
         <h2 className="text-base font-semibold tracking-tight">
-          Report this {kind}
+          Report this {reportNoun(kind)}
         </h2>
 
         {state === "done" ? (

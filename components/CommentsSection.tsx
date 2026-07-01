@@ -220,6 +220,7 @@ function CommentItem({
             >
               {muting ? "Muting…" : "Mute"}
             </button>
+            <ReportButton kind="account" targetId={comment.author_id} variant="link" />
             <ReportButton kind="comment" targetId={comment.id} variant="link" />
           </span>
         ) : null}

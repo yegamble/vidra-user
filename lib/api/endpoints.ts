@@ -228,6 +228,13 @@ export const api = {
       body: { reason },
     }),
 
+  /** POST /api/v1/users/{id}/report — file an abuse report on an account (auth; self 422, unknown 404, idempotent 204). */
+  reportAccount: (id: string, reason: string) =>
+    apiRequest<void>(`/api/v1/users/${encodeURIComponent(id)}/report`, {
+      method: "POST",
+      body: { reason },
+    }),
+
   /** GET /api/v1/videos/{id}/rating — like/dislike counts (+ my_rating if authed). */
   getVideoRating: (id: string, signal?: AbortSignal) =>
     apiRequest<VideoRating>(`/api/v1/videos/${encodeURIComponent(id)}/rating`, { signal }),

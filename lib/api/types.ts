@@ -210,12 +210,12 @@ export interface CreateVideoRequest {
   license?: string;
 }
 
-/** POST /api/v1/videos/{id}/report and /api/v1/comments/{id}/report body. */
+/** POST /api/v1/videos|comments/{id}/report and /api/v1/users/{id}/report body. */
 export interface CreateReportRequest {
   reason: string;
 }
 
-export type ReportTargetType = "video" | "comment";
+export type ReportTargetType = "video" | "comment" | "account";
 export type ReportStatus = "open" | "accepted" | "rejected";
 
 /** Who filed a report (admin moderation queue view). */
@@ -226,7 +226,8 @@ export interface ReportReporter {
 /**
  * An abuse report as seen by a moderator/admin in the queue. Target context is
  * type-dependent: a video report carries video_id/video_title, a comment report
- * carries comment_id/comment_body. Mirrors the backend Report schema.
+ * carries comment_id/comment_body, an account report carries
+ * reported_user_id/reported_username. Mirrors the backend Report schema.
  */
 export interface Report {
   id: string;
@@ -244,6 +245,9 @@ export interface Report {
   // Comment-report context.
   comment_id?: string;
   comment_body?: string;
+  // Account-report context.
+  reported_user_id?: string;
+  reported_username?: string;
 }
 
 export interface ReportListResponse {
