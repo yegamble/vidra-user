@@ -8,6 +8,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 const TABS = [
   { href: "/admin/users", label: "Users" },
   { href: "/admin/audit-log", label: "Audit log" },
+  { href: "/admin/system", label: "System" },
 ];
 
 // AdminTabs is the sub-navigation shared by the admin surfaces. It self-hides for

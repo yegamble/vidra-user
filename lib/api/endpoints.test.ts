@@ -287,6 +287,11 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/audit-log");
   });
 
+  it("getSystemStatus targets the admin system endpoint", async () => {
+    await api.getSystemStatus();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/system");
+  });
+
   it("updateAdminUser PATCHes the role / active flag", async () => {
     await api.updateAdminUser("u1", { role: "moderator", is_active: false });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

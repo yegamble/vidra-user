@@ -6,6 +6,7 @@ import type {
   AdminUser,
   AdminUserListResponse,
   AuditLogListResponse,
+  SystemStatus,
   AdminVideoListResponse,
   BlockedVideoListResponse,
   BlockVideoRequest,
@@ -400,6 +401,10 @@ export const api = {
       query: { action: params.action, limit: params.limit, offset: params.offset },
       signal,
     }),
+
+  /** GET /api/v1/admin/system — operational status snapshot (admin). */
+  getSystemStatus: (signal?: AbortSignal) =>
+    apiRequest<SystemStatus>("/api/v1/admin/system", { signal }),
 
   /**
    * GET /api/v1/admin/videos/blocked — currently-blocked videos, newest block

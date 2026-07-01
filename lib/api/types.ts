@@ -136,6 +136,30 @@ export interface AuditLogListResponse {
   offset: number;
 }
 
+/** Health of a single backend dependency in the system-status snapshot. */
+export interface SystemStatusComponent {
+  status: string; // ok | down | not_configured
+  error?: string;
+}
+
+/**
+ * Operational snapshot from GET /api/v1/admin/system. Mirrors the backend
+ * SystemStatus schema; operational metadata only (no secrets/PII).
+ */
+export interface SystemStatus {
+  status: "ok" | "degraded";
+  software: {
+    name: string;
+    version: string;
+    commit: string;
+    build_date: string;
+    go_version: string;
+  };
+  environment: string;
+  uptime_seconds: number;
+  components: Record<string, SystemStatusComponent>;
+}
+
 /** PATCH /api/v1/admin/users/{id} body — partial; provide at least one field. */
 export interface UpdateUserRequest {
   role?: UserRole;
