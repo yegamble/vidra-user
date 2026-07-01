@@ -277,6 +277,16 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/users");
   });
 
+  it("getAuditLog targets the audit-log endpoint with the action filter", async () => {
+    await api.getAuditLog({ action: "auth.login", limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/audit-log?action=auth.login&limit=100");
+  });
+
+  it("getAuditLog omits the action filter when not provided", async () => {
+    await api.getAuditLog();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/audit-log");
+  });
+
   it("updateAdminUser PATCHes the role / active flag", async () => {
     await api.updateAdminUser("u1", { role: "moderator", is_active: false });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

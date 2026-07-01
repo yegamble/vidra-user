@@ -5,6 +5,7 @@ import type {
   AdminCommentListResponse,
   AdminUser,
   AdminUserListResponse,
+  AuditLogListResponse,
   AdminVideoListResponse,
   BlockedVideoListResponse,
   BlockVideoRequest,
@@ -388,6 +389,16 @@ export const api = {
     apiRequest<AdminUser>(`/api/v1/admin/users/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body,
+    }),
+
+  /** GET /api/v1/admin/audit-log — the security audit trail, newest first (admin). */
+  getAuditLog: (
+    params: { action?: string; limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<AuditLogListResponse>("/api/v1/admin/audit-log", {
+      query: { action: params.action, limit: params.limit, offset: params.offset },
+      signal,
     }),
 
   /**

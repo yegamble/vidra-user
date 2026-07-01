@@ -114,6 +114,28 @@ export interface AdminUserListResponse {
   offset: number;
 }
 
+/**
+ * A durable security-audit entry (auth/moderation/admin/registration action).
+ * Mirrors the backend AuditLogEntry; never carries secrets/PII. actor_id /
+ * actor_username are absent for unauthenticated events or deleted accounts.
+ */
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  result: "success" | "failure";
+  actor_id?: string;
+  actor_username?: string;
+  reason?: string;
+  request_id?: string;
+  occurred_at: string;
+}
+
+export interface AuditLogListResponse {
+  entries: AuditLogEntry[];
+  limit: number;
+  offset: number;
+}
+
 /** PATCH /api/v1/admin/users/{id} body — partial; provide at least one field. */
 export interface UpdateUserRequest {
   role?: UserRole;
