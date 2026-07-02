@@ -90,7 +90,19 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold">Live streams</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Live streams</h2>
+        <button
+          type="button"
+          onClick={() => {
+            setStatus("loading");
+            setReloadKey((k) => k + 1);
+          }}
+          className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        >
+          Reload
+        </button>
+      </div>
 
       <form
         onSubmit={(e) => void create(e)}

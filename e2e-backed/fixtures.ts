@@ -39,6 +39,26 @@ export async function ensureAdmin(request: APIRequestContext): Promise<void> {
   });
 }
 
+// LIVE_INGEST_SECRET is the shared secret the backed backend is started with
+// (frontend-e2e-backed.yml / local run) so a test can drive the media-server-facing
+// live ingest hooks. Test-only value, not a real secret.
+export const LIVE_INGEST_SECRET = "e2e-ingest-secret";
+
+// liveIngest calls the media-server-facing live ingest hook (start|stop) with the
+// ingest secret + a publisher's stream key. Returns the HTTP status.
+export async function liveIngest(
+  request: APIRequestContext,
+  action: "start" | "stop",
+  streamKey: string,
+  secret = LIVE_INGEST_SECRET,
+): Promise<number> {
+  const res = await request.post(`${API_URL}/api/v1/live/ingest/${action}`, {
+    headers: { "X-Ingest-Secret": secret },
+    data: { stream_key: streamKey },
+  });
+  return res.status();
+}
+
 /** loginToken logs in with the given credentials and returns the access token. */
 export async function loginToken(
   request: APIRequestContext,

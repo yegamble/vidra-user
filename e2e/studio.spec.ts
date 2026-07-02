@@ -451,6 +451,40 @@ test("a creator can create a live stream and manage its key", async ({ page }) =
   await expect(page.getByRole("listitem").filter({ hasText: "My Show" })).toHaveCount(0);
 });
 
+test("the live streams list reloads state", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  const base = {
+    id: "ls1",
+    channel_id: "c1",
+    title: "My Show",
+    description: "",
+    privacy: "public",
+    permanent: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  let calls = 0;
+  await page.route(CHANNEL_LIVE, (route) => {
+    calls += 1;
+    return route.fulfill({
+      json: { live_streams: [{ ...base, state: calls === 1 ? "offline" : "live" }] },
+    });
+  });
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: "My Show" });
+  await expect(row.getByText("offline")).toBeVisible();
+  // Reload re-reads the state → the badge flips to live.
+  await page.getByRole("button", { name: "Reload" }).click();
+  await expect(row.getByText("live", { exact: true })).toBeVisible();
+});
+
 test("a creator can delete a video", async ({ page }) => {
   await signIn(page);
   await page.route(MY_CHANNELS, (route) =>

@@ -191,11 +191,15 @@ a live backend. It is **never** part of `npm run ci` (which stays mocked and fas
 
 ```bash
 # 1. Start the real backend + database (from ../vidra-core), detached. Disable
-#    rate limiting so the suite's many register/login calls aren't throttled, and
+#    rate limiting so the suite's many register/login calls aren't throttled;
 #    enable the dev mail-capture seam so the email-token confirm specs
-#    (password-reset-confirm, email-verify) can read the token they need:
-( cd ../vidra-core && RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true docker compose --profile core up -d --build )  # pg+redis+migrate+api → :8080
-#    If host :8080 is taken, map another host port: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_PORT=8088 docker compose --profile core up -d
+#    (password-reset-confirm, email-verify) can read the token they need; relax the
+#    URL-import SSRF guard so the studio import spec can import the backend's own
+#    /original; and set LIVE_INGEST_SECRET so the live-status spec can flip a stream
+#    live via the media-server ingest hook (must match e2e-backed/fixtures.ts:
+#    LIVE_INGEST_SECRET = "e2e-ingest-secret"):
+( cd ../vidra-core && RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret docker compose --profile core up -d --build )  # pg+redis+migrate+api → :8080
+#    If host :8080 is taken, map another host port: add HTTP_PORT=8088 to the line above.
 #    (stale PG-version volume? `docker compose --profile core down -v` to reset the dev data.)
 # 2. Build the frontend pointed at it — NEXT_PUBLIC_* is baked at BUILD time, so a
 #    plain `npm run dev`/`start` will NOT pick up a new API URL; you must rebuild:

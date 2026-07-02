@@ -4,6 +4,7 @@ import {
   API_URL,
   TINY_MP4_BASE64,
   channelVideos,
+  liveIngest,
   liveStreams,
   loginToken,
   seedPublishedChannel,
@@ -312,4 +313,53 @@ test("a creator can create, rekey, and delete a live stream", async ({ page, req
   await deleted;
   const afterDelete = await liveStreams(request, handle, token);
   expect(afterDelete.map((s) => s.title)).not.toContain(streamTitle);
+});
+
+// Proves the live-status round trip against a real vidra-core + PostgreSQL: a
+// creator makes a live stream, the RTMP ingest boundary flips it live by its key
+// (via the ingest hook), and the studio's Reload shows the "live" badge; stopping
+// the ingest returns it to "ended". Requires LIVE_INGEST_SECRET on the backend
+// (set in frontend-e2e-backed.yml).
+test("a live stream shows LIVE after the ingest hook flips it", async ({ page, request }) => {
+  const id = uniqueId();
+  const handle = `ch${id}`;
+  const streamTitle = `Live status ${id}`;
+
+  await page.goto("/signup");
+  await page.getByLabel("Username").fill(`fan${id}`);
+  await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
+  await page.getByLabel("Password").fill("supersecret-e2e");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByLabel("Channel handle").fill(handle);
+  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
+  const channelCreated = page.waitForResponse(
+    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create channel" }).click();
+  await channelCreated;
+
+  await page.getByLabel("Live stream title").fill(streamTitle);
+  const created = page.waitForResponse(
+    (r) => /\/channels\/[^/]+\/live$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create live stream" }).click();
+  await created;
+  const key = await page.getByLabel("Stream key").inputValue();
+  expect(key).not.toEqual("");
+
+  const row = page.getByRole("listitem").filter({ hasText: streamTitle });
+  await expect(row.getByText("offline", { exact: true })).toBeVisible();
+
+  // The RTMP ingest boundary authenticates the key and flips the stream live.
+  expect(await liveIngest(request, "start", key)).toBe(200);
+  await page.getByRole("button", { name: "Reload" }).click();
+  await expect(row.getByText("live", { exact: true })).toBeVisible();
+
+  // Stopping the ingest ends the (one-shot) stream.
+  expect(await liveIngest(request, "stop", key)).toBe(204);
+  await page.getByRole("button", { name: "Reload" }).click();
+  await expect(row.getByText("ended", { exact: true })).toBeVisible();
 });
