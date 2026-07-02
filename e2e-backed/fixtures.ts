@@ -333,9 +333,11 @@ export async function channelDetail(
 export async function videoComments(
   request: APIRequestContext,
   videoId: string,
-): Promise<Array<{ body: string; author_username: string }>> {
+): Promise<Array<{ body: string; author_username: string; edited: boolean }>> {
   const res = await request.get(`${API_URL}/api/v1/videos/${videoId}/comments`);
-  return ((await res.json()) as { comments: Array<{ body: string; author_username: string }> }).comments;
+  return (
+    (await res.json()) as { comments: Array<{ body: string; author_username: string; edited: boolean }> }
+  ).comments;
 }
 
 /** videoDetail reads a video's public detail (title/description/taxonomy) via the API. */

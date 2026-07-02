@@ -71,6 +71,9 @@ export function CommentsSection({ videoId }: { videoId: string }) {
               key={c.id}
               comment={c}
               onDeleted={() => setComments((prev) => prev.filter((x) => x.id !== c.id))}
+              onEdited={(updated) =>
+                setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+              }
               onMutedAuthor={(authorId) =>
                 setComments((prev) => prev.filter((x) => x.author_id !== authorId))
               }
@@ -156,15 +159,17 @@ function CommentForm({
   );
 }
 
-// CommentItem renders one comment. Its author gets a Delete control; any other
-// signed-in viewer gets Mute (hide this account's comments) + Report.
+// CommentItem renders one comment. Its author gets Edit + Delete controls; any
+// other signed-in viewer gets Mute (hide this account's comments) + Report.
 function CommentItem({
   comment,
   onDeleted,
+  onEdited,
   onMutedAuthor,
 }: {
   comment: Comment;
   onDeleted: () => void;
+  onEdited: (updated: Comment) => void;
   onMutedAuthor: (authorId: string) => void;
 }) {
   const { user, status } = useSession();
@@ -172,8 +177,34 @@ function CommentItem({
   const [muting, setMuting] = useState(false);
   const [blocking, setBlocking] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(comment.body);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const isAuthor = user?.username === comment.author_username;
   const when = relativeTime(comment.created_at);
+
+  function startEdit() {
+    setDraft(comment.body);
+    setEditError(null);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    const trimmed = draft.trim();
+    if (trimmed === "" || saving) return;
+    setSaving(true);
+    setEditError(null);
+    try {
+      const updated = await api.editComment(comment.id, trimmed);
+      onEdited(updated);
+      setEditing(false);
+    } catch (err: unknown) {
+      setEditError(err instanceof ApiError ? err.message : "Could not save your edit.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function remove() {
     setBusy(true);
@@ -216,15 +247,29 @@ function CommentItem({
           {comment.author_display_name || comment.author_username}
         </span>
         {when ? <span className="text-zinc-500 dark:text-zinc-400">{when}</span> : null}
+        {comment.edited ? (
+          <span className="text-xs text-zinc-400 dark:text-zinc-500">(edited)</span>
+        ) : null}
         {isAuthor ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void remove()}
-            className="ml-auto text-xs font-medium text-zinc-500 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-red-400"
-          >
-            Delete
-          </button>
+          <span className="ml-auto flex items-center gap-3">
+            {!editing ? (
+              <button
+                type="button"
+                onClick={startEdit}
+                className="text-xs font-medium text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                Edit
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void remove()}
+              className="text-xs font-medium text-zinc-500 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-red-400"
+            >
+              Delete
+            </button>
+          </span>
         ) : status === "authed" ? (
           <span className="ml-auto flex items-center gap-3">
             <button
@@ -249,7 +294,43 @@ function CommentItem({
           </span>
         ) : null}
       </div>
-      <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">{comment.body}</p>
+      {editing ? (
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void saveEdit();
+          }}
+        >
+          <textarea
+            aria-label="Edit comment"
+            rows={3}
+            maxLength={MAX_COMMENT_LEN}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          />
+          {editError ? <p className="text-sm text-red-600 dark:text-red-400">{editError}</p> : null}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || draft.trim() === ""}
+              className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">{comment.body}</p>
+      )}
     </li>
   );
 }

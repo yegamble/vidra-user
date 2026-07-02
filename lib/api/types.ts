@@ -498,6 +498,8 @@ export interface Comment {
   author_display_name: string;
   created_at: string;
   updated_at: string;
+  /** True once the body has been edited (updated_at moved past created_at). */
+  edited: boolean;
 }
 
 export interface CommentListResponse {

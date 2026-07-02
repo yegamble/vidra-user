@@ -246,6 +246,13 @@ export const api = {
       body: { body },
     }),
 
+  /** PATCH /api/v1/comments/{id} — edit your own comment body (auth, author-only). */
+  editComment: (id: string, body: string) =>
+    apiRequest<Comment>(`/api/v1/comments/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: { body },
+    }),
+
   /** DELETE /api/v1/comments/{id} — delete your own comment (auth). */
   deleteComment: (id: string) =>
     apiRequest<void>(`/api/v1/comments/${encodeURIComponent(id)}`, { method: "DELETE" }),

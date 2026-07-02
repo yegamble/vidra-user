@@ -108,3 +108,52 @@ test("an authenticated viewer can post a comment", async ({ page }) => {
   await expect(page.getByText("Great video")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Comments (1)" })).toBeVisible();
 });
+
+test("an author can edit their own comment", async ({ page }) => {
+  await page.route(LOGIN, (route) => route.fulfill({ json: session }));
+  await page.route(FEED, (route) =>
+    route.fulfill({ json: { videos: [detail], sort: "recent", limit: 20, offset: 0 } }),
+  );
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) =>
+    route.fulfill({
+      json: { comments: [comment("c1", "original body", "ada", "Ada Makes")], limit: 20, offset: 0 },
+    }),
+  );
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+  await page.route(/\/api\/v1\/me\/saved(\?|$)/, (route) =>
+    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+  );
+  // PATCH the comment → returns the edited body with edited=true.
+  await page.route(/\/api\/v1\/comments\/c1$/, (route) => {
+    if (route.request().method() === "PATCH") {
+      void route.fulfill({ json: { ...comment("c1", "edited body", "ada", "Ada Makes"), edited: true } });
+    } else {
+      void route.fulfill({ status: 204, body: "" });
+    }
+  });
+
+  await page.getByRole("heading", { name: "Watch Me" }).click();
+  await expect(page.getByText("original body")).toBeVisible();
+
+  const commentsRegion = page.getByRole("region", { name: "Comments" });
+  await commentsRegion.getByRole("button", { name: "Edit" }).click();
+  const edited = page.waitForRequest(
+    (r) => /\/api\/v1\/comments\/c1$/.test(r.url()) && r.method() === "PATCH",
+  );
+  await page.getByLabel("Edit comment").fill("edited body");
+  await commentsRegion.getByRole("button", { name: "Save" }).click();
+  const req = await edited;
+  expect(req.postDataJSON()).toEqual({ body: "edited body" });
+
+  // The list shows the new body and the "(edited)" marker.
+  await expect(page.getByText("edited body")).toBeVisible();
+  await expect(page.getByText("(edited)")).toBeVisible();
+});
