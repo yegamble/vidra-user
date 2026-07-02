@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { API_URL, TINY_MP4_BASE64, channelVideos, uniqueId } from "./fixtures";
+import { API_URL, TINY_MP4_BASE64, channelVideos, seedPublishedChannel, uniqueId } from "./fixtures";
 
 // Proves the publish round trip against a real vidra-core + PostgreSQL: a creator
 // signs up, creates a channel, and uploads a video in the studio; the published
@@ -191,4 +191,53 @@ test("a creator can replace their video's thumbnail", async ({ page, request }) 
   const res = await request.get(`${API_URL}/api/v1/videos/${vid!.id}/thumbnail`);
   expect(res.status()).toBe(200);
   expect(res.headers()["content-type"]).toContain("image/png");
+});
+
+// Proves URL import against a real vidra-core + PostgreSQL: a creator publishes a
+// video by importing from a URL. The source is a seeded public video, imported by
+// its own /original via the compose service name (http://api:8080/…) — no external
+// origin needed. Requires HTTP_IMPORT_ALLOW_PRIVATE_URLS=true on the backend (set
+// in the frontend-e2e-backed workflow); the Content-Type fallback accepts the
+// extension-less /original path. The imported video then appears published on the
+// importer's channel.
+test("a creator can publish a video by importing from a URL", async ({ page, request }) => {
+  // A public source whose /original the backend can fetch from within the network.
+  const src = await seedPublishedChannel(request);
+
+  const id = uniqueId();
+  const handle = `ch${id}`;
+  const channelName = `Channel ${id}`;
+  const videoTitle = `Imported clip ${id}`;
+
+  await page.goto("/signup");
+  await page.getByLabel("Username").fill(`fan${id}`);
+  await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
+  await page.getByLabel("Password").fill("supersecret-e2e");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByLabel("Channel handle").fill(handle);
+  await page.getByLabel("Channel display name").fill(channelName);
+  const channelCreated = page.waitForResponse(
+    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create channel" }).click();
+  await channelCreated;
+
+  // Import the source's own /original via the compose service name (reachable
+  // inside the docker network; the frontend only submits the URL as a string).
+  await page.getByLabel("Video title").fill(videoTitle);
+  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByLabel("Video URL").fill(`http://api:8080/api/v1/videos/${src.videoId}/original`);
+  const imported = page.waitForResponse(
+    (r) => /\/videos\/[^/]+\/import$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Publish" }).click();
+  await imported;
+  await expect(page.getByText("Published!")).toBeVisible();
+
+  // Persisted: the importer's channel now carries the published, imported video.
+  const vids = await channelVideos(request, handle);
+  expect(vids.map((v) => v.title)).toContain(videoTitle);
 });

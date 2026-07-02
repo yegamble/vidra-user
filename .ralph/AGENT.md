@@ -68,7 +68,12 @@ works). Studio publishing: the `StudioView` publish form and the
 per-video **Edit** form both set **title + description + privacy** (`createVideoDraft` /
 `updateVideo` — the backend accepts `description` ≤5000 on create + PATCH) — description
 DB-effect VERIFIED in `e2e-backed/video-description.spec.ts` (publish/edit → public
-video-detail API + watch-page render). Captions: the studio's per-video **Edit** surface
+video-detail API + watch-page render). The publish form has a **Source** toggle:
+"Upload file" (multipart `POST /videos/:id/file`) or **"Import from URL"** (`POST
+/videos/:id/import` via `api.importVideoFile`) — DB-effect VERIFIED in
+`e2e-backed/studio.spec.ts` (import a public source's own `/original` via the compose
+service name → published; needs the backend's `HTTP_IMPORT_ALLOW_PRIVATE_URLS=true`,
+set in `frontend-e2e-backed.yml`). Captions: the studio's per-video **Edit** surface
 embeds `components/CaptionsManager.tsx` — upload/list/remove WebVTT caption tracks
 (`GET/POST/DELETE /videos/:id/captions[/:lang]`) — DB-effect VERIFIED in
 `e2e-backed/captions.spec.ts`. The same Edit surface embeds `components/ThumbnailManager.tsx`

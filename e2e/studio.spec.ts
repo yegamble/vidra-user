@@ -210,6 +210,36 @@ test("a creator can upload and publish a video", async ({ page }) => {
   });
 });
 
+test("a creator can publish a video by importing from a URL", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  let importBody: unknown;
+  await page.route(/\/api\/v1\/videos\/v1\/import$/, (route) => {
+    importBody = route.request().postDataJSON();
+    return route.fulfill({ json: { video: video() } });
+  });
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  // Switch the source to URL and provide a link.
+  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByLabel("Video URL").fill("https://example.com/clip.mp4");
+  await page.getByRole("button", { name: "Publish" }).click();
+
+  await expect(page.getByText("Published!")).toBeVisible();
+  await expect(page.getByRole("link", { name: /View .*My clip/ })).toBeVisible();
+  expect(importBody).toEqual({ url: "https://example.com/clip.mp4" });
+});
+
 test("a creator can edit a video's title and privacy", async ({ page }) => {
   await signIn(page);
   await page.route(MY_CHANNELS, (route) =>

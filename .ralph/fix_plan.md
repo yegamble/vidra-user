@@ -312,11 +312,11 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 
 ## P6.3 URL Import
 
-- [ ] Implement Import with URL tab.
-- [ ] Implement URL input and validation.
-- [ ] Implement rights/legal warning text.
-- [ ] Implement import submit/progress/error states.
-- [ ] Add tests for URL import form behavior.
+- [x] Implement Import with URL tab. (The studio `UploadSection` publish form has a **Source** toggle — "Upload file" / "Import from URL" (radio) — that swaps the file picker for a URL input. `POST /channels/:handle/videos` (draft) → `POST /videos/:id/import` (`api.importVideoFile`) instead of the multipart upload. **VERIFIED** below.)
+- [x] Implement URL input and validation. (A `type="url"` field (`aria-label` "Video URL"); submit is disabled until a title + URL are present. Authoritative validation is the backend's SSRF-guarded import — a bad/non-public/non-http URL comes back 422 and is surfaced.)
+- [~] Implement rights/legal warning text. (A helper line ("A public direct link to a video file. We fetch and publish it.") sets expectations; a fuller rights/copyright attestation is a later product/legal decision — DEFERRED on that.)
+- [x] Implement import submit/progress/error states. (Shared publish flow: "Importing…" while in flight, "Published!" + a View link on success; `importOrUploadError` maps 422 → "Couldn't fetch that URL — it must be a public link to a video file", 415 → "not a supported video type", 413 → "too large".)
+- [x] Add tests for URL import form behavior. (Mocked `e2e/studio.spec.ts` "publish by importing from a URL" (toggle → URL → Publish → asserts the `POST /videos/v1/import` body is `{url}` + "Published!"). API client `importVideoFile` unit-tested. **Backed-VERIFIED** `e2e-backed/studio.spec.ts` "a creator can publish a video by importing from a URL": a public source video is seeded, then imported by its OWN `/original` via the compose service name (`http://api:8080/…`, no external origin) — the imported video appears published on the importer's channel via the public API. Requires the backend's `HTTP_IMPORT_ALLOW_PRIVATE_URLS=true` (set in `frontend-e2e-backed.yml`); the vidra-core Content-Type fallback accepts the extension-less `/original`. Backend: `POST /videos/:id/import` (vidra-core P6.1).)
 
 ## P6.4 Torrent/Magnet Import
 

@@ -416,6 +416,19 @@ function taxonomyFields(category: string, language: string, license: string) {
   return out;
 }
 
+// importOrUploadError maps a publish failure to a friendly message, tailored to
+// whether the source was a file upload or a URL import.
+function importOrUploadError(err: unknown, source: "file" | "url"): string {
+  if (err instanceof ApiError) {
+    if (err.status === 415) return "That is not a supported video type.";
+    if (err.status === 413) return "That file is too large.";
+    if (source === "url" && err.status === 422) {
+      return "Couldn't fetch that URL — it must be a public link to a video file.";
+    }
+  }
+  return source === "url" ? "Import failed. Please try again." : "Upload failed. Please try again.";
+}
+
 function UploadSection({ channels, config }: { channels: Channel[]; config: VideoConfigResponse | null }) {
   const [handle, setHandle] = useState(channels[0]?.handle ?? "");
   const [title, setTitle] = useState("");
@@ -424,6 +437,8 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   const [language, setLanguage] = useState("");
   const [license, setLicense] = useState("");
   const [privacy, setPrivacy] = useState<VideoPrivacy>("public");
+  const [source, setSource] = useState<"file" | "url">("file");
+  const [videoUrl, setVideoUrl] = useState("");
   const [state, setState] = useState<UploadState>("idle");
   const [published, setPublished] = useState<Video | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -432,7 +447,10 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   async function upload(e: React.FormEvent) {
     e.preventDefault();
     const file = fileRef.current?.files?.[0];
-    if (state === "uploading" || title.trim() === "" || !file || handle === "") return;
+    const url = videoUrl.trim();
+    if (state === "uploading" || title.trim() === "" || handle === "") return;
+    if (source === "file" && !file) return;
+    if (source === "url" && url === "") return;
     setState("uploading");
     setError(null);
     setPublished(null);
@@ -443,7 +461,10 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
         privacy,
         ...taxonomyFields(category, language, license),
       });
-      const res = await api.uploadVideoFile(draft.id, file);
+      const res =
+        source === "url"
+          ? await api.importVideoFile(draft.id, url)
+          : await api.uploadVideoFile(draft.id, file as File);
       setPublished(res.video);
       setState("done");
       setTitle("");
@@ -451,13 +472,10 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
       setCategory("");
       setLanguage("");
       setLicense("");
+      setVideoUrl("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
-      setError(
-        err instanceof ApiError && err.status === 415
-          ? "That file type is not a supported video."
-          : "Upload failed. Please try again.",
-      );
+      setError(importOrUploadError(err, source));
       setState("error");
     }
   }
@@ -543,23 +561,63 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             <option value="private">Private</option>
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Video file</span>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="video/*"
-            aria-label="Video file"
-            className="text-sm file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:file:bg-zinc-800"
-          />
-        </label>
+        <fieldset className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Source</span>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="video-source"
+                checked={source === "file"}
+                onChange={() => setSource("file")}
+              />
+              Upload file
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="video-source"
+                checked={source === "url"}
+                onChange={() => setSource("url")}
+              />
+              Import from URL
+            </label>
+          </div>
+        </fieldset>
+        {source === "file" ? (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Video file</span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="video/*"
+              aria-label="Video file"
+              className="text-sm file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:file:bg-zinc-800"
+            />
+          </label>
+        ) : (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Video URL</span>
+            <input
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              type="url"
+              placeholder="https://example.com/clip.mp4"
+              aria-label="Video URL"
+              className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              A public direct link to a video file. We fetch and publish it.
+            </span>
+          </label>
+        )}
         <div>
           <button
             type="submit"
             disabled={state === "uploading"}
             className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
-            {state === "uploading" ? "Uploading…" : "Publish"}
+            {state === "uploading" ? (source === "url" ? "Importing…" : "Uploading…") : "Publish"}
           </button>
         </div>
       </form>

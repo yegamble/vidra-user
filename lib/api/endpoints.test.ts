@@ -249,6 +249,14 @@ describe("api endpoints", () => {
     expect(init.headers["content-type"]).toBeUndefined();
   });
 
+  it("importVideoFile POSTs the url to the import endpoint", async () => {
+    await api.importVideoFile("v1", "https://example.com/clip.mp4");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/import");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ url: "https://example.com/clip.mp4" });
+  });
+
   it("setVideoThumbnail POSTs multipart to the thumbnail endpoint", async () => {
     const file = new File(["img"], "poster.png", { type: "image/png" });
     await api.setVideoThumbnail("v1", file);

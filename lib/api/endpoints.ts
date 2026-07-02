@@ -169,6 +169,16 @@ export const api = {
     });
   },
 
+  /**
+   * POST /api/v1/videos/{id}/import — import the original from a public URL (auth,
+   * owner). Like uploadVideoFile but the backend fetches the file (SSRF-guarded).
+   */
+  importVideoFile: (videoId: string, url: string) =>
+    apiRequest<UploadVideoResult>(`/api/v1/videos/${encodeURIComponent(videoId)}/import`, {
+      method: "POST",
+      body: { url },
+    }),
+
   /** GET /api/v1/videos/{id}/captions — a video's caption tracks (public). */
   getCaptions: (videoId: string, signal?: AbortSignal) =>
     apiRequest<CaptionListResponse>(`/api/v1/videos/${encodeURIComponent(videoId)}/captions`, { signal }),

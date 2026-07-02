@@ -33,9 +33,12 @@ jobs:
       # RATE_LIMIT_ENABLED=false so the suite's many register/login calls from one
       # runner IP are not throttled. DEV_MAIL_CAPTURE_ENABLED=true exposes the dev
       # email-token endpoint for the reset/verify flows (test seam only).
+      # HTTP_IMPORT_ALLOW_PRIVATE_URLS=true relaxes the URL-import SSRF guard so the
+      # studio import test can import the backend's own /original via the compose
+      # service name (no external origin needed) — dev/test seam only.
       - name: Start vidra-core stack
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true docker compose --profile core up -d --build
+        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true docker compose --profile core up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
