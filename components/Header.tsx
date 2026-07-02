@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { AdminNavLink } from "@/components/AdminNavLink";
 import { AccountMenu } from "@/components/auth/AccountMenu";
@@ -6,8 +9,13 @@ import { ModerationNavLink } from "@/components/ModerationNavLink";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchBox } from "@/components/SearchBox";
 
-// App shell header: brand + primary nav + search + account menu.
+// App shell header: brand + primary nav + search + account menu. Hidden on the
+// embeddable player routes (/embed/*), which are meant to be iframed bare.
 export function Header() {
+  const pathname = usePathname();
+  if (pathname?.startsWith("/embed")) {
+    return null;
+  }
   return (
     <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-black/80">
       <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-4 px-4">

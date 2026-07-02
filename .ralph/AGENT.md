@@ -20,7 +20,11 @@ component → route-mockable, with loading/error/empty/grid states; `components/
 `components/ui/*` primitives) render the public feed; the watch page
 (`app/videos/[id]` → `components/WatchView.tsx`) plays the original via a native
 Range-capable `<video>` with title/views/date/duration/dimensions/description and
-loading/not-found/error states. `lib/format.ts` has display helpers (count, relative time,
+loading/not-found/error states. The **embed player** (`app/embed/[id]` →
+`components/EmbedPlayer.tsx`) is a full-bleed, chrome-less variant for iframing —
+just the `<video>` + a title link back to the watch page; the app `Header` returns
+null on `/embed/*`. Public/unlisted only (private/unknown → "not available"). Backed-VERIFIED
+in `e2e-backed/embed.spec.ts`. `lib/format.ts` has display helpers (count, relative time,
 duration). Auth: `components/auth/AuthProvider.tsx` (`useSession`) holds the session
 client-side — the access token lives in the in-memory `lib/api/auth-store.ts` (auto-attached
 by the API client, never persisted/logged), `lib/api/auth.ts` wraps register/login/logout/me,

@@ -252,11 +252,11 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 
 ## P4.3 Embed Player
 
-- [ ] Implement embed route if in-scope.
-- [ ] Implement minimal player chrome for embed.
-- [ ] Implement embed privacy/sandbox behavior.
-- [ ] Implement embed loading/error states.
-- [ ] Add embed smoke test.
+- [x] Implement embed route if in-scope. (`app/embed/[id]/page.tsx` → `components/EmbedPlayer.tsx` — a full-bleed player at `/embed/:id` meant to be iframed. Server component resolves the id; the player loads client-side via `api.getVideo(id)`. **VERIFIED** end-to-end below.)
+- [x] Implement minimal player chrome for embed. (Native `<video controls playsInline>` filling the frame + a small title link (top-left overlay) back to the full watch page opening in a new tab (`target=_blank rel=noopener`); no site header/nav (the app `Header` now returns null on `/embed/*` via `usePathname`), no comments, no auth-only controls.)
+- [~] Implement embed privacy/sandbox behavior. (Privacy DONE: the embed shows only public/unlisted videos — a private or unknown video renders "This video is not available." (mirrors the backend 404, which hides private videos from anon). Iframe sandboxing is the embedding site's responsibility; the frontend Next server sets no X-Frame-Options so the page is embeddable. A copy-paste iframe snippet on the watch page is a later polish.)
+- [x] Implement embed loading/error states. (loading "Loading…", not-found "This video is not available." (404), and generic error "Could not load this video." — all full-bleed on black.)
+- [x] Add embed smoke test. (Mocked `e2e/embed.spec.ts` — player present with the original-stream `src`, title links to `/videos/:id` in a new tab, NO app chrome (Home/Vidra nav absent); unavailable-video state — 2. **Backed-VERIFIED** `e2e-backed/embed.spec.ts`: a published video is API-seeded, `/embed/:id` renders the native player pointed at the real `…/videos/:id/original` endpoint with the title and no chrome; a non-public id shows "not available". Read-only page (proves the read contract against a real published row, like the admin audit-log/system pages). Runs in CI via `frontend-e2e-backed.yml`.)
 
 ---
 
