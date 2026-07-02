@@ -249,6 +249,17 @@ describe("api endpoints", () => {
     expect(init.headers["content-type"]).toBeUndefined();
   });
 
+  it("setVideoThumbnail POSTs multipart to the thumbnail endpoint", async () => {
+    const file = new File(["img"], "poster.png", { type: "image/png" });
+    await api.setVideoThumbnail("v1", file);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/thumbnail");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+    expect(init.headers["content-type"]).toBeUndefined();
+  });
+
   it("getReports defaults to all reports (no status filter)", async () => {
     await api.getReports();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/reports");

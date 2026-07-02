@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { CaptionsManager } from "@/components/CaptionsManager";
+import { ThumbnailManager } from "@/components/ThumbnailManager";
 import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -817,6 +818,7 @@ function VideoRow({
           </select>
         </label>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        <ThumbnailManager videoId={video.id} hasThumbnail={video.has_thumbnail ?? false} />
         <CaptionsManager videoId={video.id} />
         <div className="flex gap-2">
           <button

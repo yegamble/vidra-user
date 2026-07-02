@@ -44,6 +44,7 @@ import type {
   UpdatePlaylistRequest,
   UpdateVideoRequest,
   UploadVideoResult,
+  VideoFile,
   VideoRating,
   VideoSearchResponse,
   WatchedWord,
@@ -150,6 +151,19 @@ export const api = {
     const form = new FormData();
     form.append("file", file);
     return apiRequest<UploadVideoResult>(`/api/v1/videos/${encodeURIComponent(videoId)}/file`, {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  /**
+   * POST /api/v1/videos/{id}/thumbnail — set a custom poster image (auth, owner,
+   * multipart). Replaces any auto-generated/previous thumbnail. JPEG/PNG/WebP.
+   */
+  setVideoThumbnail: (videoId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<VideoFile>(`/api/v1/videos/${encodeURIComponent(videoId)}/thumbnail`, {
       method: "POST",
       body: form,
     });

@@ -71,7 +71,11 @@ DB-effect VERIFIED in `e2e-backed/video-description.spec.ts` (publish/edit → p
 video-detail API + watch-page render). Captions: the studio's per-video **Edit** surface
 embeds `components/CaptionsManager.tsx` — upload/list/remove WebVTT caption tracks
 (`GET/POST/DELETE /videos/:id/captions[/:lang]`) — DB-effect VERIFIED in
-`e2e-backed/captions.spec.ts`. On the viewer side, the watch-page `Player`
+`e2e-backed/captions.spec.ts`. The same Edit surface embeds `components/ThumbnailManager.tsx`
+— a custom poster upload (`POST /videos/:id/thumbnail`, JPEG/PNG/WebP → 415 otherwise,
+`api.setVideoThumbnail`) that replaces any ffmpeg-generated poster and cache-busts the
+preview — DB-effect VERIFIED in `e2e-backed/studio.spec.ts` (uploaded PNG served back as
+image/png). On the viewer side, the watch-page `Player`
 (`WatchView.tsx`) renders a `<track kind="captions">` per caption inside the native
 `<video controls>` (surfacing the browser CC toggle); it fetches each WebVTT body and
 serves it via a same-origin blob URL — sidestepping the native cross-origin `<track>`

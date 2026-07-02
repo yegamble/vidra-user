@@ -13,6 +13,7 @@ const UPLOAD = /\/api\/v1\/videos\/v1\/file$/;
 const VIDEO = /\/api\/v1\/videos\/v1$/;
 const CAPTIONS = /\/api\/v1\/videos\/v1\/captions$/;
 const CAPTION_LANG = /\/api\/v1\/videos\/v1\/captions\/[^/]+$/;
+const THUMBNAIL = /\/api\/v1\/videos\/v1\/thumbnail(\?|$)/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 
 function videoConfig() {
@@ -316,6 +317,55 @@ test("a creator can add and remove a caption from a video's edit surface", async
   await page.getByRole("button", { name: "Remove en caption" }).click();
   await removed;
   await expect(page.getByText("No captions yet.")).toBeVisible();
+});
+
+test("a creator can replace a video's thumbnail from the edit surface", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) =>
+    route.fulfill({ json: { videos: [video({ title: "Poster clip" })] } }),
+  );
+  await page.route(CAPTIONS, (route) => route.fulfill({ json: { captions: [] } }));
+  await page.route(VIDEO, (route) => route.fulfill({ json: video({ title: "Poster clip" }) }));
+  await page.route(VIDEO_CONFIG, (route) =>
+    route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
+  );
+  await page.route(THUMBNAIL, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        status: 201,
+        json: {
+          id: "f1",
+          kind: "thumbnail",
+          content_type: "image/png",
+          original_name: "poster.png",
+          size_bytes: 4,
+          created_at: new Date().toISOString(),
+        },
+      });
+    }
+    // The <img> preview GET after upload (cache-busted src).
+    return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from([137, 80, 78, 71]) });
+  });
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: "Poster clip" });
+  await row.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByText("No thumbnail yet.")).toBeVisible();
+
+  const posted = page.waitForResponse(
+    (r) => THUMBNAIL.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByLabel("Thumbnail image").setInputFiles({
+    name: "poster.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([137, 80, 78, 71]),
+  });
+  await posted;
+  // The preview image now renders (cache-busted src).
+  await expect(page.getByRole("img", { name: "Current thumbnail" })).toBeVisible();
 });
 
 test("a creator can delete a video", async ({ page }) => {

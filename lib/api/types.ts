@@ -433,6 +433,16 @@ export interface UploadVideoResult {
   video: Video;
 }
 
+/** A stored video file (original or thumbnail). Mirrors the backend VideoFile. */
+export interface VideoFile {
+  id: string;
+  kind: string;
+  content_type: string;
+  original_name: string;
+  size_bytes: number;
+  created_at: string;
+}
+
 export interface Comment {
   id: string;
   video_id: string;
