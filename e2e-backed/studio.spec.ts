@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-import { API_URL, TINY_MP4_BASE64, channelVideos, seedPublishedChannel, uniqueId } from "./fixtures";
+import {
+  API_URL,
+  TINY_MP4_BASE64,
+  channelVideos,
+  liveStreams,
+  loginToken,
+  seedPublishedChannel,
+  uniqueId,
+} from "./fixtures";
 
 // Proves the publish round trip against a real vidra-core + PostgreSQL: a creator
 // signs up, creates a channel, and uploads a video in the studio; the published
@@ -240,4 +248,68 @@ test("a creator can publish a video by importing from a URL", async ({ page, req
   // Persisted: the importer's channel now carries the published, imported video.
   const vids = await channelVideos(request, handle);
   expect(vids.map((v) => v.title)).toContain(videoTitle);
+});
+
+// Proves the live-stream lifecycle against a real vidra-core + PostgreSQL: a
+// creator makes a live stream in the studio, sees the stream key once, rotates it,
+// and deletes it. Persistence is confirmed by reading the channel's live streams
+// via the API (logging in as the creator) after create and after delete.
+test("a creator can create, rekey, and delete a live stream", async ({ page, request }) => {
+  const id = uniqueId();
+  const handle = `ch${id}`;
+  const email = `e2e-fan-${id}@example.test`;
+  const password = "supersecret-e2e";
+  const streamTitle = `Live show ${id}`;
+
+  await page.goto("/signup");
+  await page.getByLabel("Username").fill(`fan${id}`);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByLabel("Channel handle").fill(handle);
+  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
+  const channelCreated = page.waitForResponse(
+    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create channel" }).click();
+  await channelCreated;
+
+  // Create a live stream → the key is shown once.
+  await page.getByLabel("Live stream title").fill(streamTitle);
+  const created = page.waitForResponse(
+    (r) => /\/channels\/[^/]+\/live$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create live stream" }).click();
+  await created;
+  const firstKey = await page.getByLabel("Stream key").inputValue();
+  expect(firstKey).not.toEqual("");
+
+  // Persisted: reading the channel's live streams via the API (as the creator)
+  // shows the new stream, offline.
+  const token = await loginToken(request, email, password);
+  const afterCreate = await liveStreams(request, handle, token);
+  expect(afterCreate.map((s) => s.title)).toContain(streamTitle);
+  expect(afterCreate.find((s) => s.title === streamTitle)?.state).toBe("offline");
+
+  // Rotate the key → a new key, different from the first.
+  const row = page.getByRole("listitem").filter({ hasText: streamTitle });
+  const rekeyed = page.waitForResponse(
+    (r) => /\/live\/[^/]+\/key$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await row.getByRole("button", { name: "Regenerate key" }).click();
+  await rekeyed;
+  const secondKey = await page.getByLabel("Stream key").inputValue();
+  expect(secondKey).not.toEqual(firstKey);
+
+  // Delete → gone from the API list too.
+  const deleted = page.waitForResponse(
+    (r) => /\/live\/[^/]+$/.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
+  );
+  await row.getByRole("button", { name: "Delete" }).click();
+  await deleted;
+  const afterDelete = await liveStreams(request, handle, token);
+  expect(afterDelete.map((s) => s.title)).not.toContain(streamTitle);
 });

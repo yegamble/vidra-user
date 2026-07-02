@@ -39,6 +39,32 @@ export async function ensureAdmin(request: APIRequestContext): Promise<void> {
   });
 }
 
+/** loginToken logs in with the given credentials and returns the access token. */
+export async function loginToken(
+  request: APIRequestContext,
+  email: string,
+  password: string,
+): Promise<string> {
+  const res = await request.post(`${API_URL}/api/v1/auth/login`, {
+    data: { email, password },
+  });
+  return ((await res.json()) as { token: string }).token;
+}
+
+/** liveStreams reads a channel's live streams via the API as the owner. */
+export async function liveStreams(
+  request: APIRequestContext,
+  handle: string,
+  token: string,
+): Promise<Array<{ id: string; title: string; state: string }>> {
+  const res = await request.get(`${API_URL}/api/v1/channels/${handle}/live`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (
+    (await res.json()) as { live_streams: Array<{ id: string; title: string; state: string }> }
+  ).live_streams;
+}
+
 /** adminToken logs in as the deterministic admin and returns its access token. */
 export async function adminToken(request: APIRequestContext): Promise<string> {
   const res = await request.post(`${API_URL}/api/v1/auth/login`, {

@@ -327,16 +327,14 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 - [ ] Implement import submit/progress/error states.
 - [ ] If deferred, mark explicit intentional difference and keep control hidden or disabled by config.
 
-## P6.5 Live Publishing
-
-- [ ] Implement Go Live tab.
-- [ ] Implement normal vs permanent/recurring live selector.
-- [ ] Implement RTMP URL display.
-- [ ] Implement private stream key display/copy/regenerate behavior according to backend contract.
-- [ ] Implement stream key warning text.
-- [ ] Implement live status display.
-- [ ] Implement replay behavior UI.
-- [ ] Add tests for live form and sensitive key visibility.
+- [x] Implement Go Live tab. (`components/LiveStreamsSection.tsx`, a studio section (per selected channel): a create form (title + privacy + permanent) → `POST /channels/:handle/live` (`api.createLiveStream`), a list of the channel's streams (`GET /channels/:handle/live`) with a state badge + per-row Regenerate key / Delete. **VERIFIED** below.)
+- [x] Implement normal vs permanent/recurring live selector. (A "Permanent (reuse this stream + key across sessions)" checkbox on the create form → `permanent` in the request; permanent streams show a "· permanent" marker in the list.)
+- [x] Implement RTMP URL display. (The stream-key reveal box shows the `rtmp_url` from the create/regenerate response next to the key, when the backend returns one.)
+- [x] Implement private stream key display/copy/regenerate behavior according to backend contract. (`StreamKeyReveal`: the key is shown ONCE on create and on Regenerate (`POST /live/:id/key`) in a highlighted read-only field with a **Copy** button (`navigator.clipboard`) and a Dismiss; it is never refetched (the list endpoint never returns keys). Delete → `DELETE /live/:id`.)
+- [x] Implement stream key warning text. ("Copy your stream key now — it won't be shown again." on the reveal box.)
+- [~] Implement live status display. (A state badge — offline / live (red) / ended — per stream. Real-time transitions land with the backend RTMP ingest boundary; for now it reflects the stored state, which starts offline.)
+- [ ] Implement replay behavior UI. (DEFERRED — needs the backend live-replay/VOD conversion contract, vidra-core P12.)
+- [x] Add tests for live form and sensitive key visibility. (Mocked `e2e/studio.spec.ts` "create a live stream and manage its key" (create → key shown once → offline badge → regenerate rotates the shown key → delete removes the row). API client `createLiveStream`/`getLiveStreams`/`regenerateLiveStreamKey`/`deleteLiveStream` unit-tested. **Backed-VERIFIED** `e2e-backed/studio.spec.ts` "a creator can create, rekey, and delete a live stream": create in the studio → key shown → an API read (logging in as the creator) confirms the persisted offline stream → regenerate (new key differs) → delete → the API read confirms it's gone. Backend: vidra-core P12 `/channels/:handle/live` + `/live/:id[/key]`.)
 
 ---
 

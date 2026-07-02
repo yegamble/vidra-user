@@ -19,6 +19,10 @@ import type {
   BlockedUserListResponse,
   Conversation,
   ConversationListResponse,
+  CreateLiveStreamRequest,
+  CreateLiveStreamResponse,
+  LiveStreamListResponse,
+  LiveStreamKey,
   MessageListResponse,
   Message,
   MutedAccountListResponse,
@@ -178,6 +182,25 @@ export const api = {
       method: "POST",
       body: { url },
     }),
+
+  /** POST /api/v1/channels/{handle}/live — create a live stream (auth, owner). Returns the key once. */
+  createLiveStream: (handle: string, body: CreateLiveStreamRequest) =>
+    apiRequest<CreateLiveStreamResponse>(`/api/v1/channels/${encodeURIComponent(handle)}/live`, {
+      method: "POST",
+      body,
+    }),
+
+  /** GET /api/v1/channels/{handle}/live — the channel's live streams (auth, owner; no keys). */
+  getLiveStreams: (handle: string, signal?: AbortSignal) =>
+    apiRequest<LiveStreamListResponse>(`/api/v1/channels/${encodeURIComponent(handle)}/live`, { signal }),
+
+  /** POST /api/v1/live/{id}/key — rotate a stream's key (auth, owner). Returns the new key once. */
+  regenerateLiveStreamKey: (id: string) =>
+    apiRequest<LiveStreamKey>(`/api/v1/live/${encodeURIComponent(id)}/key`, { method: "POST" }),
+
+  /** DELETE /api/v1/live/{id} — delete a live stream (auth, owner; idempotent). */
+  deleteLiveStream: (id: string) =>
+    apiRequest<void>(`/api/v1/live/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   /** GET /api/v1/videos/{id}/captions — a video's caption tracks (public). */
   getCaptions: (videoId: string, signal?: AbortSignal) =>

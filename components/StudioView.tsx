@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { CaptionsManager } from "@/components/CaptionsManager";
+import { LiveStreamsSection } from "@/components/LiveStreamsSection";
 import { ThumbnailManager } from "@/components/ThumbnailManager";
 import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -113,6 +114,9 @@ function Studio() {
       ) : null}
       {channels.length > 0 ? (
         <MyVideosSection key={`videos-${channelsKey}`} channels={channels} config={config} />
+      ) : null}
+      {channels.length > 0 ? (
+        <LiveStreamsSection key={`live-${channelsKey}`} channels={channels} />
       ) : null}
     </div>
   );

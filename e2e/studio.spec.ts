@@ -15,6 +15,9 @@ const CAPTIONS = /\/api\/v1\/videos\/v1\/captions$/;
 const CAPTION_LANG = /\/api\/v1\/videos\/v1\/captions\/[^/]+$/;
 const THUMBNAIL = /\/api\/v1\/videos\/v1\/thumbnail(\?|$)/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
+const CHANNEL_LIVE = /\/api\/v1\/channels\/ada_makes\/live$/;
+const LIVE_ONE = /\/api\/v1\/live\/[^/]+$/;
+const LIVE_KEY = /\/api\/v1\/live\/[^/]+\/key$/;
 
 function videoConfig() {
   return {
@@ -396,6 +399,56 @@ test("a creator can replace a video's thumbnail from the edit surface", async ({
   await posted;
   // The preview image now renders (cache-busted src).
   await expect(page.getByRole("img", { name: "Current thumbnail" })).toBeVisible();
+});
+
+test("a creator can create a live stream and manage its key", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  const stream = {
+    id: "ls1",
+    channel_id: "c1",
+    title: "My Show",
+    description: "",
+    privacy: "public",
+    state: "offline",
+    permanent: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  await page.route(CHANNEL_LIVE, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        json: { live_stream: stream, stream_key: "SECRET-KEY-1", rtmp_url: "rtmp://ingest/live" },
+      });
+    }
+    return route.fulfill({ json: { live_streams: [] } });
+  });
+  await page.route(LIVE_KEY, (route) => route.fulfill({ json: { stream_key: "SECRET-KEY-2" } }));
+  await page.route(LIVE_ONE, (route) =>
+    route.request().method() === "DELETE" ? route.fulfill({ status: 204, body: "" }) : route.continue(),
+  );
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Live stream title").fill("My Show");
+  await page.getByRole("button", { name: "Create live stream" }).click();
+
+  // The stream key is shown once; the row appears with an offline badge.
+  await expect(page.getByLabel("Stream key")).toHaveValue("SECRET-KEY-1");
+  const row = page.getByRole("listitem").filter({ hasText: "My Show" });
+  await expect(row.getByText("offline")).toBeVisible();
+
+  // Regenerate rotates the shown key.
+  await row.getByRole("button", { name: "Regenerate key" }).click();
+  await expect(page.getByLabel("Stream key")).toHaveValue("SECRET-KEY-2");
+
+  // Delete removes the row.
+  await row.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: "My Show" })).toHaveCount(0);
 });
 
 test("a creator can delete a video", async ({ page }) => {

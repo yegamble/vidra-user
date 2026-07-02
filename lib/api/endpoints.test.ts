@@ -249,6 +249,33 @@ describe("api endpoints", () => {
     expect(init.headers["content-type"]).toBeUndefined();
   });
 
+  it("createLiveStream POSTs the metadata to the channel live endpoint", async () => {
+    await api.createLiveStream("ada", { title: "Show", permanent: true });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channels/ada/live");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ title: "Show", permanent: true });
+  });
+
+  it("getLiveStreams targets the channel live list", async () => {
+    await api.getLiveStreams("ada");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/channels/ada/live");
+  });
+
+  it("regenerateLiveStreamKey POSTs to the key endpoint", async () => {
+    await api.regenerateLiveStreamKey("s1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/live/s1/key");
+    expect(init.method).toBe("POST");
+  });
+
+  it("deleteLiveStream DELETEs the live stream", async () => {
+    await api.deleteLiveStream("s1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/live/s1");
+    expect(init.method).toBe("DELETE");
+  });
+
   it("importVideoFile POSTs the url to the import endpoint", async () => {
     await api.importVideoFile("v1", "https://example.com/clip.mp4");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

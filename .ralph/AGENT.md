@@ -73,7 +73,13 @@ video-detail API + watch-page render). The publish form has a **Source** toggle:
 /videos/:id/import` via `api.importVideoFile`) — DB-effect VERIFIED in
 `e2e-backed/studio.spec.ts` (import a public source's own `/original` via the compose
 service name → published; needs the backend's `HTTP_IMPORT_ALLOW_PRIVATE_URLS=true`,
-set in `frontend-e2e-backed.yml`). Captions: the studio's per-video **Edit** surface
+set in `frontend-e2e-backed.yml`). The studio also has a **Live streams** section
+(`components/LiveStreamsSection.tsx`): create a live stream (title/privacy/permanent →
+`POST /channels/:handle/live`), see the **stream key once** (copy-it-now reveal box +
+RTMP URL), and per-stream Regenerate key (`POST /live/:id/key`) / Delete
+(`DELETE /live/:id`); the list (`GET /channels/:handle/live`) never returns keys —
+DB-effect VERIFIED in `e2e-backed/studio.spec.ts` (create → API read confirms it →
+rekey → delete → API read confirms gone). Captions: the studio's per-video **Edit** surface
 embeds `components/CaptionsManager.tsx` — upload/list/remove WebVTT caption tracks
 (`GET/POST/DELETE /videos/:id/captions[/:lang]`) — DB-effect VERIFIED in
 `e2e-backed/captions.spec.ts`. The same Edit surface embeds `components/ThumbnailManager.tsx`

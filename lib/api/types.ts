@@ -443,6 +443,51 @@ export interface VideoFile {
   created_at: string;
 }
 
+export type LiveStreamState = "offline" | "live" | "ended";
+
+/**
+ * A live stream's metadata. The stream key is never part of this — it is returned
+ * only by create/regenerate (see CreateLiveStreamResponse / LiveStreamKey).
+ * channel_handle/display_name are present on the single-stream get.
+ */
+export interface LiveStream {
+  id: string;
+  channel_id: string;
+  title: string;
+  description: string;
+  privacy: VideoPrivacy;
+  state: LiveStreamState;
+  permanent: boolean;
+  created_at: string;
+  updated_at: string;
+  channel_handle?: string;
+  channel_display_name?: string;
+}
+
+export interface CreateLiveStreamRequest {
+  title: string;
+  description?: string;
+  privacy?: VideoPrivacy;
+  permanent?: boolean;
+}
+
+/** The create response: the stream plus its key (shown once) and RTMP ingest URL. */
+export interface CreateLiveStreamResponse {
+  live_stream: LiveStream;
+  stream_key: string;
+  rtmp_url?: string;
+}
+
+export interface LiveStreamListResponse {
+  live_streams: LiveStream[];
+}
+
+/** A regenerated stream key (shown once) plus the RTMP ingest URL. */
+export interface LiveStreamKey {
+  stream_key: string;
+  rtmp_url?: string;
+}
+
 export interface Comment {
   id: string;
   video_id: string;
