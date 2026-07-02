@@ -365,6 +365,25 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ body: "hi" });
   });
 
+  it("blockUser POSTs to the blocks endpoint for the user", async () => {
+    await api.blockUser("u2");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/blocks/u2");
+    expect(init.method).toBe("POST");
+  });
+
+  it("unblockUser DELETEs the block for the user", async () => {
+    await api.unblockUser("u2");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/blocks/u2");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("getBlockedUsers targets the blocks endpoint with pagination", async () => {
+    await api.getBlockedUsers({ limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/blocks?limit=100");
+  });
+
   it("getAdminVideos targets the admin videos overview with the q filter", async () => {
     await api.getAdminVideos({ q: "cat", limit: 100 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/videos?q=cat&limit=100");

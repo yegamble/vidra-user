@@ -476,6 +476,23 @@ export interface MutedAccountListResponse {
   offset: number;
 }
 
+/**
+ * An account the caller has blocked. A block symmetrically cuts off direct
+ * messaging between the two. Mirrors the backend BlockedUser schema.
+ */
+export interface BlockedUser {
+  user_id: string;
+  username: string;
+  display_name: string;
+  blocked_at: string;
+}
+
+export interface BlockedUserListResponse {
+  users: BlockedUser[];
+  limit: number;
+  offset: number;
+}
+
 /** A 1:1 conversation (normal, non-E2EE direct messaging). */
 export interface Conversation {
   id: string;

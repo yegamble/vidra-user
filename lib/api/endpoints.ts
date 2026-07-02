@@ -16,6 +16,7 @@ import type {
   ChannelListResponse,
   Comment,
   CommentListResponse,
+  BlockedUserListResponse,
   Conversation,
   ConversationListResponse,
   MessageListResponse,
@@ -217,6 +218,24 @@ export const api = {
   /** GET /api/v1/me/mutes/accounts — the accounts the caller has muted, newest first (auth). */
   getMutedAccounts: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
     apiRequest<MutedAccountListResponse>("/api/v1/me/mutes/accounts", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/me/blocks/{id} — block an account (auth; idempotent 204). A
+   * block symmetrically cuts off direct messaging. Self → 422, unknown → 404.
+   */
+  blockUser: (userId: string) =>
+    apiRequest<void>(`/api/v1/me/blocks/${encodeURIComponent(userId)}`, { method: "POST" }),
+
+  /** DELETE /api/v1/me/blocks/{id} — unblock an account (auth; idempotent 204). */
+  unblockUser: (userId: string) =>
+    apiRequest<void>(`/api/v1/me/blocks/${encodeURIComponent(userId)}`, { method: "DELETE" }),
+
+  /** GET /api/v1/me/blocks — the accounts the caller has blocked, newest first (auth). */
+  getBlockedUsers: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+    apiRequest<BlockedUserListResponse>("/api/v1/me/blocks", {
       query: { limit: params.limit, offset: params.offset },
       signal,
     }),

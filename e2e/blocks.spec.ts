@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Mocked account-mute coverage (a real backend is not running in `npm run ci`; the
-// persistence round-trip + hiding effect are proven in e2e-backed/mutes.spec.ts).
+// Mocked account-block coverage (a real backend is not running in `npm run ci`;
+// the persistence round-trip + DM-gating are proven in e2e-backed/blocks.spec.ts).
 const DETAIL = /\/api\/v1\/videos\/v1$/;
 const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;
 const COMMENTS = /\/api\/v1\/videos\/v1\/comments/;
@@ -9,8 +9,8 @@ const RATING = /\/api\/v1\/videos\/v1\/rating/;
 const SAVED = /\/api\/v1\/me\/saved(\?|$)/;
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
-const MUTE_ONE = /\/api\/v1\/me\/mutes\/accounts\/[^/]+$/;
-const MUTES_LIST = /\/api\/v1\/me\/mutes\/accounts(\?|$)/;
+const BLOCK_ONE = /\/api\/v1\/me\/blocks\/[^/]+$/;
+const BLOCKS_LIST = /\/api\/v1\/me\/blocks(\?|$)/;
 const NO_RATING = { like_count: 0, dislike_count: 0, my_rating: null };
 
 const detail = {
@@ -67,7 +67,7 @@ async function signIn(page: Page) {
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 }
 
-test("muting a comment's author hides that account's comments", async ({ page }) => {
+test("blocking a comment's author posts the block and reflects it", async ({ page }) => {
   await signIn(page);
 
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
@@ -75,10 +75,7 @@ test("muting a comment's author hides that account's comments", async ({ page })
   await page.route(COMMENTS, (route) =>
     route.fulfill({
       json: {
-        comments: [
-          comment("cb", "spam from bob", "u-bob", "bob", "Bob Jones"),
-          comment("cc", "hi from charlie", "u-charlie", "charlie", "Charlie"),
-        ],
+        comments: [comment("cb", "hi from bob", "u-bob", "bob", "Bob Jones")],
         limit: 20,
         offset: 0,
       },
@@ -89,10 +86,10 @@ test("muting a comment's author hides that account's comments", async ({ page })
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
   );
 
-  let mutedId: string | null = null;
-  await page.route(MUTE_ONE, (route) => {
+  let blockedId: string | null = null;
+  await page.route(BLOCK_ONE, (route) => {
     if (route.request().method() === "POST") {
-      mutedId = route.request().url().match(/\/accounts\/([^/]+)$/)?.[1] ?? null;
+      blockedId = route.request().url().match(/\/blocks\/([^/]+)$/)?.[1] ?? null;
       return route.fulfill({ status: 204, body: "" });
     }
     return route.continue();
@@ -100,33 +97,29 @@ test("muting a comment's author hides that account's comments", async ({ page })
 
   // Reach the watch page via the home feed card (keeps the in-memory session).
   await page.getByRole("heading", { name: "Watch Me" }).click();
-  await expect(page.getByText("spam from bob")).toBeVisible();
-  await expect(page.getByText("hi from charlie")).toBeVisible();
+  await expect(page.getByText("hi from bob")).toBeVisible();
 
-  // Mute bob (from his comment). His comment disappears; charlie's stays.
-  const muted = page.waitForResponse(
-    (r) => MUTE_ONE.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  // Block bob from his comment → POST fires; the button reflects the blocked state.
+  const blocked = page.waitForResponse(
+    (r) => BLOCK_ONE.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page
-    .locator("li", { hasText: "spam from bob" })
-    .getByRole("button", { name: "Mute" })
-    .click();
-  await muted;
-
-  await expect(page.getByText("spam from bob")).toHaveCount(0);
-  await expect(page.getByText("hi from charlie")).toBeVisible();
-  expect(mutedId).toBe("u-bob");
+  await page.locator("li", { hasText: "hi from bob" }).getByRole("button", { name: "Block" }).click();
+  await blocked;
+  expect(blockedId).toBe("u-bob");
+  // The comment stays (a block doesn't hide content), and the control shows "Blocked".
+  await expect(page.getByText("hi from bob")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Blocked" })).toBeVisible();
 });
 
-test("the muted-accounts page lists muted accounts and unmutes them", async ({ page }) => {
+test("the blocked-accounts page lists blocked accounts and unblocks them", async ({ page }) => {
   await signIn(page);
 
-  await page.route(MUTES_LIST, (route) => {
+  await page.route(BLOCKS_LIST, (route) => {
     if (route.request().method() === "GET") {
       return route.fulfill({
         json: {
-          accounts: [
-            { user_id: "u-bob", username: "bob", display_name: "Bob Jones", muted_at: new Date().toISOString() },
+          users: [
+            { user_id: "u-bob", username: "bob", display_name: "Bob Jones", blocked_at: new Date().toISOString() },
           ],
           limit: 100,
           offset: 0,
@@ -135,22 +128,22 @@ test("the muted-accounts page lists muted accounts and unmutes them", async ({ p
     }
     return route.continue();
   });
-  await page.route(MUTE_ONE, (route) =>
+  await page.route(BLOCK_ONE, (route) =>
     route.request().method() === "DELETE" ? route.fulfill({ status: 204, body: "" }) : route.continue(),
   );
 
-  // Settings → Muted accounts (client-side nav keeps the session).
+  // Settings → Blocked accounts (client-side nav keeps the session).
   await page.getByRole("link", { name: "ada" }).click();
-  await page.getByRole("link", { name: "Manage muted accounts" }).click();
+  await page.getByRole("link", { name: "Manage blocked accounts" }).click();
   await expect(page.getByText("Bob Jones")).toBeVisible();
   await expect(page.getByText("@bob")).toBeVisible();
 
-  const unmuted = page.waitForResponse(
-    (r) => MUTE_ONE.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
+  const unblocked = page.waitForResponse(
+    (r) => BLOCK_ONE.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
   );
-  await page.getByRole("button", { name: "Unmute" }).click();
-  await unmuted;
+  await page.getByRole("button", { name: "Unblock" }).click();
+  await unblocked;
 
   await expect(page.getByText("Bob Jones")).toHaveCount(0);
-  await expect(page.getByText("No muted accounts")).toBeVisible();
+  await expect(page.getByText("No blocked accounts")).toBeVisible();
 });

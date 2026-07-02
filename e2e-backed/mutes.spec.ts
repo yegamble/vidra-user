@@ -38,7 +38,7 @@ test("muting a commenter hides their comment and unmuting restores it", async ({
 
   // The muted account appears on the management page (a fresh API read).
   await page.getByRole("link", { name: `fan${id}` }).click();
-  await page.getByRole("link", { name: "Manage" }).click();
+  await page.getByRole("link", { name: "Manage muted accounts" }).click();
   await expect(page.getByText(`@${commenter.username}`)).toBeVisible();
 
   // Unmute → the account drops out of the list.

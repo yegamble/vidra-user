@@ -54,7 +54,13 @@ viewer **Mutes** a comment's author (`CommentsSection` → `POST /me/mutes/accou
 via `Comment.author_id`), hiding that account's comments; the muted-accounts page
 (`app/settings/mutes` → `components/MutedAccountsView.tsx`, linked from `/settings`) lists
 (`GET /me/mutes/accounts`) and **unmutes** (`DELETE …`) — DB-effect VERIFIED in
-`e2e-backed/mutes.spec.ts`. Studio publishing: the `StudioView` publish form and the
+`e2e-backed/mutes.spec.ts`. Account blocks (distinct from mute — symmetrically cut off DM):
+a viewer **Blocks** a comment's author (`CommentsSection` → `POST /me/blocks/:author_id`);
+a block makes `MessageButton` surface the backend 403 inline ("You can't message this user."),
+and the blocked-accounts page (`app/settings/blocks` → `components/BlockedUsersView.tsx`,
+linked from `/settings`) lists (`GET /me/blocks`) and **unblocks** (`DELETE …`) — DB-effect
+VERIFIED in `e2e-backed/blocks.spec.ts` (block → DM refused → block-list read → unblock → DM
+works). Studio publishing: the `StudioView` publish form and the
 per-video **Edit** form both set **title + description + privacy** (`createVideoDraft` /
 `updateVideo` — the backend accepts `description` ≤5000 on create + PATCH) — description
 DB-effect VERIFIED in `e2e-backed/video-description.spec.ts` (publish/edit → public

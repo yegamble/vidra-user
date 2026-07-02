@@ -170,6 +170,8 @@ function CommentItem({
   const { user, status } = useSession();
   const [busy, setBusy] = useState(false);
   const [muting, setMuting] = useState(false);
+  const [blocking, setBlocking] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const isAuthor = user?.username === comment.author_username;
   const when = relativeTime(comment.created_at);
 
@@ -192,6 +194,18 @@ function CommentItem({
     } catch {
       // Leave the comment in place on failure.
       setMuting(false);
+    }
+  }
+
+  async function block() {
+    setBlocking(true);
+    try {
+      await api.blockUser(comment.author_id);
+      setBlocked(true); // a block doesn't hide content, so keep the comment; reflect the state
+    } catch {
+      // Leave things as-is on failure.
+    } finally {
+      setBlocking(false);
     }
   }
 
@@ -222,6 +236,14 @@ function CommentItem({
               {muting ? "Muting…" : "Mute"}
             </button>
             <MessageButton recipientId={comment.author_id} />
+            <button
+              type="button"
+              disabled={blocking || blocked}
+              onClick={() => void block()}
+              className="text-xs font-medium text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              {blocked ? "Blocked" : blocking ? "Blocking…" : "Block"}
+            </button>
             <ReportButton kind="account" targetId={comment.author_id} variant="link" />
             <ReportButton kind="comment" targetId={comment.id} variant="link" />
           </span>
