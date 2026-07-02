@@ -50,8 +50,9 @@ test("a creator uploads and removes a caption in the studio", async ({ page, req
   await row.getByRole("button", { name: "Edit" }).click();
   await expect(page.getByText("No captions yet.")).toBeVisible();
 
-  // Upload an English caption.
-  await page.getByLabel("Caption language").fill("en");
+  // Upload an English caption — the language comes from the curated taxonomy
+  // <select> (GET /videos/config), not a free-text field.
+  await page.getByLabel("Caption language").selectOption("en");
   await page.getByLabel("Caption label").fill("English");
   await page.getByLabel("Caption file").setInputFiles({
     name: "cap.vtt",

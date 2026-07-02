@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ApiError, api } from "@/lib/api";
-import type { Caption } from "@/lib/api";
+import type { Caption, VideoConfigOption } from "@/lib/api";
 
 // CaptionsManager lists a video's WebVTT caption tracks and lets the owner upload
 // (or replace) and remove them. Embedded in the studio's per-video edit surface.
 export function CaptionsManager({ videoId }: { videoId: string }) {
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [languages, setLanguages] = useState<VideoConfigOption[]>([]);
   const [language, setLanguage] = useState("");
   const [label, setLabel] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -30,6 +31,20 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
       });
     return () => controller.abort();
   }, [videoId]);
+
+  // Load the caption-language taxonomy so the owner picks from curated codes
+  // (same source as the studio metadata dropdowns) instead of free-typing a tag.
+  // On failure we leave the list empty and fall back to a free-text input.
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .getVideoConfig(controller.signal)
+      .then((res) => setLanguages(res.languages))
+      .catch(() => {
+        // Keep the free-text fallback; no user-facing error for a config miss.
+      });
+    return () => controller.abort();
+  }, []);
 
   async function upload(e: React.FormEvent) {
     e.preventDefault();
@@ -101,14 +116,30 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
 
       <form className="flex flex-col gap-2" onSubmit={upload}>
         <div className="flex flex-wrap gap-2">
-          <input
-            aria-label="Caption language"
-            placeholder="Language (e.g. en)"
-            value={language}
-            maxLength={35}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="w-28 rounded border border-zinc-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          {languages.length > 0 ? (
+            <select
+              aria-label="Caption language"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-40 rounded border border-zinc-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">Select a language…</option>
+              {languages.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              aria-label="Caption language"
+              placeholder="Language (e.g. en)"
+              value={language}
+              maxLength={35}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-28 rounded border border-zinc-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          )}
           <input
             aria-label="Caption label"
             placeholder="Label (optional)"

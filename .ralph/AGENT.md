@@ -81,8 +81,9 @@ RTMP URL), and per-stream Regenerate key (`POST /live/:id/key`) / Delete
 DB-effect VERIFIED in `e2e-backed/studio.spec.ts` (create → API read confirms it →
 rekey → delete → API read confirms gone). Captions: the studio's per-video **Edit** surface
 embeds `components/CaptionsManager.tsx` — upload/list/remove WebVTT caption tracks
-(`GET/POST/DELETE /videos/:id/captions[/:lang]`) — DB-effect VERIFIED in
-`e2e-backed/captions.spec.ts`. The same Edit surface embeds `components/ThumbnailManager.tsx`
+(`GET/POST/DELETE /videos/:id/captions[/:lang]`), with the language picked from a
+curated `<select>` of the `/videos/config` taxonomy (free-text fallback if config
+is unavailable) — DB-effect VERIFIED in `e2e-backed/captions.spec.ts`. The same Edit surface embeds `components/ThumbnailManager.tsx`
 — a custom poster upload (`POST /videos/:id/thumbnail`, JPEG/PNG/WebP → 415 otherwise,
 `api.setVideoThumbnail`) that replaces any ffmpeg-generated poster and cache-busts the
 preview — DB-effect VERIFIED in `e2e-backed/studio.spec.ts` (uploaded PNG served back as

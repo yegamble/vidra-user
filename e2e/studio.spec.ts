@@ -310,14 +310,10 @@ test("a creator can add and remove a caption from a video's edit surface", async
   await page.route(CAPTION_LANG, (route) =>
     route.request().method() === "DELETE" ? route.fulfill({ status: 204, body: "" }) : route.continue(),
   );
-  // Entering edit mode fetches the video detail to pre-fill the form. Mock the
-  // taxonomy config as empty so the dropdowns carry no options — this
-  // caption-focused test stays deterministically isolated from taxonomy labels
-  // (e.g. a "English" language option colliding with the caption label).
+  // Entering edit mode fetches the video detail to pre-fill the form and the
+  // taxonomy config that populates the caption-language <select>.
   await page.route(VIDEO, (route) => route.fulfill({ json: video({ title: "Captioned clip" }) }));
-  await page.route(VIDEO_CONFIG, (route) =>
-    route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
-  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
   const row = page.getByRole("listitem").filter({ hasText: "Captioned clip" });
@@ -326,8 +322,8 @@ test("a creator can add and remove a caption from a video's edit surface", async
   // The captions manager appears (empty).
   await expect(page.getByText("No captions yet.")).toBeVisible();
 
-  // Upload an English caption.
-  await page.getByLabel("Caption language").fill("en");
+  // Upload an English caption — the language comes from the curated taxonomy <select>.
+  await page.getByLabel("Caption language").selectOption("en");
   await page.getByLabel("Caption label").fill("English");
   await page.getByLabel("Caption file").setInputFiles({
     name: "cap.vtt",
@@ -341,7 +337,9 @@ test("a creator can add and remove a caption from a video's edit surface", async
   await uploaded;
 
   await expect(page.getByText("No captions yet.")).toHaveCount(0);
-  await expect(page.getByText("English")).toBeVisible();
+  // Assert the track's Remove control rather than the "English" label, which now
+  // also matches the caption-language and video-language <select> options.
+  await expect(page.getByRole("button", { name: "Remove en caption" })).toBeVisible();
 
   // Remove it.
   const removed = page.waitForResponse(
