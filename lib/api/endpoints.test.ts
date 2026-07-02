@@ -160,6 +160,14 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("reorderPlaylist PUTs the ordered video ids", async () => {
+    await api.reorderPlaylist("p1", ["v2", "v1"]);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/playlists/p1/videos");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ video_ids: ["v2", "v1"] });
+  });
+
   it("getMyChannels targets the channels endpoint", async () => {
     await api.getMyChannels();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/channels");

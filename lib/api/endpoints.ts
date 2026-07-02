@@ -462,6 +462,17 @@ export const api = {
     ),
 
   /**
+   * PUT /api/v1/playlists/{id}/videos — reorder items (auth, owner). videoIds must
+   * be exactly the playlist's current video ids in the desired order; a mismatch
+   * (missing/extra/duplicate) is 422.
+   */
+  reorderPlaylist: (id: string, videoIds: string[]) =>
+    apiRequest<void>(`/api/v1/playlists/${encodeURIComponent(id)}/videos`, {
+      method: "PUT",
+      body: { video_ids: videoIds },
+    }),
+
+  /**
    * GET /api/v1/admin/reports — the moderation queue, newest first (moderator/admin).
    * Pass `openOnly` to return only unresolved reports.
    */

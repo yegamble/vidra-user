@@ -22,6 +22,7 @@ export function PlaylistDetailView({ id }: { id: string }) {
   const [playlist, setPlaylist] = useState<PlaylistDetail | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [reordering, setReordering] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -68,6 +69,31 @@ export function PlaylistDetailView({ id }: { id: string }) {
       await api.removeFromPlaylist(id, videoId);
     } catch {
       setPlaylist(prev); // restore on failure
+    }
+  }
+
+  // moveItem swaps the item at index with its neighbour in the given direction and
+  // persists the whole new order via PUT (the backend expects the full item set).
+  // Optimistic: the list reorders immediately and restores if the request fails
+  // (e.g. a 422 if the visible items diverged from the stored set).
+  async function moveItem(index: number, dir: -1 | 1) {
+    if (!playlist || reordering) return;
+    const target = index + dir;
+    if (target < 0 || target >= playlist.videos.length) return;
+    const prev = playlist;
+    const reordered = [...playlist.videos];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setReordering(true);
+    setPlaylist({ ...playlist, videos: reordered });
+    try {
+      await api.reorderPlaylist(
+        id,
+        reordered.map((v) => v.id),
+      );
+    } catch {
+      setPlaylist(prev); // restore on failure
+    } finally {
+      setReordering(false);
     }
   }
 
@@ -151,11 +177,31 @@ export function PlaylistDetailView({ id }: { id: string }) {
         />
       ) : (
         <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {playlist.videos.map((video) => (
+          {playlist.videos.map((video, index) => (
             <li key={video.id} className="flex flex-col gap-2">
               <VideoCard video={video} />
               {isOwner ? (
-                <div className="flex justify-end">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void moveItem(index, -1)}
+                      disabled={reordering || index === 0}
+                      aria-label={`Move ${video.title} up`}
+                      className="text-xs font-medium text-zinc-500 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-40 dark:hover:text-zinc-200"
+                    >
+                      Move up
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void moveItem(index, 1)}
+                      disabled={reordering || index === playlist.videos.length - 1}
+                      aria-label={`Move ${video.title} down`}
+                      className="text-xs font-medium text-zinc-500 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-40 dark:hover:text-zinc-200"
+                    >
+                      Move down
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => void removeItem(video.id)}

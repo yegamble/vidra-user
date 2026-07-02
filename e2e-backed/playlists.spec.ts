@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { seedPublishedChannel, uniqueId } from "./fixtures";
+import { API_URL, registerUser, seedPublishedChannel, TINY_MP4_BASE64, uniqueId } from "./fixtures";
 
 // Proves the playlist round trip against a real vidra-core + PostgreSQL: a viewer
 // creates a playlist and adds a video from the watch page, the video then appears
@@ -95,4 +95,69 @@ test("an owner can edit a playlist's title and visibility, and it persists", asy
   await page.getByRole("link", { name: new RegExp(`Renamed ${id}`) }).click();
   await expect(page.getByRole("heading", { name: `Renamed ${id}` })).toBeVisible();
   await expect(page.getByText(/· public/)).toBeVisible();
+});
+
+// Proves the playlist REORDER round trip against a real vidra-core + PostgreSQL:
+// an owner reorders two items via the UI and the new order survives a fresh
+// refetch (a real backend GET) AND a direct API read — confirming PUT
+// /playlists/:id/videos rewrote the positions in the DB.
+test("an owner can reorder playlist items, and the order persists", async ({ page, request }) => {
+  // Seed one channel with two published videos (A, then B).
+  const { handle, videoId: aId, videoTitle: aTitle, token: ownerToken } = await seedPublishedChannel(request);
+  const auth = { Authorization: `Bearer ${ownerToken}` };
+  const bTitle = `Video B ${uniqueId()}`;
+  const bCreate = await request.post(`${API_URL}/api/v1/channels/${handle}/videos`, {
+    headers: auth,
+    data: { title: bTitle, privacy: "public" },
+  });
+  const bId = ((await bCreate.json()) as { id: string }).id;
+  await request.post(`${API_URL}/api/v1/videos/${bId}/file`, {
+    headers: auth,
+    multipart: {
+      file: { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from(TINY_MP4_BASE64, "base64") },
+    },
+  });
+
+  // A viewer registers via the API, then creates a public playlist and adds A then B.
+  const viewer = await registerUser(request, "fan");
+  const vAuth = { Authorization: `Bearer ${viewer.token}` };
+  const plCreate = await request.post(`${API_URL}/api/v1/playlists`, {
+    headers: vAuth,
+    data: { title: `Order Mix ${uniqueId()}`, visibility: "public" },
+  });
+  const plId = ((await plCreate.json()) as { id: string }).id;
+  for (const vid of [aId, bId]) {
+    await request.post(`${API_URL}/api/v1/playlists/${plId}/videos`, { headers: vAuth, data: { video_id: vid } });
+  }
+
+  // Sign in as the viewer through the UI so the browser session owns the playlist.
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(viewer.email);
+  await page.getByLabel("Password").fill("supersecret-e2e");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  // Open the playlist detail via client-side nav (keeps the in-memory session):
+  // initial order is [A, B].
+  await page.getByRole("link", { name: "Playlists" }).click();
+  await page.getByRole("link", { name: /Order Mix/ }).click();
+  await expect(page.getByRole("heading", { name: aTitle })).toBeVisible();
+  await expect(page.getByRole("heading", { name: bTitle })).toBeVisible();
+
+  // Move B up → PUT → 204.
+  const reordered = page.waitForResponse(
+    (r) => /\/playlists\/[^/]+\/videos$/.test(r.url()) && r.request().method() === "PUT" && r.ok(),
+  );
+  await page.getByRole("button", { name: `Move ${bTitle} up` }).click();
+  await reordered;
+
+  // Persisted (DB evidence): a direct backend read shows B before A.
+  const detailRes = await request.get(`${API_URL}/api/v1/playlists/${plId}`, { headers: vAuth });
+  const detail = (await detailRes.json()) as { videos: { id: string }[] };
+  expect(detail.videos.map((v) => v.id)).toEqual([bId, aId]);
+
+  // And a fresh UI refetch reflects it: B is now first, so its Move up is disabled.
+  await page.getByRole("link", { name: "Playlists" }).click();
+  await page.getByRole("link", { name: /Order Mix/ }).click();
+  await expect(page.getByRole("button", { name: `Move ${bTitle} up` })).toBeDisabled();
 });

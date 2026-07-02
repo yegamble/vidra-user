@@ -114,6 +114,35 @@ test("the playlist detail shows videos and the owner can remove one", async ({ p
   await expect(page.getByRole("heading", { name: "Clip" })).toBeHidden();
 });
 
+test("the owner can reorder playlist items", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_PLAYLISTS, (route) =>
+    route.fulfill({ json: { playlists: [playlist("p1", "My Mix", 2)] } }),
+  );
+  await page.route(DETAIL, (route) =>
+    route.fulfill({
+      json: { ...playlist("p1", "My Mix", 2), videos: [video("v1", "First"), video("v2", "Second")] },
+    }),
+  );
+  // PUT reorder → 204; the body is asserted below via waitForRequest.
+  await page.route(/\/api\/v1\/playlists\/p1\/videos$/, (route) => route.fulfill({ status: 204, body: "" }));
+
+  await page.getByRole("link", { name: "Playlists" }).click();
+  await page.getByRole("link", { name: /My Mix/ }).click();
+  await expect(page.getByRole("heading", { name: "First" })).toBeVisible();
+
+  // Move "Second" up → PUT the full new order [v2, v1].
+  const reordered = page.waitForRequest(
+    (r) => /\/api\/v1\/playlists\/p1\/videos$/.test(r.url()) && r.method() === "PUT",
+  );
+  await page.getByRole("button", { name: "Move Second up" }).click();
+  const req = await reordered;
+  expect(req.postDataJSON()).toEqual({ video_ids: ["v2", "v1"] });
+
+  // The list reordered optimistically: "Second" is now first, so its Move up is disabled.
+  await expect(page.getByRole("button", { name: "Move Second up" })).toBeDisabled();
+});
+
 test("the owner can edit a playlist's title and visibility", async ({ page }) => {
   await signIn(page);
   await page.route(MY_PLAYLISTS, (route) =>
