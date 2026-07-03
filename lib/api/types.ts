@@ -216,6 +216,8 @@ export interface RegisterRequest {
   password: string;
   /** Optional message to the admins, used only when the instance requires registration approval. */
   note?: string;
+  /** See LoginRequest.cookie_mode — the web client always sends true. */
+  cookie_mode?: boolean;
 }
 
 /**
@@ -229,6 +231,21 @@ export interface RegistrationPending {
 export interface LoginRequest {
   email: string;
   password: string;
+  /**
+   * Opt the session into cookie mode (browser clients): the rotating refresh
+   * token is delivered as an httpOnly `vidra_refresh` cookie and omitted from
+   * the response body. The web client always sends true.
+   */
+  cookie_mode?: boolean;
+}
+
+/**
+ * POST /api/v1/auth/refresh | /auth/logout body. `refresh_token` may be omitted
+ * in cookie mode — the httpOnly `vidra_refresh` cookie carries it instead.
+ */
+export interface RefreshRequest {
+  refresh_token?: string;
+  cookie_mode?: boolean;
 }
 
 /** POST /api/v1/auth/password-reset — start the reset flow (always 202). */
@@ -256,7 +273,11 @@ export interface UpdateProfileRequest {
 /** Returned by register / login / refresh. */
 export interface AuthResponse {
   token: string;
-  refresh_token: string;
+  /**
+   * Opaque rotating refresh token. Omitted in cookie mode, where the httpOnly
+   * `vidra_refresh` cookie is the sole carrier (what the web client uses).
+   */
+  refresh_token?: string;
   token_type: string;
   expires_in: number;
   user: User;

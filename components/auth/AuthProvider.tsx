@@ -1,9 +1,21 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 
-import { authApi, setAccessToken } from "@/lib/api";
+import {
+  authApi,
+  restoreSession,
+  setAccessToken,
+  setSessionExpiredHandler,
+} from "@/lib/api";
 import type {
   AuthResponse,
   LoginRequest,
@@ -12,7 +24,11 @@ import type {
   User,
 } from "@/lib/api";
 
-type SessionStatus = "anon" | "authed";
+/**
+ * "restoring" — the boot-time silent refresh is still in flight (views should
+ * treat it as loading, not signed-out); "anon" / "authed" — the settled states.
+ */
+type SessionStatus = "restoring" | "anon" | "authed";
 
 /**
  * Outcome of a register call: "created" — the account exists and the session is
@@ -36,16 +52,48 @@ interface SessionContextValue {
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 // AuthProvider holds the session client-side: the access token lives in the
-// in-memory auth-store (auto-attached by the API client), the refresh token +
-// user live in React state. Nothing is persisted, so a reload signs out until
-// refresh-token rehydration lands.
+// in-memory auth-store (auto-attached by the API client) and the user in React
+// state. The refresh token is an httpOnly cookie the JS never sees, so a hard
+// reload rehydrates via one silent POST /auth/refresh on boot — success loads
+// /auth/me, failure quietly lands signed out (no error UI).
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    // An unrecoverable 401 mid-session (refresh failed, or a retried request
+    // was still unauthorized) drops the UI to signed-out everywhere.
+    setSessionExpiredHandler(() => setUser(null));
+
+    void (async () => {
+      const res = await restoreSession();
+      if (cancelled) return;
+      if (res) {
+        // Prefer a fresh /auth/me read (role/verification may have changed
+        // since the token was minted); fall back to the refresh payload's
+        // user so a transient /me failure doesn't drop a valid session.
+        try {
+          const me = await authApi.me();
+          if (!cancelled) setUser(me);
+        } catch {
+          if (!cancelled) setUser(res.user);
+        }
+      }
+      if (!cancelled) setRestored(true);
+    })();
+
+    return () => {
+      cancelled = true;
+      setSessionExpiredHandler(null);
+    };
+  }, []);
 
   const apply = useCallback((res: AuthResponse) => {
+    // Cookie mode: the response body has no refresh_token — the httpOnly
+    // cookie set by the backend is the sole carrier. Only the short-lived
+    // access token is kept, in memory.
     setAccessToken(res.token);
-    setRefreshToken(res.refresh_token);
     setUser(res.user);
   }, []);
 
@@ -80,28 +128,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authApi.deactivate(password);
     // The backend already revoked every session; drop the local one too.
     setAccessToken(null);
-    setRefreshToken(null);
     setUser(null);
   }, []);
 
   const logout = useCallback(async () => {
-    const rt = refreshToken;
     setAccessToken(null);
-    setRefreshToken(null);
     setUser(null);
-    if (rt) {
-      try {
-        await authApi.logout(rt);
-      } catch {
-        // Best-effort revoke; logout is idempotent server-side.
-      }
+    try {
+      // Cookie-mode revoke: the request carries the httpOnly cookie (no body
+      // token) and the 204 clears it, so a reload stays signed out.
+      await authApi.logout();
+    } catch {
+      // Best-effort revoke; logout is idempotent server-side.
     }
-  }, [refreshToken]);
+  }, []);
 
   const value = useMemo<SessionContextValue>(
     () => ({
       user,
-      status: user ? "authed" : "anon",
+      status: user ? "authed" : restored ? "anon" : "restoring",
       login,
       register,
       updateProfile,
@@ -109,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       reloadUser,
     }),
-    [user, login, register, updateProfile, deactivate, logout, reloadUser],
+    [user, restored, login, register, updateProfile, deactivate, logout, reloadUser],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

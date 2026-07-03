@@ -6,14 +6,24 @@ import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, authApi } from "@/lib/api";
 import type { UpdateProfileRequest } from "@/lib/api";
 
 // SettingsView lets the signed-in user edit their profile (display name, bio)
-// and deactivate their account. The session lives in memory, so a hard reload
-// lands here signed out — we show a sign-in prompt rather than an empty form.
+// and deactivate their account. On a hard reload the session is restored via
+// the httpOnly refresh cookie — show a loading state until that settles; only
+// a settled signed-out state gets the sign-in prompt.
 export function SettingsView() {
   const { status, user, updateProfile, deactivate } = useSession();
+
+  if (status === "restoring") {
+    return (
+      <div className="flex justify-center py-16">
+        <Spinner label="Loading your account" />
+      </div>
+    );
+  }
 
   if (status === "anon" || !user) {
     return (

@@ -11,7 +11,16 @@ import type {
   User,
 } from "./types";
 
-/** Typed wrappers for the vidra-core auth endpoints. */
+/**
+ * Typed wrappers for the vidra-core auth endpoints.
+ *
+ * Session endpoints run in COOKIE MODE: register/login send cookie_mode: true
+ * with credentials included, so the rotating refresh token lives in an
+ * httpOnly `vidra_refresh` cookie (never in JS-readable state) and the
+ * response body omits it. Only these endpoints (plus refresh/logout) send
+ * cookies; every other call is cookie-free. A 401 on them is a real answer,
+ * so the client's silent-refresh retry is disabled (retryOn401: false).
+ */
 export const authApi = {
   /**
    * POST /api/v1/auth/register — create an account; returns a session (201).
@@ -21,12 +30,19 @@ export const authApi = {
   register: (body: RegisterRequest) =>
     apiRequest<AuthResponse | RegistrationPending>("/api/v1/auth/register", {
       method: "POST",
-      body,
+      body: { ...body, cookie_mode: true },
+      credentials: "include",
+      retryOn401: false,
     }),
 
   /** POST /api/v1/auth/login — exchange credentials for a session. */
   login: (body: LoginRequest) =>
-    apiRequest<AuthResponse>("/api/v1/auth/login", { method: "POST", body }),
+    apiRequest<AuthResponse>("/api/v1/auth/login", {
+      method: "POST",
+      body: { ...body, cookie_mode: true },
+      credentials: "include",
+      retryOn401: false,
+    }),
 
   /**
    * POST /api/v1/auth/password-reset — start the reset flow. Always 202
@@ -60,11 +76,18 @@ export const authApi = {
   confirmEmailVerification: (body: EmailVerificationConfirmRequest) =>
     apiRequest<void>("/api/v1/auth/verify-email/confirm", { method: "POST", body }),
 
-  /** POST /api/v1/auth/logout — revoke a session (idempotent, always 204). */
-  logout: (refreshToken: string) =>
+  /**
+   * POST /api/v1/auth/logout — revoke the cookie-mode session (idempotent,
+   * always 204). The body carries no token: the httpOnly `vidra_refresh`
+   * cookie identifies the session, and the response clears it (Max-Age=0) so
+   * the browser is left signed out across reloads.
+   */
+  logout: () =>
     apiRequest<void>("/api/v1/auth/logout", {
       method: "POST",
-      body: { refresh_token: refreshToken },
+      body: {},
+      credentials: "include",
+      retryOn401: false,
     }),
 
   /** GET /api/v1/auth/me — the current account (uses the stored bearer token). */

@@ -4,10 +4,23 @@ import Link from "next/link";
 
 import { useSession } from "@/components/auth/AuthProvider";
 
-// AccountMenu reflects session state in the header: a sign-in link when anon, or
-// the username + sign-out when authenticated.
+// AccountMenu reflects session state in the header: a sign-in link when anon,
+// the username + sign-out when authenticated, and a quiet placeholder while the
+// boot-time silent refresh decides which (avoids a "Sign in" flash on reload).
 export function AccountMenu() {
   const { status, user, logout } = useSession();
+
+  if (status === "restoring") {
+    return (
+      <span
+        role="status"
+        aria-label="Checking your session"
+        className="inline-block h-7 w-16 animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800"
+      >
+        <span className="sr-only">Checking your session…</span>
+      </span>
+    );
+  }
 
   if (status === "authed" && user) {
     return (

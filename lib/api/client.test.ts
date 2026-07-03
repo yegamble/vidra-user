@@ -1,12 +1,38 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiRequest } from "./client";
+import { getAccessToken, setAccessToken, setSessionExpiredHandler } from "./auth-store";
+import { ApiError, apiRequest, restoreSession } from "./client";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+const REFRESH_URL = "http://localhost:8080/api/v1/auth/refresh";
+
+function sessionJson(token: string): Response {
+  // Cookie-mode AuthResponse: no refresh_token in the body.
+  return jsonResponse({
+    token,
+    token_type: "Bearer",
+    expires_in: 900,
+    user: {
+      id: "u1",
+      username: "ada",
+      email: "ada@example.test",
+      role: "user",
+      email_verified: false,
+      display_name: "",
+      bio: "",
+      created_at: "2026-01-01T00:00:00Z",
+    },
+  });
+}
+
+function unauthorized(): Response {
+  return jsonResponse({ error: { code: "unauthorized", message: "token expired" } }, 401);
 }
 
 describe("apiRequest", () => {
@@ -105,5 +131,144 @@ describe("apiRequest", () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.code).toBe("network_error");
     expect(err.status).toBe(0);
+  });
+});
+
+describe("restoreSession", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    setAccessToken(null);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setAccessToken(null);
+  });
+
+  it("POSTs the refresh endpoint with cookies, no body token, and stores the new access token", async () => {
+    fetchMock.mockResolvedValue(sessionJson("fresh"));
+    const res = await restoreSession();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(REFRESH_URL);
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    // The httpOnly cookie is the sole refresh-token carrier — never a body token.
+    expect(JSON.parse(init.body as string)).toEqual({ cookie_mode: true });
+    expect((init.headers as Record<string, string>).authorization).toBeUndefined();
+    expect(res?.token).toBe("fresh");
+    expect(getAccessToken()).toBe("fresh");
+  });
+
+  it("resolves null on a dead/absent cookie (401) without throwing", async () => {
+    fetchMock.mockResolvedValue(unauthorized());
+    await expect(restoreSession()).resolves.toBeNull();
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("resolves null on a network failure without throwing", async () => {
+    fetchMock.mockRejectedValue(new TypeError("fetch failed"));
+    await expect(restoreSession()).resolves.toBeNull();
+  });
+
+  it("dedupes concurrent refreshes into a single flight", async () => {
+    fetchMock.mockResolvedValue(sessionJson("fresh"));
+    const [a, b] = await Promise.all([restoreSession(), restoreSession()]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(a?.token).toBe("fresh");
+    expect(b?.token).toBe("fresh");
+  });
+});
+
+describe("apiRequest 401 → silent refresh → retry", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let expired: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    expired = vi.fn();
+    setSessionExpiredHandler(expired);
+    setAccessToken("stale");
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setSessionExpiredHandler(null);
+    setAccessToken(null);
+  });
+
+  it("refreshes once and retries the original request with the rotated token", async () => {
+    fetchMock
+      .mockResolvedValueOnce(unauthorized()) // original call, stale token
+      .mockResolvedValueOnce(sessionJson("fresh")) // silent refresh
+      .mockResolvedValueOnce(jsonResponse({ ok: true })); // retried call
+    const out = await apiRequest<{ ok: boolean }>("/api/v1/auth/me");
+    expect(out).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const [refreshUrl, refreshInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(refreshUrl).toBe(REFRESH_URL);
+    expect(refreshInit.credentials).toBe("include");
+    const [, retryInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect((retryInit.headers as Record<string, string>).authorization).toBe("Bearer fresh");
+    expect(expired).not.toHaveBeenCalled();
+    expect(getAccessToken()).toBe("fresh");
+  });
+
+  it("signs out and rethrows the original 401 when the refresh fails", async () => {
+    fetchMock
+      .mockResolvedValueOnce(unauthorized()) // original call
+      .mockResolvedValueOnce(unauthorized()); // refresh: cookie dead too
+    await expect(apiRequest("/api/v1/auth/me")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 401,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(expired).toHaveBeenCalledTimes(1);
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("signs out when the retried request is 401 again (no second refresh)", async () => {
+    fetchMock
+      .mockResolvedValueOnce(unauthorized()) // original call
+      .mockResolvedValueOnce(sessionJson("fresh")) // refresh succeeds
+      .mockResolvedValueOnce(unauthorized()); // retry still unauthorized
+    await expect(apiRequest("/api/v1/me/notifications")).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(expired).toHaveBeenCalledTimes(1);
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("does not retry a call made with an explicit per-call token", async () => {
+    fetchMock.mockResolvedValue(unauthorized());
+    await expect(apiRequest("/x", { token: "explicit" })).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it("does not retry an anonymous call", async () => {
+    setAccessToken(null);
+    fetchMock.mockResolvedValue(unauthorized());
+    await expect(apiRequest("/x")).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it("does not retry when retryOn401 is false (session endpoints)", async () => {
+    fetchMock.mockResolvedValue(unauthorized());
+    await expect(apiRequest("/api/v1/auth/login", { method: "POST", body: {}, retryOn401: false })).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it("does not retry non-401 failures", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: "forbidden", message: "no" } }, 403),
+    );
+    await expect(apiRequest("/x")).rejects.toMatchObject({ status: 403 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

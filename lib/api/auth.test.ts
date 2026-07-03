@@ -41,23 +41,27 @@ describe("authApi + auth-store", () => {
     setAccessToken(null);
   });
 
-  it("login POSTs credentials and returns the session", async () => {
+  it("login POSTs credentials in cookie mode (cookie_mode: true, credentials included)", async () => {
     fetchMock.mockResolvedValue(okJson(session));
     const res = await authApi.login({ email: "ada@example.test", password: "pw" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/auth/login");
     expect(init.method).toBe("POST");
-    expect(init.body).toBe(JSON.stringify({ email: "ada@example.test", password: "pw" }));
+    expect(init.body).toBe(
+      JSON.stringify({ email: "ada@example.test", password: "pw", cookie_mode: true }),
+    );
+    expect(init.credentials).toBe("include");
     expect(res.token).toBe("acc");
     expect(res.user.username).toBe("ada");
   });
 
-  it("register POSTs to the register endpoint", async () => {
+  it("register POSTs to the register endpoint in cookie mode", async () => {
     fetchMock.mockResolvedValue(okJson(session));
     await authApi.register({ username: "ada", email: "ada@example.test", password: "password1" });
-    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
-      "http://localhost:8080/api/v1/auth/register",
-    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/auth/register");
+    expect((JSON.parse(init.body as string) as { cookie_mode: boolean }).cookie_mode).toBe(true);
+    expect(init.credentials).toBe("include");
   });
 
   it("register surfaces the 202 pending-approval body instead of a session", async () => {
@@ -73,13 +77,16 @@ describe("authApi + auth-store", () => {
     expect(JSON.parse(init.body as string).note).toBe("hi admins");
   });
 
-  it("auto-attaches the stored access token to subsequent calls", async () => {
+  it("auto-attaches the stored access token to subsequent calls (cookie-free)", async () => {
     setAccessToken("acc");
     fetchMock.mockResolvedValue(okJson(session.user));
     await authApi.me();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/auth/me");
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer acc");
+    // Only the session endpoints opt into cookies; /me and everything else
+    // must never send credentials.
+    expect(init.credentials).toBeUndefined();
   });
 
   it("sends no auth header when no token is stored", async () => {
@@ -124,12 +131,13 @@ describe("authApi + auth-store", () => {
     expect(init.body).toBe(JSON.stringify({ token: "verify-tok" }));
   });
 
-  it("logout posts the refresh token", async () => {
+  it("logout posts with credentials and no body token (the cookie carries it)", async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
-    await authApi.logout("ref");
+    await authApi.logout();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/auth/logout");
-    expect(init.body).toBe(JSON.stringify({ refresh_token: "ref" }));
+    expect(init.body).toBe("{}");
+    expect(init.credentials).toBe("include");
   });
 
   it("setAccessToken/getAccessToken round-trip", () => {

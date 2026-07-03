@@ -230,6 +230,9 @@ test("signup on an approval-required instance shows the copy and the pending con
     email: "ada@example.test",
     password: "supersecret",
     note: "hello!",
+    // The web client always opts sessions into cookie mode; on a 202 pending
+    // outcome no session (or cookie) is created, but the flag is still sent.
+    cookie_mode: true,
   });
 });
 
