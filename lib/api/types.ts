@@ -1,1680 +1,241 @@
-// Hand-maintained types mirroring the vidra-core HTTP contract
-// (vidra-core/api/openapi.yaml). PROVISIONAL: keep in lock-step with the backend
-// OpenAPI until generated types replace these. Never invent shapes here.
+// API types for the vidra-core HTTP contract.
+//
+// These are NOT hand-maintained: every type below is DERIVED from the generated
+// `generated.ts`, which `npm run codegen` (scripts/codegen.mjs) produces from
+// vidra-core's api/openapi.yaml — the single source of truth. This makes drift
+// structurally impossible: if the backend changes a schema, the regenerated types
+// change and TypeScript fails at the call sites that no longer match. Do NOT
+// hand-edit shapes here — change the OpenAPI spec in vidra-core and re-run
+// `npm run codegen`, then commit the refreshed generated.ts.
+//
+// The named aliases below preserve the public type names the app imports from
+// `@/lib/api`, mapping each onto its OpenAPI component schema. The few union/enum
+// types are derived from the owning schema's field (wrapped in NonNullable so an
+// optional/nullable field still yields the narrow union), and the handful of
+// request bodies that are inline (not named components) are derived from the
+// generated `operations`.
 
+import type { components, operations } from "./generated";
+
+type Schemas = components["schemas"];
+
+// Re-export the raw generated maps for anything not aliased below.
+export type { components, operations, paths } from "./generated";
+
+// --- Errors -----------------------------------------------------------------
+export type ApiErrorEnvelope = Schemas["ErrorResponse"];
 /** A field-level validation problem (present on 422 responses). */
-export interface FieldError {
-  field: string;
-  message: string;
-}
-
-/** The single error envelope returned for every non-2xx response. */
-export interface ApiErrorEnvelope {
-  error: {
-    code: string;
-    message: string;
-    request_id?: string;
-    fields?: FieldError[];
-  };
-}
-
-export interface InstanceResponse {
-  name: string;
-  description: string;
-  software: { name: string; version: string };
-  registration_enabled: boolean;
-  /** When true, signup files a pending request for admin approval (202) instead of creating an account. */
-  registration_requires_approval: boolean;
-  /**
-   * Configured OIDC login provider names, in display order. Render a
-   * "Continue with <provider>" button per entry, navigating (top-level) to
-   * GET /api/v1/auth/oauth/{provider}. Empty when OAuth login is off.
-   */
-  oauth_providers: string[];
-  /**
-   * Whether ActivityPub federation is enabled on this instance (gates
-   * remote-content surfaces and the instance-level protocol label).
-   */
-  federation_enabled: boolean;
-  terms_url: string;
-  privacy_url: string;
-  contact_email: string;
-}
-
-export type VideoPrivacy = "public" | "unlisted" | "private";
-// "scheduled": processed but publish_at lies in the future (public surfaces hide
-// it). "quarantined": held for moderator review (QUARANTINE_NEW_UPLOADS) — only
-// the owner and moderators see it until it is approved (published) or rejected
-// (failed).
-export type VideoState =
-  | "draft"
-  | "processing"
-  | "scheduled"
-  | "quarantined"
-  | "published"
-  | "failed";
-
-export interface Video {
-  id: string;
-  channel_id: string;
-  title: string;
-  description: string;
-  privacy: VideoPrivacy;
-  state: VideoState;
-  created_at: string;
-  /**
-   * Whether this card is a federated REMOTE video (subscriptions feed, search,
-   * public feed with scope=all). Remote cards omit the local-only fields
-   * (channel_id, privacy, state — typed required here for the local shape the
-   * app renders everywhere else; never read them on a remote card) and instead
-   * carry domain/watch_url/stream_url. Local videos are always false/omitted.
-   */
-  remote?: boolean;
-  /** REMOTE cards only: the origin instance's domain. */
-  domain?: string;
-  /** REMOTE cards only: the origin's human watch page (always present on remote cards). */
-  watch_url?: string;
-  /**
-   * REMOTE cards only: best playable URL from the origin (HLS preferred, else a
-   * direct video file). Omitted when the origin advertised none.
-   */
-  stream_url?: string;
-  /**
-   * The scheduled publish time (ISO date-time). Present on the detail,
-   * create/update, and owner (studio) channel-list views once a schedule was
-   * set; omitted otherwise. The server publishes automatically at this time.
-   */
-  publish_at?: string;
-  // Discovery-card / detail extras — present on the endpoints that populate them,
-  // omitted otherwise.
-  duration_seconds?: number;
-  width?: number;
-  height?: number;
-  has_thumbnail?: boolean;
-  /**
-   * Whether a seek-preview storyboard (sprite sheet + WebVTT map) is available at
-   * GET /videos/{id}/storyboard.jpg (+ .vtt). Present on the DETAIL view only.
-   */
-  has_storyboard?: boolean;
-  views?: number;
-  // Owning channel, present on card/feed views (so a card can link to the
-  // channel); omitted on the detail view.
-  channel_handle?: string;
-  channel_display_name?: string;
-  // Optional taxonomy ids (see GET /videos/config); present on create/update/
-  // detail when set, omitted otherwise.
-  category?: string;
-  language?: string;
-  license?: string;
-  // Free-form tags (lowercased, alphabetical; at most 5). Present on the
-  // create/update/detail views; omitted when empty and on list/feed views.
-  tags?: string[];
-  // HLS streaming (transcoding pipeline). hls_url is the master-playlist path
-  // (GET /videos/{id}/hls/master.m3u8), present on the DETAIL endpoint only once
-  // the transcoded streaming playlist is ready — omitted while transcoding is
-  // pending/failed or disabled (progressive /original playback always works).
-  // renditions lists the available ladder rungs (tallest first) alongside it.
-  hls_url?: string;
-  renditions?: VideoRendition[];
-}
-
-/** One transcoded HLS rendition (ladder rung) of a video. */
-export interface VideoRendition {
-  height: number;
-  width: number;
-}
-
-/** One selectable value in a video-metadata taxonomy (GET /videos/config). */
-export interface VideoConfigOption {
-  id: string;
-  label: string;
-}
-
-/** GET /api/v1/videos/config — the taxonomy for the metadata dropdowns. */
-export interface VideoConfigResponse {
-  categories: VideoConfigOption[];
-  licenses: VideoConfigOption[];
-  languages: VideoConfigOption[];
-  privacies: VideoConfigOption[];
-}
-
-export type FeedSort = "recent" | "popular" | "trending";
-
-/**
- * Public-feed scope: "local" (this instance's videos only, the default) or
- * "all" (mixes in federated remote videos for discovery).
- */
-export type FeedScope = "local" | "all";
-
-export interface VideoFeedResponse {
-  videos: Video[];
-  sort: FeedSort;
-  /** The scope actually applied (normalised); present on the public feed only. */
-  scope?: FeedScope;
-  limit: number;
-  offset: number;
-}
-
-export interface VideoListResponse {
-  videos: Video[];
-}
-
-export interface VideoSearchResponse {
-  query: string;
-  videos: Video[];
-  limit: number;
-  offset: number;
-}
-
-export type UserRole = "user" | "moderator" | "admin";
-
-/**
- * Admin projection of an account (the password hash is never exposed). Mirrors
- * the backend AdminUser schema; returned by the admin users list + update.
- */
-export interface AdminUser {
-  id: string;
-  username: string;
-  email: string;
-  role: UserRole;
-  is_active: boolean;
-  email_verified: boolean;
-  display_name: string;
-  created_at: string;
-}
-
-export interface AdminUserListResponse {
-  users: AdminUser[];
-  limit: number;
-  offset: number;
-}
-
-/**
- * A durable security-audit entry (auth/moderation/admin/registration action).
- * Mirrors the backend AuditLogEntry; never carries secrets/PII. actor_id /
- * actor_username are absent for unauthenticated events or deleted accounts.
- */
-export interface AuditLogEntry {
-  id: string;
-  action: string;
-  result: "success" | "failure";
-  actor_id?: string;
-  actor_username?: string;
-  reason?: string;
-  request_id?: string;
-  occurred_at: string;
-}
-
-export interface AuditLogListResponse {
-  entries: AuditLogEntry[];
-  limit: number;
-  offset: number;
-}
-
-/** Health of a single backend dependency in the system-status snapshot. */
-export interface SystemStatusComponent {
-  status: string; // ok | down | not_configured
-  error?: string;
-}
-
-/**
- * Operational snapshot from GET /api/v1/admin/system. Mirrors the backend
- * SystemStatus schema; operational metadata only (no secrets/PII).
- */
-export interface SystemStatus {
-  status: "ok" | "degraded";
-  software: {
-    name: string;
-    version: string;
-    commit: string;
-    build_date: string;
-    go_version: string;
-  };
-  environment: string;
-  uptime_seconds: number;
-  components: Record<string, SystemStatusComponent>;
-}
-
-/** PATCH /api/v1/admin/users/{id} body — partial; provide at least one field. */
-export interface UpdateUserRequest {
-  role?: UserRole;
-  is_active?: boolean;
-}
-
-export type RegistrationRequestStatus = "pending" | "approved" | "rejected";
-
-/**
- * One entry in the admin registration approval queue. Mirrors the backend
- * RegistrationRequest schema; the stored password hash is never exposed.
- * reviewer_username / reviewed_at are omitted while pending; moderator_note is
- * the internal note recorded on reject; note is the applicant's message.
- */
-export interface RegistrationRequest {
-  id: string;
-  username: string;
-  email: string;
-  note?: string;
-  status: RegistrationRequestStatus;
-  moderator_note?: string;
-  reviewed_at?: string;
-  created_at: string;
-  reviewer_username?: string;
-}
-
-export interface RegistrationRequestListResponse {
-  requests: RegistrationRequest[];
-  limit: number;
-  offset: number;
-}
-
-/** POST /api/v1/admin/registration-requests/{id}/reject body — note is optional. */
-export interface RejectRegistrationRequest {
-  note?: string;
-}
-
-export interface User {
-  id: string;
-  username: string;
-  email: string;
-  role: UserRole;
-  email_verified: boolean;
-  display_name: string;
-  bio: string;
-  /**
-   * Account-level discovery opt-out. When true, the account's channels and
-   * videos are excluded from public discovery surfaces (video feed, search)
-   * while direct channel/video URLs keep serving. Default false.
-   */
-  unlisted?: boolean;
-  created_at: string;
-  /** Whether an avatar is set (served at GET /users/{id}/avatar). Present on GET/PATCH /auth/me. */
-  has_avatar?: boolean;
-  /** Whether a profile banner is set (served at GET /users/{id}/banner). Present on GET/PATCH /auth/me. */
-  has_banner?: boolean;
-}
-
-/**
- * A stored avatar/banner's metadata, returned by the profile-image upload
- * endpoints. The image itself is served by the corresponding public GET route
- * with the Content-Type recorded here.
- */
-export interface ProfileImage {
-  kind: "avatar" | "banner";
-  content_type: string;
-  size_bytes: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface RegisterRequest {
-  username: string;
-  email: string;
-  password: string;
-  /** Optional message to the admins, used only when the instance requires registration approval. */
-  note?: string;
-  /** See LoginRequest.cookie_mode — the web client always sends true. */
-  cookie_mode?: boolean;
-}
-
-/**
- * The 202 register outcome when the instance requires registration approval:
- * no account or token exists yet — a pending request was filed for admin review.
- */
-export interface RegistrationPending {
-  status: "pending";
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-  /**
-   * Opt the session into cookie mode (browser clients): the rotating refresh
-   * token is delivered as an httpOnly `vidra_refresh` cookie and omitted from
-   * the response body. The web client always sends true.
-   */
-  cookie_mode?: boolean;
-}
-
-/**
- * POST /api/v1/auth/refresh | /auth/logout body. `refresh_token` may be omitted
- * in cookie mode — the httpOnly `vidra_refresh` cookie carries it instead.
- */
-export interface RefreshRequest {
-  refresh_token?: string;
-  cookie_mode?: boolean;
-}
-
-/** POST /api/v1/auth/password-reset — start the reset flow (always 202). */
-export interface PasswordResetRequest {
-  email: string;
-}
-
-/** POST /api/v1/auth/password-reset/confirm — set a new password with a token. */
-export interface PasswordResetConfirmRequest {
-  token: string;
-  password: string;
-}
-
-/** POST /api/v1/auth/verify-email/confirm — mark the email verified with a token. */
-export interface EmailVerificationConfirmRequest {
-  token: string;
-}
-
-/** PATCH /api/v1/auth/me — partial profile update; omitted fields are unchanged. */
-export interface UpdateProfileRequest {
-  display_name?: string;
-  bio?: string;
-  /** Toggle the account-level discovery opt-out (see User.unlisted). */
-  unlisted?: boolean;
-}
-
-/**
- * GET|POST /api/v1/me/export — the caller's most recent account-export job.
- * pending/running while the archive is assembled, done once downloadable
- * (download_ready true until the 7-day expiry), failed after the job
- * dead-lettered. GET is 404 when no export was ever requested (or the expired
- * archive was already cleaned up).
- */
-export interface AccountExportStatus {
-  id: string;
-  state: "pending" | "running" | "done" | "failed";
-  download_ready: boolean;
-  requested_at: string;
-  /** When the finished archive stops being downloadable; null until finished. */
-  expires_at: string | null;
-}
-
-/**
- * The vidra account export archive (format version 1): one JSON document with
- * the user's own data. Contains NO password hash and NO tokens; media files
- * are not bundled (each video entry carries its original's download URL).
- * This same shape is what POST /api/v1/me/import accepts — only the safe
- * subsets (profile fields, playlists, local follows, notification prefs) are
- * re-created; the rest is reported in the summary's skipped_sections.
- */
-export interface AccountArchive {
-  vidra_export: {
-    version: number;
-    generated_at: string;
-    /** Public origin of the exporting instance. */
-    instance?: string;
-  };
-  profile: {
-    username: string;
-    email: string;
-    display_name: string;
-    bio: string;
-    unlisted: boolean;
-    email_verified: boolean;
-    created_at: string;
-  };
-  notification_prefs?: Array<{ type: string; enabled: boolean }>;
-  /** Owned channels (metadata only; not re-created by import). */
-  channels?: Array<{
-    id?: string;
-    handle?: string;
-    display_name?: string;
-    description?: string;
-    created_at?: string;
-  }>;
-  /** Owned videos' metadata incl. taxonomy/tags (media not bundled; not re-created). */
-  videos?: Array<Record<string, unknown>>;
-  playlists?: Array<{
-    id?: string;
-    title?: string;
-    description?: string;
-    visibility?: string;
-    video_ids?: string[];
-    created_at?: string;
-  }>;
-  /** The account's own comments (not re-created by import). */
-  comments?: Array<Record<string, unknown>>;
-  follows?: Array<{ channel_id?: string; channel_handle?: string; followed_at?: string }>;
-  /** Watch-later entries (not re-created by import). */
-  saved_videos?: Array<Record<string, unknown>>;
-  /** Watch history with resume positions (not re-created by import). */
-  watch_history?: Array<Record<string, unknown>>;
-}
-
-/** POST /api/v1/me/import result: what was re-created and what was skipped. */
-export interface AccountImportSummary {
-  /** True when display_name/bio were applied from the archive. */
-  profile_applied: boolean;
-  playlists_created: number;
-  playlist_items_added: number;
-  /** Items whose video does not exist on this instance. */
-  playlist_items_skipped: number;
-  follows_created: number;
-  /** Follows of channels not present locally. */
-  follows_skipped: number;
-  notification_prefs_applied: number;
-  /** Preferences for notification types this build does not know. */
-  notification_prefs_skipped: number;
-  /**
-   * Counts of archive entries that are not importable in v1, keyed by section
-   * (channels, videos, comments, saved_videos, watch_history, playlists).
-   */
-  skipped_sections: Record<string, number>;
-}
-
-/**
- * DELETE /api/v1/auth/me body — password confirmation for the irreversible
- * hard delete (a stolen access token alone must not destroy the account).
- */
-export interface DeleteAccountRequest {
-  password: string;
-}
-
-/**
- * Login outcome for an account with two-factor authentication enabled: the
- * credentials were valid but NO session is issued yet. Present the mfa_token
- * with a TOTP or recovery code at POST /api/v1/auth/mfa/challenge (5 min).
- */
-export interface MFARequiredResponse {
-  mfa_required: true;
-  /** Short-lived single-purpose token, only accepted by the MFA challenge. */
-  mfa_token: string;
-}
-
-/** GET /api/v1/auth/mfa — the account's two-factor state. */
-export interface MFAStatusResponse {
-  enabled: boolean;
-  /** Unused single-use recovery codes left (0 when disabled). */
-  recovery_codes_remaining: number;
-}
-
-/**
- * POST /api/v1/auth/mfa/totp — returned exactly once when enrollment starts;
- * neither field can be retrieved again.
- */
-export interface TOTPEnrollmentResponse {
-  /** Base32 TOTP shared secret, for manual authenticator entry. */
-  secret: string;
-  /** otpauth:// provisioning URI (QR-code payload). */
-  otpauth_uri: string;
-}
-
-/**
- * POST /api/v1/auth/mfa/totp/verify — the 10 single-use recovery codes, shown
- * exactly once (stored hashed server-side).
- */
-export interface RecoveryCodesResponse {
-  recovery_codes: string[];
-}
-
-/** POST /api/v1/auth/mfa/challenge body — second half of a two-factor login. */
-export interface MFAChallengeRequest {
-  /** The mfa_token from the login response (valid 5 minutes). */
-  mfa_token: string;
-  /** The current 6-digit authenticator code or one unused recovery code. */
-  code: string;
-  /** See LoginRequest.cookie_mode — the web client always sends true. */
-  cookie_mode?: boolean;
-}
-
-/** One OIDC identity linked to the account (GET /me/oauth-identities). */
-export interface OAuthIdentity {
-  provider: string;
-  /** Email snapshot captured when the identity was linked; may be empty. */
-  email: string;
-  created_at: string;
-}
-
-export interface OAuthIdentitiesResponse {
-  identities: OAuthIdentity[];
-}
-
-/** Returned by register / login / refresh. */
-export interface AuthResponse {
-  token: string;
-  /**
-   * Opaque rotating refresh token. Omitted in cookie mode, where the httpOnly
-   * `vidra_refresh` cookie is the sole carrier (what the web client uses).
-   */
-  refresh_token?: string;
-  token_type: string;
-  expires_in: number;
-  user: User;
-}
-
-export interface Channel {
-  id: string;
-  owner_id: string;
-  handle: string;
-  display_name: string;
-  description: string;
-  follower_count: number;
-  created_at: string;
-  /** Whether an avatar is set (served at GET /channels/{handle}/avatar). */
-  has_avatar?: boolean;
-  /** Whether a banner is set (served at GET /channels/{handle}/banner). */
-  has_banner?: boolean;
-}
-
-export interface ChannelListResponse {
-  channels: Channel[];
-}
-
-// --- Donation addresses (P13, simple NON-CUSTODIAL crypto donation display) ---
-// Display+copy only: Vidra never holds funds, balances, or private keys and
-// processes no payments/payouts. There is deliberately no amount/balance field.
-
-/** The curated set of networks the backend accepts for donation addresses. */
-export type DonationNetwork = "bitcoin" | "ethereum" | "litecoin" | "monero";
-
-/**
- * A public crypto wallet address the owner displays for donations, either
- * account-level (profile) or scoped to a channel they own (channel_id). The
- * internal verification nonce/expiry are never exposed; `verified` is whether
- * the owner cryptographically proved control via the challenge/verify flow.
- */
-export interface DonationAddress {
-  id: string;
-  owner_id: string;
-  /** The channel this address is scoped to; omitted for account-level addresses. */
-  channel_id?: string;
-  network: DonationNetwork;
-  address: string;
-  label: string;
-  verified: boolean;
-  created_at: string;
-}
-
-export interface DonationAddressListResponse {
-  addresses: DonationAddress[];
-}
-
-export interface AddDonationAddressRequest {
-  /** Omit for an account-level (profile) address; set to scope to a caller-owned channel. */
-  channel_id?: string;
-  network: DonationNetwork;
-  address: string;
-  label?: string;
-}
-
-/** The one-time challenge message the owner signs to prove control of an address. */
-export interface DonationChallengeResponse {
-  message: string;
-  expires_at: string;
-}
-
-export interface VerifyDonationAddressRequest {
-  /** The signature of the challenge message (never stored or logged by the server). */
-  signature: string;
-}
-
-/** POST /api/v1/channels body. */
-export interface CreateChannelRequest {
-  handle: string;
-  display_name: string;
-  description?: string;
-}
-
-/** PATCH /api/v1/channels/{handle} body — partial; the handle is immutable. */
-export interface UpdateChannelRequest {
-  display_name?: string;
-  description?: string;
-}
-
-/** POST /api/v1/channels/{handle}/videos body (create a draft). */
-export interface CreateVideoRequest {
-  title: string;
-  description?: string;
-  privacy?: VideoPrivacy;
-  category?: string;
-  language?: string;
-  license?: string;
-  /**
-   * Free-form tags; lowercased, trimmed, and deduped server-side. At most 5
-   * distinct tags of at most 50 characters each (422 otherwise).
-   */
-  tags?: string[];
-  /**
-   * Schedule the publish (ISO date-time): after processing, the video parks in
-   * the "scheduled" state until this time, then publishes automatically. Must
-   * lie in the future (422 otherwise).
-   */
-  publish_at?: string;
-}
-
-/** POST /api/v1/videos|comments/{id}/report and /api/v1/users/{id}/report body. */
-export interface CreateReportRequest {
-  reason: string;
-}
-
-export type ReportTargetType = "video" | "comment" | "account" | "remote_video" | "message";
-export type ReportStatus = "open" | "accepted" | "rejected";
-
-/** Who filed a report (admin moderation queue view). */
-export interface ReportReporter {
-  username: string;
-}
-
-/**
- * An abuse report as seen by a moderator/admin in the queue. Target context is
- * type-dependent: a video report carries video_id/video_title, a comment report
- * carries comment_id/comment_body, an account report carries
- * reported_user_id/reported_username, a remote_video report carries
- * remote_video_id/remote_video_title/remote_video_domain. Mirrors the backend
- * Report schema.
- */
-export interface Report {
-  id: string;
-  target_type: ReportTargetType;
-  reason: string;
-  status: ReportStatus;
-  /** Internal moderator note (empty until resolved with one). */
-  moderator_note: string;
-  created_at: string;
-  resolved_at?: string;
-  reporter: ReportReporter;
-  // Video-report context.
-  video_id?: string;
-  video_title?: string;
-  // Comment-report context.
-  comment_id?: string;
-  comment_body?: string;
-  // Account-report context.
-  reported_user_id?: string;
-  reported_username?: string;
-  // Remote-video-report context (federated content).
-  remote_video_id?: string;
-  /** Title of the reported remote video; omitted if it was deleted. */
-  remote_video_title?: string;
-  /** Origin instance of the reported remote video. */
-  remote_video_domain?: string;
-  // Direct-message-report context.
-  /** The reported direct message; omitted if the message row was later hard-deleted. */
-  message_id?: string;
-  /** Snapshot of the reported message body at report time (survives a sender tombstone). */
-  message_body?: string;
-}
-
-export interface ReportListResponse {
-  reports: Report[];
-  limit: number;
-  offset: number;
-}
-
-/** POST /api/v1/admin/reports/{id}/resolve body. */
-export interface ResolveReportRequest {
-  status: "accepted" | "rejected";
-  note?: string;
-}
-
-/** POST /api/v1/admin/videos/{id}/block body; the reason is recorded for audit. */
-export interface BlockVideoRequest {
-  reason?: string;
-}
-
-/**
- * A currently-blocked video as seen by a moderator/admin in the block-list.
- * Mirrors the backend BlockedVideo schema. `blocked_by` is omitted when the
- * moderator who blocked it has since been deleted.
- */
-export interface BlockedVideo {
-  video_id: string;
-  title: string;
-  privacy: string;
-  state: string;
-  channel_handle: string;
-  channel_display_name: string;
-  reason: string;
-  blocked_by?: string;
-  blocked_at: string;
-}
-
-export interface BlockedVideoListResponse {
-  videos: BlockedVideo[];
-  limit: number;
-  offset: number;
-}
-
-/**
- * A currently-blocked federated remote video in the moderation block-list.
- * Blocking hides it from every local surface (feeds, search, /remote/{id}),
- * so review links go to the origin's watch_url. Mirrors the backend
- * BlockedRemoteVideo schema; `blocked_by` is omitted when that moderator
- * account was deleted.
- */
-export interface BlockedRemoteVideo {
-  remote_video_id: string;
-  title: string;
-  /** The remote video's ActivityPub object id. */
-  object_url: string;
-  /** The origin's human watch page. */
-  watch_url: string;
-  /** The origin channel identity ("name@domain"). */
-  channel_handle: string;
-  /** The origin instance. */
-  domain: string;
-  reason: string;
-  blocked_by?: string;
-  blocked_at: string;
-}
-
-export interface BlockedRemoteVideoListResponse {
-  videos: BlockedRemoteVideo[];
-  limit: number;
-  offset: number;
-}
-
-/**
- * A video in the admin/moderator videos overview (any privacy/state), with its
- * current block status. Mirrors the backend AdminVideo schema.
- */
-export interface AdminVideo {
-  id: string;
-  title: string;
-  privacy: string;
-  state: string;
-  channel_handle: string;
-  channel_display_name: string;
-  views: number;
-  created_at: string;
-  blocked: boolean;
-}
-
-export interface AdminVideoListResponse {
-  videos: AdminVideo[];
-  limit: number;
-  offset: number;
-}
-
-/**
- * A comment in the admin/moderator comments overview, with author + video
- * context. Mirrors the backend AdminComment schema.
- */
-export interface AdminComment {
-  id: string;
-  video_id: string;
-  video_title: string;
-  body: string;
-  author_username: string;
-  author_display_name: string;
-  created_at: string;
-}
-
-export interface AdminCommentListResponse {
-  comments: AdminComment[];
-  limit: number;
-  offset: number;
-}
-
-/** A term on the instance-wide watched-words list. Mirrors the backend WatchedWord schema. */
-export interface WatchedWord {
-  id: string;
-  word: string;
-  /** Username of the moderator who added it; omitted on the create response or if deleted. */
-  created_by_username?: string;
-  created_at: string;
-}
-
-export interface WatchedWordListResponse {
-  words: WatchedWord[];
-  limit: number;
-  offset: number;
-}
-
-/** POST /api/v1/admin/watched-words body. */
-export interface CreateWatchedWordRequest {
-  word: string;
-}
-
-/**
- * Content flagged by the watched-words list, for moderator review: a comment
- * (type "comment"; comment_id/comment_body present, video_id is the video it is
- * on) or a video (type "video"; comment fields absent, video_id/video_title are
- * the flagged video). Mirrors the backend WatchedWordMatch schema.
- */
-export interface WatchedWordMatch {
-  id: string;
-  word: string;
-  /** What was flagged. */
-  type: "comment" | "video";
-  /** The flagged comment (comment matches only). */
-  comment_id?: string;
-  /** The flagged comment's body (comment matches only). */
-  comment_body?: string;
-  /** The flagged video, or the video the flagged comment is on. */
-  video_id: string;
-  /** The video's title (a link target for the review queue). */
-  video_title: string;
-  /** The comment's author or the video's owner respectively. */
-  author_username: string;
-  created_at: string;
-}
-
-export interface WatchedWordMatchListResponse {
-  matches: WatchedWordMatch[];
-  limit: number;
-  offset: number;
-}
-
-/** PATCH /api/v1/videos/{id} body; provide at least one field, omitted ones unchanged. */
-export interface UpdateVideoRequest {
-  title?: string;
-  description?: string;
-  privacy?: VideoPrivacy;
-  category?: string;
-  language?: string;
-  license?: string;
-  /**
-   * Replaces the video's whole tag set (an empty array clears it; omit the
-   * field to leave tags unchanged). Same limits as create.
-   */
-  tags?: string[];
-  /**
-   * Set (or move) the scheduled publish time (ISO date-time). Only accepted
-   * while the video is not yet published, and must lie in the future (422
-   * otherwise).
-   */
-  publish_at?: string;
-}
-
-/**
- * POST /api/v1/videos/{id}/file response (the published video + stored file).
- * The resumable-upload complete endpoint (POST /uploads/{id}/complete) returns
- * the same shape plus `file`, so it is optional here.
- */
-export interface UploadVideoResult {
-  video: Video;
-  file?: VideoFile;
-}
-
-/** POST /api/v1/videos/{id}/upload-session body — declare the file to chunk. */
-export interface CreateUploadSessionRequest {
-  /** The total size of the file to upload, in bytes (> 0). */
-  size: number;
-  /** The client filename; its extension must be an accepted video container. */
-  filename: string;
-}
-
-/** POST /api/v1/videos/{id}/upload-session response — the opened session. */
-export interface UploadSessionResponse {
-  upload_id: string;
-  /** Fixed chunk size in bytes; every chunk but the last must be exactly this. */
-  chunk_size: number;
-  /** How many chunks to upload (indices 0 … total_chunks-1). */
-  total_chunks: number;
-  /** The declared total size, echoed back. */
-  size: number;
-  /** When the session (and its uploaded chunks) expire (24h). */
-  expires_at: string;
-}
-
-export type UploadSessionState = "active" | "completed" | "cancelled";
-
-/**
- * GET /api/v1/uploads/{id} (and every chunk PUT) response — the received-chunk
- * status a client reads to know which chunks to (re)send after an interruption.
- */
-export interface UploadStatusResponse {
-  upload_id: string;
-  video_id: string;
-  state: UploadSessionState;
-  size: number;
-  chunk_size: number;
-  total_chunks: number;
-  /** The chunk indices that have landed, ascending. */
-  received_chunks: number[];
-  /** The total bytes received across all landed chunks. */
-  bytes_received: number;
-  expires_at: string;
-}
-
-export type ImportJobState = "pending" | "running" | "done" | "failed";
-
-/** An asynchronous URL-import job for a video's original file. */
-export interface ImportJob {
-  id: string;
-  video_id: string;
-  state: ImportJobState;
-  /** Safe, human-readable failure reason (present on failed / pending retry). */
-  error?: string;
-  /** How many times the import has been attempted. */
-  attempts: number;
-  created_at: string;
-  updated_at: string;
-}
-
-/** POST/GET /api/v1/videos/{id}/import response — the latest import job. */
-export interface ImportJobResponse {
-  import_job: ImportJob;
-}
-
-/** A stored video file (original or thumbnail). Mirrors the backend VideoFile. */
-export interface VideoFile {
-  id: string;
-  kind: string;
-  content_type: string;
-  original_name: string;
-  size_bytes: number;
-  created_at: string;
-}
-
-export type LiveStreamState = "offline" | "live" | "ended";
-
-/**
- * A live stream's metadata. The stream key is never part of this — it is returned
- * only by create/regenerate (see CreateLiveStreamResponse / LiveStreamKey).
- * channel_handle/display_name are present on the single-stream get.
- */
-export interface LiveStream {
-  id: string;
-  channel_id: string;
-  title: string;
-  description: string;
-  privacy: VideoPrivacy;
-  state: LiveStreamState;
-  permanent: boolean;
-  /**
-   * When true the media server records each session and the api republishes the
-   * recording as a normal on-demand video once the stream ends (privacy
-   * inherited). Default false.
-   */
-  replay_enabled: boolean;
-  created_at: string;
-  updated_at: string;
-  channel_handle?: string;
-  channel_display_name?: string;
-  /**
-   * Live HLS master-playlist path — present ONLY while state is "live" and a
-   * media server is configured to serve it. This is the readiness signal for the
-   * live watch surface (the playlist 404s otherwise). Matches liveHlsMasterUrl.
-   */
-  hls_url?: string;
-}
-
-export interface CreateLiveStreamRequest {
-  title: string;
-  description?: string;
-  privacy?: VideoPrivacy;
-  permanent?: boolean;
-  /** Record sessions and republish them as VODs (see LiveStream.replay_enabled). */
-  replay_enabled?: boolean;
-}
-
-/** Edit a live stream's metadata. `title` is required (a full-object update). */
-export interface UpdateLiveStreamRequest {
-  title: string;
-  description?: string;
-  privacy?: VideoPrivacy;
-  permanent?: boolean;
-  replay_enabled?: boolean;
-}
-
-/** The create response: the stream plus its key (shown once) and RTMP ingest URL. */
-export interface CreateLiveStreamResponse {
-  live_stream: LiveStream;
-  stream_key: string;
-  rtmp_url?: string;
-}
-
-export interface LiveStreamListResponse {
-  live_streams: LiveStream[];
-}
-
-/** A regenerated stream key (shown once) plus the RTMP ingest URL. */
-export interface LiveStreamKey {
-  stream_key: string;
-  rtmp_url?: string;
-}
-
-export interface Comment {
-  id: string;
-  video_id: string;
-  body: string;
-  /**
-   * The author's account id (so a signed-in viewer can mute them) — null for
-   * a federated (remote-authored) comment, which has no local account.
-   */
-  author_id: string | null;
-  /**
-   * The local author's username, or — for a remote comment — the remote
-   * author-name snapshot captured at ingestion.
-   */
-  author_username: string;
-  author_display_name: string;
-  /** True for a federated comment authored on another instance. */
-  remote: boolean;
-  /** The remote author's origin instance; omitted for local comments. */
-  author_domain?: string;
-  created_at: string;
-  updated_at: string;
-  /** True once the body has been edited (updated_at moved past created_at). */
-  edited: boolean;
-}
-
-export interface CommentListResponse {
-  comments: Comment[];
-  limit: number;
-  offset: number;
-}
-
-/** A WebVTT caption track's metadata. Mirrors the backend Caption schema. */
-export interface Caption {
-  language: string;
-  label: string;
-  created_at: string;
-}
-
-export interface CaptionListResponse {
-  captions: Caption[];
-}
-
-/** The lifecycle of an asynchronous Whisper auto-caption job. */
-export type CaptionJobState = "pending" | "running" | "done" | "failed";
-
-/**
- * An asynchronous auto-caption (Whisper) job for a video. Mirrors the backend
- * CaptionJob schema. `error` is a safe, human-readable reason (present only when
- * a job failed or a retry is pending) — never a raw internal error.
- */
-export interface CaptionJob {
-  id: string;
-  video_id: string;
-  /** The caption language tag the generated track is stored under. */
-  language: string;
-  state: CaptionJobState;
-  error?: string;
-  attempts: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CaptionJobResponse {
-  caption_job: CaptionJob;
-}
-
-/**
- * Optional body for an auto-caption request. When `language` is omitted the
- * server uses its configured default; it is both the stored track's tag and the
- * transcription hint.
- */
-export interface AutoCaptionRequest {
-  language?: string;
-}
-
-/** An account the caller has muted. Mirrors the backend MutedAccount schema. */
-export interface MutedAccount {
-  user_id: string;
-  username: string;
-  display_name: string;
-  muted_at: string;
-}
-
-export interface MutedAccountListResponse {
-  accounts: MutedAccount[];
-  limit: number;
-  offset: number;
-}
-
-/**
- * A remote instance the caller has muted (its videos/comments are hidden from
- * the caller's surfaces). Mirrors the backend MutedInstance schema.
- */
-export interface MutedInstance {
-  domain: string;
-  muted_at: string;
-}
-
-export interface MutedInstanceListResponse {
-  instances: MutedInstance[];
-  limit: number;
-  offset: number;
-}
-
-/** POST /api/v1/admin/instances/blocked body. */
-export interface BlockInstanceRequest {
-  /** Bare hostname (optionally host:port) of the instance to block. */
-  domain: string;
-  /** Recorded on the blocklist and in the audit trail. May be empty. */
-  reason?: string;
-}
-
-/**
- * A remote instance on the admin blocklist: inbound activity from it is
- * dropped, its content hidden, outbound deliveries cancelled. Mirrors the
- * backend BlockedInstance schema. blocked_by is omitted when that admin
- * account was deleted.
- */
-export interface BlockedInstance {
-  domain: string;
-  reason: string;
-  blocked_by?: string;
-  blocked_at: string;
-}
-
-export interface BlockedInstanceListResponse {
-  instances: BlockedInstance[];
-  limit: number;
-  offset: number;
-}
-
-/**
- * The full stored metadata of a federated remote video (GET /remote-videos/{id}).
- * Remote videos are metadata only — playback uses stream_url from the origin
- * when present, and watch_url always links the origin's watch page.
- */
-export interface RemoteVideo {
-  id: string;
-  /** Always true. Distinguishes remote metadata from local videos. */
-  remote: boolean;
-  /** The origin instance's domain. */
-  domain: string;
-  title: string;
-  description: string;
-  /** The ActivityPub object id on the origin. */
-  object_url: string;
-  /** The origin's human watch page. */
-  watch_url: string;
-  /**
-   * Best playable URL from the origin (HLS preferred, else a direct video
-   * file). Omitted when the origin advertised none.
-   */
-  stream_url?: string;
-  duration_seconds?: number;
-  published_at?: string;
-  /** Whether a locally cached thumbnail is available (see remoteVideoThumbnailUrl). */
-  has_thumbnail: boolean;
-}
-
-/**
- * POST /api/v1/me/remote-follows body — names the remote channel to follow.
- * Exactly one of handle ("name@domain", leading @ tolerated) or actor_url.
- */
-export interface CreateRemoteFollowRequest {
-  handle?: string;
-  actor_url?: string;
-}
-
-/**
- * pending until the remote instance Accepts the follow, then accepted (only
- * accepted follows feed the subscriptions feed). A remote Reject removes it.
- */
-export type RemoteFollowState = "pending" | "accepted";
-
-/** The caller's outbound follow of a remote channel. Mirrors the backend RemoteFollow schema. */
-export interface RemoteFollow {
-  /** The follow row id (the DELETE /me/remote-follows/{id} key). */
-  id: string;
-  /** The followed remote channel's ActivityPub actor URL. */
-  actor_url: string;
-  /** The followed channel's "name@domain" identity. */
-  handle: string;
-  /** The origin instance's domain. */
-  domain: string;
-  state: RemoteFollowState;
-  created_at: string;
-}
-
-export interface RemoteFollowListResponse {
-  follows: RemoteFollow[];
-  limit: number;
-  offset: number;
-}
-
-/**
- * An account the caller has blocked. A block symmetrically cuts off direct
- * messaging between the two. Mirrors the backend BlockedUser schema.
- */
-export interface BlockedUser {
-  user_id: string;
-  username: string;
-  display_name: string;
-  blocked_at: string;
-}
-
-export interface BlockedUserListResponse {
-  users: BlockedUser[];
-  limit: number;
-  offset: number;
-}
-
-/** A 1:1 conversation. Its type (plaintext vs encrypted) is chosen at creation and immutable. */
-export interface Conversation {
-  id: string;
-  /**
-   * True for an end-to-end-encrypted conversation, which stores only opaque
-   * per-device ciphertext envelopes (the server holds no keys). Immutable.
-   */
-  encrypted: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-/**
- * A conversation as shown in the inbox: the other participant plus a preview of
- * the last message. Mirrors the backend ConversationSummary schema.
- * `last_message_body` is "" when the conversation has no messages yet.
- */
-export interface ConversationSummary {
-  id: string;
-  updated_at: string;
-  /** True for an E2EE conversation — its last-message preview is always empty (envelopes are opaque). */
-  encrypted: boolean;
-  other_user_id: string;
-  other_username: string;
-  other_display_name: string;
-  last_message_body: string;
-  last_message_at: string;
-  /**
-   * The caller's unread messages in this conversation (the peer's messages past
-   * the caller's read watermark). Omitted/0 when nothing is unread.
-   */
-  unread_count?: number;
-}
-
-export interface ConversationListResponse {
-  conversations: ConversationSummary[];
-  limit: number;
-  offset: number;
-}
-
-/**
- * A single direct message. sender_username/sender_display_name are populated on
- * list and on the send response (the authenticated sender).
- */
-export interface Message {
-  id: string;
-  conversation_id: string;
-  sender_id: string;
-  sender_username?: string;
-  sender_display_name?: string;
-  /** The message text, or "[deleted]" for a tombstoned message. */
-  body: string;
-  /** True once the sender has deleted (tombstoned) the message. */
-  deleted?: boolean;
-  created_at: string;
-  /**
-   * DM attachments linked to this message (metadata only; the bytes are fetched,
-   * participant-gated, from GET /api/v1/attachments/{id}).
-   */
-  attachments?: DMAttachment[];
-  /**
-   * OpenGraph link preview of the first URL in the body, present only once the
-   * backend's async fetch has resolved (null/absent otherwise).
-   */
-  preview?: LinkPreview | null;
-}
-
-/** The kind of a direct-message attachment (the backend allowlist). */
-export type DMAttachmentKind = "image" | "video" | "audio" | "pdf";
-
-/**
- * A direct-message attachment's metadata, as carried on a message. Fetch the
- * bytes from GET /api/v1/attachments/{id} (participant-gated, behind auth).
- */
-export interface DMAttachment {
-  id: string;
-  kind: DMAttachmentKind;
-  content_type: string;
-  filename: string;
-  size_bytes: number;
-}
-
-/**
- * An OpenGraph link preview of the first URL in a message body. Only `url` is
- * guaranteed; title/description/image are best-effort from the origin page.
- */
-export interface LinkPreview {
-  url: string;
-  title?: string;
-  description?: string;
-  image?: string;
-}
-
-/** POST /api/v1/conversations/{id}/attachments response — reference the id in a subsequent send. */
-export interface UploadAttachmentResponse {
-  attachment_id: string;
-  kind: DMAttachmentKind;
-  content_type: string;
-  filename: string;
-  size_bytes: number;
-}
-
-/** POST /api/v1/conversations/{id}/read body — pin the watermark to a message, or omit for newest. */
-export interface MarkConversationReadRequest {
-  message_id?: string;
-}
-
-export interface MessageListResponse {
-  messages: Message[];
-  /**
-   * The other participant's read watermark (the id of the last message they have
-   * read), for a "Seen" indicator. Omitted when they have read nothing or have
-   * disabled read receipts.
-   */
-  peer_last_read_message_id?: string;
-  limit: number;
-  offset: number;
-}
-
-// --- End-to-end encrypted messaging (see .ralph/specs/e2ee.md) ---------------
-// All cryptography is client-side (Olm). These shapes carry PUBLIC key material
-// and opaque ciphertext only — the server never sees private keys or plaintext.
-
-/** A registered E2EE device. Carries PUBLIC key material only. Mirrors E2EEDevice. */
-export interface E2EEDevice {
-  id: string;
-  user_id: string;
-  device_name: string;
-  /** Public Curve25519 identity key (base64). */
-  identity_key: string;
-  /** Public Ed25519 signing key (base64). */
-  signing_key: string;
-  created_at: string;
-  last_seen_at: string;
-}
-
-export interface E2EEDeviceListResponse {
-  devices: E2EEDevice[];
-}
-
-/** POST /api/v1/e2ee/devices body — register a device's public keys under a name. */
-export interface RegisterE2EEDeviceRequest {
-  device_name: string;
-  identity_key: string;
-  signing_key: string;
-}
-
-/** One public one-time prekey (client-assigned key_id). Mirrors E2EEOneTimeKey. */
-export interface E2EEOneTimeKey {
-  key_id: string;
-  key: string;
-}
-
-/** POST /api/v1/e2ee/devices/{id}/one-time-keys body. */
-export interface UploadOneTimeKeysRequest {
-  one_time_keys: E2EEOneTimeKey[];
-}
-
-/** POST /api/v1/e2ee/devices/{id}/one-time-keys response — unclaimed count after upload. */
-export interface UploadOneTimeKeysResponse {
-  unclaimed: number;
-}
-
-/** GET /api/v1/e2ee/devices/{id}/one-time-keys/count response. */
-export interface OneTimeKeyCountResponse {
-  count: number;
-}
-
-/**
- * One device's claim result: its public identity plus one atomically claimed
- * (single-use) one-time key — null when the device has no prekeys left. Mirrors
- * the backend E2EEClaim.
- */
-export interface E2EEClaim {
-  device_id: string;
-  identity_key: string;
-  signing_key: string;
-  one_time_key: E2EEOneTimeKey | null;
-}
-
-/** POST /api/v1/users/{id}/e2ee/claim response — one claim per device of the target user. */
-export interface E2EEClaimResponse {
-  user_id: string;
-  claims: E2EEClaim[];
-}
-
-/** One per-recipient-device ciphertext blob in an encrypted send. Mirrors EncryptedEnvelope. */
-export interface EncryptedEnvelope {
-  recipient_device_id: string;
-  /** Olm message type: 0 = prekey, 1 = normal. */
-  message_type: 0 | 1;
-  /** Opaque ciphertext (≤64 KiB). Never inspected by the server. */
-  ciphertext: string;
-}
-
-/**
- * POST /api/v1/conversations/{id}/messages body on an ENCRYPTED conversation:
- * one envelope per recipient device (incl. the sender's own other devices),
- * optionally with a disappearing-message timer. Mirrors SendEncryptedMessageRequest.
- */
-export interface SendEncryptedMessageRequest {
-  sender_device_id: string;
-  envelopes: EncryptedEnvelope[];
-  /** Optional disappearing-message timer (30s–90d), stamping expires_at on every envelope. */
-  expires_in_seconds?: number;
-}
-
-/** Summary of an accepted encrypted send (the envelopes are not echoed back). Mirrors SendEncryptedResponse. */
-export interface SendEncryptedResponse {
-  conversation_id: string;
-  envelope_count: number;
-  created_at: string;
-  /** Present when a disappearing-message timer was set. */
-  expires_at?: string;
-}
-
-/**
- * A stored envelope returned only to the owner of its recipient device. The
- * ciphertext is byte-identical to what the sender posted — the server cannot
- * decrypt it. Mirrors the backend EncryptedMessage.
- */
-export interface EncryptedMessage {
-  id: string;
-  conversation_id: string;
-  sender_user_id: string;
-  sender_device_id: string;
-  recipient_device_id: string;
-  message_type: 0 | 1;
-  ciphertext: string;
-  created_at: string;
-  /** Present on disappearing messages. */
-  expires_at?: string;
-}
-
-/** GET on an encrypted conversation — the caller's devices' envelopes, newest first (expired filtered). */
-export interface EncryptedMessageListResponse {
-  envelopes: EncryptedMessage[];
-  limit: number;
-  offset: number;
-}
-
-export type RatingValue = "like" | "dislike";
-
-export interface VideoRating {
-  like_count: number;
-  dislike_count: number;
-  my_rating: RatingValue | null;
-}
-
-/** GET /api/v1/videos/{id}/watch-progress — the caller's saved resume position. */
-export interface WatchProgress {
-  video_id: string;
-  /** Saved resume position in whole seconds (0 when none recorded). */
-  position_seconds: number;
-}
-
-/**
- * A watch-history card: a video card plus the caller's saved resume position and
- * when they last watched it. Mirrors the backend HistoryItem (allOf Video + …).
- */
-export interface HistoryItem extends Video {
-  position_seconds: number;
-  watched_at: string;
-}
-
-export interface WatchHistoryResponse {
-  videos: HistoryItem[];
-  limit: number;
-  offset: number;
-}
-
-export type NotificationType =
-  | "follow"
-  | "comment"
-  | "message"
-  | "report_resolved"
-  | "video_rejected";
-
-/** Who triggered a notification. */
-export interface NotificationActor {
-  username: string;
-  display_name: string;
-}
-
-/**
- * A user notification. Context fields are type-dependent: follow carries the
- * channel, comment carries the video (+ comment id), message carries the
- * conversation, report_resolved carries the report outcome, video_rejected
- * carries the rejected upload (the moderator's identity is never included).
- * Mirrors the backend Notification schema.
- */
-export interface Notification {
-  id: string;
-  type: NotificationType;
-  read: boolean;
-  created_at: string;
-  actor?: NotificationActor;
-  // Follow context.
-  channel_handle?: string;
-  channel_display_name?: string;
-  // Comment context (video_id/video_title also carry the rejected upload for
-  // video_rejected notifications).
-  video_id?: string;
-  video_title?: string;
-  comment_id?: string;
-  // Message context.
-  conversation_id?: string;
-  // Report-resolved context (actor is absent for this type).
-  report_id?: string;
-  report_status?: ReportStatus;
-  report_target_type?: ReportTargetType;
-}
-
-export interface NotificationListResponse {
-  notifications: Notification[];
-  unread_count: number;
-  limit: number;
-  offset: number;
-}
-
-export interface UnreadCountResponse {
-  unread_count: number;
-}
-
-export type PlaylistVisibility = "public" | "unlisted" | "private";
-
-/** A named, ordered collection of videos. Mirrors the backend Playlist schema. */
-export interface Playlist {
-  id: string;
-  title: string;
-  description: string;
-  visibility: PlaylistVisibility;
-  /** Number of public, published videos in the playlist. */
-  video_count: number;
-  /** Whether an uploaded cover image is available at GET /playlists/{id}/thumbnail. */
-  has_thumbnail?: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PlaylistListResponse {
-  playlists: Playlist[];
-}
-
-/** A playlist plus its ordered public video cards (the detail endpoint). */
-export interface PlaylistDetail extends Playlist {
-  videos: Video[];
-}
-
-/** POST /api/v1/playlists body. */
-export interface CreatePlaylistRequest {
-  title: string;
-  description?: string;
-  visibility?: PlaylistVisibility;
-}
-
-/** PATCH /api/v1/playlists/{id} body; omitted fields are unchanged. */
-export interface UpdatePlaylistRequest {
-  title?: string;
-  description?: string;
-  visibility?: PlaylistVisibility;
-}
-
-/** One day of a stats series (UTC calendar day). */
-export interface DailyViews {
-  /** ISO date, e.g. "2026-07-03". */
-  day: string;
-  views: number;
-}
-
-/**
- * GET /api/v1/videos/{id}/stats — creator statistics for one video (owner
- * only). daily_views is a dense 30-day series, oldest first, zero-filled.
- */
-export interface VideoStatsResponse {
-  views: number;
-  likes: number;
-  dislikes: number;
-  comments: number;
-  daily_views: DailyViews[];
-}
-
-/**
- * GET /api/v1/channels/{handle}/stats — aggregated creator statistics across a
- * channel's videos (owner only), plus follower/video counts and the dense
- * 30-day daily-views series (oldest first, zero-filled).
- */
-export interface ChannelStatsResponse {
-  views: number;
-  likes: number;
-  dislikes: number;
-  comments: number;
-  followers: number;
-  /** Total videos on the channel (any privacy/state). */
-  videos: number;
-  daily_views: DailyViews[];
-}
-
-/**
- * GET/PATCH /api/v1/me/notification-prefs response: every known notification
- * type mapped to whether it is delivered to this user. Types with no stored
- * preference default to true.
- */
-export interface NotificationPrefsResponse {
-  prefs: Record<string, boolean>;
-}
-
-/**
- * PATCH /api/v1/me/notification-prefs body: a partial map of notification
- * type -> enabled. Only the types present are changed; an unknown type rejects
- * the whole update (422). Known types: comment, follow, message,
- * report_resolved, video_rejected.
- */
-export interface UpdateNotificationPrefsRequest {
-  prefs: Record<string, boolean>;
-}
-
-/**
- * An upload held for moderator review (QUARANTINE_NEW_UPLOADS), as seen in the
- * moderation quarantine queue. Mirrors the backend QuarantinedVideo schema.
- */
-export interface QuarantinedVideo {
-  id: string;
-  title: string;
-  privacy: VideoPrivacy;
-  state: "quarantined";
-  channel_handle: string;
-  channel_display_name: string;
-  /** The owning account's username. */
-  owner_username: string;
-  created_at: string;
-}
-
-export interface QuarantinedVideoListResponse {
-  videos: QuarantinedVideo[];
-  limit: number;
-  offset: number;
-}
-
-/**
- * POST /api/v1/admin/videos/{id}/reject body (optional). The reason is
- * recorded in the audit trail — it is not shown to the owner.
- */
-export interface RejectQuarantinedVideoRequest {
-  reason?: string;
-}
+export type FieldError = NonNullable<Schemas["ErrorResponse"]["error"]["fields"]>[number];
+
+// --- Instance ---------------------------------------------------------------
+export type InstanceResponse = Schemas["InstanceResponse"];
+
+// --- Video ------------------------------------------------------------------
+export type VideoPrivacy = NonNullable<Schemas["Video"]["privacy"]>;
+export type VideoState = NonNullable<Schemas["Video"]["state"]>;
+export type Video = Schemas["Video"];
+export type VideoRendition = Schemas["VideoRendition"];
+export type VideoConfigOption = Schemas["VideoConfigOption"];
+export type VideoConfigResponse = Schemas["VideoConfigResponse"];
+export type FeedSort = NonNullable<Schemas["VideoFeedResponse"]["sort"]>;
+export type FeedScope = NonNullable<Schemas["VideoFeedResponse"]["scope"]>;
+export type VideoFeedResponse = Schemas["VideoFeedResponse"];
+export type VideoListResponse = Schemas["VideoListResponse"];
+export type VideoSearchResponse = Schemas["VideoSearchResponse"];
+
+// --- Users / auth -----------------------------------------------------------
+export type UserRole = NonNullable<Schemas["User"]["role"]>;
+export type AdminUser = Schemas["AdminUser"];
+export type AdminUserListResponse = Schemas["AdminUserListResponse"];
+export type AuditLogEntry = Schemas["AuditLogEntry"];
+export type AuditLogListResponse = Schemas["AuditLogListResponse"];
+export type SystemStatusComponent = Schemas["ComponentStatus"];
+export type SystemStatus = Schemas["SystemStatus"];
+export type UpdateUserRequest = Schemas["UpdateUserRequest"];
+export type RegistrationRequestStatus = NonNullable<Schemas["RegistrationRequest"]["status"]>;
+export type RegistrationRequest = Schemas["RegistrationRequest"];
+export type RegistrationRequestListResponse = Schemas["RegistrationRequestListResponse"];
+export type RejectRegistrationRequest = Schemas["RejectRegistrationRequest"];
+export type User = Schemas["User"];
+export type ProfileImage = Schemas["ProfileImage"];
+export type RegisterRequest = Schemas["RegisterRequest"];
+export type RegistrationPending = Schemas["RegistrationPending"];
+export type LoginRequest = Schemas["LoginRequest"];
+export type RefreshRequest = Schemas["RefreshRequest"];
+// These request bodies are inline in the spec (not named components), so derive
+// them from the generated operations.
+export type PasswordResetRequest =
+  NonNullable<operations["requestPasswordReset"]["requestBody"]>["content"]["application/json"];
+export type PasswordResetConfirmRequest =
+  NonNullable<operations["confirmPasswordReset"]["requestBody"]>["content"]["application/json"];
+export type EmailVerificationConfirmRequest =
+  NonNullable<operations["confirmEmailVerification"]["requestBody"]>["content"]["application/json"];
+export type UpdateProfileRequest = Schemas["UpdateProfileRequest"];
+export type AccountExportStatus = Schemas["AccountExportStatus"];
+export type AccountArchive = Schemas["AccountArchive"];
+export type AccountImportSummary = Schemas["AccountImportSummary"];
+export type DeleteAccountRequest = Schemas["DeleteAccountRequest"];
+export type MFARequiredResponse = Schemas["MFARequiredResponse"];
+export type MFAStatusResponse = Schemas["MFAStatusResponse"];
+export type TOTPEnrollmentResponse = Schemas["TOTPEnrollmentResponse"];
+export type RecoveryCodesResponse = Schemas["RecoveryCodesResponse"];
+export type MFAChallengeRequest = Schemas["MFAChallengeRequest"];
+export type OAuthIdentity = Schemas["OAuthIdentity"];
+export type OAuthIdentitiesResponse = Schemas["OAuthIdentitiesResponse"];
+export type AuthResponse = Schemas["AuthResponse"];
+
+// --- Channels ---------------------------------------------------------------
+export type Channel = Schemas["Channel"];
+export type ChannelListResponse = Schemas["ChannelListResponse"];
+
+// --- Donation addresses (simple NON-CUSTODIAL crypto donation display) ------
+export type DonationNetwork = NonNullable<Schemas["DonationAddress"]["network"]>;
+export type DonationAddress = Schemas["DonationAddress"];
+export type DonationAddressListResponse = Schemas["DonationAddressListResponse"];
+export type AddDonationAddressRequest = Schemas["AddDonationAddressRequest"];
+export type DonationChallengeResponse = Schemas["DonationChallengeResponse"];
+export type VerifyDonationAddressRequest = Schemas["VerifyDonationAddressRequest"];
+
+// --- Channel / video mutations ----------------------------------------------
+export type CreateChannelRequest = Schemas["CreateChannelRequest"];
+export type UpdateChannelRequest = Schemas["UpdateChannelRequest"];
+export type CreateVideoRequest = Schemas["CreateVideoRequest"];
+
+// --- Reports / moderation ---------------------------------------------------
+export type CreateReportRequest = Schemas["CreateReportRequest"];
+export type ReportTargetType = NonNullable<Schemas["Report"]["target_type"]>;
+export type ReportStatus = NonNullable<Schemas["Report"]["status"]>;
+export type ReportReporter = Schemas["ReportReporter"];
+export type Report = Schemas["Report"];
+export type ReportListResponse = Schemas["ReportListResponse"];
+export type ResolveReportRequest = Schemas["ResolveReportRequest"];
+export type BlockVideoRequest = Schemas["BlockVideoRequest"];
+export type BlockedVideo = Schemas["BlockedVideo"];
+export type BlockedVideoListResponse = Schemas["BlockedVideoListResponse"];
+export type BlockedRemoteVideo = Schemas["BlockedRemoteVideo"];
+export type BlockedRemoteVideoListResponse = Schemas["BlockedRemoteVideoListResponse"];
+export type AdminVideo = Schemas["AdminVideo"];
+export type AdminVideoListResponse = Schemas["AdminVideoListResponse"];
+export type AdminComment = Schemas["AdminComment"];
+export type AdminCommentListResponse = Schemas["AdminCommentListResponse"];
+export type WatchedWord = Schemas["WatchedWord"];
+export type WatchedWordListResponse = Schemas["WatchedWordListResponse"];
+export type CreateWatchedWordRequest = Schemas["CreateWatchedWordRequest"];
+export type WatchedWordMatch = Schemas["WatchedWordMatch"];
+export type WatchedWordMatchListResponse = Schemas["WatchedWordMatchListResponse"];
+
+// --- Video update / upload --------------------------------------------------
+export type UpdateVideoRequest = Schemas["UpdateVideoRequest"];
+/** POST /api/v1/videos/{id}/file response (the published video + stored file). */
+export type UploadVideoResult = Schemas["UploadVideoFileResponse"];
+export type CreateUploadSessionRequest = Schemas["CreateUploadSessionRequest"];
+export type UploadSessionResponse = Schemas["UploadSessionResponse"];
+export type UploadSessionState = NonNullable<Schemas["UploadStatusResponse"]["state"]>;
+export type UploadStatusResponse = Schemas["UploadStatusResponse"];
+export type ImportJobState = NonNullable<Schemas["ImportJob"]["state"]>;
+export type ImportJob = Schemas["ImportJob"];
+export type ImportJobResponse = Schemas["ImportJobResponse"];
+export type VideoFile = Schemas["VideoFile"];
+
+// --- Live streaming ---------------------------------------------------------
+export type LiveStreamState = NonNullable<Schemas["LiveStream"]["state"]>;
+export type LiveStream = Schemas["LiveStream"];
+export type CreateLiveStreamRequest = Schemas["CreateLiveStreamRequest"];
+export type UpdateLiveStreamRequest = Schemas["UpdateLiveStreamRequest"];
+export type CreateLiveStreamResponse = Schemas["CreateLiveStreamResponse"];
+export type LiveStreamListResponse = Schemas["LiveStreamListResponse"];
+export type LiveStreamKey = Schemas["LiveStreamKey"];
+
+// --- Comments ---------------------------------------------------------------
+export type Comment = Schemas["Comment"];
+export type CommentListResponse = Schemas["CommentListResponse"];
+
+// --- Captions ---------------------------------------------------------------
+export type Caption = Schemas["Caption"];
+export type CaptionListResponse = Schemas["CaptionListResponse"];
+export type CaptionJobState = NonNullable<Schemas["CaptionJob"]["state"]>;
+export type CaptionJob = Schemas["CaptionJob"];
+export type CaptionJobResponse = Schemas["CaptionJobResponse"];
+export type AutoCaptionRequest = Schemas["AutoCaptionRequest"];
+
+// --- Mutes / blocks ---------------------------------------------------------
+export type MutedAccount = Schemas["MutedAccount"];
+export type MutedAccountListResponse = Schemas["MutedAccountListResponse"];
+export type MutedInstance = Schemas["MutedInstance"];
+export type MutedInstanceListResponse = Schemas["MutedInstanceListResponse"];
+export type BlockInstanceRequest = Schemas["BlockInstanceRequest"];
+export type BlockedInstance = Schemas["BlockedInstance"];
+export type BlockedInstanceListResponse = Schemas["BlockedInstanceListResponse"];
+
+// --- Federation / remote content --------------------------------------------
+export type RemoteVideo = Schemas["RemoteVideo"];
+export type CreateRemoteFollowRequest = Schemas["CreateRemoteFollowRequest"];
+export type RemoteFollowState = NonNullable<Schemas["RemoteFollow"]["state"]>;
+export type RemoteFollow = Schemas["RemoteFollow"];
+export type RemoteFollowListResponse = Schemas["RemoteFollowListResponse"];
+export type BlockedUser = Schemas["BlockedUser"];
+export type BlockedUserListResponse = Schemas["BlockedUserListResponse"];
+
+// --- Messaging --------------------------------------------------------------
+export type Conversation = Schemas["Conversation"];
+export type ConversationSummary = Schemas["ConversationSummary"];
+export type ConversationListResponse = Schemas["ConversationListResponse"];
+export type Message = Schemas["Message"];
+export type DMAttachmentKind = NonNullable<Schemas["DMAttachment"]["kind"]>;
+export type DMAttachment = Schemas["DMAttachment"];
+export type LinkPreview = Schemas["LinkPreview"];
+export type UploadAttachmentResponse = Schemas["UploadAttachmentResponse"];
+export type MarkConversationReadRequest = Schemas["MarkConversationReadRequest"];
+export type MessageListResponse = Schemas["MessageListResponse"];
+
+// --- End-to-end encrypted messaging (see .ralph/specs/e2ee.md) --------------
+export type E2EEDevice = Schemas["E2EEDevice"];
+export type E2EEDeviceListResponse = Schemas["E2EEDeviceListResponse"];
+export type RegisterE2EEDeviceRequest = Schemas["RegisterE2EEDeviceRequest"];
+export type E2EEOneTimeKey = Schemas["E2EEOneTimeKey"];
+export type UploadOneTimeKeysRequest = Schemas["UploadOneTimeKeysRequest"];
+export type UploadOneTimeKeysResponse = Schemas["UploadOneTimeKeysResponse"];
+export type OneTimeKeyCountResponse = Schemas["OneTimeKeyCountResponse"];
+export type E2EEClaim = Schemas["E2EEClaim"];
+export type E2EEClaimResponse = Schemas["E2EEClaimResponse"];
+export type EncryptedEnvelope = Schemas["EncryptedEnvelope"];
+export type SendEncryptedMessageRequest = Schemas["SendEncryptedMessageRequest"];
+export type SendEncryptedResponse = Schemas["SendEncryptedResponse"];
+export type EncryptedMessage = Schemas["EncryptedMessage"];
+export type EncryptedMessageListResponse = Schemas["EncryptedMessageListResponse"];
+
+// --- Ratings / watch progress / history -------------------------------------
+export type RatingValue = NonNullable<Schemas["VideoRating"]["my_rating"]>;
+export type VideoRating = Schemas["VideoRating"];
+export type WatchProgress = Schemas["WatchProgress"];
+export type HistoryItem = Schemas["HistoryItem"];
+export type WatchHistoryResponse = Schemas["WatchHistoryResponse"];
+
+// --- Notifications ----------------------------------------------------------
+export type NotificationType = NonNullable<Schemas["Notification"]["type"]>;
+export type NotificationActor = Schemas["NotificationActor"];
+export type Notification = Schemas["Notification"];
+export type NotificationListResponse = Schemas["NotificationListResponse"];
+export type UnreadCountResponse = Schemas["UnreadCountResponse"];
+
+// --- Playlists --------------------------------------------------------------
+export type PlaylistVisibility = NonNullable<Schemas["Playlist"]["visibility"]>;
+export type Playlist = Schemas["Playlist"];
+export type PlaylistListResponse = Schemas["PlaylistListResponse"];
+export type PlaylistDetail = Schemas["PlaylistDetailResponse"];
+export type CreatePlaylistRequest = Schemas["CreatePlaylistRequest"];
+export type UpdatePlaylistRequest = Schemas["UpdatePlaylistRequest"];
+
+// --- Statistics -------------------------------------------------------------
+export type DailyViews = Schemas["DailyViews"];
+export type VideoStatsResponse = Schemas["VideoStatsResponse"];
+export type ChannelStatsResponse = Schemas["ChannelStatsResponse"];
+
+// --- Notification preferences -----------------------------------------------
+export type NotificationPrefsResponse = Schemas["NotificationPrefsResponse"];
+export type UpdateNotificationPrefsRequest = Schemas["UpdateNotificationPrefsRequest"];
+
+// --- Quarantine -------------------------------------------------------------
+export type QuarantinedVideo = Schemas["QuarantinedVideo"];
+export type QuarantinedVideoListResponse = Schemas["QuarantinedVideoListResponse"];
+export type RejectQuarantinedVideoRequest = Schemas["RejectQuarantinedVideoRequest"];

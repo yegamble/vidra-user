@@ -1227,7 +1227,10 @@ function VideoRow({
   const [language, setLanguage] = useState(video.language ?? "");
   const [license, setLicense] = useState(video.license ?? "");
   const [tags, setTags] = useState<string[]>(video.tags ?? []);
-  const [privacy, setPrivacy] = useState<VideoPrivacy>(video.privacy);
+  // A studio (owned, local) video always carries privacy/state; the fields are
+  // optional on the shared Video type only because federated remote cards omit
+  // them, so coalesce to a safe default that never actually fires here.
+  const [privacy, setPrivacy] = useState<VideoPrivacy>(video.privacy ?? "private");
   // The schedule as a datetime-local value; the owner list rows carry
   // publish_at once set (per the contract), the detail fetch refreshes it.
   const [publishAt, setPublishAt] = useState(toLocalInputValue(video.publish_at));
@@ -1283,7 +1286,7 @@ function VideoRow({
     setLanguage(video.language ?? "");
     setLicense(video.license ?? "");
     setTags(detail?.tags ?? video.tags ?? []);
-    setPrivacy(video.privacy);
+    setPrivacy(video.privacy ?? "private");
     setPublishAt(toLocalInputValue((detail ?? video).publish_at));
     setError(null);
   }
@@ -1302,7 +1305,7 @@ function VideoRow({
       setLanguage(full.language ?? "");
       setLicense(full.license ?? "");
       setTags(full.tags ?? []);
-      setPrivacy(full.privacy);
+      setPrivacy(full.privacy ?? "private");
       setPublishAt(toLocalInputValue(full.publish_at));
     } catch {
       // Keep the list-derived defaults already in state (and claim nothing
@@ -1436,11 +1439,11 @@ function VideoRow({
           </Link>
         </p>
         <div className="mt-1 flex items-center gap-2 text-xs">
-          <StateBadge state={video.state} />
+          <StateBadge state={video.state ?? "draft"} />
           {video.privacy === "public" ? (
             <span className="text-zinc-500 dark:text-zinc-400">Public</span>
           ) : (
-            <PrivacyBadge privacy={video.privacy} />
+            <PrivacyBadge privacy={video.privacy ?? "private"} />
           )}
           {video.state === "scheduled" && video.publish_at ? (
             <span className="text-zinc-500 dark:text-zinc-400">

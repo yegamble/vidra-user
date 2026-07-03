@@ -170,7 +170,7 @@ export function WatchView({ id }: { id: string }) {
             {/* Owner-facing badge: a private video only ever loads for its
                 owner; an unlisted one tells anyone with the link how it is
                 shared. Public renders nothing. */}
-            <PrivacyBadge privacy={video.privacy} />
+            <PrivacyBadge privacy={video.privacy ?? "public"} />
             {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
             {chips.map((c) => (
               <span
@@ -410,7 +410,7 @@ function Player({
         <StoryboardPreview
           videoId={video.id}
           videoRef={videoRef}
-          durationSeconds={video.duration_seconds}
+          durationSeconds={video.duration_seconds ?? undefined}
         />
       ) : null}
       <div className="flex flex-wrap items-center gap-2">

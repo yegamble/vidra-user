@@ -26,6 +26,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated from vidra-core's OpenAPI spec (npm run codegen) — not hand-edited.
+    "lib/api/generated.ts",
     // Test/build artifacts.
     "playwright-report/**",
     "test-results/**",

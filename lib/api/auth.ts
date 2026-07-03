@@ -37,7 +37,7 @@ export const authApi = {
    * When the instance requires registration approval no account is created:
    * the backend files a pending request and answers 202 {status:"pending"}.
    */
-  register: (body: RegisterRequest) =>
+  register: (body: Omit<RegisterRequest, "cookie_mode">) =>
     apiRequest<AuthResponse | RegistrationPending>("/api/v1/auth/register", {
       method: "POST",
       body: { ...body, cookie_mode: true },
@@ -50,7 +50,7 @@ export const authApi = {
    * MFA-enabled account valid credentials return {mfa_required, mfa_token}
    * with NO session tokens — finish at completeMFAChallenge within 5 minutes.
    */
-  login: (body: LoginRequest) =>
+  login: (body: Omit<LoginRequest, "cookie_mode">) =>
     apiRequest<AuthResponse | MFARequiredResponse>("/api/v1/auth/login", {
       method: "POST",
       body: { ...body, cookie_mode: true },

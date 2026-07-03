@@ -50,10 +50,10 @@ export type LoginOutcome =
 interface SessionContextValue {
   user: User | null;
   status: SessionStatus;
-  login: (credentials: LoginRequest) => Promise<LoginOutcome>;
+  login: (credentials: Omit<LoginRequest, "cookie_mode">) => Promise<LoginOutcome>;
   /** Second half of a two-factor login (TOTP or recovery code). */
   completeMfaChallenge: (mfaToken: string, code: string) => Promise<void>;
-  register: (input: RegisterRequest) => Promise<RegisterOutcome>;
+  register: (input: Omit<RegisterRequest, "cookie_mode">) => Promise<RegisterOutcome>;
   updateProfile: (input: UpdateProfileRequest) => Promise<void>;
   deactivate: (password: string) => Promise<void>;
   /** IRREVERSIBLE hard delete (password re-confirmed); clears the local session. */
@@ -112,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (credentials: LoginRequest): Promise<LoginOutcome> => {
+    async (credentials: Omit<LoginRequest, "cookie_mode">): Promise<LoginOutcome> => {
       const res = await authApi.login(credentials);
       // An MFA-enabled account answers {mfa_required, mfa_token} with NO
       // session tokens — the caller must run the challenge step.
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (input: RegisterRequest): Promise<RegisterOutcome> => {
+    async (input: Omit<RegisterRequest, "cookie_mode">): Promise<RegisterOutcome> => {
       const res = await authApi.register(input);
       // A 202 means the instance requires approval: a pending request was filed
       // and there is no session to apply.

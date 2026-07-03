@@ -1,14 +1,15 @@
 name: contract-ci
 
-# Frontend <-> backend contract drift guard. Fails when the vidra-user API client
-# (lib/api/*.ts) references an /api/ path that no longer exists in vidra-core's
-# OpenAPI spec (path params compared structurally, so it is name-agnostic and not
-# flaky). It does NOT yet check methods/field shapes — that needs generated types.
+# Frontend <-> backend contract guard. Two checks against vidra-core's OpenAPI spec
+# (fetched from the public repo, so no token is needed):
+#   1. path check   — every /api/ path the client (lib/api/*.ts) calls exists in the
+#      spec (structural, name-agnostic, not flaky).
+#   2. type freshness — regenerates lib/api/generated.ts from the spec and fails if
+#      the committed file is stale. Since lib/api/types.ts DERIVES every type from
+#      generated.ts, this makes SHAPE drift (not just path drift) impossible to miss.
 #
-# Since the split, vidra-core is a separate PUBLIC repo, so this fetches the spec's
-# raw file from it (no token needed) and points the checker at it via OPENAPI_PATH.
-# It cannot see backend-side spec changes on its own, so also run vidra-core's
-# `openapi` workflow as the backend half of the same contract.
+# It cannot see backend-side spec edits on its own, so vidra-core's `openapi`
+# workflow is the backend half of the same contract.
 on:
   push:
     branches: [main]
@@ -26,6 +27,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Fetch backend OpenAPI contract from vidra-core (public)
         run: |
@@ -37,3 +43,15 @@ jobs:
         env:
           OPENAPI_PATH: .contract/openapi.yaml
         run: node scripts/check-contract.mjs
+
+      - name: Verify generated API types are up to date with the spec
+        env:
+          OPENAPI_PATH: .contract/openapi.yaml
+        run: |
+          npm run codegen
+          if ! git diff --quiet -- lib/api/generated.ts; then
+            echo "::error::lib/api/generated.ts is stale vs vidra-core's openapi.yaml. Run 'npm run codegen' and commit the result."
+            git --no-pager diff -- lib/api/generated.ts | head -80
+            exit 1
+          fi
+          echo "OK: generated API types match the backend contract."

@@ -426,11 +426,21 @@ describe("api endpoints", () => {
   });
 
   it("createLiveStream POSTs the metadata to the channel live endpoint", async () => {
-    await api.createLiveStream("ada", { title: "Show", permanent: true });
+    await api.createLiveStream("ada", {
+      title: "Show",
+      permanent: true,
+      privacy: "public",
+      replay_enabled: false,
+    });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/channels/ada/live");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ title: "Show", permanent: true });
+    expect(JSON.parse(init.body as string)).toEqual({
+      title: "Show",
+      permanent: true,
+      privacy: "public",
+      replay_enabled: false,
+    });
   });
 
   it("getLiveStreams targets the channel live list", async () => {
@@ -458,11 +468,21 @@ describe("api endpoints", () => {
   });
 
   it("updateLiveStream PATCHes the metadata (incl. replay_enabled)", async () => {
-    await api.updateLiveStream("s1", { title: "Show", replay_enabled: true });
+    await api.updateLiveStream("s1", {
+      title: "Show",
+      replay_enabled: true,
+      privacy: "public",
+      permanent: false,
+    });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/live/s1");
     expect(init.method).toBe("PATCH");
-    expect(JSON.parse(init.body as string)).toEqual({ title: "Show", replay_enabled: true });
+    expect(JSON.parse(init.body as string)).toEqual({
+      title: "Show",
+      replay_enabled: true,
+      privacy: "public",
+      permanent: false,
+    });
   });
 
   it("importVideoFile POSTs the url to the import endpoint (async job)", async () => {
