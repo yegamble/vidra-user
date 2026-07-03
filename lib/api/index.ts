@@ -6,6 +6,7 @@ export {
   api,
   channelAvatarUrl,
   channelBannerUrl,
+  remoteVideoThumbnailUrl,
   userAvatarUrl,
   userBannerUrl,
   videoCaptionUrl,

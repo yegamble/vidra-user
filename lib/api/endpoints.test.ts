@@ -4,6 +4,7 @@ import {
   api,
   channelAvatarUrl,
   channelBannerUrl,
+  remoteVideoThumbnailUrl,
   userAvatarUrl,
   userBannerUrl,
   videoCaptionUrl,
@@ -744,5 +745,88 @@ describe("api endpoints", () => {
     await api.rejectQuarantinedVideo("v1");
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({});
+  });
+
+  it("getFeed passes scope=all through and omits it when unset", async () => {
+    await api.getFeed({ sort: "recent", scope: "all", limit: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos?sort=recent&scope=all&limit=20");
+  });
+
+  it("getRemoteVideo targets the remote-video detail with the id encoded", async () => {
+    await api.getRemoteVideo("r 1");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/remote-videos/r%201");
+  });
+
+  it("remoteVideoThumbnailUrl builds the cached-poster URL", () => {
+    expect(remoteVideoThumbnailUrl("r1")).toBe(
+      "http://localhost:8080/api/v1/remote-videos/r1/thumbnail",
+    );
+  });
+
+  it("createRemoteFollow POSTs the handle target", async () => {
+    await api.createRemoteFollow({ handle: "films@videos.example" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/remote-follows");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ handle: "films@videos.example" });
+  });
+
+  it("createRemoteFollow POSTs the actor_url target", async () => {
+    await api.createRemoteFollow({ actor_url: "https://videos.example/video-channels/films" });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      actor_url: "https://videos.example/video-channels/films",
+    });
+  });
+
+  it("listRemoteFollows targets the remote-follows list with pagination", async () => {
+    await api.listRemoteFollows({ limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/remote-follows?limit=100");
+  });
+
+  it("deleteRemoteFollow DELETEs the follow by row id", async () => {
+    await api.deleteRemoteFollow("f1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/remote-follows/f1");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("muteInstance POSTs to the instance-mute endpoint with the domain encoded", async () => {
+    await api.muteInstance("videos.example:8443");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/mutes/instances/videos.example%3A8443");
+    expect(init.method).toBe("POST");
+  });
+
+  it("unmuteInstance DELETEs the instance mute", async () => {
+    await api.unmuteInstance("videos.example");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/mutes/instances/videos.example");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("getMutedInstances targets the instance-mutes list with pagination", async () => {
+    await api.getMutedInstances({ limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/mutes/instances?limit=100");
+  });
+
+  it("getBlockedInstances targets the admin blocklist with pagination", async () => {
+    await api.getBlockedInstances({ limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/instances/blocked?limit=100");
+  });
+
+  it("blockInstance POSTs the domain + reason", async () => {
+    await api.blockInstance({ domain: "spam.example", reason: "spam waves" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/instances/blocked");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ domain: "spam.example", reason: "spam waves" });
+  });
+
+  it("unblockInstance DELETEs the blocklist entry with the domain encoded", async () => {
+    await api.unblockInstance("spam.example:8443");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/instances/blocked/spam.example%3A8443");
+    expect(init.method).toBe("DELETE");
   });
 });

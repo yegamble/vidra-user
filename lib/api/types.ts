@@ -52,6 +52,23 @@ export interface Video {
   state: VideoState;
   created_at: string;
   /**
+   * Whether this card is a federated REMOTE video (subscriptions feed, search,
+   * public feed with scope=all). Remote cards omit the local-only fields
+   * (channel_id, privacy, state — typed required here for the local shape the
+   * app renders everywhere else; never read them on a remote card) and instead
+   * carry domain/watch_url/stream_url. Local videos are always false/omitted.
+   */
+  remote?: boolean;
+  /** REMOTE cards only: the origin instance's domain. */
+  domain?: string;
+  /** REMOTE cards only: the origin's human watch page (always present on remote cards). */
+  watch_url?: string;
+  /**
+   * REMOTE cards only: best playable URL from the origin (HLS preferred, else a
+   * direct video file). Omitted when the origin advertised none.
+   */
+  stream_url?: string;
+  /**
    * The scheduled publish time (ISO date-time). Present on the detail,
    * create/update, and owner (studio) channel-list views once a schedule was
    * set; omitted otherwise. The server publishes automatically at this time.
@@ -107,9 +124,17 @@ export interface VideoConfigResponse {
 
 export type FeedSort = "recent" | "popular" | "trending";
 
+/**
+ * Public-feed scope: "local" (this instance's videos only, the default) or
+ * "all" (mixes in federated remote videos for discovery).
+ */
+export type FeedScope = "local" | "all";
+
 export interface VideoFeedResponse {
   videos: Video[];
   sort: FeedSort;
+  /** The scope actually applied (normalised); present on the public feed only. */
+  scope?: FeedScope;
   limit: number;
   offset: number;
 }
@@ -686,6 +711,111 @@ export interface MutedAccount {
 
 export interface MutedAccountListResponse {
   accounts: MutedAccount[];
+  limit: number;
+  offset: number;
+}
+
+/**
+ * A remote instance the caller has muted (its videos/comments are hidden from
+ * the caller's surfaces). Mirrors the backend MutedInstance schema.
+ */
+export interface MutedInstance {
+  domain: string;
+  muted_at: string;
+}
+
+export interface MutedInstanceListResponse {
+  instances: MutedInstance[];
+  limit: number;
+  offset: number;
+}
+
+/** POST /api/v1/admin/instances/blocked body. */
+export interface BlockInstanceRequest {
+  /** Bare hostname (optionally host:port) of the instance to block. */
+  domain: string;
+  /** Recorded on the blocklist and in the audit trail. May be empty. */
+  reason?: string;
+}
+
+/**
+ * A remote instance on the admin blocklist: inbound activity from it is
+ * dropped, its content hidden, outbound deliveries cancelled. Mirrors the
+ * backend BlockedInstance schema. blocked_by is omitted when that admin
+ * account was deleted.
+ */
+export interface BlockedInstance {
+  domain: string;
+  reason: string;
+  blocked_by?: string;
+  blocked_at: string;
+}
+
+export interface BlockedInstanceListResponse {
+  instances: BlockedInstance[];
+  limit: number;
+  offset: number;
+}
+
+/**
+ * The full stored metadata of a federated remote video (GET /remote-videos/{id}).
+ * Remote videos are metadata only — playback uses stream_url from the origin
+ * when present, and watch_url always links the origin's watch page.
+ */
+export interface RemoteVideo {
+  id: string;
+  /** Always true. Distinguishes remote metadata from local videos. */
+  remote: boolean;
+  /** The origin instance's domain. */
+  domain: string;
+  title: string;
+  description: string;
+  /** The ActivityPub object id on the origin. */
+  object_url: string;
+  /** The origin's human watch page. */
+  watch_url: string;
+  /**
+   * Best playable URL from the origin (HLS preferred, else a direct video
+   * file). Omitted when the origin advertised none.
+   */
+  stream_url?: string;
+  duration_seconds?: number;
+  published_at?: string;
+  /** Whether a locally cached thumbnail is available (see remoteVideoThumbnailUrl). */
+  has_thumbnail: boolean;
+}
+
+/**
+ * POST /api/v1/me/remote-follows body — names the remote channel to follow.
+ * Exactly one of handle ("name@domain", leading @ tolerated) or actor_url.
+ */
+export interface CreateRemoteFollowRequest {
+  handle?: string;
+  actor_url?: string;
+}
+
+/**
+ * pending until the remote instance Accepts the follow, then accepted (only
+ * accepted follows feed the subscriptions feed). A remote Reject removes it.
+ */
+export type RemoteFollowState = "pending" | "accepted";
+
+/** The caller's outbound follow of a remote channel. Mirrors the backend RemoteFollow schema. */
+export interface RemoteFollow {
+  /** The follow row id (the DELETE /me/remote-follows/{id} key). */
+  id: string;
+  /** The followed remote channel's ActivityPub actor URL. */
+  actor_url: string;
+  /** The followed channel's "name@domain" identity. */
+  handle: string;
+  /** The origin instance's domain. */
+  domain: string;
+  state: RemoteFollowState;
+  created_at: string;
+}
+
+export interface RemoteFollowListResponse {
+  follows: RemoteFollow[];
   limit: number;
   offset: number;
 }

@@ -11,13 +11,19 @@ import { readFeedFilters } from "@/lib/feed-url";
 export default async function TrendingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tag?: string; category?: string; language?: string }>;
+  searchParams: Promise<{ tag?: string; category?: string; language?: string; scope?: string }>;
 }) {
   const sp = await searchParams;
   const filters = readFeedFilters(sp);
-  const feedKey = ["trending", filters.category ?? "", filters.language ?? "", filters.tag ?? ""].join(
-    "|",
-  );
+  // The Local/All scope toggle renders on the home feed only, but an explicit
+  // ?scope=all deep link (or one carried over by a sort switch) is honoured.
+  const feedKey = [
+    "trending",
+    filters.scope ?? "local",
+    filters.category ?? "",
+    filters.language ?? "",
+    filters.tag ?? "",
+  ].join("|");
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

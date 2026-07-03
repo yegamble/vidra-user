@@ -28,12 +28,15 @@ export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: Fe
   const [more, setMore] = useState<MoreStatus>("idle");
   const [reloadKey, setReloadKey] = useState(0);
 
-  const { tag, category, language } = filters;
+  const { tag, category, language, scope } = filters;
 
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getFeed({ sort, tag, category, language, limit: PAGE_SIZE, offset: 0 }, controller.signal)
+      .getFeed(
+        { sort, scope, tag, category, language, limit: PAGE_SIZE, offset: 0 },
+        controller.signal,
+      )
       .then((res) => {
         setVideos(res.videos);
         setHasMore(res.videos.length === PAGE_SIZE);
@@ -43,7 +46,7 @@ export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: Fe
         if (!controller.signal.aborted) setStatus("error");
       });
     return () => controller.abort();
-  }, [sort, tag, category, language, reloadKey]);
+  }, [sort, scope, tag, category, language, reloadKey]);
 
   function retry() {
     setStatus("loading");
@@ -55,6 +58,7 @@ export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: Fe
     try {
       const res = await api.getFeed({
         sort,
+        scope,
         tag,
         category,
         language,

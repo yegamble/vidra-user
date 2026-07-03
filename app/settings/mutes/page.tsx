@@ -1,4 +1,5 @@
 import { MutedAccountsView } from "@/components/MutedAccountsView";
+import { MutesTabs } from "@/components/MutesTabs";
 
 export default function MutedAccountsPage() {
   return (
@@ -7,6 +8,7 @@ export default function MutedAccountsPage() {
       <p className="mb-6 text-sm text-zinc-500 dark:text-zinc-400">
         Accounts you have muted. Their comments are hidden from you.
       </p>
+      <MutesTabs />
       <MutedAccountsView />
     </main>
   );

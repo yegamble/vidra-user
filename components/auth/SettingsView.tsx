@@ -81,9 +81,9 @@ export function SettingsView() {
       </section>
       <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Muted accounts</h2>
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Mutes</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Accounts whose comments are hidden from you.
+            Accounts and federated instances whose content is hidden from you.
           </p>
         </div>
         <Link

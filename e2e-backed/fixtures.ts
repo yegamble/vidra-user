@@ -534,3 +534,34 @@ export async function videoRating(
   const res = await request.get(`${API_URL}/api/v1/videos/${videoId}/rating`);
   return (await res.json()) as { like_count: number; dislike_count: number };
 }
+
+/**
+ * muteInstance mutes a federated instance for the given user via the API
+ * (POST /me/mutes/instances/{domain}). Used to seed an instance mute — the UI
+ * mute control lives on a remote video's watch page, which needs federated
+ * content a plain backed stack does not have.
+ */
+export async function muteInstance(
+  request: APIRequestContext,
+  token: string,
+  domain: string,
+): Promise<number> {
+  const res = await request.post(
+    `${API_URL}/api/v1/me/mutes/instances/${encodeURIComponent(domain)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return res.status();
+}
+
+/** mutedInstances reads the caller's persisted instance mutes via the API. */
+export async function mutedInstances(
+  request: APIRequestContext,
+  token: string,
+): Promise<Array<{ domain: string; muted_at: string }>> {
+  const res = await request.get(`${API_URL}/api/v1/me/mutes/instances?limit=100`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (
+    (await res.json()) as { instances: Array<{ domain: string; muted_at: string }> }
+  ).instances;
+}

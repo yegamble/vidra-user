@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { RemoteFollowsSection } from "@/components/RemoteFollowsSection";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -14,8 +15,10 @@ import type { Video } from "@/lib/api";
 type Status = "loading" | "error" | "ready";
 
 // SubscriptionsView shows the signed-in user's feed of videos from the channels
-// they follow. The session lives in memory, so a hard reload lands here signed
-// out — we show a sign-in prompt rather than fetching.
+// they follow — local channels and accepted remote-channel follows (remote:true
+// cards with an origin badge), plus the remote-follows affordance above the
+// feed. The session lives in memory, so a hard reload lands here signed out —
+// we show a sign-in prompt rather than fetching.
 export function SubscriptionsView() {
   const { status } = useSession();
 
@@ -35,7 +38,12 @@ export function SubscriptionsView() {
     );
   }
 
-  return <Feed />;
+  return (
+    <>
+      <RemoteFollowsSection />
+      <Feed />
+    </>
+  );
 }
 
 function Feed() {

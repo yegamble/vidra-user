@@ -28,6 +28,14 @@ import type {
   MessageListResponse,
   Message,
   MutedAccountListResponse,
+  MutedInstanceListResponse,
+  BlockInstanceRequest,
+  BlockedInstanceListResponse,
+  CreateRemoteFollowRequest,
+  RemoteFollow,
+  RemoteFollowListResponse,
+  RemoteVideo,
+  FeedScope,
   CreateChannelRequest,
   UpdateChannelRequest,
   CreateVideoRequest,
@@ -70,6 +78,11 @@ import type {
 
 export interface FeedParams {
   sort?: FeedSort;
+  /**
+   * Feed scope: "local" (default) or "all", which mixes in federated remote
+   * videos (remote:true cards). Omitted → the backend defaults to local.
+   */
+  scope?: FeedScope;
   /** Only videos carrying this free-form tag (case-insensitive exact match). */
   tag?: string;
   /** Only videos with this subject-category id (GET /videos/config; unknown → 422). */
@@ -100,6 +113,7 @@ export const api = {
     apiRequest<VideoFeedResponse>("/api/v1/videos", {
       query: {
         sort: params.sort,
+        scope: params.scope,
         tag: params.tag,
         category: params.category,
         language: params.language,
@@ -395,6 +409,90 @@ export const api = {
     apiRequest<MutedAccountListResponse>("/api/v1/me/mutes/accounts", {
       query: { limit: params.limit, offset: params.offset },
       signal,
+    }),
+
+  /**
+   * POST /api/v1/me/mutes/instances/{domain} — mute a whole remote instance so
+   * its content is hidden from the caller (auth; idempotent 204; invalid
+   * domain → 422).
+   */
+  muteInstance: (domain: string) =>
+    apiRequest<void>(`/api/v1/me/mutes/instances/${encodeURIComponent(domain)}`, {
+      method: "POST",
+    }),
+
+  /** DELETE /api/v1/me/mutes/instances/{domain} — unmute an instance (auth; idempotent 204). */
+  unmuteInstance: (domain: string) =>
+    apiRequest<void>(`/api/v1/me/mutes/instances/${encodeURIComponent(domain)}`, {
+      method: "DELETE",
+    }),
+
+  /** GET /api/v1/me/mutes/instances — the instances the caller has muted, newest first (auth). */
+  getMutedInstances: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+    apiRequest<MutedInstanceListResponse>("/api/v1/me/mutes/instances", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * GET /api/v1/remote-videos/{id} — a federated remote video's stored metadata
+   * (public; 404 when unknown or its origin instance is admin-blocked).
+   */
+  getRemoteVideo: (id: string, signal?: AbortSignal) =>
+    apiRequest<RemoteVideo>(`/api/v1/remote-videos/${encodeURIComponent(id)}`, { signal }),
+
+  /**
+   * POST /api/v1/me/remote-follows — follow a remote channel by "name@domain"
+   * handle or actor URL (auth). Returns the follow row (state=pending until
+   * the remote Accepts; idempotent re-follow returns the existing row).
+   * Unresolvable/local target → 422; federation disabled → 503.
+   */
+  createRemoteFollow: (body: CreateRemoteFollowRequest) =>
+    apiRequest<RemoteFollow>("/api/v1/me/remote-follows", { method: "POST", body }),
+
+  /** GET /api/v1/me/remote-follows — the caller's remote-channel follows, newest first (auth). */
+  listRemoteFollows: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+    apiRequest<RemoteFollowListResponse>("/api/v1/me/remote-follows", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * DELETE /api/v1/me/remote-follows/{id} — unfollow a remote channel by follow
+   * row id (auth, 204; local delete wins, an Undo{Follow} is queued). Unknown
+   * or another user's id → 404.
+   */
+  deleteRemoteFollow: (id: string) =>
+    apiRequest<void>(`/api/v1/me/remote-follows/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /**
+   * GET /api/v1/admin/instances/blocked — the admin instance blocklist, newest
+   * block first (admin/moderator).
+   */
+  getBlockedInstances: (
+    params: { limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<BlockedInstanceListResponse>("/api/v1/admin/instances/blocked", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/instances/blocked — block a remote instance: inbound
+   * activity dropped, content hidden, outbound deliveries cancelled
+   * (admin/moderator; idempotent 204 — re-blocking refreshes the reason;
+   * audited; invalid domain → 422).
+   */
+  blockInstance: (body: BlockInstanceRequest) =>
+    apiRequest<void>("/api/v1/admin/instances/blocked", { method: "POST", body }),
+
+  /** DELETE /api/v1/admin/instances/blocked/{domain} — unblock an instance (admin/moderator; idempotent 204). */
+  unblockInstance: (domain: string) =>
+    apiRequest<void>(`/api/v1/admin/instances/blocked/${encodeURIComponent(domain)}`, {
+      method: "DELETE",
     }),
 
   /**
@@ -854,6 +952,15 @@ export function videoHlsMasterUrl(id: string): string {
 /** Direct URL to a video's poster image (for an <img> src). */
 export function videoThumbnailUrl(id: string): string {
   return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/thumbnail`;
+}
+
+/**
+ * Direct URL to a remote video's locally cached poster (for an <img> src).
+ * 404s when no thumbnail was cached at ingestion — remote cards keep their
+ * no-preview fallback in that case.
+ */
+export function remoteVideoThumbnailUrl(id: string): string {
+  return `${apiBaseUrl}/api/v1/remote-videos/${encodeURIComponent(id)}/thumbnail`;
 }
 
 /** Direct URL to a caption track's WebVTT body (text/vtt). */

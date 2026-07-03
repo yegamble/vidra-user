@@ -24,6 +24,14 @@ describe("feedHref", () => {
   it("omits unset filters", () => {
     expect(feedHref("recent", { tag: undefined, category: undefined })).toBe("/");
   });
+
+  it("keeps scope=all explicit and the default local scope out of the URL", () => {
+    expect(feedHref("recent", { scope: "all" })).toBe("/?scope=all");
+    expect(feedHref("popular", { scope: "all", tag: "cats" })).toBe(
+      "/?sort=popular&scope=all&tag=cats",
+    );
+    expect(feedHref("recent", { scope: undefined })).toBe("/");
+  });
 });
 
 describe("readFeedFilters", () => {
@@ -32,16 +40,25 @@ describe("readFeedFilters", () => {
       tag: "cats",
       category: "7",
       language: undefined,
+      scope: undefined,
     });
     expect(readFeedFilters({})).toEqual({
       tag: undefined,
       category: undefined,
       language: undefined,
+      scope: undefined,
     });
     expect(readFeedFilters({ tag: "  " })).toEqual({
       tag: undefined,
       category: undefined,
       language: undefined,
+      scope: undefined,
     });
+  });
+
+  it("normalizes scope: only 'all' is kept, anything else is the local default", () => {
+    expect(readFeedFilters({ scope: "all" }).scope).toBe("all");
+    expect(readFeedFilters({ scope: "local" }).scope).toBeUndefined();
+    expect(readFeedFilters({ scope: "bogus" }).scope).toBeUndefined();
   });
 });

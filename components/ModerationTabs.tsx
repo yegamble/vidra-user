@@ -13,6 +13,7 @@ const TABS = [
   { href: "/moderation/comments", label: "Comments" },
   { href: "/moderation/watched-words", label: "Watched words" },
   { href: "/moderation/watched-word-matches", label: "Word matches" },
+  { href: "/moderation/instances", label: "Instances" },
 ];
 
 // ModerationTabs is the sub-navigation shared by the moderation surfaces (the
