@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -15,30 +15,17 @@ type Status = "loading" | "error" | "ready";
 
 const ROLES: UserRole[] = ["user", "moderator", "admin"];
 
-// AdminUsersView is the admin-only account management surface. A non-admin or
-// anonymous viewer is gated out (the session lives in memory, so a hard reload
-// lands here signed out — we show a permission prompt rather than fetching a 403).
+// AdminUsersView is the admin-only account management surface, role-gated by
+// RoleGate (an under-privileged/anonymous viewer sees the shared permission
+// prompt and nothing fetches).
 export function AdminUsersView() {
   const { user } = useSession();
 
-  if (user?.role !== "admin") {
-    return (
-      <EmptyState
-        title="Administrators only"
-        message={
-          <>
-            This page is for administrators.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
-              Sign in
-            </Link>{" "}
-            with an admin account to manage users.
-          </>
-        }
-      />
-    );
-  }
-
-  return <UsersList currentUserId={user.id} />;
+  return (
+    <RoleGate minRole="admin" action="manage users">
+      {user ? <UsersList currentUserId={user.id} /> : null}
+    </RoleGate>
+  );
 }
 
 function UsersList({ currentUserId }: { currentUserId: string }) {

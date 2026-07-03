@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
+import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -13,31 +12,16 @@ import { formatUptime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
-// AdminSystemStatusView is the admin-only operational dashboard: build info, the
-// runtime environment, uptime, and per-dependency health. Read-only; a non-admin
-// or anonymous viewer is gated out (the session lives in memory, so a hard reload
-// lands here signed out — we show a prompt rather than fetching a 403).
+// AdminSystemStatusView is the admin-only operational dashboard: build info,
+// the runtime environment, uptime, and per-dependency health. Read-only;
+// role-gated by RoleGate (an under-privileged/anonymous viewer sees the shared
+// permission prompt and nothing fetches).
 export function AdminSystemStatusView() {
-  const { user } = useSession();
-
-  if (user?.role !== "admin") {
-    return (
-      <EmptyState
-        title="Administrators only"
-        message={
-          <>
-            This page is for administrators.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
-              Sign in
-            </Link>{" "}
-            with an admin account to view system status.
-          </>
-        }
-      />
-    );
-  }
-
-  return <StatusPanel />;
+  return (
+    <RoleGate minRole="admin" action="view system status">
+      <StatusPanel />
+    </RoleGate>
+  );
 }
 
 function StatusPanel() {

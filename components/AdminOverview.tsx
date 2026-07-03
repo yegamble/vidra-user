@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { RoleGate } from "@/components/RoleGate";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
@@ -42,29 +41,17 @@ const SECTIONS = [
 
 // AdminOverview is the /admin index: a live system summary (reusing the
 // GET /admin/system snapshot), the open-reports count, and cards linking to the
-// admin sections. A non-admin or anonymous viewer is gated out (the session
-// lives in memory, so a hard reload lands here signed out — we show a
-// permission prompt rather than fetching a 403).
+// admin sections. Role-gated by RoleGate (an under-privileged/anonymous viewer
+// sees the shared permission prompt and nothing fetches).
 export function AdminOverview() {
-  const { user } = useSession();
+  return (
+    <RoleGate minRole="admin" action="view the overview">
+      <OverviewBody />
+    </RoleGate>
+  );
+}
 
-  if (user?.role !== "admin") {
-    return (
-      <EmptyState
-        title="Administrators only"
-        message={
-          <>
-            This page is for administrators.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
-              Sign in
-            </Link>{" "}
-            with an admin account to view the overview.
-          </>
-        }
-      />
-    );
-  }
-
+function OverviewBody() {
   return (
     <div className="flex flex-col gap-8">
       <SystemSummary />

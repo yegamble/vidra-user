@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
+import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -15,32 +15,16 @@ const MAX_NOTE_LEN = 2000;
 
 type Status = "loading" | "error" | "ready";
 
-// ModerationQueue is the moderator/admin view of the abuse-report queue. A
-// non-privileged or anonymous viewer is gated out (the session lives in memory,
-// so a hard reload lands here signed out — we show a sign-in/permission prompt
-// rather than fetching a 403). Privileged viewers see the queue + resolve actions.
+// ModerationQueue is the moderator/admin view of the abuse-report queue,
+// role-gated by RoleGate (an under-privileged/anonymous viewer sees the shared
+// permission prompt and nothing fetches). Privileged viewers see the queue +
+// resolve actions.
 export function ModerationQueue() {
-  const { user } = useSession();
-  const role = user?.role;
-
-  if (role !== "admin" && role !== "moderator") {
-    return (
-      <EmptyState
-        title="Moderators only"
-        message={
-          <>
-            This page is for moderators and administrators.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
-              Sign in
-            </Link>{" "}
-            with a moderator account to review reports.
-          </>
-        }
-      />
-    );
-  }
-
-  return <Queue />;
+  return (
+    <RoleGate minRole="moderator" action="review reports">
+      <Queue />
+    </RoleGate>
+  );
 }
 
 function Queue() {

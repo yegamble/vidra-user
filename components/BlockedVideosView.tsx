@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
+import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -14,32 +14,15 @@ import { relativeTime } from "@/lib/format";
 type Status = "loading" | "error" | "ready";
 
 // BlockedVideosView is the moderator/admin block-list: every currently-blocked
-// video with the context to review it (channel, reason, who blocked it, when) and
-// an Unblock control. A non-privileged or anonymous viewer is gated out (the
-// session lives in memory, so a hard reload lands here signed out — show a prompt
-// rather than fetching a 403).
+// video with the context to review it (channel, reason, who blocked it, when)
+// and an Unblock control. Role-gated by RoleGate (an under-privileged/anonymous
+// viewer sees the shared permission prompt and nothing fetches).
 export function BlockedVideosView() {
-  const { user } = useSession();
-  const role = user?.role;
-
-  if (role !== "admin" && role !== "moderator") {
-    return (
-      <EmptyState
-        title="Moderators only"
-        message={
-          <>
-            This page is for moderators and administrators.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
-              Sign in
-            </Link>{" "}
-            with a moderator account to review blocked videos.
-          </>
-        }
-      />
-    );
-  }
-
-  return <BlockList />;
+  return (
+    <RoleGate minRole="moderator" action="review blocked videos">
+      <BlockList />
+    </RoleGate>
+  );
 }
 
 function BlockList() {

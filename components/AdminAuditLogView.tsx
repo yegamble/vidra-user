@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
+import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -13,30 +12,15 @@ import { relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
-// AdminAuditLogView is the admin-only security audit trail. A non-admin or
-// anonymous viewer is gated out (the session lives in memory, so a hard reload
-// lands here signed out — we show a permission prompt rather than fetching a 403).
+// AdminAuditLogView is the admin-only security audit trail, role-gated by
+// RoleGate (an under-privileged/anonymous viewer sees the shared permission
+// prompt and nothing fetches).
 export function AdminAuditLogView() {
-  const { user } = useSession();
-
-  if (user?.role !== "admin") {
-    return (
-      <EmptyState
-        title="Administrators only"
-        message={
-          <>
-            This page is for administrators.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
-              Sign in
-            </Link>{" "}
-            with an admin account to view the audit log.
-          </>
-        }
-      />
-    );
-  }
-
-  return <AuditList />;
+  return (
+    <RoleGate minRole="admin" action="view the audit log">
+      <AuditList />
+    </RoleGate>
+  );
 }
 
 function AuditList() {

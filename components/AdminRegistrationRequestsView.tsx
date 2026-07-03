@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -15,31 +15,18 @@ const MAX_NOTE_LEN = 2000;
 
 type Status = "loading" | "error" | "ready";
 
-// AdminRegistrationRequestsView is the admin-only registration approval queue.
-// A non-admin or anonymous viewer is gated out (the session lives in memory, so
-// a hard reload lands here signed out — we show a permission prompt rather than
-// fetching a 403). Admins review pending signups and approve or reject them.
+// AdminRegistrationRequestsView is the admin-only registration approval queue,
+// role-gated by RoleGate (an under-privileged/anonymous viewer sees the shared
+// permission prompt and nothing fetches). Admins review pending signups and
+// approve or reject them.
 export function AdminRegistrationRequestsView() {
   const { user } = useSession();
 
-  if (user?.role !== "admin") {
-    return (
-      <EmptyState
-        title="Administrators only"
-        message={
-          <>
-            This page is for administrators.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
-              Sign in
-            </Link>{" "}
-            with an admin account to review registration requests.
-          </>
-        }
-      />
-    );
-  }
-
-  return <RequestQueue reviewerUsername={user.username} />;
+  return (
+    <RoleGate minRole="admin" action="review registration requests">
+      {user ? <RequestQueue reviewerUsername={user.username} /> : null}
+    </RoleGate>
+  );
 }
 
 function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {

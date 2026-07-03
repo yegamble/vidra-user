@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
+import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -14,31 +14,15 @@ import { formatCount, relativeTime } from "@/lib/format";
 type Status = "loading" | "error" | "ready";
 
 // AdminVideosView is the moderator/admin videos overview: browse every video
-// (any privacy/state) and block/unblock any of them. A non-privileged or
-// anonymous viewer is gated out (the session lives in memory, so a hard reload
-// lands here signed out — show a prompt rather than fetching a 403).
+// (any privacy/state) and block/unblock any of them. Role-gated by RoleGate (an
+// under-privileged/anonymous viewer sees the shared permission prompt and
+// nothing fetches).
 export function AdminVideosView() {
-  const { user } = useSession();
-  const role = user?.role;
-
-  if (role !== "admin" && role !== "moderator") {
-    return (
-      <EmptyState
-        title="Moderators only"
-        message={
-          <>
-            This page is for moderators and administrators.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
-              Sign in
-            </Link>{" "}
-            with a moderator account to manage videos.
-          </>
-        }
-      />
-    );
-  }
-
-  return <VideosList />;
+  return (
+    <RoleGate minRole="moderator" action="manage videos">
+      <VideosList />
+    </RoleGate>
+  );
 }
 
 function VideosList() {
