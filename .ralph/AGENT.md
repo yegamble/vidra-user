@@ -133,7 +133,24 @@ the real Olm path only runs under the backed profile). Admin: the admin-only use
 page (`app/admin/users` → `components/AdminUsersView.tsx`, reached via the admin-only
 `AdminNavLink`) lists/searches accounts (`GET /admin/users?q=`) and edits each user's
 role + active flag (`PATCH /admin/users/:id`), disabling the admin's own row — DB-effect
-VERIFIED in `e2e-backed/admin-users.spec.ts`. Auth recovery: the password-reset **request**
+VERIFIED in `e2e-backed/admin-users.spec.ts`. The admin sub-nav (`AdminTabs`) also has
+**Config / Jobs / Media** surfaces (slice `user-admin-config`): the instance configuration
+page (`app/admin/config` → `components/AdminInstanceConfigView.tsx`) loads
+`GET /admin/instance-settings` and renders grouped identity/registration/feature/moderation
+controls (text `Input`s + `Toggle`s) with per-key Overridden-vs-Default badges + a
+null-clears-override "Reset to default", saving a partial `PATCH /admin/instance-settings`
+diff (backed round trip WRITTEN in `e2e-backed/instance-settings.spec.ts`: UI edit →
+`GET /instance` + `GET /admin/instance-settings` reflect it); the jobs page
+(`app/admin/jobs` → `components/AdminJobsView.tsx`) reads `GET /admin/jobs` into per-queue
+cards (pending/running/done/failed + oldest-pending age + stuck signal) + a recent-failures
+table with a Refresh; the media-GC panel (`app/admin/media` →
+`components/AdminMediaView.tsx`) dry-runs `POST /admin/media/gc {dry_run:true}` to list
+orphaned storage objects then double-confirms a purge (`{dry_run:false}`, type `PURGE`) —
+audited server-side. Mocked coverage `e2e/admin-{config,jobs,media}.spec.ts` (anon + regular
+gated, admin happy path). NOTE: the Studio-side "uploads are disabled by the administrator"
+feature-toggle EFFECT is BLOCKED — the committed `GET /instance` `InstanceResponse` doesn't
+expose uploads/imports/live/comments flags (only registration/federation), so no non-admin
+surface has a contract-backed signal to reflect. Auth recovery: the password-reset **request**
 page (`app/reset-password` → `components/auth/ResetPasswordForm.tsx`, linked "Forgot your
 password?" from `LoginForm`) submits an email to `POST /auth/password-reset` (always 202,
 enumeration-safe) and shows a neutral confirmation — DB-effect VERIFIED in

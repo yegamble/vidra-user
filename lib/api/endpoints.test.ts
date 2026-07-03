@@ -1203,4 +1203,47 @@ describe("api endpoints", () => {
     expect(url).toBe("http://localhost:8080/api/v1/admin/instances/blocked/spam.example%3A8443");
     expect(init.method).toBe("DELETE");
   });
+
+  it("getInstanceSettings targets the admin instance-settings endpoint", async () => {
+    await api.getInstanceSettings();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/instance-settings");
+  });
+
+  it("updateInstanceSettings PATCHes the flat key→value patch", async () => {
+    await api.updateInstanceSettings({ instance_name: "My Vidra", uploads_enabled: false });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/instance-settings");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({
+      instance_name: "My Vidra",
+      uploads_enabled: false,
+    });
+  });
+
+  it("updateInstanceSettings sends a null value to clear an override", async () => {
+    await api.updateInstanceSettings({ terms_url: null });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ terms_url: null });
+  });
+
+  it("getJobs targets the admin jobs endpoint", async () => {
+    await api.getJobs();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/jobs");
+  });
+
+  it("runMediaGC POSTs a dry run by default (dry_run=true)", async () => {
+    await api.runMediaGC(true);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/media/gc");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ dry_run: true });
+  });
+
+  it("runMediaGC POSTs dry_run=false for a confirmed purge", async () => {
+    await api.runMediaGC(false);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ dry_run: false });
+  });
 });

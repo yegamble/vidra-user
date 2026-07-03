@@ -8,6 +8,10 @@ import type {
   AdminUser,
   AdminUserListResponse,
   AuditLogListResponse,
+  InstanceSettingsResponse,
+  UpdateInstanceSettingsRequest,
+  JobsOverview,
+  MediaGCResponse,
   SystemStatus,
   AdminVideoListResponse,
   BlockedRemoteVideoListResponse,
@@ -1346,6 +1350,48 @@ export const api = {
     apiRequest<void>(`/api/v1/admin/videos/${encodeURIComponent(id)}/reject`, {
       method: "POST",
       body,
+    }),
+
+  /**
+   * GET /api/v1/admin/instance-settings — every runtime-mutable instance
+   * setting's EFFECTIVE value with its config default and whether the database
+   * currently overrides it (admin only). The DB-backed overlay behind the admin
+   * configuration page.
+   */
+  getInstanceSettings: (signal?: AbortSignal) =>
+    apiRequest<InstanceSettingsResponse>("/api/v1/admin/instance-settings", { signal }),
+
+  /**
+   * PATCH /api/v1/admin/instance-settings — partial, per-key-validated update
+   * (admin only). The body is a flat map of setting key → new value (a boolean
+   * for toggle keys, a string for text keys); a `null` value clears that
+   * override (resets the key to its config default). Only the keys present are
+   * changed. An unknown key / type mismatch / content-invalid value is 422 with
+   * field errors and nothing is written. Returns the full effective document.
+   */
+  updateInstanceSettings: (patch: UpdateInstanceSettingsRequest) =>
+    apiRequest<InstanceSettingsResponse>("/api/v1/admin/instance-settings", {
+      method: "PATCH",
+      body: patch,
+    }),
+
+  /**
+   * GET /api/v1/admin/jobs — durable job-queue operations snapshot (admin only):
+   * per-queue depth by state (pending/running/done/failed) + the oldest
+   * still-pending item's age, plus a merged recent-failures list. No secrets/URLs.
+   */
+  getJobs: (signal?: AbortSignal) => apiRequest<JobsOverview>("/api/v1/admin/jobs", { signal }),
+
+  /**
+   * POST /api/v1/admin/media/gc — sweep stored media objects with no database
+   * reference (admin only; audited). `dryRun` true (the default) reports the
+   * would-delete orphan set without deleting; false actually deletes them.
+   * 503 when the storage backend cannot list (GC unavailable).
+   */
+  runMediaGC: (dryRun: boolean) =>
+    apiRequest<MediaGCResponse>("/api/v1/admin/media/gc", {
+      method: "POST",
+      body: { dry_run: dryRun },
     }),
 };
 

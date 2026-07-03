@@ -3078,6 +3078,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Durable job-queue status (admin)
+         * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
+         */
+        get: operations["listJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/instance-settings": {
         parameters: {
             query?: never;
@@ -4954,6 +4974,40 @@ export interface components {
                 };
             };
         };
+        /** @description Durable job-queue operations snapshot (admin jobs page). No secrets/PII. */
+        JobsOverview: {
+            queues: components["schemas"]["QueueStatus"][];
+            /** @description Newest-first, merged across queues, capped. */
+            recent_failures: components["schemas"]["JobFailure"][];
+        };
+        /** @description One queue's normalised depth. For upload_sessions (no retry model), pending=active, done=completed, failed=cancelled, running=0. */
+        QueueStatus: {
+            /** @example transcode_jobs */
+            queue: string;
+            /** Format: int64 */
+            pending: number;
+            /** Format: int64 */
+            running: number;
+            /** Format: int64 */
+            done: number;
+            /** Format: int64 */
+            failed: number;
+            /**
+             * Format: int64
+             * @description Age of the oldest still-pending item, or 0 when none pending.
+             */
+            oldest_pending_age_seconds: number;
+        };
+        /** @description One dead-lettered job, safe to show an operator (no secrets/URLs). */
+        JobFailure: {
+            queue: string;
+            /** Format: uuid */
+            id: string;
+            error: string;
+            attempts: number;
+            /** Format: date-time */
+            failed_at: string;
+        };
         /** @description One runtime-mutable instance setting's effective state: its type, the effective value (a string for text keys, a boolean for toggle keys), the config default, and whether the database currently overrides it. */
         InstanceSetting: {
             /**
@@ -4982,7 +5036,7 @@ export interface components {
          *     }
          */
         UpdateInstanceSettingsRequest: {
-            [key: string]: (string | boolean) | null;
+            [key: string]: unknown;
         };
         /** @description Partial update; provide at least one field. */
         UpdateUserRequest: {
@@ -13587,6 +13641,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current durable-queue snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsOverview"];
                 };
             };
             /** @description Missing, invalid, or expired token. */

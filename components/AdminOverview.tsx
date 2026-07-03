@@ -30,6 +30,21 @@ const SECTIONS = [
     description: "Review pending signups and approve or reject them.",
   },
   {
+    href: "/admin/config",
+    label: "Configuration",
+    description: "Instance identity, registration, feature toggles, and moderation gates.",
+  },
+  {
+    href: "/admin/jobs",
+    label: "Jobs",
+    description: "Background-work queue depth, stuck workers, and recent failures.",
+  },
+  {
+    href: "/admin/media",
+    label: "Media storage",
+    description: "Garbage-collect stored media objects with no database reference.",
+  },
+  {
     href: "/admin/audit-log",
     label: "Audit log",
     description: "The security audit trail of admin and auth actions.",

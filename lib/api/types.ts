@@ -52,6 +52,16 @@ export type AuditLogListResponse = Schemas["AuditLogListResponse"];
 export type SystemStatusComponent = Schemas["ComponentStatus"];
 export type SystemStatus = Schemas["SystemStatus"];
 export type UpdateUserRequest = Schemas["UpdateUserRequest"];
+
+// --- Admin: instance settings / jobs / media GB (slice user-admin-config) ----
+export type InstanceSetting = Schemas["InstanceSetting"];
+export type InstanceSettingType = NonNullable<Schemas["InstanceSetting"]["type"]>;
+export type InstanceSettingsResponse = Schemas["InstanceSettingsResponse"];
+export type UpdateInstanceSettingsRequest = Schemas["UpdateInstanceSettingsRequest"];
+export type JobsOverview = Schemas["JobsOverview"];
+export type QueueStatus = Schemas["QueueStatus"];
+export type JobFailure = Schemas["JobFailure"];
+export type MediaGCResponse = Schemas["MediaGCResponse"];
 export type RegistrationRequestStatus = NonNullable<Schemas["RegistrationRequest"]["status"]>;
 export type RegistrationRequest = Schemas["RegistrationRequest"];
 export type RegistrationRequestListResponse = Schemas["RegistrationRequestListResponse"];

@@ -807,6 +807,48 @@ export async function userDonationAddresses(
   return ((await res.json()) as { addresses: DonationAddressRow[] }).addresses;
 }
 
+/** instanceAbout reads the PUBLIC instance about/config document (GET /instance). */
+export async function instanceAbout(
+  request: APIRequestContext,
+): Promise<{
+  name: string;
+  description: string;
+  registration_enabled: boolean;
+  terms_url: string;
+  contact_email: string;
+}> {
+  const res = await request.get(`${API_URL}/api/v1/instance`);
+  return (await res.json()) as {
+    name: string;
+    description: string;
+    registration_enabled: boolean;
+    terms_url: string;
+    contact_email: string;
+  };
+}
+
+/**
+ * instanceSettings reads the effective admin instance-settings overlay as the
+ * given admin (GET /admin/instance-settings), returned as a key→setting map so a
+ * test can assert a specific key's effective value + whether it is DB-overridden.
+ */
+export async function instanceSettings(
+  request: APIRequestContext,
+  token: string,
+): Promise<Record<string, { value: string | boolean; default: string | boolean; overridden: boolean }>> {
+  const res = await request.get(`${API_URL}/api/v1/admin/instance-settings`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const body = (await res.json()) as {
+    settings: Array<{ key: string; value: string | boolean; default: string | boolean; overridden: boolean }>;
+  };
+  const map: Record<string, { value: string | boolean; default: string | boolean; overridden: boolean }> = {};
+  for (const s of body.settings) {
+    map[s.key] = { value: s.value, default: s.default, overridden: s.overridden };
+  }
+  return map;
+}
+
 /** mutedInstances reads the caller's persisted instance mutes via the API. */
 export async function mutedInstances(
   request: APIRequestContext,

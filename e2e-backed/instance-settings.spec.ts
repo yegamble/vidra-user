@@ -1,0 +1,91 @@
+import { expect, test, type Page } from "@playwright/test";
+
+import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
+  adminToken,
+  instanceAbout,
+  instanceSettings,
+  uniqueId,
+} from "./fixtures";
+
+// Proves the admin instance-configuration page against a real vidra-core +
+// PostgreSQL (the compose stack): the deterministic admin edits settings through
+// the UI, and the change is proven to have reached the DB-backed overlay — both
+// via the public GET /instance surface (for the instance name) and via the
+// GET /admin/instance-settings effective read (for a feature toggle round trip).
+//
+// WRITE-ONLY in this loop: authored to run under the `backend-backed` project
+// (npm run e2e:backed), not part of the mocked `npm run ci` gate.
+
+async function loginAsAdmin(page: Page) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  // Client-side nav keeps the in-memory session.
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await page.getByRole("link", { name: "Config" }).click();
+  await expect(page.getByRole("heading", { name: "Instance identity" })).toBeVisible();
+}
+
+test("editing the instance name persists to the DB and shows on the public instance endpoint", async ({
+  page,
+  request,
+}) => {
+  const name = `Vidra ${uniqueId()}`;
+  await loginAsAdmin(page);
+
+  const nameInput = page.getByLabel("Instance name");
+  await nameInput.fill(name);
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+
+  // The public instance about endpoint reflects the new name after a fresh read.
+  await expect
+    .poll(async () => (await instanceAbout(request)).name)
+    .toBe(name);
+
+  // And the effective admin overlay marks the key as DB-overridden.
+  const token = await adminToken(request);
+  const settings = await instanceSettings(request, token);
+  expect(settings.instance_name.value).toBe(name);
+  expect(settings.instance_name.overridden).toBe(true);
+
+  // The change is visible in the UI after a fresh load/refetch (not just optimistic).
+  await page.reload();
+  await loginAsAdmin(page);
+  await expect(page.getByLabel("Instance name")).toHaveValue(name);
+});
+
+test("toggling a feature off then on round-trips through the DB overlay", async ({ page, request }) => {
+  await loginAsAdmin(page);
+
+  const uploads = page.getByRole("switch", { name: "Video uploads" });
+  const save = page.getByRole("button", { name: "Save changes" });
+
+  // Turn uploads off and save.
+  if ((await uploads.getAttribute("aria-checked")) === "true") {
+    await uploads.click();
+  }
+  await expect(uploads).toHaveAttribute("aria-checked", "false");
+  await save.click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+
+  // The DB overlay now overrides uploads_enabled to false.
+  let token = await adminToken(request);
+  let settings = await instanceSettings(request, token);
+  expect(settings.uploads_enabled.value).toBe(false);
+  expect(settings.uploads_enabled.overridden).toBe(true);
+
+  // Turn it back on and save — the overlay reflects the round trip.
+  await uploads.click();
+  await expect(uploads).toHaveAttribute("aria-checked", "true");
+  await save.click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+
+  token = await adminToken(request);
+  settings = await instanceSettings(request, token);
+  expect(settings.uploads_enabled.value).toBe(true);
+});
