@@ -26,7 +26,17 @@
 - Data-mutating flows must be proven against a real `vidra-core` + PostgreSQL.
   Mocks are for UI scaffolding only. See `.ralph/PROMPT.md` and `.ralph/AGENT.md`.
 
+## Component primitives + tokens
+- Primitive layer lives in `components/ui/` (barrel `@/components/ui`); semantic
+  design tokens + centralized `.focus-ring` in `app/globals.css`; typed inline
+  SVG icons in `components/icons/`. See `.ralph/specs/design-system.md`.
+- i18n readiness seam: `lib/i18n` (`t()` + default-locale catalog). Readiness
+  only — not a translation system.
+
 ## Open questions / TODO
-- [ ] Pick unit/component test framework and API-mocking approach (e.g. MSW).
-- [ ] Define the Playwright `backend-backed` project and DB-effect assertion helper.
-- [ ] Define design tokens (see design-system.md).
+- [x] Pick unit/component test framework and API-mocking approach. (Vitest for
+  unit + RTL (`@testing-library/react` + jsdom, per-file docblock) for component
+  units; Playwright `page.route` for mocked e2e — MSW not adopted.)
+- [x] Define the Playwright `backend-backed` project and DB-effect assertion helper.
+  (`e2e-backed/` + `fixtures.ts`; see `.ralph/AGENT.md`.)
+- [x] Define design tokens (see design-system.md).

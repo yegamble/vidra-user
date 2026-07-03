@@ -12,7 +12,15 @@ export default defineConfig({
     },
   },
   test: {
+    // Default environment is node (lib/* pure-logic + API-client tests). RTL
+    // component-unit tests (components/**/*.test.tsx) opt into jsdom per-file
+    // via a `// @vitest-environment jsdom` docblock, so we don't pay for jsdom
+    // on the node suites and keep one runner + one config.
     environment: "node",
-    include: ["lib/**/*.test.ts", "app/**/*.test.{ts,tsx}"],
+    include: [
+      "lib/**/*.test.{ts,tsx}",
+      "app/**/*.test.{ts,tsx}",
+      "components/**/*.test.tsx",
+    ],
   },
 });

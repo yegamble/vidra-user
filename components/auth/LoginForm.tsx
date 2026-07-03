@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api } from "@/lib/api";
 
@@ -164,30 +166,21 @@ export function LoginForm({
 
         {errorBanner}
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="mfa-code" className="text-sm font-medium">
-            Authentication code
-          </label>
-          <input
-            id="mfa-code"
-            name="mfa-code"
-            type="text"
-            autoComplete="one-time-code"
-            autoFocus
-            required
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
+        <Input
+          id="mfa-code"
+          name="mfa-code"
+          type="text"
+          label="Authentication code"
+          autoComplete="one-time-code"
+          autoFocus
+          required
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+        />
 
-        <button
-          type="submit"
-          disabled={submitting || code.trim() === ""}
-          className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
+        <Button type="submit" className="w-full" disabled={submitting || code.trim() === ""}>
           {submitting ? "Verifying…" : "Verify code"}
-        </button>
+        </Button>
 
         <button
           type="button"
@@ -217,35 +210,27 @@ export function LoginForm({
     >
       {errorBanner}
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="login-email" className="text-sm font-medium">
-          Email
-        </label>
-        <input
-          id="login-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-        />
-      </div>
+      <Input
+        id="login-email"
+        name="email"
+        type="email"
+        label="Email"
+        autoComplete="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="login-password" className="text-sm font-medium">
-          Password
-        </label>
-        <input
+        <Input
           id="login-password"
           name="password"
           type="password"
+          label="Password"
           autoComplete="current-password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
         />
         <Link
           href="/reset-password"
@@ -255,13 +240,9 @@ export function LoginForm({
         </Link>
       </div>
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-      >
+      <Button type="submit" className="w-full" disabled={submitting}>
         {submitting ? "Signing in…" : "Sign in"}
-      </button>
+      </Button>
 
       <OAuthButtons providers={providers} returnTo="/login?oauth=1" />
 

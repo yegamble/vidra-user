@@ -6,8 +6,11 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
+import { Textarea } from "@/components/ui/Textarea";
 import { ApiError, api } from "@/lib/api";
 
 type RegState = "loading" | "open" | "closed";
@@ -180,58 +183,55 @@ export function SignupForm({
         </p>
       ) : null}
 
-      <Field
+      <Input
         id="signup-username"
+        name="signup-username"
         label="Username"
         type="text"
         autoComplete="username"
+        required
         value={username}
-        onChange={setUsername}
+        onChange={(e) => setUsername(e.target.value)}
         error={fieldErrors.username}
       />
-      <Field
+      <Input
         id="signup-email"
+        name="signup-email"
         label="Email"
         type="email"
         autoComplete="email"
+        required
         value={email}
-        onChange={setEmail}
+        onChange={(e) => setEmail(e.target.value)}
         error={fieldErrors.email}
       />
-      <Field
+      <Input
         id="signup-password"
+        name="signup-password"
         label="Password"
         type="password"
         autoComplete="new-password"
+        required
         value={password}
-        onChange={setPassword}
+        onChange={(e) => setPassword(e.target.value)}
         error={fieldErrors.password}
       />
 
       {requiresApproval ? (
-        <div className="flex flex-col gap-1">
-          <label htmlFor="signup-note" className="text-sm font-medium">
-            Message to the administrators (optional)
-          </label>
-          <textarea
-            id="signup-note"
-            name="signup-note"
-            rows={3}
-            maxLength={2000}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
+        <Textarea
+          id="signup-note"
+          name="signup-note"
+          label="Message to the administrators (optional)"
+          rows={3}
+          maxLength={2000}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
       ) : null}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-      >
+      <Button type="submit" className="w-full" disabled={submitting}>
         {submitting ? "Creating account…" : "Create account"}
-      </button>
+      </Button>
 
       {requiresApproval ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -249,49 +249,5 @@ export function SignupForm({
         </Link>
       </p>
     </form>
-  );
-}
-
-function Field({
-  id,
-  label,
-  type,
-  autoComplete,
-  value,
-  onChange,
-  error,
-}: {
-  id: string;
-  label: string;
-  type: string;
-  autoComplete: string;
-  value: string;
-  onChange: (v: string) => void;
-  error?: string;
-}) {
-  const errorId = `${id}-error`;
-  return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
-      <input
-        id={id}
-        name={id}
-        type={type}
-        autoComplete={autoComplete}
-        required
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-      />
-      {error ? (
-        <p id={errorId} className="text-xs text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      ) : null}
-    </div>
   );
 }
