@@ -7,30 +7,22 @@ import { useEffect, useRef, useState } from "react";
 import { AdminNavLink } from "@/components/AdminNavLink";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { ModerationNavLink } from "@/components/ModerationNavLink";
+import { NAV_LINKS } from "@/components/nav-links";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchBox } from "@/components/SearchBox";
-
-// The primary navigation destinations, shared by the desktop inline nav and the
-// small-screen collapsed menu so the two can never drift apart.
-const NAV_LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/subscriptions", label: "Subscriptions" },
-  { href: "/library", label: "Library" },
-  { href: "/playlists", label: "Playlists" },
-  { href: "/history", label: "History" },
-  { href: "/messages", label: "Messages" },
-  { href: "/studio", label: "Studio" },
-] as const;
 
 const MOBILE_LINK_CLASS =
   "block rounded-md px-3 py-2 hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
 
-// App shell header: brand + primary nav + search + account menu. On small
-// screens the nav links and auth controls collapse into an accessible
-// disclosure menu behind a hamburger button (aria-expanded/aria-controls,
-// Escape / outside-click / route-change close, focus moved into the menu on
-// open and restored to the button on close). Hidden on the embeddable player
-// routes (/embed/*), which are meant to be iframed bare.
+// App shell header: brand + search + account menu (the desktop/tablet primary
+// nav lives in the Sidebar). On small screens the nav links and auth controls
+// collapse into an accessible disclosure menu behind a hamburger button
+// (aria-expanded/aria-controls, Escape / outside-click / route-change close,
+// focus moved into the menu on open and restored to the button on close).
+// Hidden on the embeddable player routes (/embed/*), which are meant to be
+// iframed bare. NOTE: design-system.md prefers mobile bottom tabs over a
+// hamburger — the disclosure menu stays until that bottom-tab shell lands
+// (tracked in fix_plan P2).
 export function Header() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -91,22 +83,6 @@ export function Header() {
         >
           Vidra
         </Link>
-        <nav
-          aria-label="Primary"
-          className="hidden items-center gap-4 text-sm text-zinc-600 sm:flex dark:text-zinc-300"
-        >
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="hover:text-zinc-900 dark:hover:text-zinc-100"
-            >
-              {link.label}
-            </Link>
-          ))}
-          <ModerationNavLink />
-          <AdminNavLink />
-        </nav>
         <div className="flex min-w-0 flex-1 justify-center px-1 sm:px-2">
           <SearchBox />
         </div>

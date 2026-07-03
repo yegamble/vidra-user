@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { Header } from "@/components/Header";
+import { Sidebar } from "@/components/Sidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,7 +34,10 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           <Header />
-          {children}
+          <div className="flex w-full flex-1">
+            <Sidebar />
+            <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+          </div>
         </AuthProvider>
       </body>
     </html>
