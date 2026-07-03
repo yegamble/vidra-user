@@ -6,11 +6,14 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
 import { CommentsSection } from "@/components/CommentsSection";
 import { DownloadButton } from "@/components/DownloadButton";
+import { KeyboardShortcutsHelp } from "@/components/KeyboardShortcutsHelp";
 import { QualityMenu } from "@/components/QualityMenu";
 import { RatingControls } from "@/components/RatingControls";
+import { RelatedVideos } from "@/components/RelatedVideos";
 import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
+import { SpeedMenu } from "@/components/SpeedMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -18,6 +21,11 @@ import { ApiError, api, videoCaptionUrl, videoThumbnailUrl } from "@/lib/api";
 import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
 import type { Video, VideoConfigResponse } from "@/lib/api";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import {
+  SHORTCUT_IGNORE_SELECTOR,
+  clampSeekTarget,
+  shortcutForKey,
+} from "@/lib/player-shortcuts";
 import { parseStartTime } from "@/lib/start-time";
 import { useHlsPlayback } from "@/lib/use-hls-playback";
 
@@ -147,7 +155,8 @@ export function WatchView({ id }: { id: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+      <div className="flex min-w-0 flex-1 flex-col gap-8">
       <article className="flex flex-col gap-4">
         <Player video={video} videoRef={playerRef} startAt={startAt} />
 
@@ -186,6 +195,9 @@ export function WatchView({ id }: { id: string }) {
       </article>
 
       <CommentsSection videoId={video.id} />
+      </div>
+
+      <RelatedVideos video={video} />
     </div>
   );
 }
@@ -212,9 +224,62 @@ function Player({
   const playback = useHlsPlayback(videoRef, video, startAt);
   const lastSentRef = useRef(0);
   const [resumeAt, setResumeAt] = useState<number | null>(null);
+  const [speed, setSpeed] = useState(1);
   const [tracks, setTracks] = useState<
     Array<{ language: string; label: string; url: string }>
   >([]);
+
+  // Apply the selected playback rate; re-applied when the src changes because
+  // a media load() resets the element back to its default rate.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.defaultPlaybackRate = speed;
+    el.playbackRate = speed;
+  }, [speed, playback.src, videoRef]);
+
+  // Player keyboard shortcuts (space/K, J/L, arrows, M, F, C — see
+  // KeyboardShortcutsHelp). Ignored while typing in / operating another
+  // interactive control, when the video's own native controls have focus
+  // (they already handle these keys), or on modified presses.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented) return;
+      const target = e.target;
+      if (target instanceof HTMLElement && target.isContentEditable) return;
+      if (target instanceof Element && target.closest(SHORTCUT_IGNORE_SELECTOR)) return;
+      const shortcut = shortcutForKey(e);
+      const el = videoRef.current;
+      if (!shortcut || !el) return;
+      e.preventDefault();
+      switch (shortcut.kind) {
+        case "toggle-play":
+          if (el.paused) void el.play().catch(() => {});
+          else el.pause();
+          break;
+        case "seek-by":
+          el.currentTime = clampSeekTarget(el.currentTime, shortcut.seconds, el.duration);
+          break;
+        case "toggle-mute":
+          el.muted = !el.muted;
+          break;
+        case "toggle-fullscreen":
+          if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+          else void el.requestFullscreen().catch(() => {});
+          break;
+        case "toggle-captions": {
+          const list = Array.from(el.textTracks);
+          if (list.length === 0) break;
+          const anyShowing = list.some((t) => t.mode === "showing");
+          for (const t of list) t.mode = "disabled";
+          if (!anyShowing) list[0].mode = "showing";
+          break;
+        }
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [videoRef]);
 
   // Report the current position (whole seconds). No-op unless signed in.
   const record = useCallback(() => {
@@ -316,26 +381,27 @@ function Player({
         ))}
         Your browser does not support the video tag.
       </video>
-      {playback.levels.length > 0 || resumeAt !== null ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Only hls.js playback exposes controllable quality; the menu hides
-              itself for native-HLS/original playback (levels is empty). */}
-          <QualityMenu
-            levels={playback.levels}
-            currentLevel={playback.currentLevel}
-            onSelect={playback.setLevel}
-          />
-          {resumeAt !== null ? (
-            <button
-              type="button"
-              onClick={resume}
-              className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              Resume from {formatDuration(resumeAt)}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Speed applies to every playback path (native video.playbackRate). */}
+        <SpeedMenu speed={speed} onSelect={setSpeed} />
+        {/* Only hls.js playback exposes controllable quality; the menu hides
+            itself for native-HLS/original playback (levels is empty). */}
+        <QualityMenu
+          levels={playback.levels}
+          currentLevel={playback.currentLevel}
+          onSelect={playback.setLevel}
+        />
+        {resumeAt !== null ? (
+          <button
+            type="button"
+            onClick={resume}
+            className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Resume from {formatDuration(resumeAt)}
+          </button>
+        ) : null}
+        <KeyboardShortcutsHelp />
+      </div>
     </div>
   );
 }
