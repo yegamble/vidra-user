@@ -116,6 +116,54 @@ test("renders caption tracks on the player for a video with captions", async ({ 
   expect(await track.getAttribute("src")).toMatch(/^blob:/);
 });
 
+test("tags render as chips linking to the tag-filtered browse", async ({ page }) => {
+  await page.route(DETAIL_OK, (route) =>
+    route.fulfill({
+      json: {
+        id: "v1",
+        channel_id: "c1",
+        title: "Tagged Video",
+        description: "",
+        privacy: "public",
+        state: "published",
+        created_at: new Date().toISOString(),
+        views: 1,
+        has_thumbnail: false,
+        tags: ["gaming", "retro"],
+      },
+    }),
+  );
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
+    route.fulfill({ json: { captions: [] } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/comments/, (route) =>
+    route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+  // The tag chip navigates to the filtered home feed.
+  const feedTags: Array<string | null> = [];
+  await page.route(/\/api\/v1\/videos(\?|$)/, (route) => {
+    const url = new URL(route.request().url());
+    feedTags.push(url.searchParams.get("tag"));
+    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } });
+  });
+
+  await page.goto("/videos/v1");
+  const tagList = page.getByRole("list", { name: "Tags" });
+  await expect(tagList.getByRole("link", { name: "Browse videos tagged gaming" })).toHaveAttribute(
+    "href",
+    "/?tag=gaming",
+  );
+  await tagList.getByRole("link", { name: "Browse videos tagged retro" }).click();
+  await expect(page).toHaveURL(/\/\?tag=retro$/);
+  // The filtered browse fetched with the tag and shows the active chip.
+  await expect(page.getByRole("main").getByText("#retro")).toBeVisible();
+  await expect.poll(() => feedTags[feedTags.length - 1]).toBe("retro");
+});
+
 test("a non-public video carries an owner-facing privacy badge", async ({ page }) => {
   await page.route(DETAIL_OK, (route) =>
     route.fulfill({

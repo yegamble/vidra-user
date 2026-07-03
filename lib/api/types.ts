@@ -57,6 +57,9 @@ export interface Video {
   category?: string;
   language?: string;
   license?: string;
+  // Free-form tags (lowercased, alphabetical; at most 5). Present on the
+  // create/update/detail views; omitted when empty and on list/feed views.
+  tags?: string[];
   // HLS streaming (transcoding pipeline). hls_url is the master-playlist path
   // (GET /videos/{id}/hls/master.m3u8), present on the DETAIL endpoint only once
   // the transcoded streaming playlist is ready — omitted while transcoding is
@@ -352,6 +355,11 @@ export interface CreateVideoRequest {
   category?: string;
   language?: string;
   license?: string;
+  /**
+   * Free-form tags; lowercased, trimmed, and deduped server-side. At most 5
+   * distinct tags of at most 50 characters each (422 otherwise).
+   */
+  tags?: string[];
 }
 
 /** POST /api/v1/videos|comments/{id}/report and /api/v1/users/{id}/report body. */
@@ -524,6 +532,11 @@ export interface UpdateVideoRequest {
   category?: string;
   language?: string;
   license?: string;
+  /**
+   * Replaces the video's whole tag set (an empty array clears it; omit the
+   * field to leave tags unchanged). Same limits as create.
+   */
+  tags?: string[];
 }
 
 /** POST /api/v1/videos/{id}/file response (the published video + stored file). */

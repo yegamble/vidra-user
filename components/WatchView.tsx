@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
@@ -21,6 +22,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, videoCaptionUrl, videoThumbnailUrl } from "@/lib/api";
 import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
 import type { Video, VideoConfigResponse } from "@/lib/api";
+import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import {
   SHORTCUT_IGNORE_SELECTOR,
@@ -191,6 +193,21 @@ export function WatchView({ id }: { id: string }) {
             <DownloadButton videoId={video.id} />
             <ReportButton kind="video" targetId={video.id} />
           </div>
+          {video.tags && video.tags.length > 0 ? (
+            <ul aria-label="Tags" className="flex flex-wrap items-center gap-1.5">
+              {video.tags.map((tag) => (
+                <li key={tag}>
+                  <Link
+                    href={feedHref("recent", { tag })}
+                    aria-label={`Browse videos tagged ${tag}`}
+                    className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+                  >
+                    #{tag}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {video.description ? (
             <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
               {video.description}

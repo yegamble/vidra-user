@@ -7,6 +7,7 @@ import { CaptionsManager } from "@/components/CaptionsManager";
 import { LiveStreamsSection } from "@/components/LiveStreamsSection";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
+import { TagsInput } from "@/components/TagsInput";
 import { ThumbnailManager } from "@/components/ThumbnailManager";
 import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -503,6 +504,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   const [category, setCategory] = useState("");
   const [language, setLanguage] = useState("");
   const [license, setLicense] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [privacy, setPrivacy] = useState<VideoPrivacy>("public");
   const [source, setSource] = useState<"file" | "url">("file");
   const [videoUrl, setVideoUrl] = useState("");
@@ -549,6 +551,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
         description: description.trim(),
         privacy,
         ...taxonomyFields(category, language, license),
+        ...(tags.length > 0 ? { tags } : {}),
       });
       draftId = draft.id;
       // Cancel clicked while the draft POST was still in flight: stop before
@@ -582,6 +585,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
       setCategory("");
       setLanguage("");
       setLicense("");
+      setTags([]);
       setVideoUrl("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
@@ -694,6 +698,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           error={fieldErrors.license}
           errorId="publish-license-error"
         />
+        <TagsInput value={tags} onChange={setTags} ariaLabel="Video tags" />
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Privacy</span>
           <select
@@ -957,6 +962,7 @@ function VideoRow({
   const [category, setCategory] = useState(video.category ?? "");
   const [language, setLanguage] = useState(video.language ?? "");
   const [license, setLicense] = useState(video.license ?? "");
+  const [tags, setTags] = useState<string[]>(video.tags ?? []);
   const [privacy, setPrivacy] = useState<VideoPrivacy>(video.privacy);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -975,6 +981,10 @@ function VideoRow({
         description: description.trim(),
         privacy,
         ...taxonomyFields(category, language, license),
+        // tags REPLACES the whole set (empty clears), so it is only sent when
+        // the detail fetch supplied the real current set to edit from — never
+        // from list-row data, which omits tags entirely.
+        ...(detail ? { tags } : {}),
       });
       onUpdated(updated);
       setMode("view");
@@ -992,6 +1002,7 @@ function VideoRow({
     setCategory(video.category ?? "");
     setLanguage(video.language ?? "");
     setLicense(video.license ?? "");
+    setTags(detail?.tags ?? video.tags ?? []);
     setPrivacy(video.privacy);
     setError(null);
   }
@@ -1009,6 +1020,7 @@ function VideoRow({
       setCategory(full.category ?? "");
       setLanguage(full.language ?? "");
       setLicense(full.license ?? "");
+      setTags(full.tags ?? []);
       setPrivacy(full.privacy);
     } catch {
       // Keep the list-derived defaults already in state (and claim nothing
@@ -1073,6 +1085,9 @@ function VideoRow({
           onChange={setLicense}
           options={config?.licenses ?? []}
         />
+        {/* Tags are editable only when the detail fetch supplied the current
+            set (see save()); otherwise the editor would show a false empty. */}
+        {detail ? <TagsInput value={tags} onChange={setTags} ariaLabel="Edit tags" /> : null}
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Privacy</span>
           <select

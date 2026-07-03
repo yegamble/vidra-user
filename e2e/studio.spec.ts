@@ -213,6 +213,83 @@ test("a creator can upload and publish a video", async ({ page }) => {
   });
 });
 
+test("publish sends the entered tags, normalized, on the draft", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  let draftBody: unknown;
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      draftBody = route.request().postDataJSON();
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  await page.route(UPLOAD, (route) => route.fulfill({ json: { video: video() } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("Tagged clip");
+  const tagsField = page.getByLabel("Video tags");
+  // Enter commits; a comma commits too (paste-friendly); values are lowercased
+  // and deduped, capped at 5.
+  await tagsField.fill("Retro");
+  await tagsField.press("Enter");
+  await tagsField.fill("GAMING, retro");
+  await tagsField.press("Enter");
+  await expect(page.getByRole("button", { name: "Remove tag retro" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove tag gaming" })).toBeVisible();
+  // A removed chip does not travel with the publish.
+  await tagsField.fill("typo");
+  await tagsField.press("Enter");
+  await page.getByRole("button", { name: "Remove tag typo" }).click();
+
+  await page.getByLabel("Video file").setInputFiles({
+    name: "clip.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("test"),
+  });
+  await page.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByText("Published!")).toBeVisible();
+  expect(draftBody).toMatchObject({ title: "Tagged clip", tags: ["retro", "gaming"] });
+});
+
+test("editing tags sends the replaced set on the PATCH", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) =>
+    route.fulfill({ json: { videos: [video({ title: "Tagged clip" })] } }),
+  );
+  let patchBody: unknown;
+  await page.route(VIDEO, (route) => {
+    if (route.request().method() === "PATCH") {
+      patchBody = route.request().postDataJSON();
+      return route.fulfill({ json: video({ title: "Tagged clip", tags: ["fresh", "retro"] }) });
+    }
+    // GET: the edit form fetches the full detail — the only view carrying tags.
+    return route.fulfill({ json: video({ title: "Tagged clip", tags: ["old", "retro"] }) });
+  });
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: "Tagged clip" });
+  await row.getByRole("button", { name: "Edit" }).click();
+
+  // Pre-filled from the detail; replace "old" with "fresh".
+  await expect(page.getByRole("button", { name: "Remove tag old" })).toBeVisible();
+  await page.getByRole("button", { name: "Remove tag old" }).click();
+  const tagsField = page.getByLabel("Edit tags");
+  await tagsField.fill("fresh");
+  await tagsField.press("Enter");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(row.getByRole("button", { name: "Edit" })).toBeVisible();
+  expect(patchBody).toMatchObject({ tags: ["retro", "fresh"] });
+});
+
 // The false-success regression: the upload HTTP call succeeds (201) but the
 // returned video is state="failed" (probe/scan rejected the file) — the creator
 // must see an error, not "Published!", and keep the form for a retry.

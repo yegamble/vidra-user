@@ -391,6 +391,7 @@ export async function videoDetail(
   category?: string;
   language?: string;
   license?: string;
+  tags?: string[];
   hls_url?: string;
   renditions?: Array<{ height: number; width: number }>;
 }> {
@@ -401,6 +402,7 @@ export async function videoDetail(
     category?: string;
     language?: string;
     license?: string;
+    tags?: string[];
     hls_url?: string;
     renditions?: Array<{ height: number; width: number }>;
   };
