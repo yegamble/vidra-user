@@ -23,6 +23,8 @@ export interface InstanceResponse {
   description: string;
   software: { name: string; version: string };
   registration_enabled: boolean;
+  /** When true, signup files a pending request for admin approval (202) instead of creating an account. */
+  registration_requires_approval: boolean;
   terms_url: string;
   privacy_url: string;
   contact_email: string;
@@ -166,6 +168,37 @@ export interface UpdateUserRequest {
   is_active?: boolean;
 }
 
+export type RegistrationRequestStatus = "pending" | "approved" | "rejected";
+
+/**
+ * One entry in the admin registration approval queue. Mirrors the backend
+ * RegistrationRequest schema; the stored password hash is never exposed.
+ * reviewer_username / reviewed_at are omitted while pending; moderator_note is
+ * the internal note recorded on reject; note is the applicant's message.
+ */
+export interface RegistrationRequest {
+  id: string;
+  username: string;
+  email: string;
+  note?: string;
+  status: RegistrationRequestStatus;
+  moderator_note?: string;
+  reviewed_at?: string;
+  created_at: string;
+  reviewer_username?: string;
+}
+
+export interface RegistrationRequestListResponse {
+  requests: RegistrationRequest[];
+  limit: number;
+  offset: number;
+}
+
+/** POST /api/v1/admin/registration-requests/{id}/reject body — note is optional. */
+export interface RejectRegistrationRequest {
+  note?: string;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -181,6 +214,16 @@ export interface RegisterRequest {
   username: string;
   email: string;
   password: string;
+  /** Optional message to the admins, used only when the instance requires registration approval. */
+  note?: string;
+}
+
+/**
+ * The 202 register outcome when the instance requires registration approval:
+ * no account or token exists yet — a pending request was filed for admin review.
+ */
+export interface RegistrationPending {
+  status: "pending";
 }
 
 export interface LoginRequest {

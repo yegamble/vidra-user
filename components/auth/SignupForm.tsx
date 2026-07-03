@@ -16,18 +16,25 @@ export function SignupForm() {
   const { register } = useSession();
 
   const [regState, setRegState] = useState<RegState>("loading");
+  const [requiresApproval, setRequiresApproval] = useState(false);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [note, setNote] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Set when register answered 202: the signup awaits admin approval.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     api
       .getInstance(controller.signal)
-      .then((instance) => setRegState(instance.registration_enabled ? "open" : "closed"))
+      .then((instance) => {
+        setRequiresApproval(instance.registration_requires_approval === true);
+        setRegState(instance.registration_enabled ? "open" : "closed");
+      })
       .catch(() => {
         // If we cannot read instance config, show the form and let the register
         // attempt surface the real outcome rather than blocking signup.
@@ -41,7 +48,18 @@ export function SignupForm() {
     setFormError(null);
     setSubmitting(true);
     try {
-      await register({ username, email, password });
+      const outcome = await register({
+        username,
+        email,
+        password,
+        note: note.trim() || undefined,
+      });
+      if (outcome === "pending") {
+        // The instance requires approval: no account/session exists yet — show
+        // the awaiting-approval confirmation instead of navigating home signed in.
+        setPendingEmail(email);
+        return;
+      }
       router.push("/");
     } catch (err) {
       if (err instanceof ApiError && err.fields && err.fields.length > 0) {
@@ -55,6 +73,24 @@ export function SignupForm() {
       }
       setSubmitting(false);
     }
+  }
+
+  if (pendingEmail) {
+    return (
+      <EmptyState
+        title="Your account is awaiting approval"
+        message={
+          <>
+            Your signup was sent to the administrators of this instance for review. Once it is
+            approved you can{" "}
+            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+              sign in
+            </Link>{" "}
+            as <span className="font-medium">{pendingEmail}</span>. No account exists until then.
+          </>
+        }
+      />
+    );
   }
 
   if (regState === "loading") {
@@ -127,6 +163,23 @@ export function SignupForm() {
         error={fieldErrors.password}
       />
 
+      {requiresApproval ? (
+        <div className="flex flex-col gap-1">
+          <label htmlFor="signup-note" className="text-sm font-medium">
+            Message to the administrators (optional)
+          </label>
+          <textarea
+            id="signup-note"
+            name="signup-note"
+            rows={3}
+            maxLength={2000}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+        </div>
+      ) : null}
+
       <button
         type="submit"
         disabled={submitting}
@@ -134,6 +187,13 @@ export function SignupForm() {
       >
         {submitting ? "Creating account…" : "Create account"}
       </button>
+
+      {requiresApproval ? (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          New accounts on this instance require administrator approval. Your signup will be
+          reviewed before you can sign in.
+        </p>
+      ) : null}
 
       <p className="text-sm text-zinc-500 dark:text-zinc-400">
         Already have an account?{" "}

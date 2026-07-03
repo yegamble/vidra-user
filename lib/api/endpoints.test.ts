@@ -331,6 +331,39 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/users");
   });
 
+  it("getRegistrationRequests targets the queue with the pending filter", async () => {
+    await api.getRegistrationRequests({ status: "pending", limit: 100 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/registration-requests?status=pending&limit=100",
+    );
+  });
+
+  it("getRegistrationRequests omits the status filter when not provided", async () => {
+    await api.getRegistrationRequests();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/registration-requests");
+  });
+
+  it("approveRegistrationRequest POSTs to the approve endpoint", async () => {
+    await api.approveRegistrationRequest("r1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/registration-requests/r1/approve");
+    expect(init.method).toBe("POST");
+  });
+
+  it("rejectRegistrationRequest POSTs the optional note to the reject endpoint", async () => {
+    await api.rejectRegistrationRequest("r1", { note: "spam signup" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/registration-requests/r1/reject");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ note: "spam signup" });
+  });
+
+  it("rejectRegistrationRequest sends an empty body when no note is given", async () => {
+    await api.rejectRegistrationRequest("r1");
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({});
+  });
+
   it("getAuditLog targets the audit-log endpoint with the action filter", async () => {
     await api.getAuditLog({ action: "auth.login", limit: 100 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/audit-log?action=auth.login&limit=100");

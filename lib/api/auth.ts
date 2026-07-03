@@ -6,15 +6,23 @@ import type {
   PasswordResetConfirmRequest,
   PasswordResetRequest,
   RegisterRequest,
+  RegistrationPending,
   UpdateProfileRequest,
   User,
 } from "./types";
 
 /** Typed wrappers for the vidra-core auth endpoints. */
 export const authApi = {
-  /** POST /api/v1/auth/register — create an account; returns a session. */
+  /**
+   * POST /api/v1/auth/register — create an account; returns a session (201).
+   * When the instance requires registration approval no account is created:
+   * the backend files a pending request and answers 202 {status:"pending"}.
+   */
   register: (body: RegisterRequest) =>
-    apiRequest<AuthResponse>("/api/v1/auth/register", { method: "POST", body }),
+    apiRequest<AuthResponse | RegistrationPending>("/api/v1/auth/register", {
+      method: "POST",
+      body,
+    }),
 
   /** POST /api/v1/auth/login — exchange credentials for a session. */
   login: (body: LoginRequest) =>

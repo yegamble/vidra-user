@@ -41,6 +41,8 @@ import type {
   Playlist,
   PlaylistDetail,
   PlaylistListResponse,
+  RegistrationRequestListResponse,
+  RejectRegistrationRequest,
   ReportListResponse,
   ResolveReportRequest,
   UnreadCountResponse,
@@ -522,6 +524,41 @@ export const api = {
       method: "PATCH",
       body,
     }),
+
+  /**
+   * GET /api/v1/admin/registration-requests — the registration approval queue,
+   * newest first (admin only). status="pending" returns only unresolved requests.
+   */
+  getRegistrationRequests: (
+    params: { status?: "pending"; limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<RegistrationRequestListResponse>("/api/v1/admin/registration-requests", {
+      query: { status: params.status, limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/registration-requests/{id}/approve — approve a pending
+   * request, creating the account from the stored credentials (admin only, 204).
+   * 404 if unknown/already resolved; 409 if the username/email has since been taken.
+   */
+  approveRegistrationRequest: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/registration-requests/${encodeURIComponent(id)}/approve`,
+      { method: "POST" },
+    ),
+
+  /**
+   * POST /api/v1/admin/registration-requests/{id}/reject — reject a pending
+   * request with an optional internal note (admin only, 204). 404 if
+   * unknown/already resolved.
+   */
+  rejectRegistrationRequest: (id: string, body: RejectRegistrationRequest = {}) =>
+    apiRequest<void>(
+      `/api/v1/admin/registration-requests/${encodeURIComponent(id)}/reject`,
+      { method: "POST", body },
+    ),
 
   /** GET /api/v1/admin/audit-log — the security audit trail, newest first (admin). */
   getAuditLog: (

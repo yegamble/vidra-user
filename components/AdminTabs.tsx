@@ -7,6 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 
 const TABS = [
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/registration-requests", label: "Registration" },
   { href: "/admin/audit-log", label: "Audit log" },
   { href: "/admin/system", label: "System" },
 ];

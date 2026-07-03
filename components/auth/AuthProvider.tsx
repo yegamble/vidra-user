@@ -14,11 +14,18 @@ import type {
 
 type SessionStatus = "anon" | "authed";
 
+/**
+ * Outcome of a register call: "created" — the account exists and the session is
+ * live; "pending" — the instance requires approval, a request was filed and
+ * nobody is signed in.
+ */
+export type RegisterOutcome = "created" | "pending";
+
 interface SessionContextValue {
   user: User | null;
   status: SessionStatus;
   login: (credentials: LoginRequest) => Promise<void>;
-  register: (input: RegisterRequest) => Promise<void>;
+  register: (input: RegisterRequest) => Promise<RegisterOutcome>;
   updateProfile: (input: UpdateProfileRequest) => Promise<void>;
   deactivate: (password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -50,8 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (input: RegisterRequest) => {
-      apply(await authApi.register(input));
+    async (input: RegisterRequest): Promise<RegisterOutcome> => {
+      const res = await authApi.register(input);
+      // A 202 means the instance requires approval: a pending request was filed
+      // and there is no session to apply.
+      if (!res || !("token" in res)) return "pending";
+      apply(res);
+      return "created";
     },
     [apply],
   );

@@ -139,10 +139,20 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
     throw err;
   }
 
-  // 204 No Content and 202 Accepted (e.g. the enumeration-safe password-reset
-  // request) carry no body — don't attempt to parse JSON.
-  if (res.status === 204 || res.status === 202) {
+  // 204 No Content never carries a body. A 202 Accepted may (register →
+  // {status:"pending"} when the instance requires approval) or may not (the
+  // enumeration-safe password-reset request) — parse the body when present.
+  if (res.status === 204) {
     return undefined as T;
+  }
+  if (res.status === 202) {
+    const text = await res.text();
+    if (!text) return undefined as T;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return undefined as T;
+    }
   }
   return (await res.json()) as T;
 }

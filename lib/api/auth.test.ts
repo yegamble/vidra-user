@@ -60,6 +60,19 @@ describe("authApi + auth-store", () => {
     );
   });
 
+  it("register surfaces the 202 pending-approval body instead of a session", async () => {
+    fetchMock.mockResolvedValue(okJson({ status: "pending" }, 202));
+    const res = await authApi.register({
+      username: "ada",
+      email: "ada@example.test",
+      password: "password1",
+      note: "hi admins",
+    });
+    expect(res).toEqual({ status: "pending" });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).note).toBe("hi admins");
+  });
+
   it("auto-attaches the stored access token to subsequent calls", async () => {
     setAccessToken("acc");
     fetchMock.mockResolvedValue(okJson(session.user));

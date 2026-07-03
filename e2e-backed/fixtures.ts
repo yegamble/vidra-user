@@ -182,6 +182,41 @@ export async function adminUsers(
 }
 
 /**
+ * registrationRequests reads the admin registration approval queue as the given
+ * admin (optionally only pending). Used to prove a signup filed a request and
+ * that approve/reject persisted its status flip.
+ */
+export async function registrationRequests(
+  request: APIRequestContext,
+  token: string,
+  status?: "pending",
+): Promise<Array<{ id: string; username: string; email: string; status: string }>> {
+  const url = new URL(`${API_URL}/api/v1/admin/registration-requests`);
+  url.searchParams.set("limit", "100");
+  if (status) url.searchParams.set("status", status);
+  const res = await request.get(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (
+    (await res.json()) as {
+      requests: Array<{ id: string; username: string; email: string; status: string }>;
+    }
+  ).requests;
+}
+
+/** loginStatus attempts a login and returns just the HTTP status (200 = account exists). */
+export async function loginStatus(
+  request: APIRequestContext,
+  email: string,
+  password: string,
+): Promise<number> {
+  const res = await request.post(`${API_URL}/api/v1/auth/login`, {
+    data: { email, password },
+  });
+  return res.status();
+}
+
+/**
  * fileVideoReport registers a fresh reporter and files a report on a video via the
  * API, returning the unique reason used (so a test can find it in the queue). Used
  * to seed an open report for the moderation-resolve UI to act on.

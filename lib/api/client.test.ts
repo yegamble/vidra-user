@@ -87,6 +87,18 @@ describe("apiRequest", () => {
     expect(out).toBeUndefined();
   });
 
+  it("returns undefined on a bodyless 202 (password-reset request)", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 202 }));
+    const out = await apiRequest("/x", { method: "POST", body: { a: 1 } });
+    expect(out).toBeUndefined();
+  });
+
+  it("parses the body of a 202 that carries one (register pending approval)", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ status: "pending" }, 202));
+    const out = await apiRequest<{ status: string }>("/x", { method: "POST", body: { a: 1 } });
+    expect(out).toEqual({ status: "pending" });
+  });
+
   it("wraps network failures as a network_error ApiError", async () => {
     fetchMock.mockRejectedValue(new TypeError("fetch failed"));
     const err = (await apiRequest("/x").catch((e) => e)) as ApiError;
