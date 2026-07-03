@@ -6,7 +6,16 @@ const FEED_URL = /\/api\/v1\/videos(\?|$)/;
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 
-const PRIMARY = ["Home", "Subscriptions", "Library", "Playlists", "History", "Messages", "Studio"];
+const PRIMARY = [
+  "Home",
+  "Trending",
+  "Subscriptions",
+  "Library",
+  "Playlists",
+  "History",
+  "Messages",
+  "Studio",
+];
 
 test.beforeEach(async ({ page }) => {
   await page.route(FEED_URL, (route) =>

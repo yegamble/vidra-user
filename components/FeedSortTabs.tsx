@@ -10,11 +10,19 @@ const OPTIONS: { sort: FeedSort; label: string }[] = [
   { sort: "trending", label: "Trending" },
 ];
 
-// FeedSortTabs is the home feed's sort switcher (segmented buttons with
-// aria-pressed). The active sort lives in the URL (?sort=) so a mode is
-// shareable and back/forward friendly: clicking pushes a history entry and the
-// server page re-renders the heading + remounts the feed. This control itself
-// never remounts, so focus stays on the pressed button.
+// FeedSortTabs is the browse feed's sort switcher (segmented buttons with
+// aria-pressed), shared by the home page and /trending. The active mode lives
+// in the URL so it is shareable and back/forward friendly: Recent/Popular are
+// home-feed modes (/, /?sort=popular) and Trending is its own route
+// (/trending; the home page still honours a ?sort=trending deep link).
+// Clicking pushes a history entry and the server page re-renders the heading +
+// remounts the feed; this control itself never remounts, so focus stays on the
+// pressed button.
+function sortHref(sort: FeedSort): string {
+  if (sort === "trending") return "/trending";
+  return sort === "recent" ? "/" : `/?sort=${sort}`;
+}
+
 export function FeedSortTabs({ active }: { active: FeedSort }) {
   const router = useRouter();
   return (
@@ -29,7 +37,7 @@ export function FeedSortTabs({ active }: { active: FeedSort }) {
           type="button"
           aria-pressed={active === sort}
           onClick={() => {
-            if (sort !== active) router.push(sort === "recent" ? "/" : `/?sort=${sort}`);
+            if (sort !== active) router.push(sortHref(sort));
           }}
           className={
             active === sort

@@ -17,6 +17,11 @@ export const NAV_LINKS: readonly NavLinkDef[] = [
     iconPath: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10",
   },
   {
+    href: "/trending",
+    label: "Trending",
+    iconPath: "M23 6l-9.5 9.5-5-5L1 18M17 6h6v6",
+  },
+  {
     href: "/subscriptions",
     label: "Subscriptions",
     iconPath: "M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16M5 19h.01",
