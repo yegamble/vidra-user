@@ -9,21 +9,9 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { SystemStatus } from "@/lib/api";
+import { formatUptime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
-
-// formatUptime renders a second count as a compact "1d 2h 3m" string.
-function formatUptime(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const parts: string[] = [];
-  if (d) parts.push(`${d}d`);
-  if (h) parts.push(`${h}h`);
-  if (m || parts.length === 0) parts.push(`${m}m`);
-  return parts.join(" ");
-}
 
 // AdminSystemStatusView is the admin-only operational dashboard: build info, the
 // runtime environment, uptime, and per-dependency health. Read-only; a non-admin

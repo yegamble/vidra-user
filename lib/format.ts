@@ -45,6 +45,19 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   return `${Math.floor(secs / 31557600)}y ago`;
 }
 
+/** formatUptime renders a second count as a compact "1d 2h 3m" string. */
+export function formatUptime(seconds: number): string {
+  const s = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const parts: string[] = [];
+  if (d) parts.push(`${d}d`);
+  if (h) parts.push(`${h}h`);
+  if (m || parts.length === 0) parts.push(`${m}m`);
+  return parts.join(" ");
+}
+
 /** formatDuration renders whole seconds as m:ss, or h:mm:ss past an hour. */
 export function formatDuration(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCount, formatDuration, relativeTime } from "./format";
+import { formatCount, formatDuration, formatUptime, relativeTime } from "./format";
 
 describe("formatCount", () => {
   it("formats small, thousands, millions, billions", () => {
@@ -38,6 +38,23 @@ describe("relativeTime", () => {
   it("handles future and invalid input", () => {
     expect(relativeTime(ago(-30), now)).toBe("just now");
     expect(relativeTime("not-a-date", now)).toBe("");
+  });
+});
+
+describe("formatUptime", () => {
+  it("formats day/hour/minute buckets, dropping empty units", () => {
+    expect(formatUptime(0)).toBe("0m");
+    expect(formatUptime(59)).toBe("0m");
+    expect(formatUptime(60)).toBe("1m");
+    expect(formatUptime(3600)).toBe("1h");
+    expect(formatUptime(3661)).toBe("1h 1m");
+    expect(formatUptime(90061)).toBe("1d 1h 1m");
+    expect(formatUptime(86400 * 3)).toBe("3d");
+  });
+
+  it("guards against negative / NaN", () => {
+    expect(formatUptime(-5)).toBe("0m");
+    expect(formatUptime(Number.NaN)).toBe("0m");
   });
 });
 

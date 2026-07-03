@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "@/components/auth/AuthProvider";
 
 const TABS = [
+  { href: "/admin", label: "Overview" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/registration-requests", label: "Registration" },
   { href: "/admin/audit-log", label: "Audit log" },
