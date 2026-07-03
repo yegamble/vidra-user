@@ -5,12 +5,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { CaptionsManager } from "@/components/CaptionsManager";
 import { LiveStreamsSection } from "@/components/LiveStreamsSection";
+import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { ThumbnailManager } from "@/components/ThumbnailManager";
 import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, isUploadCancelled } from "@/lib/api";
+import { ApiError, api, channelAvatarUrl, channelBannerUrl, isUploadCancelled } from "@/lib/api";
 import type {
   Channel,
   Video,
@@ -295,6 +296,26 @@ function ChannelRow({
           />
         </label>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        <ProfileImageManager
+          kind="avatar"
+          label="Channel avatar"
+          name={channel.display_name || channel.handle}
+          has={channel.has_avatar ?? false}
+          src={channelAvatarUrl(channel.handle)}
+          upload={(file) => api.setChannelAvatar(channel.handle, file)}
+          remove={() => api.deleteChannelAvatar(channel.handle)}
+          onChanged={(has) => onUpdated({ ...channel, has_avatar: has })}
+        />
+        <ProfileImageManager
+          kind="banner"
+          label="Channel banner"
+          name={channel.display_name || channel.handle}
+          has={channel.has_banner ?? false}
+          src={channelBannerUrl(channel.handle)}
+          upload={(file) => api.setChannelBanner(channel.handle, file)}
+          remove={() => api.deleteChannelBanner(channel.handle)}
+          onChanged={(has) => onUpdated({ ...channel, has_banner: has })}
+        />
         <div className="flex gap-2">
           <button
             type="button"

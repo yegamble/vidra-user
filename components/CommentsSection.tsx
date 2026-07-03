@@ -6,9 +6,10 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { MessageButton } from "@/components/MessageButton";
 import { ReportButton } from "@/components/ReportButton";
+import { Avatar } from "@/components/ui/Avatar";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, userAvatarUrl } from "@/lib/api";
 import type { Comment } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -241,7 +242,16 @@ function CommentItem({
   }
 
   return (
-    <li className="flex flex-col gap-1">
+    <li className="flex gap-3">
+      {/* Comments carry author_id, not a has_avatar flag: always point at the
+          public avatar URL and let a 404 fall back to the initial-letter block
+          via onError — the fixed-size block keeps the row layout stable. */}
+      <Avatar
+        src={userAvatarUrl(comment.author_id)}
+        name={comment.author_display_name || comment.author_username}
+        className="mt-0.5 h-8 w-8 text-sm"
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
       <div className="flex items-center gap-2 text-sm">
         <span className="font-medium text-zinc-900 dark:text-zinc-100">
           {comment.author_display_name || comment.author_username}
@@ -331,6 +341,7 @@ function CommentItem({
       ) : (
         <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">{comment.body}</p>
       )}
+      </div>
     </li>
   );
 }

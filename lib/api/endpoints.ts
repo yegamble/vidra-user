@@ -43,6 +43,7 @@ import type {
   Playlist,
   PlaylistDetail,
   PlaylistListResponse,
+  ProfileImage,
   RegistrationRequestListResponse,
   RejectRegistrationRequest,
   ReportListResponse,
@@ -196,6 +197,72 @@ export const api = {
     apiRequest<UploadVideoResult>(`/api/v1/videos/${encodeURIComponent(videoId)}/import`, {
       method: "POST",
       body: { url },
+    }),
+
+  /**
+   * POST /api/v1/me/avatar — set the caller's account avatar (auth, multipart,
+   * JPEG/PNG/WebP by extension; otherwise 415). Served publicly at
+   * GET /users/{id}/avatar (see userAvatarUrl).
+   */
+  setMyAvatar: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<ProfileImage>("/api/v1/me/avatar", { method: "POST", body: form });
+  },
+
+  /** DELETE /api/v1/me/avatar — remove the caller's account avatar (404 when none set). */
+  deleteMyAvatar: () => apiRequest<void>("/api/v1/me/avatar", { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/me/banner — set the caller's account (profile) banner (auth,
+   * multipart, same type gate as the avatar). Served publicly at
+   * GET /users/{id}/banner (see userBannerUrl).
+   */
+  setMyBanner: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<ProfileImage>("/api/v1/me/banner", { method: "POST", body: form });
+  },
+
+  /** DELETE /api/v1/me/banner — remove the caller's account banner (404 when none set). */
+  deleteMyBanner: () => apiRequest<void>("/api/v1/me/banner", { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/channels/{handle}/avatar — set a channel's avatar (auth, owner
+   * only — a non-owner/unknown handle is 404; multipart, JPEG/PNG/WebP else 415).
+   */
+  setChannelAvatar: (handle: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<ProfileImage>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/avatar`,
+      { method: "POST", body: form },
+    );
+  },
+
+  /** DELETE /api/v1/channels/{handle}/avatar — remove a channel's avatar (auth, owner). */
+  deleteChannelAvatar: (handle: string) =>
+    apiRequest<void>(`/api/v1/channels/${encodeURIComponent(handle)}/avatar`, {
+      method: "DELETE",
+    }),
+
+  /**
+   * POST /api/v1/channels/{handle}/banner — set a channel's banner (auth, owner
+   * only; same type gate / 404-for-non-owner semantics as the avatar route).
+   */
+  setChannelBanner: (handle: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<ProfileImage>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/banner`,
+      { method: "POST", body: form },
+    );
+  },
+
+  /** DELETE /api/v1/channels/{handle}/banner — remove a channel's banner (auth, owner). */
+  deleteChannelBanner: (handle: string) =>
+    apiRequest<void>(`/api/v1/channels/${encodeURIComponent(handle)}/banner`, {
+      method: "DELETE",
     }),
 
   /** POST /api/v1/channels/{handle}/live — create a live stream (auth, owner). Returns the key once. */
@@ -682,4 +749,24 @@ export function videoThumbnailUrl(id: string): string {
 /** Direct URL to a caption track's WebVTT body (text/vtt). */
 export function videoCaptionUrl(id: string, language: string): string {
   return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/captions/${encodeURIComponent(language)}`;
+}
+
+/** Direct URL to a user's public avatar image (404s when none is set). */
+export function userAvatarUrl(userId: string): string {
+  return `${apiBaseUrl}/api/v1/users/${encodeURIComponent(userId)}/avatar`;
+}
+
+/** Direct URL to a user's public profile banner image (404s when none is set). */
+export function userBannerUrl(userId: string): string {
+  return `${apiBaseUrl}/api/v1/users/${encodeURIComponent(userId)}/banner`;
+}
+
+/** Direct URL to a channel's public avatar image (404s when none is set). */
+export function channelAvatarUrl(handle: string): string {
+  return `${apiBaseUrl}/api/v1/channels/${encodeURIComponent(handle)}/avatar`;
+}
+
+/** Direct URL to a channel's public banner image (404s when none is set). */
+export function channelBannerUrl(handle: string): string {
+  return `${apiBaseUrl}/api/v1/channels/${encodeURIComponent(handle)}/banner`;
 }

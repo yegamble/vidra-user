@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, channelAvatarUrl, channelBannerUrl } from "@/lib/api";
 import type { Channel, Video } from "@/lib/api";
 import { formatCount } from "@/lib/format";
 
@@ -67,15 +68,23 @@ export function ChannelView({ handle }: { handle: string }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-2 border-b border-zinc-200 pb-6 dark:border-zinc-800">
+      <header className="flex flex-col gap-3 border-b border-zinc-200 pb-6 dark:border-zinc-800">
+        {channel.has_banner ? <ChannelBanner handle={channel.handle} /> : null}
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {channel.display_name || channel.handle}
-            </h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              @{channel.handle} · {formatCount(channel.follower_count)} followers
-            </p>
+          <div className="flex items-center gap-3">
+            <Avatar
+              src={channel.has_avatar ? channelAvatarUrl(channel.handle) : null}
+              name={channel.display_name || channel.handle}
+              className="h-14 w-14 text-xl"
+            />
+            <div className="flex flex-col gap-1">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {channel.display_name || channel.handle}
+              </h1>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                @{channel.handle} · {formatCount(channel.follower_count)} followers
+              </p>
+            </div>
           </div>
           <SubscribeButton
             handle={channel.handle}
@@ -108,6 +117,24 @@ export function ChannelView({ handle }: { handle: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ChannelBanner renders the channel's banner across the top of the header when
+// has_banner says one exists. A broken image (e.g. deleted between the view
+// read and the image fetch) unmounts entirely, so the layout falls back to the
+// same header the bannerless state uses — nothing shifts around a dead frame.
+function ChannelBanner({ handle }: { handle: string }) {
+  const [broken, setBroken] = useState(false);
+  if (broken) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- backend-served image, not a static asset
+    <img
+      src={channelBannerUrl(handle)}
+      alt=""
+      onError={() => setBroken(true)}
+      className="h-32 w-full rounded-lg bg-zinc-100 object-cover sm:h-48 dark:bg-zinc-800"
+    />
   );
 }
 

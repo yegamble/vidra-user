@@ -3,10 +3,14 @@
 import Link from "next/link";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { Avatar } from "@/components/ui/Avatar";
+import { userAvatarUrl } from "@/lib/api";
 
 // AccountMenu reflects session state in the header: a sign-in link when anon,
-// the username + sign-out when authenticated, and a quiet placeholder while the
-// boot-time silent refresh decides which (avoids a "Sign in" flash on reload).
+// the avatar + username + sign-out when authenticated, and a quiet placeholder
+// while the boot-time silent refresh decides which (avoids a "Sign in" flash on
+// reload). The avatar image is decorative (alt="") — the username next to it is
+// the accessible name of the settings link.
 export function AccountMenu() {
   const { status, user, logout } = useSession();
 
@@ -27,8 +31,13 @@ export function AccountMenu() {
       <div className="flex items-center gap-3 text-sm">
         <Link
           href="/settings"
-          className="font-medium text-zinc-700 hover:underline dark:text-zinc-200"
+          className="flex items-center gap-2 font-medium text-zinc-700 hover:underline dark:text-zinc-200"
         >
+          <Avatar
+            src={user.has_avatar ? userAvatarUrl(user.id) : null}
+            name={user.display_name || user.username}
+            className="h-6 w-6 text-xs"
+          />
           {user.username}
         </Link>
         <button

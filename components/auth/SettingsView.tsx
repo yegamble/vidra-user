@@ -5,17 +5,18 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, authApi } from "@/lib/api";
-import type { UpdateProfileRequest } from "@/lib/api";
+import { ApiError, api, authApi, userAvatarUrl, userBannerUrl } from "@/lib/api";
+import type { UpdateProfileRequest, User } from "@/lib/api";
 
 // SettingsView lets the signed-in user edit their profile (display name, bio)
 // and deactivate their account. On a hard reload the session is restored via
 // the httpOnly refresh cookie — show a loading state until that settles; only
 // a settled signed-out state gets the sign-in prompt.
 export function SettingsView() {
-  const { status, user, updateProfile, deactivate } = useSession();
+  const { status, user, updateProfile, deactivate, reloadUser } = useSession();
 
   if (status === "restoring") {
     return (
@@ -57,6 +58,11 @@ export function SettingsView() {
         initialBio={user.bio}
         updateProfile={updateProfile}
       />
+      <ProfileImagesSection
+        key={`images-${user.id}`}
+        user={user}
+        onChanged={() => void reloadUser().catch(() => {})}
+      />
       <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
         <div>
           <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Muted accounts</h2>
@@ -88,6 +94,45 @@ export function SettingsView() {
         </Link>
       </section>
       <DeactivateSection deactivate={deactivate} />
+    </div>
+  );
+}
+
+// ProfileImagesSection hosts the account avatar + profile banner managers. The
+// avatar shows everywhere the account's identity does (header, comments); the
+// banner is stored for the public profile surface. onChanged re-reads /auth/me
+// so has_avatar/has_banner (and the header avatar) stay in sync.
+function ProfileImagesSection({
+  user,
+  onChanged,
+}: {
+  user: User;
+  onChanged: () => void;
+}) {
+  const name = user.display_name || user.username;
+  return (
+    <div className="flex max-w-xl flex-col gap-3">
+      <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Profile images</h2>
+      <ProfileImageManager
+        kind="avatar"
+        label="Avatar"
+        name={name}
+        has={user.has_avatar ?? false}
+        src={userAvatarUrl(user.id)}
+        upload={(file) => api.setMyAvatar(file)}
+        remove={() => api.deleteMyAvatar()}
+        onChanged={onChanged}
+      />
+      <ProfileImageManager
+        kind="banner"
+        label="Banner"
+        name={name}
+        has={user.has_banner ?? false}
+        src={userBannerUrl(user.id)}
+        upload={(file) => api.setMyBanner(file)}
+        remove={() => api.deleteMyBanner()}
+        onChanged={onChanged}
+      />
     </div>
   );
 }

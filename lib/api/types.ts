@@ -208,6 +208,23 @@ export interface User {
   display_name: string;
   bio: string;
   created_at: string;
+  /** Whether an avatar is set (served at GET /users/{id}/avatar). Present on GET/PATCH /auth/me. */
+  has_avatar?: boolean;
+  /** Whether a profile banner is set (served at GET /users/{id}/banner). Present on GET/PATCH /auth/me. */
+  has_banner?: boolean;
+}
+
+/**
+ * A stored avatar/banner's metadata, returned by the profile-image upload
+ * endpoints. The image itself is served by the corresponding public GET route
+ * with the Content-Type recorded here.
+ */
+export interface ProfileImage {
+  kind: "avatar" | "banner";
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RegisterRequest {
@@ -291,6 +308,10 @@ export interface Channel {
   description: string;
   follower_count: number;
   created_at: string;
+  /** Whether an avatar is set (served at GET /channels/{handle}/avatar). */
+  has_avatar?: boolean;
+  /** Whether a banner is set (served at GET /channels/{handle}/banner). */
+  has_banner?: boolean;
 }
 
 export interface ChannelListResponse {

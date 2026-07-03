@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api, videoCaptionUrl, videoOriginalUrl, videoThumbnailUrl } from "./endpoints";
+import {
+  api,
+  channelAvatarUrl,
+  channelBannerUrl,
+  userAvatarUrl,
+  userBannerUrl,
+  videoCaptionUrl,
+  videoOriginalUrl,
+  videoThumbnailUrl,
+} from "./endpoints";
 
 function okJson(): Response {
   return new Response(JSON.stringify({}), {
@@ -348,6 +357,83 @@ describe("api endpoints", () => {
     expect(init.body).toBeInstanceOf(FormData);
     expect((init.body as FormData).get("file")).toBeInstanceOf(File);
     expect(init.headers["content-type"]).toBeUndefined();
+  });
+
+  it("setMyAvatar POSTs multipart to the account avatar endpoint", async () => {
+    const file = new File(["img"], "face.png", { type: "image/png" });
+    await api.setMyAvatar(file);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
+    expect(url).toBe("http://localhost:8080/api/v1/me/avatar");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+    expect(init.headers["content-type"]).toBeUndefined();
+  });
+
+  it("deleteMyAvatar DELETEs the account avatar endpoint", async () => {
+    await api.deleteMyAvatar();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/avatar");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("setMyBanner POSTs multipart to the account banner endpoint", async () => {
+    const file = new File(["img"], "wide.png", { type: "image/png" });
+    await api.setMyBanner(file);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/banner");
+    expect(init.method).toBe("POST");
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
+  it("deleteMyBanner DELETEs the account banner endpoint", async () => {
+    await api.deleteMyBanner();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/banner");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("setChannelAvatar POSTs multipart with the handle encoded", async () => {
+    const file = new File(["img"], "face.png", { type: "image/png" });
+    await api.setChannelAvatar("ada makes", file);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channels/ada%20makes/avatar");
+    expect(init.method).toBe("POST");
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
+  it("deleteChannelAvatar DELETEs the channel avatar endpoint", async () => {
+    await api.deleteChannelAvatar("ada_makes");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channels/ada_makes/avatar");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("setChannelBanner POSTs multipart to the channel banner endpoint", async () => {
+    const file = new File(["img"], "wide.png", { type: "image/png" });
+    await api.setChannelBanner("ada_makes", file);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channels/ada_makes/banner");
+    expect(init.method).toBe("POST");
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
+  it("deleteChannelBanner DELETEs the channel banner endpoint", async () => {
+    await api.deleteChannelBanner("ada_makes");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channels/ada_makes/banner");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("profile-image URL helpers build the public serve URLs", () => {
+    expect(userAvatarUrl("u1")).toBe("http://localhost:8080/api/v1/users/u1/avatar");
+    expect(userBannerUrl("u1")).toBe("http://localhost:8080/api/v1/users/u1/banner");
+    expect(channelAvatarUrl("ada makes")).toBe(
+      "http://localhost:8080/api/v1/channels/ada%20makes/avatar",
+    );
+    expect(channelBannerUrl("ada_makes")).toBe(
+      "http://localhost:8080/api/v1/channels/ada_makes/banner",
+    );
   });
 
   it("getReports defaults to all reports (no status filter)", async () => {
