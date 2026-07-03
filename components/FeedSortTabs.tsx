@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import type { FeedSort } from "@/lib/api";
+import { feedHref, type FeedFilters } from "@/lib/feed-url";
 
 const OPTIONS: { sort: FeedSort; label: string }[] = [
   { sort: "recent", label: "Recent" },
@@ -14,16 +15,18 @@ const OPTIONS: { sort: FeedSort; label: string }[] = [
 // aria-pressed), shared by the home page and /trending. The active mode lives
 // in the URL so it is shareable and back/forward friendly: Recent/Popular are
 // home-feed modes (/, /?sort=popular) and Trending is its own route
-// (/trending; the home page still honours a ?sort=trending deep link).
-// Clicking pushes a history entry and the server page re-renders the heading +
-// remounts the feed; this control itself never remounts, so focus stays on the
-// pressed button.
-function sortHref(sort: FeedSort): string {
-  if (sort === "trending") return "/trending";
-  return sort === "recent" ? "/" : `/?sort=${sort}`;
-}
-
-export function FeedSortTabs({ active }: { active: FeedSort }) {
+// (/trending; the home page still honours a ?sort=trending deep link). Active
+// tag/category/language filters ride along on a mode switch (feedHref keeps
+// them in the query string). Clicking pushes a history entry and the server
+// page re-renders the heading + remounts the feed; this control itself never
+// remounts, so focus stays on the pressed button.
+export function FeedSortTabs({
+  active,
+  filters = {},
+}: {
+  active: FeedSort;
+  filters?: FeedFilters;
+}) {
   const router = useRouter();
   return (
     <div
@@ -37,7 +40,7 @@ export function FeedSortTabs({ active }: { active: FeedSort }) {
           type="button"
           aria-pressed={active === sort}
           onClick={() => {
-            if (sort !== active) router.push(sortHref(sort));
+            if (sort !== active) router.push(feedHref(sort, filters));
           }}
           className={
             active === sort

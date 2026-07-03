@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
 import { api } from "@/lib/api";
 import type { FeedSort, Video } from "@/lib/api";
+import type { FeedFilters } from "@/lib/feed-url";
 
 type Status = "loading" | "error" | "ready";
 type MoreStatus = "idle" | "loading" | "error";
@@ -16,20 +17,23 @@ type MoreStatus = "idle" | "loading" | "error";
 // VideoFeed loads the public feed in the browser (so it is route-mockable in
 // tests and refetchable) and renders loading / error / empty / grid states plus
 // a "Load more" pager (limit/offset; the pager hides once a page comes back
-// short). The page mounts it with key={sort}, so a sort change gives a fresh
-// load (no synchronous setState in the effect). The API client already logs
-// failures; this component only reflects them in the UI.
-export function VideoFeed({ sort }: { sort: FeedSort }) {
+// short). Optional URL-reflected filters (tag/category/language) narrow the
+// feed. The page mounts it with a key derived from sort+filters, so any change
+// gives a fresh load (no synchronous setState in the effect). The API client
+// already logs failures; this component only reflects them in the UI.
+export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: FeedFilters }) {
   const [status, setStatus] = useState<Status>("loading");
   const [videos, setVideos] = useState<Video[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [more, setMore] = useState<MoreStatus>("idle");
   const [reloadKey, setReloadKey] = useState(0);
 
+  const { tag, category, language } = filters;
+
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getFeed({ sort, limit: PAGE_SIZE, offset: 0 }, controller.signal)
+      .getFeed({ sort, tag, category, language, limit: PAGE_SIZE, offset: 0 }, controller.signal)
       .then((res) => {
         setVideos(res.videos);
         setHasMore(res.videos.length === PAGE_SIZE);
@@ -39,7 +43,7 @@ export function VideoFeed({ sort }: { sort: FeedSort }) {
         if (!controller.signal.aborted) setStatus("error");
       });
     return () => controller.abort();
-  }, [sort, reloadKey]);
+  }, [sort, tag, category, language, reloadKey]);
 
   function retry() {
     setStatus("loading");
@@ -49,7 +53,14 @@ export function VideoFeed({ sort }: { sort: FeedSort }) {
   async function loadMore() {
     setMore("loading");
     try {
-      const res = await api.getFeed({ sort, limit: PAGE_SIZE, offset: videos.length });
+      const res = await api.getFeed({
+        sort,
+        tag,
+        category,
+        language,
+        limit: PAGE_SIZE,
+        offset: videos.length,
+      });
       setVideos((v) => [...v, ...res.videos]);
       setHasMore(res.videos.length === PAGE_SIZE);
       setMore("idle");
@@ -74,7 +85,14 @@ export function VideoFeed({ sort }: { sort: FeedSort }) {
     );
   }
   if (videos.length === 0) {
-    return <EmptyState title="No videos yet" message="Published videos will appear here." />;
+    return tag || category || language ? (
+      <EmptyState
+        title="No matching videos"
+        message="Nothing matches the active filters. Try removing one."
+      />
+    ) : (
+      <EmptyState title="No videos yet" message="Published videos will appear here." />
+    );
   }
   return (
     <div className="flex flex-col gap-6">

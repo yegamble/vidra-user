@@ -65,6 +65,12 @@ import type {
 
 export interface FeedParams {
   sort?: FeedSort;
+  /** Only videos carrying this free-form tag (case-insensitive exact match). */
+  tag?: string;
+  /** Only videos with this subject-category id (GET /videos/config; unknown → 422). */
+  category?: string;
+  /** Only videos with this content-language code (GET /videos/config; unknown → 422). */
+  language?: string;
   limit?: number;
   offset?: number;
 }
@@ -80,10 +86,21 @@ export const api = {
   getInstance: (signal?: AbortSignal) =>
     apiRequest<InstanceResponse>("/api/v1/instance", { signal }),
 
-  /** GET /api/v1/videos — public feed, ordered by sort, with view/thumbnail cards. */
+  /**
+   * GET /api/v1/videos — public feed, ordered by sort, with view/thumbnail
+   * cards. Optional tag/category/language filters narrow the feed (unknown
+   * category/language ids are a 422).
+   */
   getFeed: (params: FeedParams = {}, signal?: AbortSignal) =>
     apiRequest<VideoFeedResponse>("/api/v1/videos", {
-      query: { sort: params.sort, limit: params.limit, offset: params.offset },
+      query: {
+        sort: params.sort,
+        tag: params.tag,
+        category: params.category,
+        language: params.language,
+        limit: params.limit,
+        offset: params.offset,
+      },
       signal,
     }),
 

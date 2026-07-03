@@ -44,6 +44,18 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos?sort=popular&limit=20&offset=20");
   });
 
+  it("getFeed passes the tag/category/language filters, encoded", async () => {
+    await api.getFeed({ sort: "recent", tag: "cats & dogs", category: "7", language: "en" });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/videos?sort=recent&tag=cats+%26+dogs&category=7&language=en",
+    );
+  });
+
+  it("getFeed omits unset filters entirely", async () => {
+    await api.getFeed({ sort: "recent", limit: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos?sort=recent&limit=20");
+  });
+
   it("searchVideos encodes the query", async () => {
     await api.searchVideos("go lang");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/search?q=go+lang");
