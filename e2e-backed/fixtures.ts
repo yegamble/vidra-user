@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 
 import type { APIRequestContext } from "@playwright/test";
 
@@ -551,6 +551,53 @@ export async function muteInstance(
     { headers: { Authorization: `Bearer ${token}` } },
   );
   return res.status();
+}
+
+// --- TOTP (RFC 6238) test-side implementation --------------------------------
+// The backed MFA spec enrolls through the UI and must then COMPUTE valid
+// authenticator codes from the enrolled base32 secret, exactly like a real
+// authenticator app would (SHA1, 6 digits, 30s period — the backend's stated
+// parameters). Test-code only; the product never computes TOTP codes.
+
+const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+/** base32Decode decodes an (unpadded) RFC 4648 base32 string. */
+export function base32Decode(encoded: string): Buffer {
+  const clean = encoded.toUpperCase().replace(/=+$/, "");
+  let bits = 0;
+  let value = 0;
+  const out: number[] = [];
+  for (const ch of clean) {
+    const idx = BASE32_ALPHABET.indexOf(ch);
+    if (idx === -1) throw new Error(`invalid base32 character: ${ch}`);
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(out);
+}
+
+/**
+ * totpCode computes the RFC 6238 code (HMAC-SHA1, 6 digits, 30s period) for a
+ * base32 secret. `stepOffset` shifts the time window (the backend tolerates
+ * ±1 step of skew, so ±1 is always accepted around "now").
+ */
+export function totpCode(secret: string, stepOffset = 0, at = Date.now()): string {
+  const counter = Math.floor(at / 1000 / 30) + stepOffset;
+  const msg = Buffer.alloc(8);
+  msg.writeBigUInt64BE(BigInt(counter));
+  const digest = createHmac("sha1", base32Decode(secret)).update(msg).digest();
+  const offset = digest[digest.length - 1] & 0xf;
+  const code =
+    (((digest[offset] & 0x7f) << 24) |
+      (digest[offset + 1] << 16) |
+      (digest[offset + 2] << 8) |
+      digest[offset + 3]) %
+    1_000_000;
+  return code.toString().padStart(6, "0");
 }
 
 /** mutedInstances reads the caller's persisted instance mutes via the API. */

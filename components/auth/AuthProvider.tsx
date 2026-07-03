@@ -37,10 +37,22 @@ type SessionStatus = "restoring" | "anon" | "authed";
  */
 export type RegisterOutcome = "created" | "pending";
 
+/**
+ * Outcome of a login call: "authed" — the session is live; "mfa_required" —
+ * the credentials were valid but the account has two-factor authentication
+ * enabled, so NO session exists yet. Present `mfaToken` (valid 5 minutes)
+ * together with a TOTP or recovery code to completeMfaChallenge.
+ */
+export type LoginOutcome =
+  | { status: "authed" }
+  | { status: "mfa_required"; mfaToken: string };
+
 interface SessionContextValue {
   user: User | null;
   status: SessionStatus;
-  login: (credentials: LoginRequest) => Promise<void>;
+  login: (credentials: LoginRequest) => Promise<LoginOutcome>;
+  /** Second half of a two-factor login (TOTP or recovery code). */
+  completeMfaChallenge: (mfaToken: string, code: string) => Promise<void>;
   register: (input: RegisterRequest) => Promise<RegisterOutcome>;
   updateProfile: (input: UpdateProfileRequest) => Promise<void>;
   deactivate: (password: string) => Promise<void>;
@@ -98,8 +110,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (credentials: LoginRequest) => {
-      apply(await authApi.login(credentials));
+    async (credentials: LoginRequest): Promise<LoginOutcome> => {
+      const res = await authApi.login(credentials);
+      // An MFA-enabled account answers {mfa_required, mfa_token} with NO
+      // session tokens — the caller must run the challenge step.
+      if ("mfa_required" in res) {
+        return { status: "mfa_required", mfaToken: res.mfa_token };
+      }
+      apply(res);
+      return { status: "authed" };
+    },
+    [apply],
+  );
+
+  const completeMfaChallenge = useCallback(
+    async (mfaToken: string, code: string) => {
+      apply(await authApi.completeMFAChallenge(mfaToken, code));
     },
     [apply],
   );
@@ -148,13 +174,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       status: user ? "authed" : restored ? "anon" : "restoring",
       login,
+      completeMfaChallenge,
       register,
       updateProfile,
       deactivate,
       logout,
       reloadUser,
     }),
-    [user, restored, login, register, updateProfile, deactivate, logout, reloadUser],
+    [
+      user,
+      restored,
+      login,
+      completeMfaChallenge,
+      register,
+      updateProfile,
+      deactivate,
+      logout,
+      reloadUser,
+    ],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

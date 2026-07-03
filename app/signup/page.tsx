@@ -1,10 +1,18 @@
 import { SignupForm } from "@/components/auth/SignupForm";
 
-export default function SignupPage() {
+// The OAuth callback redirects back here carrying one-shot markers (?oauth=1 /
+// ?oauth_error=<code>) when the flow was started from the signup page — see
+// app/login/page.tsx for the mechanics.
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ oauth?: string; oauth_error?: string }>;
+}) {
+  const sp = await searchParams;
   return (
     <main className="mx-auto w-full max-w-sm flex-1 px-4 py-12">
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Create your account</h1>
-      <SignupForm />
+      <SignupForm oauthPending={sp.oauth === "1"} oauthError={sp.oauth_error ?? ""} />
     </main>
   );
 }

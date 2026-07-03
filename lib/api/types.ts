@@ -25,6 +25,17 @@ export interface InstanceResponse {
   registration_enabled: boolean;
   /** When true, signup files a pending request for admin approval (202) instead of creating an account. */
   registration_requires_approval: boolean;
+  /**
+   * Configured OIDC login provider names, in display order. Render a
+   * "Continue with <provider>" button per entry, navigating (top-level) to
+   * GET /api/v1/auth/oauth/{provider}. Empty when OAuth login is off.
+   */
+  oauth_providers: string[];
+  /**
+   * Whether ActivityPub federation is enabled on this instance (gates
+   * remote-content surfaces and the instance-level protocol label).
+   */
+  federation_enabled: boolean;
   terms_url: string;
   privacy_url: string;
   contact_email: string;
@@ -350,6 +361,65 @@ export interface UpdateProfileRequest {
   bio?: string;
   /** Toggle the account-level discovery opt-out (see User.unlisted). */
   unlisted?: boolean;
+}
+
+/**
+ * Login outcome for an account with two-factor authentication enabled: the
+ * credentials were valid but NO session is issued yet. Present the mfa_token
+ * with a TOTP or recovery code at POST /api/v1/auth/mfa/challenge (5 min).
+ */
+export interface MFARequiredResponse {
+  mfa_required: true;
+  /** Short-lived single-purpose token, only accepted by the MFA challenge. */
+  mfa_token: string;
+}
+
+/** GET /api/v1/auth/mfa — the account's two-factor state. */
+export interface MFAStatusResponse {
+  enabled: boolean;
+  /** Unused single-use recovery codes left (0 when disabled). */
+  recovery_codes_remaining: number;
+}
+
+/**
+ * POST /api/v1/auth/mfa/totp — returned exactly once when enrollment starts;
+ * neither field can be retrieved again.
+ */
+export interface TOTPEnrollmentResponse {
+  /** Base32 TOTP shared secret, for manual authenticator entry. */
+  secret: string;
+  /** otpauth:// provisioning URI (QR-code payload). */
+  otpauth_uri: string;
+}
+
+/**
+ * POST /api/v1/auth/mfa/totp/verify — the 10 single-use recovery codes, shown
+ * exactly once (stored hashed server-side).
+ */
+export interface RecoveryCodesResponse {
+  recovery_codes: string[];
+}
+
+/** POST /api/v1/auth/mfa/challenge body — second half of a two-factor login. */
+export interface MFAChallengeRequest {
+  /** The mfa_token from the login response (valid 5 minutes). */
+  mfa_token: string;
+  /** The current 6-digit authenticator code or one unused recovery code. */
+  code: string;
+  /** See LoginRequest.cookie_mode — the web client always sends true. */
+  cookie_mode?: boolean;
+}
+
+/** One OIDC identity linked to the account (GET /me/oauth-identities). */
+export interface OAuthIdentity {
+  provider: string;
+  /** Email snapshot captured when the identity was linked; may be empty. */
+  email: string;
+  created_at: string;
+}
+
+export interface OAuthIdentitiesResponse {
+  identities: OAuthIdentity[];
 }
 
 /** Returned by register / login / refresh. */

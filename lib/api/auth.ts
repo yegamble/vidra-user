@@ -1,12 +1,19 @@
+import { apiBaseUrl } from "@/lib/config";
+
 import { apiRequest } from "./client";
 import type {
   AuthResponse,
   EmailVerificationConfirmRequest,
   LoginRequest,
+  MFARequiredResponse,
+  MFAStatusResponse,
+  OAuthIdentitiesResponse,
   PasswordResetConfirmRequest,
   PasswordResetRequest,
+  RecoveryCodesResponse,
   RegisterRequest,
   RegistrationPending,
+  TOTPEnrollmentResponse,
   UpdateProfileRequest,
   User,
 } from "./types";
@@ -35,13 +42,82 @@ export const authApi = {
       retryOn401: false,
     }),
 
-  /** POST /api/v1/auth/login — exchange credentials for a session. */
+  /**
+   * POST /api/v1/auth/login — exchange credentials for a session. For an
+   * MFA-enabled account valid credentials return {mfa_required, mfa_token}
+   * with NO session tokens — finish at completeMFAChallenge within 5 minutes.
+   */
   login: (body: LoginRequest) =>
-    apiRequest<AuthResponse>("/api/v1/auth/login", {
+    apiRequest<AuthResponse | MFARequiredResponse>("/api/v1/auth/login", {
       method: "POST",
       body: { ...body, cookie_mode: true },
       credentials: "include",
       retryOn401: false,
+    }),
+
+  /**
+   * POST /api/v1/auth/mfa/challenge — second half of a two-factor login:
+   * the login's mfa_token plus a 6-digit TOTP code (or one unused recovery
+   * code, consumed on use) for the full session. Cookie mode like login; a
+   * wrong/expired token and a wrong code are both 401.
+   */
+  completeMFAChallenge: (mfaToken: string, code: string) =>
+    apiRequest<AuthResponse>("/api/v1/auth/mfa/challenge", {
+      method: "POST",
+      body: { mfa_token: mfaToken, code, cookie_mode: true },
+      credentials: "include",
+      retryOn401: false,
+    }),
+
+  /**
+   * GET /api/v1/auth/mfa — whether TOTP two-factor auth is enabled for the
+   * account and how many single-use recovery codes remain (auth).
+   */
+  getMFAStatus: (signal?: AbortSignal) =>
+    apiRequest<MFAStatusResponse>("/api/v1/auth/mfa", { signal }),
+
+  /**
+   * POST /api/v1/auth/mfa/totp — start (or restart) TOTP enrollment (auth).
+   * Returns the shared secret + otpauth:// URI EXACTLY ONCE; login is
+   * unaffected until the enrollment is verified. 409 when already enabled.
+   */
+  beginTOTPEnrollment: () =>
+    apiRequest<TOTPEnrollmentResponse>("/api/v1/auth/mfa/totp", { method: "POST" }),
+
+  /**
+   * POST /api/v1/auth/mfa/totp/verify — confirm the pending enrollment with
+   * the first valid authenticator code: two-factor flips on and the 10
+   * recovery codes are returned EXACTLY ONCE. 400 on a wrong code.
+   */
+  verifyTOTPEnrollment: (code: string) =>
+    apiRequest<RecoveryCodesResponse>("/api/v1/auth/mfa/totp/verify", {
+      method: "POST",
+      body: { code },
+    }),
+
+  /**
+   * DELETE /api/v1/auth/mfa/totp — turn two-factor auth off (auth). The
+   * account password must be re-entered (403 when wrong); also cancels a
+   * pending enrollment. 204 on success.
+   */
+  disableTOTP: (password: string) =>
+    apiRequest<void>("/api/v1/auth/mfa/totp", { method: "DELETE", body: { password } }),
+
+  /**
+   * GET /api/v1/me/oauth-identities — the OIDC identities linked to the
+   * account, oldest link first (auth).
+   */
+  listOAuthIdentities: (signal?: AbortSignal) =>
+    apiRequest<OAuthIdentitiesResponse>("/api/v1/me/oauth-identities", { signal }),
+
+  /**
+   * DELETE /api/v1/me/oauth-identities/{provider} — unlink one provider
+   * identity (auth, 204). 422 when it is the account's last sign-in method;
+   * 404 when that provider is not linked.
+   */
+  unlinkOAuthIdentity: (provider: string) =>
+    apiRequest<void>(`/api/v1/me/oauth-identities/${encodeURIComponent(provider)}`, {
+      method: "DELETE",
     }),
 
   /**
@@ -107,3 +183,16 @@ export const authApi = {
       body: { password },
     }),
 };
+
+/**
+ * URL of GET /api/v1/auth/oauth/{provider} — the OIDC begin endpoint. It must
+ * be reached by a TOP-LEVEL browser navigation (anchor/redirect, never fetch):
+ * the backend answers 302 to the provider after sealing the attempt into a
+ * signed httpOnly state cookie. `returnTo` must be a same-origin relative path
+ * ("/..."); the callback lands the session server-side in cookie mode and
+ * redirects the browser there (with ?oauth_error=<code> on failure).
+ */
+export function oauthBeginUrl(provider: string, returnTo?: string): string {
+  const base = `${apiBaseUrl}/api/v1/auth/oauth/${encodeURIComponent(provider)}`;
+  return returnTo ? `${base}?return_to=${encodeURIComponent(returnTo)}` : base;
+}

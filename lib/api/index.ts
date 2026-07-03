@@ -16,6 +16,6 @@ export {
 } from "./endpoints";
 export type { FeedParams, SearchParams } from "./endpoints";
 export { getVideoConfigCached, resolveOptionLabel } from "./video-config";
-export { authApi } from "./auth";
+export { authApi, oauthBeginUrl } from "./auth";
 export { getAccessToken, setAccessToken, setSessionExpiredHandler } from "./auth-store";
 export type * from "./types";

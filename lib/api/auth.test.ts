@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getAccessToken, setAccessToken } from "./auth-store";
-import { authApi } from "./auth";
-import { apiRequest } from "./client";
+import { authApi, oauthBeginUrl } from "./auth";
+import { ApiError, apiRequest } from "./client";
 
 const session = {
   token: "acc",
@@ -51,6 +51,8 @@ describe("authApi + auth-store", () => {
       JSON.stringify({ email: "ada@example.test", password: "pw", cookie_mode: true }),
     );
     expect(init.credentials).toBe("include");
+    // Narrow the union: a non-MFA account gets the full session.
+    if ("mfa_required" in res) throw new Error("expected a session, got an MFA challenge");
     expect(res.token).toBe("acc");
     expect(res.user.username).toBe("ada");
   });
@@ -144,5 +146,112 @@ describe("authApi + auth-store", () => {
     expect(getAccessToken()).toBeNull();
     setAccessToken("x");
     expect(getAccessToken()).toBe("x");
+  });
+
+  it("login surfaces an MFA challenge body instead of a session", async () => {
+    fetchMock.mockResolvedValue(okJson({ mfa_required: true, mfa_token: "mfa-tok" }));
+    const res = await authApi.login({ email: "ada@example.test", password: "pw" });
+    expect(res).toEqual({ mfa_required: true, mfa_token: "mfa-tok" });
+  });
+
+  it("completeMFAChallenge POSTs the mfa_token and code in cookie mode, no 401 retry", async () => {
+    fetchMock.mockResolvedValue(okJson(session));
+    const res = await authApi.completeMFAChallenge("mfa-tok", "123456");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/auth/mfa/challenge");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(
+      JSON.stringify({ mfa_token: "mfa-tok", code: "123456", cookie_mode: true }),
+    );
+    expect(init.credentials).toBe("include");
+    expect(res.token).toBe("acc");
+  });
+
+  it("a 401 on the MFA challenge is a real answer (single request, rethrown)", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "unauthorized", message: "bad code" } }), {
+        status: 401,
+      }),
+    );
+    await expect(authApi.completeMFAChallenge("mfa-tok", "000000")).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("getMFAStatus GETs the mfa status endpoint with the bearer token", async () => {
+    setAccessToken("acc");
+    fetchMock.mockResolvedValue(okJson({ enabled: true, recovery_codes_remaining: 7 }));
+    const res = await authApi.getMFAStatus();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/auth/mfa");
+    expect((init.headers as Record<string, string>).authorization).toBe("Bearer acc");
+    expect(res).toEqual({ enabled: true, recovery_codes_remaining: 7 });
+  });
+
+  it("beginTOTPEnrollment POSTs and returns the one-time secret + otpauth URI", async () => {
+    fetchMock.mockResolvedValue(okJson({ secret: "JBSWY3DP", otpauth_uri: "otpauth://totp/x" }));
+    const res = await authApi.beginTOTPEnrollment();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/auth/mfa/totp");
+    expect(init.method).toBe("POST");
+    expect(res.otpauth_uri).toBe("otpauth://totp/x");
+  });
+
+  it("verifyTOTPEnrollment POSTs the code and returns the recovery codes", async () => {
+    fetchMock.mockResolvedValue(okJson({ recovery_codes: ["a1b2c-3d4e5"] }));
+    const res = await authApi.verifyTOTPEnrollment("123456");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/auth/mfa/totp/verify");
+    expect(init.body).toBe(JSON.stringify({ code: "123456" }));
+    expect(res.recovery_codes).toEqual(["a1b2c-3d4e5"]);
+  });
+
+  it("disableTOTP DELETEs with the password confirmation in the body", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await authApi.disableTOTP("supersecret");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/auth/mfa/totp");
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBe(JSON.stringify({ password: "supersecret" }));
+  });
+
+  it("listOAuthIdentities GETs the linked identities", async () => {
+    fetchMock.mockResolvedValue(
+      okJson({ identities: [{ provider: "google", email: "a@b.c", created_at: "2026-01-01" }] }),
+    );
+    const res = await authApi.listOAuthIdentities();
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/oauth-identities");
+    expect(res.identities[0].provider).toBe("google");
+  });
+
+  it("unlinkOAuthIdentity DELETEs the provider path (encoded)", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await authApi.unlinkOAuthIdentity("goo gle");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/oauth-identities/goo%20gle");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("a 422 unlink (last sign-in method) surfaces as an ApiError with the status", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: "unprocessable_entity", message: "cannot remove the last sign-in method" },
+        }),
+        { status: 422 },
+      ),
+    );
+    const err = await authApi.unlinkOAuthIdentity("google").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(422);
+  });
+
+  it("oauthBeginUrl points at the begin endpoint, with an encoded return_to when given", () => {
+    expect(oauthBeginUrl("google")).toBe("http://localhost:8080/api/v1/auth/oauth/google");
+    expect(oauthBeginUrl("google", "/login?oauth=1")).toBe(
+      "http://localhost:8080/api/v1/auth/oauth/google?return_to=%2Flogin%3Foauth%3D1",
+    );
   });
 });

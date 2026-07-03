@@ -5,27 +5,56 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api } from "@/lib/api";
 
 type RegState = "loading" | "open" | "closed";
 
-export function SignupForm() {
+export function SignupForm({
+  oauthPending = false,
+  oauthError = "",
+}: {
+  /** True when the URL carried the ?oauth=1 return_to marker. */
+  oauthPending?: boolean;
+  /** The ?oauth_error=<code> from a failed OAuth callback ("" when none). */
+  oauthError?: string;
+}) {
   const router = useRouter();
-  const { register } = useSession();
+  const { status, register } = useSession();
 
   const [regState, setRegState] = useState<RegState>("loading");
   const [requiresApproval, setRequiresApproval] = useState(false);
+  const [providers, setProviders] = useState<string[]>([]);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [note, setNote] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(
+    oauthError ? oauthErrorMessage(oauthError) : null,
+  );
   const [submitting, setSubmitting] = useState(false);
   // Set when register answered 202: the signup awaits admin approval.
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  // Sticky OAuth-landing marker (see LoginForm): while the boot silent-refresh
+  // decides, a spinner shows; a settled "anon" is surfaced as an honest error.
+  const [oauthLanding] = useState(oauthPending && !oauthError);
+  const [landingDismissed, setLandingDismissed] = useState(false);
+  const completingOAuth = oauthLanding && !landingDismissed && status === "restoring";
+  const oauthSilentFailure = oauthLanding && !landingDismissed && status === "anon";
+
+  // Clean the one-shot OAuth markers out of the URL.
+  useEffect(() => {
+    if (oauthPending || oauthError) router.replace("/signup");
+  }, [oauthPending, oauthError, router]);
+
+  // A successful OAuth landing: the silent refresh picked up the session
+  // cookie the callback set — leave the signup page.
+  useEffect(() => {
+    if (oauthLanding && status === "authed") router.replace("/");
+  }, [oauthLanding, status, router]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -33,6 +62,7 @@ export function SignupForm() {
       .getInstance(controller.signal)
       .then((instance) => {
         setRequiresApproval(instance.registration_requires_approval === true);
+        setProviders(instance.oauth_providers ?? []);
         setRegState(instance.registration_enabled ? "open" : "closed");
       })
       .catch(() => {
@@ -46,6 +76,7 @@ export function SignupForm() {
   async function submit() {
     setFieldErrors({});
     setFormError(null);
+    setLandingDismissed(true); // a manual attempt supersedes the OAuth landing
     setSubmitting(true);
     try {
       const outcome = await register({
@@ -93,6 +124,14 @@ export function SignupForm() {
     );
   }
 
+  if (completingOAuth) {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner label="Completing sign-in" />
+      </div>
+    );
+  }
+
   if (regState === "loading") {
     return (
       <div className="flex justify-center py-12">
@@ -100,6 +139,12 @@ export function SignupForm() {
       </div>
     );
   }
+  const displayFormError =
+    formError ??
+    (oauthSilentFailure
+      ? "Could not complete the sign-in with the provider. Please try again."
+      : null);
+
   if (regState === "closed") {
     return (
       <EmptyState
@@ -126,12 +171,12 @@ export function SignupForm() {
       }}
       className="flex flex-col gap-4"
     >
-      {formError ? (
+      {displayFormError ? (
         <p
           role="alert"
           className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
         >
-          {formError}
+          {displayFormError}
         </p>
       ) : null}
 
@@ -194,6 +239,8 @@ export function SignupForm() {
           reviewed before you can sign in.
         </p>
       ) : null}
+
+      <OAuthButtons providers={providers} returnTo="/signup?oauth=1" />
 
       <p className="text-sm text-zinc-500 dark:text-zinc-400">
         Already have an account?{" "}
