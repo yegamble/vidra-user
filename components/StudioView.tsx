@@ -22,6 +22,7 @@ import type {
   VideoPrivacy,
   VideoState,
 } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
@@ -462,6 +463,27 @@ function taxonomyFields(category: string, language: string, license: string) {
   return out;
 }
 
+// toLocalInputValue formats an ISO timestamp as a datetime-local input value
+// (YYYY-MM-DDTHH:MM in the viewer's local zone); "" when absent/unparseable.
+function toLocalInputValue(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// scheduleToIso converts a datetime-local value (interpreted in the viewer's
+// local zone) to the ISO instant the API expects; undefined when empty/invalid
+// (an invalid value is left for the backend's 422 to explain, so the field is
+// never silently dropped — but browsers keep datetime-local well-formed).
+function scheduleToIso(local: string): string | undefined {
+  if (local.trim() === "") return undefined;
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
 // importOrUploadError maps a publish failure to a friendly message, tailored to
 // whether the source was a file upload or a URL import.
 function importOrUploadError(err: unknown, source: "file" | "url"): string {
@@ -494,6 +516,7 @@ const PUBLISH_FIELDS: ReadonlySet<string> = new Set([
   "category",
   "language",
   "license",
+  "publish_at",
   "url",
 ]);
 
@@ -506,6 +529,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   const [license, setLicense] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [privacy, setPrivacy] = useState<VideoPrivacy>("public");
+  const [publishAt, setPublishAt] = useState("");
   const [source, setSource] = useState<"file" | "url">("file");
   const [videoUrl, setVideoUrl] = useState("");
   const [state, setState] = useState<UploadState>("idle");
@@ -546,12 +570,14 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     setResult(null);
     let draftId: string | null = null;
     try {
+      const scheduleIso = scheduleToIso(publishAt);
       const draft = await api.createVideoDraft(handle, {
         title: title.trim(),
         description: description.trim(),
         privacy,
         ...taxonomyFields(category, language, license),
         ...(tags.length > 0 ? { tags } : {}),
+        ...(scheduleIso ? { publish_at: scheduleIso } : {}),
       });
       draftId = draft.id;
       // Cancel clicked while the draft POST was still in flight: stop before
@@ -586,6 +612,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
       setLanguage("");
       setLicense("");
       setTags([]);
+      setPublishAt("");
       setVideoUrl("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
@@ -715,6 +742,23 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           </select>
           <FieldErrorText id="publish-privacy-error" message={fieldErrors.privacy} />
         </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Schedule publish (optional)</span>
+          <input
+            type="datetime-local"
+            value={publishAt}
+            onChange={(e) => setPublishAt(e.target.value)}
+            aria-label="Schedule publish"
+            aria-invalid={fieldErrors.publish_at ? true : undefined}
+            aria-describedby={fieldErrors.publish_at ? "publish-schedule-error" : undefined}
+            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          <FieldErrorText id="publish-schedule-error" message={fieldErrors.publish_at} />
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            Leave empty to publish as soon as processing finishes. A scheduled video stays
+            hidden from public surfaces until this time (must be in the future).
+          </span>
+        </label>
         <fieldset className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Source</span>
           <div className="flex gap-4">
@@ -820,6 +864,19 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             <Link href={`/videos/${result.id}`} className="font-medium underline">
               View “{result.title}”
             </Link>
+          </p>
+        ) : result.state === "scheduled" ? (
+          // Honest scheduled outcome: processed and parked until publish_at.
+          <p role="status" className="text-sm text-sky-700 dark:text-sky-300">
+            “{result.title}” is scheduled — it will publish automatically
+            {result.publish_at ? ` on ${formatDateTime(result.publish_at)}` : " at the scheduled time"}.
+          </p>
+        ) : result.state === "quarantined" ? (
+          // Quarantine is its own outcome, not a failure: the upload succeeded
+          // but this instance holds new uploads for moderator review.
+          <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
+            “{result.title}” was received and is held for review — this instance reviews new
+            uploads before they go public. It will publish once a moderator approves it.
           </p>
         ) : (
           // An honest in-progress message: the file was received but the backend
@@ -964,6 +1021,9 @@ function VideoRow({
   const [license, setLicense] = useState(video.license ?? "");
   const [tags, setTags] = useState<string[]>(video.tags ?? []);
   const [privacy, setPrivacy] = useState<VideoPrivacy>(video.privacy);
+  // The schedule as a datetime-local value; the owner list rows carry
+  // publish_at once set (per the contract), the detail fetch refreshes it.
+  const [publishAt, setPublishAt] = useState(toLocalInputValue(video.publish_at));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The full detail fetched when Edit opens — the only view carrying hls_url/
@@ -971,10 +1031,22 @@ function VideoRow({
   // note can be honest. null until (unless) the detail fetch succeeds.
   const [detail, setDetail] = useState<Video | null>(null);
 
+  // The schedule field only exists while the video is not yet published (the
+  // backend rejects publish_at on a published video); the detail state wins
+  // once fetched.
+  const editable = detail ?? video;
+  const canSchedule = editable.state !== "published";
+
   async function save() {
     if (busy || title.trim() === "") return;
     setBusy(true);
     setError(null);
+    // Send publish_at only when the (non-published) schedule actually changed —
+    // re-sending an untouched past schedule would 422 ("must be in the future"),
+    // and the contract has no way to clear a schedule (so empty is omitted).
+    const scheduleIso = scheduleToIso(publishAt);
+    const scheduleChanged =
+      canSchedule && scheduleIso !== undefined && publishAt !== toLocalInputValue(editable.publish_at);
     try {
       const updated = await api.updateVideo(video.id, {
         title: title.trim(),
@@ -985,6 +1057,7 @@ function VideoRow({
         // the detail fetch supplied the real current set to edit from — never
         // from list-row data, which omits tags entirely.
         ...(detail ? { tags } : {}),
+        ...(scheduleChanged ? { publish_at: scheduleIso } : {}),
       });
       onUpdated(updated);
       setMode("view");
@@ -1004,6 +1077,7 @@ function VideoRow({
     setLicense(video.license ?? "");
     setTags(detail?.tags ?? video.tags ?? []);
     setPrivacy(video.privacy);
+    setPublishAt(toLocalInputValue((detail ?? video).publish_at));
     setError(null);
   }
 
@@ -1022,6 +1096,7 @@ function VideoRow({
       setLicense(full.license ?? "");
       setTags(full.tags ?? []);
       setPrivacy(full.privacy);
+      setPublishAt(toLocalInputValue(full.publish_at));
     } catch {
       // Keep the list-derived defaults already in state (and claim nothing
       // about streaming readiness without the detail).
@@ -1101,6 +1176,24 @@ function VideoRow({
             <option value="private">Private</option>
           </select>
         </label>
+        {canSchedule ? (
+          // Scheduling is only editable while the video has not published yet —
+          // the backend rejects publish_at on a published video, and a schedule
+          // cannot be cleared through the contract (only moved).
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Scheduled publish</span>
+            <input
+              type="datetime-local"
+              value={publishAt}
+              onChange={(e) => setPublishAt(e.target.value)}
+              aria-label="Edit scheduled publish"
+              className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              Set or move the automatic publish time (must be in the future).
+            </span>
+          </label>
+        ) : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         {detail ? <StreamingStatus video={detail} /> : null}
         <ThumbnailManager videoId={video.id} hasThumbnail={video.has_thumbnail ?? false} />
@@ -1142,7 +1235,18 @@ function VideoRow({
           ) : (
             <PrivacyBadge privacy={video.privacy} />
           )}
+          {video.state === "scheduled" && video.publish_at ? (
+            <span className="text-zinc-500 dark:text-zinc-400">
+              publishes {formatDateTime(video.publish_at)}
+            </span>
+          ) : null}
         </div>
+        {video.state === "quarantined" ? (
+          <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+            Held for review — this instance reviews new uploads before they go public. Only you
+            and the moderators can see it until it is approved.
+          </p>
+        ) : null}
       </div>
       {mode === "confirm-delete" ? (
         <div className="flex shrink-0 items-center gap-2 text-sm">
@@ -1216,6 +1320,8 @@ function StateBadge({ state }: { state: VideoState }) {
   const styles: Record<VideoState, string> = {
     draft: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
     processing: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+    scheduled: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200",
+    quarantined: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
     published: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200",
     failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
   };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCount, formatDuration, formatUptime, relativeTime } from "./format";
+import { formatCount, formatDateTime, formatDuration, formatUptime, relativeTime } from "./format";
 
 describe("formatCount", () => {
   it("formats small, thousands, millions, billions", () => {
@@ -70,5 +70,18 @@ describe("formatDuration", () => {
   it("guards against negative / NaN", () => {
     expect(formatDuration(-1)).toBe("0:00");
     expect(formatDuration(Number.NaN)).toBe("0:00");
+  });
+});
+
+describe("formatDateTime", () => {
+  it("renders a locale-formatted absolute date + time", () => {
+    const out = formatDateTime("2026-07-10T14:30:00Z");
+    // Locale/zone dependent, so assert the stable parts: the year and a time.
+    expect(out).toContain("2026");
+    expect(out).toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it("returns empty for an unparseable timestamp", () => {
+    expect(formatDateTime("not-a-date")).toBe("");
   });
 });

@@ -38,9 +38,13 @@ import type {
   VideoConfigResponse,
   VideoFeedResponse,
   VideoListResponse,
+  ChannelStatsResponse,
   CreatePlaylistRequest,
   NotificationListResponse,
+  NotificationPrefsResponse,
   Playlist,
+  QuarantinedVideoListResponse,
+  RejectQuarantinedVideoRequest,
   PlaylistDetail,
   PlaylistListResponse,
   ProfileImage,
@@ -55,6 +59,7 @@ import type {
   UploadVideoResult,
   VideoFile,
   VideoRating,
+  VideoStatsResponse,
   VideoSearchResponse,
   WatchedWord,
   WatchedWordListResponse,
@@ -128,6 +133,23 @@ export const api = {
     apiRequest<VideoListResponse>(
       `/api/v1/channels/${encodeURIComponent(handle)}/videos`,
       { token, signal },
+    ),
+
+  /**
+   * GET /api/v1/videos/{id}/stats — creator statistics for a video (auth, owner
+   * only; a non-owner/unknown id is 404 so existence is not leaked).
+   */
+  getVideoStats: (id: string, signal?: AbortSignal) =>
+    apiRequest<VideoStatsResponse>(`/api/v1/videos/${encodeURIComponent(id)}/stats`, { signal }),
+
+  /**
+   * GET /api/v1/channels/{handle}/stats — aggregated creator statistics for a
+   * channel (auth, owner only; a non-owner/unknown handle is 404).
+   */
+  getChannelStats: (handle: string, signal?: AbortSignal) =>
+    apiRequest<ChannelStatsResponse>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/stats`,
+      { signal },
     ),
 
   /** POST /api/v1/channels/{handle}/follow — follow a channel (auth; idempotent 204). */
@@ -533,6 +555,24 @@ export const api = {
   markAllNotificationsRead: () =>
     apiRequest<void>("/api/v1/me/notifications/read-all", { method: "POST" }),
 
+  /**
+   * GET /api/v1/me/notification-prefs — the caller's per-type notification
+   * switchboard (auth). Types never configured default to enabled.
+   */
+  getNotificationPrefs: (signal?: AbortSignal) =>
+    apiRequest<NotificationPrefsResponse>("/api/v1/me/notification-prefs", { signal }),
+
+  /**
+   * PATCH /api/v1/me/notification-prefs — partial preference update (auth):
+   * only the types present are changed; an unknown type is 422 and nothing is
+   * written. Returns the full updated map.
+   */
+  updateNotificationPrefs: (prefs: Record<string, boolean>) =>
+    apiRequest<NotificationPrefsResponse>("/api/v1/me/notification-prefs", {
+      method: "PATCH",
+      body: { prefs },
+    }),
+
   /** GET /api/v1/me/playlists — the caller's playlists, newest first (auth). */
   getMyPlaylists: (signal?: AbortSignal) =>
     apiRequest<PlaylistListResponse>("/api/v1/me/playlists", { signal }),
@@ -601,6 +641,14 @@ export const api = {
       method: "POST",
       body,
     }),
+
+  /**
+   * DELETE /api/v1/admin/reports/{id} — permanently remove a report row (admin
+   * only — moderators resolve but cannot purge; idempotent 204). Notifications
+   * referencing the report are removed with it. Audited.
+   */
+  deleteReport: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/reports/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   /**
    * GET /api/v1/admin/users — accounts newest first (admin only). Optional `q`
@@ -750,6 +798,41 @@ export const api = {
   unblockVideo: (id: string) =>
     apiRequest<void>(`/api/v1/admin/videos/${encodeURIComponent(id)}/block`, {
       method: "DELETE",
+    }),
+
+  /**
+   * GET /api/v1/admin/videos/quarantined — uploads held for moderator review
+   * (QUARANTINE_NEW_UPLOADS), newest first (moderator/admin).
+   */
+  getQuarantinedVideos: (
+    params: { limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<QuarantinedVideoListResponse>("/api/v1/admin/videos/quarantined", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/videos/{id}/approve — release a quarantined upload by
+   * publishing it through the real publish transition (moderator/admin, 204).
+   * Only a currently-quarantined video can be approved (409 otherwise).
+   */
+  approveQuarantinedVideo: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/videos/${encodeURIComponent(id)}/approve`, {
+      method: "POST",
+    }),
+
+  /**
+   * POST /api/v1/admin/videos/{id}/reject — fail a quarantined upload
+   * (moderator/admin, 204): it never publishes, the owner is notified (the
+   * moderator's identity is not exposed), and the optional reason is recorded
+   * in the audit trail. Only a currently-quarantined video can be rejected.
+   */
+  rejectQuarantinedVideo: (id: string, body: RejectQuarantinedVideoRequest = {}) =>
+    apiRequest<void>(`/api/v1/admin/videos/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body,
     }),
 };
 

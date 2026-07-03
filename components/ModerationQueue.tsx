@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
+import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -73,6 +74,12 @@ function Queue() {
     );
   }, []);
 
+  // After an admin hard-delete the row is gone for good — drop it locally; a
+  // later refetch confirms the purge persisted.
+  const onDeleted = useCallback((id: string) => {
+    setReports((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
   const visible = openOnly ? reports.filter((r) => r.status === "open") : reports;
 
   return (
@@ -105,7 +112,7 @@ function Queue() {
         <ul className="flex flex-col gap-3">
           {visible.map((report) => (
             <li key={report.id}>
-              <ReportRow report={report} onResolved={onResolved} />
+              <ReportRow report={report} onResolved={onResolved} onDeleted={onDeleted} />
             </li>
           ))}
         </ul>
@@ -150,15 +157,20 @@ type RowState = "idle" | "submitting";
 function ReportRow({
   report,
   onResolved,
+  onDeleted,
 }: {
   report: Report;
   onResolved: (id: string, status: ReportStatus) => void;
+  onDeleted: (id: string) => void;
 }) {
+  const { user } = useSession();
   const [note, setNote] = useState("");
   const [rowState, setRowState] = useState<RowState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [blockState, setBlockState] = useState<"idle" | "blocking" | "blocked">("idle");
   const [blockError, setBlockError] = useState<string | null>(null);
+  const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "deleting">("idle");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function resolve(status: "accepted" | "rejected") {
     if (rowState === "submitting") return;
@@ -170,6 +182,21 @@ function ReportRow({
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not resolve this report.");
       setRowState("idle");
+    }
+  }
+
+  // Hard-delete a resolved report (admin only — moderators resolve but cannot
+  // purge). Two-step confirm; the row is removed on the 204.
+  async function hardDelete() {
+    if (deleteState === "deleting") return;
+    setDeleteState("deleting");
+    setDeleteError(null);
+    try {
+      await api.deleteReport(report.id);
+      onDeleted(report.id);
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : "Could not delete this report.");
+      setDeleteState("idle");
     }
   }
 
@@ -216,6 +243,48 @@ function ReportRow({
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
           <span className="font-medium">Note:</span> {report.moderator_note}
         </p>
+      ) : null}
+
+      {/* Hard-delete is an admin-only purge of a RESOLVED report (moderators
+          resolve but cannot delete; open reports must be resolved first). */}
+      {report.status !== "open" && user?.role === "admin" ? (
+        <div className="mt-3 flex flex-col gap-1">
+          {deleteState === "idle" ? (
+            <button
+              type="button"
+              aria-label={`Delete this ${report.target_type} report`}
+              onClick={() => setDeleteState("confirm")}
+              className="self-start rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+            >
+              Delete
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-zinc-600 dark:text-zinc-300">
+                Permanently delete this report? This cannot be undone.
+              </span>
+              <button
+                type="button"
+                disabled={deleteState === "deleting"}
+                onClick={() => void hardDelete()}
+                className="font-medium text-red-600 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 dark:text-red-400"
+              >
+                {deleteState === "deleting" ? "Deleting…" : "Confirm"}
+              </button>
+              <button
+                type="button"
+                disabled={deleteState === "deleting"}
+                onClick={() => setDeleteState("idle")}
+                className="font-medium text-zinc-500 hover:text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-200"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {deleteError ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>
+          ) : null}
+        </div>
       ) : null}
 
       {report.status === "open" ? (

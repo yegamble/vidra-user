@@ -7,6 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 
 const TABS = [
   { href: "/moderation", label: "Reports" },
+  { href: "/moderation/quarantine", label: "Quarantine" },
   { href: "/moderation/blocked", label: "Blocked videos" },
   { href: "/moderation/videos", label: "All videos" },
   { href: "/moderation/comments", label: "Comments" },
@@ -24,7 +25,7 @@ export function ModerationTabs() {
   if (user?.role !== "admin" && user?.role !== "moderator") return null;
 
   return (
-    <nav className="mb-6 flex gap-2" aria-label="Moderation sections">
+    <nav className="mb-6 flex flex-wrap gap-2" aria-label="Moderation sections">
       {TABS.map((tab) => {
         const active = pathname === tab.href;
         return (

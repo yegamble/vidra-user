@@ -1,0 +1,206 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import { useSession } from "@/components/auth/AuthProvider";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Spinner } from "@/components/ui/Spinner";
+import { api } from "@/lib/api";
+
+type Status = "loading" | "error" | "ready";
+
+// Human copy for the known notification types (the backend's switchboard keys).
+// A type the backend returns that is not listed here still renders (by its raw
+// key) so a new backend type is never silently untogglable.
+const TYPE_LABELS: Record<string, { label: string; help: string }> = {
+  comment: {
+    label: "Comments",
+    help: "Someone comments on one of your videos.",
+  },
+  follow: {
+    label: "New followers",
+    help: "Someone starts following one of your channels.",
+  },
+  message: {
+    label: "Direct messages",
+    help: "Someone sends you a direct message.",
+  },
+  report_resolved: {
+    label: "Report outcomes",
+    help: "A moderator resolves an abuse report you filed.",
+  },
+  video_rejected: {
+    label: "Rejected uploads",
+    help: "A moderator rejects one of your held uploads.",
+  },
+};
+
+// A stable display order for the known types; unknown-but-returned types sort
+// after them, alphabetically.
+const TYPE_ORDER = ["comment", "follow", "message", "report_resolved", "video_rejected"];
+
+function orderedTypes(prefs: Record<string, boolean>): string[] {
+  return Object.keys(prefs).sort((a, b) => {
+    const ia = TYPE_ORDER.indexOf(a);
+    const ib = TYPE_ORDER.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+// NotificationPrefsView is the per-type notification switchboard
+// (/settings/notifications): every known type mapped to whether it is
+// delivered. Toggles PATCH immediately (optimistic, one type per request) and
+// re-sync from the server's full response; a failed PATCH reverts the switch
+// and says so. Session-gated like the other settings surfaces.
+export function NotificationPrefsView() {
+  const { status } = useSession();
+
+  if (status === "restoring") {
+    return (
+      <div className="flex justify-center py-16">
+        <Spinner label="Loading your account" />
+      </div>
+    );
+  }
+  if (status !== "authed") {
+    return (
+      <EmptyState
+        title="Sign in to manage notifications"
+        message={
+          <>
+            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+              Sign in
+            </Link>{" "}
+            to choose which notifications you receive.
+          </>
+        }
+      />
+    );
+  }
+
+  return <Prefs />;
+}
+
+function Prefs() {
+  const [status, setStatus] = useState<Status>("loading");
+  const [prefs, setPrefs] = useState<Record<string, boolean>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .getNotificationPrefs(controller.signal)
+      .then((res) => {
+        setPrefs(res.prefs);
+        setStatus("ready");
+      })
+      .catch((err: unknown) => {
+        void err;
+        if (controller.signal.aborted) return;
+        setStatus("error");
+      });
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  async function toggle(type: string) {
+    const next = !prefs[type];
+    setError(null);
+    setPrefs((p) => ({ ...p, [type]: next })); // optimistic
+    try {
+      const res = await api.updateNotificationPrefs({ [type]: next });
+      setPrefs(res.prefs); // the server's full map is the source of truth
+    } catch {
+      setPrefs((p) => ({ ...p, [type]: !next })); // revert
+      setError("Could not save that preference. Please try again.");
+    }
+  }
+
+  if (status === "loading") {
+    return (
+      <div className="flex justify-center py-16">
+        <Spinner label="Loading notification preferences" />
+      </div>
+    );
+  }
+  if (status === "error") {
+    return (
+      <ErrorState
+        message="Could not load your notification preferences."
+        onRetry={() => {
+          setStatus("loading");
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    );
+  }
+
+  const types = orderedTypes(prefs);
+  if (types.length === 0) {
+    return (
+      <EmptyState
+        title="No notification types"
+        message="This instance exposes no configurable notification types."
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {error ? (
+        <p
+          role="alert"
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+        >
+          {error}
+        </p>
+      ) : null}
+      <ul className="flex flex-col divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+        {types.map((type) => {
+          const meta = TYPE_LABELS[type];
+          const enabled = prefs[type];
+          return (
+            <li key={type} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                  {meta?.label ?? type}
+                </p>
+                {meta ? (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{meta.help}</p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={enabled}
+                aria-label={`${meta?.label ?? type} notifications`}
+                onClick={() => void toggle(type)}
+                className={
+                  "relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 " +
+                  (enabled ? "bg-emerald-600" : "bg-zinc-300 dark:bg-zinc-700")
+                }
+              >
+                <span
+                  aria-hidden
+                  className={
+                    "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform " +
+                    (enabled ? "translate-x-5" : "")
+                  }
+                />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        Turning a type off stops new notifications of that kind; ones you already have stay in
+        your list.
+      </p>
+    </div>
+  );
+}

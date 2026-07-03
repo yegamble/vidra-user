@@ -13,13 +13,15 @@ import { relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
-// WatchedWordMatchesView is the moderator/admin review queue for comments that
-// matched a watched term when posted (read-only; detection happens on the
-// backend at comment-create time). Role-gated by RoleGate (an under-privileged/
-// anonymous viewer sees the shared permission prompt and nothing fetches).
+// WatchedWordMatchesView is the moderator/admin review queue for content that
+// matched a watched term when created — comments (type "comment") and videos
+// (type "video"), each badged with what was flagged. Read-only; detection
+// happens on the backend at create time. Role-gated by RoleGate (an
+// under-privileged/anonymous viewer sees the shared permission prompt and
+// nothing fetches).
 export function WatchedWordMatchesView() {
   return (
-    <RoleGate minRole="moderator" action="review flagged comments">
+    <RoleGate minRole="moderator" action="review flagged content">
       <MatchesList />
     </RoleGate>
   );
@@ -64,8 +66,8 @@ function MatchesList() {
   if (matches.length === 0) {
     return (
       <EmptyState
-        title="No flagged comments"
-        message="No comments have matched a watched term yet."
+        title="No flagged content"
+        message="No comments or videos have matched a watched term yet."
       />
     );
   }
@@ -78,6 +80,10 @@ function MatchesList() {
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-400">
               {m.word}
             </span>
+            {/* What was flagged: the comment's body, or the video itself. */}
+            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 capitalize dark:bg-zinc-800 dark:text-zinc-300">
+              {m.type}
+            </span>
             <span className="text-sm text-zinc-600 dark:text-zinc-400">
               by {m.author_username}
             </span>
@@ -85,13 +91,15 @@ function MatchesList() {
               href={`/videos/${m.video_id}`}
               className="text-sm text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
             >
-              on video
+              {m.type === "video" ? m.video_title || "on video" : "on video"}
             </Link>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">{relativeTime(m.created_at)}</span>
           </div>
-          <blockquote className="border-l-2 border-zinc-300 pl-3 text-sm whitespace-pre-wrap text-zinc-700 italic dark:border-zinc-700 dark:text-zinc-300">
-            {m.comment_body}
-          </blockquote>
+          {m.type === "comment" ? (
+            <blockquote className="border-l-2 border-zinc-300 pl-3 text-sm whitespace-pre-wrap text-zinc-700 italic dark:border-zinc-700 dark:text-zinc-300">
+              {m.comment_body}
+            </blockquote>
+          ) : null}
         </li>
       ))}
     </ul>

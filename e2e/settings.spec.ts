@@ -82,6 +82,24 @@ test("maps a 422 field error inline", async ({ page }) => {
   await expect(page.getByText("must be at most 50 characters")).toBeVisible();
 });
 
+test("the discovery opt-out toggle rides along with the profile save", async ({ page }) => {
+  await signIn(page);
+  let patchBody: unknown;
+  await page.route(ME, (route) => {
+    patchBody = route.request().postDataJSON();
+    return route.fulfill({ json: { ...user, unlisted: true } });
+  });
+
+  await page.getByRole("link", { name: "ada" }).click();
+  const toggle = page.getByLabel("Hide my account from discovery");
+  await expect(toggle).not.toBeChecked(); // default false
+  await toggle.check();
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(page.getByText("Profile saved.")).toBeVisible();
+  expect(patchBody).toMatchObject({ unlisted: true });
+});
+
 test("prompts to sign in when the session is gone", async ({ page }) => {
   // A hard load lands signed out (the session lives only in memory).
   await page.goto("/settings");

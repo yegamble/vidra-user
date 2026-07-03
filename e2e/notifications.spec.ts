@@ -151,6 +151,32 @@ test("the notifications list shows an empty state", async ({ page }) => {
   await expect(page.getByText("No notifications yet")).toBeVisible();
 });
 
+test("a report_resolved notification states the outcome", async ({ page }) => {
+  await signIn(page, 1);
+  await page.route(LIST, (route) =>
+    route.fulfill({
+      json: {
+        notifications: [
+          {
+            id: "n1",
+            type: "report_resolved",
+            read: false,
+            created_at: new Date().toISOString(),
+            report_id: "r1",
+            report_status: "accepted",
+            report_target_type: "video",
+          },
+        ],
+        unread_count: 1,
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.getByRole("link", { name: /Notifications/ }).click();
+  await expect(page.getByText("A moderator accepted your video report")).toBeVisible();
+});
+
 test("a message notification links to the conversation thread", async ({ page }) => {
   await signIn(page, 1);
   await page.route(LIST, (route) =>

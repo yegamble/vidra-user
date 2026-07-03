@@ -497,6 +497,35 @@ export async function conversationsFor(
   ).conversations;
 }
 
+/**
+ * ownerVideoDetail reads a video's detail AS ITS OWNER (a non-published video —
+ * draft/scheduled/quarantined/failed — is 404 to the public), returning the
+ * status plus the lifecycle fields a scheduling/quarantine test asserts on.
+ */
+export async function ownerVideoDetail(
+  request: APIRequestContext,
+  videoId: string,
+  token: string,
+): Promise<{ status: number; state?: string; publish_at?: string }> {
+  const res = await request.get(`${API_URL}/api/v1/videos/${videoId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok()) return { status: res.status() };
+  const body = (await res.json()) as { state: string; publish_at?: string };
+  return { status: res.status(), state: body.state, publish_at: body.publish_at };
+}
+
+/** notificationPrefs reads the caller's persisted notification switchboard via the API. */
+export async function notificationPrefs(
+  request: APIRequestContext,
+  token: string,
+): Promise<Record<string, boolean>> {
+  const res = await request.get(`${API_URL}/api/v1/me/notification-prefs`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return ((await res.json()) as { prefs: Record<string, boolean> }).prefs;
+}
+
 /** videoRating reads a video's persisted like/dislike counts via the public API. */
 export async function videoRating(
   request: APIRequestContext,

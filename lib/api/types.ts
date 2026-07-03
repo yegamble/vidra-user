@@ -31,7 +31,17 @@ export interface InstanceResponse {
 }
 
 export type VideoPrivacy = "public" | "unlisted" | "private";
-export type VideoState = "draft" | "processing" | "published" | "failed";
+// "scheduled": processed but publish_at lies in the future (public surfaces hide
+// it). "quarantined": held for moderator review (QUARANTINE_NEW_UPLOADS) — only
+// the owner and moderators see it until it is approved (published) or rejected
+// (failed).
+export type VideoState =
+  | "draft"
+  | "processing"
+  | "scheduled"
+  | "quarantined"
+  | "published"
+  | "failed";
 
 export interface Video {
   id: string;
@@ -41,6 +51,12 @@ export interface Video {
   privacy: VideoPrivacy;
   state: VideoState;
   created_at: string;
+  /**
+   * The scheduled publish time (ISO date-time). Present on the detail,
+   * create/update, and owner (studio) channel-list views once a schedule was
+   * set; omitted otherwise. The server publishes automatically at this time.
+   */
+  publish_at?: string;
   // Discovery-card / detail extras — present on the endpoints that populate them,
   // omitted otherwise.
   duration_seconds?: number;
@@ -223,6 +239,12 @@ export interface User {
   email_verified: boolean;
   display_name: string;
   bio: string;
+  /**
+   * Account-level discovery opt-out. When true, the account's channels and
+   * videos are excluded from public discovery surfaces (video feed, search)
+   * while direct channel/video URLs keep serving. Default false.
+   */
+  unlisted?: boolean;
   created_at: string;
   /** Whether an avatar is set (served at GET /users/{id}/avatar). Present on GET/PATCH /auth/me. */
   has_avatar?: boolean;
@@ -301,6 +323,8 @@ export interface EmailVerificationConfirmRequest {
 export interface UpdateProfileRequest {
   display_name?: string;
   bio?: string;
+  /** Toggle the account-level discovery opt-out (see User.unlisted). */
+  unlisted?: boolean;
 }
 
 /** Returned by register / login / refresh. */
@@ -360,6 +384,12 @@ export interface CreateVideoRequest {
    * distinct tags of at most 50 characters each (422 otherwise).
    */
   tags?: string[];
+  /**
+   * Schedule the publish (ISO date-time): after processing, the video parks in
+   * the "scheduled" state until this time, then publishes automatically. Must
+   * lie in the future (422 otherwise).
+   */
+  publish_at?: string;
 }
 
 /** POST /api/v1/videos|comments/{id}/report and /api/v1/users/{id}/report body. */
@@ -505,15 +535,25 @@ export interface CreateWatchedWordRequest {
 }
 
 /**
- * A comment flagged by the watched-words list (matched a term when posted).
- * Mirrors the backend WatchedWordMatch schema.
+ * Content flagged by the watched-words list, for moderator review: a comment
+ * (type "comment"; comment_id/comment_body present, video_id is the video it is
+ * on) or a video (type "video"; comment fields absent, video_id/video_title are
+ * the flagged video). Mirrors the backend WatchedWordMatch schema.
  */
 export interface WatchedWordMatch {
   id: string;
   word: string;
-  comment_id: string;
-  comment_body: string;
+  /** What was flagged. */
+  type: "comment" | "video";
+  /** The flagged comment (comment matches only). */
+  comment_id?: string;
+  /** The flagged comment's body (comment matches only). */
+  comment_body?: string;
+  /** The flagged video, or the video the flagged comment is on. */
   video_id: string;
+  /** The video's title (a link target for the review queue). */
+  video_title: string;
+  /** The comment's author or the video's owner respectively. */
   author_username: string;
   created_at: string;
 }
@@ -537,6 +577,12 @@ export interface UpdateVideoRequest {
    * field to leave tags unchanged). Same limits as create.
    */
   tags?: string[];
+  /**
+   * Set (or move) the scheduled publish time (ISO date-time). Only accepted
+   * while the video is not yet published, and must lie in the future (422
+   * otherwise).
+   */
+  publish_at?: string;
 }
 
 /** POST /api/v1/videos/{id}/file response (the published video + stored file). */
@@ -739,7 +785,12 @@ export interface WatchHistoryResponse {
   offset: number;
 }
 
-export type NotificationType = "follow" | "comment" | "message";
+export type NotificationType =
+  | "follow"
+  | "comment"
+  | "message"
+  | "report_resolved"
+  | "video_rejected";
 
 /** Who triggered a notification. */
 export interface NotificationActor {
@@ -750,7 +801,9 @@ export interface NotificationActor {
 /**
  * A user notification. Context fields are type-dependent: follow carries the
  * channel, comment carries the video (+ comment id), message carries the
- * conversation. Mirrors the backend Notification schema.
+ * conversation, report_resolved carries the report outcome, video_rejected
+ * carries the rejected upload (the moderator's identity is never included).
+ * Mirrors the backend Notification schema.
  */
 export interface Notification {
   id: string;
@@ -761,12 +814,17 @@ export interface Notification {
   // Follow context.
   channel_handle?: string;
   channel_display_name?: string;
-  // Comment context.
+  // Comment context (video_id/video_title also carry the rejected upload for
+  // video_rejected notifications).
   video_id?: string;
   video_title?: string;
   comment_id?: string;
   // Message context.
   conversation_id?: string;
+  // Report-resolved context (actor is absent for this type).
+  report_id?: string;
+  report_status?: ReportStatus;
+  report_target_type?: ReportTargetType;
 }
 
 export interface NotificationListResponse {
@@ -815,4 +873,88 @@ export interface UpdatePlaylistRequest {
   title?: string;
   description?: string;
   visibility?: PlaylistVisibility;
+}
+
+/** One day of a stats series (UTC calendar day). */
+export interface DailyViews {
+  /** ISO date, e.g. "2026-07-03". */
+  day: string;
+  views: number;
+}
+
+/**
+ * GET /api/v1/videos/{id}/stats — creator statistics for one video (owner
+ * only). daily_views is a dense 30-day series, oldest first, zero-filled.
+ */
+export interface VideoStatsResponse {
+  views: number;
+  likes: number;
+  dislikes: number;
+  comments: number;
+  daily_views: DailyViews[];
+}
+
+/**
+ * GET /api/v1/channels/{handle}/stats — aggregated creator statistics across a
+ * channel's videos (owner only), plus follower/video counts and the dense
+ * 30-day daily-views series (oldest first, zero-filled).
+ */
+export interface ChannelStatsResponse {
+  views: number;
+  likes: number;
+  dislikes: number;
+  comments: number;
+  followers: number;
+  /** Total videos on the channel (any privacy/state). */
+  videos: number;
+  daily_views: DailyViews[];
+}
+
+/**
+ * GET/PATCH /api/v1/me/notification-prefs response: every known notification
+ * type mapped to whether it is delivered to this user. Types with no stored
+ * preference default to true.
+ */
+export interface NotificationPrefsResponse {
+  prefs: Record<string, boolean>;
+}
+
+/**
+ * PATCH /api/v1/me/notification-prefs body: a partial map of notification
+ * type -> enabled. Only the types present are changed; an unknown type rejects
+ * the whole update (422). Known types: comment, follow, message,
+ * report_resolved, video_rejected.
+ */
+export interface UpdateNotificationPrefsRequest {
+  prefs: Record<string, boolean>;
+}
+
+/**
+ * An upload held for moderator review (QUARANTINE_NEW_UPLOADS), as seen in the
+ * moderation quarantine queue. Mirrors the backend QuarantinedVideo schema.
+ */
+export interface QuarantinedVideo {
+  id: string;
+  title: string;
+  privacy: VideoPrivacy;
+  state: "quarantined";
+  channel_handle: string;
+  channel_display_name: string;
+  /** The owning account's username. */
+  owner_username: string;
+  created_at: string;
+}
+
+export interface QuarantinedVideoListResponse {
+  videos: QuarantinedVideo[];
+  limit: number;
+  offset: number;
+}
+
+/**
+ * POST /api/v1/admin/videos/{id}/reject body (optional). The reason is
+ * recorded in the audit trail — it is not shown to the owner.
+ */
+export interface RejectQuarantinedVideoRequest {
+  reason?: string;
 }

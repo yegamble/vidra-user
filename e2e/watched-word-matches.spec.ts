@@ -34,9 +34,23 @@ function match(id: string, word: string, body: string, author = "bob") {
   return {
     id,
     word,
+    type: "comment",
     comment_id: `c-${id}`,
     comment_body: body,
     video_id: "v1",
+    video_title: "Some video",
+    author_username: author,
+    created_at: new Date().toISOString(),
+  };
+}
+
+function videoMatch(id: string, word: string, title: string, author = "bob") {
+  return {
+    id,
+    word,
+    type: "video",
+    video_id: "v2",
+    video_title: title,
     author_username: author,
     created_at: new Date().toISOString(),
   };
@@ -67,17 +81,34 @@ test("anonymous viewers are gated out of flagged comments", async ({ page }) => 
   expect(fetched).toBe(false);
 });
 
-test("a moderator reviews flagged comments", async ({ page }) => {
+test("a moderator reviews flagged comments and videos with type badges", async ({ page }) => {
   await signIn(page, "moderator");
   await page.route(MATCHES, (route) =>
-    route.fulfill({ json: { matches: [match("m1", "spam", "buy cheap SPAM now")], limit: 100, offset: 0 } }),
+    route.fulfill({
+      json: {
+        matches: [
+          match("m1", "spam", "buy cheap SPAM now"),
+          videoMatch("m2", "scam", "Totally legit scam tutorial", "carol"),
+        ],
+        limit: 100,
+        offset: 0,
+      },
+    }),
   );
 
   await page.getByRole("link", { name: "Moderation" }).click();
   await page.getByRole("link", { name: "Word matches" }).click();
 
+  // The comment match: term badge + type badge + quoted body.
   await expect(page.getByText("buy cheap SPAM now")).toBeVisible();
   await expect(page.getByText("by bob")).toBeVisible();
-  // The matched term badge (exact match avoids also matching the body text).
   await expect(page.getByText("spam", { exact: true })).toBeVisible();
+  await expect(page.getByText("comment", { exact: true })).toBeVisible();
+
+  // The video match: type badge + the flagged video's title as the link.
+  await expect(page.getByText("video", { exact: true })).toBeVisible();
+  await expect(page.getByText("by carol")).toBeVisible();
+  const videoLink = page.getByRole("link", { name: "Totally legit scam tutorial" });
+  await expect(videoLink).toBeVisible();
+  await expect(videoLink).toHaveAttribute("href", "/videos/v2");
 });

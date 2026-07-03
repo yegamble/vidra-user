@@ -28,6 +28,24 @@ function describe(n: Notification): { text: string; href: string } {
       href: n.conversation_id ? `/messages/${n.conversation_id}` : "#",
     };
   }
+  if (n.type === "video_rejected") {
+    // A moderator rejected the quarantined upload. The moderator's identity and
+    // the rejection reason are never exposed by the contract — the honest copy
+    // says what happened and points at the studio, where the failed row lives.
+    const upload = n.video_title ? `your upload “${n.video_title}”` : "your upload";
+    return {
+      text: `A moderator rejected ${upload} — it was not published`,
+      href: "/studio",
+    };
+  }
+  if (n.type === "report_resolved") {
+    const outcome =
+      n.report_status === "accepted" || n.report_status === "rejected"
+        ? n.report_status
+        : "resolved";
+    const target = n.report_target_type ? `${n.report_target_type} report` : "report";
+    return { text: `A moderator ${outcome} your ${target}`, href: "#" };
+  }
   // follow
   const channel = n.channel_display_name || n.channel_handle || "your channel";
   return {

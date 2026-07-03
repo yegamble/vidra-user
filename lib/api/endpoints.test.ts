@@ -689,4 +689,60 @@ describe("api endpoints", () => {
     expect(url).toBe("http://localhost:8080/api/v1/admin/watched-words/w1");
     expect(init.method).toBe("DELETE");
   });
+
+  it("getVideoStats targets the video stats endpoint with the id encoded", async () => {
+    await api.getVideoStats("v 1");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/v%201/stats");
+  });
+
+  it("getChannelStats targets the channel stats endpoint with the handle encoded", async () => {
+    await api.getChannelStats("ada makes");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/channels/ada%20makes/stats");
+  });
+
+  it("getNotificationPrefs targets the notification-prefs endpoint", async () => {
+    await api.getNotificationPrefs();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/notification-prefs");
+  });
+
+  it("updateNotificationPrefs PATCHes the partial prefs map", async () => {
+    await api.updateNotificationPrefs({ follow: false });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/notification-prefs");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ prefs: { follow: false } });
+  });
+
+  it("deleteReport DELETEs the report by id", async () => {
+    await api.deleteReport("r1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/reports/r1");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("getQuarantinedVideos targets the quarantine queue with pagination", async () => {
+    await api.getQuarantinedVideos({ limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/videos/quarantined?limit=100");
+  });
+
+  it("approveQuarantinedVideo POSTs to the approve endpoint", async () => {
+    await api.approveQuarantinedVideo("v1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/videos/v1/approve");
+    expect(init.method).toBe("POST");
+  });
+
+  it("rejectQuarantinedVideo POSTs the optional reason to the reject endpoint", async () => {
+    await api.rejectQuarantinedVideo("v1", { reason: "not allowed here" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/videos/v1/reject");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ reason: "not allowed here" });
+  });
+
+  it("rejectQuarantinedVideo defaults to an empty body", async () => {
+    await api.rejectQuarantinedVideo("v1");
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({});
+  });
 });

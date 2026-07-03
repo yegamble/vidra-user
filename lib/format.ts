@@ -58,6 +58,23 @@ export function formatUptime(seconds: number): string {
   return parts.join(" ");
 }
 
+/**
+ * formatDateTime renders an ISO timestamp as a short absolute date + time in
+ * the viewer's locale/zone (e.g. "Jul 10, 2026, 2:30 PM"). Used where an exact
+ * future moment matters (scheduled publish), unlike relativeTime's "x ago".
+ */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /** formatDuration renders whole seconds as m:ss, or h:mm:ss past an hour. */
 export function formatDuration(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";

@@ -7,6 +7,7 @@ const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const REPORTS = /\/api\/v1\/admin\/reports(\?|$)/;
 const RESOLVE = /\/api\/v1\/admin\/reports\/[^/]+\/resolve$/;
+const REPORT_ONE = /\/api\/v1\/admin\/reports\/[^/]+$/;
 const BLOCK = /\/api\/v1\/admin\/videos\/[^/]+\/block$/;
 
 type Role = "user" | "moderator" | "admin";
@@ -174,4 +175,59 @@ test("the All filter shows resolved reports without resolve actions", async ({ p
   await expect(page.getByText("accepted")).toBeVisible();
   // Only the still-open comment report keeps its resolve actions.
   await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(1);
+});
+
+test("an admin can hard-delete a resolved report from the All view", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.route(REPORTS, (route) => {
+    const openOnly = route.request().url().includes("status=open");
+    const reports = openOnly
+      ? [commentReport("r2", "open")]
+      : [videoReport("r1", "accepted"), commentReport("r2", "open")];
+    return route.fulfill({ json: { reports, limit: 100, offset: 0 } });
+  });
+  let deletedId: string | null = null;
+  await page.route(REPORT_ONE, (route) => {
+    if (route.request().method() === "DELETE") {
+      deletedId = route.request().url().match(/\/reports\/([^/]+)$/)?.[1] ?? null;
+      return route.fulfill({ status: 204, body: "" });
+    }
+    return route.continue();
+  });
+
+  await page.getByRole("link", { name: "Moderation" }).click();
+  await page.getByRole("button", { name: "All" }).click();
+  await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
+
+  // Delete lives only on the resolved card; the open one keeps resolve actions.
+  await expect(page.getByRole("button", { name: "Delete this video report" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete this comment report" })).toHaveCount(0);
+
+  const deleted = page.waitForResponse(
+    (r) => REPORT_ONE.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Delete this video report" }).click();
+  await expect(page.getByText("Permanently delete this report?")).toBeVisible();
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await deleted;
+
+  // The purged row is gone; the open report remains.
+  await expect(page.getByRole("link", { name: "Bad clip" })).toHaveCount(0);
+  await expect(page.getByText("nasty comment")).toBeVisible();
+  expect(deletedId).toBe("r1");
+});
+
+test("moderators do not get the report Delete control", async ({ page }) => {
+  await signIn(page, "moderator");
+  await page.route(REPORTS, (route) =>
+    route.fulfill({
+      json: { reports: [videoReport("r1", "accepted")], limit: 100, offset: 0 },
+    }),
+  );
+
+  await page.getByRole("link", { name: "Moderation" }).click();
+  await page.getByRole("button", { name: "All" }).click();
+  await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
+  // Hard-delete is an admin-only purge — moderators resolve but cannot delete.
+  await expect(page.getByRole("button", { name: /Delete this .* report/ })).toHaveCount(0);
 });

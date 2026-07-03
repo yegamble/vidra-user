@@ -56,6 +56,7 @@ export function SettingsView() {
         key={user.id}
         initialDisplayName={user.display_name}
         initialBio={user.bio}
+        initialUnlisted={user.unlisted ?? false}
         updateProfile={updateProfile}
       />
       <ProfileImagesSection
@@ -63,6 +64,21 @@ export function SettingsView() {
         user={user}
         onChanged={() => void reloadUser().catch(() => {})}
       />
+      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+        <div>
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Notifications</h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Choose which notifications you receive.
+          </p>
+        </div>
+        <Link
+          href="/settings/notifications"
+          aria-label="Manage notification preferences"
+          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        >
+          Manage
+        </Link>
+      </section>
       <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
         <div>
           <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Muted accounts</h2>
@@ -273,14 +289,17 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
 function ProfileForm({
   initialDisplayName,
   initialBio,
+  initialUnlisted,
   updateProfile,
 }: {
   initialDisplayName: string;
   initialBio: string;
+  initialUnlisted: boolean;
   updateProfile: (input: UpdateProfileRequest) => Promise<void>;
 }) {
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [bio, setBio] = useState(initialBio);
+  const [unlisted, setUnlisted] = useState(initialUnlisted);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
@@ -290,7 +309,7 @@ function ProfileForm({
     setFormError(null);
     setState("saving");
     try {
-      await updateProfile({ display_name: displayName, bio });
+      await updateProfile({ display_name: displayName, bio, unlisted });
       setState("saved");
     } catch (err) {
       setState("idle");
@@ -381,6 +400,30 @@ function ProfileForm({
             {fieldErrors.bio}
           </p>
         ) : null}
+      </div>
+
+      <div className="flex items-start gap-2">
+        <input
+          id="settings-unlisted"
+          name="settings-unlisted"
+          type="checkbox"
+          checked={unlisted}
+          onChange={(e) => {
+            setUnlisted(e.target.checked);
+            setState("idle");
+          }}
+          aria-describedby="settings-unlisted-help"
+          className="mt-0.5 h-4 w-4 rounded border-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700"
+        />
+        <div className="flex flex-col">
+          <label htmlFor="settings-unlisted" className="text-sm font-medium">
+            Hide my account from discovery
+          </label>
+          <span id="settings-unlisted-help" className="text-xs text-zinc-500 dark:text-zinc-400">
+            Your channels and videos stay reachable by direct link but no longer appear in the
+            public feed or search on this instance.
+          </span>
+        </div>
       </div>
 
       <button
