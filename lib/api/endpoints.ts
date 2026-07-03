@@ -59,6 +59,8 @@ import type {
   CreateRemoteFollowRequest,
   RemoteFollow,
   RemoteFollowListResponse,
+  ATProtoLinkRequest,
+  ATProtoStatus,
   RemoteVideo,
   FeedScope,
   CreateChannelRequest,
@@ -670,6 +672,36 @@ export const api = {
     apiRequest<void>(`/api/v1/me/remote-follows/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
+
+  // --- ATProto / Bluesky cross-posting (P11 extension) --------------------
+  // OUTBOUND only: link a Bluesky account so newly published PUBLIC videos are
+  // announced there. The write takes a Bluesky APP PASSWORD (never the main
+  // password); the backend seals it and NEVER returns it — ATProtoStatus omits
+  // it entirely. When the extension is disabled on this instance every call is
+  // 503, which the UI surfaces as an honest "not enabled here" state.
+
+  /**
+   * GET /api/v1/me/atproto — the caller's linked Bluesky account status
+   * (handle, DID, PDS, auto-post, last-post). 404 when nothing is linked; 503
+   * when Bluesky cross-posting is disabled on this instance. Never the password.
+   */
+  getATProtoAccount: (signal?: AbortSignal) =>
+    apiRequest<ATProtoStatus>("/api/v1/me/atproto", { signal }),
+
+  /**
+   * PUT /api/v1/me/atproto — link (or re-link) a Bluesky account. `app_password`
+   * MUST be a Bluesky app password (Settings → App Passwords), not the main
+   * password; the backend verifies it against the PDS and seals it at rest.
+   * Bad handle/app-password/PDS → 422; PDS unreachable → 502; disabled → 503.
+   */
+  linkATProtoAccount: (body: ATProtoLinkRequest) =>
+    apiRequest<ATProtoStatus>("/api/v1/me/atproto", { method: "PUT", body }),
+
+  /**
+   * DELETE /api/v1/me/atproto — unlink the Bluesky account (idempotent, 204).
+   * No further auto cross-posts are made. 503 when the extension is disabled.
+   */
+  unlinkATProtoAccount: () => apiRequest<void>("/api/v1/me/atproto", { method: "DELETE" }),
 
   /**
    * GET /api/v1/admin/instances/blocked — the admin instance blocklist, newest

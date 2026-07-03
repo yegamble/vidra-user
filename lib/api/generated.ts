@@ -2530,6 +2530,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/atproto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the caller's linked Bluesky account
+         * @description Returns the caller's linked Bluesky account status — handle, resolved DID, PDS, auto-post setting, and last-post timestamp. The app password is NEVER included. Requires authentication. 404 when nothing is linked; 503 when the extension is disabled.
+         */
+        get: operations["getATProtoAccount"];
+        /**
+         * Link a Bluesky account for cross-posting
+         * @description Links (or re-links) the caller's Bluesky account so Vidra can announce their newly published PUBLIC videos on Bluesky (ATProto extension, P10.2 — outbound cross-posting only). The caller supplies their handle and a Bluesky APP PASSWORD (Settings → App Passwords on Bluesky) — never their main account password. The backend verifies the credentials by creating a session on the PDS (com.atproto.server.createSession, over an https, public, SSRF-guarded client), resolves the DID, and stores the app password sealed at rest; it is never returned, logged, or exported. Re-linking overwrites the previous link. Requires authentication. When the extension is disabled on this instance the endpoint is 503.
+         */
+        put: operations["linkATProtoAccount"];
+        post?: never;
+        /**
+         * Unlink the caller's Bluesky account
+         * @description Removes the caller's linked Bluesky account (no further auto cross-posts are made). Idempotent: unlinking when nothing is linked still succeeds. Requires authentication. 503 when the extension is disabled.
+         */
+        delete: operations["unlinkATProtoAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/blocks": {
         parameters: {
             query?: never;
@@ -3826,6 +3854,56 @@ export interface components {
             published_at?: string;
             /** @description Whether a locally cached thumbnail is available. */
             has_thumbnail: boolean;
+        };
+        /** @description Credentials for linking a Bluesky account. app_password must be a Bluesky APP PASSWORD (Settings → App Passwords), never the account's main password — the backend never returns it. */
+        ATProtoLinkRequest: {
+            /**
+             * @description The Bluesky handle, e.g. "alice.bsky.social" (leading @ tolerated).
+             * @example alice.bsky.social
+             */
+            handle: string;
+            /**
+             * @description A Bluesky app password (write-only; never returned).
+             * @example xxxx-xxxx-xxxx-xxxx
+             */
+            app_password: string;
+            /**
+             * @description Optional PDS base URL; defaults to https://bsky.social. Must be an https, public origin.
+             * @example https://bsky.social
+             */
+            pds_url?: string;
+            /**
+             * @description When true, newly published PUBLIC videos owned by the caller are announced on Bluesky.
+             * @default false
+             */
+            auto_post: boolean;
+        };
+        /** @description The caller's linked Bluesky account. Deliberately excludes the app password (sealed or raw) — it is never exposed. */
+        ATProtoStatus: {
+            /**
+             * @description The linked Bluesky handle (as resolved by the PDS).
+             * @example alice.bsky.social
+             */
+            handle: string;
+            /**
+             * @description The resolved decentralized identifier.
+             * @example did:plc:abc123
+             */
+            did: string;
+            /**
+             * @description The PDS the account is hosted on.
+             * @example https://bsky.social
+             */
+            pds_url: string;
+            /** @description Whether newly published public videos are auto-announced. */
+            auto_post: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When the last successful auto-post was made (absent if never).
+             */
+            last_posted_at?: string;
         };
         /** @description Names the remote channel to follow — exactly one of handle or actor_url. */
         CreateRemoteFollowRequest: {
@@ -12197,6 +12275,149 @@ export interface operations {
             };
             /** @description No such remote follow for this caller. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getATProtoAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The linked-account status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ATProtoStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No Bluesky account is linked. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bluesky cross-posting is not enabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    linkATProtoAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ATProtoLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description The linked-account status (never the app password). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ATProtoStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing/invalid handle or app password, a non-https/private PDS URL, or credentials the PDS rejected. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The Bluesky PDS could not be reached; try again. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bluesky cross-posting is not enabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unlinkATProtoAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account is unlinked (or was not linked). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bluesky cross-posting is not enabled on this instance. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

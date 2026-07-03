@@ -1165,6 +1165,53 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("getATProtoAccount GETs the linked Bluesky status", async () => {
+    await api.getATProtoAccount();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/atproto");
+    // No explicit method => GET.
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  it("linkATProtoAccount PUTs the handle, app password, and auto-post flag", async () => {
+    await api.linkATProtoAccount({
+      handle: "alice.bsky.social",
+      app_password: "xxxx-xxxx-xxxx-xxxx",
+      auto_post: true,
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/atproto");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({
+      handle: "alice.bsky.social",
+      app_password: "xxxx-xxxx-xxxx-xxxx",
+      auto_post: true,
+    });
+  });
+
+  it("linkATProtoAccount forwards an optional custom PDS URL", async () => {
+    await api.linkATProtoAccount({
+      handle: "alice.example",
+      app_password: "yyyy-yyyy-yyyy-yyyy",
+      pds_url: "https://pds.example",
+      auto_post: false,
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      handle: "alice.example",
+      app_password: "yyyy-yyyy-yyyy-yyyy",
+      pds_url: "https://pds.example",
+      auto_post: false,
+    });
+  });
+
+  it("unlinkATProtoAccount DELETEs the Bluesky link", async () => {
+    await api.unlinkATProtoAccount();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/atproto");
+    expect(init.method).toBe("DELETE");
+  });
+
   it("muteInstance POSTs to the instance-mute endpoint with the domain encoded", async () => {
     await api.muteInstance("videos.example:8443");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

@@ -186,6 +186,13 @@ export type RemoteFollowListResponse = Schemas["RemoteFollowListResponse"];
 export type BlockedUser = Schemas["BlockedUser"];
 export type BlockedUserListResponse = Schemas["BlockedUserListResponse"];
 
+// --- ATProto / Bluesky cross-posting (P11 extension) ------------------------
+// Outbound only: link a Bluesky account (handle + APP PASSWORD) so newly
+// published PUBLIC videos are announced on Bluesky. The app password is
+// write-only — ATProtoStatus never carries it.
+export type ATProtoLinkRequest = Schemas["ATProtoLinkRequest"];
+export type ATProtoStatus = Schemas["ATProtoStatus"];
+
 // --- Messaging --------------------------------------------------------------
 export type Conversation = Schemas["Conversation"];
 export type ConversationSummary = Schemas["ConversationSummary"];
