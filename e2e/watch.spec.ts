@@ -160,7 +160,9 @@ test("tags render as chips linking to the tag-filtered browse", async ({ page })
   await tagList.getByRole("link", { name: "Browse videos tagged retro" }).click();
   await expect(page).toHaveURL(/\/\?tag=retro$/);
   // The filtered browse fetched with the tag and shows the active chip.
-  await expect(page.getByRole("main").getByText("#retro")).toBeVisible();
+  // .first(): under load the streamed server copy and the hydrating client
+  // copy of the dynamic home page can briefly coexist in the DOM.
+  await expect(page.getByText("#retro").first()).toBeVisible();
   await expect.poll(() => feedTags[feedTags.length - 1]).toBe("retro");
 });
 

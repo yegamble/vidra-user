@@ -37,6 +37,20 @@ async function mockFeed(page: Page, calls: Array<Record<string, string | null>>,
   });
 }
 
+// The home page is dynamic (searchParams): under heavy load the streamed
+// server-rendered content and the hydrating client copy can coexist in the DOM
+// for several seconds, making strict locators resolve two elements. Wait for
+// reconciliation (exactly one copy) and for the config fetch to enable the
+// selects before interacting or asserting.
+async function filtersReady(page: Page) {
+  // getByRole("main") resolves through the accessibility tree, so the hidden
+  // streamed duplicate is never matched; scoping every label/text query to it
+  // keeps strict mode happy. The generous timeout covers CPU-starved hydration
+  // under full-suite parallelism.
+  const category = page.getByRole("main").getByLabel("Filter by category");
+  await expect(category).toBeEnabled({ timeout: 20_000 });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route(CONFIG_URL, (route) =>
     route.fulfill({
@@ -63,20 +77,23 @@ test("selecting category and language filters the feed and lands in the URL", as
   await mockFeed(page, calls);
 
   await page.goto("/");
-  const category = page.getByLabel("Filter by category");
-  await expect(category).toBeEnabled();
-  await category.selectOption("7");
+  await filtersReady(page);
+  const main = page.getByRole("main");
+  await main.getByLabel("Filter by category").selectOption("7");
   await expect(page).toHaveURL(/\/\?category=7$/);
-  await expect(page.getByLabel("Filter by category")).toHaveValue("7");
+  await expect(main.getByLabel("Filter by category")).toHaveValue("7");
 
-  await page.getByLabel("Filter by language").selectOption("en");
+  await main.getByLabel("Filter by language").selectOption("en");
   await expect(page).toHaveURL(/\/\?category=7&language=en$/);
 
-  expect(calls).toEqual([
-    { sort: "recent", tag: null, category: null, language: null },
-    { sort: "recent", tag: null, category: "7", language: null },
-    { sort: "recent", tag: null, category: "7", language: "en" },
-  ]);
+  // Poll: the URL updates before the remounted feed's refetch lands.
+  await expect
+    .poll(() => calls)
+    .toEqual([
+      { sort: "recent", tag: null, category: null, language: null },
+      { sort: "recent", tag: null, category: "7", language: null },
+      { sort: "recent", tag: null, category: "7", language: "en" },
+    ]);
 });
 
 test("a filtered URL is a shareable deep link that preselects the controls", async ({ page }) => {
@@ -84,9 +101,13 @@ test("a filtered URL is a shareable deep link that preselects the controls", asy
   await mockFeed(page, calls);
 
   await page.goto("/?category=1&language=fr");
-  await expect(page.getByLabel("Filter by category")).toHaveValue("1");
-  await expect(page.getByLabel("Filter by language")).toHaveValue("fr");
-  expect(calls[0]).toEqual({ sort: "recent", tag: null, category: "1", language: "fr" });
+  await filtersReady(page);
+  const main = page.getByRole("main");
+  await expect(main.getByLabel("Filter by category")).toHaveValue("1");
+  await expect(main.getByLabel("Filter by language")).toHaveValue("fr");
+  await expect
+    .poll(() => calls[0])
+    .toEqual({ sort: "recent", tag: null, category: "1", language: "fr" });
 });
 
 test("an active ?tag= filter shows a removable chip and narrows the feed", async ({ page }) => {
@@ -94,8 +115,7 @@ test("an active ?tag= filter shows a removable chip and narrows the feed", async
   await mockFeed(page, calls, 0);
 
   await page.goto("/?tag=cats");
-  // Scoped to the main region: during hydration a streamed duplicate of the
-  // page content can transiently exist outside <main>.
+  await filtersReady(page);
   const main = page.getByRole("main");
   await expect(main.getByText("#cats")).toBeVisible();
   // A filtered empty result explains itself.
@@ -115,9 +135,10 @@ test("switching sort keeps the active filters in the URL", async ({ page }) => {
   await mockFeed(page, calls);
 
   await page.goto("/?category=7");
+  await filtersReady(page);
   await page.getByRole("button", { name: "Popular" }).click();
   await expect(page).toHaveURL(/\/\?sort=popular&category=7$/);
-  await expect(page.getByLabel("Filter by category")).toHaveValue("7");
+  await expect(page.getByRole("main").getByLabel("Filter by category")).toHaveValue("7");
 
   await page.getByRole("button", { name: "Trending" }).click();
   await expect(page).toHaveURL(/\/trending\?category=7$/);
@@ -131,9 +152,8 @@ test("/trending supports the same filters", async ({ page }) => {
   await mockFeed(page, calls);
 
   await page.goto("/trending");
-  const language = page.getByLabel("Filter by language");
-  await expect(language).toBeEnabled();
-  await language.selectOption("fr");
+  await filtersReady(page);
+  await page.getByRole("main").getByLabel("Filter by language").selectOption("fr");
   await expect(page).toHaveURL(/\/trending\?language=fr$/);
   await expect
     .poll(() => calls[calls.length - 1])
