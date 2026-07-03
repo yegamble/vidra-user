@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api, videoOriginalUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
+import { parseStartTime } from "@/lib/start-time";
 
 type Status = "loading" | "notfound" | "error" | "ready";
 
@@ -17,6 +18,13 @@ type Status = "loading" | "notfound" | "error" | "ready";
 export function EmbedPlayer({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<Video | null>(null);
+  // An explicit ?t=<seconds> start (what the share dialog emits), honoured via
+  // a media-fragment `#t=` on the stream src. The <video> only renders after
+  // the client-side fetch resolves, so reading window here cannot cause a
+  // hydration mismatch.
+  const [startAt] = useState<number | null>(() =>
+    typeof window === "undefined" ? null : parseStartTime(window.location.search),
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,7 +69,7 @@ export function EmbedPlayer({ id }: { id: string }) {
         controls
         playsInline
         className="h-full w-full bg-black"
-        src={videoOriginalUrl(video.id)}
+        src={videoOriginalUrl(video.id) + (startAt !== null ? `#t=${startAt}` : "")}
         poster={video.has_thumbnail ? videoThumbnailUrl(video.id) : undefined}
       >
         Your browser does not support the video tag.

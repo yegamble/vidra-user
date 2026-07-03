@@ -1,19 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
 import { CommentsSection } from "@/components/CommentsSection";
+import { DownloadButton } from "@/components/DownloadButton";
 import { RatingControls } from "@/components/RatingControls";
 import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
+import { ShareButton } from "@/components/ShareButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, videoCaptionUrl, videoOriginalUrl, videoThumbnailUrl } from "@/lib/api";
-import type { Video } from "@/lib/api";
+import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
+import type { Video, VideoConfigResponse } from "@/lib/api";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { parseStartTime } from "@/lib/start-time";
 
 type Status = "loading" | "error" | "notfound" | "ready";
 
@@ -31,6 +35,18 @@ export function WatchView({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<Video | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // The player element, owned here so the Share dialog can read currentTime.
+  const playerRef = useRef<HTMLVideoElement | null>(null);
+  // An explicit ?t=<seconds> start position from the URL, parsed once. The
+  // <video> only renders after the client-side fetch resolves, so reading
+  // window here cannot cause a hydration mismatch.
+  const [startAt] = useState<number | null>(() =>
+    typeof window === "undefined" ? null : parseStartTime(window.location.search),
+  );
+  // The metadata taxonomy for the category/language/license chips, loaded
+  // (cached, once per page load) only when the video carries any of them.
+  const [config, setConfig] = useState<VideoConfigResponse | null>(null);
+  const [configFailed, setConfigFailed] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -46,6 +62,23 @@ export function WatchView({ id }: { id: string }) {
       });
     return () => controller.abort();
   }, [id, reloadKey]);
+
+  const hasTaxonomy = Boolean(video && (video.category || video.language || video.license));
+  useEffect(() => {
+    if (!hasTaxonomy) return;
+    let cancelled = false;
+    getVideoConfigCached()
+      .then((c) => {
+        if (!cancelled) setConfig(c);
+      })
+      .catch(() => {
+        // Chips fall back to the raw taxonomy ids.
+        if (!cancelled) setConfigFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasTaxonomy]);
 
   function retry() {
     setStatus("loading");
@@ -76,16 +109,43 @@ export function WatchView({ id }: { id: string }) {
   const when = relativeTime(video.created_at);
   if (when) meta.push(when);
 
-  const chips: string[] = [];
-  if (typeof video.duration_seconds === "number") chips.push(formatDuration(video.duration_seconds));
+  const chips: Array<{ key: string; label: string; sr?: string }> = [];
+  if (typeof video.duration_seconds === "number") {
+    chips.push({ key: "duration", label: formatDuration(video.duration_seconds) });
+  }
   if (typeof video.width === "number" && typeof video.height === "number") {
-    chips.push(`${video.width}×${video.height}`);
+    chips.push({ key: "dimensions", label: `${video.width}×${video.height}` });
+  }
+  // Taxonomy chips render once the (cached) config resolves the human labels —
+  // or with the raw ids if the config fetch failed. Only shown when set.
+  if (config !== null || configFailed) {
+    if (video.category) {
+      chips.push({
+        key: "category",
+        sr: "Category: ",
+        label: resolveOptionLabel(config?.categories, video.category),
+      });
+    }
+    if (video.language) {
+      chips.push({
+        key: "language",
+        sr: "Language: ",
+        label: resolveOptionLabel(config?.languages, video.language),
+      });
+    }
+    if (video.license) {
+      chips.push({
+        key: "license",
+        sr: "License: ",
+        label: resolveOptionLabel(config?.licenses, video.license),
+      });
+    }
   }
 
   return (
     <div className="flex flex-col gap-8">
       <article className="flex flex-col gap-4">
-        <Player video={video} />
+        <Player video={video} videoRef={playerRef} startAt={startAt} />
 
         <div className="flex flex-col gap-2">
           <h1 className="text-xl font-semibold tracking-tight">{video.title}</h1>
@@ -93,10 +153,11 @@ export function WatchView({ id }: { id: string }) {
             {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
             {chips.map((c) => (
               <span
-                key={c}
+                key={c.key}
                 className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
               >
-                {c}
+                {c.sr ? <span className="sr-only">{c.sr}</span> : null}
+                {c.label}
               </span>
             ))}
           </div>
@@ -104,6 +165,12 @@ export function WatchView({ id }: { id: string }) {
             <RatingControls videoId={video.id} />
             <SaveButton videoId={video.id} />
             <AddToPlaylistButton videoId={video.id} />
+            <ShareButton
+              videoId={video.id}
+              title={video.title}
+              getCurrentTime={() => playerRef.current?.currentTime ?? 0}
+            />
+            <DownloadButton videoId={video.id} />
             <ReportButton kind="video" targetId={video.id} />
           </div>
           {video.description ? (
@@ -121,11 +188,21 @@ export function WatchView({ id }: { id: string }) {
 
 // Player wraps the native <video> with watch-history behaviour: for a signed-in
 // viewer it reports playback position (throttled, plus on pause and unmount) and
-// surfaces a Resume control loaded from the saved position.
-function Player({ video }: { video: Video }) {
+// surfaces a Resume control loaded from the saved position. An explicit
+// ?t=<seconds> start (startAt) is honoured via a media-fragment `#t=` on the
+// stream src — the browser seeks there natively once metadata loads — and
+// suppresses the resume offer (the explicit link intent wins).
+function Player({
+  video,
+  videoRef,
+  startAt,
+}: {
+  video: Video;
+  videoRef: RefObject<HTMLVideoElement | null>;
+  startAt: number | null;
+}) {
   const { status: sessionStatus } = useSession();
   const authed = sessionStatus === "authed";
-  const videoRef = useRef<HTMLVideoElement>(null);
   const lastSentRef = useRef(0);
   const [resumeAt, setResumeAt] = useState<number | null>(null);
   const [tracks, setTracks] = useState<
@@ -138,7 +215,7 @@ function Player({ video }: { video: Video }) {
     if (!authed || !el) return;
     const pos = Math.floor(el.currentTime || 0);
     void api.recordWatchProgress(video.id, pos).catch(() => {});
-  }, [authed, video.id]);
+  }, [authed, video.id, videoRef]);
 
   // Throttled variant for the high-frequency timeupdate/play events.
   const recordThrottled = useCallback(() => {
@@ -148,9 +225,10 @@ function Player({ video }: { video: Video }) {
     record();
   }, [record]);
 
-  // Load the saved resume position once (signed in only).
+  // Load the saved resume position once (signed in only, and not when the URL
+  // carries an explicit ?t= start).
   useEffect(() => {
-    if (!authed) return;
+    if (!authed || startAt !== null) return;
     const controller = new AbortController();
     api
       .getWatchProgress(video.id, controller.signal)
@@ -159,7 +237,7 @@ function Player({ video }: { video: Video }) {
       })
       .catch(() => {});
     return () => controller.abort();
-  }, [authed, video.id]);
+  }, [authed, video.id, startAt]);
 
   // Flush the final position when leaving the page / switching videos.
   useEffect(() => {
@@ -220,7 +298,7 @@ function Player({ video }: { video: Video }) {
         controls
         playsInline
         className="aspect-video w-full rounded-lg bg-black"
-        src={videoOriginalUrl(video.id)}
+        src={videoOriginalUrl(video.id) + (startAt !== null ? `#t=${startAt}` : "")}
         poster={video.has_thumbnail ? videoThumbnailUrl(video.id) : undefined}
         onPlay={recordThrottled}
         onTimeUpdate={recordThrottled}

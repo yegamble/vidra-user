@@ -27,8 +27,13 @@ function video(id: string, title: string) {
   };
 }
 
-function historyItem(id: string, title: string, position: number) {
-  return { ...video(id, title), position_seconds: position, watched_at: new Date().toISOString() };
+function historyItem(id: string, title: string, position: number, duration?: number) {
+  return {
+    ...video(id, title),
+    ...(duration !== undefined ? { duration_seconds: duration } : {}),
+    position_seconds: position,
+    watched_at: new Date().toISOString(),
+  };
 }
 
 const detail = video("v1", "Watch Me");
@@ -67,14 +72,24 @@ test("history prompts anonymous viewers to sign in", async ({ page }) => {
   await expect(page.getByText("Sign in to see your history")).toBeVisible();
 });
 
-test("history lists watched videos with a resume label", async ({ page }) => {
+test("history lists watched videos with a resume label, progress bar, and duration badge", async ({
+  page,
+}) => {
   await signIn(page);
   await page.route(HISTORY, (route) =>
-    route.fulfill({ json: { videos: [historyItem("h1", "Watched Clip", 95)], limit: 20, offset: 0 } }),
+    route.fulfill({
+      json: { videos: [historyItem("h1", "Watched Clip", 95, 200)], limit: 20, offset: 0 },
+    }),
   );
   await page.getByRole("link", { name: "History" }).click();
   await expect(page.getByRole("heading", { name: "Watched Clip" })).toBeVisible();
   await expect(page.getByText("Resume at 1:35")).toBeVisible();
+  // The card shows a duration badge (m:ss) and a decorative resume-progress bar
+  // filled to position/duration (95/200 = 47.5%).
+  await expect(page.getByText("3:20")).toBeVisible();
+  const bar = page.locator("[data-resume-progress]");
+  await expect(bar).toHaveCount(1);
+  await expect(bar).toHaveAttribute("data-resume-progress", "47.5");
 });
 
 test("removing an entry takes it out of the history list", async ({ page }) => {

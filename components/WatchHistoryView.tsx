@@ -124,7 +124,16 @@ function History() {
       <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {items.map((item) => (
           <li key={item.id} className="flex flex-col gap-2">
-            <VideoCard video={item} />
+            <VideoCard
+              video={item}
+              progressFraction={
+                typeof item.duration_seconds === "number" &&
+                item.duration_seconds > 0 &&
+                item.position_seconds > 0
+                  ? item.position_seconds / item.duration_seconds
+                  : undefined
+              }
+            />
             <div className="flex items-center justify-between gap-2 text-xs text-zinc-500 dark:text-zinc-400">
               <span>
                 {item.position_seconds > 0

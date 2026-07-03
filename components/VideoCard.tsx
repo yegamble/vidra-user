@@ -2,13 +2,35 @@ import Link from "next/link";
 
 import { videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
-import { formatCount, relativeTime } from "@/lib/format";
+import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 
-export function VideoCard({ video }: { video: Video }) {
+export function VideoCard({
+  video,
+  progressFraction,
+}: {
+  video: Video;
+  /**
+   * Watched fraction (0..1) for a thin resume-progress bar across the bottom
+   * of the thumbnail (history cards). Decorative (aria-hidden) — the caller
+   * keeps an accessible "Resume at m:ss" text alongside. Capped at 100%.
+   */
+  progressFraction?: number;
+}) {
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
   const when = relativeTime(video.created_at);
   if (when) meta.push(when);
+
+  // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge
+  // is noise rather than information.
+  const duration =
+    typeof video.duration_seconds === "number" && video.duration_seconds > 0
+      ? video.duration_seconds
+      : null;
+  const progressPct =
+    typeof progressFraction === "number"
+      ? Math.min(100, Math.max(0, Math.round(progressFraction * 1000) / 10))
+      : null;
 
   // The card is a <div>, not a single <Link>, so the channel can be its own
   // (sibling, non-nested) link to /channels/{handle}.
@@ -33,6 +55,20 @@ export function VideoCard({ video }: { video: Video }) {
               No preview
             </div>
           )}
+          {duration !== null ? (
+            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
+              {formatDuration(duration)}
+            </span>
+          ) : null}
+          {progressPct !== null ? (
+            <div aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-black/40">
+              <div
+                data-resume-progress={String(progressPct)}
+                style={{ width: `${progressPct}%` }}
+                className="h-full bg-red-600"
+              />
+            </div>
+          ) : null}
         </div>
         <h3 className="line-clamp-2 text-sm font-medium text-zinc-900 group-hover:text-zinc-600 dark:text-zinc-100 dark:group-hover:text-zinc-300">
           {video.title}

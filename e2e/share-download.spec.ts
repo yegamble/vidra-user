@@ -1,0 +1,124 @@
+import { expect, test, type Page } from "@playwright/test";
+
+// Share/download dialog coverage, route-mocked (a real backend is not running
+// in `npm run ci`). Clipboard read-back needs explicit permissions in Chromium.
+test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
+const DETAIL = /\/api\/v1\/videos\/v1$/;
+const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;
+
+const detail = {
+  id: "v1",
+  channel_id: "c1",
+  title: "Share Me",
+  description: "",
+  privacy: "public",
+  state: "published",
+  created_at: new Date().toISOString(),
+  views: 7,
+  has_thumbnail: false,
+};
+
+async function openWatch(page: Page, path = "/videos/v1") {
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort()); // don't actually stream bytes
+  await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
+    route.fulfill({ json: { captions: [] } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/comments/, (route) =>
+    route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+  await page.goto(path);
+  await expect(page.getByRole("heading", { name: "Share Me" })).toBeVisible();
+}
+
+test("the share dialog copies the watch link, with an optional start time", async ({ page }) => {
+  await openWatch(page);
+
+  // Pretend playback is at 1:35 (no real media streams in mocked runs, so the
+  // element's currentTime getter is shadowed on the instance).
+  await page.evaluate(() => {
+    const v = document.querySelector("video");
+    if (v) Object.defineProperty(v, "currentTime", { get: () => 95 });
+  });
+
+  await page.getByRole("button", { name: "Share" }).click();
+  const dialog = page.getByRole("dialog", { name: "Share this video" });
+  await expect(dialog).toBeVisible();
+
+  const origin = await page.evaluate(() => window.location.origin);
+  const link = dialog.getByLabel("Watch page link", { exact: true });
+  await expect(link).toHaveValue(`${origin}/videos/v1`);
+
+  const copyLink = dialog.getByRole("button", { name: "Copy watch page link" });
+  await copyLink.click();
+  await expect(copyLink).toHaveText("Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${origin}/videos/v1`);
+
+  // "Start at" appends ?t=<seconds> from the snapshotted playback position
+  // (and resets the stale Copied confirmation).
+  await dialog.getByRole("checkbox", { name: "Start at 1:35" }).check();
+  await expect(copyLink).toHaveText("Copy");
+  await expect(link).toHaveValue(`${origin}/videos/v1?t=95`);
+  await copyLink.click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    `${origin}/videos/v1?t=95`,
+  );
+});
+
+test("the share dialog copies an embed iframe snippet and closes on Escape", async ({ page }) => {
+  await openWatch(page);
+  await page.getByRole("button", { name: "Share" }).click();
+  const dialog = page.getByRole("dialog", { name: "Share this video" });
+  await expect(dialog).toBeVisible();
+
+  const origin = await page.evaluate(() => window.location.origin);
+  const snippet = `<iframe src="${origin}/embed/v1" width="560" height="315" frameborder="0" allowfullscreen title="Share Me"></iframe>`;
+  await expect(dialog.getByLabel("Embed code", { exact: true })).toHaveValue(snippet);
+
+  await dialog.getByRole("button", { name: "Copy embed code" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(snippet);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
+test("the watch page honors ?t= by starting playback at that position", async ({ page }) => {
+  await openWatch(page, "/videos/v1?t=90");
+  // The start position rides the stream src as a native media fragment.
+  await expect(page.locator("video")).toHaveAttribute(
+    "src",
+    /\/api\/v1\/videos\/v1\/original#t=90$/,
+  );
+});
+
+test("the embed player honors ?t=", async ({ page }) => {
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.goto("/embed/v1?t=45");
+  await expect(page.locator("video")).toHaveAttribute(
+    "src",
+    /\/api\/v1\/videos\/v1\/original#t=45$/,
+  );
+});
+
+test("the download dialog links the original file", async ({ page }) => {
+  await openWatch(page);
+  await page.getByRole("button", { name: "Download" }).click();
+  const dialog = page.getByRole("dialog", { name: "Download this video" });
+  await expect(dialog).toBeVisible();
+
+  const link = dialog.getByRole("link", { name: "Original file" });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute(
+    "href",
+    "http://localhost:8080/api/v1/videos/v1/original",
+  );
+  await expect(link).toHaveAttribute("download", "");
+
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toBeHidden();
+});

@@ -22,6 +22,9 @@ test("plays a video and shows its metadata", async ({ page }) => {
         duration_seconds: 83,
         width: 1280,
         height: 720,
+        category: "music",
+        language: "en",
+        license: "cc-by",
       },
     }),
   );
@@ -35,6 +38,17 @@ test("plays a video and shows its metadata", async ({ page }) => {
   await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
     route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
   );
+  // The taxonomy the category/language/license chips resolve their labels from.
+  await page.route(/\/api\/v1\/videos\/config$/, (route) =>
+    route.fulfill({
+      json: {
+        categories: [{ id: "music", label: "Music" }],
+        licenses: [{ id: "cc-by", label: "Attribution" }],
+        languages: [{ id: "en", label: "English" }],
+        privacies: [{ id: "public", label: "Public" }],
+      },
+    }),
+  );
 
   await page.goto("/videos/v1");
 
@@ -43,6 +57,12 @@ test("plays a video and shows its metadata", async ({ page }) => {
   await expect(page.getByText("1:23")).toBeVisible();
   await expect(page.getByText("1280×720")).toBeVisible();
   await expect(page.getByText("A nice clip.")).toBeVisible();
+
+  // Taxonomy chips render the labels resolved from GET /videos/config, with
+  // sr-only prefixes for screen readers.
+  await expect(page.getByText("Category: Music")).toBeVisible();
+  await expect(page.getByText("Language: English")).toBeVisible();
+  await expect(page.getByText("License: Attribution")).toBeVisible();
 
   const src = await page.locator("video").getAttribute("src");
   expect(src).toBe("http://localhost:8080/api/v1/videos/v1/original");

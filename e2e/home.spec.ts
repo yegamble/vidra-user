@@ -50,6 +50,22 @@ test("renders feed cards from the API", async ({ page }) => {
   await expect(channelLinks).toHaveCount(2);
 });
 
+test("feed cards show a duration badge when the card carries a duration", async ({ page }) => {
+  await page.route(FEED_URL, (route) =>
+    route.fulfill({
+      json: {
+        videos: [{ ...video("v1", "Timed Video", 10), duration_seconds: 83 }],
+        sort: "recent",
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Timed Video" })).toBeVisible();
+  await expect(page.getByText("1:23")).toBeVisible();
+});
+
 test("shows the empty state when there are no videos", async ({ page }) => {
   await page.route(FEED_URL, (route) =>
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
