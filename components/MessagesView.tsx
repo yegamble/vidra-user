@@ -109,12 +109,27 @@ function Inbox() {
                 ) : null}
                 {c.other_display_name || c.other_username}
               </span>
-              <span className="truncate text-sm text-zinc-500 dark:text-zinc-400">
+              <span
+                className={
+                  "truncate text-sm " +
+                  (c.unread_count && c.unread_count > 0
+                    ? "font-medium text-zinc-900 dark:text-zinc-100"
+                    : "text-zinc-500 dark:text-zinc-400")
+                }
+              >
                 {c.encrypted
                   ? "Encrypted conversation"
                   : c.last_message_body || "No messages yet"}
               </span>
             </div>
+            {c.unread_count && c.unread_count > 0 ? (
+              <span
+                className="inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-zinc-900 px-1.5 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+                aria-label={`${c.unread_count} unread ${c.unread_count === 1 ? "message" : "messages"}`}
+              >
+                {c.unread_count > 99 ? "99+" : c.unread_count}
+              </span>
+            ) : null}
             <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">
               {relativeTime(c.last_message_at)}
             </span>

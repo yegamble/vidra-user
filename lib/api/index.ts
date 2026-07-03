@@ -25,7 +25,7 @@ export {
   resumableUpload,
 } from "./resumable-upload";
 export type { ResumableUploadOptions, StoredUploadSession } from "./resumable-upload";
-export type { FeedParams, SearchParams } from "./endpoints";
+export type { FeedParams, SearchParams, SearchVideosParams } from "./endpoints";
 export { getVideoConfigCached, resolveOptionLabel } from "./video-config";
 export { authApi, oauthBeginUrl } from "./auth";
 export { getAccessToken, setAccessToken, setSessionExpiredHandler } from "./auth-store";

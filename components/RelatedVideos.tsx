@@ -9,29 +9,33 @@ import type { Video } from "@/lib/api";
 const RELATED_COUNT = 6;
 
 // RelatedVideos composes a small "watch next" rail for the watch page from the
-// existing public feed endpoints (no dedicated related-videos contract):
-// videos from the same channel first (matched by channel_id against a recent
-// feed page — the detail response carries no channel_handle, so the channel's
-// own listing endpoint is unreachable from here; recorded contract gap), then
-// videos in the same category (GET /videos?category=), excluding the current
-// video and deduping, capped at 6 cards. The section hides itself while
-// loading, on failure, and when nothing relates — it is pure polish and must
-// never break the watch page.
+// existing public endpoints (no dedicated related-videos contract). Same-channel
+// videos come first: the detail response now carries `channel_handle` (Wave A
+// contract gap closed), so we can list the channel directly via GET
+// /channels/{handle}/videos instead of scanning a recent feed page for a
+// channel_id match. Same-category videos (GET /videos?category=) fill the rest.
+// The current video is excluded and results deduped, capped at 6 cards. The
+// section hides itself while loading, on failure, and when nothing relates — it
+// is pure polish and must never break the watch page.
 export function RelatedVideos({ video }: { video: Video }) {
   const [related, setRelated] = useState<Video[] | null>(null);
 
-  const { id, channel_id: channelId, category } = video;
+  const { id, channel_handle: channelHandle, channel_id: channelId, category } = video;
 
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
 
     async function load() {
-      const [recent, sameCategory] = await Promise.all([
-        api
-          .getFeed({ sort: "recent", limit: 50 }, controller.signal)
-          .then((r) => r.videos)
-          .catch(() => [] as Video[]),
+      const [sameChannel, sameCategory] = await Promise.all([
+        // Prefer the channel's own listing (detail now carries channel_handle);
+        // fall back to an empty list if the handle is absent (e.g. a remote card).
+        channelHandle
+          ? api
+              .listChannelVideos(channelHandle, undefined, controller.signal)
+              .then((r) => r.videos)
+              .catch(() => [] as Video[])
+          : Promise.resolve([] as Video[]),
         category
           ? api
               .getFeed({ sort: "recent", category, limit: 20 }, controller.signal)
@@ -39,10 +43,11 @@ export function RelatedVideos({ video }: { video: Video }) {
               .catch(() => [] as Video[])
           : Promise.resolve([] as Video[]),
       ]);
-      const sameChannel = [...recent, ...sameCategory].filter((v) => v.channel_id === channelId);
+      // Guard the channel listing against a stale/mismatched channel_id too.
+      const channelPicks = sameChannel.filter((v) => !channelId || v.channel_id === channelId);
       const seen = new Set([id]);
       const picks: Video[] = [];
-      for (const v of [...sameChannel, ...sameCategory]) {
+      for (const v of [...channelPicks, ...sameCategory]) {
         if (seen.has(v.id)) continue;
         seen.add(v.id);
         picks.push(v);
@@ -56,7 +61,7 @@ export function RelatedVideos({ video }: { video: Video }) {
       cancelled = true;
       controller.abort();
     };
-  }, [id, channelId, category]);
+  }, [id, channelHandle, channelId, category]);
 
   if (!related || related.length === 0) return null;
 

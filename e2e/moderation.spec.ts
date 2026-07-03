@@ -76,6 +76,22 @@ function remoteVideoReport(id: string, status: string) {
   };
 }
 
+// A report against a DIRECT MESSAGE (target_type message) carrying the
+// snapshotted body (which survives a sender tombstone), as the queue serves it.
+function messageReport(id: string, status: string) {
+  return {
+    id,
+    target_type: "message",
+    reason: `reason-${id}`,
+    status,
+    moderator_note: "",
+    created_at: new Date().toISOString(),
+    reporter: { username: "dave" },
+    message_id: "m7",
+    message_body: "abusive DM text",
+  };
+}
+
 async function signIn(page: Page, role: Role) {
   await page.route(LOGIN, (route) => route.fulfill({ json: session(role) }));
   await page.route(FEED, (route) =>
@@ -220,6 +236,24 @@ test("a remote-video report shows origin context and blocks the remote video", a
   );
   expect(blockedRemoteId).toBe("rv9");
   expect(blockBody).toEqual({ reason: "reason-r1" });
+});
+
+test("a direct-message report shows the snapshotted body in the queue", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.route(REPORTS, (route) =>
+    route.fulfill({ json: { reports: [messageReport("r1", "open")], limit: 100, offset: 0 } }),
+  );
+
+  await page.getByRole("link", { name: "Moderation" }).click();
+
+  // The card renders the "message" type pill, the snapshotted body, and the
+  // reporter — but no block action (messages have no block, only resolve).
+  await expect(page.getByText("message", { exact: true })).toBeVisible();
+  await expect(page.getByText("abusive DM text")).toBeVisible();
+  await expect(page.getByText("Direct message")).toBeVisible();
+  await expect(page.getByText("by dave")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Block video" })).toHaveCount(0);
 });
 
 test("the All filter shows resolved reports without resolve actions", async ({ page }) => {

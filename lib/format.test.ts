@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCount, formatDateTime, formatDuration, formatUptime, relativeTime } from "./format";
+import {
+  formatBytes,
+  formatCount,
+  formatDateTime,
+  formatDuration,
+  formatUptime,
+  relativeTime,
+} from "./format";
 
 describe("formatCount", () => {
   it("formats small, thousands, millions, billions", () => {
@@ -17,6 +24,22 @@ describe("formatCount", () => {
   it("guards against negatives / NaN", () => {
     expect(formatCount(-5)).toBe("0");
     expect(formatCount(Number.NaN)).toBe("0");
+  });
+});
+
+describe("formatBytes", () => {
+  it("formats bytes, KB, MB, GB (1024-step)", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(1024)).toBe("1.0 KB");
+    expect(formatBytes(1536)).toBe("1.5 KB");
+    expect(formatBytes(25 * 1024 * 1024)).toBe("25.0 MB");
+    expect(formatBytes(2 * 1024 * 1024 * 1024)).toBe("2.0 GB");
+  });
+
+  it("guards against negatives / NaN", () => {
+    expect(formatBytes(-1)).toBe("0 B");
+    expect(formatBytes(Number.NaN)).toBe("0 B");
   });
 });
 

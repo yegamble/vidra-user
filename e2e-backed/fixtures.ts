@@ -499,6 +499,64 @@ export async function conversationsFor(
   ).conversations;
 }
 
+// A DM attachment's metadata as carried on a message read from the API.
+interface DMAttachmentRow {
+  id: string;
+  kind: string;
+  content_type: string;
+  filename: string;
+  size_bytes: number;
+}
+
+/**
+ * inboxFor reads a user's DM inbox via the API (as that user's token), returning
+ * the id, the other participant, the last-message preview AND the unread count
+ * per conversation — so a read-receipt test can prove the unread count dropped
+ * to zero after the thread was opened.
+ */
+export async function inboxFor(
+  request: APIRequestContext,
+  token: string,
+): Promise<Array<{ id: string; other_username: string; last_message_body: string; unread_count?: number }>> {
+  const res = await request.get(`${API_URL}/api/v1/me/conversations?limit=100`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (
+    (await res.json()) as {
+      conversations: Array<{
+        id: string;
+        other_username: string;
+        last_message_body: string;
+        unread_count?: number;
+      }>;
+    }
+  ).conversations;
+}
+
+/**
+ * conversationMessages reads a plaintext conversation's messages AS a
+ * participant, returning each message (with any attachments) plus the peer's
+ * read watermark (peer_last_read_message_id) — so a backed test can prove an
+ * attachment persisted for the OTHER participant, or that a read receipt landed.
+ */
+export async function conversationMessages(
+  request: APIRequestContext,
+  token: string,
+  conversationId: string,
+): Promise<{
+  messages: Array<{ id: string; body: string; deleted?: boolean; attachments?: DMAttachmentRow[] }>;
+  peer_last_read_message_id?: string;
+}> {
+  const res = await request.get(
+    `${API_URL}/api/v1/conversations/${conversationId}/messages?limit=100`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return (await res.json()) as {
+    messages: Array<{ id: string; body: string; deleted?: boolean; attachments?: DMAttachmentRow[] }>;
+    peer_last_read_message_id?: string;
+  };
+}
+
 /**
  * ownerVideoDetail reads a video's detail AS ITS OWNER (a non-published video —
  * draft/scheduled/quarantined/failed — is 404 to the public), returning the

@@ -9,17 +9,26 @@ import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
 import { api } from "@/lib/api";
 import type { Video } from "@/lib/api";
+import type { SearchFilters } from "@/lib/search-url";
 
 type Status = "idle" | "loading" | "error" | "ready";
 type MoreStatus = "idle" | "loading" | "error";
 
-// SearchResults loads public title-search results client-side, with a "Load
+// SearchResults loads public title/tag-search results client-side, with a "Load
 // more" pager (limit/offset; the pager hides once a page comes back short).
-// The page mounts it with key={query}, so the initial status is derived from
-// the query (no synchronous setState in the effect) and a new query gives a
-// fresh load.
-export function SearchResults({ query }: { query: string }) {
+// The page mounts it with a key that encodes the query AND the active
+// category/language/tag filters, so the initial status is derived from the
+// query (no synchronous setState in the effect) and any change gives a fresh
+// load — the filters ride every page request (initial + "Load more").
+export function SearchResults({
+  query,
+  filters = {},
+}: {
+  query: string;
+  filters?: SearchFilters;
+}) {
   const trimmed = query.trim();
+  const { category, language, tag } = filters;
   const [videos, setVideos] = useState<Video[]>([]);
   const [status, setStatus] = useState<Status>(trimmed ? "loading" : "idle");
   const [hasMore, setHasMore] = useState(false);
@@ -30,7 +39,7 @@ export function SearchResults({ query }: { query: string }) {
     if (!trimmed) return;
     const controller = new AbortController();
     api
-      .searchVideos(trimmed, { limit: PAGE_SIZE, offset: 0 }, controller.signal)
+      .searchVideos(trimmed, { limit: PAGE_SIZE, offset: 0, category, language, tag }, controller.signal)
       .then((res) => {
         setVideos(res.videos);
         setHasMore(res.videos.length === PAGE_SIZE);
@@ -40,7 +49,7 @@ export function SearchResults({ query }: { query: string }) {
         if (!controller.signal.aborted) setStatus("error");
       });
     return () => controller.abort();
-  }, [trimmed, reloadKey]);
+  }, [trimmed, category, language, tag, reloadKey]);
 
   function retry() {
     setStatus("loading");
@@ -50,7 +59,13 @@ export function SearchResults({ query }: { query: string }) {
   async function loadMore() {
     setMore("loading");
     try {
-      const res = await api.searchVideos(trimmed, { limit: PAGE_SIZE, offset: videos.length });
+      const res = await api.searchVideos(trimmed, {
+        limit: PAGE_SIZE,
+        offset: videos.length,
+        category,
+        language,
+        tag,
+      });
       setVideos((v) => [...v, ...res.videos]);
       setHasMore(res.videos.length === PAGE_SIZE);
       setMore("idle");
@@ -73,7 +88,17 @@ export function SearchResults({ query }: { query: string }) {
     return <ErrorState message="Search failed. Please try again." onRetry={retry} />;
   }
   if (videos.length === 0) {
-    return <EmptyState title="No results" message={`Nothing matched “${trimmed}”.`} />;
+    const filtered = Boolean(category || language || tag);
+    return (
+      <EmptyState
+        title="No results"
+        message={
+          filtered
+            ? `Nothing matched “${trimmed}” with these filters. Try removing a filter.`
+            : `Nothing matched “${trimmed}”.`
+        }
+      />
+    );
   }
   return (
     <div className="flex flex-col gap-6">

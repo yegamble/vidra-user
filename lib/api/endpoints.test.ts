@@ -71,6 +71,18 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/search?q=go&limit=20&offset=40");
   });
 
+  it("searchVideos passes the category/language/tag filters, encoded", async () => {
+    await api.searchVideos("go", { category: "7", language: "en", tag: "cats & dogs" });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/videos/search?q=go&tag=cats+%26+dogs&category=7&language=en",
+    );
+  });
+
+  it("searchVideos omits unset filters entirely", async () => {
+    await api.searchVideos("go", { limit: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/search?q=go&limit=20");
+  });
+
   it("getChannel encodes the handle in the path", async () => {
     await api.getChannel("ada makes");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/channels/ada%20makes");
@@ -784,6 +796,72 @@ describe("api endpoints", () => {
       envelopes: [{ recipient_device_id: "d2", message_type: 0, ciphertext: "xx" }],
       expires_in_seconds: 3600,
     });
+  });
+
+  it("sendMessage includes attachment_ids when attachments are attached", async () => {
+    await api.sendMessage("c1", "hi", ["a1", "a2"]);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/conversations/c1/messages");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ body: "hi", attachment_ids: ["a1", "a2"] });
+  });
+
+  it("sendMessage omits an empty body when sending attachments only", async () => {
+    await api.sendMessage("c1", "", ["a1"]);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ attachment_ids: ["a1"] });
+  });
+
+  it("uploadDMAttachment POSTs multipart to the conversation attachments endpoint", async () => {
+    const file = new File(["bytes"], "photo.png", { type: "image/png" });
+    await api.uploadDMAttachment("c1", file);
+    const [url, init] = fetchMock.mock.calls[0] as [
+      string,
+      RequestInit & { headers: Record<string, string> },
+    ];
+    expect(url).toBe("http://localhost:8080/api/v1/conversations/c1/attachments");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+    expect(init.headers["content-type"]).toBeUndefined();
+  });
+
+  it("fetchAttachment GETs the participant-gated attachment bytes", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("bytes", { status: 200 }));
+    const blob = await api.fetchAttachment("a1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/attachments/a1");
+    expect(init.method ?? "GET").toBe("GET");
+    expect(blob).toBeInstanceOf(Blob);
+  });
+
+  it("markConversationRead POSTs without a body for the newest-message watermark", async () => {
+    await api.markConversationRead("c1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/conversations/c1/read");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
+  });
+
+  it("markConversationRead pins the watermark to a message id when given", async () => {
+    await api.markConversationRead("c1", "m9");
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ message_id: "m9" });
+  });
+
+  it("deleteMessage DELETEs the message endpoint", async () => {
+    await api.deleteMessage("m1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/messages/m1");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("reportMessage POSTs the reason to the message report endpoint", async () => {
+    await api.reportMessage("m1", "abuse");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/messages/m1/report");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ reason: "abuse" });
   });
 
   it("registerE2EEDevice POSTs the public keys to the devices endpoint", async () => {

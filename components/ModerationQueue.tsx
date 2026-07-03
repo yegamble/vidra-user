@@ -436,6 +436,19 @@ function ReportTarget({ report }: { report: Report }) {
       </blockquote>
     );
   }
+  if (report.target_type === "message") {
+    // A reported direct message: the body is snapshotted at report time so it
+    // survives a sender tombstone. The conversation stays private (no link) —
+    // moderators act on the snapshot, resolve/reject, or report-purge (admin).
+    return (
+      <div className="mt-2">
+        <blockquote className="border-l-2 border-zinc-300 pl-3 text-sm text-zinc-700 italic dark:border-zinc-700 dark:text-zinc-300">
+          {report.message_body || "(message unavailable)"}
+        </blockquote>
+        <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">Direct message</p>
+      </div>
+    );
+  }
   if (report.target_type === "account") {
     return (
       <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">

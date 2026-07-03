@@ -1,7 +1,7 @@
 import { apiBaseUrl } from "@/lib/config";
 
 import { getAccessToken } from "./auth-store";
-import { apiRequest } from "./client";
+import { ApiError, apiRequest } from "./client";
 import { uploadWithProgress, type UploadProgress } from "./upload";
 import type {
   AdminCommentListResponse,
@@ -47,6 +47,7 @@ import type {
   UpdateLiveStreamRequest,
   MessageListResponse,
   Message,
+  UploadAttachmentResponse,
   MutedAccountListResponse,
   MutedInstanceListResponse,
   BlockInstanceRequest,
@@ -122,6 +123,18 @@ export interface SearchParams {
   offset?: number;
 }
 
+/**
+ * Params for GET /videos/search: pagination plus the optional taxonomy/tag
+ * filters the search page mirrors from the home feed (category/language ids come
+ * from GET /videos/config; tag is a free-form lowercased tag). Each filter
+ * narrows to LOCAL results (federated remote cards are excluded when set).
+ */
+export interface SearchVideosParams extends SearchParams {
+  tag?: string;
+  category?: string;
+  language?: string;
+}
+
 /** Typed wrappers for the public vidra-core read endpoints. */
 export const api = {
   /** GET /api/v1/instance — public instance about/config. */
@@ -155,10 +168,22 @@ export const api = {
   getVideo: (id: string, token?: string, signal?: AbortSignal) =>
     apiRequest<Video>(`/api/v1/videos/${encodeURIComponent(id)}`, { token, signal }),
 
-  /** GET /api/v1/videos/search?q= — public title search. */
-  searchVideos: (query: string, params: SearchParams = {}, signal?: AbortSignal) =>
+  /**
+   * GET /api/v1/videos/search?q= — public title/tag search. Optional taxonomy/tag
+   * filters (category/language/tag) narrow results to local videos; an unknown
+   * category/language value is a 422 (the selects are populated from the same
+   * GET /videos/config taxonomy, so the UI never sends one).
+   */
+  searchVideos: (query: string, params: SearchVideosParams = {}, signal?: AbortSignal) =>
     apiRequest<VideoSearchResponse>("/api/v1/videos/search", {
-      query: { q: query, limit: params.limit, offset: params.offset },
+      query: {
+        q: query,
+        limit: params.limit,
+        offset: params.offset,
+        tag: params.tag,
+        category: params.category,
+        language: params.language,
+      },
       signal,
     }),
 
@@ -741,13 +766,84 @@ export const api = {
     ),
 
   /**
-   * POST /api/v1/conversations/{id}/messages — post a message to a conversation
-   * (auth). A non-participant (or unknown conversation) is 404; body 1–5000 chars.
+   * POST /api/v1/conversations/{id}/messages — post a message to a plaintext
+   * conversation (auth). A message needs a non-empty body OR at least one
+   * `attachmentIds` entry (ids returned by uploadDMAttachment, ≤4). A
+   * non-participant (or unknown conversation) is 404; body ≤5000 chars.
    */
-  sendMessage: (conversationId: string, body: string) =>
+  sendMessage: (conversationId: string, body: string, attachmentIds?: string[]) =>
     apiRequest<Message>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
       method: "POST",
-      body: { body },
+      body: {
+        ...(body ? { body } : {}),
+        ...(attachmentIds && attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+      },
+    }),
+
+  /**
+   * POST /api/v1/conversations/{id}/attachments — upload a DM attachment (auth,
+   * multipart "file"). Returns an id to reference in a subsequent sendMessage.
+   * Allowed kinds image/video/audio/pdf, ≤25 MiB; 413 oversize, 415 unsupported
+   * type, 422 encrypted conversation or failed malware scan, 503 storage off.
+   */
+  uploadDMAttachment: (conversationId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<UploadAttachmentResponse>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/attachments`,
+      { method: "POST", body: form },
+    );
+  },
+
+  /**
+   * GET /api/v1/attachments/{id} — the participant-gated bytes of a DM attachment
+   * (auth). Fetched as a Blob (for an inline object-URL image or a download),
+   * since the endpoint needs the bearer token an <img src> can't carry. An
+   * unknown attachment or a non-participant caller is 404.
+   */
+  fetchAttachment: async (id: string, signal?: AbortSignal): Promise<Blob> => {
+    const res = await fetch(`${apiBaseUrl}/api/v1/attachments/${encodeURIComponent(id)}`, {
+      headers: getAccessToken() ? { authorization: `Bearer ${getAccessToken() as string}` } : {},
+      signal,
+    });
+    if (!res.ok) {
+      throw new ApiError({
+        status: res.status,
+        code: "attachment_unavailable",
+        message: "could not load this attachment",
+      });
+    }
+    return res.blob();
+  },
+
+  /**
+   * POST /api/v1/conversations/{id}/read — advance the caller's read watermark
+   * (auth, idempotent, advance-only). With `messageId` it pins to that message;
+   * without it, to the newest message. Non-participant/unknown → 404.
+   */
+  markConversationRead: (conversationId: string, messageId?: string) =>
+    apiRequest<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/read`, {
+      method: "POST",
+      body: messageId ? { message_id: messageId } : undefined,
+    }),
+
+  /**
+   * DELETE /api/v1/messages/{id} — sender-only soft delete (tombstone): the body
+   * becomes "[deleted]" and attachments are removed (auth). A non-sender/unknown
+   * message → 404; an already-deleted message is an idempotent 204.
+   */
+  deleteMessage: (messageId: string) =>
+    apiRequest<void>(`/api/v1/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/messages/{id}/report — file an abuse report against a DM
+   * (auth; either participant; the body is snapshotted so the report survives a
+   * sender tombstone; idempotent per reporter+message 204; non-participant → 404).
+   */
+  reportMessage: (messageId: string, reason: string) =>
+    apiRequest<void>(`/api/v1/messages/${encodeURIComponent(messageId)}/report`, {
+      method: "POST",
+      body: { reason },
     }),
 
   /**

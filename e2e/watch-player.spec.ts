@@ -250,18 +250,25 @@ test("the related rail lists same-channel videos first, then same-category", asy
       },
     }),
   );
+  // Same-channel videos now come from the channel's own listing (the detail
+  // response carries channel_handle → GET /channels/{handle}/videos).
+  await page.route(/\/api\/v1\/channels\/h-c1\/videos$/, (route) =>
+    route.fulfill({
+      json: {
+        videos: [
+          video("v2", "Same Channel Follow-up", "c1"),
+          video("v1", "Watch Me", "c1", "7"),
+        ],
+      },
+    }),
+  );
   await page.route(FEED, (route) => {
     const url = new URL(route.request().url());
+    // Category feed (filler): a same-category stranger + the current video itself.
     const videos =
       url.searchParams.get("category") === "7"
-        ? // Category feed: a same-category stranger + the current video itself.
-          [video("v9", "Same Category Pick", "c9", "7"), video("v1", "Watch Me", "c1", "7")]
-        : // Recent feed: a same-channel video, the current video, an unrelated one.
-          [
-            video("v2", "Same Channel Follow-up", "c1"),
-            video("v1", "Watch Me", "c1", "7"),
-            video("v3", "Unrelated Clip", "c3"),
-          ];
+        ? [video("v9", "Same Category Pick", "c9", "7"), video("v1", "Watch Me", "c1", "7")]
+        : [];
     route.fulfill({ json: { videos, sort: "recent", limit: 50, offset: 0 } });
   });
 

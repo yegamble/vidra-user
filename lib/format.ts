@@ -21,6 +21,20 @@ export function formatCount(n: number): string {
   return String(Math.floor(n));
 }
 
+/** formatBytes renders a byte count compactly: 512 B, 1.4 KB, 24.0 MB, 1.2 GB (SI, 1024-step). */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+  if (bytes < 1024) return `${Math.floor(bytes)} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(1)} ${units[unit]}`;
+}
+
 /** relativeTime renders an ISO timestamp as a coarse "x ago" relative to now. */
 export function relativeTime(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();

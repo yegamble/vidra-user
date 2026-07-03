@@ -8,7 +8,7 @@ import { ApiError, api } from "@/lib/api";
 
 const MAX_REASON_LEN = 2000;
 
-export type ReportKind = "video" | "comment" | "account" | "remote_video";
+export type ReportKind = "video" | "comment" | "account" | "remote_video" | "message";
 
 // reportNoun is the human word for a report kind ("account" reads as "user",
 // a remote_video reads as plain "video" — the federation detail is the
@@ -111,6 +111,8 @@ function ReportDialog({
         await api.reportRemoteVideo(targetId, trimmed);
       } else if (kind === "comment") {
         await api.reportComment(targetId, trimmed);
+      } else if (kind === "message") {
+        await api.reportMessage(targetId, trimmed);
       } else {
         await api.reportAccount(targetId, trimmed);
       }

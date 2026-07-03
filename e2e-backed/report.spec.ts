@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-import { adminToken, reportsQueue, seedComment, seedPublishedChannel, uniqueId } from "./fixtures";
+import {
+  adminToken,
+  registerUser,
+  reportsQueue,
+  seedComment,
+  seedPublishedChannel,
+  sendDirectMessage,
+  uniqueId,
+} from "./fixtures";
 
 // Signs up a fresh viewer in the UI (the session lives in memory, so subsequent
 // navigation is client-side).
@@ -115,4 +123,48 @@ test("reporting an account from a comment persists to the moderation queue", asy
   const mine = (await reportsQueue(request, token)).find((r) => r.reason === reason);
   expect(mine).toBeTruthy();
   expect(mine?.target_type).toBe("account");
+});
+
+// Proves the DM message-report round trip: a sender messages a recipient; the
+// recipient opens the thread and reports the sender's message; it appears in the
+// admin moderation queue as a message report with the snapshotted body.
+test("reporting a direct message from the thread persists to the moderation queue", async ({
+  page,
+  request,
+}) => {
+  const sender = await registerUser(request, "snd");
+  const recipient = await registerUser(request, "rcp");
+  const id = uniqueId();
+  const messageBody = `dm-to-report-${id}`;
+  const reason = `msg-report-${id}`;
+  await sendDirectMessage(request, sender.token, recipient.id, messageBody);
+
+  // The recipient logs in through the UI (session is in memory → client-side nav).
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(recipient.email);
+  await page.getByLabel("Password").fill("supersecret-e2e");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  // Open the thread from the inbox (keeps the in-memory session).
+  await page.getByRole("link", { name: "Messages" }).first().click();
+  await page.getByText(messageBody).click();
+  await expect(page.getByText(messageBody)).toBeVisible();
+
+  // Report the peer's (sender's) message.
+  await page.getByRole("button", { name: "Report this message" }).click();
+  const dialog = page.getByRole("dialog", { name: "Report this message" });
+  await dialog.getByLabel("Reason for report").fill(reason);
+  const reported = page.waitForResponse(
+    (r) => /\/messages\/[^/]+\/report$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await dialog.getByRole("button", { name: "Submit report" }).click();
+  await reported;
+  await expect(page.getByText("your report has been sent to the moderators")).toBeVisible();
+
+  // Persisted: the message report shows up in the admin moderation queue.
+  const token = await adminToken(request);
+  const mine = (await reportsQueue(request, token)).find((r) => r.reason === reason);
+  expect(mine).toBeTruthy();
+  expect(mine?.target_type).toBe("message");
 });

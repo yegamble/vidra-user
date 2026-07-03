@@ -642,7 +642,7 @@ export interface CreateReportRequest {
   reason: string;
 }
 
-export type ReportTargetType = "video" | "comment" | "account" | "remote_video";
+export type ReportTargetType = "video" | "comment" | "account" | "remote_video" | "message";
 export type ReportStatus = "open" | "accepted" | "rejected";
 
 /** Who filed a report (admin moderation queue view). */
@@ -683,6 +683,11 @@ export interface Report {
   remote_video_title?: string;
   /** Origin instance of the reported remote video. */
   remote_video_domain?: string;
+  // Direct-message-report context.
+  /** The reported direct message; omitted if the message row was later hard-deleted. */
+  message_id?: string;
+  /** Snapshot of the reported message body at report time (survives a sender tombstone). */
+  message_body?: string;
 }
 
 export interface ReportListResponse {
@@ -1254,6 +1259,11 @@ export interface ConversationSummary {
   other_display_name: string;
   last_message_body: string;
   last_message_at: string;
+  /**
+   * The caller's unread messages in this conversation (the peer's messages past
+   * the caller's read watermark). Omitted/0 when nothing is unread.
+   */
+  unread_count?: number;
 }
 
 export interface ConversationListResponse {
@@ -1272,12 +1282,71 @@ export interface Message {
   sender_id: string;
   sender_username?: string;
   sender_display_name?: string;
+  /** The message text, or "[deleted]" for a tombstoned message. */
   body: string;
+  /** True once the sender has deleted (tombstoned) the message. */
+  deleted?: boolean;
   created_at: string;
+  /**
+   * DM attachments linked to this message (metadata only; the bytes are fetched,
+   * participant-gated, from GET /api/v1/attachments/{id}).
+   */
+  attachments?: DMAttachment[];
+  /**
+   * OpenGraph link preview of the first URL in the body, present only once the
+   * backend's async fetch has resolved (null/absent otherwise).
+   */
+  preview?: LinkPreview | null;
+}
+
+/** The kind of a direct-message attachment (the backend allowlist). */
+export type DMAttachmentKind = "image" | "video" | "audio" | "pdf";
+
+/**
+ * A direct-message attachment's metadata, as carried on a message. Fetch the
+ * bytes from GET /api/v1/attachments/{id} (participant-gated, behind auth).
+ */
+export interface DMAttachment {
+  id: string;
+  kind: DMAttachmentKind;
+  content_type: string;
+  filename: string;
+  size_bytes: number;
+}
+
+/**
+ * An OpenGraph link preview of the first URL in a message body. Only `url` is
+ * guaranteed; title/description/image are best-effort from the origin page.
+ */
+export interface LinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+}
+
+/** POST /api/v1/conversations/{id}/attachments response — reference the id in a subsequent send. */
+export interface UploadAttachmentResponse {
+  attachment_id: string;
+  kind: DMAttachmentKind;
+  content_type: string;
+  filename: string;
+  size_bytes: number;
+}
+
+/** POST /api/v1/conversations/{id}/read body — pin the watermark to a message, or omit for newest. */
+export interface MarkConversationReadRequest {
+  message_id?: string;
 }
 
 export interface MessageListResponse {
   messages: Message[];
+  /**
+   * The other participant's read watermark (the id of the last message they have
+   * read), for a "Seen" indicator. Omitted when they have read nothing or have
+   * disabled read receipts.
+   */
+  peer_last_read_message_id?: string;
   limit: number;
   offset: number;
 }
