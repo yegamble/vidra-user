@@ -57,6 +57,19 @@ export interface Video {
   category?: string;
   language?: string;
   license?: string;
+  // HLS streaming (transcoding pipeline). hls_url is the master-playlist path
+  // (GET /videos/{id}/hls/master.m3u8), present on the DETAIL endpoint only once
+  // the transcoded streaming playlist is ready — omitted while transcoding is
+  // pending/failed or disabled (progressive /original playback always works).
+  // renditions lists the available ladder rungs (tallest first) alongside it.
+  hls_url?: string;
+  renditions?: VideoRendition[];
+}
+
+/** One transcoded HLS rendition (ladder rung) of a video. */
+export interface VideoRendition {
+  height: number;
+  width: number;
 }
 
 /** One selectable value in a video-metadata taxonomy (GET /videos/config). */

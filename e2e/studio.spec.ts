@@ -523,6 +523,59 @@ test("a creator can edit a video's title and privacy", async ({ page }) => {
   });
 });
 
+test("the edit surface lists the ready HLS renditions for a transcoded video", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [video()] } }));
+  // The DETAIL is the only view carrying hls_url/renditions (per the contract),
+  // which the edit surface fetches — that is where the streaming note lives.
+  await page.route(VIDEO, (route) =>
+    route.fulfill({
+      json: video({
+        hls_url: "/api/v1/videos/v1/hls/master.m3u8",
+        renditions: [
+          { height: 720, width: 1280 },
+          { height: 480, width: 854 },
+        ],
+      }),
+    }),
+  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  // Scope to the video row — the channel row has its own Edit button.
+  const row = page.getByRole("listitem").filter({ hasText: "My clip" });
+  await row.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByText("Streaming (HLS) ready: 720p, 480p.")).toBeVisible();
+});
+
+test("the edit surface notes when a published video's HD versions are not ready", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [video()] } }));
+  // Published but no hls_url on the detail: transcoding pending/failed/disabled —
+  // the contract exposes only this presence signal, so the note stays hedged.
+  await page.route(VIDEO, (route) => route.fulfill({ json: video() }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  // Scope to the video row — the channel row has its own Edit button.
+  const row = page.getByRole("listitem").filter({ hasText: "My clip" });
+  await row.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(
+    page.getByText(
+      "HD streaming versions are not ready — viewers currently watch the original file",
+      { exact: false },
+    ),
+  ).toBeVisible();
+});
+
 test("a creator can add and remove a caption from a video's edit surface", async ({ page }) => {
   await signIn(page);
   await page.route(MY_CHANNELS, (route) =>

@@ -7,6 +7,7 @@ import {
   userAvatarUrl,
   userBannerUrl,
   videoCaptionUrl,
+  videoHlsMasterUrl,
   videoOriginalUrl,
   videoThumbnailUrl,
 } from "./endpoints";
@@ -73,6 +74,15 @@ describe("api endpoints", () => {
     expect(videoThumbnailUrl("v1")).toBe("http://localhost:8080/api/v1/videos/v1/thumbnail");
     expect(videoCaptionUrl("v1", "pt-BR")).toBe(
       "http://localhost:8080/api/v1/videos/v1/captions/pt-BR",
+    );
+  });
+
+  it("videoHlsMasterUrl builds the master-playlist URL with the id encoded", () => {
+    expect(videoHlsMasterUrl("v1")).toBe(
+      "http://localhost:8080/api/v1/videos/v1/hls/master.m3u8",
+    );
+    expect(videoHlsMasterUrl("a/b")).toBe(
+      "http://localhost:8080/api/v1/videos/a%2Fb/hls/master.m3u8",
     );
   });
 

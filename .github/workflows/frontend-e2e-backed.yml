@@ -39,9 +39,12 @@ jobs:
       # LIVE_INGEST_SECRET enables the media-server-facing live ingest hooks so the
       # studio live-status test can flip a stream live/ended by its key (test seam;
       # value must match LIVE_INGEST_SECRET in e2e-backed/fixtures.ts).
+      # TRANSCODING_ENABLED=true turns on the async HLS transcode pipeline so
+      # e2e-backed/hls-playback.spec.ts can prove publish → transcode → HLS
+      # playback end to end (the compose api image ships ffmpeg/ffprobe).
       - name: Start vidra-core stack
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret docker compose --profile core up -d --build
+        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true docker compose --profile core up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core

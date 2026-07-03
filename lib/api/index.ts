@@ -9,6 +9,7 @@ export {
   userAvatarUrl,
   userBannerUrl,
   videoCaptionUrl,
+  videoHlsMasterUrl,
   videoOriginalUrl,
   videoThumbnailUrl,
 } from "./endpoints";

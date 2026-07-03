@@ -17,9 +17,14 @@ test("the embed player renders a real published video with no app chrome", async
 
   const video = page.locator("video");
   await expect(video).toHaveCount(1);
+  // With TRANSCODING_ENABLED the async pipeline may finish before this page
+  // loads, in which case the embed streams HLS via hls.js (a blob: MediaSource
+  // src) instead of the progressive original — both are the real backend
+  // stream, so accept either (the HLS path is proven end-to-end in
+  // hls-playback.spec.ts, which waits for the transcode deterministically).
   await expect(video).toHaveAttribute(
     "src",
-    new RegExp(`/api/v1/videos/${videoId}/original$`),
+    new RegExp(`^blob:|/api/v1/videos/${videoId}/original$`),
   );
   await expect(page.getByRole("link", { name: videoTitle })).toBeVisible();
 

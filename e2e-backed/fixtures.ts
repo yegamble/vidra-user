@@ -381,7 +381,7 @@ export async function videoComments(
   ).comments;
 }
 
-/** videoDetail reads a video's public detail (title/description/taxonomy) via the API. */
+/** videoDetail reads a video's public detail (title/description/taxonomy/HLS) via the API. */
 export async function videoDetail(
   request: APIRequestContext,
   videoId: string,
@@ -391,6 +391,8 @@ export async function videoDetail(
   category?: string;
   language?: string;
   license?: string;
+  hls_url?: string;
+  renditions?: Array<{ height: number; width: number }>;
 }> {
   const res = await request.get(`${API_URL}/api/v1/videos/${videoId}`);
   return (await res.json()) as {
@@ -399,7 +401,34 @@ export async function videoDetail(
     category?: string;
     language?: string;
     license?: string;
+    hls_url?: string;
+    renditions?: Array<{ height: number; width: number }>;
   };
+}
+
+/**
+ * waitForHls polls a video's public detail until the transcoding pipeline has
+ * published its HLS ladder (hls_url present), returning the detail. Requires
+ * the backed stack to run with TRANSCODING_ENABLED=true (frontend-e2e-backed.yml
+ * sets it); fails loudly after the deadline instead of passing on mocks.
+ */
+export async function waitForHls(
+  request: APIRequestContext,
+  videoId: string,
+  timeoutMs = 90_000,
+): Promise<Awaited<ReturnType<typeof videoDetail>>> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const detail = await videoDetail(request, videoId);
+    if (detail.hls_url) return detail;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `video ${videoId} was not transcoded to HLS within ${timeoutMs}ms — ` +
+          "is the backed stack running with TRANSCODING_ENABLED=true?",
+      );
+    }
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
 }
 
 /**

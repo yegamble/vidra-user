@@ -741,6 +741,16 @@ export function videoOriginalUrl(id: string): string {
   return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/original`;
 }
 
+/**
+ * Direct URL to a video's HLS master playlist. Only meaningful once the detail
+ * response carries `hls_url` (the readiness signal — the playlist 404s before
+ * transcoding completes). The path is deterministic per the contract, matching
+ * the detail's hls_url value.
+ */
+export function videoHlsMasterUrl(id: string): string {
+  return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/hls/master.m3u8`;
+}
+
 /** Direct URL to a video's poster image (for an <img> src). */
 export function videoThumbnailUrl(id: string): string {
   return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/thumbnail`;

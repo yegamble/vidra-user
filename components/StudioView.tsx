@@ -959,6 +959,10 @@ function VideoRow({
   const [privacy, setPrivacy] = useState<VideoPrivacy>(video.privacy);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The full detail fetched when Edit opens — the only view carrying hls_url/
+  // renditions (list rows omit them per the contract), so the streaming-status
+  // note can be honest. null until (unless) the detail fetch succeeds.
+  const [detail, setDetail] = useState<Video | null>(null);
 
   async function save() {
     if (busy || title.trim() === "") return;
@@ -998,6 +1002,7 @@ function VideoRow({
     setError(null);
     try {
       const full = await api.getVideo(video.id);
+      setDetail(full);
       setTitle(full.title);
       setDescription(full.description);
       setCategory(full.category ?? "");
@@ -1005,7 +1010,8 @@ function VideoRow({
       setLicense(full.license ?? "");
       setPrivacy(full.privacy);
     } catch {
-      // Keep the list-derived defaults already in state.
+      // Keep the list-derived defaults already in state (and claim nothing
+      // about streaming readiness without the detail).
     }
     setMode("edit");
   }
@@ -1080,6 +1086,7 @@ function VideoRow({
           </select>
         </label>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {detail ? <StreamingStatus video={detail} /> : null}
         <ThumbnailManager videoId={video.id} hasThumbnail={video.has_thumbnail ?? false} />
         <CaptionsManager videoId={video.id} />
         <div className="flex gap-2">
@@ -1156,6 +1163,32 @@ function VideoRow({
         </div>
       )}
     </li>
+  );
+}
+
+// StreamingStatus is the honest transcoding note on the edit surface. The
+// contract exposes exactly one signal: the DETAIL response carries hls_url (+
+// renditions) once the transcoded HLS ladder is ready, and omits it while
+// transcoding is pending, failed, or disabled on the instance — there is no
+// queue/progress state to show, and list rows omit the field entirely (which is
+// why this lives here, where the detail is already fetched, and not as an
+// N+1-fetch row badge). Only published videos are annotated: a draft has no
+// file and processing/failed already have their own badges.
+function StreamingStatus({ video }: { video: Video }) {
+  if (video.state !== "published") return null;
+  if (video.hls_url) {
+    const heights = (video.renditions ?? []).map((r) => `${r.height}p`).join(", ");
+    return (
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        Streaming (HLS) ready{heights ? `: ${heights}` : ""}.
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      HD streaming versions are not ready — viewers currently watch the original file. They
+      appear automatically once transcoding completes (if enabled on this instance).
+    </p>
   );
 }
 

@@ -6,6 +6,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
 import { CommentsSection } from "@/components/CommentsSection";
 import { DownloadButton } from "@/components/DownloadButton";
+import { QualityMenu } from "@/components/QualityMenu";
 import { RatingControls } from "@/components/RatingControls";
 import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
@@ -13,11 +14,12 @@ import { ShareButton } from "@/components/ShareButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, videoCaptionUrl, videoOriginalUrl, videoThumbnailUrl } from "@/lib/api";
+import { ApiError, api, videoCaptionUrl, videoThumbnailUrl } from "@/lib/api";
 import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
 import type { Video, VideoConfigResponse } from "@/lib/api";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { parseStartTime } from "@/lib/start-time";
+import { useHlsPlayback } from "@/lib/use-hls-playback";
 
 type Status = "loading" | "error" | "notfound" | "ready";
 
@@ -27,10 +29,12 @@ const PROGRESS_INTERVAL_MS = 10_000;
 // trivial positions a viewer would not want to "resume" into).
 const RESUME_MIN_SECONDS = 5;
 
-// WatchView loads one video client-side and plays its original via a Range-capable
-// <video src>. States: loading / not-found (404) / error (retry) / ready. For a
-// signed-in viewer it records watch progress (so the video enters their history
-// and can be resumed) and offers a Resume control from the saved position.
+// WatchView loads one video client-side and plays it: the transcoded HLS ladder
+// when the detail carries hls_url (see useHlsPlayback), else the original via a
+// Range-capable <video src>. States: loading / not-found (404) / error (retry) /
+// ready. For a signed-in viewer it records watch progress (so the video enters
+// their history and can be resumed) and offers a Resume control from the saved
+// position.
 export function WatchView({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<Video | null>(null);
@@ -190,8 +194,10 @@ export function WatchView({ id }: { id: string }) {
 // viewer it reports playback position (throttled, plus on pause and unmount) and
 // surfaces a Resume control loaded from the saved position. An explicit
 // ?t=<seconds> start (startAt) is honoured via a media-fragment `#t=` on the
-// stream src — the browser seeks there natively once metadata loads — and
-// suppresses the resume offer (the explicit link intent wins).
+// stream src (or hls.js startPosition) — and suppresses the resume offer (the
+// explicit link intent wins). When the detail carries hls_url the stream is the
+// transcoded HLS ladder (hls.js over MSE, quality selectable via QualityMenu;
+// native <video src> on MSE-less Safari), otherwise the progressive original.
 function Player({
   video,
   videoRef,
@@ -203,6 +209,7 @@ function Player({
 }) {
   const { status: sessionStatus } = useSession();
   const authed = sessionStatus === "authed";
+  const playback = useHlsPlayback(videoRef, video, startAt);
   const lastSentRef = useRef(0);
   const [resumeAt, setResumeAt] = useState<number | null>(null);
   const [tracks, setTracks] = useState<
@@ -298,7 +305,7 @@ function Player({
         controls
         playsInline
         className="aspect-video w-full rounded-lg bg-black"
-        src={videoOriginalUrl(video.id) + (startAt !== null ? `#t=${startAt}` : "")}
+        src={playback.src}
         poster={video.has_thumbnail ? videoThumbnailUrl(video.id) : undefined}
         onPlay={recordThrottled}
         onTimeUpdate={recordThrottled}
@@ -309,14 +316,25 @@ function Player({
         ))}
         Your browser does not support the video tag.
       </video>
-      {resumeAt !== null ? (
-        <button
-          type="button"
-          onClick={resume}
-          className="self-start rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
-          Resume from {formatDuration(resumeAt)}
-        </button>
+      {playback.levels.length > 0 || resumeAt !== null ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Only hls.js playback exposes controllable quality; the menu hides
+              itself for native-HLS/original playback (levels is empty). */}
+          <QualityMenu
+            levels={playback.levels}
+            currentLevel={playback.currentLevel}
+            onSelect={playback.setLevel}
+          />
+          {resumeAt !== null ? (
+            <button
+              type="button"
+              onClick={resume}
+              className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Resume from {formatDuration(resumeAt)}
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
