@@ -217,7 +217,7 @@ function RequestRow({
         >
           {request.status}
         </span>
-        <span className="text-xs text-zinc-400 dark:text-zinc-500">
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
           requested {relativeTime(request.created_at)}
         </span>
       </div>

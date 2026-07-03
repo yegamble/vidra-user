@@ -183,7 +183,7 @@ function UserRow({
         >
           {user.email_verified ? "verified" : "unverified"}
         </span>
-        <span className="text-xs text-zinc-400 dark:text-zinc-500">
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
           joined {relativeTime(user.created_at)}
         </span>
       </div>
@@ -225,7 +225,7 @@ function UserRow({
           {user.is_active ? "Deactivate" : "Reactivate"}
         </button>
         {isSelf ? (
-          <span className="text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
             You can&apos;t change your own role or status.
           </span>
         ) : null}

@@ -455,7 +455,7 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 - [ ] Add ARIA labels to icon-only buttons.
 - [ ] Add reduced-motion friendly interactions.
 - [ ] Add basic responsive coverage for mobile/tablet/desktop.
-- [ ] Add accessibility checks to Playwright where feasible.
+- [x] Add accessibility checks to Playwright where feasible. (`e2e/a11y.spec.ts` runs **axe-core** (DEPENDENCY ADDED: `@axe-core/playwright@4.12.1`, MPL-2.0, devDependency only — the standard automated-a11y engine, justified per the P12.6 plan) against five route-mocked key surfaces: home (feed cards rendered), watch (player + caption track + comments — the caption track keeps the axe `video-caption` rule satisfied honestly, matching the real player behavior), login, settings (signed in), admin users (admin, list rendered). The gate fails on **serious/critical** violations only (readable dump of rule id/impact/help/nodes on failure); minor/moderate stay non-blocking. Fixes it flagged (all light-mode `color-contrast`, serious): VideoCard "No preview" placeholder `text-zinc-400` on `bg-zinc-200` → `text-zinc-600 dark:text-zinc-400`; the muted `text-zinc-400 dark:text-zinc-500` caption combo (fails on white, and its dark variant was marginal too) → the established `text-zinc-500 dark:text-zinc-400` in AdminUsersView ("joined …", self-edit note), AdminRegistrationRequestsView (requested-at), CommentsSection ("(edited)") — same combo everywhere it existed, so future scans don't flap. Runs in `npm run ci` (part of the chromium project); full suite green after the fixes.)
 
 ---
 

@@ -51,7 +51,7 @@ export function VideoCard({
               className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">
+            <div className="flex h-full w-full items-center justify-center text-xs text-zinc-600 dark:text-zinc-400">
               No preview
             </div>
           )}

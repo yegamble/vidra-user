@@ -258,7 +258,7 @@ function CommentItem({
         </span>
         {when ? <span className="text-zinc-500 dark:text-zinc-400">{when}</span> : null}
         {comment.edited ? (
-          <span className="text-xs text-zinc-400 dark:text-zinc-500">(edited)</span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">(edited)</span>
         ) : null}
         {isAuthor ? (
           <span className="ml-auto flex items-center gap-3">
