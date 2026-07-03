@@ -82,12 +82,14 @@ export async function liveStreams(
   request: APIRequestContext,
   handle: string,
   token: string,
-): Promise<Array<{ id: string; title: string; state: string }>> {
+): Promise<Array<{ id: string; title: string; state: string; replay_enabled: boolean }>> {
   const res = await request.get(`${API_URL}/api/v1/channels/${handle}/live`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   return (
-    (await res.json()) as { live_streams: Array<{ id: string; title: string; state: string }> }
+    (await res.json()) as {
+      live_streams: Array<{ id: string; title: string; state: string; replay_enabled: boolean }>;
+    }
   ).live_streams;
 }
 

@@ -26,6 +26,7 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
   const [title, setTitle] = useState("");
   const [privacy, setPrivacy] = useState<VideoPrivacy>("public");
   const [permanent, setPermanent] = useState(false);
+  const [replayEnabled, setReplayEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<RevealedKey | null>(null);
@@ -57,11 +58,13 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
         title: title.trim(),
         privacy,
         permanent,
+        replay_enabled: replayEnabled,
       });
       setStreams((prev) => [res.live_stream, ...prev]);
       setRevealed({ id: res.live_stream.id, key: res.stream_key, rtmp: res.rtmp_url });
       setTitle("");
       setPermanent(false);
+      setReplayEnabled(false);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create the live stream.");
     } finally {
@@ -85,6 +88,26 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
       setRevealed((r) => (r?.id === id ? null : r));
     } catch {
       // Leave the stream in place on failure.
+    }
+  }
+
+  // Toggle "save replay as a video" on an existing stream. The update contract is
+  // a full-object edit (title required), so the stream's current fields ride
+  // along unchanged; only replay_enabled flips. On success the returned stream
+  // replaces the row (never touches the key or live state).
+  async function toggleReplay(stream: LiveStream) {
+    const next = !stream.replay_enabled;
+    try {
+      const updated = await api.updateLiveStream(stream.id, {
+        title: stream.title,
+        description: stream.description,
+        privacy: stream.privacy,
+        permanent: stream.permanent,
+        replay_enabled: next,
+      });
+      setStreams((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    } catch {
+      // Leave the toggle as-is on failure.
     }
   }
 
@@ -158,6 +181,21 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
           />
           Permanent (reuse this stream + key across sessions)
         </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={replayEnabled}
+              onChange={(e) => setReplayEnabled(e.target.checked)}
+              aria-label="Save replay as a video"
+            />
+            Save replay as a video
+          </span>
+          <span className="pl-6 text-xs text-zinc-500 dark:text-zinc-400">
+            Records this stream and publishes it as a normal video (with the same
+            privacy) once the stream ends.
+          </span>
+        </label>
         <div>
           <button
             type="submit"
@@ -199,6 +237,15 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
                     <span className="text-zinc-500 dark:text-zinc-400">· permanent</span>
                   ) : null}
                 </div>
+                <label className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={s.replay_enabled}
+                    onChange={() => void toggleReplay(s)}
+                    aria-label={`Save replay as a video for ${s.title}`}
+                  />
+                  Save replay as a video
+                </label>
               </div>
               <div className="flex shrink-0 items-center gap-3 text-sm">
                 <button

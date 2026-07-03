@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -86,12 +87,15 @@ export function ChannelView({ handle }: { handle: string }) {
               </p>
             </div>
           </div>
-          <SubscribeButton
-            handle={channel.handle}
-            onDelta={(d) =>
-              setChannel((c) => (c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c))
-            }
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <ChannelLiveBadge handle={channel.handle} ownerId={channel.owner_id} />
+            <SubscribeButton
+              handle={channel.handle}
+              onDelta={(d) =>
+                setChannel((c) => (c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c))
+              }
+            />
+          </div>
         </div>
         {channel.description ? (
           <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">

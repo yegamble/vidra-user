@@ -915,10 +915,22 @@ export interface LiveStream {
   privacy: VideoPrivacy;
   state: LiveStreamState;
   permanent: boolean;
+  /**
+   * When true the media server records each session and the api republishes the
+   * recording as a normal on-demand video once the stream ends (privacy
+   * inherited). Default false.
+   */
+  replay_enabled: boolean;
   created_at: string;
   updated_at: string;
   channel_handle?: string;
   channel_display_name?: string;
+  /**
+   * Live HLS master-playlist path — present ONLY while state is "live" and a
+   * media server is configured to serve it. This is the readiness signal for the
+   * live watch surface (the playlist 404s otherwise). Matches liveHlsMasterUrl.
+   */
+  hls_url?: string;
 }
 
 export interface CreateLiveStreamRequest {
@@ -926,6 +938,17 @@ export interface CreateLiveStreamRequest {
   description?: string;
   privacy?: VideoPrivacy;
   permanent?: boolean;
+  /** Record sessions and republish them as VODs (see LiveStream.replay_enabled). */
+  replay_enabled?: boolean;
+}
+
+/** Edit a live stream's metadata. `title` is required (a full-object update). */
+export interface UpdateLiveStreamRequest {
+  title: string;
+  description?: string;
+  privacy?: VideoPrivacy;
+  permanent?: boolean;
+  replay_enabled?: boolean;
 }
 
 /** The create response: the stream plus its key (shown once) and RTMP ingest URL. */
@@ -985,6 +1008,39 @@ export interface Caption {
 
 export interface CaptionListResponse {
   captions: Caption[];
+}
+
+/** The lifecycle of an asynchronous Whisper auto-caption job. */
+export type CaptionJobState = "pending" | "running" | "done" | "failed";
+
+/**
+ * An asynchronous auto-caption (Whisper) job for a video. Mirrors the backend
+ * CaptionJob schema. `error` is a safe, human-readable reason (present only when
+ * a job failed or a retry is pending) — never a raw internal error.
+ */
+export interface CaptionJob {
+  id: string;
+  video_id: string;
+  /** The caption language tag the generated track is stored under. */
+  language: string;
+  state: CaptionJobState;
+  error?: string;
+  attempts: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CaptionJobResponse {
+  caption_job: CaptionJob;
+}
+
+/**
+ * Optional body for an auto-caption request. When `language` is omitted the
+ * server uses its configured default; it is both the stored track's tag and the
+ * transcription hint.
+ */
+export interface AutoCaptionRequest {
+  language?: string;
 }
 
 /** An account the caller has muted. Mirrors the backend MutedAccount schema. */

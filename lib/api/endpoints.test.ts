@@ -7,6 +7,7 @@ import {
   remoteVideoThumbnailUrl,
   userAvatarUrl,
   userBannerUrl,
+  liveHlsMasterUrl,
   videoCaptionUrl,
   videoHlsMasterUrl,
   videoOriginalUrl,
@@ -106,6 +107,15 @@ describe("api endpoints", () => {
     );
     expect(videoHlsMasterUrl("a/b")).toBe(
       "http://localhost:8080/api/v1/videos/a%2Fb/hls/master.m3u8",
+    );
+  });
+
+  it("liveHlsMasterUrl builds the live master-playlist URL with the id encoded", () => {
+    expect(liveHlsMasterUrl("ls1")).toBe(
+      "http://localhost:8080/api/v1/live/ls1/hls/master.m3u8",
+    );
+    expect(liveHlsMasterUrl("a/b")).toBe(
+      "http://localhost:8080/api/v1/live/a%2Fb/hls/master.m3u8",
     );
   });
 
@@ -371,6 +381,19 @@ describe("api endpoints", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/live/s1");
     expect(init.method).toBe("DELETE");
+  });
+
+  it("getLiveStream targets the single live-stream endpoint", async () => {
+    await api.getLiveStream("s1");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/live/s1");
+  });
+
+  it("updateLiveStream PATCHes the metadata (incl. replay_enabled)", async () => {
+    await api.updateLiveStream("s1", { title: "Show", replay_enabled: true });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/live/s1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ title: "Show", replay_enabled: true });
   });
 
   it("importVideoFile POSTs the url to the import endpoint (async job)", async () => {
@@ -813,6 +836,25 @@ describe("api endpoints", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/videos/v1/captions/en");
     expect(init.method).toBe("DELETE");
+  });
+
+  it("requestAutoCaption POSTs the auto-caption endpoint with a language hint", async () => {
+    await api.requestAutoCaption("v1", { language: "en" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/captions/auto");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ language: "en" });
+  });
+
+  it("requestAutoCaption defaults to an empty body when no hint is given", async () => {
+    await api.requestAutoCaption("v1");
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({});
+  });
+
+  it("getAutoCaption targets the auto-caption status endpoint", async () => {
+    await api.getAutoCaption("v1");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/v1/captions/auto");
   });
 
   it("getWatchedWords targets the watched-words endpoint with pagination", async () => {

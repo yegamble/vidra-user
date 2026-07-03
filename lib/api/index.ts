@@ -6,6 +6,7 @@ export {
   api,
   channelAvatarUrl,
   channelBannerUrl,
+  liveHlsMasterUrl,
   playlistThumbnailUrl,
   remoteVideoThumbnailUrl,
   userAvatarUrl,

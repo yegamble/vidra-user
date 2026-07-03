@@ -32,10 +32,14 @@ import type {
   SendEncryptedMessageRequest,
   SendEncryptedResponse,
   UploadOneTimeKeysResponse,
+  AutoCaptionRequest,
+  CaptionJobResponse,
   CreateLiveStreamRequest,
   CreateLiveStreamResponse,
+  LiveStream,
   LiveStreamListResponse,
   LiveStreamKey,
+  UpdateLiveStreamRequest,
   MessageListResponse,
   Message,
   MutedAccountListResponse,
@@ -388,6 +392,21 @@ export const api = {
   getLiveStreams: (handle: string, signal?: AbortSignal) =>
     apiRequest<LiveStreamListResponse>(`/api/v1/channels/${encodeURIComponent(handle)}/live`, { signal }),
 
+  /**
+   * GET /api/v1/live/{id} — a single live stream's public metadata (the watch
+   * surface). A private stream is visible only to its owner (else 404). While
+   * live, the response carries `hls_url`; the stream key is never returned.
+   */
+  getLiveStream: (id: string, signal?: AbortSignal) =>
+    apiRequest<LiveStream>(`/api/v1/live/${encodeURIComponent(id)}`, { signal }),
+
+  /** PATCH /api/v1/live/{id} — edit a live stream (auth, owner). Never rotates the key. */
+  updateLiveStream: (id: string, body: UpdateLiveStreamRequest) =>
+    apiRequest<LiveStream>(`/api/v1/live/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body,
+    }),
+
   /** POST /api/v1/live/{id}/key — rotate a stream's key (auth, owner). Returns the new key once. */
   regenerateLiveStreamKey: (id: string) =>
     apiRequest<LiveStreamKey>(`/api/v1/live/${encodeURIComponent(id)}/key`, { method: "POST" }),
@@ -418,6 +437,27 @@ export const api = {
       `/api/v1/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(language)}`,
       { method: "DELETE" },
     ),
+
+  /**
+   * POST /api/v1/videos/{id}/captions/auto — enqueue a Whisper auto-caption job
+   * (owner, 202). `language` is an optional tag + transcription hint. 503 when
+   * auto-captioning is disabled on the instance; 409 when a job is already
+   * running; 422 for a malformed language tag.
+   */
+  requestAutoCaption: (videoId: string, body: AutoCaptionRequest = {}) =>
+    apiRequest<CaptionJobResponse>(`/api/v1/videos/${encodeURIComponent(videoId)}/captions/auto`, {
+      method: "POST",
+      body,
+    }),
+
+  /**
+   * GET /api/v1/videos/{id}/captions/auto — the latest auto-caption job's status
+   * (owner). 404 when the video never requested auto-captioning. Poll for progress.
+   */
+  getAutoCaption: (videoId: string, signal?: AbortSignal) =>
+    apiRequest<CaptionJobResponse>(`/api/v1/videos/${encodeURIComponent(videoId)}/captions/auto`, {
+      signal,
+    }),
 
   /** GET /api/v1/me/subscriptions/videos — videos from followed channels (auth). */
   getSubscriptionVideos: (params: SearchParams = {}, signal?: AbortSignal) =>
@@ -1161,6 +1201,16 @@ export function videoOriginalUrl(id: string): string {
  */
 export function videoHlsMasterUrl(id: string): string {
   return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/hls/master.m3u8`;
+}
+
+/**
+ * Direct URL to a live stream's HLS master playlist. Only meaningful while the
+ * stream is live and a media server is serving it (the get response's `hls_url`
+ * is the readiness signal — the playlist 404s otherwise). The path is
+ * deterministic per the contract, matching the LiveStream.hls_url value.
+ */
+export function liveHlsMasterUrl(id: string): string {
+  return `${apiBaseUrl}/api/v1/live/${encodeURIComponent(id)}/hls/master.m3u8`;
 }
 
 /** Direct URL to a video's poster image (for an <img> src). */

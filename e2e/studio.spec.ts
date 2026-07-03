@@ -18,6 +18,7 @@ const IMPORT = /\/api\/v1\/videos\/v1\/import$/;
 const VIDEO = /\/api\/v1\/videos\/v1$/;
 const CAPTIONS = /\/api\/v1\/videos\/v1\/captions$/;
 const CAPTION_LANG = /\/api\/v1\/videos\/v1\/captions\/[^/]+$/;
+const AUTO_CAPTION = /\/api\/v1\/videos\/v1\/captions\/auto$/;
 const THUMBNAIL = /\/api\/v1\/videos\/v1\/thumbnail(\?|$)/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 const CHANNEL_LIVE = /\/api\/v1\/channels\/ada_makes\/live$/;
@@ -82,6 +83,21 @@ function importJob(state: string, overrides: Record<string, unknown> = {}) {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,
+  };
+}
+
+function captionJob(state: string, overrides: Record<string, unknown> = {}) {
+  return {
+    caption_job: {
+      id: "cj1",
+      video_id: "v1",
+      language: "en",
+      state,
+      attempts: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...overrides,
+    },
   };
 }
 
@@ -1053,6 +1069,222 @@ test("the live streams list reloads state", async ({ page }) => {
   // Reload re-reads the state → the badge flips to live.
   await page.getByRole("button", { name: "Reload" }).click();
   await expect(row.getByText("live", { exact: true })).toBeVisible();
+});
+
+test("a creator can enable 'save replay as a video' when creating a live stream", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  const created = {
+    id: "ls1",
+    channel_id: "c1",
+    title: "Replay Show",
+    description: "",
+    privacy: "public",
+    state: "offline",
+    permanent: false,
+    replay_enabled: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  await page.route(CHANNEL_LIVE, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        json: { live_stream: created, stream_key: "SECRET-KEY-1", rtmp_url: "rtmp://ingest/live" },
+      });
+    }
+    return route.fulfill({ json: { live_streams: [] } });
+  });
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Live stream title").fill("Replay Show");
+  await page.getByLabel("Save replay as a video").check();
+
+  // The create POST carries replay_enabled: true.
+  const createReq = page.waitForRequest(
+    (r) => CHANNEL_LIVE.test(r.url()) && r.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Create live stream" }).click();
+  const req = await createReq;
+  expect(req.postDataJSON()).toMatchObject({ title: "Replay Show", replay_enabled: true });
+
+  // The created row shows the replay toggle checked (mirrors the persisted stream).
+  const row = page.getByRole("listitem").filter({ hasText: "Replay Show" });
+  await expect(row.getByLabel("Save replay as a video for Replay Show")).toBeChecked();
+});
+
+test("a creator toggles replay on an existing stream (PATCH)", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  const stream = {
+    id: "ls1",
+    channel_id: "c1",
+    title: "Toggle Show",
+    description: "",
+    privacy: "public",
+    state: "offline",
+    permanent: false,
+    replay_enabled: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  await page.route(CHANNEL_LIVE, (route) =>
+    route.fulfill({ json: { live_streams: [stream] } }),
+  );
+  // PATCH /live/ls1 flips replay_enabled and echoes the updated stream.
+  await page.route(LIVE_ONE, (route) => {
+    if (route.request().method() === "PATCH") {
+      const body = route.request().postDataJSON() as { replay_enabled?: boolean };
+      return route.fulfill({ json: { ...stream, replay_enabled: Boolean(body.replay_enabled) } });
+    }
+    return route.continue();
+  });
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: "Toggle Show" });
+  const toggle = row.getByLabel("Save replay as a video for Toggle Show");
+  await expect(toggle).not.toBeChecked();
+
+  const patched = page.waitForResponse(
+    (r) => LIVE_ONE.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
+  );
+  // A single click (not .check(), which would retry-click a controlled checkbox
+  // whose state only flips once the async PATCH resolves — double-toggling it).
+  await toggle.click();
+  await patched;
+  await expect(toggle).toBeChecked();
+});
+
+// Shared setup for the auto-caption (Whisper) tests: sign in, one video, enter
+// its edit surface (which mounts the CaptionsManager).
+async function openVideoEditForCaptions(page: Page) {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) =>
+    route.fulfill({ json: { videos: [video({ title: "Autocap clip" })] } }),
+  );
+  await page.route(VIDEO, (route) => route.fulfill({ json: video({ title: "Autocap clip" }) }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: "Autocap clip" });
+  await row.getByRole("button", { name: "Edit" }).click();
+}
+
+test("a creator generates automatic captions and the track appears after polling", async ({
+  page,
+}) => {
+  // The captions list is empty until the auto-caption job completes, then returns
+  // the generated track. The status endpoint reports running once, then done.
+  let autoGets = 0;
+  let done = false;
+  await page.route(CAPTIONS, (route) =>
+    route.fulfill({
+      json: {
+        captions: done
+          ? [{ language: "en", label: "English (auto)", created_at: new Date().toISOString() }]
+          : [],
+      },
+    }),
+  );
+  await page.route(AUTO_CAPTION, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ status: 202, json: captionJob("pending") });
+    }
+    autoGets += 1;
+    const state = autoGets >= 2 ? "done" : "running";
+    if (state === "done") done = true;
+    return route.fulfill({ json: captionJob(state) });
+  });
+
+  await openVideoEditForCaptions(page);
+  await expect(page.getByText("No captions yet.")).toBeVisible();
+
+  // Pick a language hint and request auto-captioning.
+  await page.getByLabel("Transcription language").selectOption("en");
+  const posted = page.waitForResponse(
+    (r) => AUTO_CAPTION.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Generate automatically" }).click();
+  await posted;
+
+  // It reports progress while the job runs…
+  await expect(page.getByText("Generating captions…", { exact: false })).toBeVisible();
+
+  // …then the poll sees "done", the list refreshes, and the track appears.
+  await expect(page.getByText("Automatic captions added.")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "Remove en caption" })).toBeVisible();
+});
+
+test("auto-captioning is disabled with an explanation when the server doesn't support it", async ({
+  page,
+}) => {
+  await page.route(CAPTIONS, (route) => route.fulfill({ json: { captions: [] } }));
+  // The server has auto-captioning turned off → 503.
+  await page.route(AUTO_CAPTION, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 503,
+          json: { error: { code: "unavailable", message: "auto-captioning disabled" } },
+        })
+      : route.fulfill({ json: captionJob("pending") }),
+  );
+
+  await openVideoEditForCaptions(page);
+  await page.getByRole("button", { name: "Generate automatically" }).click();
+
+  // The control is replaced by an explanation; the button is gone.
+  await expect(page.getByText("Automatic captions aren't available on this server.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Generate automatically" })).toHaveCount(0);
+});
+
+test("a 409 (a job already running) still polls through to the finished track", async ({
+  page,
+}) => {
+  let autoGets = 0;
+  let done = false;
+  await page.route(CAPTIONS, (route) =>
+    route.fulfill({
+      json: {
+        captions: done
+          ? [{ language: "en", label: "English (auto)", created_at: new Date().toISOString() }]
+          : [],
+      },
+    }),
+  );
+  await page.route(AUTO_CAPTION, (route) => {
+    if (route.request().method() === "POST") {
+      // A job is already in flight for this video.
+      return route.fulfill({
+        status: 409,
+        json: { error: { code: "conflict", message: "already running" } },
+      });
+    }
+    autoGets += 1;
+    const state = autoGets >= 2 ? "done" : "running";
+    if (state === "done") done = true;
+    return route.fulfill({ json: captionJob(state) });
+  });
+
+  await openVideoEditForCaptions(page);
+  await page.getByRole("button", { name: "Generate automatically" }).click();
+
+  // Despite the 409, we follow the in-flight job to completion.
+  await expect(page.getByText("Automatic captions added.")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "Remove en caption" })).toBeVisible();
 });
 
 test("a creator can delete a video", async ({ page }) => {
