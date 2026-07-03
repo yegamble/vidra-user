@@ -13,9 +13,20 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, channelAvatarUrl, channelBannerUrl, isUploadCancelled } from "@/lib/api";
+import {
+  ApiError,
+  api,
+  channelAvatarUrl,
+  channelBannerUrl,
+  findResumableUploadSession,
+  forgetUploadSession,
+  isUploadCancelled,
+  resumableUpload,
+} from "@/lib/api";
 import type {
   Channel,
+  StoredUploadSession,
+  UploadVideoResult,
   Video,
   VideoConfigOption,
   VideoConfigResponse,
@@ -520,6 +531,32 @@ const PUBLISH_FIELDS: ReadonlySet<string> = new Set([
   "url",
 ]);
 
+// How often the async URL-import job is polled for progress.
+const IMPORT_POLL_INTERVAL_MS = 2000;
+
+// uploadCancelled builds the same cancellation ApiError the upload layer throws
+// (status 0 + the "upload_cancelled" code), so a cancelled import poll is
+// recognised by isUploadCancelled exactly like an aborted chunk upload.
+function uploadCancelled(): ApiError {
+  return new ApiError({ status: 0, code: "upload_cancelled", message: "upload cancelled" });
+}
+
+// sleep resolves after ms, or rejects as a cancellation when the signal aborts.
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(uploadCancelled());
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(uploadCancelled());
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 function UploadSection({ channels, config }: { channels: Channel[]; config: VideoConfigResponse | null }) {
   const [handle, setHandle] = useState(channels[0]?.handle ?? "");
   const [title, setTitle] = useState("");
@@ -536,11 +573,17 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   const [result, setResult] = useState<Video | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  // Byte-level progress percent (0–100) for the in-flight file upload.
+  // Chunk-accurate progress percent (0–100) for the in-flight file upload.
   const [progress, setProgress] = useState(0);
+  // A resumable session found for the currently-picked file (matched by
+  // filename + size in localStorage) — offers "Resume upload" after a refresh.
+  const [resumeCandidate, setResumeCandidate] = useState<StoredUploadSession | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const publishRef = useRef<HTMLButtonElement>(null);
+  // The in-flight chunked-upload session id, captured as soon as it opens so a
+  // Cancel can DELETE the session (dropping its chunk blobs) before cleanup.
+  const sessionIdRef = useRef<string | null>(null);
 
   // After a cancel the in-flight controls (progress + Cancel) disappear — put
   // focus back on the Publish button so keyboard users are not dropped on body.
@@ -548,10 +591,90 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     if (state === "cancelled") publishRef.current?.focus();
   }, [state]);
 
-  // Cancel the in-flight upload: aborts the XHR (the upload promise rejects as
-  // a cancellation, handled in upload() below).
+  // Cancel the in-flight upload: aborts the chunk transfer (the upload promise
+  // rejects as a cancellation, handled in the catch blocks below).
   function cancelUpload() {
     abortRef.current?.abort();
+  }
+
+  // finishWithVideo applies the state-based outcome: a returned video may be
+  // state="failed" (a probe/scan rejected it after the HTTP call succeeded) —
+  // that is an honest error, never "Published!". A published/scheduled/
+  // quarantined/processing result clears the form.
+  function finishWithVideo(video: Video, from: "file" | "url") {
+    if (video.state === "failed") {
+      setError(failedStateError(from));
+      setState("error");
+      return;
+    }
+    setResult(video);
+    setState("done");
+    setTitle("");
+    setDescription("");
+    setCategory("");
+    setLanguage("");
+    setLicense("");
+    setTags([]);
+    setPublishAt("");
+    setVideoUrl("");
+    setResumeCandidate(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  // applyFieldErrors maps a 422's field errors inline onto the matching form
+  // fields (aria-invalid + aria-describedby); returns true when it handled them.
+  function applyFieldErrors(err: unknown): boolean {
+    if (err instanceof ApiError && err.status === 422 && err.fields && err.fields.length > 0) {
+      const map: Record<string, string> = {};
+      for (const f of err.fields) {
+        if (PUBLISH_FIELDS.has(f.field)) map[f.field] = f.message;
+      }
+      if (Object.keys(map).length > 0) {
+        setFieldErrors(map);
+        setState("error");
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // discardSession abandons a lingering resumable session: DELETE the session
+  // (drops its chunks) and best-effort delete its draft video.
+  async function discardSession(s: StoredUploadSession) {
+    await api.cancelUploadSession(s.uploadId).catch(() => {});
+    forgetUploadSession(s.uploadId);
+    void api.deleteVideo(s.videoId).catch(() => {});
+  }
+
+  // importAndPoll enqueues the async URL import (202) then polls the job until it
+  // is done or failed. On done it reads the finalised video; on failed it returns
+  // the surfaced, safe error message.
+  async function importAndPoll(
+    videoId: string,
+    url: string,
+    signal: AbortSignal,
+  ): Promise<{ ok: true; video: Video } | { ok: false; error: string }> {
+    let job = (await api.importVideoFile(videoId, url)).import_job;
+    while (job.state === "pending" || job.state === "running") {
+      await sleep(IMPORT_POLL_INTERVAL_MS, signal);
+      job = (await api.getVideoImport(videoId, signal)).import_job;
+    }
+    if (job.state === "failed") {
+      return {
+        ok: false,
+        error: job.error && job.error.trim() !== "" ? job.error : failedStateError("url"),
+      };
+    }
+    const video = await api.getVideo(videoId, undefined, signal);
+    return { ok: true, video };
+  }
+
+  // onFilePicked offers a resume when the re-picked file matches an unfinished
+  // session (same filename + size) left by an interrupted upload.
+  function onFilePicked() {
+    setError(null);
+    const file = fileRef.current?.files?.[0];
+    setResumeCandidate(file ? findResumableUploadSession(file) : null);
   }
 
   async function upload(e: React.FormEvent) {
@@ -563,6 +686,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     if (source === "url" && url === "") return;
     const controller = new AbortController();
     abortRef.current = controller;
+    sessionIdRef.current = null;
     setState("uploading");
     setProgress(0);
     setError(null);
@@ -570,6 +694,13 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     setResult(null);
     let draftId: string | null = null;
     try {
+      // A fresh publish for a file that still has a lingering resumable session
+      // discards it first, so a new upload never leaves an orphan behind.
+      if (source === "file" && file) {
+        const stale = findResumableUploadSession(file);
+        if (stale) await discardSession(stale);
+        setResumeCandidate(null);
+      }
       const scheduleIso = scheduleToIso(publishAt);
       const draft = await api.createVideoDraft(handle, {
         title: title.trim(),
@@ -580,65 +711,105 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
         ...(scheduleIso ? { publish_at: scheduleIso } : {}),
       });
       draftId = draft.id;
-      // Cancel clicked while the draft POST was still in flight: stop before
-      // the upload starts and clean up the just-created draft.
+      // Cancel clicked while the draft POST was still in flight: stop before the
+      // upload starts and clean up the just-created draft.
       if (controller.signal.aborted) {
         void api.deleteVideo(draft.id).catch(() => {});
         setState("cancelled");
         return;
       }
-      const res =
-        source === "url"
-          ? await api.importVideoFile(draft.id, url)
-          : await api.uploadVideoFile(
-              draft.id,
-              file as File,
-              (p) => setProgress(p.percent),
-              controller.signal,
-            );
-      // The HTTP call succeeding is NOT success: the backend finalises the video
-      // and may return state="failed" (probe/scan rejected the file). Only a
-      // published/processing result clears the form; failed keeps it for a retry.
-      if (res.video.state === "failed") {
-        setError(failedStateError(source));
-        setState("error");
+      if (source === "url") {
+        const imported = await importAndPoll(draft.id, url, controller.signal);
+        if (!imported.ok) {
+          setError(imported.error);
+          setState("error");
+          return;
+        }
+        finishWithVideo(imported.video, "url");
         return;
       }
-      setResult(res.video);
-      setState("done");
-      setTitle("");
-      setDescription("");
-      setCategory("");
-      setLanguage("");
-      setLicense("");
-      setTags([]);
-      setPublishAt("");
-      setVideoUrl("");
-      if (fileRef.current) fileRef.current.value = "";
+      // File source: the resumable (chunked) protocol — create session → PUT
+      // chunks sequentially (per-chunk retry) → complete.
+      const res: UploadVideoResult = await resumableUpload(draft.id, file as File, {
+        onProgress: (p) => setProgress(p.percent),
+        signal: controller.signal,
+        onSessionOpened: (id) => {
+          sessionIdRef.current = id;
+        },
+      });
+      finishWithVideo(res.video, "file");
     } catch (err) {
-      // A local cancellation is not an error: return the form to its editable
-      // state (values kept) and best-effort delete the orphaned draft so it
-      // never lingers in "Your videos" (a failure here is tolerable — the
-      // draft stays hidden from viewers either way).
+      // A local cancellation is not an error: DELETE the session (dropping its
+      // chunk blobs) and the orphaned draft, then return the form to editable.
       if (isUploadCancelled(err)) {
+        if (sessionIdRef.current) {
+          void api.cancelUploadSession(sessionIdRef.current).catch(() => {});
+          forgetUploadSession(sessionIdRef.current);
+        }
         if (draftId) void api.deleteVideo(draftId).catch(() => {});
         setState("cancelled");
         return;
       }
-      // A 422 with field errors maps inline onto the matching form fields
-      // (aria-invalid + aria-describedby); anything else is a form-level message.
-      if (err instanceof ApiError && err.status === 422 && err.fields && err.fields.length > 0) {
-        const map: Record<string, string> = {};
-        for (const f of err.fields) {
-          if (PUBLISH_FIELDS.has(f.field)) map[f.field] = f.message;
-        }
-        if (Object.keys(map).length > 0) {
-          setFieldErrors(map);
-          setState("error");
-          return;
-        }
-      }
+      if (applyFieldErrors(err)) return;
       setError(importOrUploadError(err, source));
+      setState("error");
+    } finally {
+      abortRef.current = null;
+    }
+  }
+
+  // resumeUpload continues an interrupted upload for the re-picked file: read the
+  // session's received chunks, then PUT only the missing ones and complete. The
+  // draft already carries the original metadata, so nothing is re-created.
+  async function resumeUpload() {
+    const file = fileRef.current?.files?.[0];
+    const cand = resumeCandidate;
+    if (!cand || !file || state === "uploading") return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    sessionIdRef.current = cand.uploadId;
+    setState("uploading");
+    setProgress(0);
+    setError(null);
+    setFieldErrors({});
+    setResult(null);
+    try {
+      const status = await api.getUploadSession(cand.uploadId, controller.signal);
+      if (status.state !== "active") {
+        forgetUploadSession(cand.uploadId);
+        setResumeCandidate(null);
+        setError("That unfinished upload is no longer available — publish to start a new one.");
+        setState("error");
+        return;
+      }
+      const res = await resumableUpload(status.video_id, file, {
+        resume: status,
+        onProgress: (p) => setProgress(p.percent),
+        signal: controller.signal,
+        onSessionOpened: (id) => {
+          sessionIdRef.current = id;
+        },
+      });
+      finishWithVideo(res.video, "file");
+    } catch (err) {
+      if (isUploadCancelled(err)) {
+        if (sessionIdRef.current) {
+          void api.cancelUploadSession(sessionIdRef.current).catch(() => {});
+          forgetUploadSession(sessionIdRef.current);
+        }
+        void api.deleteVideo(cand.videoId).catch(() => {});
+        setResumeCandidate(null);
+        setState("cancelled");
+        return;
+      }
+      if (err instanceof ApiError && err.status === 404) {
+        forgetUploadSession(cand.uploadId);
+        setResumeCandidate(null);
+        setError("That unfinished upload is no longer available — publish to start a new one.");
+        setState("error");
+        return;
+      }
+      setError(importOrUploadError(err, "file"));
       setState("error");
     } finally {
       abortRef.current = null;
@@ -790,8 +961,12 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
               type="file"
               accept="video/*"
               aria-label="Video file"
+              onChange={onFilePicked}
               className="text-sm file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:file:bg-zinc-800"
             />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              Large files upload in chunks and can be resumed if interrupted.
+            </span>
           </label>
         ) : (
           <label className="flex flex-col gap-1 text-sm">
@@ -812,6 +987,38 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             </span>
           </label>
         )}
+        {source === "file" && resumeCandidate && state !== "uploading" ? (
+          // A resumable session was left by an interrupted upload of this exact
+          // file — offer to resume from the chunks that already landed.
+          <div
+            role="status"
+            className="flex flex-col gap-2 rounded-md border border-sky-300 bg-sky-50 p-3 text-sm dark:border-sky-800 dark:bg-sky-950/40"
+          >
+            <p className="text-sky-800 dark:text-sky-200">
+              Unfinished upload found for “{resumeCandidate.filename}”. Resume where you left off,
+              or start a new upload.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void resumeUpload()}
+                className="rounded-full bg-sky-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:bg-sky-600 dark:hover:bg-sky-500"
+              >
+                Resume upload
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void discardSession(resumeCandidate);
+                  setResumeCandidate(null);
+                }}
+                className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3">
           <button
             ref={publishRef}

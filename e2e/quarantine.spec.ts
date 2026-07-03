@@ -11,7 +11,10 @@ const APPROVE = /\/api\/v1\/admin\/videos\/[^/]+\/approve$/;
 const REJECT = /\/api\/v1\/admin\/videos\/[^/]+\/reject$/;
 const MY_CHANNELS = /\/api\/v1\/me\/channels$/;
 const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
-const UPLOAD = /\/api\/v1\/videos\/v1\/file$/;
+// Resumable (chunked) upload protocol endpoints.
+const UPLOAD_SESSION = /\/api\/v1\/videos\/v1\/upload-session$/;
+const CHUNK = /\/api\/v1\/uploads\/up1\/chunks\/\d+$/;
+const COMPLETE = /\/api\/v1\/uploads\/up1\/complete$/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 const NOTIFICATIONS = /\/api\/v1\/me\/notifications(\?|$)/;
 
@@ -204,8 +207,32 @@ test("a quarantined publish outcome is reported as held for review, not failed o
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  await page.route(UPLOAD, (route) =>
-    route.fulfill({ json: { video: video({ state: "quarantined" }) } }),
+  // The chunked upload assembles and finalises the video as "quarantined".
+  const FUTURE = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  await page.route(UPLOAD_SESSION, (route) =>
+    route.fulfill({
+      status: 201,
+      json: { upload_id: "up1", chunk_size: 1_048_576, total_chunks: 1, size: 4, expires_at: FUTURE },
+    }),
+  );
+  await page.route(CHUNK, (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        upload_id: "up1",
+        video_id: "v1",
+        state: "active",
+        size: 4,
+        chunk_size: 1_048_576,
+        total_chunks: 1,
+        received_chunks: [0],
+        bytes_received: 4,
+        expires_at: FUTURE,
+      },
+    }),
+  );
+  await page.route(COMPLETE, (route) =>
+    route.fulfill({ status: 201, json: { video: video({ state: "quarantined" }) } }),
   );
   await page.route(VIDEO_CONFIG, (route) =>
     route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),

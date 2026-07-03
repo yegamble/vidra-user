@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { PlaylistThumbnailManager } from "@/components/PlaylistThumbnailManager";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -169,6 +170,14 @@ export function PlaylistDetailView({ id }: { id: string }) {
           ) : null}
         </header>
       )}
+
+      {isOwner ? (
+        <PlaylistThumbnailManager
+          playlistId={playlist.id}
+          hasThumbnail={playlist.has_thumbnail ?? false}
+          onChanged={(has) => setPlaylist((p) => (p ? { ...p, has_thumbnail: has } : p))}
+        />
+      ) : null}
 
       {playlist.videos.length === 0 ? (
         <EmptyState

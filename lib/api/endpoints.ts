@@ -76,6 +76,10 @@ import type {
   UpdatePlaylistRequest,
   UpdateVideoRequest,
   UploadVideoResult,
+  CreateUploadSessionRequest,
+  UploadSessionResponse,
+  UploadStatusResponse,
+  ImportJobResponse,
   VideoFile,
   VideoRating,
   VideoStatsResponse,
@@ -254,13 +258,57 @@ export const api = {
   },
 
   /**
-   * POST /api/v1/videos/{id}/import — import the original from a public URL (auth,
-   * owner). Like uploadVideoFile but the backend fetches the file (SSRF-guarded).
+   * POST /api/v1/videos/{id}/import — enqueue an ASYNC URL import (auth, owner).
+   * Returns 202 with the queued job; the backend fetches (SSRF-guarded) and runs
+   * the pipeline in the background. Poll getVideoImport for progress.
    */
   importVideoFile: (videoId: string, url: string) =>
-    apiRequest<UploadVideoResult>(`/api/v1/videos/${encodeURIComponent(videoId)}/import`, {
+    apiRequest<ImportJobResponse>(`/api/v1/videos/${encodeURIComponent(videoId)}/import`, {
       method: "POST",
       body: { url },
+    }),
+
+  /**
+   * GET /api/v1/videos/{id}/import — the video's latest URL-import job (auth,
+   * owner). state is pending/running/done/failed; on failure `error` is a safe,
+   * human-readable reason. A video that was never imported → 404.
+   */
+  getVideoImport: (videoId: string, signal?: AbortSignal) =>
+    apiRequest<ImportJobResponse>(`/api/v1/videos/${encodeURIComponent(videoId)}/import`, { signal }),
+
+  /**
+   * POST /api/v1/videos/{id}/upload-session — open a resumable (chunked) upload
+   * session for the video's original file (auth, owner). Validates the declared
+   * size/extension/quota up front; returns the fixed chunk size + total chunks.
+   */
+  createUploadSession: (videoId: string, body: CreateUploadSessionRequest) =>
+    apiRequest<UploadSessionResponse>(
+      `/api/v1/videos/${encodeURIComponent(videoId)}/upload-session`,
+      { method: "POST", body },
+    ),
+
+  /**
+   * GET /api/v1/uploads/{upload_id} — the resume contract: which chunk indices
+   * have landed (owner only). Read after an interruption to skip received chunks.
+   */
+  getUploadSession: (uploadId: string, signal?: AbortSignal) =>
+    apiRequest<UploadStatusResponse>(`/api/v1/uploads/${encodeURIComponent(uploadId)}`, { signal }),
+
+  /**
+   * DELETE /api/v1/uploads/{upload_id} — cancel a resumable upload and drop its
+   * chunk blobs (auth, owner; idempotent 204).
+   */
+  cancelUploadSession: (uploadId: string) =>
+    apiRequest<void>(`/api/v1/uploads/${encodeURIComponent(uploadId)}`, { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/uploads/{upload_id}/complete — assemble the session's chunks and
+   * finalise the video through the same pipeline as a direct upload (auth, owner).
+   * Returns the finalised video (state "published", or "failed" if a probe rejected it).
+   */
+  completeUploadSession: (uploadId: string) =>
+    apiRequest<UploadVideoResult>(`/api/v1/uploads/${encodeURIComponent(uploadId)}/complete`, {
+      method: "POST",
     }),
 
   /**
@@ -824,6 +872,23 @@ export const api = {
     }),
 
   /**
+   * POST /api/v1/playlists/{id}/thumbnail — set a playlist's cover image (auth,
+   * owner, multipart). Replaces any previous cover. JPEG/PNG/WebP else 415.
+   */
+  setPlaylistThumbnail: (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<Playlist>(`/api/v1/playlists/${encodeURIComponent(id)}/thumbnail`, {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  /** DELETE /api/v1/playlists/{id}/thumbnail — remove a playlist's cover (owner, idempotent). */
+  deletePlaylistThumbnail: (id: string) =>
+    apiRequest<void>(`/api/v1/playlists/${encodeURIComponent(id)}/thumbnail`, { method: "DELETE" }),
+
+  /**
    * GET /api/v1/admin/reports — the moderation queue, newest first (moderator/admin).
    * Pass `openOnly` to return only unresolved reports.
    */
@@ -1115,6 +1180,21 @@ export function remoteVideoThumbnailUrl(id: string): string {
 /** Direct URL to a caption track's WebVTT body (text/vtt). */
 export function videoCaptionUrl(id: string, language: string): string {
   return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/captions/${encodeURIComponent(language)}`;
+}
+
+/** Direct URL to a video's storyboard WebVTT map (seek-preview cues). */
+export function videoStoryboardVttUrl(id: string): string {
+  return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/storyboard.vtt`;
+}
+
+/** Direct URL to a video's storyboard sprite sheet (for the seek-preview thumbnails). */
+export function videoStoryboardImageUrl(id: string): string {
+  return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/storyboard.jpg`;
+}
+
+/** Direct URL to a playlist's cover image (for an <img> src; 404s when none set). */
+export function playlistThumbnailUrl(id: string): string {
+  return `${apiBaseUrl}/api/v1/playlists/${encodeURIComponent(id)}/thumbnail`;
 }
 
 /** Direct URL to a user's public avatar image (404s when none is set). */

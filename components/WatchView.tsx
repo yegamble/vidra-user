@@ -16,6 +16,7 @@ import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
 import { SpeedMenu } from "@/components/SpeedMenu";
+import { StoryboardPreview } from "@/components/StoryboardPreview";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -403,6 +404,15 @@ function Player({
         ))}
         Your browser does not support the video tag.
       </video>
+      {/* Seek-hover preview thumbnails from the storyboard, when one exists. The
+          native seekbar keeps working; this is an additional accessible scrubber. */}
+      {video.has_storyboard ? (
+        <StoryboardPreview
+          videoId={video.id}
+          videoRef={videoRef}
+          durationSeconds={video.duration_seconds}
+        />
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         {/* Speed applies to every playback path (native video.playbackRate). */}
         <SpeedMenu speed={speed} onSelect={setSpeed} />

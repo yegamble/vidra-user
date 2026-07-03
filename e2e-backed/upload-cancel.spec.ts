@@ -2,18 +2,19 @@ import { expect, test } from "@playwright/test";
 
 import { channelVideos, loginToken, uniqueId } from "./fixtures";
 
-// Proves upload cancellation against a real vidra-core + PostgreSQL: a creator
-// starts a file upload, the determinate progress UI appears, and Cancel aborts
-// the XHR mid-flight — the form returns to an editable state and the orphaned
-// draft video is best-effort DELETEd (awaited here). Persistence of the cleanup:
-// the owner-authed channel list (which includes drafts and every other state)
-// carries NO row for the cancelled upload after a fresh API read.
+// Proves CHUNKED-upload cancellation against a real vidra-core + PostgreSQL: a
+// creator starts a resumable upload (create session → PUT chunks), the
+// determinate progress UI appears, and Cancel aborts the in-flight chunk —
+// the form returns to an editable state, the upload session is DELETEd (dropping
+// its chunk blobs), and the orphaned draft video is best-effort DELETEd (both
+// awaited here). Persistence of the cleanup: the owner-authed channel list
+// (which includes drafts and every other state) carries NO row for the cancelled
+// upload after a fresh API read — a cancelled session leaves NO published video.
 //
-// CDP upload throttling (~512 KB/s) keeps the 16 MB body in flight for ~30s so
-// the cancel lands deterministically mid-upload; the file bytes never finish
-// arriving, so their content is irrelevant (ffprobe never runs). The backend's
-// UPLOAD_MAX_SIZE (2G default) comfortably admits the Content-Length.
-test("cancelling an in-flight upload deletes the orphaned draft", async ({ page, request }) => {
+// CDP upload throttling (~512 KB/s) keeps the 16 MB body in flight for tens of
+// seconds so the cancel lands deterministically mid-chunk; the chunk never
+// finishes arriving, so its content is irrelevant (the video is never assembled).
+test("a cancelled chunked upload leaves no session and no published video", async ({ page, request }) => {
   const id = uniqueId();
   const handle = `ch${id}`;
   const email = `e2e-fan-${id}@example.test`;
@@ -57,12 +58,17 @@ test("cancelling an in-flight upload deletes the orphaned draft", async ({ page,
   // The determinate progress UI is up while the upload is in flight.
   await expect(page.getByRole("progressbar", { name: "Upload progress" })).toBeVisible();
 
-  // Cancel → the abort fires the best-effort DELETE of the just-created draft
-  // (awaited: the 204 is the backend acknowledging the row is gone).
+  // Cancel → the abort fires a DELETE of the upload session (dropping its chunks)
+  // and a best-effort DELETE of the just-created draft (both awaited: the 204s are
+  // the backend acknowledging the session and the draft row are gone).
+  const sessionDeleted = page.waitForResponse(
+    (r) => /\/api\/v1\/uploads\/[^/]+$/.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
+  );
   const draftDeleted = page.waitForResponse(
     (r) => /\/api\/v1\/videos\/[^/]+$/.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
   );
   await page.getByRole("button", { name: "Cancel upload" }).click();
+  await sessionDeleted;
   await draftDeleted;
 
   // Back to an editable form; nothing claims success and the values are kept.

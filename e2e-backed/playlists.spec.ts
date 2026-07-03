@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-import { API_URL, registerUser, seedPublishedChannel, TINY_MP4_BASE64, uniqueId } from "./fixtures";
+import {
+  API_URL,
+  registerUser,
+  seedPublishedChannel,
+  TINY_MP4_BASE64,
+  TINY_PNG_BASE64,
+  uniqueId,
+} from "./fixtures";
 
 // Proves the playlist round trip against a real vidra-core + PostgreSQL: a viewer
 // creates a playlist and adds a video from the watch page, the video then appears
@@ -160,4 +167,51 @@ test("an owner can reorder playlist items, and the order persists", async ({ pag
   await page.getByRole("link", { name: "Playlists" }).click();
   await page.getByRole("link", { name: /Order Mix/ }).click();
   await expect(page.getByRole("button", { name: `Move ${bTitle} up` })).toBeDisabled();
+});
+
+// Proves the playlist COVER round trip against a real vidra-core + PostgreSQL: an
+// owner creates a PUBLIC playlist, uploads a PNG cover from the detail page, and
+// the cover then serves as image/png through the public thumbnail endpoint — DB
+// evidence that POST /playlists/:id/thumbnail persisted the stored object.
+test("a playlist cover uploaded from the detail page persists", async ({ page, request }) => {
+  const id = uniqueId();
+  const title = `Cover Mix ${id}`;
+
+  await page.goto("/signup");
+  await page.getByLabel("Username").fill(`fan${id}`);
+  await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
+  await page.getByLabel("Password").fill("supersecret-e2e");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  // Create a PUBLIC playlist so the cover is readable via the public API.
+  await page.getByRole("link", { name: "Playlists" }).click();
+  await page.getByLabel("Playlist title").fill(title);
+  await page.getByLabel("Visibility").selectOption("public");
+  const created = page.waitForResponse(
+    (r) => /\/api\/v1\/playlists$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create" }).click();
+  await created;
+
+  // Open the detail page and upload a PNG cover from the owner cover manager.
+  await page.getByRole("link", { name: new RegExp(title) }).click();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  const uploaded = page.waitForResponse(
+    (r) => /\/api\/v1\/playlists\/[^/]+\/thumbnail$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByLabel("Cover image").setInputFiles({
+    name: "cover.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(TINY_PNG_BASE64, "base64"),
+  });
+  await uploaded;
+  await expect(page.getByRole("img", { name: "Current cover" })).toBeVisible();
+
+  // Persisted: the playlist id is in the URL; the public thumbnail endpoint now
+  // serves the stored cover as image/png (a fresh, unauthenticated API read).
+  const playlistId = page.url().split("/playlists/")[1];
+  const res = await request.get(`${API_URL}/api/v1/playlists/${playlistId}/thumbnail`);
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toContain("image/png");
 });

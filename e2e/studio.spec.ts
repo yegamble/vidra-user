@@ -9,7 +9,12 @@ const MY_CHANNELS = /\/api\/v1\/me\/channels$/;
 const CREATE_CHANNEL = /\/api\/v1\/channels$/;
 const CHANNEL_BY_HANDLE = /\/api\/v1\/channels\/ada_makes$/;
 const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
-const UPLOAD = /\/api\/v1\/videos\/v1\/file$/;
+// Resumable (chunked) upload protocol endpoints.
+const UPLOAD_SESSION = /\/api\/v1\/videos\/v1\/upload-session$/;
+const CHUNK = /\/api\/v1\/uploads\/up1\/chunks\/\d+$/;
+const COMPLETE = /\/api\/v1\/uploads\/up1\/complete$/;
+const SESSION = /\/api\/v1\/uploads\/up1$/;
+const IMPORT = /\/api\/v1\/videos\/v1\/import$/;
 const VIDEO = /\/api\/v1\/videos\/v1$/;
 const CAPTIONS = /\/api\/v1\/videos\/v1\/captions$/;
 const CAPTION_LANG = /\/api\/v1\/videos\/v1\/captions\/[^/]+$/;
@@ -64,6 +69,61 @@ function video(overrides: Record<string, unknown> = {}) {
     created_at: new Date().toISOString(),
     ...overrides,
   };
+}
+
+const FUTURE = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+
+function importJob(state: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id: "job1",
+    video_id: "v1",
+    state,
+    attempts: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+// mockChunkedUpload wires the resumable-upload protocol so a studio file upload
+// completes: open session → PUT each chunk → complete returns `completeJson`.
+// Small test files fit one chunk (chunk_size defaults large).
+async function mockChunkedUpload(
+  page: Page,
+  completeJson: Record<string, unknown>,
+  opts: { total?: number; chunkSize?: number; size?: number } = {},
+) {
+  const total = opts.total ?? 1;
+  const chunkSize = opts.chunkSize ?? 1_048_576;
+  const size = opts.size ?? 4;
+  await page.route(UPLOAD_SESSION, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 201,
+          json: { upload_id: "up1", chunk_size: chunkSize, total_chunks: total, size, expires_at: FUTURE },
+        })
+      : route.continue(),
+  );
+  const received: number[] = [];
+  await page.route(CHUNK, (route) => {
+    const n = Number(/\/chunks\/(\d+)$/.exec(route.request().url())![1]);
+    received.push(n);
+    return route.fulfill({
+      status: 200,
+      json: {
+        upload_id: "up1",
+        video_id: "v1",
+        state: "active",
+        size,
+        chunk_size: chunkSize,
+        total_chunks: total,
+        received_chunks: [...new Set(received)].sort((a, b) => a - b),
+        bytes_received: size,
+        expires_at: FUTURE,
+      },
+    });
+  });
+  await page.route(COMPLETE, (route) => route.fulfill({ status: 201, json: completeJson }));
 }
 
 const session = {
@@ -186,7 +246,7 @@ test("a creator can upload and publish a video", async ({ page }) => {
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  await page.route(UPLOAD, (route) => route.fulfill({ json: { video: video() } }));
+  await mockChunkedUpload(page, { video: video() });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
@@ -226,7 +286,7 @@ test("publish sends the entered tags, normalized, on the draft", async ({ page }
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  await page.route(UPLOAD, (route) => route.fulfill({ json: { video: video() } }));
+  await mockChunkedUpload(page, { video: video() });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
@@ -304,7 +364,7 @@ test("a failed upload is reported as a processing failure, not Published!", asyn
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  await page.route(UPLOAD, (route) => route.fulfill({ json: { video: video({ state: "failed" }) } }));
+  await mockChunkedUpload(page, { video: video({ state: "failed" }) });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
@@ -336,8 +396,11 @@ test("a failed URL import is reported as a processing failure, not Published!", 
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  await page.route(/\/api\/v1\/videos\/v1\/import$/, (route) =>
-    route.fulfill({ json: { video: video({ state: "failed" }) } }),
+  // POST enqueues (202 running); the poll then reports the job failed.
+  await page.route(IMPORT, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 202, json: { import_job: importJob("running") } })
+      : route.fulfill({ json: { import_job: importJob("failed") } }),
   );
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
@@ -350,6 +413,38 @@ test("a failed URL import is reported as a processing failure, not Published!", 
   await expect(
     page.getByText("Processing failed — the imported file could not be published", { exact: false }),
   ).toBeVisible();
+  await expect(page.getByText("Published!")).toHaveCount(0);
+});
+
+// The async URL import surfaces the backend's safe failure reason when the job
+// comes back failed with an `error` message.
+test("a failed URL import surfaces the job's error reason", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  await page.route(IMPORT, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 202, json: { import_job: importJob("pending") } })
+      : route.fulfill({
+          json: { import_job: importJob("failed", { error: "the source returned 404 Not Found" }) },
+        }),
+  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByLabel("Video URL").fill("https://example.com/missing.mp4");
+  await page.getByRole("button", { name: "Publish" }).click();
+
+  await expect(page.getByText("the source returned 404 Not Found")).toBeVisible();
   await expect(page.getByText("Published!")).toHaveCount(0);
 });
 
@@ -366,9 +461,7 @@ test("an upload still processing shows an in-progress message, not Published!", 
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  await page.route(UPLOAD, (route) =>
-    route.fulfill({ json: { video: video({ state: "processing" }) } }),
-  );
+  await mockChunkedUpload(page, { video: video({ state: "processing" }) });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
@@ -384,11 +477,11 @@ test("an upload still processing shows an in-progress message, not Published!", 
   await expect(page.getByText("Published!")).toHaveCount(0);
 });
 
-// P6.2 upload progress + cancellation: while a (mocked, held-open) file upload
-// is in flight the form shows a determinate progress bar (role=progressbar with
-// aria-valuenow) + percent + a Cancel control; cancelling aborts the XHR,
-// returns the form to an editable state with its values kept, and best-effort
-// DELETEs the orphaned draft video.
+// P6.2 chunked upload progress + cancellation: while a (mocked, held-open) chunk
+// upload is in flight the form shows a determinate progress bar (role=progressbar
+// with aria-valuenow) + percent + a Cancel control; cancelling aborts the chunk
+// transfer, DELETEs the upload session (dropping its chunks) AND the orphaned
+// draft video, and returns the form to an editable state with its values kept.
 test("a slow upload shows a determinate progress bar and can be cancelled", async ({ page }) => {
   await signIn(page);
   await page.route(MY_CHANNELS, (route) =>
@@ -401,7 +494,23 @@ test("a slow upload shows a determinate progress bar and can be cancelled", asyn
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  // The cleanup DELETE for the orphaned draft.
+  // The session opens immediately.
+  await page.route(UPLOAD_SESSION, (route) =>
+    route.fulfill({
+      status: 201,
+      json: { upload_id: "up1", chunk_size: 1_048_576, total_chunks: 1, size: 4, expires_at: FUTURE },
+    }),
+  );
+  // Cancel → DELETE the session (drops the chunk blobs).
+  let sessionCancelled = false;
+  await page.route(SESSION, (route) => {
+    if (route.request().method() === "DELETE") {
+      sessionCancelled = true;
+      return route.fulfill({ status: 204, body: "" });
+    }
+    return route.continue();
+  });
+  // Cleanup DELETE for the orphaned draft.
   let draftDeleted = false;
   await page.route(VIDEO, (route) => {
     if (route.request().method() === "DELETE") {
@@ -410,11 +519,26 @@ test("a slow upload shows a determinate progress bar and can be cancelled", asyn
     }
     return route.continue();
   });
-  // Hold the upload open so the in-flight UI is observable; the XHR is aborted
-  // by Cancel long before this fulfils (the catch absorbs the aborted route).
-  await page.route(UPLOAD, async (route) => {
+  // Hold the chunk PUT open so the in-flight UI is observable; the fetch is
+  // aborted by Cancel long before this fulfils (the catch absorbs the abort).
+  await page.route(CHUNK, async (route) => {
     await new Promise((r) => setTimeout(r, 5_000));
-    await route.fulfill({ json: { video: video() } }).catch(() => {});
+    await route
+      .fulfill({
+        status: 200,
+        json: {
+          upload_id: "up1",
+          video_id: "v1",
+          state: "active",
+          size: 4,
+          chunk_size: 1_048_576,
+          total_chunks: 1,
+          received_chunks: [0],
+          bytes_received: 4,
+          expires_at: FUTURE,
+        },
+      })
+      .catch(() => {});
   });
 
   await page.getByRole("link", { name: "Studio" }).click();
@@ -441,8 +565,86 @@ test("a slow upload shows a determinate progress bar and can be cancelled", asyn
   await expect(page.getByRole("button", { name: "Publish" })).toBeEnabled();
   await expect(page.getByText("Published!")).toHaveCount(0);
 
-  // The orphaned draft was best-effort deleted.
+  // The session was cancelled and the orphaned draft best-effort deleted.
+  await expect.poll(() => sessionCancelled).toBe(true);
   await expect.poll(() => draftDeleted).toBe(true);
+});
+
+// The resume affordance: an interrupted upload leaves a resumable session in
+// localStorage; re-picking the SAME file (matched by name + size) offers "Resume
+// upload", which reads the session's received chunks, PUTs only the missing ones,
+// and completes — without re-creating the draft or re-uploading landed chunks.
+test("a re-picked file offers Resume and finishes the interrupted upload", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  // Seed a resumable session for a 10-byte "clip.mp4" (chunk 0 already landed) —
+  // set on the current (post-login) page so it survives the client-side nav to
+  // the studio (an interrupted upload would have left exactly this record).
+  await page.evaluate((future) => {
+    localStorage.setItem(
+      "vidra.upload-sessions",
+      JSON.stringify([
+        { uploadId: "up1", videoId: "v1", filename: "clip.mp4", size: 10, expiresAt: future },
+      ]),
+    );
+  }, FUTURE);
+
+  // GET the session status → active, chunk 0 received (of 3).
+  await page.route(SESSION, (route) =>
+    route.fulfill({
+      json: {
+        upload_id: "up1",
+        video_id: "v1",
+        state: "active",
+        size: 10,
+        chunk_size: 4,
+        total_chunks: 3,
+        received_chunks: [0],
+        bytes_received: 4,
+        expires_at: FUTURE,
+      },
+    }),
+  );
+  const putChunks: number[] = [];
+  await page.route(CHUNK, (route) => {
+    const n = Number(/\/chunks\/(\d+)$/.exec(route.request().url())![1]);
+    putChunks.push(n);
+    return route.fulfill({
+      status: 200,
+      json: {
+        upload_id: "up1",
+        video_id: "v1",
+        state: "active",
+        size: 10,
+        chunk_size: 4,
+        total_chunks: 3,
+        received_chunks: [...new Set([0, ...putChunks])].sort((a, b) => a - b),
+        bytes_received: n === 2 ? 10 : (n + 1) * 4,
+        expires_at: FUTURE,
+      },
+    });
+  });
+  await page.route(COMPLETE, (route) => route.fulfill({ status: 201, json: { video: video() } }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  // Re-pick the same 10-byte clip.mp4 → the resume banner appears.
+  await page.getByLabel("Video file").setInputFiles({
+    name: "clip.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.alloc(10),
+  });
+  await expect(page.getByText("Unfinished upload found for “clip.mp4”", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "Resume upload" }).click();
+  await expect(page.getByText("Published!")).toBeVisible();
+  // Only the missing chunks (1 and 2) were PUT — chunk 0 was skipped.
+  expect(putChunks.sort((a, b) => a - b)).toEqual([1, 2]);
 });
 
 // A 422 from the create-draft call maps its field errors inline onto the publish
@@ -535,11 +737,17 @@ test("a creator can publish a video by importing from a URL", async ({ page }) =
     }
     return route.fulfill({ json: { videos: [] } });
   });
+  // POST enqueues (202, running); the poll then reports done, and the finalised
+  // video is read back via GET /videos/v1.
   let importBody: unknown;
-  await page.route(/\/api\/v1\/videos\/v1\/import$/, (route) => {
-    importBody = route.request().postDataJSON();
-    return route.fulfill({ json: { video: video() } });
+  await page.route(IMPORT, (route) => {
+    if (route.request().method() === "POST") {
+      importBody = route.request().postDataJSON();
+      return route.fulfill({ status: 202, json: { import_job: importJob("running") } });
+    }
+    return route.fulfill({ json: { import_job: importJob("done") } });
   });
+  await page.route(VIDEO, (route) => route.fulfill({ json: video() }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();

@@ -152,6 +152,85 @@ test("the keyboard shortcuts are documented in an accessible disclosure", async 
   await expect(help).toBeFocused();
 });
 
+const STORYBOARD_VTT = `WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+storyboard.jpg#xywh=0,0,160,90
+
+00:00:02.000 --> 00:00:04.000
+storyboard.jpg#xywh=160,0,160,90
+
+00:00:04.000 --> 00:00:06.000
+storyboard.jpg#xywh=320,0,160,90
+`;
+
+test("the storyboard seek-preview previews a frame on hover and seeks on click", async ({ page }) => {
+  // A published video that advertises a storyboard (has_storyboard on the detail).
+  await page.route(DETAIL, (route) =>
+    route.fulfill({
+      json: {
+        ...video("v1", "Watch Me"),
+        has_storyboard: true,
+        duration_seconds: 6,
+      },
+    }),
+  );
+  await page.route(ORIGINAL, (route) =>
+    route.fulfill({ contentType: "video/mp4", body: Buffer.from(TINY_MP4_BASE64, "base64") }),
+  );
+  await page.route(CAPTIONS, (route) => route.fulfill({ json: { captions: [] } }));
+  await page.route(COMMENTS, (route) => route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }));
+  await page.route(RATING, (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/storyboard\.vtt$/, (route) =>
+    route.fulfill({ contentType: "text/vtt", body: STORYBOARD_VTT }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/storyboard\.jpg$/, (route) =>
+    route.fulfill({ contentType: "image/jpeg", body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]) }),
+  );
+
+  await page.goto("/videos/v1");
+  const slider = page.getByRole("slider", { name: "Seek preview" });
+  await expect(slider).toBeVisible();
+
+  // Record every requested seek (the fixture clip has a single keyframe, so
+  // currentTime snaps back to 0 — asserting the seek intent is the honest proof).
+  await page.locator("video").evaluate((el: HTMLVideoElement) => {
+    const w = window as unknown as { __seeks: number[] };
+    w.__seeks = [];
+    const proto = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime")!;
+    Object.defineProperty(el, "currentTime", {
+      configurable: true,
+      get() {
+        return proto.get!.call(this);
+      },
+      set(v: number) {
+        w.__seeks.push(v);
+        proto.set!.call(this, v);
+      },
+    });
+  });
+
+  // Hovering moves the pointer over the track → a storyboard frame previews from
+  // the sprite sheet (rendered as a background image of the sprite URL).
+  await slider.hover();
+  await expect(slider.locator('div[style*="storyboard.jpg"]')).toBeVisible();
+
+  // Clicking seeks the player to the hovered position (a positive time).
+  await slider.click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __seeks: number[] }).__seeks.at(-1) ?? -1))
+    .toBeGreaterThan(0);
+});
+
+test("no storyboard scrubber is shown when the video has none", async ({ page }) => {
+  await mockWatchPage(page);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Seek preview" })).toHaveCount(0);
+});
+
 test("the related rail lists same-channel videos first, then same-category", async ({ page }) => {
   // The current video: channel c1, category "7".
   await page.route(DETAIL, (route) => route.fulfill({ json: video("v1", "Watch Me", "c1", "7") }));

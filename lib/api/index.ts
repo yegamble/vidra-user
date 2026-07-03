@@ -6,14 +6,24 @@ export {
   api,
   channelAvatarUrl,
   channelBannerUrl,
+  playlistThumbnailUrl,
   remoteVideoThumbnailUrl,
   userAvatarUrl,
   userBannerUrl,
   videoCaptionUrl,
   videoHlsMasterUrl,
   videoOriginalUrl,
+  videoStoryboardImageUrl,
+  videoStoryboardVttUrl,
   videoThumbnailUrl,
 } from "./endpoints";
+export {
+  findResumableUploadSession,
+  forgetUploadSession,
+  rememberUploadSession,
+  resumableUpload,
+} from "./resumable-upload";
+export type { ResumableUploadOptions, StoredUploadSession } from "./resumable-upload";
 export type { FeedParams, SearchParams } from "./endpoints";
 export { getVideoConfigCached, resolveOptionLabel } from "./video-config";
 export { authApi, oauthBeginUrl } from "./auth";

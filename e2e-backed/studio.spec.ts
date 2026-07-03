@@ -11,11 +11,12 @@ import {
   uniqueId,
 } from "./fixtures";
 
-// Proves the publish round trip against a real vidra-core + PostgreSQL: a creator
-// signs up, creates a channel, and uploads a video in the studio; the published
-// video then appears on the public channel page after a fresh refetch. DB
-// evidence (the videos + video_files rows) is captured separately via psql.
-test("a creator can create a channel and publish a video", async ({ page }) => {
+// Proves the CHUNKED (resumable) publish round trip against a real vidra-core +
+// PostgreSQL: a creator signs up, creates a channel, and uploads a video in the
+// studio via the chunked protocol (create session → PUT chunks → complete); the
+// published video then appears on the public channel page after a fresh refetch.
+// DB evidence (the videos + video_files rows) is captured separately via psql.
+test("a creator can create a channel and publish a video (chunked upload)", async ({ page }) => {
   const id = uniqueId();
   const handle = `ch${id}`;
   const channelName = `Channel ${id}`;
@@ -39,7 +40,9 @@ test("a creator can create a channel and publish a video", async ({ page }) => {
   await page.getByRole("button", { name: "Create channel" }).click();
   await channelCreated;
 
-  // Upload a real (tiny) video; the backend's ffprobe accepts it and publishes it.
+  // Upload a real (tiny) video via the chunked protocol; the backend assembles
+  // the chunks, runs ffprobe (which accepts it), and publishes it. `complete`
+  // (POST /uploads/:id/complete) is the terminal call that finalises the video.
   await page.getByLabel("Video title").fill(videoTitle);
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
@@ -47,7 +50,7 @@ test("a creator can create a channel and publish a video", async ({ page }) => {
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
   const uploaded = page.waitForResponse(
-    (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   await page.getByRole("button", { name: "Publish" }).click();
   await uploaded;
@@ -94,7 +97,7 @@ test("a creator can edit and delete their video", async ({ page, request }) => {
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
   const uploaded = page.waitForResponse(
-    (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   await page.getByRole("button", { name: "Publish" }).click();
   await uploaded;
@@ -169,7 +172,7 @@ test("a creator can replace their video's thumbnail", async ({ page, request }) 
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
   const uploaded = page.waitForResponse(
-    (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   await page.getByRole("button", { name: "Publish" }).click();
   await uploaded;
@@ -202,14 +205,16 @@ test("a creator can replace their video's thumbnail", async ({ page, request }) 
   expect(res.headers()["content-type"]).toContain("image/png");
 });
 
-// Proves URL import against a real vidra-core + PostgreSQL: a creator publishes a
-// video by importing from a URL. The source is a seeded public video, imported by
+// Proves ASYNC URL import against a real vidra-core + PostgreSQL: a creator
+// publishes a video by importing from a URL. The POST now returns 202 with a
+// queued job and the studio POLLS GET /videos/:id/import until it is done, then
+// reads the finalised video. The source is a seeded public video, imported by
 // its own /original via the compose service name (http://api:8080/…) — no external
 // origin needed. Requires HTTP_IMPORT_ALLOW_PRIVATE_URLS=true on the backend (set
 // in the frontend-e2e-backed workflow); the Content-Type fallback accepts the
 // extension-less /original path. The imported video then appears published on the
 // importer's channel.
-test("a creator can publish a video by importing from a URL", async ({ page, request }) => {
+test("a creator can publish a video by importing from a URL (async job)", async ({ page, request }) => {
   // A public source whose /original the backend can fetch from within the network.
   const src = await seedPublishedChannel(request);
 
@@ -239,12 +244,14 @@ test("a creator can publish a video by importing from a URL", async ({ page, req
   await page.getByLabel("Video title").fill(videoTitle);
   await page.getByRole("radio", { name: "Import from URL" }).check();
   await page.getByLabel("Video URL").fill(`http://api:8080/api/v1/videos/${src.videoId}/original`);
-  const imported = page.waitForResponse(
-    (r) => /\/videos\/[^/]+\/import$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  // The POST enqueues the job (202); the studio then polls until it is done.
+  const enqueued = page.waitForResponse(
+    (r) => /\/videos\/[^/]+\/import$/.test(r.url()) && r.request().method() === "POST" && r.status() === 202,
   );
   await page.getByRole("button", { name: "Publish" }).click();
-  await imported;
-  await expect(page.getByText("Published!")).toBeVisible();
+  await enqueued;
+  // The background fetch + probe + poll can take a while — wait generously.
+  await expect(page.getByText("Published!")).toBeVisible({ timeout: 60_000 });
 
   // Persisted: the importer's channel now carries the published, imported video.
   const vids = await channelVideos(request, handle);
@@ -287,7 +294,7 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
     buffer: Buffer.from("these bytes are not a real video container"),
   });
   const uploaded = page.waitForResponse(
-    (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   await page.getByRole("button", { name: "Publish" }).click();
   await uploaded;

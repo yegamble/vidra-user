@@ -91,6 +91,11 @@ export interface Video {
   width?: number;
   height?: number;
   has_thumbnail?: boolean;
+  /**
+   * Whether a seek-preview storyboard (sprite sheet + WebVTT map) is available at
+   * GET /videos/{id}/storyboard.jpg (+ .vtt). Present on the DETAIL view only.
+   */
+  has_storyboard?: boolean;
   views?: number;
   // Owning channel, present on card/feed views (so a card can link to the
   // channel); omitted on the detail view.
@@ -814,9 +819,75 @@ export interface UpdateVideoRequest {
   publish_at?: string;
 }
 
-/** POST /api/v1/videos/{id}/file response (the published video + stored file). */
+/**
+ * POST /api/v1/videos/{id}/file response (the published video + stored file).
+ * The resumable-upload complete endpoint (POST /uploads/{id}/complete) returns
+ * the same shape plus `file`, so it is optional here.
+ */
 export interface UploadVideoResult {
   video: Video;
+  file?: VideoFile;
+}
+
+/** POST /api/v1/videos/{id}/upload-session body — declare the file to chunk. */
+export interface CreateUploadSessionRequest {
+  /** The total size of the file to upload, in bytes (> 0). */
+  size: number;
+  /** The client filename; its extension must be an accepted video container. */
+  filename: string;
+}
+
+/** POST /api/v1/videos/{id}/upload-session response — the opened session. */
+export interface UploadSessionResponse {
+  upload_id: string;
+  /** Fixed chunk size in bytes; every chunk but the last must be exactly this. */
+  chunk_size: number;
+  /** How many chunks to upload (indices 0 … total_chunks-1). */
+  total_chunks: number;
+  /** The declared total size, echoed back. */
+  size: number;
+  /** When the session (and its uploaded chunks) expire (24h). */
+  expires_at: string;
+}
+
+export type UploadSessionState = "active" | "completed" | "cancelled";
+
+/**
+ * GET /api/v1/uploads/{id} (and every chunk PUT) response — the received-chunk
+ * status a client reads to know which chunks to (re)send after an interruption.
+ */
+export interface UploadStatusResponse {
+  upload_id: string;
+  video_id: string;
+  state: UploadSessionState;
+  size: number;
+  chunk_size: number;
+  total_chunks: number;
+  /** The chunk indices that have landed, ascending. */
+  received_chunks: number[];
+  /** The total bytes received across all landed chunks. */
+  bytes_received: number;
+  expires_at: string;
+}
+
+export type ImportJobState = "pending" | "running" | "done" | "failed";
+
+/** An asynchronous URL-import job for a video's original file. */
+export interface ImportJob {
+  id: string;
+  video_id: string;
+  state: ImportJobState;
+  /** Safe, human-readable failure reason (present on failed / pending retry). */
+  error?: string;
+  /** How many times the import has been attempted. */
+  attempts: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** POST/GET /api/v1/videos/{id}/import response — the latest import job. */
+export interface ImportJobResponse {
+  import_job: ImportJob;
 }
 
 /** A stored video file (original or thumbnail). Mirrors the backend VideoFile. */
@@ -1322,6 +1393,8 @@ export interface Playlist {
   visibility: PlaylistVisibility;
   /** Number of public, published videos in the playlist. */
   video_count: number;
+  /** Whether an uploaded cover image is available at GET /playlists/{id}/thumbnail. */
+  has_thumbnail?: boolean;
   created_at: string;
   updated_at: string;
 }

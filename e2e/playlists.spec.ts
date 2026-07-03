@@ -10,6 +10,7 @@ const CREATE = /\/api\/v1\/playlists$/;
 const DETAIL = /\/api\/v1\/playlists\/p1$/;
 const ADD = /\/api\/v1\/playlists\/p1\/videos$/;
 const REMOVE = /\/api\/v1\/playlists\/p1\/videos\/v1$/;
+const THUMBNAIL = /\/api\/v1\/playlists\/p1\/thumbnail(\?|$)/;
 // Watch-page mocks.
 const VIDEO = /\/api\/v1\/videos\/v1$/;
 const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;
@@ -223,6 +224,94 @@ test("the owner can delete a playlist", async ({ page }) => {
   await page.getByRole("link", { name: /My Mix/ }).click();
   await page.getByRole("button", { name: "Delete playlist" }).click();
   await expect(page).toHaveURL(/\/playlists$/);
+});
+
+test("the owner can upload and remove a playlist cover from the detail page", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_PLAYLISTS, (route) =>
+    route.fulfill({ json: { playlists: [playlist("p1", "My Mix", 1)] } }),
+  );
+  await page.route(DETAIL, (route) =>
+    route.fulfill({ json: { ...playlist("p1", "My Mix", 1), videos: [video("v1", "Clip")] } }),
+  );
+  let posted = false;
+  await page.route(THUMBNAIL, (route) => {
+    const method = route.request().method();
+    if (method === "POST") {
+      posted = true;
+      return route.fulfill({ status: 201, json: { ...playlist("p1", "My Mix", 1), has_thumbnail: true } });
+    }
+    if (method === "DELETE") return route.fulfill({ status: 204, body: "" });
+    // GET: the cache-busted <img> preview after upload.
+    return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from([137, 80, 78, 71]) });
+  });
+
+  await page.getByRole("link", { name: "Playlists" }).click();
+  await page.getByRole("link", { name: /My Mix/ }).click();
+  await expect(page.getByRole("heading", { name: "My Mix" })).toBeVisible();
+
+  // The owner cover manager appears (no cover yet).
+  const cover = page.getByRole("region", { name: "Playlist cover" });
+  await expect(cover.getByText("No cover yet.")).toBeVisible();
+
+  const uploaded = page.waitForResponse(
+    (r) => THUMBNAIL.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByLabel("Cover image").setInputFiles({
+    name: "cover.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([137, 80, 78, 71]),
+  });
+  await uploaded;
+  await expect(cover.getByRole("img", { name: "Current cover" })).toBeVisible();
+  expect(posted).toBe(true);
+
+  // Remove it → back to the no-cover note.
+  await cover.getByRole("button", { name: "Remove cover" }).click();
+  await expect(cover.getByText("No cover yet.")).toBeVisible();
+});
+
+test("an unsupported playlist cover type shows a friendly error", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_PLAYLISTS, (route) =>
+    route.fulfill({ json: { playlists: [playlist("p1", "My Mix", 1)] } }),
+  );
+  await page.route(DETAIL, (route) =>
+    route.fulfill({ json: { ...playlist("p1", "My Mix", 1), videos: [] } }),
+  );
+  await page.route(THUMBNAIL, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 415,
+          json: { error: { code: "unsupported_media_type", message: "unsupported type" } },
+        })
+      : route.continue(),
+  );
+
+  await page.getByRole("link", { name: "Playlists" }).click();
+  await page.getByRole("link", { name: /My Mix/ }).click();
+  const cover = page.getByRole("region", { name: "Playlist cover" });
+  await page.getByLabel("Cover image").setInputFiles({
+    name: "cover.gif",
+    mimeType: "image/gif",
+    buffer: Buffer.from([71, 73, 70]),
+  });
+  await expect(cover.getByText("The image must be a JPEG, PNG, or WebP.")).toBeVisible();
+});
+
+test("playlist cards render the uploaded cover image when set", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_PLAYLISTS, (route) =>
+    route.fulfill({ json: { playlists: [{ ...playlist("p1", "Covered Mix", 2), has_thumbnail: true }] } }),
+  );
+  await page.route(THUMBNAIL, (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from([137, 80, 78, 71]) }),
+  );
+
+  await page.getByRole("link", { name: "Playlists" }).click();
+  const card = page.getByRole("main").getByRole("listitem").filter({ hasText: "Covered Mix" });
+  // The cover is decorative (alt=""), so match the backend image by its src.
+  await expect(card.locator('img[src*="/api/v1/playlists/p1/thumbnail"]')).toBeVisible();
 });
 
 test("a signed-in viewer can add a video to a playlist from the watch page", async ({ page }) => {

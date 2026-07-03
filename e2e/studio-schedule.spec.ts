@@ -8,7 +8,10 @@ const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const MY_CHANNELS = /\/api\/v1\/me\/channels$/;
 const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
-const UPLOAD = /\/api\/v1\/videos\/v1\/file$/;
+// Resumable (chunked) upload protocol endpoints.
+const UPLOAD_SESSION = /\/api\/v1\/videos\/v1\/upload-session$/;
+const CHUNK = /\/api\/v1\/uploads\/up1\/chunks\/\d+$/;
+const COMPLETE = /\/api\/v1\/uploads\/up1\/complete$/;
 const VIDEO = /\/api\/v1\/videos\/v1$/;
 const CAPTIONS = /\/api\/v1\/videos\/v1\/captions$/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
@@ -94,9 +97,33 @@ test("publishing with a schedule sends publish_at and reports the scheduled outc
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  // The upload finishes processing but parks in "scheduled" until publish_at.
-  await page.route(UPLOAD, (route) =>
+  // The chunked upload finishes processing but parks in "scheduled" until publish_at.
+  const FUTURE = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  await page.route(UPLOAD_SESSION, (route) =>
     route.fulfill({
+      status: 201,
+      json: { upload_id: "up1", chunk_size: 1_048_576, total_chunks: 1, size: 4, expires_at: FUTURE },
+    }),
+  );
+  await page.route(CHUNK, (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        upload_id: "up1",
+        video_id: "v1",
+        state: "active",
+        size: 4,
+        chunk_size: 1_048_576,
+        total_chunks: 1,
+        received_chunks: [0],
+        bytes_received: 4,
+        expires_at: FUTURE,
+      },
+    }),
+  );
+  await page.route(COMPLETE, (route) =>
+    route.fulfill({
+      status: 201,
       json: { video: video({ state: "scheduled", publish_at: isoOf("2030-01-02T12:30") }) },
     }),
   );

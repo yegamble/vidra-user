@@ -10,7 +10,10 @@ import {
   videoCaptionUrl,
   videoHlsMasterUrl,
   videoOriginalUrl,
+  videoStoryboardImageUrl,
+  videoStoryboardVttUrl,
   videoThumbnailUrl,
+  playlistThumbnailUrl,
 } from "./endpoints";
 
 function okJson(): Response {
@@ -88,6 +91,13 @@ describe("api endpoints", () => {
     expect(videoCaptionUrl("v1", "pt-BR")).toBe(
       "http://localhost:8080/api/v1/videos/v1/captions/pt-BR",
     );
+    expect(videoStoryboardVttUrl("v1")).toBe(
+      "http://localhost:8080/api/v1/videos/v1/storyboard.vtt",
+    );
+    expect(videoStoryboardImageUrl("v1")).toBe(
+      "http://localhost:8080/api/v1/videos/v1/storyboard.jpg",
+    );
+    expect(playlistThumbnailUrl("p1")).toBe("http://localhost:8080/api/v1/playlists/p1/thumbnail");
   });
 
   it("videoHlsMasterUrl builds the master-playlist URL with the id encoded", () => {
@@ -363,12 +373,63 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
-  it("importVideoFile POSTs the url to the import endpoint", async () => {
+  it("importVideoFile POSTs the url to the import endpoint (async job)", async () => {
     await api.importVideoFile("v1", "https://example.com/clip.mp4");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/videos/v1/import");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ url: "https://example.com/clip.mp4" });
+  });
+
+  it("getVideoImport GETs the import status endpoint", async () => {
+    await api.getVideoImport("v1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/import");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  it("createUploadSession POSTs the size/filename to the upload-session endpoint", async () => {
+    await api.createUploadSession("v1", { size: 1024, filename: "clip.mp4" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/upload-session");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ size: 1024, filename: "clip.mp4" });
+  });
+
+  it("getUploadSession GETs the resume-status endpoint", async () => {
+    await api.getUploadSession("up1");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/uploads/up1");
+  });
+
+  it("cancelUploadSession DELETEs the session endpoint", async () => {
+    await api.cancelUploadSession("up1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/uploads/up1");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("completeUploadSession POSTs the complete endpoint", async () => {
+    await api.completeUploadSession("up1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/uploads/up1/complete");
+    expect(init.method).toBe("POST");
+  });
+
+  it("setPlaylistThumbnail POSTs multipart to the playlist thumbnail endpoint", async () => {
+    const file = new File(["img"], "cover.png", { type: "image/png" });
+    await api.setPlaylistThumbnail("p1", file);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
+    expect(url).toBe("http://localhost:8080/api/v1/playlists/p1/thumbnail");
+    expect(init.method).toBe("POST");
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+    expect(init.headers["content-type"]).toBeUndefined();
+  });
+
+  it("deletePlaylistThumbnail DELETEs the playlist thumbnail endpoint", async () => {
+    await api.deletePlaylistThumbnail("p1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/playlists/p1/thumbnail");
+    expect(init.method).toBe("DELETE");
   });
 
   it("setVideoThumbnail POSTs multipart to the thumbnail endpoint", async () => {
