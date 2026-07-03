@@ -781,6 +781,16 @@ export const api = {
     }),
 
   /**
+   * DELETE /api/v1/admin/users/{id} — IRREVERSIBLE admin hard delete of an
+   * account (same semantics as the self-serve DELETE /auth/me: channels and
+   * videos purged, comments tombstoned, per-user data erased, sessions
+   * revoked, row anonymised) but with no password confirmation. Self-guarded:
+   * an admin cannot hard-delete their own account (422). Audited (204).
+   */
+  deleteAdminUser: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /**
    * GET /api/v1/admin/registration-requests — the registration approval queue,
    * newest first (admin only). status="pending" returns only unresolved requests.
    */

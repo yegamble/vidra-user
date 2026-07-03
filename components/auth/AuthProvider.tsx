@@ -56,6 +56,8 @@ interface SessionContextValue {
   register: (input: RegisterRequest) => Promise<RegisterOutcome>;
   updateProfile: (input: UpdateProfileRequest) => Promise<void>;
   deactivate: (password: string) => Promise<void>;
+  /** IRREVERSIBLE hard delete (password re-confirmed); clears the local session. */
+  deleteAccount: (password: string) => Promise<void>;
   logout: () => Promise<void>;
   /** Re-fetch the current account (e.g. after email verification flips a flag). */
   reloadUser: () => Promise<void>;
@@ -157,6 +159,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const deleteAccount = useCallback(async (password: string) => {
+    await authApi.deleteAccount(password);
+    // The account is gone and every session revoked server-side; drop the
+    // local session so the UI lands signed out immediately.
+    setAccessToken(null);
+    setUser(null);
+  }, []);
+
   const logout = useCallback(async () => {
     setAccessToken(null);
     setUser(null);
@@ -178,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       updateProfile,
       deactivate,
+      deleteAccount,
       logout,
       reloadUser,
     }),
@@ -189,6 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       updateProfile,
       deactivate,
+      deleteAccount,
       logout,
       reloadUser,
     ],

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { AccountDataSection } from "@/components/auth/AccountDataSection";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ConnectedLogins } from "@/components/auth/ConnectedLogins";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
@@ -17,7 +18,28 @@ import type { UpdateProfileRequest, User } from "@/lib/api";
 // the httpOnly refresh cookie — show a loading state until that settles; only
 // a settled signed-out state gets the sign-in prompt.
 export function SettingsView() {
-  const { status, user, updateProfile, deactivate, reloadUser } = useSession();
+  const { status, user, updateProfile, deactivate, deleteAccount, reloadUser } = useSession();
+  // Flipped after a successful permanent delete: the session is gone, so this
+  // must be checked BEFORE the signed-out prompt or the goodbye state would
+  // never show.
+  const [deleted, setDeleted] = useState(false);
+
+  if (deleted) {
+    return (
+      <EmptyState
+        title="Your account has been deleted"
+        message={
+          <>
+            Your channels and videos were permanently removed, and your comments were replaced
+            with anonymous tombstones. This cannot be undone.{" "}
+            <Link href="/" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+              Go home
+            </Link>
+          </>
+        }
+      />
+    );
+  }
 
   if (status === "restoring") {
     return (
@@ -126,7 +148,13 @@ export function SettingsView() {
           Manage
         </Link>
       </section>
+      <AccountDataSection />
       <DeactivateSection deactivate={deactivate} />
+      <DeleteAccountSection
+        username={user.username}
+        deleteAccount={deleteAccount}
+        onDeleted={() => setDeleted(true)}
+      />
     </div>
   );
 }
@@ -299,6 +327,145 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
           {submitting ? "Deactivating…" : "Deactivate account"}
         </button>
       </form>
+    </section>
+  );
+}
+
+// DeleteAccountSection is the IRREVERSIBLE variant of the danger zone: a
+// two-step confirmation (explicit arm step, then password + type-the-username)
+// before DELETE /auth/me. Distinct from Deactivate, which is reversible by an
+// admin. On success the parent shows the goodbye state (the session is gone).
+function DeleteAccountSection({
+  username,
+  deleteAccount,
+  onDeleted,
+}: {
+  username: string;
+  deleteAccount: (password: string) => Promise<void>;
+  onDeleted: () => void;
+}) {
+  const [armed, setArmed] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmName, setConfirmName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await deleteAccount(password);
+      onDeleted();
+    } catch (err) {
+      setSubmitting(false);
+      if (err instanceof ApiError) {
+        setError(err.status === 403 ? "Incorrect password." : err.message);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
+    }
+  }
+
+  return (
+    <section className="flex max-w-xl flex-col gap-3 rounded-md border border-red-300 p-4 dark:border-red-900/70">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-base font-semibold text-red-700 dark:text-red-300">
+          Delete account permanently
+        </h2>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          This permanently deletes your account. Your channels and videos are removed for good,
+          your comments are replaced with anonymous &ldquo;[deleted]&rdquo; tombstones (replies to
+          them are kept), and your playlists, follows, history, and settings are erased. This
+          cannot be undone — if you might come back, use Deactivate above instead.
+        </p>
+      </div>
+      {!armed ? (
+        <button
+          type="button"
+          onClick={() => setArmed(true)}
+          className="self-start rounded-md border border-red-600 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-300 dark:hover:bg-red-950/30"
+        >
+          Delete account permanently
+        </button>
+      ) : (
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+          className="flex flex-col gap-3"
+        >
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+            >
+              {error}
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-1">
+            <label htmlFor="delete-password" className="text-sm font-medium">
+              Password
+            </label>
+            <input
+              id="delete-password"
+              name="delete-password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="delete-confirm-username" className="text-sm font-medium">
+              Confirm your username
+            </label>
+            <input
+              id="delete-confirm-username"
+              name="delete-confirm-username"
+              type="text"
+              autoComplete="off"
+              required
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+              aria-describedby="delete-confirm-username-help"
+              className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <span
+              id="delete-confirm-username-help"
+              className="text-xs text-zinc-500 dark:text-zinc-400"
+            >
+              Type <span className="font-mono font-medium">{username}</span> exactly to enable
+              deletion.
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={submitting || password === "" || confirmName !== username}
+              className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60"
+            >
+              {submitting ? "Deleting…" : "Permanently delete my account"}
+            </button>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => {
+                setArmed(false);
+                setPassword("");
+                setConfirmName("");
+                setError(null);
+              }}
+              className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
     </section>
   );
 }

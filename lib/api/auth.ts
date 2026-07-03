@@ -2,6 +2,9 @@ import { apiBaseUrl } from "@/lib/config";
 
 import { apiRequest } from "./client";
 import type {
+  AccountArchive,
+  AccountExportStatus,
+  AccountImportSummary,
   AuthResponse,
   EmailVerificationConfirmRequest,
   LoginRequest,
@@ -182,6 +185,47 @@ export const authApi = {
       method: "POST",
       body: { password },
     }),
+
+  /**
+   * DELETE /api/v1/auth/me — IRREVERSIBLE hard delete of the account after
+   * re-confirming the password (403 when wrong). Owned channels/videos are
+   * permanently removed, comments become "[deleted]" tombstones, per-user data
+   * is erased, and all sessions are revoked (204).
+   */
+  deleteAccount: (password: string) =>
+    apiRequest<void>("/api/v1/auth/me", { method: "DELETE", body: { password } }),
+
+  /**
+   * GET /api/v1/me/export — the caller's most recent export job's status.
+   * 404 when no export was ever requested (or the expired archive was
+   * already cleaned up).
+   */
+  getAccountExport: (signal?: AbortSignal) =>
+    apiRequest<AccountExportStatus>("/api/v1/me/export", { signal }),
+
+  /**
+   * POST /api/v1/me/export — enqueue the export job (202 with the fresh
+   * status). 409 while one is already pending/running; requesting again after
+   * completion replaces the previous archive.
+   */
+  requestAccountExport: () =>
+    apiRequest<AccountExportStatus>("/api/v1/me/export", { method: "POST" }),
+
+  /**
+   * GET /api/v1/me/export/download — the finished JSON archive. 409 while
+   * still pending/running or after a failure, 410 once expired, 404 when
+   * none exists.
+   */
+  downloadAccountExport: () => apiRequest<AccountArchive>("/api/v1/me/export/download"),
+
+  /**
+   * POST /api/v1/me/import — re-create the SAFE subsets of an account archive
+   * (profile fields, playlists, local follows, notification prefs); returns
+   * the per-category summary. 413 over the body limit, 422 when the body is
+   * not a vidra account archive. Additive — never deletes existing data.
+   */
+  importAccountArchive: (archive: AccountArchive) =>
+    apiRequest<AccountImportSummary>("/api/v1/me/import", { method: "POST", body: archive }),
 };
 
 /**

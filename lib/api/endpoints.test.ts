@@ -543,6 +543,14 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ role: "moderator", is_active: false });
   });
 
+  it("deleteAdminUser DELETEs the user by id (no body — no password confirm)", async () => {
+    await api.deleteAdminUser("u2");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/users/u2");
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBeUndefined();
+  });
+
   it("getBlockedVideos targets the block-list endpoint with pagination", async () => {
     await api.getBlockedVideos({ limit: 100 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/videos/blocked?limit=100");

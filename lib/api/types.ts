@@ -364,6 +364,103 @@ export interface UpdateProfileRequest {
 }
 
 /**
+ * GET|POST /api/v1/me/export — the caller's most recent account-export job.
+ * pending/running while the archive is assembled, done once downloadable
+ * (download_ready true until the 7-day expiry), failed after the job
+ * dead-lettered. GET is 404 when no export was ever requested (or the expired
+ * archive was already cleaned up).
+ */
+export interface AccountExportStatus {
+  id: string;
+  state: "pending" | "running" | "done" | "failed";
+  download_ready: boolean;
+  requested_at: string;
+  /** When the finished archive stops being downloadable; null until finished. */
+  expires_at: string | null;
+}
+
+/**
+ * The vidra account export archive (format version 1): one JSON document with
+ * the user's own data. Contains NO password hash and NO tokens; media files
+ * are not bundled (each video entry carries its original's download URL).
+ * This same shape is what POST /api/v1/me/import accepts — only the safe
+ * subsets (profile fields, playlists, local follows, notification prefs) are
+ * re-created; the rest is reported in the summary's skipped_sections.
+ */
+export interface AccountArchive {
+  vidra_export: {
+    version: number;
+    generated_at: string;
+    /** Public origin of the exporting instance. */
+    instance?: string;
+  };
+  profile: {
+    username: string;
+    email: string;
+    display_name: string;
+    bio: string;
+    unlisted: boolean;
+    email_verified: boolean;
+    created_at: string;
+  };
+  notification_prefs?: Array<{ type: string; enabled: boolean }>;
+  /** Owned channels (metadata only; not re-created by import). */
+  channels?: Array<{
+    id?: string;
+    handle?: string;
+    display_name?: string;
+    description?: string;
+    created_at?: string;
+  }>;
+  /** Owned videos' metadata incl. taxonomy/tags (media not bundled; not re-created). */
+  videos?: Array<Record<string, unknown>>;
+  playlists?: Array<{
+    id?: string;
+    title?: string;
+    description?: string;
+    visibility?: string;
+    video_ids?: string[];
+    created_at?: string;
+  }>;
+  /** The account's own comments (not re-created by import). */
+  comments?: Array<Record<string, unknown>>;
+  follows?: Array<{ channel_id?: string; channel_handle?: string; followed_at?: string }>;
+  /** Watch-later entries (not re-created by import). */
+  saved_videos?: Array<Record<string, unknown>>;
+  /** Watch history with resume positions (not re-created by import). */
+  watch_history?: Array<Record<string, unknown>>;
+}
+
+/** POST /api/v1/me/import result: what was re-created and what was skipped. */
+export interface AccountImportSummary {
+  /** True when display_name/bio were applied from the archive. */
+  profile_applied: boolean;
+  playlists_created: number;
+  playlist_items_added: number;
+  /** Items whose video does not exist on this instance. */
+  playlist_items_skipped: number;
+  follows_created: number;
+  /** Follows of channels not present locally. */
+  follows_skipped: number;
+  notification_prefs_applied: number;
+  /** Preferences for notification types this build does not know. */
+  notification_prefs_skipped: number;
+  /**
+   * Counts of archive entries that are not importable in v1, keyed by section
+   * (channels, videos, comments, saved_videos, watch_history, playlists).
+   */
+  skipped_sections: Record<string, number>;
+}
+
+/**
+ * DELETE /api/v1/auth/me body — password confirmation for the irreversible
+ * hard delete (a stolen access token alone must not destroy the account).
+ */
+export interface DeleteAccountRequest {
+  password: string;
+}
+
+/**
  * Login outcome for an account with two-factor authentication enabled: the
  * credentials were valid but NO session is issued yet. Present the mfa_token
  * with a TOTP or recovery code at POST /api/v1/auth/mfa/challenge (5 min).

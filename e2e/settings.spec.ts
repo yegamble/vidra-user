@@ -139,3 +139,60 @@ test("shows an error when the deactivate password is wrong", async ({ page }) =>
   await expect(page.getByText("Incorrect password.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
+
+test("permanently deleting the account takes the two-step confirm and shows a goodbye state", async ({
+  page,
+}) => {
+  await signIn(page);
+  let deleteBody: unknown;
+  let deleteMethod = "";
+  await page.route(ME, (route) => {
+    deleteMethod = route.request().method();
+    deleteBody = route.request().postDataJSON();
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.getByRole("link", { name: "ada" }).click();
+
+  // Step 1: arm. No password/username fields are shown yet.
+  await expect(page.getByLabel("Confirm your username")).toHaveCount(0);
+  await page.getByRole("button", { name: "Delete account permanently" }).click();
+
+  // Step 2: password + type-the-username. The submit stays disabled until the
+  // typed username matches exactly.
+  const submit = page.getByRole("button", { name: "Permanently delete my account" });
+  await page.getByLabel("Password", { exact: true }).fill("supersecret");
+  await page.getByLabel("Confirm your username").fill("wrong-name");
+  await expect(submit).toBeDisabled();
+  await page.getByLabel("Confirm your username").fill("ada");
+  await expect(submit).toBeEnabled();
+  await submit.click();
+
+  // Goodbye state + signed out (the session is gone).
+  await expect(page.getByText("Your account has been deleted")).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  expect(deleteMethod).toBe("DELETE");
+  expect(deleteBody).toEqual({ password: "supersecret" });
+});
+
+test("a wrong password on permanent delete is surfaced and nothing is deleted", async ({ page }) => {
+  await signIn(page);
+  await page.route(ME, (route) =>
+    route.fulfill({
+      status: 403,
+      json: { error: { code: "forbidden", message: "incorrect password" } },
+    }),
+  );
+
+  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Delete account permanently" }).click();
+  await page.getByLabel("Password", { exact: true }).fill("nope");
+  await page.getByLabel("Confirm your username").fill("ada");
+  await page.getByRole("button", { name: "Permanently delete my account" }).click();
+
+  await expect(page.getByText("Incorrect password.")).toBeVisible();
+  // Still signed in, still on the confirm step — no goodbye state.
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByText("Your account has been deleted")).toHaveCount(0);
+});

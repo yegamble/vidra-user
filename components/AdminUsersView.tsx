@@ -72,6 +72,11 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
   }, []);
 
+  // A hard-deleted account is gone for good — drop its row.
+  const onDeleted = useCallback((id: string) => {
+    setUsers((prev) => prev.filter((u) => u.id !== id));
+  }, []);
+
   return (
     <div className="flex flex-col gap-4">
       <form
@@ -125,7 +130,12 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
         <ul className="flex flex-col gap-3">
           {users.map((u) => (
             <li key={u.id}>
-              <UserRow user={u} isSelf={u.id === currentUserId} onUpdated={onUpdated} />
+              <UserRow
+                user={u}
+                isSelf={u.id === currentUserId}
+                onUpdated={onUpdated}
+                onDeleted={onDeleted}
+              />
             </li>
           ))}
         </ul>
@@ -140,13 +150,19 @@ function UserRow({
   user,
   isSelf,
   onUpdated,
+  onDeleted,
 }: {
   user: AdminUser;
   isSelf: boolean;
   onUpdated: (updated: AdminUser) => void;
+  onDeleted: (id: string) => void;
 }) {
   const [rowState, setRowState] = useState<RowState>("idle");
   const [error, setError] = useState<string | null>(null);
+  // Two-step permanent delete: an explicit arm click, then a type-the-username
+  // confirmation (the same double-confirm as the self-serve delete).
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
   const save = useCallback(
     async (patch: { role?: UserRole; is_active?: boolean }) => {
@@ -163,6 +179,18 @@ function UserRow({
     },
     [user.id, onUpdated],
   );
+
+  const doDelete = useCallback(async () => {
+    setRowState("saving");
+    setError(null);
+    try {
+      await api.deleteAdminUser(user.id);
+      onDeleted(user.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete this user.");
+      setRowState("idle");
+    }
+  }, [user.id, onDeleted]);
 
   return (
     <article className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
@@ -224,12 +252,66 @@ function UserRow({
         >
           {user.is_active ? "Deactivate" : "Reactivate"}
         </button>
+        {!deleteArmed ? (
+          <button
+            type="button"
+            aria-label={`Delete ${user.username} permanently`}
+            disabled={isSelf || rowState === "saving"}
+            onClick={() => setDeleteArmed(true)}
+            className="rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30"
+          >
+            Delete permanently
+          </button>
+        ) : null}
         {isSelf ? (
           <span className="text-xs text-zinc-500 dark:text-zinc-400">
-            You can&apos;t change your own role or status.
+            You can&apos;t change your own role or status, or delete your own account.
           </span>
         ) : null}
       </div>
+
+      {deleteArmed ? (
+        <div className="mt-3 flex flex-col gap-2 rounded-md border border-red-300 p-3 dark:border-red-900/60">
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            This permanently deletes <span className="font-medium">{user.username}</span>&apos;s
+            account: their channels and videos are removed for good, their comments become
+            &ldquo;[deleted]&rdquo; tombstones, and this cannot be undone. Deactivate is the
+            reversible alternative.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              autoComplete="off"
+              aria-label={`Type ${user.username} to confirm deletion`}
+              placeholder={`Type ${user.username} to confirm`}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+            <button
+              type="button"
+              aria-label={`Confirm permanent deletion of ${user.username}`}
+              disabled={rowState === "saving" || deleteConfirmName !== user.username}
+              onClick={() => void doDelete()}
+              className="rounded-md bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60"
+            >
+              {rowState === "saving" ? "Deleting…" : "Confirm permanent delete"}
+            </button>
+            <button
+              type="button"
+              disabled={rowState === "saving"}
+              onClick={() => {
+                setDeleteArmed(false);
+                setDeleteConfirmName("");
+                setError(null);
+              }}
+              className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
     </article>

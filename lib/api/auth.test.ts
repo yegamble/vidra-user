@@ -254,4 +254,103 @@ describe("authApi + auth-store", () => {
       "http://localhost:8080/api/v1/auth/oauth/google?return_to=%2Flogin%3Foauth%3D1",
     );
   });
+
+  it("deleteAccount DELETEs /auth/me with the password confirmation in the body", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await authApi.deleteAccount("supersecret");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/auth/me");
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBe(JSON.stringify({ password: "supersecret" }));
+  });
+
+  it("a 403 on deleteAccount (wrong password) surfaces as an ApiError", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "forbidden", message: "incorrect password" } }), {
+        status: 403,
+      }),
+    );
+    await expect(authApi.deleteAccount("nope")).rejects.toMatchObject({ status: 403 });
+  });
+
+  const exportStatus = {
+    id: "e1",
+    state: "pending",
+    download_ready: false,
+    requested_at: "2026-07-03T00:00:00Z",
+    expires_at: null,
+  };
+
+  it("getAccountExport GETs the export status with the bearer token", async () => {
+    setAccessToken("acc");
+    fetchMock.mockResolvedValue(okJson(exportStatus));
+    const res = await authApi.getAccountExport();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/export");
+    expect((init.headers as Record<string, string>).authorization).toBe("Bearer acc");
+    expect(res.state).toBe("pending");
+  });
+
+  it("requestAccountExport POSTs and parses the 202 status body", async () => {
+    fetchMock.mockResolvedValue(okJson(exportStatus, 202));
+    const res = await authApi.requestAccountExport();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/export");
+    expect(init.method).toBe("POST");
+    expect(res).toEqual(exportStatus);
+  });
+
+  it("downloadAccountExport GETs the archive body", async () => {
+    const archive = {
+      vidra_export: { version: 1, generated_at: "2026-07-03T00:00:00Z" },
+      profile: {
+        username: "ada",
+        email: "ada@example.test",
+        display_name: "",
+        bio: "",
+        unlisted: false,
+        email_verified: true,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    };
+    fetchMock.mockResolvedValue(okJson(archive));
+    const res = await authApi.downloadAccountExport();
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/export/download");
+    expect(res.vidra_export.version).toBe(1);
+    expect(res.profile.username).toBe("ada");
+  });
+
+  it("importAccountArchive POSTs the archive and returns the summary", async () => {
+    const summary = {
+      profile_applied: true,
+      playlists_created: 1,
+      playlist_items_added: 2,
+      playlist_items_skipped: 0,
+      follows_created: 3,
+      follows_skipped: 1,
+      notification_prefs_applied: 4,
+      notification_prefs_skipped: 0,
+      skipped_sections: { videos: 5 },
+    };
+    fetchMock.mockResolvedValue(okJson(summary));
+    const archive = {
+      vidra_export: { version: 1, generated_at: "2026-07-03T00:00:00Z" },
+      profile: {
+        username: "ada",
+        email: "ada@example.test",
+        display_name: "Ada",
+        bio: "",
+        unlisted: false,
+        email_verified: true,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    };
+    const res = await authApi.importAccountArchive(archive);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/import");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual(archive);
+    expect(res).toEqual(summary);
+  });
 });

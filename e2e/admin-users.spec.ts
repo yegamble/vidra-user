@@ -98,9 +98,11 @@ test("an admin sees the users list with a self badge", async ({ page }) => {
   await expect(page.getByText("alice@example.test")).toBeVisible();
   await expect(page.getByText("bob@example.test")).toBeVisible();
   await expect(page.getByText("you", { exact: true })).toBeVisible();
-  // The admin's own row controls are disabled (backend forbids self-demote/deactivate).
+  // The admin's own row controls are disabled (backend forbids self-demote/
+  // deactivate/hard-delete).
   await expect(page.getByLabel("Role for boss")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Deactivate boss" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Delete boss permanently" })).toBeDisabled();
 });
 
 test("the search box filters by query", async ({ page }) => {
@@ -162,4 +164,63 @@ test("an admin can deactivate a user", async ({ page }) => {
   await page.getByRole("button", { name: "Deactivate alice" }).click();
   await updated;
   await expect(page.getByRole("button", { name: "Reactivate alice" })).toBeVisible();
+});
+
+test("an admin can permanently delete a user after the double confirm", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.route(USERS, (route) =>
+    route.fulfill({
+      json: { users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")], limit: 100, offset: 0 },
+    }),
+  );
+  let deletedUrl = "";
+  await page.route(UPDATE, (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    deletedUrl = route.request().url();
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await expect(page.getByText("alice@example.test")).toBeVisible();
+
+  // Step 1: arm the delete for alice's row.
+  await page.getByRole("button", { name: "Delete alice permanently" }).click();
+  const confirm = page.getByRole("button", { name: "Confirm permanent deletion of alice" });
+  await expect(confirm).toBeDisabled(); // nothing typed yet
+
+  // Step 2: the confirm stays disabled until the exact username is typed.
+  await page.getByLabel("Type alice to confirm deletion").fill("alicia");
+  await expect(confirm).toBeDisabled();
+  await page.getByLabel("Type alice to confirm deletion").fill("alice");
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+
+  // The row is gone; the other rows stay.
+  await expect(page.getByText("alice@example.test")).toHaveCount(0);
+  await expect(page.getByText("boss@example.test")).toBeVisible();
+  expect(deletedUrl).toContain("/api/v1/admin/users/u2");
+});
+
+test("cancelling the admin delete keeps the user", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.route(USERS, (route) =>
+    route.fulfill({
+      json: { users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")], limit: 100, offset: 0 },
+    }),
+  );
+  let deleted = false;
+  await page.route(UPDATE, (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    deleted = true;
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await page.getByRole("button", { name: "Delete alice permanently" }).click();
+  await page.getByLabel("Type alice to confirm deletion").fill("alice");
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await expect(page.getByLabel("Type alice to confirm deletion")).toHaveCount(0);
+  await expect(page.getByText("alice@example.test")).toBeVisible();
+  expect(deleted).toBe(false);
 });
