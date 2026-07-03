@@ -30,6 +30,9 @@ const eslintConfig = defineConfig([
     "playwright-report/**",
     "test-results/**",
     "coverage/**",
+    // Vendored @matrix-org/olm runtime, copied in by scripts/copy-olm-wasm.mjs
+    // (emscripten glue — not our source to lint).
+    "public/olm/**",
   ]),
 ]);
 

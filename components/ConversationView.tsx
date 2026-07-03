@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { EncryptedThreadView } from "@/components/e2ee/EncryptedThreadView";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api } from "@/lib/api";
-import type { Message } from "@/lib/api";
+import type { EncryptedMessage, Message } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
 const MAX_MESSAGE_LEN = 5000;
@@ -18,7 +19,13 @@ type Status = "loading" | "error" | "ready";
 // ConversationView renders a single 1:1 thread: the messages (oldest → newest,
 // chat-style) plus a compose box. A non-participant or unknown conversation is a
 // 404 from the backend, which we surface as a "conversation not found" state.
-export function ConversationView({ conversationId }: { conversationId: string }) {
+export function ConversationView({
+  conversationId,
+  recipientHint,
+}: {
+  conversationId: string;
+  recipientHint?: string;
+}) {
   const { status } = useSession();
 
   if (status !== "authed") {
@@ -37,23 +44,38 @@ export function ConversationView({ conversationId }: { conversationId: string })
     );
   }
 
-  return <Thread conversationId={conversationId} />;
+  return <Thread conversationId={conversationId} recipientHint={recipientHint} />;
 }
 
-function Thread({ conversationId }: { conversationId: string }) {
+function Thread({
+  conversationId,
+  recipientHint,
+}: {
+  conversationId: string;
+  recipientHint?: string;
+}) {
   const { user } = useSession();
   const [status, setStatus] = useState<Status>("loading");
   const [notFound, setNotFound] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Non-null once the conversation is detected as encrypted (envelopes, not
+  // plaintext bodies). The backend fixes the type at creation; we branch on the
+  // shape of the messages response rather than assuming it.
+  const [envelopes, setEnvelopes] = useState<EncryptedMessage[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getMessages(conversationId, { limit: 100 }, controller.signal)
+      .getConversationMessages(conversationId, { limit: 100 }, controller.signal)
       .then((res) => {
-        // The API returns newest-first; show oldest-first so the latest is at the bottom.
-        setMessages([...res.messages].reverse());
+        if ("messages" in res) {
+          // The API returns newest-first; show oldest-first so the latest is at the bottom.
+          setMessages([...res.messages].reverse());
+          setEnvelopes(null);
+        } else {
+          setEnvelopes(res.envelopes);
+        }
         setStatus("ready");
       })
       .catch((err: unknown) => {
@@ -70,9 +92,10 @@ function Thread({ conversationId }: { conversationId: string }) {
     setReloadKey((k) => k + 1);
   }
 
-  // The other participant is whoever sent a message that isn't me.
+  // The other participant is whoever sent a plaintext message that isn't me.
   const other = messages.find((m) => m.sender_id !== user?.id);
   const otherName = other?.sender_display_name || other?.sender_username || "Conversation";
+  const encrypted = status === "ready" && envelopes !== null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -83,7 +106,9 @@ function Thread({ conversationId }: { conversationId: string }) {
         >
           ← Messages
         </Link>
-        <h1 className="truncate text-xl font-semibold tracking-tight">{otherName}</h1>
+        <h1 className="truncate text-xl font-semibold tracking-tight">
+          {encrypted ? "Encrypted conversation" : otherName}
+        </h1>
       </div>
 
       {status === "loading" ? (
@@ -99,6 +124,13 @@ function Thread({ conversationId }: { conversationId: string }) {
               : "Could not load this conversation."
           }
           onRetry={notFound ? undefined : retry}
+        />
+      ) : envelopes !== null ? (
+        <EncryptedThreadView
+          conversationId={conversationId}
+          initialEnvelopes={envelopes}
+          recipientId={recipientHint}
+          myUserId={user?.id ?? ""}
         />
       ) : (
         <>

@@ -1052,9 +1052,14 @@ export interface BlockedUserListResponse {
   offset: number;
 }
 
-/** A 1:1 conversation (normal, non-E2EE direct messaging). */
+/** A 1:1 conversation. Its type (plaintext vs encrypted) is chosen at creation and immutable. */
 export interface Conversation {
   id: string;
+  /**
+   * True for an end-to-end-encrypted conversation, which stores only opaque
+   * per-device ciphertext envelopes (the server holds no keys). Immutable.
+   */
+  encrypted: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -1067,6 +1072,8 @@ export interface Conversation {
 export interface ConversationSummary {
   id: string;
   updated_at: string;
+  /** True for an E2EE conversation — its last-message preview is always empty (envelopes are opaque). */
+  encrypted: boolean;
   other_user_id: string;
   other_username: string;
   other_display_name: string;
@@ -1096,6 +1103,128 @@ export interface Message {
 
 export interface MessageListResponse {
   messages: Message[];
+  limit: number;
+  offset: number;
+}
+
+// --- End-to-end encrypted messaging (see .ralph/specs/e2ee.md) ---------------
+// All cryptography is client-side (Olm). These shapes carry PUBLIC key material
+// and opaque ciphertext only — the server never sees private keys or plaintext.
+
+/** A registered E2EE device. Carries PUBLIC key material only. Mirrors E2EEDevice. */
+export interface E2EEDevice {
+  id: string;
+  user_id: string;
+  device_name: string;
+  /** Public Curve25519 identity key (base64). */
+  identity_key: string;
+  /** Public Ed25519 signing key (base64). */
+  signing_key: string;
+  created_at: string;
+  last_seen_at: string;
+}
+
+export interface E2EEDeviceListResponse {
+  devices: E2EEDevice[];
+}
+
+/** POST /api/v1/e2ee/devices body — register a device's public keys under a name. */
+export interface RegisterE2EEDeviceRequest {
+  device_name: string;
+  identity_key: string;
+  signing_key: string;
+}
+
+/** One public one-time prekey (client-assigned key_id). Mirrors E2EEOneTimeKey. */
+export interface E2EEOneTimeKey {
+  key_id: string;
+  key: string;
+}
+
+/** POST /api/v1/e2ee/devices/{id}/one-time-keys body. */
+export interface UploadOneTimeKeysRequest {
+  one_time_keys: E2EEOneTimeKey[];
+}
+
+/** POST /api/v1/e2ee/devices/{id}/one-time-keys response — unclaimed count after upload. */
+export interface UploadOneTimeKeysResponse {
+  unclaimed: number;
+}
+
+/** GET /api/v1/e2ee/devices/{id}/one-time-keys/count response. */
+export interface OneTimeKeyCountResponse {
+  count: number;
+}
+
+/**
+ * One device's claim result: its public identity plus one atomically claimed
+ * (single-use) one-time key — null when the device has no prekeys left. Mirrors
+ * the backend E2EEClaim.
+ */
+export interface E2EEClaim {
+  device_id: string;
+  identity_key: string;
+  signing_key: string;
+  one_time_key: E2EEOneTimeKey | null;
+}
+
+/** POST /api/v1/users/{id}/e2ee/claim response — one claim per device of the target user. */
+export interface E2EEClaimResponse {
+  user_id: string;
+  claims: E2EEClaim[];
+}
+
+/** One per-recipient-device ciphertext blob in an encrypted send. Mirrors EncryptedEnvelope. */
+export interface EncryptedEnvelope {
+  recipient_device_id: string;
+  /** Olm message type: 0 = prekey, 1 = normal. */
+  message_type: 0 | 1;
+  /** Opaque ciphertext (≤64 KiB). Never inspected by the server. */
+  ciphertext: string;
+}
+
+/**
+ * POST /api/v1/conversations/{id}/messages body on an ENCRYPTED conversation:
+ * one envelope per recipient device (incl. the sender's own other devices),
+ * optionally with a disappearing-message timer. Mirrors SendEncryptedMessageRequest.
+ */
+export interface SendEncryptedMessageRequest {
+  sender_device_id: string;
+  envelopes: EncryptedEnvelope[];
+  /** Optional disappearing-message timer (30s–90d), stamping expires_at on every envelope. */
+  expires_in_seconds?: number;
+}
+
+/** Summary of an accepted encrypted send (the envelopes are not echoed back). Mirrors SendEncryptedResponse. */
+export interface SendEncryptedResponse {
+  conversation_id: string;
+  envelope_count: number;
+  created_at: string;
+  /** Present when a disappearing-message timer was set. */
+  expires_at?: string;
+}
+
+/**
+ * A stored envelope returned only to the owner of its recipient device. The
+ * ciphertext is byte-identical to what the sender posted — the server cannot
+ * decrypt it. Mirrors the backend EncryptedMessage.
+ */
+export interface EncryptedMessage {
+  id: string;
+  conversation_id: string;
+  sender_user_id: string;
+  sender_device_id: string;
+  recipient_device_id: string;
+  message_type: 0 | 1;
+  ciphertext: string;
+  created_at: string;
+  /** Present on disappearing messages. */
+  expires_at?: string;
+}
+
+/** GET on an encrypted conversation — the caller's devices' envelopes, newest first (expired filtered). */
+export interface EncryptedMessageListResponse {
+  envelopes: EncryptedMessage[];
   limit: number;
   offset: number;
 }

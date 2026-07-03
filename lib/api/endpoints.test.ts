@@ -616,6 +616,86 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ body: "hi" });
   });
 
+  it("startConversation adds encrypted:true when starting an encrypted thread", async () => {
+    await api.startConversation("u2", { encrypted: true });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/conversations");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ recipient_id: "u2", encrypted: true });
+  });
+
+  it("getConversationMessages targets a conversation's messages (union endpoint)", async () => {
+    await api.getConversationMessages("c1", { limit: 50 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/conversations/c1/messages?limit=50");
+  });
+
+  it("sendEncryptedMessage POSTs the envelopes + timer to the messages endpoint", async () => {
+    await api.sendEncryptedMessage("c1", {
+      sender_device_id: "d1",
+      envelopes: [{ recipient_device_id: "d2", message_type: 0, ciphertext: "xx" }],
+      expires_in_seconds: 3600,
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/conversations/c1/messages");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      sender_device_id: "d1",
+      envelopes: [{ recipient_device_id: "d2", message_type: 0, ciphertext: "xx" }],
+      expires_in_seconds: 3600,
+    });
+  });
+
+  it("registerE2EEDevice POSTs the public keys to the devices endpoint", async () => {
+    await api.registerE2EEDevice({ device_name: "Laptop", identity_key: "ik", signing_key: "sk" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/e2ee/devices");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      device_name: "Laptop",
+      identity_key: "ik",
+      signing_key: "sk",
+    });
+  });
+
+  it("listMyE2EEDevices targets the devices probe endpoint", async () => {
+    await api.listMyE2EEDevices();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/e2ee/devices");
+  });
+
+  it("deleteE2EEDevice DELETEs the device by id", async () => {
+    await api.deleteE2EEDevice("d1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/e2ee/devices/d1");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("uploadE2EEOneTimeKeys POSTs the key batch", async () => {
+    await api.uploadE2EEOneTimeKeys("d1", [{ key_id: "k1", key: "otk1" }]);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/e2ee/devices/d1/one-time-keys");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      one_time_keys: [{ key_id: "k1", key: "otk1" }],
+    });
+  });
+
+  it("countE2EEOneTimeKeys GETs the unclaimed count", async () => {
+    await api.countE2EEOneTimeKeys("d1");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/e2ee/devices/d1/one-time-keys/count");
+  });
+
+  it("listUserE2EEDevices targets a peer's public devices", async () => {
+    await api.listUserE2EEDevices("u2");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/users/u2/e2ee/devices");
+  });
+
+  it("claimE2EEOneTimeKeys POSTs to the user's claim endpoint", async () => {
+    await api.claimE2EEOneTimeKeys("u2");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/users/u2/e2ee/claim");
+    expect(init.method).toBe("POST");
+  });
+
   it("blockUser POSTs to the blocks endpoint for the user", async () => {
     await api.blockUser("u2");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

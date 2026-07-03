@@ -109,9 +109,27 @@ fresh inbox refetch → recipient's inbox read via the API carries the body; psq
 renders `type=message` as "{actor} sent you a message" linking `/messages/{conversation_id}`
 (consuming vidra-core's message-notification contract) — DB-effect VERIFIED in
 `e2e-backed/notifications.spec.ts` (API-seeded DM → recipient logs in → unread bell badge →
-click the notification → real thread with the message body). Note: normal (plaintext) DM
-only — attachments/receipts/link-previews/per-message delete/E2EE are DEFERRED on absent
-backend contracts. Admin: the admin-only users
+click the notification → real thread with the message body). Note: plaintext DM
+attachments/receipts/link-previews/per-message delete stay DEFERRED (no backend
+contract). **Encrypted DMs now ship** (slice `user-e2ee-ui`): client-side E2EE via
+**@matrix-org/olm** WASM (the one allowed dep), loaded at runtime from `/olm/`
+(Turbopack can't bundle its emscripten glue → `scripts/copy-olm-wasm.mjs` `prebuild`-
+copies `olm.js`/`olm.wasm` into `public/olm/`, gitignored). `lib/e2ee/*` = pure
+fan-out/timer/safety-number helpers (unit-tested) + Olm loader/provider (a stub is
+injected via `window.__VIDRA_E2EE_CRYPTO__` so mocked runs never touch WASM) + a
+random-key **pickled Olm account in IndexedDB** + the orchestration engine
+(device setup, OTK replenishment ≥20, per-device fan-out, decrypt). UI
+(`components/e2ee/*`): a contract-gated "Encrypted message" affordance on comments
+(probes `GET /e2ee/devices`, per the no-pretending rule), first-use device setup,
+the encrypted thread (`EncryptedThreadView`: lock header + honest §1 limitation copy,
+per-message **undecryptable** state, disappearing-timer off/1h/1d/1w →
+`expires_in_seconds`, safety-number/fingerprint panel), the inbox lock indicator,
+and **/settings/devices** (list + delete + safety numbers; no rename — the contract
+has none). `ConversationView` branches encrypted vs plaintext on the messages
+response shape. Mocked `e2e/e2ee.spec.ts` (7, stubbed crypto) covers it; the
+**real-crypto** proof `e2e-backed/e2ee.spec.ts` (two contexts, real Olm, real
+backend) is WRITTEN but not run in `npm run ci` (that gate is mocked + build only —
+the real Olm path only runs under the backed profile). Admin: the admin-only users
 page (`app/admin/users` → `components/AdminUsersView.tsx`, reached via the admin-only
 `AdminNavLink`) lists/searches accounts (`GET /admin/users?q=`) and edits each user's
 role + active flag (`PATCH /admin/users/:id`), disabling the admin's own row — DB-effect

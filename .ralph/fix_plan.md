@@ -379,13 +379,25 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 
 ## P8.2 Encrypted Messaging
 
-- [ ] Display encrypted mode availability only when backend contract supports it.
-- [ ] Implement device setup/onboarding UI.
-- [ ] Implement encrypted conversation indicator.
-- [ ] Implement disappearing message timer control.
-- [ ] Implement ciphertext-safe attachment warnings where needed.
-- [ ] Do not pretend E2EE exists unless backend storage/protocol evidence exists.
-- [ ] Add tests for encrypted-mode UI states.
+> Slice `user-e2ee-ui` (2026-07-03) — implements the E2EE DM UX per
+> `../vidra-core/.ralph/specs/e2ee.md §5` against the committed `/api/v1/e2ee/*`
+> contract. All cryptography is client-side via **@matrix-org/olm** WASM (the one
+> allowed dependency), loaded at RUNTIME via a `<script>` from `/olm/` (Turbopack
+> cannot bundle its emscripten glue; `scripts/copy-olm-wasm.mjs` `prebuild`-copies
+> it into `public/olm/`, gitignored). The Olm account is pickled with a random
+> key in IndexedDB (`lib/e2ee/store.ts`), device-bound by design. The crypto is
+> injected through a seam (`getCryptoProvider` → `window.__VIDRA_E2EE_CRYPTO__`)
+> so mocked runs stub it and never touch WASM. NB: the real Olm path
+> (`lib/e2ee/olm-crypto.ts`) is exercised ONLY by the write-only backed spec — it
+> is not run in `npm run ci` (mocked + build only).
+
+- [x] Display encrypted mode availability only when backend contract supports it. (No-pretending rule: `lib/e2ee/availability.ts` probes `GET /api/v1/e2ee/devices` once per session; `StartEncryptedButton` renders **nothing** until the probe resolves non-404 (contract present). A 404 (older backend) or anon → hidden. Mocked `e2e/e2ee.spec.ts` proves both: "Encrypted message" appears on a comment when advertised, and is absent when `GET /e2ee/devices` 404s.)
+- [x] Implement device setup/onboarding UI. (`components/e2ee/DeviceSetup.tsx` — first-encrypted-use flow: name this browser → `E2EEEngine.setupDevice` creates the Olm account, `POST /e2ee/devices` (public identity+signing keys), uploads a batch of one-time prekeys (`POST …/one-time-keys`), pickles into IndexedDB. `EncryptedThreadView` runs it automatically when no device exists. OTK replenishment ≥20 maintained: `replenishOneTimeKeys` tops back up to 30 whenever `GET …/count` < 20 (unit-tested threshold in `lib/e2ee/engine.test.ts`). Also a **Settings → Devices** page (`app/settings/devices` → `components/e2ee/DevicesView.tsx`, linked from `/settings`): list devices (`GET /e2ee/devices`) + delete (`DELETE /e2ee/devices/:id`, two-step confirm, cascades envelopes) + per-device safety number. No rename control — the contract has none.)
+- [x] Implement encrypted conversation indicator. (Lock everywhere: the inbox row (`MessagesView`) shows a lock + "Encrypted conversation" (preview always empty — server can't read it) and links with `?to={peer}`; the thread header (`ConversationView`) reads "Encrypted conversation"; `EncryptedThreadView`'s `LockHeader` shows an "End-to-end encrypted" banner. `ConversationView` branches plaintext vs encrypted on the messages response shape (`"messages"` vs `"envelopes"`), so a direct load needs no prior type knowledge.)
+- [x] Implement disappearing message timer control. (Composer `<select>` "Disappearing messages timer": off/1h/1d/1w → `expires_in_seconds` (pure `expiresInSeconds` helper, unit-tested, all within the backend 30s–90d bound) on the `SendEncryptedMessageRequest`. Mocked `e2e/e2ee.spec.ts` selects "1 day" and asserts the POST body carries `expires_in_seconds: 86400`.)
+- [~] Implement ciphertext-safe attachment warnings where needed. (N/A this slice — E2EE attachments are DEFERRED with plaintext DM attachments (no backend contract). Instead the honest §1 limitation copy ships: the lock header states metadata is visible and a new device can't read earlier messages; the device/safety-number panels explain the server could substitute keys for an unverified peer.)
+- [x] Do not pretend E2EE exists unless backend storage/protocol evidence exists. (See availability probe above — the affordance is contract-gated; there is no fake/local-only encryption path.)
+- [x] Add tests for encrypted-mode UI states. (**Unit**: pure fan-out/timer/safety-number helpers (`lib/e2ee/envelope.test.ts`, 9), engine setup/replenish/fan-out with a fake provider+store+stubbed fetch (`lib/e2ee/engine.test.ts`, 3), and every new API-client fn (`lib/api/endpoints.test.ts` +11). **Mocked e2e** with a STUBBED crypto layer injected via the test seam (`e2e/e2ee.spec.ts`, 7): availability gating (advertised vs 404), inbox lock badge, device-setup flow → composer, inbound decrypt + per-message **undecryptable** state, disappearing-timer POST body, and the devices settings list+remove. **ONE real-crypto backed spec WRITTEN** (`e2e-backed/e2ee.spec.ts`, write-only, not run in this loop): two browser contexts + real Olm + real backend — A sets up, B sets up, A sends encrypted, B reads plaintext after reload, B's own envelope fetch proves the server holds only ciphertext, a THIRD account's list-messages 404s, and a short-TTL envelope vanishes after its TTL.)
 
 ---
 

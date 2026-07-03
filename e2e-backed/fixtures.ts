@@ -600,6 +600,94 @@ export function totpCode(secret: string, stepOffset = 0, at = Date.now()): strin
   return code.toString().padStart(6, "0");
 }
 
+// --- E2EE backed helpers -----------------------------------------------------
+
+/** e2eeDevices reads a user's public E2EE devices via the API (as a participant/self). */
+export async function e2eeDevices(
+  request: APIRequestContext,
+  userId: string,
+  token: string,
+): Promise<Array<{ id: string; identity_key: string; signing_key: string; device_name: string }>> {
+  const res = await request.get(`${API_URL}/api/v1/users/${userId}/e2ee/devices`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (
+    (await res.json()) as {
+      devices: Array<{ id: string; identity_key: string; signing_key: string; device_name: string }>;
+    }
+  ).devices;
+}
+
+/** myE2EEDevices reads the caller's own registered devices via the API. */
+export async function myE2EEDevices(
+  request: APIRequestContext,
+  token: string,
+): Promise<Array<{ id: string; device_name: string }>> {
+  const res = await request.get(`${API_URL}/api/v1/e2ee/devices`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return ((await res.json()) as { devices: Array<{ id: string; device_name: string }> }).devices;
+}
+
+/**
+ * encryptedEnvelopes reads a conversation's stored envelopes AS the given
+ * participant (their devices' envelopes only). Returns the ciphertext blobs so a
+ * test can prove the server holds ONLY opaque ciphertext (never the plaintext).
+ */
+export async function encryptedEnvelopes(
+  request: APIRequestContext,
+  conversationId: string,
+  token: string,
+): Promise<Array<{ id: string; ciphertext: string; recipient_device_id: string; expires_at?: string }>> {
+  const res = await request.get(
+    `${API_URL}/api/v1/conversations/${conversationId}/messages?limit=100`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return (
+    (await res.json()) as {
+      envelopes: Array<{ id: string; ciphertext: string; recipient_device_id: string; expires_at?: string }>;
+    }
+  ).envelopes;
+}
+
+/** messagesStatus returns the HTTP status of reading a conversation's messages as the given token (404 = non-participant). */
+export async function messagesStatus(
+  request: APIRequestContext,
+  conversationId: string,
+  token: string,
+): Promise<number> {
+  const res = await request.get(`${API_URL}/api/v1/conversations/${conversationId}/messages`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.status();
+}
+
+/**
+ * postEncryptedEnvelope posts one opaque ciphertext envelope to an encrypted
+ * conversation AS the sender, optionally with a disappearing timer. Used to seed
+ * an expiring envelope (the UI timer's floor is 1h, so a short-TTL expiry test
+ * seeds directly). The ciphertext is an arbitrary opaque string — the server
+ * never inspects it.
+ */
+export async function postEncryptedEnvelope(
+  request: APIRequestContext,
+  conversationId: string,
+  token: string,
+  input: { senderDeviceId: string; recipientDeviceId: string; ciphertext: string; expiresInSeconds?: number },
+): Promise<number> {
+  const res = await request.post(`${API_URL}/api/v1/conversations/${conversationId}/messages`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      sender_device_id: input.senderDeviceId,
+      envelopes: [
+        { recipient_device_id: input.recipientDeviceId, message_type: 1, ciphertext: input.ciphertext },
+      ],
+      ...(input.expiresInSeconds ? { expires_in_seconds: input.expiresInSeconds } : {}),
+    },
+  });
+  return res.status();
+}
+
 /** mutedInstances reads the caller's persisted instance mutes via the API. */
 export async function mutedInstances(
   request: APIRequestContext,

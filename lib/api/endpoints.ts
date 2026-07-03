@@ -22,6 +22,16 @@ import type {
   BlockedUserListResponse,
   Conversation,
   ConversationListResponse,
+  E2EEClaimResponse,
+  E2EEDevice,
+  E2EEDeviceListResponse,
+  E2EEOneTimeKey,
+  EncryptedMessageListResponse,
+  OneTimeKeyCountResponse,
+  RegisterE2EEDeviceRequest,
+  SendEncryptedMessageRequest,
+  SendEncryptedResponse,
+  UploadOneTimeKeysResponse,
   CreateLiveStreamRequest,
   CreateLiveStreamResponse,
   LiveStreamListResponse,
@@ -528,12 +538,16 @@ export const api = {
   /**
    * POST /api/v1/conversations — start (or get) the 1:1 conversation with a
    * recipient (auth). Idempotent: the same pair always maps to one conversation.
-   * Messaging yourself → 422; an unknown recipient → 404.
+   * Pass `{ encrypted: true }` to start the pair's distinct ENCRYPTED thread
+   * (opaque per-device ciphertext). Messaging yourself → 422; unknown recipient → 404;
+   * a block either way → 403.
    */
-  startConversation: (recipientId: string) =>
+  startConversation: (recipientId: string, opts: { encrypted?: boolean } = {}) =>
     apiRequest<Conversation>("/api/v1/conversations", {
       method: "POST",
-      body: { recipient_id: recipientId },
+      body: opts.encrypted
+        ? { recipient_id: recipientId, encrypted: true }
+        : { recipient_id: recipientId },
     }),
 
   /** GET /api/v1/me/conversations — the caller's inbox, most-recently-active first (auth). */
@@ -558,6 +572,22 @@ export const api = {
     ),
 
   /**
+   * GET /api/v1/conversations/{id}/messages — a conversation's messages, newest
+   * first (auth). Returns a MessageListResponse for a plaintext conversation and
+   * an EncryptedMessageListResponse for an encrypted one (branch on which key is
+   * present). A non-participant (or unknown conversation) is 404.
+   */
+  getConversationMessages: (
+    conversationId: string,
+    params: { limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<MessageListResponse | EncryptedMessageListResponse>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
+      { query: { limit: params.limit, offset: params.offset }, signal },
+    ),
+
+  /**
    * POST /api/v1/conversations/{id}/messages — post a message to a conversation
    * (auth). A non-participant (or unknown conversation) is 404; body 1–5000 chars.
    */
@@ -565,6 +595,71 @@ export const api = {
     apiRequest<Message>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
       method: "POST",
       body: { body },
+    }),
+
+  /**
+   * POST /api/v1/conversations/{id}/messages on an ENCRYPTED conversation —
+   * per-recipient-device ciphertext envelopes (+ optional disappearing timer).
+   * The server stores them opaquely and returns a summary (not the envelopes).
+   */
+  sendEncryptedMessage: (conversationId: string, body: SendEncryptedMessageRequest) =>
+    apiRequest<SendEncryptedResponse>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
+      { method: "POST", body },
+    ),
+
+  /**
+   * POST /api/v1/e2ee/devices — register an E2EE device's PUBLIC identity/signing
+   * keys under a user-visible name (auth). At most 20 devices per user (422 beyond).
+   */
+  registerE2EEDevice: (body: RegisterE2EEDeviceRequest) =>
+    apiRequest<E2EEDevice>("/api/v1/e2ee/devices", { method: "POST", body }),
+
+  /**
+   * GET /api/v1/e2ee/devices — the caller's registered devices, oldest first
+   * (auth). Also the client's E2EE availability probe (a non-404 means the
+   * backend advertises the contract).
+   */
+  listMyE2EEDevices: (signal?: AbortSignal) =>
+    apiRequest<E2EEDeviceListResponse>("/api/v1/e2ee/devices", { signal }),
+
+  /** DELETE /api/v1/e2ee/devices/{id} — remove one of the caller's devices (auth; 204; 404 if not owned). */
+  deleteE2EEDevice: (id: string) =>
+    apiRequest<void>(`/api/v1/e2ee/devices/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /** POST /api/v1/e2ee/devices/{id}/one-time-keys — upload a batch of PUBLIC prekeys (auth, owner). */
+  uploadE2EEOneTimeKeys: (deviceId: string, oneTimeKeys: E2EEOneTimeKey[]) =>
+    apiRequest<UploadOneTimeKeysResponse>(
+      `/api/v1/e2ee/devices/${encodeURIComponent(deviceId)}/one-time-keys`,
+      { method: "POST", body: { one_time_keys: oneTimeKeys } },
+    ),
+
+  /** GET /api/v1/e2ee/devices/{id}/one-time-keys/count — unclaimed prekey count (auth, owner). */
+  countE2EEOneTimeKeys: (deviceId: string, signal?: AbortSignal) =>
+    apiRequest<OneTimeKeyCountResponse>(
+      `/api/v1/e2ee/devices/${encodeURIComponent(deviceId)}/one-time-keys/count`,
+      { signal },
+    ),
+
+  /**
+   * GET /api/v1/users/{id}/e2ee/devices — a peer's PUBLIC device keys (auth,
+   * participant-gated). Used for the safety-number display and inbound-message
+   * sender resolution. 404 for an unknown user or no shared conversation; 403 on a block.
+   */
+  listUserE2EEDevices: (userId: string, signal?: AbortSignal) =>
+    apiRequest<E2EEDeviceListResponse>(
+      `/api/v1/users/${encodeURIComponent(userId)}/e2ee/devices`,
+      { signal },
+    ),
+
+  /**
+   * POST /api/v1/users/{id}/e2ee/claim — atomically claim ONE one-time key per
+   * device of the target user, for establishing an Olm session per device pair
+   * (auth, participant-gated; single-use). Claiming your own devices is allowed.
+   */
+  claimE2EEOneTimeKeys: (userId: string) =>
+    apiRequest<E2EEClaimResponse>(`/api/v1/users/${encodeURIComponent(userId)}/e2ee/claim`, {
+      method: "POST",
     }),
 
   /** POST /api/v1/videos/{id}/report — file an abuse report on a video (auth; idempotent 204). */

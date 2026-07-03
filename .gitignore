@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# vendored @matrix-org/olm runtime, copied into public/ by scripts/copy-olm-wasm.mjs
+/public/olm/
+
 # production
 /build
 

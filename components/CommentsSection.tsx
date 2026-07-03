@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { StartEncryptedButton } from "@/components/e2ee/StartEncryptedButton";
 import { MessageButton } from "@/components/MessageButton";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ReportButton } from "@/components/ReportButton";
@@ -368,6 +369,7 @@ function CommentItem({
               {muting ? "Muting…" : "Mute"}
             </button>
             <MessageButton recipientId={authorId} />
+            <StartEncryptedButton recipientId={authorId} />
             <button
               type="button"
               disabled={blocking || blocked}

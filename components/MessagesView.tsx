@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { LockIcon } from "@/components/e2ee/LockIcon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -89,15 +90,29 @@ function Inbox() {
       {items.map((c) => (
         <li key={c.id}>
           <Link
-            href={`/messages/${c.id}`}
+            // Encrypted threads carry the peer id so the encrypted composer can
+            // fan out without a participant lookup (previews are always empty —
+            // the server can't read the ciphertext).
+            href={c.encrypted ? `/messages/${c.id}?to=${encodeURIComponent(c.other_user_id)}` : `/messages/${c.id}`}
             className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:bg-zinc-900/40"
           >
             <div className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              <span className="flex items-center gap-1.5 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                {c.encrypted ? (
+                  <span
+                    className="text-emerald-600 dark:text-emerald-400"
+                    aria-label="Encrypted conversation"
+                    title="Encrypted conversation"
+                  >
+                    <LockIcon />
+                  </span>
+                ) : null}
                 {c.other_display_name || c.other_username}
               </span>
               <span className="truncate text-sm text-zinc-500 dark:text-zinc-400">
-                {c.last_message_body || "No messages yet"}
+                {c.encrypted
+                  ? "Encrypted conversation"
+                  : c.last_message_body || "No messages yet"}
               </span>
             </div>
             <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">
