@@ -361,12 +361,19 @@ export async function videoDetail(
   };
 }
 
-/** channelVideos reads a channel's public videos via the public API. */
+/**
+ * channelVideos reads a channel's videos via the API. Unauthenticated it returns
+ * only public, published videos; pass the owner's `token` to read every state
+ * (e.g. to prove a failed upload persisted as state="failed").
+ */
 export async function channelVideos(
   request: APIRequestContext,
   handle: string,
+  token?: string,
 ): Promise<Array<{ id: string; title: string; privacy: string; state: string }>> {
-  const res = await request.get(`${API_URL}/api/v1/channels/${handle}/videos`);
+  const res = await request.get(`${API_URL}/api/v1/channels/${handle}/videos`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
   return (
     (await res.json()) as {
       videos: Array<{ id: string; title: string; privacy: string; state: string }>;

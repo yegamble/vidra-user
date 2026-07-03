@@ -251,6 +251,98 @@ test("a creator can publish a video by importing from a URL", async ({ page, req
   expect(vids.map((v) => v.title)).toContain(videoTitle);
 });
 
+// The false-success regression against the real pipeline: uploading bytes the
+// backend's ffprobe rejects returns 201 with video.state="failed" — the UI must
+// report the failure (never "Published!"). Persistence: the owner's channel list
+// (authed read, which includes non-published states) carries the row as "failed".
+test("a rejected upload is reported as failed, not published", async ({ page, request }) => {
+  const id = uniqueId();
+  const handle = `ch${id}`;
+  const email = `e2e-fan-${id}@example.test`;
+  const password = "supersecret-e2e";
+  const videoTitle = `Broken clip ${id}`;
+
+  await page.goto("/signup");
+  await page.getByLabel("Username").fill(`fan${id}`);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByLabel("Channel handle").fill(handle);
+  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
+  const channelCreated = page.waitForResponse(
+    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create channel" }).click();
+  await channelCreated;
+
+  // A .mp4 extension gets past the container allow-list, but the bytes are not a
+  // video — the real ffprobe rejects them and the video is finalised as failed.
+  await page.getByLabel("Video title").fill(videoTitle);
+  await page.getByLabel("Video file").setInputFiles({
+    name: "clip.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("these bytes are not a real video container"),
+  });
+  const uploaded = page.waitForResponse(
+    (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Publish" }).click();
+  await uploaded;
+
+  await expect(
+    page.getByText("Processing failed — the file could not be published", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByText("Published!")).toHaveCount(0);
+
+  // Persisted: the owner's channel list shows the video in state "failed".
+  const token = await loginToken(request, email, password);
+  const mine = (await channelVideos(request, handle, token)).find((v) => v.title === videoTitle);
+  expect(mine?.state).toBe("failed");
+});
+
+// A malformed import URL comes back 422 with a `url` field error from the real
+// SSRF guard (non-http schemes are refused before any fetch); the UI maps it
+// inline onto the Video URL input instead of a generic banner.
+test("a non-http import URL shows an inline url field error", async ({ page }) => {
+  const id = uniqueId();
+  const handle = `ch${id}`;
+
+  await page.goto("/signup");
+  await page.getByLabel("Username").fill(`fan${id}`);
+  await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
+  await page.getByLabel("Password").fill("supersecret-e2e");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByLabel("Channel handle").fill(handle);
+  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
+  const channelCreated = page.waitForResponse(
+    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create channel" }).click();
+  await channelCreated;
+
+  await page.getByLabel("Video title").fill(`Bad import ${id}`);
+  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByLabel("Video URL").fill("ftp://example.com/clip.mp4");
+  const attempted = page.waitForResponse(
+    (r) =>
+      /\/videos\/[^/]+\/import$/.test(r.url()) &&
+      r.request().method() === "POST" &&
+      r.status() === 422,
+  );
+  await page.getByRole("button", { name: "Publish" }).click();
+  await attempted;
+
+  await expect(page.getByText("must be a public http(s) URL")).toBeVisible();
+  await expect(page.getByLabel("Video URL")).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText("Published!")).toHaveCount(0);
+});
+
 // Proves the live-stream lifecycle against a real vidra-core + PostgreSQL: a
 // creator makes a live stream in the studio, sees the stream key once, rotates it,
 // and deletes it. Persistence is confirmed by reading the channel's live streams

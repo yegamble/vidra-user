@@ -213,6 +213,179 @@ test("a creator can upload and publish a video", async ({ page }) => {
   });
 });
 
+// The false-success regression: the upload HTTP call succeeds (201) but the
+// returned video is state="failed" (probe/scan rejected the file) — the creator
+// must see an error, not "Published!", and keep the form for a retry.
+test("a failed upload is reported as a processing failure, not Published!", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  await page.route(UPLOAD, (route) => route.fulfill({ json: { video: video({ state: "failed" }) } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  await page.getByLabel("Video file").setInputFiles({
+    name: "clip.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("not really a video"),
+  });
+  await page.getByRole("button", { name: "Publish" }).click();
+
+  await expect(
+    page.getByText("Processing failed — the file could not be published", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByText("Published!")).toHaveCount(0);
+  // The form keeps its values so the creator can fix the file and retry.
+  await expect(page.getByLabel("Video title")).toHaveValue("My clip");
+});
+
+// The same false-success guard on the URL-import path.
+test("a failed URL import is reported as a processing failure, not Published!", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  await page.route(/\/api\/v1\/videos\/v1\/import$/, (route) =>
+    route.fulfill({ json: { video: video({ state: "failed" }) } }),
+  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByLabel("Video URL").fill("https://example.com/clip.mp4");
+  await page.getByRole("button", { name: "Publish" }).click();
+
+  await expect(
+    page.getByText("Processing failed — the imported file could not be published", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByText("Published!")).toHaveCount(0);
+});
+
+// An upload the backend accepts but has not finished processing must not claim
+// "Published!" either — the creator sees an honest in-progress message.
+test("an upload still processing shows an in-progress message, not Published!", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  await page.route(UPLOAD, (route) =>
+    route.fulfill({ json: { video: video({ state: "processing" }) } }),
+  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  await page.getByLabel("Video file").setInputFiles({
+    name: "clip.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("test"),
+  });
+  await page.getByRole("button", { name: "Publish" }).click();
+
+  await expect(page.getByText("is still processing", { exact: false })).toBeVisible();
+  await expect(page.getByText("Published!")).toHaveCount(0);
+});
+
+// A 422 from the create-draft call maps its field errors inline onto the publish
+// form (aria-invalid + aria-describedby), instead of one generic message.
+test("a 422 field error from the draft renders inline on the title field", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        status: 422,
+        json: {
+          error: {
+            code: "validation_failed",
+            message: "validation failed",
+            fields: [{ field: "title", message: "must be at most 200 characters" }],
+          },
+        },
+      });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  await page.getByLabel("Video file").setInputFiles({
+    name: "clip.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("test"),
+  });
+  await page.getByRole("button", { name: "Publish" }).click();
+
+  await expect(page.getByText("must be at most 200 characters")).toBeVisible();
+  const title = page.getByLabel("Video title");
+  await expect(title).toHaveAttribute("aria-invalid", "true");
+  await expect(title).toHaveAttribute("aria-describedby", "publish-title-error");
+  // Field errors replace the generic form-level message.
+  await expect(page.getByText("Upload failed. Please try again.")).toHaveCount(0);
+});
+
+// A 422 from the import call maps its url field error inline onto the URL input.
+test("a 422 url field error from the import renders inline on the URL field", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  await page.route(/\/api\/v1\/videos\/v1\/import$/, (route) =>
+    route.fulfill({
+      status: 422,
+      json: {
+        error: {
+          code: "validation_failed",
+          message: "validation failed",
+          fields: [{ field: "url", message: "must be a public http(s) URL" }],
+        },
+      },
+    }),
+  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByLabel("Video URL").fill("https://example.com/clip.mp4");
+  await page.getByRole("button", { name: "Publish" }).click();
+
+  await expect(page.getByText("must be a public http(s) URL")).toBeVisible();
+  const url = page.getByLabel("Video URL");
+  await expect(url).toHaveAttribute("aria-invalid", "true");
+  await expect(url).toHaveAttribute("aria-describedby", "publish-url-error");
+});
+
 test("a creator can publish a video by importing from a URL", async ({ page }) => {
   await signIn(page);
   await page.route(MY_CHANNELS, (route) =>

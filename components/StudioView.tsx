@@ -373,20 +373,36 @@ function ChannelRow({
 
 type UploadState = "idle" | "uploading" | "done" | "error";
 
+// FieldErrorText renders an inline field-level validation message (the target of
+// the input's aria-describedby), matching the SignupForm pattern.
+function FieldErrorText({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} className="text-xs text-red-600 dark:text-red-400">
+      {message}
+    </p>
+  );
+}
+
 // TaxonomySelect renders a labelled dropdown for an optional metadata field. An
-// empty value ("—") means unset.
+// empty value ("—") means unset. When a 422 field error targets it, `error` +
+// `errorId` wire the inline message via aria-invalid/aria-describedby.
 function TaxonomySelect({
   label,
   ariaLabel,
   value,
   onChange,
   options,
+  error,
+  errorId,
 }: {
   label: string;
   ariaLabel: string;
   value: string;
   onChange: (v: string) => void;
   options: VideoConfigOption[];
+  error?: string;
+  errorId?: string;
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
@@ -395,6 +411,8 @@ function TaxonomySelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={ariaLabel}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error && errorId ? errorId : undefined}
         className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
       >
         <option value="">—</option>
@@ -404,6 +422,7 @@ function TaxonomySelect({
           </option>
         ))}
       </select>
+      {errorId ? <FieldErrorText id={errorId} message={error} /> : null}
     </label>
   );
 }
@@ -433,6 +452,28 @@ function importOrUploadError(err: unknown, source: "file" | "url"): string {
   return source === "url" ? "Import failed. Please try again." : "Upload failed. Please try again.";
 }
 
+// failedStateError is the message for an upload/import whose HTTP call succeeded
+// but whose returned video came back state="failed" (the backend's probe/scan
+// rejected the file) — a dead upload must never be reported as published.
+function failedStateError(source: "file" | "url"): string {
+  return source === "url"
+    ? "Processing failed — the imported file could not be published. Check that the URL points to a valid video file and try again."
+    : "Processing failed — the file could not be published. Check that it is a valid video file and try again.";
+}
+
+// The publish-form fields that can carry an inline 422 message, keyed by the
+// backend's field names (create-draft: title/description/privacy/taxonomy;
+// import: url).
+const PUBLISH_FIELDS: ReadonlySet<string> = new Set([
+  "title",
+  "description",
+  "privacy",
+  "category",
+  "language",
+  "license",
+  "url",
+]);
+
 function UploadSection({ channels, config }: { channels: Channel[]; config: VideoConfigResponse | null }) {
   const [handle, setHandle] = useState(channels[0]?.handle ?? "");
   const [title, setTitle] = useState("");
@@ -444,8 +485,9 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   const [source, setSource] = useState<"file" | "url">("file");
   const [videoUrl, setVideoUrl] = useState("");
   const [state, setState] = useState<UploadState>("idle");
-  const [published, setPublished] = useState<Video | null>(null);
+  const [result, setResult] = useState<Video | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function upload(e: React.FormEvent) {
@@ -457,7 +499,8 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     if (source === "url" && url === "") return;
     setState("uploading");
     setError(null);
-    setPublished(null);
+    setFieldErrors({});
+    setResult(null);
     try {
       const draft = await api.createVideoDraft(handle, {
         title: title.trim(),
@@ -469,7 +512,15 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
         source === "url"
           ? await api.importVideoFile(draft.id, url)
           : await api.uploadVideoFile(draft.id, file as File);
-      setPublished(res.video);
+      // The HTTP call succeeding is NOT success: the backend finalises the video
+      // and may return state="failed" (probe/scan rejected the file). Only a
+      // published/processing result clears the form; failed keeps it for a retry.
+      if (res.video.state === "failed") {
+        setError(failedStateError(source));
+        setState("error");
+        return;
+      }
+      setResult(res.video);
       setState("done");
       setTitle("");
       setDescription("");
@@ -479,6 +530,19 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
       setVideoUrl("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
+      // A 422 with field errors maps inline onto the matching form fields
+      // (aria-invalid + aria-describedby); anything else is a form-level message.
+      if (err instanceof ApiError && err.status === 422 && err.fields && err.fields.length > 0) {
+        const map: Record<string, string> = {};
+        for (const f of err.fields) {
+          if (PUBLISH_FIELDS.has(f.field)) map[f.field] = f.message;
+        }
+        if (Object.keys(map).length > 0) {
+          setFieldErrors(map);
+          setState("error");
+          return;
+        }
+      }
       setError(importOrUploadError(err, source));
       setState("error");
     }
@@ -516,8 +580,11 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             placeholder="My video"
             aria-label="Video title"
             maxLength={200}
+            aria-invalid={fieldErrors.title ? true : undefined}
+            aria-describedby={fieldErrors.title ? "publish-title-error" : undefined}
             className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
           />
+          <FieldErrorText id="publish-title-error" message={fieldErrors.title} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Description</span>
@@ -528,8 +595,11 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             aria-label="Video description"
             rows={3}
             maxLength={5000}
+            aria-invalid={fieldErrors.description ? true : undefined}
+            aria-describedby={fieldErrors.description ? "publish-description-error" : undefined}
             className="resize-y rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
           />
+          <FieldErrorText id="publish-description-error" message={fieldErrors.description} />
         </label>
         <TaxonomySelect
           label="Category"
@@ -537,6 +607,8 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           value={category}
           onChange={setCategory}
           options={config?.categories ?? []}
+          error={fieldErrors.category}
+          errorId="publish-category-error"
         />
         <TaxonomySelect
           label="Language"
@@ -544,6 +616,8 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           value={language}
           onChange={setLanguage}
           options={config?.languages ?? []}
+          error={fieldErrors.language}
+          errorId="publish-language-error"
         />
         <TaxonomySelect
           label="License"
@@ -551,6 +625,8 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           value={license}
           onChange={setLicense}
           options={config?.licenses ?? []}
+          error={fieldErrors.license}
+          errorId="publish-license-error"
         />
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Privacy</span>
@@ -558,12 +634,15 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             value={privacy}
             onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
             aria-label="Privacy"
+            aria-invalid={fieldErrors.privacy ? true : undefined}
+            aria-describedby={fieldErrors.privacy ? "publish-privacy-error" : undefined}
             className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
           >
             <option value="public">Public</option>
             <option value="unlisted">Unlisted</option>
             <option value="private">Private</option>
           </select>
+          <FieldErrorText id="publish-privacy-error" message={fieldErrors.privacy} />
         </label>
         <fieldset className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Source</span>
@@ -608,8 +687,11 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
               type="url"
               placeholder="https://example.com/clip.mp4"
               aria-label="Video URL"
+              aria-invalid={fieldErrors.url ? true : undefined}
+              aria-describedby={fieldErrors.url ? "publish-url-error" : undefined}
               className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
             />
+            <FieldErrorText id="publish-url-error" message={fieldErrors.url} />
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
               A public direct link to a video file. We fetch and publish it.
             </span>
@@ -625,15 +707,28 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           </button>
         </div>
       </form>
-      {state === "done" && published ? (
-        <p className="text-sm text-green-700 dark:text-green-400">
-          Published!{" "}
-          <Link href={`/videos/${published.id}`} className="font-medium underline">
-            View “{published.title}”
-          </Link>
+      {state === "done" && result ? (
+        result.state === "published" ? (
+          <p role="status" className="text-sm text-green-700 dark:text-green-400">
+            Published!{" "}
+            <Link href={`/videos/${result.id}`} className="font-medium underline">
+              View “{result.title}”
+            </Link>
+          </p>
+        ) : (
+          // An honest in-progress message: the file was received but the backend
+          // has not finished processing it — it is not watchable yet.
+          <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
+            “{result.title}” was received and is still processing — it will appear in Your videos
+            once it’s ready.
+          </p>
+        )
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
         </p>
       ) : null}
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
     </section>
   );
 }
