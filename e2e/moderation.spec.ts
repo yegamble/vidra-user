@@ -59,6 +59,23 @@ function commentReport(id: string, status: string) {
   };
 }
 
+// A report against a FEDERATED remote video (target_type remote_video) with its
+// origin context, as the queue serves it.
+function remoteVideoReport(id: string, status: string) {
+  return {
+    id,
+    target_type: "remote_video",
+    reason: `reason-${id}`,
+    status,
+    moderator_note: "",
+    created_at: new Date().toISOString(),
+    reporter: { username: "carol" },
+    remote_video_id: "rv9",
+    remote_video_title: "Suspicious remote clip",
+    remote_video_domain: "videos.example",
+  };
+}
+
 async function signIn(page: Page, role: Role) {
   await page.route(LOGIN, (route) => route.fulfill({ json: session(role) }));
   await page.route(FEED, (route) =>
@@ -153,6 +170,56 @@ test("an admin blocks the video from a report card", async ({ page }) => {
   await expect(page.getByText("Video blocked")).toBeVisible();
   await expect(page.getByRole("link", { name: "Manage" })).toBeVisible();
   expect(blockedVideoId).toBe("v1");
+});
+
+test("a remote-video report shows origin context and blocks the remote video", async ({
+  page,
+}) => {
+  await signIn(page, "admin");
+  await page.route(REPORTS, (route) =>
+    route.fulfill({ json: { reports: [remoteVideoReport("r1", "open")], limit: 100, offset: 0 } }),
+  );
+  let blockedRemoteId: string | null = null;
+  let blockBody: unknown = null;
+  await page.route(/\/api\/v1\/admin\/remote-videos\/[^/]+\/block$/, (route) => {
+    if (route.request().method() === "POST") {
+      blockedRemoteId =
+        route.request().url().match(/\/remote-videos\/([^/]+)\/block$/)?.[1] ?? null;
+      blockBody = route.request().postDataJSON();
+      return route.fulfill({ status: 204, body: "" });
+    }
+    return route.continue();
+  });
+
+  await page.getByRole("link", { name: "Moderation" }).click();
+
+  // The card renders the "remote video" type pill, the origin, and a local
+  // remote-watch review link.
+  await expect(page.getByText("remote video", { exact: true })).toBeVisible();
+  await expect(page.getByText("videos.example")).toBeVisible();
+  await expect(page.getByText("by carol")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Suspicious remote clip" })).toHaveAttribute(
+    "href",
+    "/remote/rv9",
+  );
+
+  // Block the remote video from the card, carrying the report reason for audit.
+  const blocked = page.waitForResponse(
+    (r) =>
+      /\/api\/v1\/admin\/remote-videos\/[^/]+\/block$/.test(r.url()) &&
+      r.request().method() === "POST" &&
+      r.ok(),
+  );
+  await page.getByRole("button", { name: "Block video" }).click();
+  await blocked;
+
+  await expect(page.getByText("Video blocked")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Manage" })).toHaveAttribute(
+    "href",
+    "/moderation/blocked/remote",
+  );
+  expect(blockedRemoteId).toBe("rv9");
+  expect(blockBody).toEqual({ reason: "reason-r1" });
 });
 
 test("the All filter shows resolved reports without resolve actions", async ({ page }) => {

@@ -28,7 +28,10 @@ export function ModerationTabs() {
   return (
     <nav className="mb-6 flex flex-wrap gap-2" aria-label="Moderation sections">
       {TABS.map((tab) => {
-        const active = pathname === tab.href;
+        // "Blocked videos" stays lit on its sub-tabs (/moderation/blocked/remote).
+        const active =
+          pathname === tab.href ||
+          (tab.href === "/moderation/blocked" && pathname.startsWith("/moderation/blocked/"));
         return (
           <Link
             key={tab.href}

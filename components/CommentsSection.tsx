@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { MessageButton } from "@/components/MessageButton";
+import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ReportButton } from "@/components/ReportButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -21,6 +22,10 @@ type Status = "loading" | "error" | "ready";
 // authenticated viewer post and delete their own. Mutations update the in-memory
 // list optimistically-on-success (the server is the source of truth: a new
 // comment is prepended from the API response, a deleted one is filtered out).
+// Federated (remote-authored) comments render with the author-name snapshot,
+// an origin-domain badge, and the ActivityPub protocol label; they have no
+// local account, so the account controls (Message/Mute/Block/Report user) are
+// replaced by Mute instance + Report comment.
 export function CommentsSection({ videoId }: { videoId: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [comments, setComments] = useState<Comment[]>([]);
@@ -77,6 +82,10 @@ export function CommentsSection({ videoId }: { videoId: string }) {
               }
               onMutedAuthor={(authorId) =>
                 setComments((prev) => prev.filter((x) => x.author_id !== authorId))
+              }
+              onMutedInstance={(domain) =>
+                // An instance mute hides ALL of that origin's comments for the caller.
+                setComments((prev) => prev.filter((x) => x.author_domain !== domain))
               }
             />
           ))}
@@ -162,16 +171,20 @@ function CommentForm({
 
 // CommentItem renders one comment. Its author gets Edit + Delete controls; any
 // other signed-in viewer gets Mute (hide this account's comments) + Report.
+// A remote-authored comment has no local account: it shows the origin badge
+// and swaps the account controls for Mute instance + Report comment.
 function CommentItem({
   comment,
   onDeleted,
   onEdited,
   onMutedAuthor,
+  onMutedInstance,
 }: {
   comment: Comment;
   onDeleted: () => void;
   onEdited: (updated: Comment) => void;
   onMutedAuthor: (authorId: string) => void;
+  onMutedInstance: (domain: string) => void;
 }) {
   const { user, status } = useSession();
   const [busy, setBusy] = useState(false);
@@ -182,7 +195,12 @@ function CommentItem({
   const [draft, setDraft] = useState(comment.body);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const isAuthor = user?.username === comment.author_username;
+  const isRemote = comment.remote === true;
+  // The local author's account id; null on federated comments (no local account).
+  const authorId = !isRemote && comment.author_id ? comment.author_id : null;
+  // A remote author-name snapshot can collide with a local username — never
+  // treat a remote comment as the viewer's own.
+  const isAuthor = !isRemote && user?.username === comment.author_username;
   const when = relativeTime(comment.created_at);
 
   function startEdit() {
@@ -219,10 +237,23 @@ function CommentItem({
   }
 
   async function mute() {
+    if (!authorId) return;
     setMuting(true);
     try {
-      await api.muteAccount(comment.author_id);
-      onMutedAuthor(comment.author_id);
+      await api.muteAccount(authorId);
+      onMutedAuthor(authorId);
+    } catch {
+      // Leave the comment in place on failure.
+      setMuting(false);
+    }
+  }
+
+  async function muteInstance() {
+    if (!comment.author_domain) return;
+    setMuting(true);
+    try {
+      await api.muteInstance(comment.author_domain);
+      onMutedInstance(comment.author_domain);
     } catch {
       // Leave the comment in place on failure.
       setMuting(false);
@@ -230,9 +261,10 @@ function CommentItem({
   }
 
   async function block() {
+    if (!authorId) return;
     setBlocking(true);
     try {
-      await api.blockUser(comment.author_id);
+      await api.blockUser(authorId);
       setBlocked(true); // a block doesn't hide content, so keep the comment; reflect the state
     } catch {
       // Leave things as-is on failure.
@@ -243,19 +275,47 @@ function CommentItem({
 
   return (
     <li className="flex gap-3">
-      {/* Comments carry author_id, not a has_avatar flag: always point at the
+      {/* Local comments carry author_id, not a has_avatar flag: point at the
           public avatar URL and let a 404 fall back to the initial-letter block
-          via onError — the fixed-size block keeps the row layout stable. */}
+          via onError — the fixed-size block keeps the row layout stable.
+          Remote authors have no local account/avatar: initial-letter directly. */}
       <Avatar
-        src={userAvatarUrl(comment.author_id)}
+        src={authorId ? userAvatarUrl(authorId) : null}
         name={comment.author_display_name || comment.author_username}
         className="mt-0.5 h-8 w-8 text-sm"
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium text-zinc-900 dark:text-zinc-100">
           {comment.author_display_name || comment.author_username}
         </span>
+        {isRemote && comment.author_domain ? (
+          // Origin badge: the author lives on another instance (no local
+          // profile to link), plus the shared protocol label.
+          <>
+            <span
+              className="inline-flex max-w-full items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+              title={`Federated comment from ${comment.author_domain}`}
+            >
+              <svg
+                aria-hidden
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3 w-3 shrink-0"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+              <span className="sr-only">From </span>
+              <span className="truncate">{comment.author_domain}</span>
+            </span>
+            <ProtocolBadge protocol="activitypub" />
+          </>
+        ) : null}
         {when ? <span className="text-zinc-500 dark:text-zinc-400">{when}</span> : null}
         {comment.edited ? (
           <span className="text-xs text-zinc-500 dark:text-zinc-400">(edited)</span>
@@ -280,7 +340,24 @@ function CommentItem({
               Delete
             </button>
           </span>
-        ) : status === "authed" ? (
+        ) : status === "authed" && isRemote ? (
+          // Remote author: no local account to message/mute/block/report —
+          // the viewer can mute the whole origin instance or report the comment.
+          <span className="ml-auto flex items-center gap-3">
+            {comment.author_domain ? (
+              <button
+                type="button"
+                disabled={muting}
+                aria-label={`Mute instance ${comment.author_domain}`}
+                onClick={() => void muteInstance()}
+                className="text-xs font-medium text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                {muting ? "Muting…" : "Mute instance"}
+              </button>
+            ) : null}
+            <ReportButton kind="comment" targetId={comment.id} variant="link" />
+          </span>
+        ) : status === "authed" && authorId ? (
           <span className="ml-auto flex items-center gap-3">
             <button
               type="button"
@@ -290,7 +367,7 @@ function CommentItem({
             >
               {muting ? "Muting…" : "Mute"}
             </button>
-            <MessageButton recipientId={comment.author_id} />
+            <MessageButton recipientId={authorId} />
             <button
               type="button"
               disabled={blocking || blocked}
@@ -299,7 +376,7 @@ function CommentItem({
             >
               {blocked ? "Blocked" : blocking ? "Blocking…" : "Block"}
             </button>
-            <ReportButton kind="account" targetId={comment.author_id} variant="link" />
+            <ReportButton kind="account" targetId={authorId} variant="link" />
             <ReportButton kind="comment" targetId={comment.id} variant="link" />
           </span>
         ) : null}

@@ -215,6 +215,21 @@ function ReportRow({
     }
   }
 
+  // Block the reported FEDERATED remote video (hides it from every local
+  // surface), recording the report's reason. Same independence from resolution.
+  async function blockRemoteVideo(remoteVideoId: string) {
+    if (blockState === "blocking") return;
+    setBlockState("blocking");
+    setBlockError(null);
+    try {
+      await api.blockRemoteVideo(remoteVideoId, { reason: report.reason });
+      setBlockState("blocked");
+    } catch (err) {
+      setBlockError(err instanceof ApiError ? err.message : "Could not block this video.");
+      setBlockState("idle");
+    }
+  }
+
   return (
     <article className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -224,7 +239,8 @@ function ReportRow({
           {report.status}
         </span>
         <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-600 capitalize dark:bg-zinc-800 dark:text-zinc-300">
-          {report.target_type}
+          {/* "remote_video" reads as "remote video". */}
+          {report.target_type.replace("_", " ")}
         </span>
         <span>
           by <span className="font-medium text-zinc-700 dark:text-zinc-200">{report.reporter.username}</span>
@@ -252,7 +268,7 @@ function ReportRow({
           {deleteState === "idle" ? (
             <button
               type="button"
-              aria-label={`Delete this ${report.target_type} report`}
+              aria-label={`Delete this ${report.target_type.replace("_", " ")} report`}
               onClick={() => setDeleteState("confirm")}
               className="self-start rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
             >
@@ -342,6 +358,28 @@ function ReportRow({
                 </button>
               )
             ) : null}
+            {report.target_type === "remote_video" && report.remote_video_id ? (
+              blockState === "blocked" ? (
+                <span className="inline-flex items-center gap-1 text-sm text-zinc-600 dark:text-zinc-300">
+                  Video blocked ·{" "}
+                  <Link
+                    href="/moderation/blocked/remote"
+                    className="underline hover:text-zinc-900 dark:hover:text-zinc-100"
+                  >
+                    Manage
+                  </Link>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={blockState === "blocking"}
+                  onClick={() => void blockRemoteVideo(report.remote_video_id as string)}
+                  className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                >
+                  {blockState === "blocking" ? "Blocking…" : "Block video"}
+                </button>
+              )
+            ) : null}
           </div>
           {blockError ? <p className="text-sm text-red-600 dark:text-red-400">{blockError}</p> : null}
         </div>
@@ -351,8 +389,9 @@ function ReportRow({
 }
 
 // ReportTarget shows the reported content: a link to the video for video reports,
-// the quoted comment body for comment reports, or the reported account for
-// account reports.
+// the quoted comment body for comment reports, the reported account for account
+// reports, or the origin + title + local remote-watch link for remote_video
+// reports (federated content).
 function ReportTarget({ report }: { report: Report }) {
   if (report.target_type === "video" && report.video_id) {
     return (
@@ -363,6 +402,30 @@ function ReportTarget({ report }: { report: Report }) {
         >
           {report.video_title || "Untitled video"}
         </Link>
+      </p>
+    );
+  }
+  if (report.target_type === "remote_video") {
+    return (
+      <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        {report.remote_video_id ? (
+          <Link
+            href={`/remote/${report.remote_video_id}`}
+            className="font-medium text-zinc-900 underline hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
+          >
+            {report.remote_video_title || "(remote video unavailable)"}
+          </Link>
+        ) : (
+          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+            {report.remote_video_title || "(remote video unavailable)"}
+          </span>
+        )}
+        {report.remote_video_domain ? (
+          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            <span className="sr-only">From </span>
+            {report.remote_video_domain}
+          </span>
+        ) : null}
       </p>
     );
   }

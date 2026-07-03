@@ -61,6 +61,32 @@ test("an admin unblocks a video from the block-list and it persists", async ({ p
   expect(await videoIsPublic(request, videoId)).toBe(true);
 });
 
+// Wires the REMOTE half of the block-list against the real backend: the admin
+// opens Blocked videos → Remote and the real GET /admin/remote-videos/blocked
+// answers (empty on a plain backed stack — no federated content without the
+// fake-remote harness), rendering the honest empty state rather than an error.
+// The mutating remote flows (report/block/unblock a remote video) need real
+// remote_videos rows and stay gated on the fake-remote-harness follow-up
+// (fix_plan P11); this proves the surface + endpoint contract wire-up.
+test("the remote block-list tab loads (empty) against the real backend", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Moderation" }).click();
+  await page.getByRole("link", { name: "Blocked videos" }).click();
+
+  const listed = page.waitForResponse(
+    (r) => /\/admin\/remote-videos\/blocked(\?|$)/.test(r.url()) && r.ok(),
+  );
+  await page.getByRole("link", { name: "Remote", exact: true }).click();
+  await listed;
+
+  await expect(page.getByText("No blocked remote videos")).toBeVisible();
+});
+
 // Proves the block round trip from the moderation report queue: a viewer reports a
 // published video (seeded via the API), the deterministic admin logs in, opens the
 // queue, and clicks "Block video" on the report card — the video is then hidden

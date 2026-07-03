@@ -422,7 +422,7 @@ export interface CreateReportRequest {
   reason: string;
 }
 
-export type ReportTargetType = "video" | "comment" | "account";
+export type ReportTargetType = "video" | "comment" | "account" | "remote_video";
 export type ReportStatus = "open" | "accepted" | "rejected";
 
 /** Who filed a report (admin moderation queue view). */
@@ -434,7 +434,9 @@ export interface ReportReporter {
  * An abuse report as seen by a moderator/admin in the queue. Target context is
  * type-dependent: a video report carries video_id/video_title, a comment report
  * carries comment_id/comment_body, an account report carries
- * reported_user_id/reported_username. Mirrors the backend Report schema.
+ * reported_user_id/reported_username, a remote_video report carries
+ * remote_video_id/remote_video_title/remote_video_domain. Mirrors the backend
+ * Report schema.
  */
 export interface Report {
   id: string;
@@ -455,6 +457,12 @@ export interface Report {
   // Account-report context.
   reported_user_id?: string;
   reported_username?: string;
+  // Remote-video-report context (federated content).
+  remote_video_id?: string;
+  /** Title of the reported remote video; omitted if it was deleted. */
+  remote_video_title?: string;
+  /** Origin instance of the reported remote video. */
+  remote_video_domain?: string;
 }
 
 export interface ReportListResponse {
@@ -493,6 +501,35 @@ export interface BlockedVideo {
 
 export interface BlockedVideoListResponse {
   videos: BlockedVideo[];
+  limit: number;
+  offset: number;
+}
+
+/**
+ * A currently-blocked federated remote video in the moderation block-list.
+ * Blocking hides it from every local surface (feeds, search, /remote/{id}),
+ * so review links go to the origin's watch_url. Mirrors the backend
+ * BlockedRemoteVideo schema; `blocked_by` is omitted when that moderator
+ * account was deleted.
+ */
+export interface BlockedRemoteVideo {
+  remote_video_id: string;
+  title: string;
+  /** The remote video's ActivityPub object id. */
+  object_url: string;
+  /** The origin's human watch page. */
+  watch_url: string;
+  /** The origin channel identity ("name@domain"). */
+  channel_handle: string;
+  /** The origin instance. */
+  domain: string;
+  reason: string;
+  blocked_by?: string;
+  blocked_at: string;
+}
+
+export interface BlockedRemoteVideoListResponse {
+  videos: BlockedRemoteVideo[];
   limit: number;
   offset: number;
 }
@@ -674,10 +711,21 @@ export interface Comment {
   id: string;
   video_id: string;
   body: string;
-  /** The author's account id (so a signed-in viewer can mute them). */
-  author_id: string;
+  /**
+   * The author's account id (so a signed-in viewer can mute them) — null for
+   * a federated (remote-authored) comment, which has no local account.
+   */
+  author_id: string | null;
+  /**
+   * The local author's username, or — for a remote comment — the remote
+   * author-name snapshot captured at ingestion.
+   */
   author_username: string;
   author_display_name: string;
+  /** True for a federated comment authored on another instance. */
+  remote: boolean;
+  /** The remote author's origin instance; omitted for local comments. */
+  author_domain?: string;
   created_at: string;
   updated_at: string;
   /** True once the body has been edited (updated_at moved past created_at). */

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
@@ -80,25 +81,28 @@ export function VideoCard({
         </h3>
       </Link>
       {isRemote && video.domain ? (
-        <span
-          className="inline-flex w-fit max-w-full items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
-          title={`Federated video from ${video.domain}`}
-        >
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-3 w-3 shrink-0"
+        <span className="flex max-w-full flex-wrap items-center gap-1">
+          <span
+            className="inline-flex w-fit max-w-full items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+            title={`Federated video from ${video.domain}`}
           >
-            <circle cx="12" cy="12" r="10" />
-            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-          </svg>
-          <span className="sr-only">From </span>
-          <span className="truncate">{video.domain}</span>
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3 w-3 shrink-0"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            <span className="sr-only">From </span>
+            <span className="truncate">{video.domain}</span>
+          </span>
+          <ProtocolBadge protocol="activitypub" />
         </span>
       ) : null}
       {video.channel_handle ? (

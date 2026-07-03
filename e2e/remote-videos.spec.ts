@@ -113,16 +113,19 @@ test("the subscriptions feed renders remote cards with an origin badge linking t
   const remoteItem = page.locator("li", { hasText: "Remote Documentary" });
   await expect(remoteItem.getByText("videos.example")).toBeVisible();
   await expect(remoteItem.getByText("Films")).toBeVisible();
+  // Remote cards carry the shared ActivityPub protocol label (fix_plan P11).
+  await expect(remoteItem.getByText("ActivityPub")).toBeVisible();
   await expect(
     remoteItem.getByRole("link", { name: /Remote Documentary/ }),
   ).toHaveAttribute("href", "/remote/rv1");
-  // The local card keeps its local watch link and shows no origin badge.
+  // The local card keeps its local watch link and shows no origin/protocol badge.
   const localItem = page.locator("li", { hasText: "Local Video" });
   await expect(localItem.getByRole("link", { name: /Local Video/ })).toHaveAttribute(
     "href",
     "/videos/v1",
   );
   await expect(localItem.getByText("videos.example")).toHaveCount(0);
+  await expect(localItem.getByText("ActivityPub")).toHaveCount(0);
 });
 
 test("search results render remote cards with the origin badge and remote watch link", async ({
@@ -205,6 +208,8 @@ test("the remote watch page plays the origin stream and always links the origin 
   await page.goto("/remote/rv1");
   await expect(page.getByRole("heading", { level: 1, name: "Remote Documentary" })).toBeVisible();
   await expect(page.getByText("videos.example").first()).toBeVisible();
+  // The shared ActivityPub protocol label sits next to the origin chip.
+  await expect(page.getByText("ActivityPub")).toBeVisible();
 
   // Direct-file playback from the origin.
   await expect(page.locator("video")).toHaveAttribute(
@@ -304,4 +309,49 @@ test("anonymous viewers get no mute-instance control on the remote watch page", 
   await page.goto("/remote/rv1");
   await expect(page.getByRole("heading", { level: 1, name: "Remote Documentary" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Mute instance/ })).toHaveCount(0);
+  // Reporting requires an account too: the control degrades to a sign-in link.
+  await expect(page.getByRole("link", { name: "Sign in to report" })).toBeVisible();
+});
+
+test("a signed-in viewer can report a remote video to the local moderators", async ({ page }) => {
+  await signIn(page);
+  await page.route(REMOTE_DETAIL, (route) => route.fulfill({ json: remoteDetail() }));
+  await page.route(REMOTE_FOLLOWS, (route) =>
+    route.fulfill({ json: { follows: [], limit: 100, offset: 0 } }),
+  );
+  await page.route(SUBS, (route) =>
+    route.fulfill({
+      json: { videos: [remoteCard("rv1", "Remote Documentary")], sort: "recent", limit: 20, offset: 0 },
+    }),
+  );
+  const reportCalls: Array<{ url: string; body: unknown }> = [];
+  await page.route(/\/api\/v1\/remote-videos\/rv1\/report$/, (route) => {
+    reportCalls.push({ url: route.request().url(), body: route.request().postDataJSON() });
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  // Reach the remote watch page via a subscriptions card (client-side nav
+  // keeps the in-memory session).
+  await page.getByRole("link", { name: "Subscriptions" }).click();
+  await page.getByRole("heading", { name: "Remote Documentary" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Remote Documentary" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Report this video" }).click();
+  const dialog = page.getByRole("dialog", { name: "Report this video" });
+  await dialog.getByLabel("Reason for report").fill("stolen content");
+
+  const reported = page.waitForResponse(
+    (r) =>
+      /\/api\/v1\/remote-videos\/rv1\/report$/.test(r.url()) &&
+      r.request().method() === "POST" &&
+      r.ok(),
+  );
+  await dialog.getByRole("button", { name: "Submit report" }).click();
+  await reported;
+
+  await expect(
+    dialog.getByText("Thanks — your report has been sent to the moderators."),
+  ).toBeVisible();
+  expect(reportCalls[0].url).toContain("/api/v1/remote-videos/rv1/report");
+  expect(reportCalls[0].body).toEqual({ reason: "stolen content" });
 });

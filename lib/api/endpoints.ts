@@ -10,6 +10,7 @@ import type {
   AuditLogListResponse,
   SystemStatus,
   AdminVideoListResponse,
+  BlockedRemoteVideoListResponse,
   BlockedVideoListResponse,
   BlockVideoRequest,
   Caption,
@@ -442,6 +443,17 @@ export const api = {
     apiRequest<RemoteVideo>(`/api/v1/remote-videos/${encodeURIComponent(id)}`, { signal }),
 
   /**
+   * POST /api/v1/remote-videos/{id}/report — file an abuse report against a
+   * federated remote video (auth; target_type remote_video; idempotent per
+   * reporter+target 204; unknown remote video → 404).
+   */
+  reportRemoteVideo: (id: string, reason: string) =>
+    apiRequest<void>(`/api/v1/remote-videos/${encodeURIComponent(id)}/report`, {
+      method: "POST",
+      body: { reason },
+    }),
+
+  /**
    * POST /api/v1/me/remote-follows — follow a remote channel by "name@domain"
    * handle or actor URL (auth). Returns the follow row (state=pending until
    * the remote Accepts; idempotent re-follow returns the existing row).
@@ -828,6 +840,38 @@ export const api = {
     apiRequest<BlockedVideoListResponse>("/api/v1/admin/videos/blocked", {
       query: { limit: params.limit, offset: params.offset },
       signal,
+    }),
+
+  /**
+   * GET /api/v1/admin/remote-videos/blocked — currently-blocked federated
+   * remote videos, newest block first (moderator/admin). Paginated via
+   * limit/offset.
+   */
+  getBlockedRemoteVideos: (
+    params: { limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<BlockedRemoteVideoListResponse>("/api/v1/admin/remote-videos/blocked", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/remote-videos/{id}/block — block a federated remote
+   * video so it is hidden from all local surfaces (moderator/admin,
+   * idempotent, 204, audited). The optional reason is recorded for the audit
+   * trail. Unknown id → 404.
+   */
+  blockRemoteVideo: (id: string, body: BlockVideoRequest = {}) =>
+    apiRequest<void>(`/api/v1/admin/remote-videos/${encodeURIComponent(id)}/block`, {
+      method: "POST",
+      body,
+    }),
+
+  /** DELETE /api/v1/admin/remote-videos/{id}/block — lift a remote video's block (moderator/admin, idempotent, 204). */
+  unblockRemoteVideo: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/remote-videos/${encodeURIComponent(id)}/block`, {
+      method: "DELETE",
     }),
 
   /**

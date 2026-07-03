@@ -44,10 +44,31 @@ function comment(id: string, body: string, username = "bob", display = "Bob Jone
     id,
     video_id: "v1",
     body,
+    author_id: `author-${id}`,
     author_username: username,
     author_display_name: display,
+    remote: false,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+  };
+}
+
+// A federated (remote-authored) comment as the API serves it: no local account
+// (author_id null), an author-name snapshot, and the origin domain.
+function remoteComment(id: string, body: string, domain = "videos.example") {
+  return {
+    id,
+    video_id: "v1",
+    body,
+    parent_id: null,
+    author_id: null,
+    author_username: "remote-rene",
+    author_display_name: "Remote Rene",
+    remote: true,
+    author_domain: domain,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    edited: false,
   };
 }
 
@@ -107,6 +128,115 @@ test("an authenticated viewer can post a comment", async ({ page }) => {
 
   await expect(page.getByText("Great video")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Comments (1)" })).toBeVisible();
+});
+
+test("a federated comment shows the author snapshot with origin + protocol badges", async ({
+  page,
+}) => {
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) =>
+    route.fulfill({
+      json: {
+        comments: [remoteComment("rc1", "Greetings from afar"), comment("c1", "Local reply")],
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+
+  await page.goto("/videos/v1");
+  await expect(page.getByText("Greetings from afar")).toBeVisible();
+
+  const commentsRegion = page.getByRole("region", { name: "Comments" });
+  const remoteRow = commentsRegion.locator("li", { hasText: "Greetings from afar" });
+  // Author-name snapshot renders as plain text — no local profile/account link.
+  await expect(remoteRow.getByText("Remote Rene")).toBeVisible();
+  await expect(remoteRow.getByRole("link")).toHaveCount(0);
+  // Origin-domain badge + the shared ActivityPub protocol label.
+  await expect(remoteRow.getByText("videos.example")).toBeVisible();
+  await expect(remoteRow.getByText("ActivityPub")).toBeVisible();
+  // The local comment carries neither.
+  const localRow = commentsRegion.locator("li", { hasText: "Local reply" });
+  await expect(localRow.getByText("videos.example")).toHaveCount(0);
+  await expect(localRow.getByText("ActivityPub")).toHaveCount(0);
+});
+
+test("a signed-in viewer gets Mute instance + Report on a federated comment instead of the account controls", async ({
+  page,
+}) => {
+  await page.route(LOGIN, (route) => route.fulfill({ json: session }));
+  await page.route(FEED, (route) =>
+    route.fulfill({ json: { videos: [detail], sort: "recent", limit: 20, offset: 0 } }),
+  );
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) =>
+    route.fulfill({
+      json: {
+        comments: [
+          remoteComment("rc1", "Greetings from afar"),
+          remoteComment("rc2", "Also from afar"),
+          comment("c1", "Local reply"),
+        ],
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+  await page.route(/\/api\/v1\/me\/saved(\?|$)/, (route) =>
+    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+  );
+  const muteCalls: string[] = [];
+  await page.route(/\/api\/v1\/me\/mutes\/instances\/[^/]+$/, (route) => {
+    muteCalls.push(`${route.request().method()} ${route.request().url()}`);
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.getByRole("heading", { name: "Watch Me" }).click();
+  await expect(page.getByText("Greetings from afar")).toBeVisible();
+
+  const commentsRegion = page.getByRole("region", { name: "Comments" });
+  const remoteRow = commentsRegion.locator("li", { hasText: "Greetings from afar" });
+  const localRow = commentsRegion.locator("li", { hasText: "Local reply" });
+
+  // Remote row: Mute instance + Report only — no Message/Mute/Block (no local account).
+  await expect(
+    remoteRow.getByRole("button", { name: "Mute instance videos.example" }),
+  ).toBeVisible();
+  await expect(remoteRow.getByRole("button", { name: "Report this comment" })).toBeVisible();
+  await expect(remoteRow.getByRole("button", { name: "Message" })).toHaveCount(0);
+  await expect(remoteRow.getByRole("button", { name: "Mute", exact: true })).toHaveCount(0);
+  await expect(remoteRow.getByRole("button", { name: "Block", exact: true })).toHaveCount(0);
+  await expect(remoteRow.getByRole("button", { name: "Report this user" })).toHaveCount(0);
+  // Local row keeps the full account controls.
+  await expect(localRow.getByRole("button", { name: "Mute", exact: true })).toBeVisible();
+  await expect(localRow.getByRole("button", { name: "Message" })).toBeVisible();
+  await expect(localRow.getByRole("button", { name: "Block", exact: true })).toBeVisible();
+
+  // Muting the instance hides EVERY comment from that origin, keeps local ones.
+  const muted = page.waitForResponse(
+    (r) =>
+      /\/api\/v1\/me\/mutes\/instances\/[^/]+$/.test(r.url()) &&
+      r.request().method() === "POST" &&
+      r.ok(),
+  );
+  await remoteRow.getByRole("button", { name: "Mute instance videos.example" }).click();
+  await muted;
+
+  await expect(page.getByText("Greetings from afar")).toHaveCount(0);
+  await expect(page.getByText("Also from afar")).toHaveCount(0);
+  await expect(page.getByText("Local reply")).toBeVisible();
+  expect(muteCalls[0]).toContain("POST ");
+  expect(muteCalls[0]).toContain("/api/v1/me/mutes/instances/videos.example");
 });
 
 test("an author can edit their own comment", async ({ page }) => {

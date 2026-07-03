@@ -763,6 +763,34 @@ describe("api endpoints", () => {
     );
   });
 
+  it("reportRemoteVideo POSTs the reason to the remote-video report endpoint", async () => {
+    await api.reportRemoteVideo("r1", "stolen content");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/remote-videos/r1/report");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ reason: "stolen content" });
+  });
+
+  it("getBlockedRemoteVideos targets the remote block-list with pagination", async () => {
+    await api.getBlockedRemoteVideos({ limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/remote-videos/blocked?limit=100");
+  });
+
+  it("blockRemoteVideo POSTs the block with the audit reason", async () => {
+    await api.blockRemoteVideo("r1", { reason: "reported spam" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/remote-videos/r1/block");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ reason: "reported spam" });
+  });
+
+  it("unblockRemoteVideo DELETEs the remote video's block", async () => {
+    await api.unblockRemoteVideo("r1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/remote-videos/r1/block");
+    expect(init.method).toBe("DELETE");
+  });
+
   it("createRemoteFollow POSTs the handle target", async () => {
     await api.createRemoteFollow({ handle: "films@videos.example" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

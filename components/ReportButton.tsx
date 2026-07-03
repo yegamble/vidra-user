@@ -8,17 +8,22 @@ import { ApiError, api } from "@/lib/api";
 
 const MAX_REASON_LEN = 2000;
 
-export type ReportKind = "video" | "comment" | "account";
+export type ReportKind = "video" | "comment" | "account" | "remote_video";
 
-// reportNoun is the human word for a report kind ("account" reads as "user").
+// reportNoun is the human word for a report kind ("account" reads as "user",
+// a remote_video reads as plain "video" — the federation detail is the
+// moderators' concern, not the reporter's).
 function reportNoun(kind: ReportKind): string {
-  return kind === "account" ? "user" : kind;
+  if (kind === "account") return "user";
+  if (kind === "remote_video") return "video";
+  return kind;
 }
 
-// ReportButton lets an authenticated viewer file an abuse report against a video,
-// a comment, or an account. Anonymous viewers get a sign-in link instead.
-// Clicking opens an accessible modal with a required reason; on success it
-// confirms and the backend treats repeat reports idempotently.
+// ReportButton lets an authenticated viewer file an abuse report against a video
+// (local or federated remote), a comment, or an account. Anonymous viewers get a
+// sign-in link instead. Clicking opens an accessible modal with a required
+// reason; on success it confirms and the backend treats repeat reports
+// idempotently.
 export function ReportButton({
   kind,
   targetId,
@@ -102,6 +107,8 @@ function ReportDialog({
     try {
       if (kind === "video") {
         await api.reportVideo(targetId, trimmed);
+      } else if (kind === "remote_video") {
+        await api.reportRemoteVideo(targetId, trimmed);
       } else if (kind === "comment") {
         await api.reportComment(targetId, trimmed);
       } else {

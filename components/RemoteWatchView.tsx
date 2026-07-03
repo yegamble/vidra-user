@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ProtocolBadge } from "@/components/ProtocolBadge";
+import { ReportButton } from "@/components/ReportButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -18,8 +20,9 @@ type Status = "loading" | "error" | "notfound" | "ready";
 // (HLS via hls.js/native, or a direct file) and the page always links out to
 // the origin's watch page. There are deliberately no comments, ratings, or
 // save/playlist controls — those interactions live on the origin instance
-// (honest copy says so). A signed-in viewer can mute the whole origin
-// instance from here.
+// (honest copy says so). What DOES live here is local safety: a signed-in
+// viewer can report the remote video to the LOCAL moderators (target_type
+// remote_video) and mute the whole origin instance.
 export function RemoteWatchView({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<RemoteVideo | null>(null);
@@ -94,6 +97,7 @@ export function RemoteWatchView({ id }: { id: string }) {
             <span className="sr-only">From </span>
             {video.domain}
           </span>
+          <ProtocolBadge protocol="activitypub" />
           {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
           {typeof video.duration_seconds === "number" && video.duration_seconds > 0 ? (
             <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
@@ -122,11 +126,12 @@ export function RemoteWatchView({ id }: { id: string }) {
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" />
             </svg>
           </a>
+          <ReportButton kind="remote_video" targetId={video.id} />
           <MuteInstanceControl domain={video.domain} />
         </div>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
           This is a federated video from {video.domain}. Comments, ratings, and saving live on
-          the origin instance.
+          the origin instance. Reports go to the moderators of this instance.
         </p>
         {video.description ? (
           <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
