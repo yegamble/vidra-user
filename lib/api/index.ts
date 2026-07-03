@@ -1,5 +1,7 @@
 export { ApiError, apiRequest, restoreSession } from "./client";
 export type { RequestOptions } from "./client";
+export { isUploadCancelled, uploadWithProgress } from "./upload";
+export type { UploadOptions, UploadProgress } from "./upload";
 export { api, videoOriginalUrl, videoThumbnailUrl, videoCaptionUrl } from "./endpoints";
 export type { FeedParams, SearchParams } from "./endpoints";
 export { getVideoConfigCached, resolveOptionLabel } from "./video-config";

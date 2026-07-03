@@ -1,6 +1,8 @@
 import { apiBaseUrl } from "@/lib/config";
 
+import { getAccessToken } from "./auth-store";
 import { apiRequest } from "./client";
+import { uploadWithProgress, type UploadProgress } from "./upload";
 import type {
   AdminCommentListResponse,
   AdminUser,
@@ -152,14 +154,25 @@ export const api = {
   /**
    * POST /api/v1/videos/{id}/file — upload the original file (auth, owner). The
    * multipart body moves the draft to processing and (with no prober) publishes it.
+   * The ONE XHR-based call (fetch cannot report request-body progress):
+   * `onProgress` receives determinate byte progress, and aborting `signal`
+   * cancels the transfer (the promise rejects with the "upload_cancelled"
+   * ApiError — see isUploadCancelled). Errors carry the same ApiError envelope
+   * as every apiRequest call.
    */
-  uploadVideoFile: (videoId: string, file: File) => {
+  uploadVideoFile: (
+    videoId: string,
+    file: File,
+    onProgress?: (progress: UploadProgress) => void,
+    signal?: AbortSignal,
+  ) => {
     const form = new FormData();
     form.append("file", file);
-    return apiRequest<UploadVideoResult>(`/api/v1/videos/${encodeURIComponent(videoId)}/file`, {
-      method: "POST",
-      body: form,
-    });
+    return uploadWithProgress<UploadVideoResult>(
+      `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(videoId)}/file`,
+      form,
+      { token: getAccessToken(), onProgress, signal },
+    );
   },
 
   /**

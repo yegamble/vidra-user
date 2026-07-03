@@ -307,6 +307,67 @@ test("an upload still processing shows an in-progress message, not Published!", 
   await expect(page.getByText("Published!")).toHaveCount(0);
 });
 
+// P6.2 upload progress + cancellation: while a (mocked, held-open) file upload
+// is in flight the form shows a determinate progress bar (role=progressbar with
+// aria-valuenow) + percent + a Cancel control; cancelling aborts the XHR,
+// returns the form to an editable state with its values kept, and best-effort
+// DELETEs the orphaned draft video.
+test("a slow upload shows a determinate progress bar and can be cancelled", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  // The cleanup DELETE for the orphaned draft.
+  let draftDeleted = false;
+  await page.route(VIDEO, (route) => {
+    if (route.request().method() === "DELETE") {
+      draftDeleted = true;
+      return route.fulfill({ status: 204, body: "" });
+    }
+    return route.continue();
+  });
+  // Hold the upload open so the in-flight UI is observable; the XHR is aborted
+  // by Cancel long before this fulfils (the catch absorbs the aborted route).
+  await page.route(UPLOAD, async (route) => {
+    await new Promise((r) => setTimeout(r, 5_000));
+    await route.fulfill({ json: { video: video() } }).catch(() => {});
+  });
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  await page.getByLabel("Video file").setInputFiles({
+    name: "clip.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("test"),
+  });
+  await page.getByRole("button", { name: "Publish" }).click();
+
+  // The determinate progress bar + percent + Cancel are up while in flight.
+  const bar = page.getByRole("progressbar", { name: "Upload progress" });
+  await expect(bar).toBeVisible();
+  await expect(bar).toHaveAttribute("aria-valuenow", /^\d+$/);
+  await expect(page.getByRole("button", { name: "Uploading…" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Cancel upload" }).click();
+
+  // Back to an editable form: values kept, no progress bar, no success claim.
+  await expect(page.getByText("Upload cancelled", { exact: false })).toBeVisible();
+  await expect(bar).toHaveCount(0);
+  await expect(page.getByLabel("Video title")).toHaveValue("My clip");
+  await expect(page.getByRole("button", { name: "Publish" })).toBeEnabled();
+  await expect(page.getByText("Published!")).toHaveCount(0);
+
+  // The orphaned draft was best-effort deleted.
+  await expect.poll(() => draftDeleted).toBe(true);
+});
+
 // A 422 from the create-draft call maps its field errors inline onto the publish
 // form (aria-invalid + aria-describedby), instead of one generic message.
 test("a 422 field error from the draft renders inline on the title field", async ({ page }) => {

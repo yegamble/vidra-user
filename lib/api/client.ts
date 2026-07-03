@@ -67,13 +67,18 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return url.toString();
 }
 
-async function toApiError(res: Response): Promise<ApiError> {
+/**
+ * apiErrorFromBody maps a backend error envelope (raw response text) + HTTP
+ * status to an ApiError. Shared by the fetch client (below) and the XHR upload
+ * path (upload.ts) so both transports surface identical errors.
+ */
+export function apiErrorFromBody(status: number, text: string): ApiError {
   let code = "http_error";
-  let message = `request failed with status ${res.status}`;
+  let message = `request failed with status ${status}`;
   let requestId: string | undefined;
   let fields: FieldError[] | undefined;
   try {
-    const body = (await res.json()) as Partial<ApiErrorEnvelope>;
+    const body = JSON.parse(text) as Partial<ApiErrorEnvelope>;
     if (body.error) {
       code = body.error.code || code;
       message = body.error.message || message;
@@ -83,7 +88,17 @@ async function toApiError(res: Response): Promise<ApiError> {
   } catch {
     // Non-JSON or empty body — keep the generic message.
   }
-  return new ApiError({ status: res.status, code, message, requestId, fields });
+  return new ApiError({ status, code, message, requestId, fields });
+}
+
+async function toApiError(res: Response): Promise<ApiError> {
+  let text = "";
+  try {
+    text = await res.text();
+  } catch {
+    // An unreadable body — keep the generic message.
+  }
+  return apiErrorFromBody(res.status, text);
 }
 
 // doRequest performs one HTTP round trip (no retry logic) with the given

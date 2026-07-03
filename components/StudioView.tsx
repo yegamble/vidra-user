@@ -10,7 +10,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, isUploadCancelled } from "@/lib/api";
 import type {
   Channel,
   Video,
@@ -371,7 +371,7 @@ function ChannelRow({
   );
 }
 
-type UploadState = "idle" | "uploading" | "done" | "error";
+type UploadState = "idle" | "uploading" | "done" | "cancelled" | "error";
 
 // FieldErrorText renders an inline field-level validation message (the target of
 // the input's aria-describedby), matching the SignupForm pattern.
@@ -488,7 +488,23 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   const [result, setResult] = useState<Video | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Byte-level progress percent (0–100) for the in-flight file upload.
+  const [progress, setProgress] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const publishRef = useRef<HTMLButtonElement>(null);
+
+  // After a cancel the in-flight controls (progress + Cancel) disappear — put
+  // focus back on the Publish button so keyboard users are not dropped on body.
+  useEffect(() => {
+    if (state === "cancelled") publishRef.current?.focus();
+  }, [state]);
+
+  // Cancel the in-flight upload: aborts the XHR (the upload promise rejects as
+  // a cancellation, handled in upload() below).
+  function cancelUpload() {
+    abortRef.current?.abort();
+  }
 
   async function upload(e: React.FormEvent) {
     e.preventDefault();
@@ -497,10 +513,14 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     if (state === "uploading" || title.trim() === "" || handle === "") return;
     if (source === "file" && !file) return;
     if (source === "url" && url === "") return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setState("uploading");
+    setProgress(0);
     setError(null);
     setFieldErrors({});
     setResult(null);
+    let draftId: string | null = null;
     try {
       const draft = await api.createVideoDraft(handle, {
         title: title.trim(),
@@ -508,10 +528,23 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
         privacy,
         ...taxonomyFields(category, language, license),
       });
+      draftId = draft.id;
+      // Cancel clicked while the draft POST was still in flight: stop before
+      // the upload starts and clean up the just-created draft.
+      if (controller.signal.aborted) {
+        void api.deleteVideo(draft.id).catch(() => {});
+        setState("cancelled");
+        return;
+      }
       const res =
         source === "url"
           ? await api.importVideoFile(draft.id, url)
-          : await api.uploadVideoFile(draft.id, file as File);
+          : await api.uploadVideoFile(
+              draft.id,
+              file as File,
+              (p) => setProgress(p.percent),
+              controller.signal,
+            );
       // The HTTP call succeeding is NOT success: the backend finalises the video
       // and may return state="failed" (probe/scan rejected the file). Only a
       // published/processing result clears the form; failed keeps it for a retry.
@@ -530,6 +563,15 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
       setVideoUrl("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
+      // A local cancellation is not an error: return the form to its editable
+      // state (values kept) and best-effort delete the orphaned draft so it
+      // never lingers in "Your videos" (a failure here is tolerable — the
+      // draft stays hidden from viewers either way).
+      if (isUploadCancelled(err)) {
+        if (draftId) void api.deleteVideo(draftId).catch(() => {});
+        setState("cancelled");
+        return;
+      }
       // A 422 with field errors maps inline onto the matching form fields
       // (aria-invalid + aria-describedby); anything else is a form-level message.
       if (err instanceof ApiError && err.status === 422 && err.fields && err.fields.length > 0) {
@@ -545,6 +587,8 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
       }
       setError(importOrUploadError(err, source));
       setState("error");
+    } finally {
+      abortRef.current = null;
     }
   }
 
@@ -697,14 +741,49 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             </span>
           </label>
         )}
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
           <button
+            ref={publishRef}
             type="submit"
             disabled={state === "uploading"}
             className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             {state === "uploading" ? (source === "url" ? "Importing…" : "Uploading…") : "Publish"}
           </button>
+          {state === "uploading" && source === "file" ? (
+            // Determinate byte-level progress for the in-flight file upload
+            // (the URL import has no local bytes to measure) + a Cancel that
+            // aborts the transfer and cleans up the orphaned draft.
+            <>
+              <div
+                role="progressbar"
+                aria-label="Upload progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+                className="h-2 min-w-24 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
+              >
+                <div
+                  className="h-full rounded-full bg-zinc-900 transition-[width] duration-300 dark:bg-zinc-100"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <span
+                aria-hidden="true"
+                className="text-xs font-medium tabular-nums text-zinc-600 dark:text-zinc-300"
+              >
+                {progress}%
+              </span>
+              <button
+                type="button"
+                aria-label="Cancel upload"
+                onClick={cancelUpload}
+                className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+            </>
+          ) : null}
         </div>
       </form>
       {state === "done" && result ? (
@@ -723,6 +802,11 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             once it’s ready.
           </p>
         )
+      ) : null}
+      {state === "cancelled" ? (
+        <p role="status" className="text-sm text-zinc-600 dark:text-zinc-300">
+          Upload cancelled — nothing was published. Your details are kept so you can try again.
+        </p>
       ) : null}
       {error ? (
         <p role="alert" className="text-sm text-red-600">
