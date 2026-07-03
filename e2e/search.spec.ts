@@ -33,6 +33,31 @@ test("shows an empty state when nothing matches", async ({ page }) => {
   await expect(page.getByText("No results")).toBeVisible();
 });
 
+test("load more appends the next page of results and hides at the end", async ({ page }) => {
+  const offsets: string[] = [];
+  await page.route(SEARCH, (route) => {
+    const url = new URL(route.request().url());
+    offsets.push(url.searchParams.get("offset") ?? "");
+    const offset = Number(url.searchParams.get("offset") ?? "0");
+    const videos =
+      offset === 0
+        ? Array.from({ length: 20 }, (_, i) => video(`v${i}`, `Go Result ${i + 1}`))
+        : [video("v20", "Go Result 21")];
+    route.fulfill({ json: { query: "go", videos, limit: 20, offset } });
+  });
+
+  await page.goto("/search?q=go");
+  await expect(page.getByRole("heading", { name: "Go Result 20" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Go Result 21" })).not.toBeVisible();
+
+  await page.getByRole("button", { name: "Load more" }).click();
+  await expect(page.getByRole("heading", { name: "Go Result 21" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Go Result 1", exact: true })).toBeVisible();
+  expect(offsets).toEqual(["0", "20"]);
+  // The second page came back short (1 < 20): the pager hides.
+  await expect(page.getByRole("button", { name: "Load more" })).toBeHidden();
+});
+
 test("prompts for a term when the query is blank", async ({ page }) => {
   await page.goto("/search");
   await expect(page.getByText("Search for videos")).toBeVisible();

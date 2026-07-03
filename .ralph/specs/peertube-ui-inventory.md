@@ -47,6 +47,15 @@ For every route/flow, use this structure:
 | PT-SHELL-404 | Page not found / Go home | error page + link | unknown route | Catch-all 404 with site chrome and a home link (HTTP 404) | none | e2e/not-found.spec.ts | IMPLEMENTED | app/not-found.tsx |
 | PT-SHELL-ERROR-BOUNDARY | Something went wrong / Try again | route error boundary | render/runtime error below root layout | `role="alert"` + reset re-render; per-view inline errors remain primary | none | manual (hard to trigger under mocks) | IMPLEMENTED | app/error.tsx; app/loading.tsx |
 
+### PT-BROWSE — Home/discover, search results, channel grid
+
+| control id | label / accessible name | type | states | behavior | backend dependency | tests | status | evidence |
+|---|---|---|---|---|---|---|---|---|
+| PT-BROWSE-SORT-TABS | Sort videos (Recent / Popular / Trending) | segmented buttons (`aria-pressed`) | active/inactive/focus | Switches the home feed sort; pushes `?sort=` (shareable deep link, back-button friendly); heading + feed refetch | GET /videos?sort=recent\|popular\|trending | e2e/home.spec.ts (switch + deep link + back) | IMPLEMENTED | components/FeedSortTabs.tsx; app/page.tsx |
+| PT-BROWSE-LOAD-MORE-FEED | Load more | button | visible-when-more/loading (disabled, "Loading more…")/inline error (`role="alert"`, retryable)/hidden at end | Appends the next limit/offset page to the home grid; hides when a page returns < 20 | GET /videos?limit&offset | e2e/home.spec.ts | IMPLEMENTED | components/VideoFeed.tsx; components/ui/LoadMoreButton.tsx |
+| PT-BROWSE-LOAD-MORE-SEARCH | Load more | button | same as feed | Appends the next limit/offset page of title-search results | GET /videos/search?q&limit&offset | e2e/search.spec.ts | IMPLEMENTED | components/SearchResults.tsx |
+| PT-BROWSE-LOAD-MORE-CHANNEL | Load more | button | visible-when-more/hidden at end | Reveals the already-fetched channel list in chunks of 20 (contract has no pagination params — recorded dependency) | GET /channels/:handle/videos (unpaginated) | e2e/channel.spec.ts | IMPLEMENTED | components/ChannelView.tsx |
+
 ### PT-WATCH — Watch page/player
 
 | control id | label / accessible name | type | states | behavior | backend dependency | tests | status | evidence |

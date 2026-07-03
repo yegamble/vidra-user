@@ -4,29 +4,36 @@ import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
 import { api } from "@/lib/api";
 import type { Video } from "@/lib/api";
 
 type Status = "idle" | "loading" | "error" | "ready";
+type MoreStatus = "idle" | "loading" | "error";
 
-// SearchResults loads public title-search results client-side. The page mounts it
-// with key={query}, so the initial status is derived from the query (no
-// synchronous setState in the effect) and a new query gives a fresh load.
+// SearchResults loads public title-search results client-side, with a "Load
+// more" pager (limit/offset; the pager hides once a page comes back short).
+// The page mounts it with key={query}, so the initial status is derived from
+// the query (no synchronous setState in the effect) and a new query gives a
+// fresh load.
 export function SearchResults({ query }: { query: string }) {
   const trimmed = query.trim();
   const [videos, setVideos] = useState<Video[]>([]);
   const [status, setStatus] = useState<Status>(trimmed ? "loading" : "idle");
+  const [hasMore, setHasMore] = useState(false);
+  const [more, setMore] = useState<MoreStatus>("idle");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!trimmed) return;
     const controller = new AbortController();
     api
-      .searchVideos(trimmed, {}, controller.signal)
+      .searchVideos(trimmed, { limit: PAGE_SIZE, offset: 0 }, controller.signal)
       .then((res) => {
         setVideos(res.videos);
+        setHasMore(res.videos.length === PAGE_SIZE);
         setStatus("ready");
       })
       .catch(() => {
@@ -38,6 +45,18 @@ export function SearchResults({ query }: { query: string }) {
   function retry() {
     setStatus("loading");
     setReloadKey((k) => k + 1);
+  }
+
+  async function loadMore() {
+    setMore("loading");
+    try {
+      const res = await api.searchVideos(trimmed, { limit: PAGE_SIZE, offset: videos.length });
+      setVideos((v) => [...v, ...res.videos]);
+      setHasMore(res.videos.length === PAGE_SIZE);
+      setMore("idle");
+    } catch {
+      setMore("error");
+    }
   }
 
   if (!trimmed) {
@@ -57,12 +76,21 @@ export function SearchResults({ query }: { query: string }) {
     return <EmptyState title="No results" message={`Nothing matched “${trimmed}”.`} />;
   }
   return (
-    <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {videos.map((video) => (
-        <li key={video.id}>
-          <VideoCard video={video} />
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-6">
+      <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {videos.map((video) => (
+          <li key={video.id}>
+            <VideoCard video={video} />
+          </li>
+        ))}
+      </ul>
+      {hasMore ? (
+        <LoadMoreButton
+          busy={more === "loading"}
+          error={more === "error" ? "Could not load more results." : null}
+          onClick={() => void loadMore()}
+        />
+      ) : null}
+    </div>
   );
 }

@@ -29,9 +29,19 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos?sort=trending&limit=10");
   });
 
+  it("getFeed passes the offset for subsequent pages", async () => {
+    await api.getFeed({ sort: "popular", limit: 20, offset: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos?sort=popular&limit=20&offset=20");
+  });
+
   it("searchVideos encodes the query", async () => {
     await api.searchVideos("go lang");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/search?q=go+lang");
+  });
+
+  it("searchVideos passes pagination through", async () => {
+    await api.searchVideos("go", { limit: 20, offset: 40 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/search?q=go&limit=20&offset=40");
   });
 
   it("getChannel encodes the handle in the path", async () => {

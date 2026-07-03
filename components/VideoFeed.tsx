@@ -4,38 +4,58 @@ import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
 import { api } from "@/lib/api";
-import type { Video } from "@/lib/api";
+import type { FeedSort, Video } from "@/lib/api";
 
 type Status = "loading" | "error" | "ready";
+type MoreStatus = "idle" | "loading" | "error";
 
 // VideoFeed loads the public feed in the browser (so it is route-mockable in
-// tests and refetchable) and renders loading / error / empty / grid states. The
-// API client already logs failures; this component only reflects them in the UI.
-export function VideoFeed() {
+// tests and refetchable) and renders loading / error / empty / grid states plus
+// a "Load more" pager (limit/offset; the pager hides once a page comes back
+// short). The page mounts it with key={sort}, so a sort change gives a fresh
+// load (no synchronous setState in the effect). The API client already logs
+// failures; this component only reflects them in the UI.
+export function VideoFeed({ sort }: { sort: FeedSort }) {
   const [status, setStatus] = useState<Status>("loading");
   const [videos, setVideos] = useState<Video[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [more, setMore] = useState<MoreStatus>("idle");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getFeed({}, controller.signal)
+      .getFeed({ sort, limit: PAGE_SIZE, offset: 0 }, controller.signal)
       .then((res) => {
         setVideos(res.videos);
+        setHasMore(res.videos.length === PAGE_SIZE);
         setStatus("ready");
       })
       .catch(() => {
         if (!controller.signal.aborted) setStatus("error");
       });
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [sort, reloadKey]);
 
   function retry() {
     setStatus("loading");
     setReloadKey((k) => k + 1);
+  }
+
+  async function loadMore() {
+    setMore("loading");
+    try {
+      const res = await api.getFeed({ sort, limit: PAGE_SIZE, offset: videos.length });
+      setVideos((v) => [...v, ...res.videos]);
+      setHasMore(res.videos.length === PAGE_SIZE);
+      setMore("idle");
+    } catch {
+      setMore("error");
+    }
   }
 
   if (status === "loading") {
@@ -57,12 +77,21 @@ export function VideoFeed() {
     return <EmptyState title="No videos yet" message="Published videos will appear here." />;
   }
   return (
-    <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {videos.map((video) => (
-        <li key={video.id}>
-          <VideoCard video={video} />
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-6">
+      <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {videos.map((video) => (
+          <li key={video.id}>
+            <VideoCard video={video} />
+          </li>
+        ))}
+      </ul>
+      {hasMore ? (
+        <LoadMoreButton
+          busy={more === "loading"}
+          error={more === "error" ? "Could not load more videos." : null}
+          onClick={() => void loadMore()}
+        />
+      ) : null}
+    </div>
   );
 }

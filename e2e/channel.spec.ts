@@ -43,6 +43,27 @@ test("shows the channel header and its videos", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Sign in to subscribe" })).toBeVisible();
 });
 
+test("load more reveals the rest of a long channel grid", async ({ page }) => {
+  // The channel-videos endpoint has no limit/offset contract: the backend
+  // returns the full list and the grid reveals it in pages of 20 client-side.
+  await page.route(CHANNEL, (route) => route.fulfill({ json: channel }));
+  await page.route(CHANNEL_VIDEOS, (route) =>
+    route.fulfill({
+      json: { videos: Array.from({ length: 25 }, (_, i) => video(`v${i}`, `Clip ${i + 1}`)) },
+    }),
+  );
+
+  await page.goto("/channels/ada");
+  await expect(page.getByRole("heading", { name: "Clip 20" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clip 21" })).not.toBeVisible();
+
+  await page.getByRole("button", { name: "Load more" }).click();
+  await expect(page.getByRole("heading", { name: "Clip 21" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clip 25" })).toBeVisible();
+  // Everything is revealed: the pager hides.
+  await expect(page.getByRole("button", { name: "Load more" })).toBeHidden();
+});
+
 test("shows a not-found state for a missing channel", async ({ page }) => {
   const notFound = {
     status: 404,

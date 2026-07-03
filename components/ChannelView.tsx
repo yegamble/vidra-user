@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
 import { ApiError, api } from "@/lib/api";
@@ -21,6 +22,10 @@ export function ChannelView({ handle }: { handle: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [channel, setChannel] = useState<Channel | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
+  // The channel-videos contract has no limit/offset (the backend returns the
+  // full list), so "Load more" is a client-side reveal in PAGE_SIZE chunks.
+  // Switch to server paging if/when the contract grows pagination params.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -89,13 +94,18 @@ export function ChannelView({ handle }: { handle: string }) {
       {videos.length === 0 ? (
         <EmptyState title="No videos yet" message="This channel has not published anything." />
       ) : (
-        <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {videos.map((video) => (
-            <li key={video.id}>
-              <VideoCard video={video} />
-            </li>
-          ))}
-        </ul>
+        <div className="flex flex-col gap-6">
+          <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {videos.slice(0, visibleCount).map((video) => (
+              <li key={video.id}>
+                <VideoCard video={video} />
+              </li>
+            ))}
+          </ul>
+          {videos.length > visibleCount ? (
+            <LoadMoreButton onClick={() => setVisibleCount((c) => c + PAGE_SIZE)} />
+          ) : null}
+        </div>
       )}
     </div>
   );
