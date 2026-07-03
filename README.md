@@ -77,6 +77,43 @@ vidra/
 Next.js · TypeScript (strict) · Tailwind CSS · custom components (no UI framework) ·
 minified inline SVG icons · heavy Playwright coverage.
 
+## Docker
+A multi-stage `Dockerfile` builds a minimal production image from Next's standalone
+output (`next.config.ts` sets `output: "standalone"`; the runtime stage runs
+`node server.js` as a non-root user on port 3000).
+
+**Build args — `NEXT_PUBLIC_API_BASE_URL` is baked at BUILD time.** `NEXT_PUBLIC_*`
+values are inlined into the client JavaScript bundle when `next build` runs, so the
+backend URL the browser calls cannot be changed at `docker run` time. Build one image
+per target backend:
+
+```bash
+# Build (bake the backend the browser should call; default http://localhost:8080)
+docker build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com -t vidra-user .
+
+# Run
+docker run --rm -p 3000:3000 vidra-user
+```
+
+Compose service snippet (e.g. alongside the `vidra-core` stack, which serves the API
+on host port 8080 — note the browser, not the container, calls the API, so the baked
+URL must be reachable from the user's machine):
+
+```yaml
+services:
+  frontend:
+    build:
+      context: ./vidra-user
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+```
+
+Running without Docker is unchanged: `npm run dev` against `.env.local`, or
+`npm run build && npm run start` (standalone output does not break `next start`).
+
 ## Backend
 Set `NEXT_PUBLIC_API_BASE_URL` to a running `vidra-core` instance. For features that
 change data, verification must run against a real backend + PostgreSQL (see

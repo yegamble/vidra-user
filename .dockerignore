@@ -1,0 +1,28 @@
+# Reinstalled/rebuilt inside the image
+node_modules
+.next
+
+# VCS / CI / editor
+.git
+.gitignore
+.github
+
+# Ralph control plane (not needed to build)
+.ralph
+
+# Test & build artifacts
+playwright-report
+test-results
+coverage
+e2e
+e2e-backed
+
+# Local env / secrets (never bake into an image)
+.env
+.env.local
+.env.*.local
+
+# OS / misc
+.DS_Store
+Dockerfile
+.dockerignore

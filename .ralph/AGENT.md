@@ -158,6 +158,17 @@ npm run build               # production build (must pass before completion)
 npm run start               # serve the production build
 ```
 
+### Docker image
+```bash
+# NEXT_PUBLIC_API_BASE_URL is BAKED at build time (inlined into the client bundle);
+# build one image per target backend. Default: http://localhost:8080.
+docker build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com -t vidra-user .
+docker run --rm -p 3000:3000 vidra-user
+```
+Multi-stage build on Next standalone output (`next.config.ts` `output: "standalone"`),
+non-root runtime, `node server.js` on :3000. `next start` still works outside Docker
+(it just warns that standalone output exists). Compose snippet: README "Docker".
+
 ## Tests
 ```bash
 npm run test                # unit / component tests

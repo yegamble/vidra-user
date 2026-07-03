@@ -127,14 +127,14 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 
 ## P1.3 Docker-First Development
 
-- [ ] Add Dockerfile.
-- [ ] Add Docker Compose service for frontend.
-- [ ] Add Compose override or profile to run frontend with local backend containers.
-- [ ] Add env option to point to remote backend.
-- [ ] Add Makefile or task runner commands: `dev`, `build`, `test`, `lint`, `playwright`, `docker-up`, `docker-down`.
-- [ ] Document how to run frontend only.
-- [ ] Document how to run frontend against local backend.
-- [ ] Document how to run frontend against remote backend.
+- [x] Add Dockerfile. (Multi-stage `Dockerfile` (deps → builder → runner) on Next **standalone** output — `next.config.ts` now sets `output: "standalone"` (`next start` still works; it only warns) — runtime is `node:22-alpine`, non-root `nextjs` user, `node server.js` on :3000, `.next/static` + `public/` copied alongside. `NEXT_PUBLIC_API_BASE_URL` is **baked at build time** via `--build-arg` (NEXT_PUBLIC_* is inlined into the client bundle; documented in README "Docker" + `.ralph/AGENT.md`), default `http://localhost:8080`. `.dockerignore` keeps node_modules/.next/.git/.ralph/e2e/env files out of the context; no secrets baked. Verified locally: `docker build -t vidra-user .` succeeds and the container serves HTTP 200 on :3000.)
+- [~] Add Docker Compose service for frontend. (A ready-to-paste `frontend` service snippet (build context + `NEXT_PUBLIC_API_BASE_URL` build arg + `3000:3000`) is documented in README "Docker" for use next to the vidra-core stack. The actual meta-repo `docker-compose.yml` lives OUTSIDE this repo (scope rule — this repo must not edit siblings), so wiring it in is recorded for the meta-repo.)
+- [ ] Add Compose override or profile to run frontend with local backend containers. (Blocked on the same out-of-repo compose file; the README snippet is the drop-in.)
+- [x] Add env option to point to remote backend. (Dev/`next start`: `NEXT_PUBLIC_API_BASE_URL` via `.env.local` (README quick start). Docker: the same var as a build arg — one image per target backend, README "Docker".)
+- [ ] Add Makefile or task runner commands: `dev`, `build`, `test`, `lint`, `playwright`, `docker-up`, `docker-down`. (npm scripts cover dev/build/test/lint/e2e/ci; a make wrapper is optional polish.)
+- [x] Document how to run frontend only. (README: quick start (`npm run dev`) + "Docker" (`docker run --rm -p 3000:3000 vidra-user`).)
+- [x] Document how to run frontend against local backend. (README "Docker" compose snippet against the vidra-core stack on :8080 + the backed-e2e procedure in `.ralph/AGENT.md` (compose `core` profile, rebuild with the baked URL).)
+- [x] Document how to run frontend against remote backend. (README "Docker": `docker build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com …` — with the explicit note that the URL is baked at build time and must be reachable from the user's browser, not the container.)
 
 ## P1.4 CI Skeleton
 
@@ -502,7 +502,7 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 - [ ] Vidra extensions ledger has no unclassified in-scope frontend items.
 - [ ] API contract dependencies are either implemented, mocked with pending backend status, or intentionally deferred.
 - [ ] Every in-scope data-mutating flow has a backend-backed e2e proving the database changed and the UI reflects it after refetch.
-- [ ] Docker can build frontend.
+- [x] Docker can build frontend. (P1.3 multi-stage `Dockerfile` on Next standalone output; `docker build` verified locally serving HTTP 200 — see P1.3.)
 - [ ] Frontend can run against mocked API.
 - [ ] Frontend can run against configured backend URL.
 - [ ] Unit tests pass.
