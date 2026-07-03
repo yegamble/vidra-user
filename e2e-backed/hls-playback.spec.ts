@@ -16,6 +16,10 @@ test("a published video is transcoded to HLS and the watch page streams it with 
   page,
   request,
 }) => {
+  // Transcoding waits on a shared worker queue — under a full-suite run every
+  // uploaded video is ahead of this one, so the default 30s test budget is not
+  // enough for waitForHls's 90s polling deadline.
+  test.setTimeout(150_000);
   const { videoId, videoTitle } = await seedPublishedChannel(request);
 
   // Transcoding is asynchronous: wait (poll the public detail) until the
