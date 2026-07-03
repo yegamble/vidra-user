@@ -7,6 +7,7 @@ import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
 import { CommentsSection } from "@/components/CommentsSection";
 import { DownloadButton } from "@/components/DownloadButton";
 import { KeyboardShortcutsHelp } from "@/components/KeyboardShortcutsHelp";
+import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { QualityMenu } from "@/components/QualityMenu";
 import { RatingControls } from "@/components/RatingControls";
 import { RelatedVideos } from "@/components/RelatedVideos";
@@ -163,6 +164,10 @@ export function WatchView({ id }: { id: string }) {
         <div className="flex flex-col gap-2">
           <h1 className="text-xl font-semibold tracking-tight">{video.title}</h1>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
+            {/* Owner-facing badge: a private video only ever loads for its
+                owner; an unlisted one tells anyone with the link how it is
+                shared. Public renders nothing. */}
+            <PrivacyBadge privacy={video.privacy} />
             {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
             {chips.map((c) => (
               <span

@@ -116,6 +116,43 @@ test("renders caption tracks on the player for a video with captions", async ({ 
   expect(await track.getAttribute("src")).toMatch(/^blob:/);
 });
 
+test("a non-public video carries an owner-facing privacy badge", async ({ page }) => {
+  await page.route(DETAIL_OK, (route) =>
+    route.fulfill({
+      json: {
+        id: "v1",
+        channel_id: "c1",
+        title: "Sneak Peek",
+        description: "",
+        privacy: "unlisted",
+        state: "published",
+        created_at: new Date().toISOString(),
+        views: 1,
+        has_thumbnail: false,
+      },
+    }),
+  );
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
+    route.fulfill({ json: { captions: [] } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/comments/, (route) =>
+    route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Sneak Peek" })).toBeVisible();
+  const badge = page.getByText("Unlisted", { exact: false }).first();
+  await expect(badge).toBeVisible();
+  // The explanation reaches screen readers and pointer users alike.
+  await expect(
+    page.getByText("Anyone with the link can see this", { exact: false }).first(),
+  ).toBeAttached();
+});
+
 test("shows a not-found state for a missing video", async ({ page }) => {
   await page.route(/\/api\/v1\/videos\/missing$/, (route) =>
     route.fulfill({

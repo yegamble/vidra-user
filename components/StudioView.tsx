@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { CaptionsManager } from "@/components/CaptionsManager";
 import { LiveStreamsSection } from "@/components/LiveStreamsSection";
+import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { ThumbnailManager } from "@/components/ThumbnailManager";
 import { useSession } from "@/components/auth/AuthProvider";
@@ -1121,7 +1122,11 @@ function VideoRow({
         </p>
         <div className="mt-1 flex items-center gap-2 text-xs">
           <StateBadge state={video.state} />
-          <span className="text-zinc-500 dark:text-zinc-400">{privacyLabel(video.privacy)}</span>
+          {video.privacy === "public" ? (
+            <span className="text-zinc-500 dark:text-zinc-400">Public</span>
+          ) : (
+            <PrivacyBadge privacy={video.privacy} />
+          )}
         </div>
       </div>
       {mode === "confirm-delete" ? (
@@ -1190,10 +1195,6 @@ function StreamingStatus({ video }: { video: Video }) {
       appear automatically once transcoding completes (if enabled on this instance).
     </p>
   );
-}
-
-function privacyLabel(p: VideoPrivacy): string {
-  return p === "public" ? "Public" : p === "unlisted" ? "Unlisted" : "Private";
 }
 
 function StateBadge({ state }: { state: VideoState }) {

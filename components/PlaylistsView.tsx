@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { PlaylistCard } from "@/components/PlaylistCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -142,18 +143,10 @@ function Playlists() {
           message="Create a playlist above, then add videos to it from any watch page."
         />
       ) : (
-        <ul className="flex flex-col divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+        <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {playlists.map((pl) => (
             <li key={pl.id}>
-              <Link
-                href={`/playlists/${pl.id}`}
-                className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-zinc-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:bg-zinc-900/40"
-              >
-                <span className="min-w-0 flex-1 truncate font-medium">{pl.title}</span>
-                <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">
-                  {pl.video_count} {pl.video_count === 1 ? "video" : "videos"} · {pl.visibility}
-                </span>
-              </Link>
+              <PlaylistCard playlist={pl} />
             </li>
           ))}
         </ul>

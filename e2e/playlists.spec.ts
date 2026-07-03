@@ -96,6 +96,37 @@ test("creating a playlist adds it to the list", async ({ page }) => {
   await expect(page.getByRole("link", { name: /My Mix/ })).toBeVisible();
 });
 
+test("playlists render as cards with a count badge and a privacy badge", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_PLAYLISTS, (route) =>
+    route.fulfill({
+      json: {
+        playlists: [
+          playlist("p1", "My Mix", 3),
+          { ...playlist("p2", "Show Reel", 1), visibility: "public" },
+        ],
+      },
+    }),
+  );
+
+  await page.getByRole("link", { name: "Playlists" }).click();
+  const cards = page.getByRole("main").getByRole("listitem");
+  await expect(cards).toHaveCount(2);
+  // The private playlist carries its badge; the count badge reads naturally.
+  const mix = cards.filter({ hasText: "My Mix" });
+  await expect(mix.getByText("3 videos")).toBeVisible();
+  await expect(mix.getByText("Private")).toBeVisible();
+  // A public playlist has no privacy badge.
+  const reel = cards.filter({ hasText: "Show Reel" });
+  await expect(reel.getByText("1 video", { exact: true })).toBeVisible();
+  await expect(reel.getByText("Public")).toHaveCount(0);
+  // The card links to the detail page.
+  await expect(mix.getByRole("link", { name: /My Mix/ })).toHaveAttribute(
+    "href",
+    "/playlists/p1",
+  );
+});
+
 test("the playlist detail shows videos and the owner can remove one", async ({ page }) => {
   await signIn(page);
   await page.route(MY_PLAYLISTS, (route) =>
