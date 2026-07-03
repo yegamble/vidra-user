@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
+import { DonateButton } from "@/components/DonateButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -89,6 +90,13 @@ export function ChannelView({ handle }: { handle: string }) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ChannelLiveBadge handle={channel.handle} ownerId={channel.owner_id} />
+            <DonateButton
+              sources={[
+                { kind: "channel", handle: channel.handle },
+                { kind: "user", userId: channel.owner_id },
+              ]}
+              name={channel.display_name || channel.handle}
+            />
             <SubscribeButton
               handle={channel.handle}
               onDelta={(d) =>

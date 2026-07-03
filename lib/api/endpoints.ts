@@ -17,6 +17,11 @@ import type {
   CaptionListResponse,
   Channel,
   ChannelListResponse,
+  AddDonationAddressRequest,
+  DonationAddress,
+  DonationAddressListResponse,
+  DonationChallengeResponse,
+  VerifyDonationAddressRequest,
   Comment,
   CommentListResponse,
   BlockedUserListResponse,
@@ -196,6 +201,66 @@ export const api = {
   /** GET /api/v1/me/channels — the caller's own channels (auth). */
   getMyChannels: (signal?: AbortSignal) =>
     apiRequest<ChannelListResponse>("/api/v1/me/channels", { signal }),
+
+  // --- Donation addresses (P13, NON-CUSTODIAL display-only) ---------------
+  // Vidra never holds funds, balances, or private keys and processes no
+  // payments/payouts. These wrappers only add/read/delete public addresses and
+  // drive the ownership challenge/verify proof (no key material is handled).
+
+  /** GET /api/v1/me/donation-addresses — the caller's addresses (account + channel), each with its verified flag (auth). */
+  listMyDonationAddresses: (signal?: AbortSignal) =>
+    apiRequest<DonationAddressListResponse>("/api/v1/me/donation-addresses", { signal }),
+
+  /**
+   * POST /api/v1/me/donation-addresses — add a public donation address (auth).
+   * Unsupported network / malformed address is 422; a duplicate for the same
+   * owner/scope is 409; an unowned/absent channel_id is 403/404.
+   */
+  addDonationAddress: (body: AddDonationAddressRequest) =>
+    apiRequest<DonationAddress>("/api/v1/me/donation-addresses", { method: "POST", body }),
+
+  /** DELETE /api/v1/me/donation-addresses/{id} — remove one of the caller's addresses (auth, owner; 204). */
+  deleteDonationAddress: (id: string) =>
+    apiRequest<void>(`/api/v1/me/donation-addresses/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /**
+   * POST /api/v1/me/donation-addresses/{id}/challenge — request a one-time
+   * message to sign to prove control (auth, owner). Networks without a signing
+   * path (bitcoin/litecoin/monero) return 501 (unverified-only).
+   */
+  challengeDonationAddress: (id: string) =>
+    apiRequest<DonationChallengeResponse>(
+      `/api/v1/me/donation-addresses/${encodeURIComponent(id)}/challenge`,
+      { method: "POST" },
+    ),
+
+  /**
+   * POST /api/v1/me/donation-addresses/{id}/verify — submit the challenge
+   * signature (auth, owner). On success the address flips to verified. A wrong
+   * signature is 422; an expired/missing challenge is 409; an unsupported
+   * network is 501. The signature is verified, never stored or logged.
+   */
+  verifyDonationAddress: (id: string, body: VerifyDonationAddressRequest) =>
+    apiRequest<DonationAddress>(
+      `/api/v1/me/donation-addresses/${encodeURIComponent(id)}/verify`,
+      { method: "POST", body },
+    ),
+
+  /** GET /api/v1/users/{id}/donation-addresses — a user's PUBLIC account-level addresses (no auth). */
+  listUserDonationAddresses: (userId: string, signal?: AbortSignal) =>
+    apiRequest<DonationAddressListResponse>(
+      `/api/v1/users/${encodeURIComponent(userId)}/donation-addresses`,
+      { signal },
+    ),
+
+  /** GET /api/v1/channels/{handle}/donation-addresses — a channel's PUBLIC addresses (no auth; unknown handle 404). */
+  listChannelDonationAddresses: (handle: string, signal?: AbortSignal) =>
+    apiRequest<DonationAddressListResponse>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/donation-addresses`,
+      { signal },
+    ),
 
   /** POST /api/v1/channels — create a channel (auth). */
   createChannel: (body: CreateChannelRequest) =>

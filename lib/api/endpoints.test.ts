@@ -261,6 +261,63 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("listMyDonationAddresses targets the caller's donation-addresses endpoint", async () => {
+    await api.listMyDonationAddresses();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/donation-addresses");
+  });
+
+  it("addDonationAddress POSTs the body to the donation-addresses endpoint", async () => {
+    await api.addDonationAddress({
+      network: "ethereum",
+      address: "0x52908400098527886E0F7030069857D2E4169EE7",
+      label: "Tips",
+      channel_id: "c1",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/donation-addresses");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      network: "ethereum",
+      address: "0x52908400098527886E0F7030069857D2E4169EE7",
+      label: "Tips",
+      channel_id: "c1",
+    });
+  });
+
+  it("deleteDonationAddress DELETEs the address by id (encoded)", async () => {
+    await api.deleteDonationAddress("d 1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/donation-addresses/d%201");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("challengeDonationAddress POSTs to the address's challenge endpoint", async () => {
+    await api.challengeDonationAddress("d1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/donation-addresses/d1/challenge");
+    expect(init.method).toBe("POST");
+  });
+
+  it("verifyDonationAddress POSTs the signature to the verify endpoint", async () => {
+    await api.verifyDonationAddress("d1", { signature: "0xsig" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/donation-addresses/d1/verify");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ signature: "0xsig" });
+  });
+
+  it("listUserDonationAddresses targets the public user donation-addresses endpoint", async () => {
+    await api.listUserDonationAddresses("u1");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/users/u1/donation-addresses");
+  });
+
+  it("listChannelDonationAddresses targets the public channel donation-addresses endpoint", async () => {
+    await api.listChannelDonationAddresses("ada_makes");
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/channels/ada_makes/donation-addresses",
+    );
+  });
+
   it("createVideoDraft POSTs to the channel's videos endpoint", async () => {
     await api.createVideoDraft("ada_makes", { title: "Hi", privacy: "public" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

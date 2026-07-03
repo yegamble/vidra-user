@@ -690,6 +690,65 @@ export async function postEncryptedEnvelope(
   return res.status();
 }
 
+/** meId reads the caller's own account id via GET /auth/me. */
+export async function meId(request: APIRequestContext, token: string): Promise<string> {
+  const res = await request.get(`${API_URL}/api/v1/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return ((await res.json()) as { id: string }).id;
+}
+
+/** createChannel creates a channel for the given owner via the API (POST /channels). */
+export async function createChannel(
+  request: APIRequestContext,
+  token: string,
+  handle: string,
+  displayName: string,
+): Promise<void> {
+  await request.post(`${API_URL}/api/v1/channels`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { handle, display_name: displayName },
+  });
+}
+
+type DonationAddressRow = {
+  id: string;
+  network: string;
+  address: string;
+  label: string;
+  verified: boolean;
+  channel_id?: string;
+};
+
+/** myDonationAddresses reads the caller's persisted donation addresses via the API. */
+export async function myDonationAddresses(
+  request: APIRequestContext,
+  token: string,
+): Promise<DonationAddressRow[]> {
+  const res = await request.get(`${API_URL}/api/v1/me/donation-addresses`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return ((await res.json()) as { addresses: DonationAddressRow[] }).addresses;
+}
+
+/** channelDonationAddresses reads a channel's PUBLIC donation addresses via the API. */
+export async function channelDonationAddresses(
+  request: APIRequestContext,
+  handle: string,
+): Promise<DonationAddressRow[]> {
+  const res = await request.get(`${API_URL}/api/v1/channels/${handle}/donation-addresses`);
+  return ((await res.json()) as { addresses: DonationAddressRow[] }).addresses;
+}
+
+/** userDonationAddresses reads a user's PUBLIC account-level donation addresses via the API. */
+export async function userDonationAddresses(
+  request: APIRequestContext,
+  userId: string,
+): Promise<DonationAddressRow[]> {
+  const res = await request.get(`${API_URL}/api/v1/users/${userId}/donation-addresses`);
+  return ((await res.json()) as { addresses: DonationAddressRow[] }).addresses;
+}
+
 /** mutedInstances reads the caller's persisted instance mutes via the API. */
 export async function mutedInstances(
   request: APIRequestContext,

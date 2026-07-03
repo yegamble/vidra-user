@@ -555,6 +555,54 @@ export interface ChannelListResponse {
   channels: Channel[];
 }
 
+// --- Donation addresses (P13, simple NON-CUSTODIAL crypto donation display) ---
+// Display+copy only: Vidra never holds funds, balances, or private keys and
+// processes no payments/payouts. There is deliberately no amount/balance field.
+
+/** The curated set of networks the backend accepts for donation addresses. */
+export type DonationNetwork = "bitcoin" | "ethereum" | "litecoin" | "monero";
+
+/**
+ * A public crypto wallet address the owner displays for donations, either
+ * account-level (profile) or scoped to a channel they own (channel_id). The
+ * internal verification nonce/expiry are never exposed; `verified` is whether
+ * the owner cryptographically proved control via the challenge/verify flow.
+ */
+export interface DonationAddress {
+  id: string;
+  owner_id: string;
+  /** The channel this address is scoped to; omitted for account-level addresses. */
+  channel_id?: string;
+  network: DonationNetwork;
+  address: string;
+  label: string;
+  verified: boolean;
+  created_at: string;
+}
+
+export interface DonationAddressListResponse {
+  addresses: DonationAddress[];
+}
+
+export interface AddDonationAddressRequest {
+  /** Omit for an account-level (profile) address; set to scope to a caller-owned channel. */
+  channel_id?: string;
+  network: DonationNetwork;
+  address: string;
+  label?: string;
+}
+
+/** The one-time challenge message the owner signs to prove control of an address. */
+export interface DonationChallengeResponse {
+  message: string;
+  expires_at: string;
+}
+
+export interface VerifyDonationAddressRequest {
+  /** The signature of the challenge message (never stored or logged by the server). */
+  signature: string;
+}
+
 /** POST /api/v1/channels body. */
 export interface CreateChannelRequest {
   handle: string;

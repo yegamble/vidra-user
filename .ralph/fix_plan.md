@@ -484,14 +484,23 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 
 # P13 — Simple Crypto Donation UI
 
-- [ ] Implement donation wallet display on bio/channel pages.
-- [ ] Implement add/edit wallet address settings UI.
-- [ ] Implement network/address type selector.
-- [ ] Implement verification status badge.
-- [ ] Implement verification challenge UI if backend supports it.
-- [ ] Do not implement custody, balances, payouts, premium subscriptions, or payment processing.
-- [ ] Add component tests for verified/unverified display.
-- [ ] Add backend-backed e2e proving a saved/edited wallet address and its verification state persist to the database and are reflected in the UI after refetch.
+> Slice `user-donations-ui` (2026-07-03): NON-CUSTODIAL, display+copy-only crypto
+> donation addresses over the committed `/api/v1/**/donation-addresses` contract
+> (curated set bitcoin/ethereum/litecoin/monero; ownership challenge/verify where
+> supported — ethereum EIP-191 only, the rest are unverified-only by design).
+> Endpoints `api.{listMy,add,delete,challenge,verify}DonationAddress` +
+> `listUser/ChannelDonationAddresses` (Vitest: 7 new endpoint tests). Pure
+> per-network validator + metadata in `lib/donation-address.ts` (11 unit tests).
+> `npm run ci` green.
+
+- [x] Implement donation wallet display on bio/channel pages. (`components/DonateButton.tsx` — a reusable public "Donate" affordance mounted on the channel page (`ChannelView`), fed BOTH the channel-scoped read (`/channels/{handle}/donation-addresses`) and the owner's account-level read (`/users/{id}/donation-addresses`). Renders ONLY when addresses exist; opens an accessible dialog (role=dialog, Escape/click-out close, focus mgmt) listing address(es) per network with copy buttons + verified badge + an honesty line ("never send funds you can't afford to lose / addresses are user-provided; Vidra holds no funds"). No standalone public user-profile route exists yet, so the channel page is Vidra's creator/user identity surface — both public reads are exercised there.)
+- [x] Implement add/edit wallet address settings UI. (`/settings/donations` → `components/DonationSettingsView.tsx`: session-gated (restoring/anon/authed), loading/error/empty states; add form (network select + address input + optional label + optional channel-scope select sourced from `getMyChannels`); list of the caller's addresses; per-row delete. Linked from `SettingsView` ("Manage donation addresses"). Edit-in-place is not in the backend contract (no PATCH) — the flow is add/delete, which the contract supports; recorded as an intentional shape.)
+- [x] Implement network/address type selector. (Network `<select>` over the curated set (`DONATION_NETWORKS`); per-network client-side format validation (`validateDonationAddress`) surfaces an inline error BEFORE any request, and the backend's 422 message is surfaced on top — backend stays authoritative.)
+- [x] Implement verification status badge. (`components/DonationBadge.tsx` — Verified (emerald + check + sr-only "owner") / Unverified (neutral, not alarming); not colour-only. Shown in the settings list AND the public donate dialog.)
+- [x] Implement verification challenge UI if backend supports it. (Unverified + verification-supported (ethereum) rows show "Verify ownership" → `POST …/challenge` → the exact message to sign + per-network signing instructions + a signature paste box → `POST …/verify` → badge flips. Honest 501/409/422 handling (expired → request again; wrong sig → retry). Unsupported networks (bitcoin/litecoin/monero) show an explicit "verification is not available" state instead of a dead button.)
+- [x] Do not implement custody, balances, payouts, premium subscriptions, or payment processing. (Display + copy only — no amount/balance field is read or shown anywhere; honesty line states Vidra holds no funds and processes no payments; P13 prohibition honored.)
+- [x] Add component tests for verified/unverified display. (Mocked `e2e/donations.spec.ts` (8, green): anon prompt; add → row + Unverified badge (+ POST body); per-network validation error blocks the request; verify flow flips Unverified→Verified (+ verify body); unsupported-network honest state; delete → empty state; channel Donate dialog lists + copies an address (clipboard read-back) + honesty line + Verified badge; no Donate button when a channel has no addresses. Plus 11 `lib/donation-address.test.ts` unit tests covering the badge-driving verified flag paths + validators.)
+- [x] Add backend-backed e2e proving a saved/edited wallet address and its verification state persist to the database and are reflected in the UI after refetch. (WRITTEN `e2e-backed/donations.spec.ts` + fixtures helpers `{meId,createChannel,myDonationAddresses,channel/userDonationAddresses}`: signup → seed channel → add account-level ETH + channel-scoped BTC via the UI → API read-back proves BOTH rows persisted (scope + verified=false) → public channel/user reads surface them → channel-page Donate dialog lists the address → delete ETH via UI → API read-back proves only BTC remains → hard reload shows the survivor from the server. Runs with the `backend-backed` project / `frontend-e2e-backed.yml`; NOT executed in this loop — per the Critical Verification Rule this stays evidence-pending-a-backed-run, not VERIFIED-on-mocks.)
 
 ---
 
