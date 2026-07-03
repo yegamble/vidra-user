@@ -42,6 +42,10 @@ For every route/flow, use this structure:
 | PT-NAV-STUDIO | Studio | nav link | always shown (content auth-gated) | Opens /studio: create channel + upload/publish a video | GET /me/channels, POST /channels, POST /channels/:handle/videos, POST /videos/:id/file | e2e/studio.spec.ts + e2e-backed/studio.spec.ts | VERIFIED | components/Header.tsx; app/studio/page.tsx; components/StudioView.tsx |
 | PT-NAV-MY-VIDEO-SPACE | My video space | nav group | creator/admin | Shows videos/channels/studio | auth/permissions | Playwright | NOT_STARTED | none |
 | PT-NAV-ADMINISTRATION | Administration | nav group | admin/mod only | Opens admin sections | RBAC | Playwright RBAC | NOT_STARTED | none |
+| PT-NAV-MOBILE-MENU | Menu (hamburger) | disclosure button + menu | closed/open (`aria-expanded`), `<sm` only | Collapses all primary nav links + role-gated Moderation/Admin + auth controls; focus moves in on open, Escape/outside-click/link-follow close (focus restored to toggle) | none (links auth-gated downstream) | e2e/mobile-nav.spec.ts (390×844, 4 tests) | IMPLEMENTED | components/Header.tsx |
+| PT-SHELL-LANDMARKS | banner / Primary nav / search / main | landmarks | always | Exactly one `<header>`/`<main>` per page; nav labeled "Primary"; search landmark in header | none | e2e/a11y-landmarks.spec.ts | IMPLEMENTED | components/Header.tsx; app/*/page.tsx |
+| PT-SHELL-404 | Page not found / Go home | error page + link | unknown route | Catch-all 404 with site chrome and a home link (HTTP 404) | none | e2e/not-found.spec.ts | IMPLEMENTED | app/not-found.tsx |
+| PT-SHELL-ERROR-BOUNDARY | Something went wrong / Try again | route error boundary | render/runtime error below root layout | `role="alert"` + reset re-render; per-view inline errors remain primary | none | manual (hard to trigger under mocks) | IMPLEMENTED | app/error.tsx; app/loading.tsx |
 
 ### PT-WATCH — Watch page/player
 

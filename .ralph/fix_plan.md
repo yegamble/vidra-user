@@ -168,17 +168,17 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 # P2 — App Shell and Navigation
 
 - [x] Implement root layout. (`app/layout.tsx` renders `<Header/>` + page; sticky header, flex column shell.)
-- [~] Implement responsive header. (`components/Header.tsx`: brand link + Home nav, sticky/backdrop. Full responsive nav + collapse is a later slice.)
+- [x] Implement responsive header. (`components/Header.tsx`: brand + labeled `aria-label="Primary"` desktop nav (Home/Subscriptions/Library/Playlists/History/Messages/Studio + role-gated Moderation/Admin) + search + bell + account menu; at `<sm` the nav links and auth controls collapse behind a hamburger so the bar no longer overflows on phones. Desktop layout/selectors unchanged — full mocked suite (140) green.)
 - [ ] Implement left navigation.
-- [ ] Implement mobile navigation.
+- [x] Implement mobile navigation. (Hamburger disclosure menu in `Header.tsx` at `<sm`: button `aria-label="Menu"` with `aria-expanded`/`aria-controls="mobile-menu"`; menu panel rendered only while open (no duplicate role=link matches for desktop specs), contains all primary links + Moderation/Admin (`className`-parameterised nav-link components) + `AccountMenu`; focus moves to the first item on open, Escape/outside-click dismiss, following any link closes + restores focus to the toggle. `e2e/mobile-nav.spec.ts` (390×844 viewport, 4 tests). NOTE: design-system.md prefers bottom tabs over hamburgers — this slice was explicitly directed to a hamburger; revisit if/when the bottom-tab shell lands.)
 - [x] Implement search bar shell. (`components/SearchBox.tsx` in the header → navigates to `/search?q=`.)
 - [ ] Implement user menu shell.
 - [x] Implement theme/accessibility-friendly base styles. (Tailwind base + dark-mode-aware tokens in `globals.css`; focus-visible rings on interactive elements.)
 - [x] Implement public home route. (`app/page.tsx` → `<VideoFeed/>` discovery grid.)
-- [~] Implement loading and error boundaries. (`VideoFeed` handles loading/error/empty/ready inline via `ui/Spinner`, `ui/ErrorState` (retry), `ui/EmptyState`; route-level error.tsx/loading.tsx boundaries still TODO.)
-- [ ] Implement 404 page.
+- [x] Implement loading and error boundaries. (Route-level `app/error.tsx` — client boundary, `role="alert"` + "Try again" `reset()`, logs via `lib/logger` — and `app/loading.tsx` minimal `aria-busy` card-grid skeleton. Per-view inline states (`ui/Spinner`/`ErrorState`/`EmptyState`) kept as the first line; the boundaries are the catch-all.)
+- [x] Implement 404 page. (`app/not-found.tsx`: renders inside the root layout so the site chrome stays, 404 status + "Page not found" + Go home link; unknown-entity ids keep their richer inline not-found states in views (Watch/Channel/Conversation), so no per-route `notFound()` wiring was needed. `e2e/not-found.spec.ts` asserts status 404, banner present, exactly one `<main>`, and the way home.)
 - [x] Add Playwright smoke test for app loading. (`e2e/home.spec.ts`: header brand present; route-mocked feed renders cards; empty + error states — 4 tests.)
-- [ ] Add accessibility smoke test for navigation landmarks.
+- [x] Add accessibility smoke test for navigation landmarks. (`e2e/a11y-landmarks.spec.ts`: banner + `navigation[name="Primary"]` + search landmark + exactly one `<main>`/`<header>` on home.)
 
 ---
 
