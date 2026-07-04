@@ -54,8 +54,13 @@ test("editing the instance name persists to the DB and shows on the public insta
   expect(settings.instance_name.overridden).toBe(true);
 
   // The change is visible in the UI after a fresh load/refetch (not just optimistic).
+  // A hard reload restores the admin session from its httpOnly cookie, so the
+  // config form reloads its persisted value straight from the DB. We deliberately
+  // do NOT re-run loginAsAdmin here: signing in again while already session-restored
+  // fires a deferred post-login router.push("/") that races these assertions and can
+  // navigate away from the config page before the field is read.
   await page.reload();
-  await loginAsAdmin(page);
+  await expect(page.getByRole("heading", { name: "Instance identity" })).toBeVisible();
   await expect(page.getByLabel("Instance name")).toHaveValue(name);
 });
 
