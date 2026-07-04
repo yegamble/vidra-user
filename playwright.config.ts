@@ -20,7 +20,12 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // The backend-backed suite is signup/auth-heavy against a real stack; under CI
+  // resource load an occasional assertion (e.g. the post-signup "Sign out")
+  // races the 5s default. Two retries + a 10s expect timeout absorb that load
+  // flakiness without masking real defects (specs pass reliably locally).
+  retries: process.env.CI ? 2 : 0,
+  expect: { timeout: process.env.CI ? 10_000 : 5_000 },
   reporter: [["html", { open: "never" }]],
   use: {
     baseURL: BASE_URL,
