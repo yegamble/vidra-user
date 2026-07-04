@@ -12,6 +12,9 @@ import type {
   UpdateInstanceSettingsRequest,
   JobsOverview,
   MediaGCResponse,
+  PeerTubeImportLaunchRequest,
+  PeerTubeImportRun,
+  PeerTubeImportRunList,
   SystemStatus,
   AdminVideoListResponse,
   BlockedRemoteVideoListResponse,
@@ -1425,6 +1428,39 @@ export const api = {
       method: "POST",
       body: { dry_run: dryRun },
     }),
+
+  /**
+   * POST /api/v1/admin/peertube-import — launch a one-way PeerTube→Vidra
+   * migration run (admin only; audited). `mode` is "dry_run" (report the plan +
+   * counts + conflicts, writes NOTHING) or "run" (perform the import);
+   * `conflict_policy` (skip|rename|merge|fail, default skip server-side) resolves
+   * handle/email/slug collisions. Returns the launched run (202) to poll. The
+   * SOURCE database/storage connection is taken from SERVER CONFIG only — the
+   * browser NEVER sends a DSN or credential. 409 if a run is already active; 503
+   * when import is not configured on the instance.
+   */
+  launchPeerTubeImport: (body: PeerTubeImportLaunchRequest) =>
+    apiRequest<PeerTubeImportRun>("/api/v1/admin/peertube-import", {
+      method: "POST",
+      body,
+    }),
+
+  /**
+   * GET /api/v1/admin/peertube-import — recent import runs newest-first (admin
+   * only): the import history plus the active run's live per-entity progress.
+   */
+  listPeerTubeImports: (signal?: AbortSignal) =>
+    apiRequest<PeerTubeImportRunList>("/api/v1/admin/peertube-import", { signal }),
+
+  /**
+   * GET /api/v1/admin/peertube-import/{id} — one import run by id (admin only).
+   * The progress-poll endpoint for a launched dry-run or import.
+   */
+  getPeerTubeImport: (id: string, signal?: AbortSignal) =>
+    apiRequest<PeerTubeImportRun>(
+      `/api/v1/admin/peertube-import/${encodeURIComponent(id)}`,
+      { signal },
+    ),
 };
 
 /** Direct URL to a video's original stream (for a <video> src). Range-capable. */

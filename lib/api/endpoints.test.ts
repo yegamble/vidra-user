@@ -1293,4 +1293,26 @@ describe("api endpoints", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ dry_run: false });
   });
+
+  it("launchPeerTubeImport POSTs the mode + conflict policy (no source credentials)", async () => {
+    await api.launchPeerTubeImport({ mode: "dry_run", conflict_policy: "rename" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/peertube-import");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ mode: "dry_run", conflict_policy: "rename" });
+  });
+
+  it("listPeerTubeImports targets the admin peertube-import collection", async () => {
+    await api.listPeerTubeImports();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/peertube-import");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  it("getPeerTubeImport targets one run by id (encoded)", async () => {
+    await api.getPeerTubeImport("11111111-1111-1111-1111-111111111111");
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/peertube-import/11111111-1111-1111-1111-111111111111",
+    );
+  });
 });

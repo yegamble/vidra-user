@@ -11,6 +11,7 @@ const TABS = [
   { href: "/admin/registration-requests", label: "Registration" },
   { href: "/admin/config", label: "Config" },
   { href: "/admin/jobs", label: "Jobs" },
+  { href: "/admin/import-peertube", label: "Import" },
   { href: "/admin/media", label: "Media" },
   { href: "/admin/audit-log", label: "Audit log" },
   { href: "/admin/system", label: "System" },

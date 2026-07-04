@@ -3150,6 +3150,50 @@ export interface paths {
         patch: operations["updateInstanceSettings"];
         trace?: never;
     };
+    "/api/v1/admin/peertube-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List recent PeerTube import runs (admin)
+         * @description Returns recent import runs newest-first, each with its state, detected source schema version, and per-entity progress report — the admin import history + the active run's live progress. Restricted to admins.
+         */
+        get: operations["listPeerTubeImports"];
+        put?: never;
+        /**
+         * Launch a PeerTube import run (admin)
+         * @description Launches a one-way PeerTube→Vidra migration run and returns it (202) so the UI can poll its progress (fix_plan P18). mode is "dry_run" (report counts + mapping plan + conflicts, writes NOTHING) or "run" (perform the import). conflict_policy (skip|rename|merge|fail, default skip) resolves username/handle/email/slug collisions. The import is idempotent and resumable — a re-run skips already-imported rows via a durable ledger. The SOURCE PeerTube database + storage connection is taken from SERVER CONFIG only; the browser NEVER sends a DSN or credential. Only one run may be active at a time (409 otherwise). 503 when import is not configured on the instance. Restricted to admins; audited (no secrets).
+         */
+        post: operations["launchPeerTubeImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/peertube-import/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one PeerTube import run (admin)
+         * @description Returns one import run by id — the progress-poll endpoint. Restricted to admins.
+         */
+        get: operations["getPeerTubeImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/media/gc": {
         parameters: {
             query?: never;
@@ -3373,6 +3417,17 @@ export interface components {
             privacy_url: string;
             /** @description Operator contact email; may be empty. */
             contact_email: string;
+            /** @description Effective feature toggles (the DB-backed instance-settings overlay over static config). The frontend disables the matching affordances in lock-step with the backend's enforcement. */
+            features: {
+                /** @description Whether new video uploads are accepted. */
+                uploads: boolean;
+                /** @description Whether URL video import is accepted. */
+                imports: boolean;
+                /** @description Whether creating live streams is allowed. */
+                live: boolean;
+                /** @description Whether posting comments is allowed. */
+                comments: boolean;
+            };
         };
         OAuthIdentity: {
             /**
@@ -5051,6 +5106,19 @@ export interface components {
                     error?: string;
                 };
             };
+            /** @description The effective, non-secret rate-limit configuration in force. Rate limits are a deploy-time capacity decision (RATE_LIMIT_* / AUTH_RATE_LIMIT_* env), surfaced here read-only so an operator can confirm what is applied — there is no runtime mutation endpoint (see product-decisions §3). */
+            rate_limits: {
+                enabled: boolean;
+                /** @description General per-IP request budget over the window. */
+                requests: number;
+                /** @description Stricter per-IP budget for sensitive auth endpoints. */
+                auth_requests: number;
+                /**
+                 * Format: int64
+                 * @description The shared fixed-window length in seconds.
+                 */
+                window_seconds: number;
+            };
         };
         /** @description Durable job-queue operations snapshot (admin jobs page). No secrets/PII. */
         JobsOverview: {
@@ -5101,6 +5169,68 @@ export interface components {
             default: string | boolean;
             /** @description Whether a database override is currently set for this key. */
             overridden: boolean;
+        };
+        /** @description Launch parameters for a PeerTube import run. The source connection is NOT here — it comes from server config only. */
+        PeerTubeImportLaunchRequest: {
+            /**
+             * @description dry_run reports the plan and writes nothing; run performs the import.
+             * @enum {string}
+             */
+            mode: "dry_run" | "run";
+            /**
+             * @description How username/handle/email/slug collisions with existing Vidra rows are resolved. Defaults to skip (safest, non-destructive).
+             * @enum {string}
+             */
+            conflict_policy?: "skip" | "rename" | "merge" | "fail";
+        };
+        /** @description Per-entity outcome tally. */
+        PeerTubeImportCounts: {
+            planned: number;
+            imported: number;
+            skipped: number;
+            failed: number;
+            unsupported: number;
+        };
+        /** @description Machine-readable summary of a plan (dry-run) or run. Carries only counts, the detected source version, and safe conflict notes — never secrets/PII. */
+        PeerTubeImportReport: {
+            /** @description Detected PeerTube schema version (application.migrationVersion). */
+            source_version?: number;
+            dry_run: boolean;
+            conflict_policy: string;
+            /** @description Per-entity-kind counts, keyed by entity kind (user, channel, video, …). */
+            entities: {
+                [key: string]: components["schemas"]["PeerTubeImportCounts"];
+            };
+            /** @description Entity families intentionally not migrated (regenerate/reconcile by hand). */
+            deferred?: string[];
+            /** @description Safe, human-readable notes about resolved collisions. */
+            conflicts?: string[];
+        };
+        /** @description Status view of one PeerTube import run. */
+        PeerTubeImportRun: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            mode: "dry_run" | "run";
+            /** @enum {string} */
+            state: "pending" | "running" | "done" | "failed";
+            /** @enum {string} */
+            conflict_policy: "skip" | "rename" | "merge" | "fail";
+            source_version?: number | null;
+            report?: components["schemas"]["PeerTubeImportReport"];
+            /** @description Safe, client-visible failure reason (never a DSN/credential). */
+            error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            finished_at?: string | null;
+        };
+        PeerTubeImportRunList: {
+            runs: components["schemas"]["PeerTubeImportRun"][];
         };
         InstanceSettingsResponse: {
             settings: components["schemas"]["InstanceSetting"][];
@@ -14011,6 +14141,162 @@ export interface operations {
             };
             /** @description An unknown key or an invalid value. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listPeerTubeImports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent import runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerTubeImportRunList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    launchPeerTubeImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PeerTubeImportLaunchRequest"];
+            };
+        };
+        responses: {
+            /** @description The launched run (poll it for progress). */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerTubeImportRun"];
+                };
+            };
+            /** @description Invalid mode or conflict policy. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description An import run is already in progress. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PeerTube import is not configured on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getPeerTubeImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerTubeImportRun"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No run with that id. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

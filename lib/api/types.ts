@@ -62,6 +62,19 @@ export type JobsOverview = Schemas["JobsOverview"];
 export type QueueStatus = Schemas["QueueStatus"];
 export type JobFailure = Schemas["JobFailure"];
 export type MediaGCResponse = Schemas["MediaGCResponse"];
+
+// --- Admin: PeerTube import / migration (P10 UI over P18 backend) ------------
+export type PeerTubeImportLaunchRequest = Schemas["PeerTubeImportLaunchRequest"];
+export type PeerTubeImportMode = NonNullable<Schemas["PeerTubeImportLaunchRequest"]["mode"]>;
+export type PeerTubeImportConflictPolicy = NonNullable<
+  Schemas["PeerTubeImportLaunchRequest"]["conflict_policy"]
+>;
+export type PeerTubeImportCounts = Schemas["PeerTubeImportCounts"];
+export type PeerTubeImportReport = Schemas["PeerTubeImportReport"];
+export type PeerTubeImportRun = Schemas["PeerTubeImportRun"];
+export type PeerTubeImportRunState = NonNullable<Schemas["PeerTubeImportRun"]["state"]>;
+export type PeerTubeImportRunList = Schemas["PeerTubeImportRunList"];
+
 export type RegistrationRequestStatus = NonNullable<Schemas["RegistrationRequest"]["status"]>;
 export type RegistrationRequest = Schemas["RegistrationRequest"];
 export type RegistrationRequestListResponse = Schemas["RegistrationRequestListResponse"];
