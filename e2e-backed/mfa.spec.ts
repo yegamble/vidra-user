@@ -17,7 +17,9 @@ import { totpCode, uniqueId } from "./fixtures";
 
 async function signOut(page: Page) {
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("link", { name: "Sign in" }).first()).toBeVisible();
+  // Scope to the header banner: a signed-out page BODY may render its own
+  // "Sign in" link, so the banner landmark keeps this to the single header control.
+  await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
 }
 
 async function loginExpectingChallenge(page: Page, email: string, password: string) {
