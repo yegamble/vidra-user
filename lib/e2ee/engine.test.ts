@@ -33,6 +33,7 @@ class FakeAccount implements CryptoAccount {
 
 class MemStore implements E2EEStore {
   record: StoredDevice | null = null;
+  plaintexts = new Map<string, string>();
   async load() {
     return this.record;
   }
@@ -41,6 +42,13 @@ class MemStore implements E2EEStore {
   }
   async clear() {
     this.record = null;
+    this.plaintexts.clear();
+  }
+  async loadPlaintext(envelopeId: string) {
+    return this.plaintexts.get(envelopeId) ?? null;
+  }
+  async savePlaintext(envelopeId: string, plaintext: string) {
+    this.plaintexts.set(envelopeId, plaintext);
   }
 }
 

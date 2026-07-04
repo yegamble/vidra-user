@@ -166,9 +166,19 @@ export class E2EEEngine {
   async decryptEnvelope(env: EncryptedMessage): Promise<string> {
     const loaded = await this.ensureLoaded();
     if (!loaded) throw new Error("no E2EE device is set up");
+    // Olm messages are one-shot decryptable: a pre-key/ratchet message consumes
+    // its one-time key and ratchets the session past it, so it can only be
+    // decrypted ONCE. Thread reloads re-fetch every envelope, so return the
+    // cached plaintext for an envelope we've already decrypted instead of trying
+    // (and failing) to decrypt it again.
+    const cached = await this.store.loadPlaintext(env.id);
+    if (cached !== null) return cached;
     const identityKey = await this.identityKeyFor(env.sender_user_id, env.sender_device_id);
     const plaintext = loaded.account.decryptFrom(identityKey, env.message_type, env.ciphertext);
+    // Persist the ratcheted session BEFORE caching the plaintext, so a crash
+    // between the two never loses the session that produced it.
     await this.persist();
+    await this.store.savePlaintext(env.id, plaintext);
     return plaintext;
   }
 

@@ -24,8 +24,16 @@ export function ConnectedLogins() {
     authApi
       .listOAuthIdentities(controller.signal)
       .then((res) => setIdentities(res.identities))
-      .catch(() => {
-        if (!controller.signal.aborted) setLoadError(true);
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        // A 404 means this instance has no OIDC providers configured, so the
+        // endpoint isn't mounted — there are genuinely no external logins to
+        // link. Show the honest empty state instead of a transient-looking error.
+        if (err instanceof ApiError && err.status === 404) {
+          setIdentities([]);
+        } else {
+          setLoadError(true);
+        }
       });
     return () => controller.abort();
   }, [reloadKey]);
