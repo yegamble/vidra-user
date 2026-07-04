@@ -124,7 +124,7 @@ function Thread({
   function onDeleted(id: string) {
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === id ? { ...m, deleted: true, body: "[deleted]", attachments: undefined, preview: null } : m,
+        m.id === id ? { ...m, deleted: true, body: "[deleted]", attachments: undefined, preview: undefined } : m,
       ),
     );
   }

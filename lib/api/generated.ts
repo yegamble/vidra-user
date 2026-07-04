@@ -3724,7 +3724,7 @@ export interface components {
         VideoDownloadFile: {
             /** @enum {string} */
             kind: "original" | "webm" | "hls";
-            /** @description API path serving this file, e.g. "/api/v1/videos/{id}/original", "/api/v1/videos/{id}/webm", or "/api/v1/videos/{id}/hls/720p/playlist.m3u8". */
+            /** @description API path serving this file, e.g. the video original, its webm alternate, or an HLS rendition variant playlist. */
             url: string;
             /** @example video/mp4 */
             content_type: string;
@@ -4957,7 +4957,8 @@ export interface components {
             device_id: string;
             identity_key: string;
             signing_key: string;
-            one_time_key: components["schemas"]["E2EEOneTimeKey"] | null;
+            /** @description A claimed one-time prekey, or null when the device has none left. */
+            one_time_key: null | components["schemas"]["E2EEOneTimeKey"];
         };
         E2EEClaimResponse: {
             /** Format: uuid */
@@ -4981,8 +4982,8 @@ export interface components {
             created_at: string;
             /** @description DM attachments linked to this message (metadata only; fetch the bytes at GET /api/v1/attachments/{id}). */
             attachments?: components["schemas"]["DMAttachment"][];
-            /** @description OpenGraph link preview of the first URL in the body, present only once the async fetch has resolved. */
-            preview?: components["schemas"]["LinkPreview"] | null;
+            /** @description OpenGraph link preview of the first URL in the body; omitted until the async fetch has resolved (optional). */
+            preview?: components["schemas"]["LinkPreview"];
         };
         DMAttachment: {
             /** Format: uuid */
