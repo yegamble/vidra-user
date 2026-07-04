@@ -6,6 +6,7 @@ import {
   channelVideos,
   loginToken,
   ownerVideoDetail,
+  publishViaStudioUI,
   uniqueId,
 } from "./fixtures";
 
@@ -53,11 +54,7 @@ test("a scheduled publish persists publish_at and parks the video as scheduled",
     mimeType: "video/mp4",
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
-  await uploaded;
+  await publishViaStudioUI(page);
 
   // The honest outcome: scheduled, never "Published!".
   await expect(
@@ -125,11 +122,7 @@ test("moving a schedule from the edit surface persists the new publish_at", asyn
     mimeType: "video/mp4",
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
-  await uploaded;
+  await publishViaStudioUI(page);
   await expect(
     page.getByText("is scheduled — it will publish automatically", { exact: false }),
   ).toBeVisible();

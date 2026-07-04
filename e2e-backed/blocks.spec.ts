@@ -37,7 +37,7 @@ test("blocking a user refuses direct messages until unblocked", async ({ page, r
   await blocked;
 
   // A direct message to the blocked user is now refused (403 surfaced inline).
-  await row.getByRole("button", { name: "Message" }).click();
+  await row.getByRole("button", { name: "Message", exact: true }).click();
   await expect(page.getByText("You can't message this user.")).toBeVisible();
   await expect(page).toHaveURL(/\/videos\/[^/]+$/); // did NOT navigate to a thread
 
@@ -60,7 +60,7 @@ test("blocking a user refuses direct messages until unblocked", async ({ page, r
   const started = page.waitForResponse(
     (r) => /\/api\/v1\/conversations$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Message" }).click();
+  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Message", exact: true }).click();
   await started;
   await expect(page).toHaveURL(/\/messages\/[0-9a-f-]+$/);
 });

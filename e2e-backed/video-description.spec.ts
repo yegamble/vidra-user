@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { TINY_MP4_BASE64, channelVideos, uniqueId, videoDetail } from "./fixtures";
+import { TINY_MP4_BASE64, channelVideos, publishViaStudioUI, uniqueId, videoDetail } from "./fixtures";
 
 // Proves the video-description round trip against a real vidra-core + PostgreSQL:
 // a creator publishes a video with a description and later edits it in the studio;
@@ -38,11 +38,7 @@ test("a creator sets and edits a video description", async ({ page, request }) =
     mimeType: "video/mp4",
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
-  await uploaded;
+  await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
 
   const videoId = (await channelVideos(request, handle)).find((v) => v.title === title)!.id;

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { TINY_MP4_BASE64, captions, channelVideos, uniqueId } from "./fixtures";
+import { TINY_MP4_BASE64, captions, channelVideos, publishViaStudioUI, uniqueId } from "./fixtures";
 
 const VTT = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n";
 
@@ -37,11 +37,7 @@ test("a creator uploads and removes a caption in the studio", async ({ page, req
     mimeType: "video/mp4",
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
-  await uploaded;
+  await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
 
   // Open the video's edit surface (the captions manager lives there).

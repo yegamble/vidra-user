@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 
 // A tiny (16x16, ~0.1s) valid H.264 mp4 generated with ffmpeg, base64-encoded.
 // The e2e backend runs a real ffprobe that rejects non-video bytes, so seeding a
@@ -63,6 +63,23 @@ export async function liveIngest(
     data: { stream_key: streamKey },
   });
   return res.status();
+}
+
+/**
+ * publishViaStudioUI clicks the studio Publish button and waits for the file
+ * upload to finalise. The studio drives a RESUMABLE (chunked) upload — create
+ * session (POST /videos/:id/upload-session) → PUT chunks → complete
+ * (POST /uploads/:id/complete) — so tests wait on the terminal `complete` call,
+ * not the legacy single-shot POST /videos/:id/file. Works for both immediate and
+ * scheduled publishes (the file is uploaded either way; the outcome differs).
+ */
+export async function publishViaStudioUI(page: Page): Promise<void> {
+  const uploaded = page.waitForResponse(
+    (r) =>
+      /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Publish" }).click();
+  await uploaded;
 }
 
 /** loginToken logs in with the given credentials and returns the access token. */

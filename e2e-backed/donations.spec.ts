@@ -88,7 +88,9 @@ test("donation addresses persist, show on public reads, and survive delete + rel
   await page.goto(`/channels/${handle}`);
   await page.getByRole("button", { name: "Donate" }).click();
   const dialog = page.getByRole("dialog", { name: new RegExp(`Donate to Donate ${id}`) });
-  await expect(dialog.getByText(BTC)).toBeVisible();
+  // The dialog lists each address in a read-only, copy-friendly <input>, so the
+  // address is the field's VALUE (not text) — assert on the labelled textbox.
+  await expect(dialog.getByRole("textbox", { name: /Bitcoin.*address/ })).toHaveValue(BTC);
   await page.getByRole("button", { name: "Close" }).click();
 
   // Delete the account-level address through the UI.

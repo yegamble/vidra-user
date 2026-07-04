@@ -42,7 +42,7 @@ test("a viewer can message a commenter and the message persists", async ({ page,
   const started = page.waitForResponse(
     (r) => /\/api\/v1\/conversations$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Message" }).click();
+  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Message", exact: true }).click();
   await started;
   await expect(page).toHaveURL(/\/messages\/[0-9a-f-]+$/);
 
@@ -98,7 +98,7 @@ test("a DM attachment round-trips: upload, send, appears, and the recipient sees
   const started = page.waitForResponse(
     (r) => /\/api\/v1\/conversations$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Message" }).click();
+  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Message", exact: true }).click();
   await started;
   await expect(page).toHaveURL(/\/messages\/[0-9a-f-]+$/);
   const conversationId = page.url().split("/messages/")[1];
