@@ -17,6 +17,18 @@ export const en = {
   "common.dismiss": "Dismiss",
   "common.retry": "Try again",
 
+  // Accessibility affordances.
+  "a11y.skipToContent": "Skip to content",
+
+  // App-shell states, surfaced through the shared primitives (Spinner,
+  // ErrorState) so every loading/error surface in the app is externalized at
+  // once. See .ralph/specs/design-system.md ("i18n coverage").
+  "state.errorTitle": "Something went wrong",
+  "state.errorBody": "An unexpected error occurred while showing this page.",
+  "state.notFoundTitle": "Page not found",
+  "state.notFoundBody": "The page you're looking for doesn't exist or may have been moved.",
+  "state.notFoundHome": "Go home",
+
   // Report flow (ReportButton / report modal).
   "report.title": "Report this {noun}",
   "report.reasonLabel": "Reason for report",

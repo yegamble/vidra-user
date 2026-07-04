@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { t } from "@/lib/i18n";
+
 export const metadata: Metadata = {
   title: "Page not found — Vidra",
 };
@@ -14,15 +16,15 @@ export default function NotFound() {
       <p className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
         404
       </p>
-      <h1 className="text-2xl font-semibold tracking-tight">Page not found</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("state.notFoundTitle")}</h1>
       <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-        The page you&apos;re looking for doesn&apos;t exist or may have been moved.
+        {t("state.notFoundBody")}
       </p>
       <Link
         href="/"
         className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
       >
-        Go home
+        {t("state.notFoundHome")}
       </Link>
     </main>
   );

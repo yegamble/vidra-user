@@ -92,9 +92,26 @@ A lightweight seam, **not** a translation system. `lib/i18n/en.ts` is the
 single default-locale catalog (dotted keys, `{placeholder}` interpolation);
 `t(key, vars)` reads it. The key type is `MessageKey`, so `t()` with an unknown
 key is a compile error — the catalog can never silently drift from call sites.
-Proven on the primitives (Modal/Toast close/dismiss labels) and the report
-modal. When real localization lands, only `activeCatalog` gains a locale
-resolver; call sites do not change.
+When real localization lands, only `activeCatalog` gains a locale resolver;
+call sites do not change.
+
+### i18n coverage (what is routed through `t()`)
+Readiness is proven on a **representative set**, not the whole app. Covered:
+
+- **Primitives** — `Modal`/`Toast` close+dismiss labels; `Spinner` loading
+  label; `ErrorState` title + retry. Because `Spinner`/`ErrorState` are the
+  shared loading/error surfaces, routing their two defaults externalizes every
+  loading/error state in the app at once.
+- **App shell** — the skip-to-content link (`a11y.skipToContent`) and the
+  route-level `not-found` / `error` pages (`state.*`).
+- **Report modal** — title/reason/submit/thanks.
+
+**Remaining (the long tail):** most feature-surface copy (studio, admin,
+settings, messaging, watch metadata, auth beyond the login labels) is still
+inline English. That is expected — the seam exists and is exercised app-wide
+through the primitives; externalizing the remaining strings is mechanical
+(`t("new.key")` + a catalog entry) and gated only by effort, not by any missing
+infrastructure. A real locale swap changes only `activeCatalog`.
 
 ## Testing
 - **RTL component-unit tests** (`components/ui/*.test.tsx`): `@testing-library/react`
@@ -107,7 +124,21 @@ resolver; call sites do not change.
   selectors green.
 
 ## Accessibility baseline
-- ARIA labels on icon-only controls (enforced by `IconButton`).
-- Keyboard navigation + focus management for dialogs/menus/tabs.
+- **Skip-to-content link** — first focusable element (`app/layout.tsx`), hidden
+  until keyboard focus (`.skip-link`), jumps focus to `#main-content` (the
+  wrapper around every page's `<main>`).
+- ARIA labels on icon-only controls (enforced by `IconButton`; sweep confirmed
+  clean — player uses native `<video controls>`).
+- Keyboard navigation + focus management for dialogs/menus/tabs. Every dialog
+  traps + restores focus and closes on Escape — the `Modal` primitive owns this,
+  and the watch-page Share/Download/Donate dialogs are built on it (no ad-hoc
+  dialog scaffolding remains).
 - Centralized visible focus ring (`.focus-ring`).
-- Responsive coverage for mobile/tablet/desktop; reduced-motion respected.
+- **Reduced motion** — a single global `prefers-reduced-motion: reduce` reset in
+  `globals.css` neutralizes all animation/transition durations and forces
+  non-smooth scrolling app-wide; components don't branch on it themselves.
+- Responsive coverage for mobile/tablet/desktop (`e2e/responsive.spec.ts`:
+  phone 390px + tablet 768px, no horizontal overflow; `e2e/mobile-nav.spec.ts`).
+- Automated axe-core (`e2e/a11y.spec.ts`) over home/watch/login/settings/studio/
+  messages/admin — the gate fails on serious/critical violations.
+- Keyboard + reduced-motion regression tests in `e2e/keyboard-nav.spec.ts`.

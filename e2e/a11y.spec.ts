@@ -157,6 +157,47 @@ test("the settings page passes axe (signed in)", async ({ page }) => {
   await expectNoSevereViolations(page);
 });
 
+test("the studio page passes axe (signed in, channels + create form)", async ({ page }) => {
+  await signIn(page, "user");
+  await page.route(/\/api\/v1\/me\/channels$/, (route) =>
+    route.fulfill({ json: { channels: [] } }),
+  );
+  await page.route(/\/api\/v1\/videos\/config$/, (route) =>
+    route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
+  );
+  await page.getByRole("link", { name: "Studio" }).click();
+  await expect(page.getByRole("heading", { name: "Studio", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your channels" })).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
+test("the messages page passes axe (signed in, inbox rendered)", async ({ page }) => {
+  await signIn(page, "user");
+  await page.route(/\/api\/v1\/me\/conversations(\?|$)/, (route) =>
+    route.fulfill({
+      json: {
+        conversations: [
+          {
+            id: "c1",
+            updated_at: new Date().toISOString(),
+            other_user_id: "u2",
+            other_username: "bob",
+            other_display_name: "Bob Builder",
+            last_message_body: "see you then",
+            last_message_at: new Date().toISOString(),
+          },
+        ],
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.getByRole("link", { name: "Messages" }).click();
+  await expect(page.getByRole("heading", { name: "Messages", level: 1 })).toBeVisible();
+  await expect(page.getByText("Bob Builder")).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
 test("the admin users page passes axe (admin, list rendered)", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(USERS, (route) =>

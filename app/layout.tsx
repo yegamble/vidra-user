@@ -5,6 +5,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
+import { t } from "@/lib/i18n";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,11 +33,20 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <a href="#main-content" className="skip-link">
+          {t("a11y.skipToContent")}
+        </a>
         <AuthProvider>
           <Header />
           <div className="flex w-full flex-1">
             <Sidebar />
-            <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+            <div
+              id="main-content"
+              tabIndex={-1}
+              className="flex min-w-0 flex-1 flex-col focus:outline-none"
+            >
+              {children}
+            </div>
           </div>
         </AuthProvider>
       </body>

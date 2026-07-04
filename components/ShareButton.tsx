@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
+import { Modal } from "@/components/ui";
 import { formatDuration } from "@/lib/format";
 
 const PILL =
@@ -101,18 +102,6 @@ function ShareDialog({
   const [startAtChecked, setStartAtChecked] = useState(false);
   const [copied, setCopied] = useState<"link" | "embed" | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
-  const linkRef = useRef<HTMLInputElement>(null);
-
-  // Focus the link field on open and close on Escape (ReportButton pattern).
-  useEffect(() => {
-    linkRef.current?.focus();
-    linkRef.current?.select();
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   // The dialog only mounts client-side (after a click), so window is available.
   const origin = window.location.origin;
@@ -134,22 +123,11 @@ function ShareDialog({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Share this video"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-    >
-      <div className="flex w-full max-w-md flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-        <h2 className="text-base font-semibold tracking-tight">Share this video</h2>
-
+    <Modal title="Share this video" onClose={onClose}>
+      <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <input
-              ref={linkRef}
               readOnly
               value={watchUrl}
               aria-label="Watch page link"
@@ -206,17 +184,7 @@ function ShareDialog({
             Couldn&apos;t copy automatically — select the text and copy it manually.
           </p>
         ) : null}
-
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            Close
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { DonationBadge } from "@/components/DonationBadge";
+import { Modal } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { DonationAddress } from "@/lib/api";
 import { DONATION_NETWORKS, NETWORK_META } from "@/lib/donation-address";
@@ -106,16 +107,6 @@ function DonateDialog({
 }) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   async function copy(id: string, text: string) {
     setCopyFailed(false);
@@ -138,18 +129,12 @@ function DonateDialog({
   })).filter((g) => g.items.length > 0);
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Donate to ${name}`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    <Modal
+      title={`Donate to ${name}`}
+      onClose={onClose}
+      className="max-h-[85vh] overflow-y-auto"
     >
-      <div className="flex max-h-[85vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-        <h2 className="text-base font-semibold tracking-tight">Donate to {name}</h2>
-
+      <div className="flex flex-col gap-4">
         {groups.map((group) => (
           <div key={group.network} className="flex flex-col gap-2">
             <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
@@ -200,18 +185,7 @@ function DonateDialog({
           process payments. Never send crypto you can&apos;t afford to lose, and always
           double-check the address before sending.
         </p>
-
-        <div className="flex justify-end">
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            Close
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
