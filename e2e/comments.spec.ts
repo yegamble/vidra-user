@@ -287,3 +287,106 @@ test("an author can edit their own comment", async ({ page }) => {
   await expect(page.getByText("edited body")).toBeVisible();
   await expect(page.getByText("(edited)")).toBeVisible();
 });
+
+test("renders a reply nested one level under its parent comment", async ({ page }) => {
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) =>
+    route.fulfill({
+      json: {
+        comments: [
+          comment("c1", "parent comment"),
+          // A reply carries parent_id pointing at the top-level comment.
+          { ...comment("c2", "child reply"), parent_id: "c1" },
+        ],
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+
+  await page.goto("/videos/v1");
+  await expect(page.getByText("parent comment")).toBeVisible();
+
+  const commentsRegion = page.getByRole("region", { name: "Comments" });
+  // The reply lives inside the parent's "Replies" list (indented one level),
+  // not as a sibling top-level comment.
+  const replies = commentsRegion.getByRole("list", { name: "Replies" });
+  await expect(replies).toHaveCount(1);
+  await expect(replies.getByText("child reply")).toBeVisible();
+  await expect(commentsRegion.getByText("1 reply")).toBeVisible();
+  // The heading counts every comment (flat), parent + reply.
+  await expect(page.getByRole("heading", { name: "Comments (2)" })).toBeVisible();
+});
+
+test("an authenticated viewer can reply, and the POST carries the parent_id", async ({ page }) => {
+  await page.route(LOGIN, (route) => route.fulfill({ json: session }));
+  await page.route(FEED, (route) =>
+    route.fulfill({ json: { videos: [detail], sort: "recent", limit: 20, offset: 0 } }),
+  );
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) => {
+    if (route.request().method() === "POST") {
+      // The server threads the reply and returns it with its parent_id set.
+      void route.fulfill({
+        json: { ...comment("r1", "well put", "ada", "Ada Makes"), parent_id: "c1" },
+      });
+    } else {
+      void route.fulfill({
+        json: { comments: [comment("c1", "parent comment", "bob", "Bob Jones")], limit: 20, offset: 0 },
+      });
+    }
+  });
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+  await page.route(/\/api\/v1\/me\/saved(\?|$)/, (route) =>
+    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+  );
+
+  await page.getByRole("heading", { name: "Watch Me" }).click();
+  await expect(page.getByText("parent comment")).toBeVisible();
+
+  const commentsRegion = page.getByRole("region", { name: "Comments" });
+  const parentRow = commentsRegion.locator("li", { hasText: "parent comment" }).first();
+  await parentRow.getByRole("button", { name: "Reply", exact: true }).click();
+
+  await page.getByLabel("Write a reply").fill("well put");
+  const posted = page.waitForRequest(
+    (r) => /\/api\/v1\/videos\/v1\/comments/.test(r.url()) && r.method() === "POST",
+  );
+  await commentsRegion.getByRole("button", { name: "Post reply" }).click();
+  const req = await posted;
+  // The reply POST sends the parent comment's id as parent_id.
+  expect(req.postDataJSON()).toEqual({ body: "well put", parent_id: "c1" });
+
+  // The new reply appears nested under its parent, optimistically from the response.
+  const replies = commentsRegion.getByRole("list", { name: "Replies" });
+  await expect(replies.getByText("well put")).toBeVisible();
+});
+
+test("an anonymous viewer is prompted to sign in when replying", async ({ page }) => {
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) =>
+    route.fulfill({ json: { comments: [comment("c1", "parent comment")], limit: 20, offset: 0 } }),
+  );
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+
+  await page.goto("/videos/v1");
+  const commentsRegion = page.getByRole("region", { name: "Comments" });
+  const parentRow = commentsRegion.locator("li", { hasText: "parent comment" }).first();
+
+  // An anonymous viewer still sees a Reply control...
+  await parentRow.getByRole("button", { name: "Reply", exact: true }).click();
+  // ...but it prompts sign-in instead of opening a composer.
+  await expect(parentRow.getByText("to reply")).toBeVisible();
+  await expect(parentRow.getByRole("link", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByLabel("Write a reply")).toHaveCount(0);
+});

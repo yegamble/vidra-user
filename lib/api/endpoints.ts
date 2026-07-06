@@ -572,11 +572,15 @@ export const api = {
       { query: { limit: params.limit, offset: params.offset }, signal },
     ),
 
-  /** POST /api/v1/videos/{id}/comments — post a comment on a video (auth). */
-  postComment: (id: string, body: string) =>
+  /**
+   * POST /api/v1/videos/{id}/comments — post a comment on a video (auth).
+   * Pass `parentId` to reply to another comment on the same video; the server
+   * threads it under that parent. Omitted → a top-level comment.
+   */
+  postComment: (id: string, body: string, parentId?: string) =>
     apiRequest<Comment>(`/api/v1/videos/${encodeURIComponent(id)}/comments`, {
       method: "POST",
-      body: { body },
+      body: parentId ? { body, parent_id: parentId } : { body },
     }),
 
   /** PATCH /api/v1/comments/{id} — edit your own comment body (auth, author-only). */

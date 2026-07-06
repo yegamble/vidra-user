@@ -338,6 +338,37 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ title: "Hi", privacy: "public" });
   });
 
+  it("getVideoComments targets a video's comments with pagination", async () => {
+    await api.getVideoComments("v1", { limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/v1/comments?limit=100");
+  });
+
+  it("postComment POSTs the body to a video's comments (no parent_id for a top-level comment)", async () => {
+    await api.postComment("v1", "great video");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/comments");
+    expect(init.method).toBe("POST");
+    const parsed = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(parsed).toEqual({ body: "great video" });
+    // A top-level comment must not send a parent_id key at all.
+    expect(parsed).not.toHaveProperty("parent_id");
+  });
+
+  it("postComment sends parent_id when replying to another comment", async () => {
+    await api.postComment("v1", "nice point", "c1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/comments");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ body: "nice point", parent_id: "c1" });
+  });
+
+  it("postComment percent-encodes the video id in the path", async () => {
+    await api.postComment("v/1", "hi", "c 1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v%2F1/comments");
+    expect(JSON.parse(init.body as string)).toEqual({ body: "hi", parent_id: "c 1" });
+  });
+
   it("reportVideo POSTs the reason to the video report endpoint", async () => {
     await api.reportVideo("v1", "spam");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

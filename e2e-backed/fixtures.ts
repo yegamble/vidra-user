@@ -389,14 +389,28 @@ export async function channelDetail(
   return { status: res.status(), display_name: body.display_name, description: body.description };
 }
 
-/** videoComments reads a video's persisted comments via the public API. */
+/**
+ * videoComments reads a video's persisted comments via the public API. It
+ * surfaces `id` and `parent_id` (null for a top-level comment) so a caller can
+ * prove threading — that a reply was persisted pointing at its parent.
+ */
 export async function videoComments(
   request: APIRequestContext,
   videoId: string,
-): Promise<Array<{ body: string; author_username: string; edited: boolean }>> {
+): Promise<
+  Array<{ id: string; parent_id: string | null; body: string; author_username: string; edited: boolean }>
+> {
   const res = await request.get(`${API_URL}/api/v1/videos/${videoId}/comments`);
   return (
-    (await res.json()) as { comments: Array<{ body: string; author_username: string; edited: boolean }> }
+    (await res.json()) as {
+      comments: Array<{
+        id: string;
+        parent_id: string | null;
+        body: string;
+        author_username: string;
+        edited: boolean;
+      }>;
+    }
   ).comments;
 }
 
