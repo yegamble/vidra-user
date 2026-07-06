@@ -57,6 +57,23 @@ test("anonymous viewers are gated out of the audit log", async ({ page }) => {
   expect(fetched).toBe(false);
 });
 
+test("a regular signed-in user gets no admin nav entry and is gated from the audit log", async ({
+  page,
+}) => {
+  await signIn(page, "user");
+  // No Admin entry point in the primary nav for a non-admin.
+  await expect(page.getByRole("link", { name: "Admin", exact: true })).toHaveCount(0);
+
+  let fetched = false;
+  await page.route(AUDIT, (route) => {
+    fetched = true;
+    return route.fulfill({ json: { entries: [], limit: 20, offset: 0 } });
+  });
+  await page.goto("/admin/audit-log");
+  await expect(page.getByText("Administrators only")).toBeVisible();
+  expect(fetched).toBe(false);
+});
+
 test("an admin sees the audit log and can filter by action", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(USERS, (route) => route.fulfill({ json: { users: [], limit: 100, offset: 0 } }));

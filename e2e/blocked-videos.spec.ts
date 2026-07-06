@@ -86,6 +86,21 @@ test("anonymous viewers are gated out of the block-list", async ({ page }) => {
   expect(fetched).toBe(false);
 });
 
+test("a regular signed-in user is gated out of the block-list", async ({ page }) => {
+  await signIn(page, "user");
+  // No Moderation entry point in the primary nav for a regular user.
+  await expect(page.getByRole("link", { name: "Moderation" })).toHaveCount(0);
+
+  let fetched = false;
+  await page.route(BLOCKED, (route) => {
+    fetched = true;
+    return route.fulfill({ json: { videos: [], limit: 20, offset: 0 } });
+  });
+  await page.goto("/moderation/blocked");
+  await expect(page.getByText("Moderators only")).toBeVisible();
+  expect(fetched).toBe(false);
+});
+
 test("an admin sees the blocked-video list via the moderation tabs", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(BLOCKED, (route) =>
@@ -113,6 +128,21 @@ test("anonymous viewers are gated out of the remote block-list too", async ({ pa
   await page.goto("/moderation/blocked/remote");
   await expect(page.getByText("Moderators only")).toBeVisible();
   // The Local/Remote origin tabs self-hide behind the gate.
+  await expect(page.getByRole("navigation", { name: "Blocked video origin" })).toHaveCount(0);
+  expect(fetched).toBe(false);
+});
+
+test("a regular signed-in user is gated out of the remote block-list too", async ({ page }) => {
+  await signIn(page, "user");
+  await expect(page.getByRole("link", { name: "Moderation" })).toHaveCount(0);
+
+  let fetched = false;
+  await page.route(REMOTE_BLOCKED, (route) => {
+    fetched = true;
+    return route.fulfill({ json: { videos: [], limit: 20, offset: 0 } });
+  });
+  await page.goto("/moderation/blocked/remote");
+  await expect(page.getByText("Moderators only")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Blocked video origin" })).toHaveCount(0);
   expect(fetched).toBe(false);
 });

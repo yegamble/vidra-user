@@ -121,6 +121,21 @@ test("regular users do not see the Moderation nav entry", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Moderation" })).toHaveCount(0);
 });
 
+test("a regular signed-in user is gated out of the moderation queue", async ({ page }) => {
+  await signIn(page, "user");
+  // No Moderation entry point in the primary nav for a regular user.
+  await expect(page.getByRole("link", { name: "Moderation" })).toHaveCount(0);
+
+  let fetched = false;
+  await page.route(REPORTS, (route) => {
+    fetched = true;
+    return route.fulfill({ json: { reports: [], limit: 20, offset: 0 } });
+  });
+  await page.goto("/moderation");
+  await expect(page.getByText("Moderators only")).toBeVisible();
+  expect(fetched).toBe(false);
+});
+
 test("an admin sees the open report queue", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(REPORTS, (route) =>

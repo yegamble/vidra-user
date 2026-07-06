@@ -72,6 +72,23 @@ test("anonymous viewers are gated out of admin users", async ({ page }) => {
   expect(fetched).toBe(false);
 });
 
+test("a regular signed-in user gets no admin nav entry and is gated from admin users", async ({
+  page,
+}) => {
+  await signIn(page, "user");
+  // No Admin entry point in the primary nav for a non-admin.
+  await expect(page.getByRole("link", { name: "Admin", exact: true })).toHaveCount(0);
+
+  let fetched = false;
+  await page.route(USERS, (route) => {
+    fetched = true;
+    return route.fulfill({ json: { users: [], limit: 20, offset: 0 } });
+  });
+  await page.goto("/admin/users");
+  await expect(page.getByText("Administrators only")).toBeVisible();
+  expect(fetched).toBe(false);
+});
+
 test("moderators see Moderation but not the Admin nav entry", async ({ page }) => {
   await signIn(page, "moderator");
   await expect(page.getByRole("link", { name: "Moderation" })).toBeVisible();
