@@ -38,6 +38,12 @@ export const en = {
   "report.signInPrompt": "Sign in to report",
   "report.genericError": "Could not submit your report.",
 
+  // Appearance (theme) preference — ThemeToggle.
+  "theme.appearance": "Appearance",
+  "theme.light": "Light",
+  "theme.dark": "Dark",
+  "theme.system": "System",
+
   // Auth surfaces.
   "auth.email": "Email",
   "auth.password": "Password",

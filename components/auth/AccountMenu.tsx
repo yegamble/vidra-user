@@ -10,7 +10,9 @@ import { userAvatarUrl } from "@/lib/api";
 // the avatar + username + sign-out when authenticated, and a quiet placeholder
 // while the boot-time silent refresh decides which (avoids a "Sign in" flash on
 // reload). The avatar image is decorative (alt="") — the username next to it is
-// the accessible name of the settings link.
+// the accessible name of the settings link. On phones the username and
+// sign-out collapse away (settings owns sign-out there); the avatar remains
+// the tap target for /settings, per the design template.
 export function AccountMenu() {
   const { status, user, logout } = useSession();
 
@@ -19,7 +21,7 @@ export function AccountMenu() {
       <span
         role="status"
         aria-label="Checking your session"
-        className="inline-block h-7 w-16 animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800"
+        className="inline-block h-8 w-8 animate-pulse rounded-full bg-surface-muted sm:w-16 sm:rounded-full"
       >
         <span className="sr-only">Checking your session…</span>
       </span>
@@ -31,21 +33,21 @@ export function AccountMenu() {
       <div className="flex items-center gap-3 text-sm">
         <Link
           href="/settings"
-          className="flex items-center gap-2 font-medium text-zinc-700 hover:underline dark:text-zinc-200"
+          className="focus-ring flex items-center gap-2 rounded-full font-medium text-fg"
         >
           <Avatar
             src={user.has_avatar ? userAvatarUrl(user.id) : null}
             name={user.display_name || user.username}
-            className="h-6 w-6 text-xs"
+            className="h-8 w-8 text-xs"
           />
-          {user.username}
+          <span className="hidden sm:inline">{user.username}</span>
         </Link>
         <button
           type="button"
           onClick={() => {
             void logout();
           }}
-          className="rounded-md border border-zinc-300 px-2.5 py-1 text-zinc-600 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          className="focus-ring hidden rounded-full border border-border px-3 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg sm:inline-flex"
         >
           Sign out
         </button>
@@ -56,7 +58,7 @@ export function AccountMenu() {
   return (
     <Link
       href="/login"
-      className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+      className="focus-ring rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
     >
       Sign in
     </Link>

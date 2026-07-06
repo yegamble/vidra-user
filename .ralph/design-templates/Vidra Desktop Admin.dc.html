@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<style>
+@keyframes vpulse{0%,100%{opacity:1}50%{opacity:.4}}
+:root{--bg:#ffffff;--sur:#ffffff;--sm:#f4f4f5;--sm2:#e9e9eb;--fg:#18181b;--fgm:#71717a;--fgs:#a1a1aa;--bd:#d4d4d8;--bds:#e8e8ea;--acc:#18181b;--afg:#ffffff;--dng:#dc2626;--ok:#16a34a;--wrn:#d97706}
+[data-vtheme="dark"]{--bg:#0a0a0a;--sur:#18181b;--sm:#1f1f23;--sm2:#2b2b30;--fg:#f4f4f5;--fgm:#a1a1aa;--fgs:#71717a;--bd:#3f3f46;--bds:#26262a;--acc:#f4f4f5;--afg:#18181b;--dng:#ef4444;--ok:#22c55e;--wrn:#f59e0b}
+</style>
+</helmet>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ winW }}" height="{{ winH }}" url="vidra.example/admin" hint-size="1360px,860px">
+<div data-vtheme="{{ theme }}" style="height:100%;display:flex;background:var(--bg);color:var(--fg);font-family:-apple-system,'SF Pro Text',system-ui,sans-serif">
+
+  <!-- sidebar -->
+  <div style="flex:none;width:230px;border-right:1px solid var(--bds);display:flex;flex-direction:column;padding:18px 10px">
+    <div style="padding:0 12px 16px;display:flex;align-items:baseline;gap:8px">
+      <span style="font-size:19px;font-weight:700;letter-spacing:-0.04em">Vidra</span>
+      <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;color:var(--fgm);text-transform:uppercase">Admin</span>
+    </div>
+    <sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+      <div onClick="{{ n.go }}" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:9px;background:{{ n.bg }};color:{{ n.co }};font-size:13.5px;font-weight:600;cursor:pointer;position:relative">
+        <span dangerouslySetInnerHTML="{{ n.icon }}" style="display:flex"></span>{{ n.label }}
+        <sc-if value="{{ n.badge }}" hint-placeholder-val="{{ false }}">
+          <span style="margin-left:auto;min-width:18px;height:18px;border-radius:99px;background:var(--dng);color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px">{{ n.badge }}</span>
+        </sc-if>
+      </div>
+    </sc-for>
+    <div style="margin-top:auto;padding:12px;display:flex;align-items:center;gap:10px;border-top:1px solid var(--bds)">
+      <div style="width:30px;height:30px;border-radius:99px;background:var(--acc);color:var(--afg);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">M</div>
+      <div>
+        <div style="font-size:12.5px;font-weight:600">Mira Chen</div>
+        <div style="font-size:11px;color:var(--fgm)">Administrator</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OVERVIEW ============ -->
+  <sc-if value="{{ sOverview }}" hint-placeholder-val="{{ true }}">
+  <div style="flex:1;overflow:auto;padding:26px 32px 48px">
+    <div style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Overview</div>
+    <div style="margin-top:3px;font-size:13px;color:var(--fgm)">vidra.example · v1.4.2 · up 21 days</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:20px;max-width:1100px">
+      <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+        <div style="background:var(--sm);border-radius:14px;padding:16px 18px">
+          <div style="font-size:24px;font-weight:700;letter-spacing:-0.03em;font-variant-numeric:tabular-nums">{{ s.value }}</div>
+          <div style="margin-top:3px;font-size:12.5px;color:var(--fgm)">{{ s.label }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:26px;max-width:1100px">
+      <div>
+        <div style="font-size:15px;font-weight:700;padding-bottom:10px">Health</div>
+        <div style="background:var(--sm);border-radius:14px;overflow:hidden">
+          <sc-for list="{{ health }}" as="h" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:{{ h.divider }}">
+              <span style="width:8px;height:8px;border-radius:99px;background:{{ h.dot }};flex:none"></span>
+              <span style="font-size:13.5px;font-weight:500">{{ h.name }}</span>
+              <span style="margin-left:auto;font-size:12.5px;color:{{ h.co }}">{{ h.status }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:15px;font-weight:700;padding:20px 0 10px">Job queues</div>
+        <div style="background:var(--sm);border-radius:14px;overflow:hidden">
+          <sc-for list="{{ queues }}" as="q" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;padding:12px 16px;border-top:{{ q.divider }}">
+              <span style="font-size:13.5px;font-weight:500">{{ q.name }}</span>
+              <span style="margin-left:auto;font-size:12.5px;color:var(--fgm);font-variant-numeric:tabular-nums">{{ q.meta }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:15px;font-weight:700;padding-bottom:10px">Recent audit log</div>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ audit }}" as="a" hint-placeholder-count="5">
+            <div style="display:flex;gap:14px;padding:11px 2px;border-bottom:1px solid var(--bds)">
+              <span style="flex:none;font-size:11px;font-weight:700;font-family:ui-monospace,'SF Mono',monospace;color:var(--fgs);padding-top:2px">{{ a.time }}</span>
+              <div style="min-width:0">
+                <div style="font-size:13px;line-height:1.45"><span style="font-weight:600">{{ a.actor }}</span> {{ a.action }}</div>
+                <div style="font-size:11px;color:var(--fgs);font-family:ui-monospace,'SF Mono',monospace;margin-top:2px">{{ a.code }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ USERS ============ -->
+  <sc-if value="{{ sUsers }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;overflow:auto;padding:26px 32px 48px">
+    <div style="display:flex;align-items:center;max-width:1100px">
+      <div>
+        <div style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Users</div>
+        <div style="margin-top:3px;font-size:13px;color:var(--fgm)">2,847 accounts · 12 staff · 31 deactivated</div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px;background:var(--sm);border-radius:99px;padding:9px 16px;width:300px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fgs)" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4-4"></path></svg>
+        <span style="font-size:13px;color:var(--fgs)">Search username or email</span>
+      </div>
+    </div>
+    <div style="margin-top:20px;max-width:1100px">
+      <div style="display:grid;grid-template-columns:1.4fr 1fr 110px 130px 120px 90px;gap:12px;padding:0 14px 10px;font-size:11.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--fgs);border-bottom:1px solid var(--bds)">
+        <span>User</span><span>Email</span><span>Role</span><span>Storage</span><span>Joined</span><span>Status</span>
+      </div>
+      <sc-for list="{{ users }}" as="u" hint-placeholder-count="5">
+        <div onClick="{{ u.open }}" style="display:grid;grid-template-columns:1.4fr 1fr 110px 130px 120px 90px;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--bds);cursor:pointer;opacity:{{ u.opacity }}">
+          <div style="display:flex;align-items:center;gap:11px;min-width:0">
+            <div style="flex:none;width:32px;height:32px;border-radius:99px;background:{{ u.tint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:12.5px;font-weight:600">{{ u.initial }}</div>
+            <div style="min-width:0">
+              <div style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.name }}</div>
+              <div style="font-size:11.5px;color:var(--fgm)">@{{ u.handle }}</div>
+            </div>
+          </div>
+          <span style="font-size:12.5px;color:var(--fgm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.email }}</span>
+          <span><span style="font-size:10px;font-weight:700;letter-spacing:0.05em;padding:3px 9px;border-radius:99px;background:{{ u.roleBg }};color:{{ u.roleCo }}">{{ u.roleLabel }}</span></span>
+          <span style="font-size:12.5px;color:var(--fgm);font-variant-numeric:tabular-nums">{{ u.storage }}</span>
+          <span style="font-size:12.5px;color:var(--fgm)">{{ u.joined }}</span>
+          <span style="font-size:12px;font-weight:600;color:{{ u.statusCo }}">{{ u.status }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ USER DETAIL ============ -->
+  <sc-if value="{{ sUserDetail }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;overflow:auto;padding:26px 32px 48px">
+    <button onClick="{{ backToUsers }}" style="display:flex;align-items:center;gap:7px;background:none;border:none;color:var(--fgm);font-size:13px;font-weight:600;cursor:pointer;padding:0">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"></path></svg>All users</button>
+    <div style="display:flex;align-items:center;gap:16px;margin-top:18px;max-width:1000px">
+      <div style="width:64px;height:64px;border-radius:99px;background:oklch(0.45 0.04 160);display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;font-weight:600">N</div>
+      <div>
+        <div style="font-size:20px;font-weight:700;letter-spacing:-0.025em">North Loop</div>
+        <div style="font-size:13px;color:var(--fgm)">@northloop · noel@example.net <span style="color:var(--ok)">· verified</span> · joined Mar 2025 · last active today</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:9px">
+        <button style="border:1px solid var(--bd);background:none;color:var(--fg);border-radius:99px;padding:9px 17px;font-size:13px;font-weight:600;cursor:pointer">Deactivate</button>
+        <button style="border:1px solid color-mix(in oklab, var(--dng) 45%, transparent);background:none;color:var(--dng);border-radius:99px;padding:9px 17px;font-size:13px;font-weight:600;cursor:pointer">Delete account</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:24px;max-width:1000px">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="background:var(--sm);border-radius:14px;padding:16px 18px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:13.5px;font-weight:600">Role</span>
+            <div style="display:flex;background:var(--sm2);border-radius:9px;padding:2px">
+              <span style="padding:6px 14px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--fgm);cursor:pointer">User</span>
+              <span style="padding:6px 14px;border-radius:7px;font-size:12.5px;font-weight:600;background:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,0.12)">Moderator</span>
+              <span style="padding:6px 14px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--fgm);cursor:pointer">Admin</span>
+            </div>
+          </div>
+        </div>
+        <div style="background:var(--sm);border-radius:14px;padding:16px 18px">
+          <div style="display:flex;justify-content:space-between;font-size:13px">
+            <span style="font-weight:600">Storage quota</span><span style="color:var(--fgm)">11.7 GB of 50 GB <span style="color:var(--fgs)">· override</span></span>
+          </div>
+          <div style="margin-top:10px;height:5px;border-radius:99px;background:var(--sm2)"><div style="width:23%;height:100%;border-radius:99px;background:var(--fg)"></div></div>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button style="flex:1;border:1px solid var(--bd);background:none;color:var(--fg);border-radius:9px;padding:8px 0;font-size:12.5px;font-weight:600;cursor:pointer">Change quota</button>
+            <button style="flex:1;border:1px solid var(--bd);background:none;color:var(--fg);border-radius:9px;padding:8px 0;font-size:12.5px;font-weight:600;cursor:pointer">Reset to instance default</button>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:var(--fgs);line-height:1.5;padding:0 4px">Deletion is permanent and audited. Admins cannot delete their own account.</div>
+      </div>
+      <div style="background:var(--sm);border-radius:14px;overflow:hidden;align-self:start">
+        <sc-for list="{{ userFacts }}" as="f" hint-placeholder-count="5">
+          <div style="display:flex;justify-content:space-between;padding:13px 18px;font-size:13.5px;border-top:{{ f.divider }}">
+            <span style="color:var(--fgm)">{{ f.k }}</span><span style="font-weight:600">{{ f.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ QUEUES ============ -->
+  <sc-if value="{{ sQueues }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;overflow:auto;padding:26px 32px 48px">
+    <div style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Moderation queues</div>
+    <div style="margin-top:16px;display:flex;background:var(--sm);border-radius:10px;padding:3px;width:420px">
+      <sc-for list="{{ queueTabs }}" as="t" hint-placeholder-count="3">
+        <button onClick="{{ t.pick }}" style="flex:1;padding:8px 0;border:none;border-radius:8px;background:{{ t.bg }};color:var(--fg);font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:{{ t.sh }}">{{ t.label }} <span style="color:var(--fgm)">{{ t.count }}</span></button>
+      </sc-for>
+    </div>
+    <sc-if value="{{ qReports }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:18px;max-width:860px">
+        <sc-for list="{{ reports }}" as="r" hint-placeholder-count="4">
+          <div style="background:var(--sm);border-radius:16px;padding:16px 18px;display:flex;gap:18px;align-items:flex-start">
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:10px;font-weight:700;letter-spacing:0.05em;padding:2.5px 8px;border-radius:99px;background:var(--sm2);color:var(--fgm)">{{ r.kind }}</span>
+                <span style="font-size:12px;color:var(--fgs)">{{ r.age }}</span>
+                <sc-if value="{{ r.remote }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:var(--fgm)">· remote · {{ r.remote }}</span></sc-if>
+              </div>
+              <div style="margin-top:8px;font-size:14px;font-weight:600;line-height:1.35">{{ r.target }}</div>
+              <div style="margin-top:4px;font-size:12.5px;color:var(--fgm)">"{{ r.reason }}" — reported by {{ r.by }}</div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none">
+              <button style="background:var(--acc);color:var(--afg);border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer">Review</button>
+              <button style="border:1px solid var(--bd);background:none;color:var(--fg);border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer">Dismiss</button>
+              <button style="border:1px solid color-mix(in oklab, var(--dng) 45%, transparent);background:none;color:var(--dng);border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer">Remove</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ qQuarantine }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:18px;max-width:860px">
+        <sc-for list="{{ quarantine }}" as="q" hint-placeholder-count="2">
+          <div style="background:var(--sm);border-radius:16px;padding:16px 18px;display:flex;gap:16px;align-items:center">
+            <div style="flex:none;width:132px;aspect-ratio:16/9;border-radius:10px;background:{{ q.tint }}"></div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:14px;font-weight:600">{{ q.title }}</div>
+              <div style="margin-top:3px;font-size:12.5px;color:var(--fgm)">{{ q.ch }} · {{ q.age }}</div>
+              <div style="margin-top:6px;font-size:12px;color:{{ q.scanCo }};display:flex;align-items:center;gap:6px">
+                <span style="width:6px;height:6px;border-radius:99px;background:{{ q.scanCo }}"></span>{{ q.scan }}</div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none">
+              <button style="background:var(--acc);color:var(--afg);border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer">Approve & publish</button>
+              <button style="border:1px solid color-mix(in oklab, var(--dng) 45%, transparent);background:none;color:var(--dng);border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer">Reject</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ qRegs }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:18px;max-width:860px">
+        <sc-for list="{{ regs }}" as="r" hint-placeholder-count="3">
+          <div style="background:var(--sm);border-radius:16px;padding:16px 18px;display:flex;gap:18px;align-items:center">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:14px;font-weight:600">@{{ r.name }} <span style="font-weight:400;color:var(--fgm)">· {{ r.email }}</span></div>
+              <div style="margin-top:4px;font-size:12.5px;color:var(--fgm)">"{{ r.note }}"</div>
+              <div style="margin-top:3px;font-size:11.5px;color:var(--fgs)">Requested {{ r.age }}</div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none">
+              <button style="background:var(--acc);color:var(--afg);border:none;border-radius:9px;padding:9px 18px;font-size:12.5px;font-weight:600;cursor:pointer">Approve</button>
+              <button style="border:1px solid var(--bd);background:none;color:var(--fg);border-radius:9px;padding:9px 18px;font-size:12.5px;font-weight:600;cursor:pointer">Deny</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ============ CONTENT ============ -->
+  <sc-if value="{{ sContent }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;overflow:auto;padding:26px 32px 48px">
+    <div style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Content</div>
+    <div style="margin-top:16px;display:flex;background:var(--sm);border-radius:10px;padding:3px;width:280px">
+      <button onClick="{{ contentVids }}" style="flex:1;padding:8px 0;border:none;border-radius:8px;background:{{ contentVBg }};color:var(--fg);font-size:13px;font-weight:600;cursor:pointer;box-shadow:{{ contentVSh }}">Videos</button>
+      <button onClick="{{ contentComs }}" style="flex:1;padding:8px 0;border:none;border-radius:8px;background:{{ contentCBg }};color:var(--fg);font-size:13px;font-weight:600;cursor:pointer;box-shadow:{{ contentCSh }}">Comments</button>
+    </div>
+    <sc-if value="{{ contentIsVids }}" hint-placeholder-val="{{ true }}">
+      <div style="margin-top:14px;max-width:1000px">
+        <sc-for list="{{ adminVids }}" as="v" hint-placeholder-count="4">
+          <div style="display:flex;gap:14px;padding:12px 4px;align-items:center;border-bottom:1px solid var(--bds)">
+            <div style="flex:none;width:120px;aspect-ratio:16/9;border-radius:9px;background:{{ v.tint }};position:relative">
+              <sc-if value="{{ v.blocked }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;inset:0;border-radius:9px;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M5.5 5.5l13 13"></path></svg>
+                </div>
+              </sc-if>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:14px;font-weight:600">{{ v.title }}</div>
+              <div style="margin-top:3px;font-size:12.5px;color:var(--fgm)">{{ v.ch }} · {{ v.meta }}</div>
+            </div>
+            <button style="flex:none;border:1px solid var(--bd);background:none;color:{{ v.btnCo }};border-radius:99px;padding:8px 16px;font-size:12.5px;font-weight:600;cursor:pointer">{{ v.btn }}</button>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ contentIsComs }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:14px;max-width:860px">
+        <sc-for list="{{ adminComments }}" as="c" hint-placeholder-count="3">
+          <div style="padding:14px 4px;border-bottom:1px solid var(--bds)">
+            <div style="font-size:12.5px;color:var(--fgm)"><span style="font-weight:600;color:var(--fg)">{{ c.who }}</span> on "{{ c.on }}" · {{ c.age }}</div>
+            <div style="margin-top:5px;font-size:14px;line-height:1.5">{{ c.text }}</div>
+            <div style="margin-top:9px;display:flex;gap:16px;font-size:12px;font-weight:600">
+              <span style="color:var(--fgm);cursor:pointer">View thread</span>
+              <span style="color:var(--dng);cursor:pointer">Delete</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ============ INSTANCE ============ -->
+  <sc-if value="{{ sInstance }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;overflow:auto;padding:26px 32px 48px">
+    <div style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Instance settings</div>
+    <div style="margin-top:3px;font-size:13px;color:var(--fgm)">Changes apply live — no restart needed. Boot-time secrets stay in config.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:22px;max-width:1080px">
+      <div style="display:flex;flex-direction:column;gap:22px">
+        <div>
+          <div style="font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--fgs);padding:0 2px 8px">About</div>
+          <div style="background:var(--sm);border-radius:14px;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 18px;font-size:13.5px"><span style="font-weight:500">Instance name</span><span style="color:var(--fgm)">Vidra Example</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 18px;font-size:13.5px;border-top:1px solid var(--bds)"><span style="font-weight:500">Contact email</span><span style="color:var(--fgm)">admin@vidra.example</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 18px;font-size:13.5px;border-top:1px solid var(--bds)"><span style="font-weight:500">Terms & privacy URLs</span><span style="color:var(--fgm)">Set</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 18px;font-size:13.5px;border-top:1px solid var(--bds)"><span style="font-weight:500">Default storage quota</span><span style="color:var(--fgm)">20 GB per user</span></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--fgs);padding:0 2px 8px">Registration</div>
+          <div style="background:var(--sm);border-radius:14px;overflow:hidden">
+            <sc-for list="{{ regToggles }}" as="t" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-top:{{ t.divider }}">
+                <div><div style="font-size:13.5px;font-weight:500">{{ t.label }}</div><div style="font-size:12px;color:var(--fgm);margin-top:1px">{{ t.sub }}</div></div>
+                <div onClick="{{ t.flip }}" style="width:46px;height:28px;border-radius:99px;background:{{ t.bg }};position:relative;flex:none;cursor:pointer;transition:background 0.15s">
+                  <div style="position:absolute;top:2px;left:{{ t.knobLeft }};width:24px;height:24px;border-radius:99px;background:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:left 0.15s"></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--fgs);padding:0 2px 8px">Operations</div>
+          <div style="background:var(--sm);border-radius:14px;overflow:hidden">
+            <sc-for list="{{ opsRows }}" as="r" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 18px;border-top:{{ r.divider }};cursor:pointer">
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:13.5px;font-weight:500">{{ r.label }}</div>
+                  <div style="margin-top:1px;font-size:12px;color:{{ r.subCo }}">{{ r.sub }}</div>
+                </div>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fgs)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="m9 5 7 7-7 7"></path></svg>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--fgs);padding:0 2px 8px">Features</div>
+        <div style="background:var(--sm);border-radius:14px;overflow:hidden">
+          <sc-for list="{{ featToggles }}" as="t" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-top:{{ t.divider }}">
+              <div><div style="font-size:13.5px;font-weight:500">{{ t.label }}</div><div style="font-size:12px;color:var(--fgm);margin-top:1px">{{ t.sub }}</div></div>
+              <div onClick="{{ t.flip }}" style="width:46px;height:28px;border-radius:99px;background:{{ t.bg }};position:relative;flex:none;cursor:pointer;transition:background 0.15s">
+                <div style="position:absolute;top:2px;left:{{ t.knobLeft }};width:24px;height:24px;border-radius:99px;background:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:left 0.15s"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:8px;font-size:11.5px;color:var(--fgs);line-height:1.5;padding:0 4px">Turning a feature off returns "feature disabled" from its endpoints immediately.</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1400, &quot;height&quot;: 900}, &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;default&quot;: &quot;light&quot;, &quot;tsType&quot;: &quot;'light' | 'dark'&quot;}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'overview', queueTab: 'reports', contentTab: 'vids',
+    toggles: { reg: true, approval: true, uploads: true, imports: true, live: true, comments: true, ipfs: true, quarantine: true },
+  };
+
+  go(p) { this.setState(p); }
+
+  renderVals() {
+    const S = this.state;
+    const theme = this.props.theme ?? 'light';
+    const div = arr => arr.map((x, i) => ({ ...x, divider: i === 0 ? 'none' : '1px solid var(--bds)' }));
+
+    const tints = [
+      'linear-gradient(140deg,oklch(0.38 0.03 250),oklch(0.2 0.02 270))',
+      'linear-gradient(140deg,oklch(0.42 0.02 150),oklch(0.24 0.02 200))',
+      'linear-gradient(140deg,oklch(0.35 0.015 60),oklch(0.2 0.015 40))',
+      'linear-gradient(140deg,oklch(0.3 0.02 320),oklch(0.18 0.02 340))',
+    ];
+
+    const stats = [
+      { value:'2,847', label:'Users' }, { value:'12,304', label:'Published videos' },
+      { value:'1.9 TB', label:'Media stored' }, { value:'46', label:'Federated peers' },
+    ];
+
+    const health = div([
+      { name:'PostgreSQL', status:'Healthy · 4 ms', dot:'var(--ok)', co:'var(--fgm)' },
+      { name:'Redis', status:'Healthy · 1 ms', dot:'var(--ok)', co:'var(--fgm)' },
+      { name:'Object storage (S3)', status:'Healthy', dot:'var(--ok)', co:'var(--fgm)' },
+      { name:'IPFS gateway', status:'Degraded · high latency', dot:'var(--wrn)', co:'var(--wrn)' },
+      { name:'RTMP ingest', status:'Healthy · 2 live', dot:'var(--ok)', co:'var(--fgm)' },
+    ]);
+    const queues = div([
+      { name:'Transcode', meta:'3 pending · oldest 2 m' },
+      { name:'Federation delivery', meta:'0 pending' },
+      { name:'Captions (Whisper)', meta:'1 running' },
+      { name:'Bluesky posts', meta:'0 pending · 1 dead-letter' },
+      { name:'Imports', meta:'2 running' },
+    ]);
+    const audit = [
+      { time:'09:41', actor:'mira (admin)', action:'approved registration for @printroom', code:'admin.registration.approve' },
+      { time:'09:12', actor:'noel (mod)', action:'removed a reported comment on "Winter light tests"', code:'moderation.comment.remove' },
+      { time:'08:56', actor:'system', action:'media GC dry run — 14 orphaned objects found', code:'admin.media.gc' },
+      { time:'08:30', actor:'mira (admin)', action:'set storage quota override for @northloop (50 GB)', code:'admin.user.quota' },
+      { time:'07:58', actor:'system', action:'replay published for stream "Late-night grading"', code:'content.live.replay' },
+      { time:'07:21', actor:'mira (admin)', action:'enabled IPFS playback for the instance', code:'admin.settings.update' },
+    ];
+
+    const roleStyle = { ADMIN:{ bg:'var(--fg)', co:'var(--bg)' }, MOD:{ bg:'var(--sm2)', co:'var(--fgm)' }, USER:{ bg:'transparent', co:'var(--fgs)' } };
+    const users = [
+      { name:'Mira Chen', handle:'mira', initial:'M', tint:'oklch(0.4 0.05 260)', role:'ADMIN', email:'mira@example.com', storage:'4.2 GB', joined:'Jan 2025', status:'Active', statusCo:'var(--ok)' },
+      { name:'North Loop', handle:'northloop', initial:'N', tint:'oklch(0.45 0.04 160)', role:'MOD', email:'noel@example.net', storage:'11.7 GB', joined:'Mar 2025', status:'Active', statusCo:'var(--ok)' },
+      { name:'Grade House', handle:'gradehouse', initial:'G', tint:'oklch(0.45 0.04 300)', role:'USER', email:'studio@gradehouse.tv', storage:'96 GB', joined:'Feb 2025', status:'Active', statusCo:'var(--ok)' },
+      { name:'Field Notes', handle:'fieldnotes', initial:'F', tint:'oklch(0.4 0.04 40)', role:'USER', email:'ed@fieldnotes.blog', storage:'8.1 GB', joined:'May 2025', status:'Active', statusCo:'var(--ok)' },
+      { name:'spam_account_291', handle:'spam_account_291', initial:'S', tint:'var(--fgs)', role:'USER', email:'x91@tempmail.cc', storage:'0 B', joined:'Jun 2026', status:'Deactivated', statusCo:'var(--fgs)', deactivated:true },
+    ].map(u => ({ ...u,
+      opacity: u.deactivated ? 0.55 : 1,
+      roleLabel: u.role, roleBg: roleStyle[u.role].bg, roleCo: roleStyle[u.role].co,
+      open: () => this.go({ screen:'userDetail' }),
+    }));
+
+    const userFacts = div([
+      { k:'Videos', v:'34 published · 1 quarantined' },
+      { k:'Channels', v:'2' },
+      { k:'Live streams', v:'1 permanent' },
+      { k:'Reports against', v:'0' },
+      { k:'Donation addresses', v:'2 · 1 verified' },
+      { k:'Two-factor auth', v:'Enabled' },
+      { k:'Sessions', v:'3 active' },
+    ]);
+
+    const queueTabs = [
+      { k:'reports', label:'Reports', count:'4' },
+      { k:'quarantine', label:'Quarantine', count:'2' },
+      { k:'regs', label:'Sign-ups', count:'3' },
+    ].map(t => ({ ...t,
+      pick: () => this.go({ queueTab:t.k }),
+      bg: S.queueTab === t.k ? 'var(--bg)' : 'transparent',
+      sh: S.queueTab === t.k ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+    }));
+
+    const reports = [
+      { kind:'VIDEO', age:'25 min ago', target:'"Get rich with this one trick" — @spamlord', reason:'Scam / misleading', by:'@lena_k', remote:false },
+      { kind:'COMMENT', age:'2 h ago', target:'On "The quiet web: why federation matters"', reason:'Harassment', by:'@arno', remote:false },
+      { kind:'DM', age:'6 h ago', target:'Message snapshot from @coldcaller', reason:'Unsolicited promotion', by:'@mira', remote:false },
+      { kind:'VIDEO', age:'1 day ago', target:'"Free movies stream HD" — @mirrorbot', reason:'Copyright', by:'@printroom', remote:'tube.other.net' },
+    ];
+    const quarantine = [
+      { title:'Studio tour raw cut', ch:'@northloop', age:'40 min ago', tint:tints[3], scan:'ClamAV: clean · held (new-upload policy)', scanCo:'var(--ok)' },
+      { title:'promo_final_FINAL.mp4', ch:'@freestuff44', age:'3 h ago', tint:tints[2], scan:'ClamAV: scan error — fail-closed', scanCo:'var(--wrn)' },
+    ];
+    const regs = [
+      { name:'printroom', email:'ella@risograph.studio', note:'I publish printmaking process videos, moving from YouTube.', age:'1 h ago' },
+      { name:'slowcinema', email:'jb@slowcinema.org', note:'Archive of public-domain restorations.', age:'5 h ago' },
+      { name:'dronezzz', email:'mk9@tempmail.cc', note:'—', age:'2 days ago' },
+    ];
+    const adminVids = [
+      { title:'Get rich with this one trick', ch:'@spamlord', meta:'Reported ×3', tint:tints[2], blocked:false, btn:'Block', btnCo:'var(--dng)' },
+      { title:'Free movies stream HD', ch:'tube.other.net', meta:'Remote · blocked Jun 20', tint:tints[3], blocked:true, btn:'Unblock', btnCo:'var(--fg)' },
+      { title:'Shooting the Alps on medium format', ch:'@auroralab', meta:'128K views · Public', tint:tints[0], blocked:false, btn:'Actions', btnCo:'var(--fg)' },
+      { title:'Winter light tests (HLS 4K)', ch:'@northloop', meta:'Processing', tint:tints[1], blocked:false, btn:'Actions', btnCo:'var(--fg)' },
+    ];
+    const adminComments = [
+      { who:'coldcaller', on:'Monochrome grading — the luxury look', age:'2 h', text:'Check my channel for the REAL secret, link in bio…' },
+      { who:'arno', on:'The quiet web', age:'1 d', text:'Would love a breakdown of the instance block policy.' },
+      { who:'[deleted]', on:'Winter light tests', age:'2 d', text:'[deleted]' },
+    ];
+
+    const T = (key, label, sub) => {
+      const on = S.toggles[key];
+      return { label, sub, bg: on ? 'var(--fg)' : 'var(--sm2)', knobLeft: on ? '20px' : '2px',
+        flip: () => this.go({ toggles: { ...S.toggles, [key]: !on } }) };
+    };
+    const regToggles = div([
+      T('reg', 'Open registration', 'New accounts can sign up'),
+      T('approval', 'Require approval', 'A moderator reviews each sign-up'),
+    ]);
+    const featToggles = div([
+      T('uploads', 'Uploads', 'Direct and resumable uploads'),
+      T('imports', 'URL imports', 'Async fetch with SSRF guard'),
+      T('live', 'Live streaming', 'RTMP ingest + live HLS'),
+      T('comments', 'Comments', 'On all published videos'),
+      T('ipfs', 'IPFS playback', 'Viewers can fetch pinned videos from the IPFS network'),
+      T('quarantine', 'Quarantine new uploads', 'Hold first-time uploads for review'),
+    ]);
+    const opsRows = div([
+      { label:'Jobs', sub:'3 pending · 1 dead-letter', subCo:'var(--wrn)' },
+      { label:'System status', sub:'v1.4.2 · rate limit 120/min', subCo:'var(--fgm)' },
+      { label:'Federation', sub:'46 peers · 3 blocked instances', subCo:'var(--fgm)' },
+      { label:'Watched words', sub:'12 patterns · 5 matches this week', subCo:'var(--fgm)' },
+      { label:'PeerTube import', sub:'Last run Jun 2 · 4,120 videos migrated', subCo:'var(--fgm)' },
+      { label:'Media garbage collection', sub:'Dry run found 14 orphaned objects', subCo:'var(--fgm)' },
+    ]);
+
+    const icons = {
+      overview: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg>',
+      users: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 3-5.5 6.5-5.5s6.5 1.9 6.5 5.5"/><path d="M16 5a3.5 3.5 0 0 1 0 6.5M18.5 14.5c2 .8 3 2.4 3 4.5"/></svg>',
+      queues: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>',
+      content: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg>',
+      instance: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>',
+    };
+    const nav = [
+      { k:'overview', label:'Overview', icon:icons.overview, badge:false },
+      { k:'users', label:'Users', icon:icons.users, badge:false },
+      { k:'queues', label:'Queues', icon:icons.queues, badge:'9' },
+      { k:'content', label:'Content', icon:icons.content, badge:false },
+      { k:'instance', label:'Instance', icon:icons.instance, badge:false },
+    ].map(n => {
+      const on = S.screen === n.k || (n.k === 'users' && S.screen === 'userDetail');
+      return { label:n.label, badge:n.badge, icon:{ __html:n.icon },
+        bg: on ? 'var(--sm)' : 'transparent', co: on ? 'var(--fg)' : 'var(--fgm)',
+        go: () => this.go({ screen:n.k }) };
+    });
+
+    return {
+      theme, isDark: theme === 'dark',
+      winW: this.props.width ?? 1360, winH: this.props.height ?? 860,
+      nav, stats, health, queues, audit, users, userFacts, queueTabs, reports, quarantine, regs,
+      adminVids, adminComments, regToggles, featToggles, opsRows,
+      sOverview: S.screen === 'overview', sUsers: S.screen === 'users', sUserDetail: S.screen === 'userDetail',
+      sQueues: S.screen === 'queues', sContent: S.screen === 'content', sInstance: S.screen === 'instance',
+      backToUsers: () => this.go({ screen:'users' }),
+      qReports: S.queueTab === 'reports', qQuarantine: S.queueTab === 'quarantine', qRegs: S.queueTab === 'regs',
+      contentIsVids: S.contentTab === 'vids', contentIsComs: S.contentTab === 'coms',
+      contentVids: () => this.go({ contentTab:'vids' }), contentComs: () => this.go({ contentTab:'coms' }),
+      contentVBg: S.contentTab === 'vids' ? 'var(--bg)' : 'transparent',
+      contentCBg: S.contentTab === 'coms' ? 'var(--bg)' : 'transparent',
+      contentVSh: S.contentTab === 'vids' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+      contentCSh: S.contentTab === 'coms' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+    };
+  }
+}
+</script>
+</body>
+</html>

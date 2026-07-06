@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<style>
+@keyframes vpulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes vspin{to{transform:rotate(360deg)}}
+:root{--bg:#ffffff;--sur:#ffffff;--sm:#f4f4f5;--sm2:#e9e9eb;--fg:#18181b;--fgm:#71717a;--fgs:#a1a1aa;--bd:#d4d4d8;--bds:#e8e8ea;--acc:#18181b;--afg:#ffffff;--dng:#dc2626;--ok:#16a34a;--wrn:#d97706}
+[data-vtheme="dark"]{--bg:#0a0a0a;--sur:#18181b;--sm:#1f1f23;--sm2:#2b2b30;--fg:#f4f4f5;--fgm:#a1a1aa;--fgs:#71717a;--bd:#3f3f46;--bds:#26262a;--acc:#f4f4f5;--afg:#18181b;--dng:#ef4444;--ok:#22c55e;--wrn:#f59e0b}
+</style>
+</helmet>
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ isDark }}" hint-size="402px,874px">
+<div data-vtheme="{{ theme }}" style="height:100%;display:flex;flex-direction:column;background:var(--bg);color:var(--fg);position:relative;font-family:-apple-system,'SF Pro Text',system-ui,sans-serif">
+
+<!-- ================= HOME ================= -->
+<sc-if value="{{ sHome }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;overflow:auto;padding-top:58px">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px 4px">
+    <div style="font-size:26px;font-weight:700;letter-spacing:-0.045em">Vidra</div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <button aria-label="Notifications" onClick="{{ goInbox }}" style="position:relative;background:none;border:none;color:var(--fg);padding:4px;cursor:pointer;display:flex">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg>
+        <span style="position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:99px;background:var(--dng);border:1.5px solid var(--bg)"></span>
+      </button>
+      <button aria-label="Your account" onClick="{{ goSettings }}" style="width:30px;height:30px;border-radius:99px;background:var(--acc);color:var(--afg);border:none;font-size:13px;font-weight:600;cursor:pointer">M</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;padding:12px 20px 4px">
+    <sc-for list="{{ sorts }}" as="s" hint-placeholder-count="3">
+      <button onClick="{{ s.pick }}" style="padding:7px 14px;border-radius:99px;border:1px solid {{ s.bd }};background:{{ s.bg }};color:{{ s.co }};font-size:13px;font-weight:600;cursor:pointer">{{ s.label }}</button>
+    </sc-for>
+  </div>
+  <div style="padding:18px 0 2px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 20px 10px">
+      <span style="font-size:15px;font-weight:700;letter-spacing:-0.01em">Live now</span>
+      <span style="font-size:13px;color:var(--fgm)">2 streams</span>
+    </div>
+    <div style="display:flex;gap:12px;overflow-x:auto;padding:0 20px 4px">
+      <sc-for list="{{ liveStreams }}" as="l" hint-placeholder-count="2">
+        <div onClick="{{ l.open }}" style="flex:none;width:240px;cursor:pointer">
+          <div style="height:135px;border-radius:14px;background:{{ l.tint }};position:relative;overflow:hidden">
+            <span style="position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:5px;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);border-radius:99px;padding:4px 10px 4px 8px;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.04em"><span style="width:6px;height:6px;border-radius:99px;background:#ff453a;animation:vpulse 1.6s infinite"></span>LIVE</span>
+            <span style="position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,0.55);border-radius:6px;padding:2px 7px;color:#fff;font-size:11px;font-weight:600">{{ l.viewers }} watching</span>
+          </div>
+          <div style="padding:8px 2px 0;font-size:14px;font-weight:600;line-height:1.3">{{ l.title }}</div>
+          <div style="padding:2px 2px 0;font-size:12.5px;color:var(--fgm)">{{ l.ch }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:24px;padding:16px 0 110px">
+    <sc-for list="{{ feed }}" as="v" hint-placeholder-count="4">
+      <div onClick="{{ v.open }}" style="cursor:pointer">
+        <div style="margin:0 20px;aspect-ratio:16/9;border-radius:16px;background:{{ v.tint }};position:relative;overflow:hidden">
+          <span style="position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,0.6);border-radius:6px;padding:2px 7px;color:#fff;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums">{{ v.dur }}</span>
+          <sc-if value="{{ v.ipfs }}" hint-placeholder-val="{{ false }}">
+            <span style="position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:5px;background:rgba(0,0,0,0.5);backdrop-filter:blur(6px);border-radius:99px;padding:3px 9px;color:rgba(255,255,255,0.9);font-size:10.5px;font-weight:600;letter-spacing:0.03em">
+              <svg width="10" height="11" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 1l5 3v6l-5 3-5-3V4z"></path><path d="M6 7l5-3M6 7L1 4M6 7v6"></path></svg>IPFS</span>
+          </sc-if>
+        </div>
+        <div style="display:flex;gap:12px;padding:10px 20px 0">
+          <div style="flex:none;width:36px;height:36px;border-radius:99px;background:{{ v.avatarTint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:600">{{ v.initial }}</div>
+          <div style="min-width:0">
+            <div style="font-size:15.5px;font-weight:600;line-height:1.35;letter-spacing:-0.01em">{{ v.title }}</div>
+            <div style="margin-top:3px;font-size:13px;color:var(--fgm)">{{ v.ch }} · {{ v.views }} views · {{ v.age }}</div>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= SEARCH ================= -->
+<sc-if value="{{ sSearch }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px">
+  <div style="padding:12px 20px 0">
+    <div style="display:flex;align-items:center;gap:10px;background:var(--sm);border-radius:12px;padding:10px 14px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--fgs)" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4-4"></path></svg>
+      <span style="font-size:16px;color:var(--fg)">medium format</span>
+      <span style="margin-left:auto;color:var(--fgs);display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></span>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;padding:12px 20px 2px;overflow-x:auto">
+    <span style="flex:none;padding:6px 12px;border-radius:99px;background:var(--acc);color:var(--afg);font-size:12.5px;font-weight:600">Tag · photography</span>
+    <span style="flex:none;padding:6px 12px;border-radius:99px;border:1px solid var(--bd);color:var(--fgm);font-size:12.5px;font-weight:600">Category</span>
+    <span style="flex:none;padding:6px 12px;border-radius:99px;border:1px solid var(--bd);color:var(--fgm);font-size:12.5px;font-weight:600">Language</span>
+    <span style="flex:none;padding:6px 12px;border-radius:99px;border:1px solid var(--bd);color:var(--fgm);font-size:12.5px;font-weight:600">This instance</span>
+  </div>
+  <div style="padding:6px 20px 110px;display:flex;flex-direction:column">
+    <sc-for list="{{ results }}" as="v" hint-placeholder-count="3">
+      <div onClick="{{ v.open }}" style="display:flex;gap:12px;padding:12px 0;cursor:pointer;border-bottom:1px solid var(--bds)">
+        <div style="flex:none;width:148px;aspect-ratio:16/9;border-radius:10px;background:{{ v.tint }};position:relative">
+          <span style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.6);border-radius:5px;padding:1px 6px;color:#fff;font-size:10.5px;font-weight:600">{{ v.dur }}</span>
+        </div>
+        <div style="min-width:0;padding-top:2px">
+          <div style="font-size:14px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ v.title }}</div>
+          <div style="margin-top:4px;font-size:12px;color:var(--fgm)">{{ v.ch }}</div>
+          <div style="font-size:12px;color:var(--fgm)">{{ v.views }} views · {{ v.age }}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= INBOX ================= -->
+<sc-if value="{{ sInbox }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px">
+  <div style="padding:10px 20px 4px;font-size:26px;font-weight:700;letter-spacing:-0.04em">Inbox</div>
+  <div style="margin:12px 20px 0;display:flex;background:var(--sm);border-radius:10px;padding:3px">
+    <button onClick="{{ inboxNotifs }}" style="flex:1;padding:7px 0;border:none;border-radius:8px;background:{{ inboxTabNBg }};color:var(--fg);font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:{{ inboxTabNSh }}">Notifications</button>
+    <button onClick="{{ inboxMsgs }}" style="flex:1;padding:7px 0;border:none;border-radius:8px;background:{{ inboxTabMBg }};color:var(--fg);font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:{{ inboxTabMSh }}">Messages</button>
+  </div>
+  <sc-if value="{{ inboxIsNotifs }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:8px 0 110px">
+      <sc-for list="{{ notifs }}" as="n" hint-placeholder-count="4">
+        <div style="display:flex;gap:14px;padding:14px 20px;align-items:flex-start;background:{{ n.bg }}">
+          <div style="flex:none;width:34px;height:34px;border-radius:99px;background:var(--sm);display:flex;align-items:center;justify-content:center;color:var(--fgm)"><span dangerouslySetInnerHTML="{{ n.icon }}"></span></div>
+          <div style="min-width:0">
+            <div style="font-size:14px;line-height:1.4"><span style="font-weight:600">{{ n.strong }}</span> {{ n.text }}</div>
+            <div style="margin-top:2px;font-size:12px;color:var(--fgm)">{{ n.age }}</div>
+          </div>
+          <sc-if value="{{ n.unread }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;margin-top:6px;flex:none;width:7px;height:7px;border-radius:99px;background:var(--fg)"></span></sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+  <sc-if value="{{ inboxIsMsgs }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:8px 0 110px">
+      <sc-for list="{{ convos }}" as="c" hint-placeholder-count="3">
+        <div onClick="{{ c.open }}" style="display:flex;gap:12px;padding:13px 20px;align-items:center;cursor:pointer">
+          <div style="flex:none;width:44px;height:44px;border-radius:99px;background:{{ c.tint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:600">{{ c.initial }}</div>
+          <div style="min-width:0;flex:1">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:14.5px;font-weight:600">{{ c.name }}</span>
+              <sc-if value="{{ c.encrypted }}" hint-placeholder-val="{{ false }}">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--fgm)" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+              </sc-if>
+              <span style="margin-left:auto;font-size:11.5px;color:var(--fgs)">{{ c.age }}</span>
+            </div>
+            <div style="margin-top:2px;font-size:13px;color:var(--fgm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.last }}</div>
+          </div>
+          <sc-if value="{{ c.unread }}" hint-placeholder-val="{{ false }}"><span style="flex:none;min-width:18px;height:18px;border-radius:99px;background:var(--fg);color:var(--bg);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px">{{ c.unread }}</span></sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+</div>
+</sc-if>
+
+<!-- ================= CONVERSATION ================= -->
+<sc-if value="{{ sConvo }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 16px 10px;border-bottom:1px solid var(--bds)">
+    <button aria-label="Back" onClick="{{ goBack }}" style="background:none;border:none;color:var(--fg);cursor:pointer;padding:6px;display:flex"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"></path></svg></button>
+    <div style="width:32px;height:32px;border-radius:99px;background:oklch(0.45 0.04 300);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600">G</div>
+    <div>
+      <div style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px">Grade House
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--fgm)" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+      </div>
+      <div style="font-size:11.5px;color:var(--ok)">End-to-end encrypted · disappearing 7d</div>
+    </div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:10px;padding:16px 20px">
+    <div style="align-self:center;font-size:11px;color:var(--fgs);background:var(--sm);border-radius:99px;padding:4px 12px">Messages in this conversation disappear after 7 days</div>
+    <div style="align-self:flex-start;max-width:78%;background:var(--sm);border-radius:18px 18px 18px 6px;padding:10px 14px;font-size:14.5px;line-height:1.4">Loved the Alps piece. Want to collab on a grading breakdown?</div>
+    <div style="align-self:flex-start;max-width:78%;display:flex;align-items:center;gap:8px;background:var(--sm);border-radius:18px;padding:10px 14px;font-size:13px;color:var(--fgm)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path></svg>
+      moodboard-v2.pdf · 4.1 MB
+    </div>
+    <div style="align-self:flex-end;max-width:78%;background:var(--acc);color:var(--afg);border-radius:18px 18px 6px 18px;padding:10px 14px;font-size:14.5px;line-height:1.4">Absolutely — sending the raw clips tonight.</div>
+    <div style="align-self:flex-end;font-size:11px;color:var(--fgs);margin-top:-4px">Read · 2:14 PM</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 16px 110px">
+    <button aria-label="Attach" style="flex:none;width:36px;height:36px;border-radius:99px;background:var(--sm);border:none;color:var(--fgm);cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
+    <div style="flex:1;background:var(--sm);border-radius:99px;padding:9px 16px;font-size:14.5px;color:var(--fgs)">Encrypted message…</div>
+    <button aria-label="Send" style="flex:none;width:36px;height:36px;border-radius:99px;background:var(--acc);border:none;color:var(--afg);cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= LIBRARY ================= -->
+<sc-if value="{{ sLibrary }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px">
+  <div style="padding:10px 20px 4px;font-size:26px;font-weight:700;letter-spacing:-0.04em">Library</div>
+  <div style="padding:18px 0 2px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 20px 10px">
+      <span style="font-size:15px;font-weight:700">History</span>
+      <span style="font-size:13px;color:var(--fgm)">See all</span>
+    </div>
+    <div style="display:flex;gap:12px;overflow-x:auto;padding:0 20px">
+      <sc-for list="{{ history }}" as="v" hint-placeholder-count="3">
+        <div onClick="{{ v.open }}" style="flex:none;width:170px;cursor:pointer">
+          <div style="height:96px;border-radius:12px;background:{{ v.tint }};position:relative;overflow:hidden">
+            <div style="position:absolute;bottom:0;left:0;height:3px;background:#fff;width:{{ v.progress }}"></div>
+          </div>
+          <div style="padding:7px 2px 0;font-size:13px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ v.title }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="padding:22px 20px 4px;display:flex;align-items:baseline;justify-content:space-between">
+    <span style="font-size:15px;font-weight:700">Playlists</span>
+    <button style="background:none;border:none;color:var(--fgm);font-size:13px;font-weight:600;cursor:pointer">New</button>
+  </div>
+  <div style="display:flex;flex-direction:column">
+    <sc-for list="{{ playlists }}" as="p" hint-placeholder-count="3">
+      <div style="display:flex;gap:14px;padding:11px 20px;align-items:center;cursor:pointer">
+        <div style="flex:none;width:84px;height:48px;border-radius:9px;background:{{ p.tint }};position:relative;display:flex;align-items:center;justify-content:center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><path d="M4 5h12v2H4zM4 9h12v2H4zM4 13h8v2H4zM17 12v6.5a2.5 2.5 0 1 1-2-2.45V10l6-1.5V12z"></path></svg>
+        </div>
+        <div style="min-width:0">
+          <div style="font-size:14.5px;font-weight:600">{{ p.name }}</div>
+          <div style="margin-top:2px;font-size:12.5px;color:var(--fgm)">{{ p.count }} videos · {{ p.privacy }}</div>
+        </div>
+        <svg style="margin-left:auto" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--fgs)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"></path></svg>
+      </div>
+    </sc-for>
+  </div>
+  <div style="padding:22px 20px 8px;font-size:15px;font-weight:700">Saved</div>
+  <div style="display:flex;flex-direction:column;padding-bottom:110px">
+    <sc-for list="{{ savedRows }}" as="v" hint-placeholder-count="2">
+      <div onClick="{{ v.open }}" style="display:flex;gap:12px;padding:9px 20px;align-items:center;cursor:pointer">
+        <div style="flex:none;width:112px;aspect-ratio:16/9;border-radius:9px;background:{{ v.tint }}"></div>
+        <div style="min-width:0">
+          <div style="font-size:13.5px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ v.title }}</div>
+          <div style="margin-top:3px;font-size:12px;color:var(--fgm)">{{ v.ch }}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= STUDIO ================= -->
+<sc-if value="{{ sStudio }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 20px 0">
+    <button aria-label="Back" onClick="{{ goBack }}" style="background:none;border:none;color:var(--fg);cursor:pointer;padding:6px 6px 6px 0;display:flex"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"></path></svg></button>
+    <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Studio</span>
+    <button onClick="{{ startUpload }}" style="margin-left:auto;display:flex;align-items:center;gap:6px;background:var(--acc);color:var(--afg);border:none;border-radius:99px;padding:8px 15px;font-size:13.5px;font-weight:600;cursor:pointer">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Upload</button>
+  </div>
+  <div style="margin:16px 20px 0;background:var(--sm);border-radius:14px;padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;font-size:13px">
+      <span style="font-weight:600">Storage</span><span style="color:var(--fgm)">4.2 GB of 20 GB</span>
+    </div>
+    <div style="margin-top:9px;height:5px;border-radius:99px;background:var(--sm2)"><div style="width:21%;height:100%;border-radius:99px;background:var(--fg)"></div></div>
+  </div>
+  <div style="padding:20px 20px 8px;font-size:15px;font-weight:700">Your videos</div>
+  <div style="display:flex;flex-direction:column;padding-bottom:110px">
+    <sc-for list="{{ studioVids }}" as="v" hint-placeholder-count="5">
+      <div style="display:flex;gap:12px;padding:10px 20px;align-items:center">
+        <div style="flex:none;width:112px;aspect-ratio:16/9;border-radius:9px;background:{{ v.tint }};position:relative;display:flex;align-items:center;justify-content:center">
+          <sc-if value="{{ v.spinning }}" hint-placeholder-val="{{ false }}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" style="animation:vspin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.2-8.56"></path></svg>
+          </sc-if>
+        </div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:13.5px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">{{ v.title }}</div>
+          <div style="margin-top:4px;display:flex;align-items:center;gap:6px">
+            <span style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:2.5px 8px;border-radius:99px;background:{{ v.badgeBg }};color:{{ v.badgeCo }}">{{ v.state }}</span>
+            <span style="font-size:12px;color:var(--fgm)">{{ v.meta }}</span>
+          </div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--fgs)"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
+      </div>
+    </sc-for>
+    <div style="margin:14px 20px 0;display:flex;gap:10px">
+      <button onClick="{{ startGoLive }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--bd);background:none;color:var(--fg);border-radius:12px;padding:13px 0;font-size:14px;font-weight:600;cursor:pointer">
+        <span style="width:7px;height:7px;border-radius:99px;background:var(--dng)"></span>Go live</button>
+      <button style="flex:1;border:1px solid var(--bd);background:none;color:var(--fg);border-radius:12px;padding:13px 0;font-size:14px;font-weight:600;cursor:pointer">Import from URL</button>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= UPLOAD FLOW ================= -->
+<sc-if value="{{ sUpload }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 20px 0">
+    <button aria-label="Back" onClick="{{ goStudio }}" style="background:none;border:none;color:var(--fg);cursor:pointer;padding:6px 6px 6px 0;display:flex"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"></path></svg></button>
+    <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em">{{ uploadTitle }}</span>
+  </div>
+  <sc-if value="{{ up0 }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:24px 20px">
+      <div onClick="{{ upNext }}" style="border:1.5px dashed var(--bd);border-radius:18px;padding:52px 24px;display:flex;flex-direction:column;align-items:center;gap:14px;cursor:pointer">
+        <div style="width:56px;height:56px;border-radius:99px;background:var(--sm);display:flex;align-items:center;justify-content:center">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"></path><path d="M4 20h16"></path></svg>
+        </div>
+        <div style="font-size:16px;font-weight:600">Choose a video</div>
+        <div style="font-size:13px;color:var(--fgm);text-align:center;line-height:1.5">MP4, MOV, WebM, MKV · up to 8 GB<br>Uploads are resumable — leave and come back anytime</div>
+      </div>
+      <div style="margin-top:16px;font-size:12.5px;color:var(--fgs);text-align:center">New uploads are scanned and may be held briefly for review</div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ up1 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:24px 20px">
+      <div style="background:var(--sm);border-radius:16px;padding:18px">
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:600">
+          <span>alps-diary-final.mov</span><span style="font-variant-numeric:tabular-nums">62%</span>
+        </div>
+        <div style="margin-top:12px;height:6px;border-radius:99px;background:var(--sm2)"><div style="width:62%;height:100%;border-radius:99px;background:var(--fg)"></div></div>
+        <div style="margin-top:10px;font-size:12.5px;color:var(--fgm)">Chunk 39 of 63 · 8 MiB chunks · 2.1 GB of 3.4 GB</div>
+        <div style="margin-top:14px;display:flex;gap:8px">
+          <button style="flex:1;border:1px solid var(--bd);background:none;color:var(--fg);border-radius:10px;padding:9px 0;font-size:13px;font-weight:600;cursor:pointer">Pause</button>
+          <button style="flex:1;border:1px solid var(--bd);background:none;color:var(--dng);border-radius:10px;padding:9px 0;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--fgm);line-height:1.5;padding:0 4px">
+        <svg style="flex:none;margin-top:1px" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01" stroke-linecap="round"></path></svg>
+        If the connection drops, the upload resumes from the last completed chunk. Session expires after 24 hours.
+      </div>
+      <button onClick="{{ upNext }}" style="margin-top:20px;width:100%;background:var(--acc);color:var(--afg);border:none;border-radius:12px;padding:14px 0;font-size:15px;font-weight:600;cursor:pointer">Continue to details</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{ up2 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:18px 20px 110px;display:flex;flex-direction:column;gap:16px">
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Title</div>
+        <div style="border:1px solid var(--bd);border-radius:12px;padding:11px 14px;font-size:15px">Shooting the Alps on medium format — a field diary</div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Description</div>
+        <div style="border:1px solid var(--bd);border-radius:12px;padding:11px 14px;font-size:14px;color:var(--fgm);min-height:64px;line-height:1.5">Five days above the treeline with a Pentax 67 and forty rolls of Portra…</div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">Privacy</div>
+          <div style="border:1px solid var(--bd);border-radius:12px;padding:11px 14px;font-size:14px;display:flex;justify-content:space-between;align-items:center">Public<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fgs)" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg></div>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">Category</div>
+          <div style="border:1px solid var(--bd);border-radius:12px;padding:11px 14px;font-size:14px;display:flex;justify-content:space-between;align-items:center">Film & Photo<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fgs)" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Tags</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <span style="padding:6px 12px;border-radius:99px;background:var(--sm);font-size:12.5px;font-weight:600">photography</span>
+          <span style="padding:6px 12px;border-radius:99px;background:var(--sm);font-size:12.5px;font-weight:600">film</span>
+          <span style="padding:6px 12px;border-radius:99px;background:var(--sm);font-size:12.5px;font-weight:600">alps</span>
+          <span style="padding:6px 12px;border-radius:99px;border:1px dashed var(--bd);font-size:12.5px;color:var(--fgm)">+ Add</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;border-top:1px solid var(--bds)">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0">
+          <div><div style="font-size:14.5px;font-weight:600">Auto-captions</div><div style="font-size:12.5px;color:var(--fgm);margin-top:2px">Generate English captions with Whisper</div></div>
+          <div style="width:46px;height:28px;border-radius:99px;background:var(--fg);position:relative;flex:none"><div style="position:absolute;top:2px;right:2px;width:24px;height:24px;border-radius:99px;background:var(--bg)"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid var(--bds)">
+          <div><div style="font-size:14.5px;font-weight:600">Cross-post to Bluesky</div><div style="font-size:12.5px;color:var(--fgm);margin-top:2px">@mira.bsky.social · posts when published</div></div>
+          <div style="width:46px;height:28px;border-radius:99px;background:var(--fg);position:relative;flex:none"><div style="position:absolute;top:2px;right:2px;width:24px;height:24px;border-radius:99px;background:var(--bg)"></div></div>
+        </div>
+      </div>
+      <button onClick="{{ upNext }}" style="width:100%;background:var(--acc);color:var(--afg);border:none;border-radius:12px;padding:14px 0;font-size:15px;font-weight:600;cursor:pointer">Publish</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{ up3 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:48px 32px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center">
+      <div style="width:56px;height:56px;border-radius:99px;background:var(--sm);display:flex;align-items:center;justify-content:center">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"></path></svg>
+      </div>
+      <div style="font-size:18px;font-weight:700;letter-spacing:-0.02em">Processing</div>
+      <div style="font-size:13.5px;color:var(--fgm);line-height:1.55;max-width:280px">Your video is being transcoded to HLS (1080p → 360p). Captions and the Bluesky post will follow automatically. You'll get a notification when it's live.</div>
+      <button onClick="{{ goStudio }}" style="margin-top:8px;background:var(--acc);color:var(--afg);border:none;border-radius:99px;padding:11px 24px;font-size:14px;font-weight:600;cursor:pointer">Back to Studio</button>
+    </div>
+  </sc-if>
+</div>
+</sc-if>
+
+<!-- ================= GO LIVE ================= -->
+<sc-if value="{{ sGoLive }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 20px 0">
+    <button aria-label="Back" onClick="{{ goStudio }}" style="background:none;border:none;color:var(--fg);cursor:pointer;padding:6px 6px 6px 0;display:flex"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"></path></svg></button>
+    <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Go live</span>
+  </div>
+  <sc-if value="{{ liveNotCreated }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:18px 20px;display:flex;flex-direction:column;gap:16px">
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Stream title</div>
+        <div style="border:1px solid var(--bd);border-radius:12px;padding:11px 14px;font-size:15px">Late-night color grading session</div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Privacy</div>
+        <div style="border:1px solid var(--bd);border-radius:12px;padding:11px 14px;font-size:14px;display:flex;justify-content:space-between;align-items:center">Public<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fgs)" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg></div>
+      </div>
+      <div style="display:flex;flex-direction:column;border-top:1px solid var(--bds)">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0">
+          <div><div style="font-size:14.5px;font-weight:600">Permanent stream</div><div style="font-size:12.5px;color:var(--fgm);margin-top:2px">Keep the same URL between sessions</div></div>
+          <div style="width:46px;height:28px;border-radius:99px;background:var(--sm2);position:relative;flex:none"><div style="position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:99px;background:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,0.15)"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid var(--bds)">
+          <div><div style="font-size:14.5px;font-weight:600">Save replay</div><div style="font-size:12.5px;color:var(--fgm);margin-top:2px">Publish the recording as a video after the stream</div></div>
+          <div style="width:46px;height:28px;border-radius:99px;background:var(--fg);position:relative;flex:none"><div style="position:absolute;top:2px;right:2px;width:24px;height:24px;border-radius:99px;background:var(--bg)"></div></div>
+        </div>
+      </div>
+      <button onClick="{{ createStream }}" style="width:100%;background:var(--acc);color:var(--afg);border:none;border-radius:12px;padding:14px 0;font-size:15px;font-weight:600;cursor:pointer">Create stream</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{ liveCreated }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;gap:10px;align-items:flex-start;background:var(--sm);border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.5;color:var(--fgm)">
+        <svg style="flex:none;margin-top:1px" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--wrn)" stroke-width="2" stroke-linecap="round"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+        <span><span style="color:var(--fg);font-weight:600">Your stream key is shown only once.</span> Copy it into your encoder now — you can rotate it later, but not view it again.</span>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">RTMP server</div>
+        <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--bd);border-radius:12px;padding:11px 14px;font-size:13.5px;font-family:ui-monospace,'SF Mono',monospace">rtmp://vidra.example/live
+          <button aria-label="Copy server URL" style="margin-left:auto;background:none;border:none;color:var(--fgm);cursor:pointer;display:flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Stream key</div>
+        <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--bd);border-radius:12px;padding:11px 14px;font-size:13.5px;font-family:ui-monospace,'SF Mono',monospace">
+          <span style="filter:{{ keyBlur }};transition:filter 0.2s">vk_live_8f3a…c21d</span>
+          <button onClick="{{ toggleKey }}" style="margin-left:auto;background:none;border:none;color:var(--fgm);cursor:pointer;font-size:12.5px;font-weight:600">{{ keyLabel }}</button>
+          <button aria-label="Copy stream key" style="background:none;border:none;color:var(--fgm);cursor:pointer;display:flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button style="flex:1;border:1px solid var(--bd);background:none;color:var(--fg);border-radius:12px;padding:12px 0;font-size:13.5px;font-weight:600;cursor:pointer">Rotate key</button>
+        <button style="flex:1;border:1px solid var(--bd);background:none;color:var(--dng);border-radius:12px;padding:12px 0;font-size:13.5px;font-weight:600;cursor:pointer">Delete stream</button>
+      </div>
+      <div style="margin-top:6px;display:flex;align-items:center;gap:10px;background:var(--sm);border-radius:14px;padding:14px 16px">
+        <span style="width:8px;height:8px;border-radius:99px;background:var(--fgs)"></span>
+        <span style="font-size:13.5px;color:var(--fgm)">Waiting for encoder… start streaming to go live</span>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</sc-if>
+
+<!-- ================= WATCH ================= -->
+<sc-if value="{{ sWatch }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;display:flex;flex-direction:column">
+  <div style="position:relative;aspect-ratio:16/9;background:#000;margin-top:54px;flex:none">
+    <sc-if value="{{ playerOk }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;inset:0;background:{{ cv.tint }};opacity:0.85"></div>
+      <button aria-label="Play" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:56px;height:56px;border-radius:99px;background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M7 4.5v15l13-7.5z"></path></svg>
+      </button>
+      <div style="position:absolute;left:12px;right:12px;bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,0.9);font-variant-numeric:tabular-nums;margin-bottom:6px">
+          <span>3:42 / {{ cv.dur }}</span>
+          <span style="display:flex;gap:8px;align-items:center">
+            <span style="background:rgba(255,255,255,0.16);border-radius:5px;padding:1px 6px;font-weight:600">CC</span>
+            <span style="background:rgba(255,255,255,0.16);border-radius:5px;padding:1px 6px;font-weight:600">{{ cv.hls }}</span>
+          </span>
+        </div>
+        <div style="height:3px;border-radius:99px;background:rgba(255,255,255,0.25)"><div style="width:15%;height:100%;border-radius:99px;background:#fff"></div></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ playerError }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 32px;text-align:center">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.8" stroke-linecap="round"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+        <div style="color:#fff;font-size:14.5px;font-weight:600">Couldn't retrieve this video from IPFS</div>
+        <div style="color:rgba(255,255,255,0.65);font-size:12.5px;line-height:1.5">No reachable peers are pinning this content right now.</div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button onClick="{{ refetchIpfs }}" style="background:#fff;color:#000;border:none;border-radius:99px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer">Re-fetch from IPFS</button>
+          <button onClick="{{ useServer }}" style="background:rgba(255,255,255,0.16);color:#fff;border:none;border-radius:99px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer">Play from server</button>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ playerFetching }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" style="animation:vspin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.2-8.56"></path></svg>
+        <div style="color:rgba(255,255,255,0.8);font-size:13px">Finding peers…</div>
+      </div>
+    </sc-if>
+    <button aria-label="Close" onClick="{{ goBack }}" style="position:absolute;top:10px;left:10px;width:32px;height:32px;border-radius:99px;background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg>
+    </button>
+  </div>
+  <sc-if value="{{ showIpfsBar }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 20px;border-bottom:1px solid var(--bds);flex:none">
+      <span style="width:7px;height:7px;border-radius:99px;background:{{ ipfsDot }};flex:none"></span>
+      <span style="font-size:12.5px;color:var(--fgm)">{{ ipfsLabel }}</span>
+      <button onClick="{{ refetchIpfs }}" aria-label="Re-fetch from IPFS" style="margin-left:auto;background:none;border:none;color:var(--fgm);cursor:pointer;display:flex;padding:4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"></path></svg></button>
+      <button onClick="{{ toggleSource }}" style="background:var(--sm);border:none;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--fg);cursor:pointer">{{ sourceBtn }}</button>
+    </div>
+  </sc-if>
+  <div style="padding:14px 20px 0">
+    <div style="font-size:17px;font-weight:700;line-height:1.35;letter-spacing:-0.015em">{{ cv.title }}</div>
+    <div style="margin-top:5px;font-size:13px;color:var(--fgm)">{{ cv.views }} views · {{ cv.age }}</div>
+  </div>
+  <div style="display:flex;gap:8px;padding:14px 20px 0;overflow-x:auto">
+    <button onClick="{{ openSupport }}" style="flex:none;display:flex;align-items:center;gap:6px;background:var(--acc);color:var(--afg);border:none;border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.5-8.6C.9 9 2.7 5.5 6.2 5.5c2 0 3.3 1 4 2.1.7-1.1 2-2.1 4-2.1 3.5 0 5.3 3.5 3.7 6.9-2 4-9.9 8.6-9.9 8.6z"></path></svg>Support</button>
+    <button style="flex:none;display:flex;align-items:center;gap:6px;background:var(--sm);color:var(--fg);border:none;border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v9M8.5 8.5 12 5l3.5 3.5"></path><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path></svg>Share</button>
+    <button style="flex:none;display:flex;align-items:center;gap:6px;background:var(--sm);color:var(--fg);border:none;border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v9m0 0 3.5-3.5M12 13 8.5 9.5"></path><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path></svg>Download</button>
+    <button style="flex:none;display:flex;align-items:center;gap:6px;background:var(--sm);color:var(--fg);border:none;border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>Save</button>
+    <button style="flex:none;display:flex;align-items:center;gap:6px;background:var(--sm);color:var(--fgm);border:none;border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a1 1 0 0 1 1-1h13l-3 5 3 5H5"></path></svg>Report</button>
+  </div>
+  <div onClick="{{ openChannel }}" style="display:flex;align-items:center;gap:12px;margin:16px 20px 0;padding:12px 14px;background:var(--sm);border-radius:14px;cursor:pointer">
+    <div style="flex:none;width:40px;height:40px;border-radius:99px;background:{{ cv.avatarTint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:600">{{ cv.initial }}</div>
+    <div style="min-width:0">
+      <div style="font-size:14.5px;font-weight:600">{{ cv.ch }}</div>
+      <div style="font-size:12px;color:var(--fgm)">{{ cv.followers }} followers</div>
+    </div>
+    <button onClick="{{ toggleFollow }}" style="margin-left:auto;flex:none;background:{{ followBg }};color:{{ followCo }};border:{{ followBd }};border-radius:99px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">{{ followLabel }}</button>
+  </div>
+  <div style="margin:14px 20px 0;font-size:13.5px;line-height:1.55;color:var(--fgm)">{{ cv.desc }} <span style="color:var(--fg);font-weight:600">more</span></div>
+  <div style="margin:20px 20px 0;padding-top:16px;border-top:1px solid var(--bds)">
+    <div style="font-size:15px;font-weight:700">Comments <span style="color:var(--fgm);font-weight:600">· {{ cv.commentCount }}</span></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+      <div style="flex:none;width:30px;height:30px;border-radius:99px;background:var(--acc);color:var(--afg);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">M</div>
+      <div style="flex:1;background:var(--sm);border-radius:99px;padding:9px 15px;font-size:13.5px;color:var(--fgs)">Add a comment…</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px;padding:18px 0 110px">
+      <sc-for list="{{ comments }}" as="c" hint-placeholder-count="3">
+        <div style="display:flex;gap:11px">
+          <div style="flex:none;width:30px;height:30px;border-radius:99px;background:{{ c.tint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600">{{ c.initial }}</div>
+          <div style="min-width:0">
+            <div style="font-size:12px;color:var(--fgm)"><span style="font-weight:600;color:{{ c.nameCo }}">{{ c.who }}</span> · {{ c.age }}</div>
+            <div style="margin-top:3px;font-size:13.5px;line-height:1.45;color:{{ c.textCo }};font-style:{{ c.textStyle }}">{{ c.text }}</div>
+            <sc-if value="{{ c.hasReplies }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ c.toggle }}" style="margin-top:7px;display:flex;align-items:center;gap:6px;background:none;border:none;padding:0;font-size:12px;font-weight:600;color:var(--fgm);cursor:pointer">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate({{ c.chev }});transition:transform 0.15s"><path d="m6 9 6 6 6-6"></path></svg>{{ c.repliesLabel }}</button>
+              <sc-if value="{{ c.expanded }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:12px;display:flex;flex-direction:column;gap:13px;border-left:2px solid var(--bds);padding-left:13px">
+                  <sc-for list="{{ c.replyList }}" as="r" hint-placeholder-count="2">
+                    <div style="display:flex;gap:9px">
+                      <div style="flex:none;width:24px;height:24px;border-radius:99px;background:{{ r.tint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:600">{{ r.initial }}</div>
+                      <div style="min-width:0">
+                        <div style="font-size:11.5px;color:var(--fgm)"><span style="font-weight:600;color:{{ r.nameCo }}">{{ r.who }}</span> · {{ r.age }}</div>
+                        <div style="margin-top:2px;font-size:13px;line-height:1.45">{{ r.text }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <div style="font-size:12px;font-weight:600;color:var(--fgm);cursor:pointer">Reply</div>
+                </div>
+              </sc-if>
+            </sc-if>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= LIVE WATCH ================= -->
+<sc-if value="{{ sLive }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;display:flex;flex-direction:column">
+  <div style="position:relative;aspect-ratio:16/9;background:#000;margin-top:54px;flex:none">
+    <div style="position:absolute;inset:0;background:{{ clv.tint }};opacity:0.85"></div>
+    <span style="position:absolute;top:10px;left:52px;display:flex;align-items:center;gap:5px;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);border-radius:99px;padding:4px 10px 4px 8px;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.04em"><span style="width:6px;height:6px;border-radius:99px;background:#ff453a;animation:vpulse 1.6s infinite"></span>LIVE</span>
+    <span style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.55);border-radius:6px;padding:3px 8px;color:#fff;font-size:11px;font-weight:600">{{ clv.viewers }} watching</span>
+    <button aria-label="Close" onClick="{{ goBack }}" style="position:absolute;top:10px;left:10px;width:32px;height:32px;border-radius:99px;background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg>
+    </button>
+  </div>
+  <div style="padding:14px 20px 0">
+    <div style="font-size:17px;font-weight:700;line-height:1.35;letter-spacing:-0.015em">{{ clv.title }}</div>
+    <div style="margin-top:5px;font-size:13px;color:var(--fgm)">Started 1 hour ago · low-latency HLS</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;margin:16px 20px 0;padding:12px 14px;background:var(--sm);border-radius:14px">
+    <div style="flex:none;width:40px;height:40px;border-radius:99px;background:{{ clv.avatarTint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:600">{{ clv.initial }}</div>
+    <div style="min-width:0">
+      <div style="font-size:14.5px;font-weight:600">{{ clv.ch }}</div>
+      <div style="font-size:12px;color:var(--fgm)">{{ clv.followers }} followers</div>
+    </div>
+    <button style="margin-left:auto;flex:none;background:var(--acc);color:var(--afg);border:none;border-radius:99px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Follow</button>
+  </div>
+  <div style="display:flex;gap:10px;align-items:flex-start;margin:14px 20px 0;background:var(--sm);border-radius:14px;padding:13px 16px;font-size:12.5px;color:var(--fgm);line-height:1.5">
+    <svg style="flex:none;margin-top:1px" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01" stroke-linecap="round"></path></svg>
+    Replay is on — this stream will be published as a video when it ends.
+  </div>
+  <div style="padding:20px 20px 110px">
+    <button onClick="{{ openSupport }}" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:none;border:1px solid var(--bd);color:var(--fg);border-radius:12px;padding:12px 0;font-size:14px;font-weight:600;cursor:pointer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.5-8.6C.9 9 2.7 5.5 6.2 5.5c2 0 3.3 1 4 2.1.7-1.1 2-2.1 4-2.1 3.5 0 5.3 3.5 3.7 6.9-2 4-9.9 8.6-9.9 8.6z"></path></svg>
+      Support {{ clv.ch }}</button>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= CHANNEL ================= -->
+<sc-if value="{{ sChannel }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="position:relative;height:150px;background:{{ cv.tint }}">
+    <button aria-label="Back" onClick="{{ goBack }}" style="position:absolute;top:58px;left:14px;width:32px;height:32px;border-radius:99px;background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"></path></svg>
+    </button>
+  </div>
+  <div style="padding:0 20px">
+    <div style="display:flex;align-items:flex-end;gap:14px;margin-top:-36px;position:relative;z-index:2">
+      <div style="width:72px;height:72px;border-radius:99px;background:{{ cv.avatarTint }};border:3px solid var(--bg);display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.18)">{{ cv.initial }}</div>
+      <div style="padding-bottom:6px;display:flex;gap:8px">
+        <button onClick="{{ toggleFollow }}" style="background:{{ followBg }};color:{{ followCo }};border:{{ followBd }};border-radius:99px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer">{{ followLabel }}</button>
+        <button onClick="{{ openSupport }}" aria-label="Support this channel" style="width:34px;height:34px;border-radius:99px;border:1px solid var(--bd);background:none;color:var(--fg);cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.5-8.6C.9 9 2.7 5.5 6.2 5.5c2 0 3.3 1 4 2.1.7-1.1 2-2.1 4-2.1 3.5 0 5.3 3.5 3.7 6.9-2 4-9.9 8.6-9.9 8.6z"></path></svg></button>
+        <button aria-label="Message" style="width:34px;height:34px;border-radius:99px;border:1px solid var(--bd);background:none;color:var(--fg);cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.6 0-3.1-.4-4.4-1.2L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z"></path></svg></button>
+      </div>
+    </div>
+    <div style="margin-top:12px;font-size:20px;font-weight:700;letter-spacing:-0.025em">{{ cv.ch }}</div>
+    <div style="margin-top:2px;font-size:13px;color:var(--fgm)">@{{ cv.handle }} · {{ cv.followers }} followers · 34 videos</div>
+    <div style="margin-top:8px;font-size:13.5px;line-height:1.5;color:var(--fgm)">Field diaries, photography and the slow web. Filmed on medium format, graded by hand.</div>
+  </div>
+  <div style="display:flex;gap:22px;padding:18px 20px 0;border-bottom:1px solid var(--bds);font-size:14px;font-weight:600">
+    <span style="padding-bottom:10px;border-bottom:2px solid var(--fg)">Videos</span>
+    <span style="padding-bottom:10px;color:var(--fgm)">Playlists</span>
+    <span style="padding-bottom:10px;color:var(--fgm)">About</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:16px 20px 110px">
+    <sc-for list="{{ channelVids }}" as="v" hint-placeholder-count="4">
+      <div onClick="{{ v.open }}" style="cursor:pointer">
+        <div style="aspect-ratio:16/9;border-radius:11px;background:{{ v.tint }};position:relative">
+          <span style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.6);border-radius:5px;padding:1px 6px;color:#fff;font-size:10px;font-weight:600">{{ v.dur }}</span>
+        </div>
+        <div style="padding:7px 2px 0;font-size:13px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ v.title }}</div>
+        <div style="padding:2px 2px 0;font-size:11.5px;color:var(--fgm)">{{ v.views }} views</div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= SETTINGS ================= -->
+<sc-if value="{{ sSettings }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 20px 0">
+    <button aria-label="Back" onClick="{{ goBack }}" style="background:none;border:none;color:var(--fg);cursor:pointer;padding:6px 6px 6px 0;display:flex"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"></path></svg></button>
+    <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Account</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;padding:18px 20px 6px">
+    <div style="width:56px;height:56px;border-radius:99px;background:var(--acc);color:var(--afg);display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:600">M</div>
+    <div>
+      <div style="font-size:17px;font-weight:700">Mira Chen</div>
+      <div style="font-size:13px;color:var(--fgm)">@mira · mira@example.com <span style="color:var(--ok)">· verified</span></div>
+    </div>
+  </div>
+  <div style="padding:14px 20px 110px;display:flex;flex-direction:column;gap:22px">
+    <sc-for list="{{ settingGroups }}" as="g" hint-placeholder-count="4">
+      <div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--fgs);padding:0 2px 8px">{{ g.name }}</div>
+        <div style="background:var(--sm);border-radius:14px;overflow:hidden">
+          <sc-for list="{{ g.rows }}" as="r">
+            <div onClick="{{ r.go }}" style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:{{ r.divider }};cursor:pointer">
+              <div style="min-width:0;flex:1">
+                <div style="font-size:14.5px;font-weight:500;color:{{ r.co }}">{{ r.label }}</div>
+                <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><div style="margin-top:2px;font-size:12px;color:var(--fgm)">{{ r.sub }}</div></sc-if>
+              </div>
+              <sc-if value="{{ r.value }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--fgm)">{{ r.value }}</span></sc-if>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fgs)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="m9 5 7 7-7 7"></path></svg>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+    <button onClick="{{ signOut }}" style="width:100%;border:1px solid var(--bd);background:none;color:var(--fg);border-radius:12px;padding:13px 0;font-size:14px;font-weight:600;cursor:pointer">Sign out</button>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= DONATION SETTINGS ================= -->
+<sc-if value="{{ sDonations }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 20px 0">
+    <button aria-label="Back" onClick="{{ goSettings }}" style="background:none;border:none;color:var(--fg);cursor:pointer;padding:6px 6px 6px 0;display:flex"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"></path></svg></button>
+    <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Donation addresses</span>
+  </div>
+  <div style="padding:14px 20px 110px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13px;line-height:1.55;color:var(--fgm)">Wallet addresses shown on your pages. Supporters send funds directly to you — Vidra never holds funds or processes payments.</div>
+    <div style="background:var(--sm);border-radius:14px;padding:15px 16px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:14.5px;font-weight:700">Bitcoin</span>
+        <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--sm2);color:var(--fgm)">UNVERIFIED</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--fgm)">Account</span>
+      </div>
+      <div style="margin-top:8px;font-size:12.5px;font-family:ui-monospace,'SF Mono',monospace;color:var(--fgm);word-break:break-all">bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--fgs)">Signature verification for Bitcoin isn't available yet</div>
+    </div>
+    <div style="background:var(--sm);border-radius:14px;padding:15px 16px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:14.5px;font-weight:700">Ethereum</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--ok);color:#fff"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"></path></svg>VERIFIED</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--fgm)">Aurora Lab</span>
+      </div>
+      <div style="margin-top:8px;font-size:12.5px;font-family:ui-monospace,'SF Mono',monospace;color:var(--fgm);word-break:break-all">0x71C7656EC7ab88b098defB751B7401B5f6d8976F</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--ok)">Ownership proven by signed message · Jun 12</div>
+    </div>
+    <div style="background:var(--sm);border-radius:14px;padding:15px 16px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:14.5px;font-weight:700">Monero</span>
+        <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--sm2);color:var(--fgm)">UNVERIFIED</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--fgm)">Account</span>
+      </div>
+      <div style="margin-top:8px;font-size:12.5px;font-family:ui-monospace,'SF Mono',monospace;color:var(--fgm);word-break:break-all">48edfHu7VBRNKXm…Wj3fnLYgGDzcpQ</div>
+    </div>
+    <button style="width:100%;border:1.5px dashed var(--bd);background:none;color:var(--fg);border-radius:12px;padding:13px 0;font-size:14px;font-weight:600;cursor:pointer">+ Add address</button>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= AUTH ================= -->
+<sc-if value="{{ sAuth }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding-top:58px;display:flex;flex-direction:column">
+  <sc-if value="{{ authLogin }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 28px 80px">
+      <div style="font-size:34px;font-weight:700;letter-spacing:-0.05em;text-align:center">Vidra</div>
+      <div style="margin-top:6px;font-size:14px;color:var(--fgm);text-align:center">The quiet home for independent video</div>
+      <div style="margin-top:36px;display:flex;flex-direction:column;gap:12px">
+        <div style="border:1px solid var(--bd);border-radius:12px;padding:13px 16px;font-size:15px;color:var(--fg)">mira@example.com</div>
+        <div style="border:1px solid var(--bd);border-radius:12px;padding:13px 16px;font-size:15px;color:var(--fgs);display:flex;justify-content:space-between;align-items:center">••••••••••<span style="font-size:12.5px;font-weight:600;color:var(--fgm)">Show</span></div>
+        <button onClick="{{ authToMfa }}" style="background:var(--acc);color:var(--afg);border:none;border-radius:12px;padding:14px 0;font-size:15px;font-weight:600;cursor:pointer">Sign in</button>
+        <div style="text-align:center;font-size:13px;color:var(--fgm)">Forgot password?</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin:24px 0">
+        <div style="flex:1;height:1px;background:var(--bds)"></div><span style="font-size:12px;color:var(--fgs)">or</span><div style="flex:1;height:1px;background:var(--bds)"></div>
+      </div>
+      <button style="border:1px solid var(--bd);background:none;color:var(--fg);border-radius:12px;padding:13px 0;font-size:14px;font-weight:600;cursor:pointer">Continue with SSO</button>
+      <div style="margin-top:22px;text-align:center;font-size:13.5px;color:var(--fgm)">New here? <span onClick="{{ authToSignup }}" style="color:var(--fg);font-weight:600;cursor:pointer">Create an account</span></div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ authMfa }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 28px 80px;text-align:center">
+      <div style="align-self:center;width:52px;height:52px;border-radius:99px;background:var(--sm);display:flex;align-items:center;justify-content:center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.8"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+      </div>
+      <div style="margin-top:16px;font-size:22px;font-weight:700;letter-spacing:-0.03em">Two-factor code</div>
+      <div style="margin-top:6px;font-size:13.5px;color:var(--fgm);line-height:1.5">Enter the 6-digit code from your authenticator app</div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:28px">
+        <div style="width:44px;height:52px;border-radius:11px;border:1.5px solid var(--fg);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">7</div>
+        <div style="width:44px;height:52px;border-radius:11px;border:1.5px solid var(--fg);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">3</div>
+        <div style="width:44px;height:52px;border-radius:11px;border:1.5px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700"></div>
+        <div style="width:44px;height:52px;border-radius:11px;border:1.5px solid var(--bd)"></div>
+        <div style="width:44px;height:52px;border-radius:11px;border:1.5px solid var(--bd)"></div>
+        <div style="width:44px;height:52px;border-radius:11px;border:1.5px solid var(--bd)"></div>
+      </div>
+      <button onClick="{{ authDone }}" style="margin-top:28px;background:var(--acc);color:var(--afg);border:none;border-radius:12px;padding:14px 0;font-size:15px;font-weight:600;cursor:pointer">Verify</button>
+      <div style="margin-top:16px;font-size:13px;color:var(--fgm)">Use a recovery code instead</div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ authSignup }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 28px 80px">
+      <div style="font-size:26px;font-weight:700;letter-spacing:-0.04em">Create your account</div>
+      <div style="margin-top:20px;display:flex;flex-direction:column;gap:12px">
+        <div style="border:1px solid var(--bd);border-radius:12px;padding:13px 16px;font-size:15px;color:var(--fgs)">Username</div>
+        <div style="border:1px solid var(--bd);border-radius:12px;padding:13px 16px;font-size:15px;color:var(--fgs)">Email</div>
+        <div>
+          <div style="border:1px solid var(--dng);border-radius:12px;padding:13px 16px;font-size:15px">••••••</div>
+          <div style="margin-top:6px;font-size:12.5px;color:var(--dng)">Password must be at least 8 characters</div>
+        </div>
+        <button style="background:var(--acc);color:var(--afg);border:none;border-radius:12px;padding:14px 0;font-size:15px;font-weight:600;cursor:pointer">Continue</button>
+      </div>
+      <div style="margin-top:18px;display:flex;gap:10px;align-items:flex-start;background:var(--sm);border-radius:12px;padding:12px 14px;font-size:12.5px;color:var(--fgm);line-height:1.5">
+        <svg style="flex:none;margin-top:1px" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01" stroke-linecap="round"></path></svg>
+        This instance reviews new accounts. You'll get an email when a moderator approves yours.
+      </div>
+      <div style="margin-top:20px;text-align:center;font-size:13.5px;color:var(--fgm)">Already have an account? <span onClick="{{ authToLogin }}" style="color:var(--fg);font-weight:600;cursor:pointer">Sign in</span></div>
+    </div>
+  </sc-if>
+</div>
+</sc-if>
+
+<!-- ================= TAB BAR ================= -->
+<sc-if value="{{ showTabs }}" hint-placeholder-val="{{ true }}">
+<div style="flex:none;display:flex;align-items:flex-start;justify-content:space-around;padding:10px 8px 30px;border-top:1px solid var(--bds);background:var(--bg)">
+  <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+    <button onClick="{{ t.go }}" aria-label="{{ t.label }}" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;cursor:pointer;color:{{ t.co }};width:64px;padding:0">
+      <span dangerouslySetInnerHTML="{{ t.icon }}" style="display:flex"></span>
+      <span style="font-size:10px;font-weight:600">{{ t.label }}</span>
+    </button>
+  </sc-for>
+</div>
+</sc-if>
+
+<!-- ================= CREATE SHEET ================= -->
+<sc-if value="{{ showCreate }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.4);z-index:30"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;z-index:31;background:var(--bg);border-radius:22px 22px 0 0;padding:10px 20px 44px">
+  <div style="width:36px;height:4px;border-radius:99px;background:var(--bd);margin:4px auto 14px"></div>
+  <div style="font-size:17px;font-weight:700;letter-spacing:-0.02em;padding-bottom:8px">Create</div>
+  <div onClick="{{ startUpload }}" style="display:flex;align-items:center;gap:14px;padding:13px 0;cursor:pointer">
+    <div style="width:40px;height:40px;border-radius:12px;background:var(--sm);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"></path><path d="M4 20h16"></path></svg></div>
+    <div><div style="font-size:15px;font-weight:600">Upload a video</div><div style="font-size:12.5px;color:var(--fgm)">Resumable, up to 8 GB</div></div>
+  </div>
+  <div onClick="{{ startGoLive }}" style="display:flex;align-items:center;gap:14px;padding:13px 0;cursor:pointer">
+    <div style="width:40px;height:40px;border-radius:12px;background:var(--sm);display:flex;align-items:center;justify-content:center"><span style="width:9px;height:9px;border-radius:99px;background:var(--dng)"></span></div>
+    <div><div style="font-size:15px;font-weight:600">Go live</div><div style="font-size:12.5px;color:var(--fgm)">Stream via RTMP with optional replay</div></div>
+  </div>
+  <div onClick="{{ goStudioSheet }}" style="display:flex;align-items:center;gap:14px;padding:13px 0;cursor:pointer">
+    <div style="width:40px;height:40px;border-radius:12px;background:var(--sm);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m10 9 5 3-5 3z"></path></svg></div>
+    <div><div style="font-size:15px;font-weight:600">Open Studio</div><div style="font-size:12.5px;color:var(--fgm)">Manage videos, streams and captions</div></div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= SUPPORT SHEET ================= -->
+<sc-if value="{{ showSupport }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.4);z-index:30"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;z-index:31;background:var(--bg);border-radius:22px 22px 0 0;padding:10px 20px 44px;max-height:78%;overflow:auto">
+  <div style="width:36px;height:4px;border-radius:99px;background:var(--bd);margin:4px auto 14px"></div>
+  <div style="font-size:17px;font-weight:700;letter-spacing:-0.02em">Support {{ supportName }}</div>
+  <div style="margin-top:4px;font-size:12.5px;color:var(--fgm);line-height:1.5">Send crypto directly to the creator. Vidra never holds or processes funds.</div>
+  <div style="margin-top:16px;background:var(--sm);border-radius:16px;padding:16px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:14.5px;font-weight:700">Bitcoin</span>
+      <span style="margin-left:auto;font-size:12px;font-weight:600;color:{{ copiedCo }};cursor:pointer" onClick="{{ copyAddr }}">{{ copiedLabel }}</span>
+    </div>
+    <div style="display:flex;gap:14px;margin-top:12px;align-items:center">
+      <div style="flex:none;width:86px;height:86px;border-radius:10px;background:#fff;padding:7px;box-sizing:border-box">
+        <svg viewBox="0 0 21 21" width="72" height="72" shape-rendering="crispEdges"><path fill="#000" d="M0 0h7v1H0zM8 0h2v1H8zM11 0h1v1h-1zM14 0h7v1H14zM0 1h1v1H0zM6 1h1v1H6zM8 1h1v1H8zM10 1h3v1h-3zM14 1h1v1h-1zM20 1h1v1h-1zM0 2h1v1H0zM2 2h3v1H2zM6 2h1v1H6zM9 2h2v1H9zM12 2h1v1h-1zM14 2h1v1h-1zM16 2h3v1h-3zM20 2h1v1h-1zM0 3h1v1H0zM2 3h3v1H2zM6 3h1v1H6zM8 3h1v1H8zM11 3h2v1h-2zM14 3h1v1h-1zM16 3h3v1h-3zM20 3h1v1h-1zM0 4h1v1H0zM2 4h3v1H2zM6 4h1v1H6zM9 4h3v1H9zM14 4h1v1h-1zM16 4h3v1h-3zM20 4h1v1h-1zM0 5h1v1H0zM6 5h1v1H6zM8 5h2v1H8zM11 5h1v1h-1zM14 5h1v1h-1zM20 5h1v1h-1zM0 6h7v1H0zM8 6h1v1H8zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h7v1H14zM9 7h2v1H9zM12 7h1v1h-1zM0 8h2v1H0zM3 8h2v1H3zM6 8h2v1H6zM10 8h2v1h-2zM13 8h3v1h-3zM17 8h2v1h-2zM1 9h1v1H1zM4 9h1v1H4zM8 9h2v1H8zM11 9h1v1h-1zM14 9h2v1h-2zM18 9h2v1h-2zM0 10h2v1H0zM3 10h1v1H3zM6 10h1v1H6zM9 10h3v1H9zM13 10h2v1h-2zM16 10h2v1h-2zM19 10h2v1h-2zM2 11h2v1H2zM5 11h1v1H5zM7 11h2v1H7zM10 11h1v1h-1zM12 11h2v1h-2zM15 11h1v1h-1zM17 11h2v1h-2zM0 12h1v1H0zM4 12h3v1H4zM8 12h1v1H8zM11 12h2v1h-2zM14 12h3v1h-3zM18 12h1v1h-1zM20 12h1v1h-1zM8 13h2v1H8zM12 13h1v1h-1zM15 13h2v1h-2zM19 13h1v1h-1zM0 14h7v1H0zM8 14h1v1H8zM10 14h2v1h-2zM13 14h1v1h-1zM16 14h1v1h-1zM18 14h2v1h-2zM0 15h1v1H0zM6 15h1v1H6zM9 15h2v1H9zM12 15h2v1h-2zM15 15h2v1h-2zM19 15h2v1h-2zM0 16h1v1H0zM2 16h3v1H2zM6 16h1v1H6zM8 16h2v1H8zM11 16h1v1h-1zM13 16h3v1h-3zM17 16h2v1h-2zM0 17h1v1H0zM2 17h3v1H2zM6 17h1v1H6zM9 17h1v1H9zM12 17h2v1h-2zM16 17h1v1h-1zM18 17h1v1h-1zM0 18h1v1H0zM2 18h3v1H2zM6 18h1v1H6zM8 18h3v1H8zM13 18h2v1h-2zM16 18h2v1h-2zM19 18h2v1h-2zM0 19h1v1H0zM6 19h1v1H6zM8 19h1v1H8zM10 19h2v1h-2zM14 19h2v1h-2zM18 19h1v1h-1zM0 20h7v1H0zM9 20h2v1H9zM12 20h2v1h-2zM15 20h1v1h-1zM17 20h3v1h-3z"></path></svg>
+      </div>
+      <div style="min-width:0">
+        <div style="font-size:12px;font-family:ui-monospace,'SF Mono',monospace;color:var(--fgm);word-break:break-all;line-height:1.5">bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh</div>
+        <div style="margin-top:6px;font-size:11.5px;color:var(--fgs)">Scan or copy · on-chain only</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:10px;background:var(--sm);border-radius:16px;padding:16px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:14.5px;font-weight:700">Ethereum</span>
+      <span style="display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--ok);color:#fff"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"></path></svg>VERIFIED</span>
+      <span style="margin-left:auto;font-size:12px;font-weight:600;color:var(--fgm);cursor:pointer">Copy</span>
+    </div>
+    <div style="margin-top:8px;font-size:12px;font-family:ui-monospace,'SF Mono',monospace;color:var(--fgm);word-break:break-all">0x71C7656EC7ab88b098defB751B7401B5f6d8976F</div>
+    <div style="margin-top:6px;font-size:11.5px;color:var(--ok)">Ownership proven by signed message</div>
+  </div>
+  <div style="margin-top:14px;font-size:11.5px;color:var(--fgs);line-height:1.5;text-align:center">Payments are peer-to-peer and irreversible. Double-check the address before sending.</div>
+</div>
+</sc-if>
+
+</div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 440, &quot;height&quot;: 900}, &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;default&quot;: &quot;light&quot;, &quot;tsType&quot;: &quot;'light' | 'dark'&quot;}, &quot;ipfsEnabled&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Instance&quot;}}">
+class Component extends DCLogic {
+  state = {
+    tab: 'home', overlay: null, video: null, liveV: null,
+    inboxTab: 'notifs', sort: 'recent',
+    following: { auroralab: true },
+    ipfsByVid: { v1: 'ok', v3: 'error' }, sourceByVid: {},
+    uploadStep: 0, streamCreated: false, keyShown: true,
+    authStep: 'login', copied: false, sheet: null,
+  };
+
+  go(patch) { this.setState(patch); }
+
+  renderVals() {
+    const S = this.state;
+    const theme = this.props.theme ?? 'light';
+    const isDark = theme === 'dark';
+
+    const tints = [
+      'linear-gradient(140deg,oklch(0.38 0.03 250),oklch(0.2 0.02 270))',
+      'linear-gradient(140deg,oklch(0.42 0.02 150),oklch(0.24 0.02 200))',
+      'linear-gradient(140deg,oklch(0.35 0.015 60),oklch(0.2 0.015 40))',
+      'linear-gradient(140deg,oklch(0.3 0.02 320),oklch(0.18 0.02 340))',
+      'linear-gradient(140deg,oklch(0.44 0.02 220),oklch(0.26 0.015 250))',
+    ];
+    const avatars = ['oklch(0.4 0.05 260)','oklch(0.45 0.04 160)','oklch(0.45 0.04 300)','oklch(0.4 0.04 40)'];
+
+    const rawVideos = [
+      { id:'v1', title:'Shooting the Alps on medium format — a field diary', ch:'Aurora Lab', handle:'auroralab', initial:'A', views:'128K', age:'2 days ago', dur:'24:16', hls:'1080p', ipfs:true, followers:'24.1K', tint:tints[0], avatarTint:avatars[0], commentCount:'214', desc:'Five days above the treeline with a Pentax 67 and forty rolls of Portra. Notes on metering snow, keeping film warm, and why slow is better.' },
+      { id:'v2', title:'Building a federated video pipeline in Go', ch:'North Loop', handle:'northloop', initial:'N', views:'42K', age:'5 days ago', dur:'18:03', hls:'1440p', ipfs:false, followers:'9.8K', tint:tints[1], avatarTint:avatars[1], commentCount:'87', desc:'From upload session to HLS ladder: chunked uploads, ffprobe, and a durable transcode queue — all in one evening.' },
+      { id:'v3', title:'Monochrome grading — the luxury look, by hand', ch:'Grade House', handle:'gradehouse', initial:'G', views:'96K', age:'1 week ago', dur:'31:40', hls:'2160p', ipfs:true, followers:'51K', tint:tints[2], avatarTint:avatars[2], commentCount:'302', desc:'A full grade from log to print emulation, using only curves and patience. Project files in the description.' },
+      { id:'v4', title:'The quiet web: why federation matters', ch:'Field Notes', handle:'fieldnotes', initial:'F', views:'210K', age:'3 weeks ago', dur:'12:22', hls:'1080p', ipfs:false, followers:'18.7K', tint:tints[3], avatarTint:avatars[3], commentCount:'540', desc:'A short essay on owning your audience, small instances, and video that does not answer to an algorithm.' },
+    ];
+    const videos = rawVideos.map(v => ({ ...v, open: () => this.go({ overlay:'watch', video:v.id }) }));
+    const cv = videos.find(v => v.id === (S.video || 'v1')) || videos[0];
+
+    const rawLive = [
+      { id:'l1', title:'Late-night color grading session', ch:'Grade House', initial:'G', viewers:'1.2K', followers:'51K', tint:tints[2], avatarTint:avatars[2] },
+      { id:'l2', title:'Q&A — self-hosting your own instance', ch:'North Loop', initial:'N', viewers:'384', followers:'9.8K', tint:tints[4], avatarTint:avatars[1] },
+    ];
+    const liveStreams = rawLive.map(l => ({ ...l, open: () => this.go({ overlay:'live', liveV:l.id }) }));
+    const clv = liveStreams.find(l => l.id === S.liveV) || liveStreams[0];
+
+    const cur = S.overlay || S.tab;
+    const sheet = S.sheet;
+
+    // IPFS state for current video
+    const src = S.sourceByVid[cv.id] || 'ipfs';
+    const ipfsAvailable = cv.ipfs && (this.props.ipfsEnabled ?? true);
+    const ist = S.ipfsByVid[cv.id] || 'ok';
+    const usingIpfs = ipfsAvailable && src === 'ipfs';
+    const ipfsMap = {
+      ok:      { dot:'var(--ok)',  label:'IPFS · pinned · 12 peers' },
+      slow:    { dot:'var(--wrn)', label:'IPFS · slow — 2 peers reachable' },
+      error:   { dot:'var(--dng)', label:'IPFS · no peers pinning this video' },
+      fetching:{ dot:'var(--wrn)', label:'IPFS · finding peers…' },
+    };
+    const info = ipfsMap[ist];
+
+    const sorts = ['Recent','Popular','Trending'].map(x => {
+      const k = x.toLowerCase(); const on = S.sort === k;
+      return { label:x, pick:() => this.go({ sort:k }),
+        bg: on ? 'var(--acc)' : 'transparent', co: on ? 'var(--afg)' : 'var(--fgm)', bd: on ? 'var(--acc)' : 'var(--bd)' };
+    });
+
+    const icons = {
+      home: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
+      search: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>',
+      create: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="19" height="19" rx="6"/><path d="M12 8v8M8 12h8" stroke-linecap="round"/></svg>',
+      inbox: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+      library: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m9 9.5 4 2.5-4 2.5z" fill="currentColor" stroke="none"/><path d="M19 5h2v14"/></svg>',
+    };
+    const tabs = [
+      { k:'home', label:'Home', icon:{__html:icons.home} },
+      { k:'search', label:'Search', icon:{__html:icons.search} },
+      { k:'create', label:'Create', icon:{__html:icons.create} },
+      { k:'inbox', label:'Inbox', icon:{__html:icons.inbox} },
+      { k:'library', label:'Library', icon:{__html:icons.library} },
+    ].map(t => ({ ...t,
+      co: (S.tab === t.k && !S.overlay && t.k !== 'create') ? 'var(--fg)' : 'var(--fgs)',
+      go: () => t.k === 'create' ? this.go({ sheet:'create' }) : this.go({ tab:t.k, overlay:null, sheet:null }),
+    }));
+
+    const nIcon = p => ({ __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>' });
+    const notifs = [
+      { strong:'Your video is live.', text:'"Shooting the Alps" finished transcoding and is now published.', age:'12 min ago', unread:true, icon:nIcon('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>') },
+      { strong:'Captions ready.', text:'English auto-captions were generated for "Shooting the Alps".', age:'26 min ago', unread:true, icon:nIcon('<path d="M4 5h16v12H8l-4 4z"/>') },
+      { strong:'Grade House', text:'followed your channel Aurora Lab.', age:'2 h ago', unread:false, icon:nIcon('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>') },
+      { strong:'Held for review.', text:'"Studio tour raw cut" is in the moderation queue — new uploads on this instance are reviewed first.', age:'1 day ago', unread:false, icon:nIcon('<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/>') },
+      { strong:'North Loop', text:'replied to your comment: "Totally agree on the queue design…"', age:'2 days ago', unread:false, icon:nIcon('<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.6 0-3.1-.4-4.4-1.2L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z"/>') },
+    ].map(n => ({ ...n, bg: n.unread ? 'var(--sm)' : 'transparent' }));
+
+    const convos = [
+      { name:'Grade House', initial:'G', tint:avatars[2], last:'Absolutely — sending the raw clips tonight.', age:'2:14 PM', unread:0, encrypted:true, open:() => this.go({ overlay:'convo' }) },
+      { name:'North Loop', initial:'N', tint:avatars[1], last:'The import worker is fixed, try again?', age:'Tue', unread:2, encrypted:false, open:() => this.go({ overlay:'convo' }) },
+      { name:'Field Notes', initial:'F', tint:avatars[3], last:'moodboard-v2.pdf', age:'Jun 28', unread:0, encrypted:false, open:() => this.go({ overlay:'convo' }) },
+    ];
+
+    const history = [
+      { ...videos[2], progress:'64%' }, { ...videos[1], progress:'22%' }, { ...videos[3], progress:'91%' },
+    ];
+    const playlists = [
+      { name:'Grading references', count:12, privacy:'Private', tint:tints[2] },
+      { name:'Film photography', count:28, privacy:'Public', tint:tints[0] },
+      { name:'Watch later', count:6, privacy:'Private', tint:tints[4] },
+    ];
+    const savedRows = [videos[3], videos[1]];
+
+    const badge = {
+      published: { bg:'color-mix(in oklab, var(--ok) 15%, transparent)', co:'var(--ok)' },
+      processing:{ bg:'color-mix(in oklab, var(--wrn) 15%, transparent)', co:'var(--wrn)' },
+      draft:     { bg:'var(--sm2)', co:'var(--fgm)' },
+      review:    { bg:'color-mix(in oklab, var(--wrn) 15%, transparent)', co:'var(--wrn)' },
+      failed:    { bg:'color-mix(in oklab, var(--dng) 15%, transparent)', co:'var(--dng)' },
+    };
+    const studioVids = [
+      { title:'Shooting the Alps on medium format — a field diary', state:'Published', k:'published', meta:'128K views · Public', tint:tints[0] },
+      { title:'Studio tour raw cut', state:'In review', k:'review', meta:'Quarantined — new upload', tint:tints[3] },
+      { title:'Winter light tests (HLS 4K)', state:'Processing', k:'processing', meta:'Transcoding 1080p…', tint:tints[4], spinning:true },
+      { title:'Interview with a printmaker', state:'Draft', k:'draft', meta:'No file uploaded', tint:tints[1] },
+      { title:'Corrupted export test', state:'Failed', k:'failed', meta:'Probe rejected file', tint:tints[2] },
+    ].map(v => ({ ...v, badgeBg: badge[v.k].bg, badgeCo: badge[v.k].co }));
+
+    const mkReply = r => ({ nameCo: r.deleted ? 'var(--fgs)' : 'var(--fg)', ...r });
+    const comments = [
+      { id:'c1', who:'tomas', initial:'T', tint:avatars[1], age:'2 h', text:'The metering notes alone are worth a follow. Snow at +2 EV finally makes sense.', hasReplies:true, replies:3, replyList:[
+        mkReply({ who:'auroralab', initial:'A', tint:avatars[0], age:'2 h', text:'Thank you! The +2 rule saved every roll on day three — the histogram video goes deeper if you want it.' }),
+        mkReply({ who:'tomas', initial:'T', tint:avatars[1], age:'1 h', text:'Please make that one. Also curious how you meter mixed shade + snow.' }),
+        mkReply({ who:'lena_k', initial:'L', tint:avatars[2], age:'40 min', text:'Seconding the histogram breakdown request.' }),
+      ]},
+      { id:'c2', who:'lena_k', initial:'L', tint:avatars[2], age:'5 h', text:'Watched on IPFS from three hops away and it played flawlessly. The future is quietly here.', hasReplies:false },
+      { id:'c3', who:'[deleted]', initial:'·', tint:'var(--sm2)', age:'1 d', text:'[deleted]', hasReplies:true, replies:1, deleted:true, replyList:[
+        mkReply({ who:'arno', initial:'A', tint:avatars[0], age:'1 d', text:'Replies stay even when a comment is removed — nice touch for thread continuity.' }),
+      ]},
+      { id:'c4', who:'arno', initial:'A', tint:avatars[0], age:'1 d', text:'Would love a breakdown of the warm-up routine for the film backs in cold weather.', hasReplies:false },
+    ].map(c => {
+      const expanded = !!(S.openReplies || {})[c.id];
+      return { ...c,
+        nameCo: c.deleted ? 'var(--fgs)' : 'var(--fg)',
+        textCo: c.deleted ? 'var(--fgs)' : 'var(--fg)',
+        textStyle: c.deleted ? 'italic' : 'normal',
+        expanded, chev: expanded ? '180deg' : '0deg',
+        repliesLabel: expanded ? 'Hide replies' : (c.replies === 1 ? 'View 1 reply' : 'View ' + c.replies + ' replies'),
+        toggle: () => this.go({ openReplies: { ...(S.openReplies || {}), [c.id]: !expanded } }),
+      };
+    });
+
+    const following = !!S.following[cv.handle];
+
+    const rowsOf = defs => defs.map((r, i) => ({
+      sub: false, value: false, ...r,
+      divider: i === 0 ? 'none' : '1px solid var(--bds)',
+      co: r.danger ? 'var(--dng)' : 'var(--fg)',
+      go: r.go || (() => {}),
+    }));
+    const settingGroups = [
+      { name:'Profile', rows: rowsOf([
+        { label:'Display name & bio', value:'Mira Chen' },
+        { label:'Avatar & banner' },
+        { label:'Channels', sub:'Aurora Lab · @auroralab' },
+      ])},
+      { name:'Creator', rows: rowsOf([
+        { label:'Donation addresses', sub:'3 addresses · 1 verified', go:() => this.go({ overlay:'donations' }) },
+        { label:'Bluesky cross-posting', sub:'@mira.bsky.social · auto-post on' },
+        { label:'Linked sign-ins', sub:'SSO · 1 provider' },
+      ])},
+      { name:'Security', rows: rowsOf([
+        { label:'Two-factor authentication', sub:'On · 8 recovery codes left' },
+        { label:'Sessions', sub:'3 active · sign out everywhere' },
+        { label:'Encrypted messaging devices', sub:'2 devices registered' },
+      ])},
+      { name:'Data', rows: rowsOf([
+        { label:'Export your data', sub:'Last export June 30 · ready for 5 more days' },
+        { label:'Import an archive' },
+      ])},
+      { name:'Danger zone', rows: rowsOf([
+        { label:'Deactivate account', sub:'Reversible — an admin can restore it' },
+        { label:'Delete account', sub:'Permanent. Videos and channels are erased.', danger:true },
+      ])},
+    ];
+
+    return {
+      theme, isDark,
+      sHome: cur === 'home', sSearch: cur === 'search', sInbox: cur === 'inbox',
+      sLibrary: cur === 'library', sStudio: cur === 'studio', sUpload: cur === 'upload',
+      sGoLive: cur === 'golive', sWatch: cur === 'watch', sLive: cur === 'live',
+      sChannel: cur === 'channel', sSettings: cur === 'settings', sConvo: cur === 'convo',
+      sDonations: cur === 'donations', sAuth: cur === 'auth',
+      showTabs: !S.overlay || S.overlay === 'watch' ? !S.overlay : false,
+      showCreate: sheet === 'create', showSupport: sheet === 'support',
+
+      sorts, tabs, feed: videos, liveStreams, results: [videos[0], videos[2], videos[3]],
+      notifs, convos, history, playlists, savedRows, studioVids, comments, channelVids: videos,
+      cv, clv,
+
+      inboxIsNotifs: S.inboxTab === 'notifs', inboxIsMsgs: S.inboxTab === 'msgs',
+      inboxNotifs: () => this.go({ inboxTab:'notifs' }), inboxMsgs: () => this.go({ inboxTab:'msgs' }),
+      inboxTabNBg: S.inboxTab === 'notifs' ? 'var(--bg)' : 'transparent',
+      inboxTabMBg: S.inboxTab === 'msgs' ? 'var(--bg)' : 'transparent',
+      inboxTabNSh: S.inboxTab === 'notifs' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+      inboxTabMSh: S.inboxTab === 'msgs' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+
+      // watch / ipfs
+      playerOk: !usingIpfs || ist === 'ok' || ist === 'slow',
+      playerError: usingIpfs && ist === 'error',
+      playerFetching: usingIpfs && ist === 'fetching',
+      showIpfsBar: ipfsAvailable,
+      ipfsDot: usingIpfs ? info.dot : 'var(--fgs)',
+      ipfsLabel: usingIpfs ? info.label : 'Playing from server (HLS)',
+      sourceBtn: usingIpfs ? 'Use server' : 'Use IPFS',
+      toggleSource: () => this.go({ sourceByVid: { ...S.sourceByVid, [cv.id]: usingIpfs ? 'server' : 'ipfs' } }),
+      refetchIpfs: () => {
+        this.go({ sourceByVid:{ ...S.sourceByVid, [cv.id]:'ipfs' }, ipfsByVid: { ...S.ipfsByVid, [cv.id]:'fetching' } });
+        setTimeout(() => this.setState(s => ({ ipfsByVid: { ...s.ipfsByVid, [cv.id]:'ok' } })), 1600);
+      },
+      useServer: () => this.go({ sourceByVid: { ...S.sourceByVid, [cv.id]:'server' } }),
+
+      followLabel: following ? 'Following' : 'Follow',
+      followBg: following ? 'transparent' : 'var(--acc)',
+      followCo: following ? 'var(--fg)' : 'var(--afg)',
+      followBd: following ? '1px solid var(--bd)' : '1px solid var(--acc)',
+      toggleFollow: () => this.go({ following: { ...S.following, [cv.handle]: !following } }),
+
+      // nav
+      goBack: () => this.go({ overlay:null, sheet:null }),
+      goInbox: () => this.go({ tab:'inbox', overlay:null }),
+      goSettings: () => this.go({ overlay:'settings', sheet:null }),
+      goStudio: () => this.go({ overlay:'studio', sheet:null }),
+      goStudioSheet: () => this.go({ overlay:'studio', sheet:null }),
+      openChannel: () => this.go({ overlay:'channel' }),
+      openSupport: () => this.go({ sheet:'support' }),
+      closeSheet: () => this.go({ sheet:null }),
+      signOut: () => this.go({ overlay:'auth', authStep:'login' }),
+
+      // upload
+      startUpload: () => this.go({ overlay:'upload', uploadStep:0, sheet:null }),
+      upNext: () => this.go({ uploadStep: Math.min(S.uploadStep + 1, 3) }),
+      up0: S.uploadStep === 0, up1: S.uploadStep === 1, up2: S.uploadStep === 2, up3: S.uploadStep === 3,
+      uploadTitle: ['Upload','Uploading','Details','Done'][S.uploadStep],
+
+      // live create
+      startGoLive: () => this.go({ overlay:'golive', streamCreated:false, sheet:null }),
+      createStream: () => this.go({ streamCreated:true, keyShown:true }),
+      liveNotCreated: !S.streamCreated, liveCreated: S.streamCreated,
+      keyBlur: S.keyShown ? 'none' : 'blur(5px)',
+      keyLabel: S.keyShown ? 'Hide' : 'Show',
+      toggleKey: () => this.go({ keyShown: !S.keyShown }),
+
+      // auth
+      authLogin: S.authStep === 'login', authMfa: S.authStep === 'mfa', authSignup: S.authStep === 'signup',
+      authToMfa: () => this.go({ authStep:'mfa' }),
+      authToSignup: () => this.go({ authStep:'signup' }),
+      authToLogin: () => this.go({ authStep:'login' }),
+      authDone: () => this.go({ overlay:null, tab:'home' }),
+
+      supportName: S.overlay === 'live' ? clv.ch : cv.ch,
+      copiedLabel: S.copied ? 'Copied' : 'Copy',
+      copiedCo: S.copied ? 'var(--ok)' : 'var(--fgm)',
+      copyAddr: () => { this.go({ copied:true }); setTimeout(() => this.setState({ copied:false }), 1400); },
+    };
+  }
+}
+</script>
+</body>
+</html>

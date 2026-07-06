@@ -37,7 +37,7 @@ export function NotificationsBell() {
     <Link
       href="/notifications"
       aria-label={label}
-      className="relative inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+      className="focus-ring relative inline-flex h-9 w-9 items-center justify-center rounded-full text-fg transition-colors hover:bg-surface-muted"
     >
       <svg
         aria-hidden
@@ -53,7 +53,7 @@ export function NotificationsBell() {
         <path d="M13.73 21a2 2 0 0 1-3.46 0" />
       </svg>
       {count > 0 ? (
-        <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-4 text-white">
+        <span className="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full bg-danger-solid px-1 text-[10px] font-semibold leading-4 text-danger-fg ring-2 ring-canvas">
           {count > 99 ? "99+" : count}
         </span>
       ) : null}

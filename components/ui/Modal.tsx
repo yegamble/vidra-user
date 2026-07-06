@@ -88,7 +88,7 @@ export function Modal({ title, onClose, children, hideClose = false, className }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -100,12 +100,12 @@ export function Modal({ title, onClose, children, hideClose = false, className }
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          "w-full max-w-md rounded-lg border border-border-subtle bg-surface p-5 shadow-xl focus:outline-none",
+          "w-full max-w-md rounded-2xl border border-border-subtle bg-surface p-5 shadow-2xl focus:outline-none",
           className,
         )}
       >
         <div className="mb-3 flex items-start justify-between gap-4">
-          <h2 id={titleId} className="text-base font-semibold tracking-tight text-fg">
+          <h2 id={titleId} className="text-lg font-semibold tracking-tight text-fg">
             {title}
           </h2>
           {hideClose ? null : (

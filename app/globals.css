@@ -1,63 +1,119 @@
 @import "tailwindcss";
 
 /*
- * Vidra design tokens
- * -------------------
- * Semantic color scale (raw values in :root, dark-mode overrides via
- * prefers-color-scheme, exposed to Tailwind as `--color-*` utilities through
- * @theme inline). Component primitives (components/ui/*) consume these tokens
- * — `bg-surface`, `text-fg`, `border-border`, `ring-focus`, `bg-accent`, … —
- * so a token change reskins the whole primitive layer, and each token flips in
- * dark mode automatically (no `dark:` variant needed on the primitives).
+ * Vidra design tokens — "quiet luxury" zinc monochrome
+ * ----------------------------------------------------
+ * Source of truth: the Vidra design templates (Vidra App / Vidra Desktop
+ * .dc.html) + .ralph/specs/design-system.md. Every color is a semantic token
+ * defined once with `light-dark()`; the active scheme is driven by
+ * `color-scheme`, so:
  *
- * The values intentionally mirror the neutral (zinc) + red palette the app was
- * already hand-writing, so refactoring a surface onto the primitives is a
- * visual no-op. Spacing / radius / typography stay on Tailwind's default scale
- * (documented in .ralph/specs/design-system.md).
+ *   - no [data-theme] attribute  → follows the OS (prefers-color-scheme)
+ *   - <html data-theme="light">  → forced light
+ *   - <html data-theme="dark">   → forced dark
+ *
+ * The inline script in app/layout.tsx applies the stored preference before
+ * first paint; components never branch on theme. Tokens are exposed to
+ * Tailwind as `--color-*` utilities via `@theme inline` (bg-surface, text-fg,
+ * border-border, …), so the primitives need no `dark:` variants.
+ *
+ * Contrast: every text token passes WCAG AA (≥4.5:1) on every surface token
+ * it is documented for (verified pairs in .ralph/specs/design-system.md).
+ * `fg-subtle` is the one exception by design — it is DECORATIVE ONLY
+ * (disabled states, ornament icons), never meaningful text.
  */
 :root {
-  /* legacy aliases kept for the base body styles below */
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light dark;
+}
+[data-theme="light"] {
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/*
+ * Make Tailwind's `dark:` variant track the EFFECTIVE theme (manual override
+ * first, OS preference otherwise) so any remaining `dark:` utility stays in
+ * sync with the `light-dark()` tokens. New code should not need `dark:` at all
+ * — use the semantic tokens — but this keeps stragglers from split-braining
+ * when the user forces a theme.
+ */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:not([data-theme="light"], [data-theme="light"] *)) {
+      @slot;
+    }
+  }
+}
+
+:root {
+  /* page canvas (behind everything) */
+  --canvas: light-dark(#ffffff, #0a0a0a);
 
   /* surfaces */
-  --surface: #ffffff; /* page/card background */
-  --surface-muted: #f4f4f5; /* zinc-100 — hover fills, subtle panels */
-  --surface-raised: #ffffff; /* popovers/menus (same as surface in light) */
+  --surface: light-dark(#ffffff, #18181b); /* cards, panels */
+  --surface-muted: light-dark(#f4f4f5, #1f1f23); /* hover fills, subtle panels, chips */
+  --surface-strong: light-dark(#e9e9eb, #2b2b30); /* progress tracks, pressed fills */
+  --surface-raised: light-dark(#ffffff, #1f1f23); /* popovers, menus, sheets */
 
   /* foreground / text */
-  --fg: #18181b; /* zinc-900 — primary text */
-  --fg-muted: #71717a; /* zinc-500 — secondary text */
-  --fg-subtle: #a1a1aa; /* zinc-400 — placeholders, disabled */
+  --fg: light-dark(#18181b, #f4f4f5); /* primary text */
+  --fg-muted: light-dark(#65656e, #a1a1aa); /* secondary text — AA on every surface */
+  --fg-subtle: light-dark(#a1a1aa, #71717a); /* decorative only, never meaningful text */
 
   /* borders */
-  --border: #d4d4d8; /* zinc-300 — inputs, buttons */
-  --border-subtle: #e4e4e7; /* zinc-200 — card dividers */
+  --border: light-dark(#d4d4d8, #3f3f46); /* inputs, outlined buttons */
+  --border-subtle: light-dark(#e8e8ea, #26262a); /* hairline dividers */
 
-  /* primary action */
-  --accent: #18181b; /* zinc-900 */
-  --accent-fg: #ffffff;
+  /* primary action — monochrome accent */
+  --accent: light-dark(#18181b, #f4f4f5);
+  --accent-fg: light-dark(#ffffff, #18181b);
 
   /* focus ring */
-  --focus: #71717a; /* zinc-500 */
+  --focus: light-dark(#71717a, #a1a1aa);
 
-  /* status */
-  --danger: #dc2626; /* red-600 */
+  /* status — text/icon tones (AA as text on canvas/surface/muted) */
+  --danger: light-dark(#c81e1e, #f87171);
+  --danger-solid: #dc2626; /* solid fills (buttons); pairs with --danger-fg */
   --danger-fg: #ffffff;
-  --danger-surface: #fef2f2; /* red-50 */
-  --danger-border: #fecaca; /* red-200 */
-  --success: #16a34a; /* green-600 */
-  --warning: #d97706; /* amber-600 */
+  --danger-surface: light-dark(#fef2f2, #450a0a);
+  --danger-border: light-dark(#fecaca, #7f1d1d);
+  --success: light-dark(#15803d, #22c55e);
+  --warning: light-dark(#b45309, #f59e0b);
+
+  /* the LIVE pulse dot — Apple systemRed, same in both schemes (sits on media) */
+  --live: #ff453a;
+
+  /* legacy aliases (base body styles + older call sites) */
+  --background: var(--canvas);
+  --foreground: var(--fg);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 
+  /*
+   * Typography — Apple HIG system stack (SF Pro on Apple platforms, native
+   * UI faces elsewhere). No webfont download; text renders in the platform's
+   * own premium face immediately.
+   */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, ui-sans-serif, system-ui,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
+  --color-surface-strong: var(--surface-strong);
   --color-surface-raised: var(--surface-raised);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
@@ -68,47 +124,20 @@
   --color-accent-fg: var(--accent-fg);
   --color-focus: var(--focus);
   --color-danger: var(--danger);
+  --color-danger-solid: var(--danger-solid);
   --color-danger-fg: var(--danger-fg);
   --color-danger-surface: var(--danger-surface);
   --color-danger-border: var(--danger-border);
   --color-success: var(--success);
   --color-warning: var(--warning);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-
-    --surface: #18181b; /* zinc-900 */
-    --surface-muted: #27272a; /* zinc-800 */
-    --surface-raised: #18181b;
-
-    --fg: #f4f4f5; /* zinc-100 */
-    --fg-muted: #a1a1aa; /* zinc-400 */
-    --fg-subtle: #71717a; /* zinc-500 */
-
-    --border: #3f3f46; /* zinc-700 */
-    --border-subtle: #27272a; /* zinc-800 */
-
-    --accent: #f4f4f5; /* zinc-100 */
-    --accent-fg: #18181b;
-
-    --focus: #71717a; /* zinc-500 */
-
-    --danger: #ef4444; /* red-500 */
-    --danger-fg: #ffffff;
-    --danger-surface: #450a0a; /* red-950-ish */
-    --danger-border: #7f1d1d; /* red-900 */
-    --success: #22c55e;
-    --warning: #f59e0b;
-  }
+  --color-live: var(--live);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
 }
 
 /*
@@ -140,10 +169,10 @@ body {
   z-index: 100;
   margin: 0.5rem;
   transform: translateY(-150%);
-  border-radius: 0.375rem;
+  border-radius: 999px;
   background: var(--accent);
   color: var(--accent-fg);
-  padding: 0.5rem 0.875rem;
+  padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
   transition: transform 0.15s ease;
@@ -159,6 +188,18 @@ body {
 /* The skip-link target must not paint its own focus outline when jumped to. */
 #main-content:focus {
   outline: none;
+}
+
+/* The LIVE indicator pulse (template `vpulse`). Neutralized by the global
+ * reduced-motion reset below like every other animation. */
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 /*

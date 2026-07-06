@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<style>
+body{margin:0;background:#ececea;font-family:-apple-system,'SF Pro Text',system-ui,sans-serif}
+</style>
+</helmet>
+<section class="dv-turn" id="t2" style="padding:44px 48px 40px;border-bottom:1px solid rgba(0,0,0,0.08)">
+  <div style="max-width:920px;display:flex;flex-direction:column;gap:10px;margin-bottom:28px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="#t2" style="font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none">2</a>
+      <span style="font-size:18px;font-weight:700;letter-spacing:-0.03em;color:#1a1a1a">Desktop versions</span>
+      <button onClick="{{ toggleTheme }}" style="display:flex;align-items:center;gap:8px;background:#1a1a1a;color:#fff;border:none;border-radius:99px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer">
+        <span style="width:14px;height:14px;border-radius:99px;background:{{ swatch }};border:1.5px solid rgba(255,255,255,0.5)"></span>{{ themeLabel }}</button>
+    </div>
+    <div style="font-size:13px;line-height:1.65;color:rgba(0,0,0,0.6);max-width:760px">
+      Same token system, sidebar shell per the codebase's design spec. <a href="#2a" style="color:#1a1a1a;font-weight:600">2a</a>: home grid, watch page (two-column with related rail, IPFS source bar, <b>expandable comment replies</b>, Support dialog), channel, and Studio (click videos / sidebar to navigate). <a href="#2b" style="color:#1a1a1a;font-weight:600">2b</a>: admin console — overview, users table → user detail, moderation queues, content, instance settings.
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:48px;align-items:flex-start">
+    <div class="dv-opt" id="2a" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <a href="#2a" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,0.08);color:#1a1a1a;border-radius:5px;text-decoration:none">2a</a>
+        <span style="font-size:11px;color:rgba(0,0,0,0.55)">Desktop — viewer & creator, interactive</span>
+      </div>
+      <dc-import name="Vidra Desktop" theme="{{ theme }}" hint-size="1360px,860px"></dc-import>
+    </div>
+    <div class="dv-opt" id="2b" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <a href="#2b" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,0.08);color:#1a1a1a;border-radius:5px;text-decoration:none">2b</a>
+        <span style="font-size:11px;color:rgba(0,0,0,0.55)">Desktop — admin console, interactive</span>
+      </div>
+      <dc-import name="Vidra Desktop Admin" theme="{{ theme }}" hint-size="1360px,860px"></dc-import>
+    </div>
+  </div>
+  <p style="margin:26px 0 0;font-size:12px;line-height:1.5;color:rgba(0,0,0,0.5)">Fixes this turn: channel avatar now overlaps the banner correctly (mobile <a href="#1a" style="color:#1a1a1a;font-weight:600">1a</a>), comment replies expand with real threads on mobile and desktop watch pages.</p>
+</section>
+<section class="dv-turn" id="t1" style="padding:44px 48px 60px">
+  <div style="max-width:920px;display:flex;flex-direction:column;gap:10px;margin-bottom:32px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:22px;font-weight:700;letter-spacing:-0.04em;color:#1a1a1a">Vidra — mobile-first design</span>
+      <button onClick="{{ toggleTheme }}" style="display:flex;align-items:center;gap:8px;background:#1a1a1a;color:#fff;border:none;border-radius:99px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer">
+        <span style="width:14px;height:14px;border-radius:99px;background:{{ swatch }};border:1.5px solid rgba(255,255,255,0.5)"></span>{{ themeLabel }}</button>
+    </div>
+    <div style="font-size:13px;line-height:1.65;color:rgba(0,0,0,0.6);max-width:760px">
+      Grounded in the <b>vidra-user</b> token system (zinc semantic tokens, Apple-inspired, monochrome accent = luxury via type, space and materials — no brand color). Both phones are <b>fully interactive</b>: tap videos, tabs, toggles.
+      <a href="#1a" style="color:#1a1a1a;font-weight:600">1a</a> covers the viewer/creator app — feed, watch (with IPFS source control, re-fetch and error states on "Monochrome grading"), live, channel, library, inbox (DMs incl. E2EE), Studio (upload → resumable chunks → details → processing), Go&nbsp;Live (one-time stream key), settings (crypto donation addresses with verification), and auth (login → TOTP → signup with approval notice — via Account → Sign out).
+      <a href="#1b" style="color:#1a1a1a;font-weight:600">1b</a> is the admin/moderator app — overview (health, queues, audit log), users (detail: role, quota override, delete guard), queues (reports / quarantine / sign-ups), content, and instance (live-mutable settings incl. the IPFS feature toggle).
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:48px;align-items:flex-start">
+    <div class="dv-opt" id="1a" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <a href="#1a" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,0.08);color:#1a1a1a;border-radius:5px;text-decoration:none">1a</a>
+        <span style="font-size:11px;color:rgba(0,0,0,0.55)">Viewer & creator app — interactive</span>
+      </div>
+      <dc-import name="Vidra App" theme="{{ theme }}" hint-size="402px,874px"></dc-import>
+    </div>
+    <div class="dv-opt" id="1b" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <a href="#1b" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,0.08);color:#1a1a1a;border-radius:5px;text-decoration:none">1b</a>
+        <span style="font-size:11px;color:rgba(0,0,0,0.55)">Admin & moderator app — interactive</span>
+      </div>
+      <dc-import name="Vidra Admin" theme="{{ theme }}" hint-size="402px,874px"></dc-import>
+    </div>
+  </div>
+  <p style="margin:28px 0 0;font-size:12px;line-height:1.5;color:rgba(0,0,0,0.5)">Try next: "show the desktop watch page" · "make the donation module more prominent on channel pages" · "explore a serif wordmark for the luxury feel"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;default&quot;: &quot;light&quot;, &quot;tsType&quot;: &quot;'light' | 'dark'&quot;, &quot;section&quot;: &quot;Theme&quot;}}">
+class Component extends DCLogic {
+  state = { theme: this.props.theme ?? 'light' };
+  renderVals() {
+    const theme = this.state.theme;
+    return {
+      theme,
+      themeLabel: theme === 'light' ? 'Light mode — tap for dark' : 'Dark mode — tap for light',
+      swatch: theme === 'light' ? '#fff' : '#18181b',
+      toggleTheme: () => this.setState({ theme: theme === 'light' ? 'dark' : 'light' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

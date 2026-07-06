@@ -124,7 +124,7 @@ export function Dropdown({
         onClick={() => (open ? setOpen(false) : openMenu("first"))}
         onKeyDown={onTriggerKeyDown}
         className={cn(
-          "inline-flex items-center gap-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-fg transition-colors focus-ring hover:bg-surface-muted",
+          "inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3.5 py-1.5 text-sm font-semibold text-fg transition-colors focus-ring hover:bg-surface-muted",
           triggerClassName,
         )}
       >
@@ -136,7 +136,7 @@ export function Dropdown({
           role="menu"
           aria-label={triggerLabel}
           className={cn(
-            "absolute z-40 mt-1 min-w-40 rounded-md border border-border-subtle bg-surface-raised py-1 shadow-lg",
+            "absolute z-40 mt-1 min-w-40 rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg",
             align === "end" ? "right-0" : "left-0",
           )}
         >
@@ -156,7 +156,7 @@ export function Dropdown({
                 closeAndRefocus();
               }}
               className={cn(
-                "block w-full px-3 py-1.5 text-left text-sm transition-colors focus-ring disabled:opacity-50",
+                "block w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors focus-ring disabled:opacity-50",
                 item.danger ? "text-danger hover:bg-danger/10" : "text-fg hover:bg-surface-muted",
               )}
             >

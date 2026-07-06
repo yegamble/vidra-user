@@ -5,7 +5,7 @@ export function Spinner({ label }: { label?: string }) {
   return (
     <span role="status" aria-label={text} className="inline-flex items-center">
       <svg
-        className="h-6 w-6 animate-spin text-zinc-400"
+        className="h-6 w-6 animate-spin text-fg-muted"
         viewBox="0 0 24 24"
         fill="none"
         aria-hidden="true"

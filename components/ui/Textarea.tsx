@@ -33,7 +33,7 @@ export function Textarea({ label, hint, error, id, className, ...props }: Textar
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         className={cn(
-          "w-full rounded-md border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus-ring disabled:opacity-60",
+          "w-full rounded-xl border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted focus-ring disabled:opacity-60",
           error ? "border-danger" : "border-border",
           className,
         )}

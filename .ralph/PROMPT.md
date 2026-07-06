@@ -459,20 +459,42 @@ Implement pages and flows for:
 
 Premium/Inner Circle/payment pages are deferred. If existing design docs mention them, keep route placeholders only when useful, mark them disabled/deferred, and do not build payment logic.
 
-### Design system
-Use the uploaded Vidra frontend flow/design docs as the visual source of truth when present.
+### Design system (🔴 guardrail — read `.ralph/specs/design-system.md` before ANY UI change)
+The premium redesign has LANDED. `.ralph/specs/design-system.md` is the
+authoritative, non-negotiable spec (tokens, typography, shape language,
+component patterns, shell, theme system, WCAG contract), faithful to the
+uploaded Vidra design templates (`Vidra App.dc.html` / `Vidra Desktop.dc.html`
+/ admin variants) and Apple's Human Interface Guidelines
+(https://developer.apple.com/design/). Do not deviate from it; extend it in
+the spec first if a new pattern is genuinely needed.
 
-Default direction:
+Hard rules the loop must never regress (each is test-gated):
 
-- Apple-inspired responsive layout.
-- Mobile bottom tabs.
-- Desktop/tablet sidebar.
-- No hamburger menus for primary navigation.
-- Semantic color tokens, not scattered hex values.
-- Accessible focus rings.
-- Dark mode support.
-- Reduced motion and reduced transparency support.
-- Custom components, not UI-kit wrappers.
+- **Apple HIG, quiet luxury**: monochrome zinc chrome, content-deferent,
+  hairline borders, pill controls (`rounded-full`), `rounded-xl` inputs,
+  `rounded-2xl` cards/panels, system font stack (SF Pro on Apple platforms).
+  No new saturated chrome colors; status colors only for status.
+- **Mobile-first**: design at 390px first; `BottomTabBar` (< sm) +
+  `Sidebar` (≥ sm); NO hamburger menus; 44×44pt touch targets; safe-area
+  padding; no horizontal overflow at 390/768 (`e2e/responsive.spec.ts`).
+- **Semantic tokens ONLY** (`bg-surface`, `text-fg-muted`, `border-border`,
+  `bg-accent`, `text-danger`, `bg-danger-solid`, …). Never raw palette
+  classes (`zinc-*`, `red-*`, hex) and never `dark:` variants in components —
+  tokens flip themselves via `light-dark()` + `color-scheme`. Documented
+  exceptions: media overlays (`bg-black/60 text-white` on thumbnails/video)
+  and QR tiles (dark modules on white).
+- **Light/dark/system theme**: preference in `localStorage["vidra.theme"]`
+  applied pre-paint (`lib/theme.ts` + inline script in `app/layout.tsx`),
+  `ThemeToggle` on /settings. Both themes must look correct for every change.
+- **WCAG 2.2 AA**: text tokens are AA-verified per surface — `fg-muted` is the
+  minimum for meaningful secondary text; `fg-subtle` is decorative ONLY.
+  Danger text is `text-danger`; danger fills are `bg-danger-solid
+  text-danger-fg`. axe serious/critical is a hard gate (`e2e/a11y.spec.ts`).
+- **Accessible focus rings** (`.focus-ring`, `:focus-visible` only), skip
+  link, exactly one `<main>` per page, stable accessible names, reduced
+  motion honored globally.
+- **Custom components, not UI-kit wrappers** — extend `components/ui/*`
+  primitives; do not fork their patterns or add a component library.
 
 ### Frontend security
 - Do not store long-lived secrets in localStorage.

@@ -51,8 +51,8 @@ function writeCollapsed(next: boolean): void {
 // destination plus the role-gated Moderation/Admin entries, marks the active
 // route with aria-current, and is collapsible to an icon rail (labels stay in
 // the accessibility tree via sr-only; the collapsed state persists). Hidden
-// below `sm` (the header's disclosure menu covers phones until the bottom-tab
-// shell lands) and on the chrome-less /embed/* routes.
+// below `sm` (the BottomTabBar is the phone-width primary navigation) and on
+// the chrome-less /embed/* routes.
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useSession();
@@ -73,7 +73,7 @@ export function Sidebar() {
   return (
     <nav
       aria-label="Primary"
-      className={`sticky top-14 hidden max-h-[calc(100vh-3.5rem)] shrink-0 flex-col justify-between gap-2 self-start overflow-y-auto border-r border-zinc-200 p-2 transition-[width] duration-200 motion-reduce:transition-none sm:flex dark:border-zinc-800 ${
+      className={`sticky top-14 hidden max-h-[calc(100vh-3.5rem)] shrink-0 flex-col justify-between gap-2 self-start overflow-y-auto border-r border-border-subtle px-2.5 py-3 transition-[width] duration-200 motion-reduce:transition-none sm:flex ${
         collapsed ? "w-14" : "w-56"
       }`}
     >
@@ -104,17 +104,17 @@ export function Sidebar() {
           onClick={toggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!collapsed}
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          className="focus-ring flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
         >
           <svg
             aria-hidden
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.9"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="h-5 w-5 shrink-0"
+            className="h-[18px] w-[18px] shrink-0"
           >
             {collapsed ? <path d="M13 17l5-5-5-5M6 17l5-5-5-5" /> : <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />}
           </svg>
@@ -139,10 +139,10 @@ function SidebarLink({
       href={item.href}
       aria-current={active ? "page" : undefined}
       title={collapsed ? item.label : undefined}
-      className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 ${
+      className={`focus-ring flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
         active
-          ? "bg-zinc-100 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
-          : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          ? "bg-surface-muted font-semibold text-fg"
+          : "font-medium text-fg-muted hover:bg-surface-muted hover:text-fg"
       }`}
     >
       <svg
@@ -150,10 +150,10 @@ function SidebarLink({
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.9"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="h-5 w-5 shrink-0"
+        className="h-[18px] w-[18px] shrink-0"
       >
         <path d={item.iconPath} />
       </svg>

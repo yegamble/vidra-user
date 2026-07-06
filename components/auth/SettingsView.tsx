@@ -18,7 +18,8 @@ import type { UpdateProfileRequest, User } from "@/lib/api";
 // the httpOnly refresh cookie — show a loading state until that settles; only
 // a settled signed-out state gets the sign-in prompt.
 export function SettingsView() {
-  const { status, user, updateProfile, deactivate, deleteAccount, reloadUser } = useSession();
+  const { status, user, updateProfile, deactivate, deleteAccount, reloadUser, logout } =
+    useSession();
   // Flipped after a successful permanent delete: the session is gone, so this
   // must be checked BEFORE the signed-out prompt or the goodbye state would
   // never show.
@@ -200,6 +201,26 @@ export function SettingsView() {
         </Link>
       </section>
       <AccountDataSection />
+      {/* Header sign-out is hidden on phones (the avatar is the only account
+          control there), so settings must offer it. Named distinctly from the
+          header's "Sign out" so the two never collide in the a11y tree. */}
+      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+        <div>
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Session</h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Sign out of Vidra on this device.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            void logout();
+          }}
+          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        >
+          Sign out of this device
+        </button>
+      </section>
       <DeactivateSection deactivate={deactivate} />
       <DeleteAccountSection
         username={user.username}

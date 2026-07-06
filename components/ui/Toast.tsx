@@ -90,7 +90,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             role={tst.variant === "error" ? "alert" : "status"}
             aria-live={tst.variant === "error" ? "assertive" : "polite"}
             className={cn(
-              "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-md border px-4 py-3 text-sm shadow-lg",
+              "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg",
               VARIANT_STYLE[tst.variant],
             )}
           >

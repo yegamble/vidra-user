@@ -38,7 +38,7 @@ export function Avatar({
     return (
       <span
         aria-hidden="true"
-        className={`inline-flex shrink-0 select-none items-center justify-center rounded-full bg-zinc-200 font-semibold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200 ${className}`}
+        className={`inline-flex shrink-0 select-none items-center justify-center rounded-full bg-surface-strong font-semibold text-fg-muted ${className}`}
       >
         {(name.trim()[0] ?? "?").toUpperCase()}
       </span>
@@ -51,7 +51,7 @@ export function Avatar({
       src={src}
       alt={alt}
       onError={() => setBroken(true)}
-      className={`inline-block shrink-0 rounded-full bg-zinc-100 object-cover dark:bg-zinc-800 ${className}`}
+      className={`inline-block shrink-0 rounded-full bg-surface-muted object-cover ${className}`}
     />
   );
 }

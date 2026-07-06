@@ -21,7 +21,7 @@ export function LoadMoreButton({
   return (
     <div className="flex flex-col items-center gap-2">
       {error ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       ) : null}
@@ -29,7 +29,7 @@ export function LoadMoreButton({
         type="button"
         disabled={busy}
         onClick={onClick}
-        className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="focus-ring rounded-full border border-border px-5 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
       >
         {busy ? "Loading more…" : "Load more"}
       </button>

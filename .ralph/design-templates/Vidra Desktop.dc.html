@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<style>
+@keyframes vpulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes vspin{to{transform:rotate(360deg)}}
+:root{--bg:#ffffff;--sur:#ffffff;--sm:#f4f4f5;--sm2:#e9e9eb;--fg:#18181b;--fgm:#71717a;--fgs:#a1a1aa;--bd:#d4d4d8;--bds:#e8e8ea;--acc:#18181b;--afg:#ffffff;--dng:#dc2626;--ok:#16a34a;--wrn:#d97706}
+[data-vtheme="dark"]{--bg:#0a0a0a;--sur:#18181b;--sm:#1f1f23;--sm2:#2b2b30;--fg:#f4f4f5;--fgm:#a1a1aa;--fgs:#71717a;--bd:#3f3f46;--bds:#26262a;--acc:#f4f4f5;--afg:#18181b;--dng:#ef4444;--ok:#22c55e;--wrn:#f59e0b}
+</style>
+</helmet>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ winW }}" height="{{ winH }}" url="vidra.example" hint-size="1360px,860px">
+<div data-vtheme="{{ theme }}" style="height:100%;display:flex;flex-direction:column;background:var(--bg);color:var(--fg);font-family:-apple-system,'SF Pro Text',system-ui,sans-serif">
+
+  <!-- header -->
+  <div style="flex:none;display:flex;align-items:center;gap:20px;height:58px;padding:0 24px;border-bottom:1px solid var(--bds)">
+    <span onClick="{{ goHome }}" style="font-size:21px;font-weight:700;letter-spacing:-0.045em;cursor:pointer">Vidra</span>
+    <div style="flex:1;display:flex;justify-content:center">
+      <div style="display:flex;align-items:center;gap:10px;background:var(--sm);border-radius:99px;padding:9px 18px;width:420px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--fgs)" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4-4"></path></svg>
+        <span style="font-size:13.5px;color:var(--fgs)">Search videos, channels, tags</span>
+      </div>
+    </div>
+    <button style="display:flex;align-items:center;gap:7px;background:none;border:1px solid var(--bd);border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;color:var(--fg);cursor:pointer" onClick="{{ goStudio }}">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Create</button>
+    <button aria-label="Notifications" style="position:relative;background:none;border:none;color:var(--fg);padding:4px;cursor:pointer;display:flex">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg>
+      <span style="position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:99px;background:var(--dng);border:1.5px solid var(--bg)"></span>
+    </button>
+    <div style="width:32px;height:32px;border-radius:99px;background:var(--acc);color:var(--afg);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">M</div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+    <!-- sidebar -->
+    <div style="flex:none;width:216px;border-right:1px solid var(--bds);padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow:auto">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="7">
+        <div onClick="{{ n.go }}" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:9px;background:{{ n.bg }};color:{{ n.co }};font-size:13.5px;font-weight:600;cursor:pointer">
+          <span dangerouslySetInnerHTML="{{ n.icon }}" style="display:flex"></span>{{ n.label }}
+        </div>
+      </sc-for>
+      <div style="margin:14px 12px 6px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--fgs)">Following</div>
+      <sc-for list="{{ follows }}" as="f" hint-placeholder-count="3">
+        <div onClick="{{ f.go }}" style="display:flex;align-items:center;gap:11px;padding:7px 12px;border-radius:9px;font-size:13px;color:var(--fgm);cursor:pointer">
+          <span style="width:22px;height:22px;border-radius:99px;background:{{ f.tint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:600;flex:none">{{ f.initial }}</span>
+          {{ f.name }}
+          <sc-if value="{{ f.live }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;width:6px;height:6px;border-radius:99px;background:var(--dng);animation:vpulse 1.6s infinite"></span></sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- ============ HOME ============ -->
+    <sc-if value="{{ sHome }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;overflow:auto;padding:22px 28px 40px">
+      <div style="display:flex;gap:8px">
+        <sc-for list="{{ sorts }}" as="s" hint-placeholder-count="3">
+          <button onClick="{{ s.pick }}" style="padding:7px 16px;border-radius:99px;border:1px solid {{ s.bd }};background:{{ s.bg }};color:{{ s.co }};font-size:13px;font-weight:600;cursor:pointer">{{ s.label }}</button>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px 20px;margin-top:22px">
+        <sc-for list="{{ homeCards }}" as="v" hint-placeholder-count="6">
+          <div onClick="{{ v.open }}" style="cursor:pointer">
+            <div style="aspect-ratio:16/9;border-radius:14px;background:{{ v.tint }};position:relative;overflow:hidden">
+              <sc-if value="{{ v.isLive }}" hint-placeholder-val="{{ false }}">
+                <span style="position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:5px;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);border-radius:99px;padding:4px 10px 4px 8px;color:#fff;font-size:10.5px;font-weight:700;letter-spacing:0.04em"><span style="width:6px;height:6px;border-radius:99px;background:#ff453a;animation:vpulse 1.6s infinite"></span>LIVE</span>
+              </sc-if>
+              <sc-if value="{{ v.dur }}" hint-placeholder-val="{{ false }}">
+                <span style="position:absolute;bottom:9px;right:9px;background:rgba(0,0,0,0.6);border-radius:6px;padding:2px 7px;color:#fff;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums">{{ v.dur }}</span>
+              </sc-if>
+              <sc-if value="{{ v.ipfs }}" hint-placeholder-val="{{ false }}">
+                <span style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.5);backdrop-filter:blur(6px);border-radius:99px;padding:3px 9px;color:rgba(255,255,255,0.9);font-size:10px;font-weight:600;letter-spacing:0.03em">IPFS</span>
+              </sc-if>
+            </div>
+            <div style="display:flex;gap:11px;padding:10px 2px 0">
+              <div style="flex:none;width:34px;height:34px;border-radius:99px;background:{{ v.avatarTint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600">{{ v.initial }}</div>
+              <div style="min-width:0">
+                <div style="font-size:14px;font-weight:600;line-height:1.35;letter-spacing:-0.01em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ v.title }}</div>
+                <div style="margin-top:3px;font-size:12.5px;color:var(--fgm)">{{ v.ch }} · {{ v.meta }}</div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============ WATCH ============ -->
+    <sc-if value="{{ sWatch }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;overflow:auto;padding:24px 28px 48px">
+      <div style="display:flex;gap:26px;max-width:1280px">
+        <div style="flex:1;min-width:0">
+          <div style="position:relative;aspect-ratio:16/9;background:#000;border-radius:16px;overflow:hidden">
+            <sc-if value="{{ playerOk }}" hint-placeholder-val="{{ true }}">
+              <div style="position:absolute;inset:0;background:{{ cv.tint }};opacity:0.85"></div>
+              <button aria-label="Play" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:99px;background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff"><path d="M7 4.5v15l13-7.5z"></path></svg>
+              </button>
+              <div style="position:absolute;left:16px;right:16px;bottom:12px">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.9);font-variant-numeric:tabular-nums;margin-bottom:7px">
+                  <span>3:42 / {{ cv.dur }}</span>
+                  <span style="display:flex;gap:8px;align-items:center">
+                    <span style="background:rgba(255,255,255,0.16);border-radius:5px;padding:1px 7px;font-weight:600">CC</span>
+                    <span style="background:rgba(255,255,255,0.16);border-radius:5px;padding:1px 7px;font-weight:600">{{ cv.hls }}</span>
+                  </span>
+                </div>
+                <div style="height:4px;border-radius:99px;background:rgba(255,255,255,0.25)"><div style="width:15%;height:100%;border-radius:99px;background:#fff"></div></div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ playerError }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.8" stroke-linecap="round"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+                <div style="color:#fff;font-size:16px;font-weight:600">Couldn't retrieve this video from IPFS</div>
+                <div style="color:rgba(255,255,255,0.65);font-size:13.5px">No reachable peers are pinning this content right now.</div>
+                <div style="display:flex;gap:10px;margin-top:4px">
+                  <button onClick="{{ refetchIpfs }}" style="background:#fff;color:#000;border:none;border-radius:99px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">Re-fetch from IPFS</button>
+                  <button onClick="{{ useServer }}" style="background:rgba(255,255,255,0.16);color:#fff;border:none;border-radius:99px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">Play from server</button>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ playerFetching }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" style="animation:vspin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.2-8.56"></path></svg>
+                <div style="color:rgba(255,255,255,0.8);font-size:14px">Finding peers…</div>
+              </div>
+            </sc-if>
+          </div>
+          <sc-if value="{{ showIpfsBar }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:9px;padding:11px 4px;border-bottom:1px solid var(--bds)">
+              <span style="width:7px;height:7px;border-radius:99px;background:{{ ipfsDot }};flex:none"></span>
+              <span style="font-size:13px;color:var(--fgm)">{{ ipfsLabel }}</span>
+              <button onClick="{{ refetchIpfs }}" aria-label="Re-fetch from IPFS" style="margin-left:auto;background:none;border:none;color:var(--fgm);cursor:pointer;display:flex;padding:4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"></path></svg></button>
+              <button onClick="{{ toggleSource }}" style="background:var(--sm);border:none;border-radius:99px;padding:6px 13px;font-size:12px;font-weight:600;color:var(--fg);cursor:pointer">{{ sourceBtn }}</button>
+            </div>
+          </sc-if>
+          <div style="margin-top:14px;font-size:19px;font-weight:700;line-height:1.35;letter-spacing:-0.02em">{{ cv.title }}</div>
+          <div style="display:flex;align-items:center;gap:14px;margin-top:12px">
+            <div onClick="{{ openChannel }}" style="display:flex;align-items:center;gap:11px;cursor:pointer">
+              <div style="flex:none;width:40px;height:40px;border-radius:99px;background:{{ cv.avatarTint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:600">{{ cv.initial }}</div>
+              <div>
+                <div style="font-size:14px;font-weight:600">{{ cv.ch }}</div>
+                <div style="font-size:12px;color:var(--fgm)">{{ cv.followers }} followers</div>
+              </div>
+            </div>
+            <button onClick="{{ toggleFollow }}" style="background:{{ followBg }};color:{{ followCo }};border:{{ followBd }};border-radius:99px;padding:8px 17px;font-size:13px;font-weight:600;cursor:pointer">{{ followLabel }}</button>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button onClick="{{ openSupport }}" style="display:flex;align-items:center;gap:6px;background:var(--acc);color:var(--afg);border:none;border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.5-8.6C.9 9 2.7 5.5 6.2 5.5c2 0 3.3 1 4 2.1.7-1.1 2-2.1 4-2.1 3.5 0 5.3 3.5 3.7 6.9-2 4-9.9 8.6-9.9 8.6z"></path></svg>Support</button>
+              <button style="background:var(--sm);color:var(--fg);border:none;border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer">Share</button>
+              <button style="background:var(--sm);color:var(--fg);border:none;border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer">Download</button>
+              <button style="background:var(--sm);color:var(--fg);border:none;border-radius:99px;padding:8px 15px;font-size:13px;font-weight:600;cursor:pointer">Save</button>
+            </div>
+          </div>
+          <div style="margin-top:16px;background:var(--sm);border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.55">
+            <span style="font-weight:600">{{ cv.views }} views · {{ cv.age }}</span>
+            <span style="color:var(--fgm)"> — {{ cv.desc }}</span> <span style="font-weight:600;cursor:pointer">more</span>
+          </div>
+          <div style="margin-top:24px">
+            <div style="font-size:16px;font-weight:700">Comments <span style="color:var(--fgm);font-weight:600">· {{ cv.commentCount }}</span></div>
+            <div style="display:flex;gap:11px;align-items:center;margin-top:14px">
+              <div style="flex:none;width:34px;height:34px;border-radius:99px;background:var(--acc);color:var(--afg);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">M</div>
+              <div style="flex:1;border-bottom:1px solid var(--bd);padding:8px 2px;font-size:14px;color:var(--fgs)">Add a comment…</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:20px;padding:22px 0 0">
+              <sc-for list="{{ comments }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;gap:12px">
+                  <div style="flex:none;width:34px;height:34px;border-radius:99px;background:{{ c.tint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600">{{ c.initial }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:12.5px;color:var(--fgm)"><span style="font-weight:600;color:{{ c.nameCo }}">{{ c.who }}</span> · {{ c.age }}</div>
+                    <div style="margin-top:3px;font-size:14px;line-height:1.5;color:{{ c.textCo }};font-style:{{ c.textStyle }}">{{ c.text }}</div>
+                    <div style="margin-top:7px;display:flex;gap:16px;font-size:12px;font-weight:600;color:var(--fgm)">
+                      <span style="cursor:pointer">Reply</span><span style="cursor:pointer">Report</span>
+                    </div>
+                    <sc-if value="{{ c.hasReplies }}" hint-placeholder-val="{{ false }}">
+                      <button onClick="{{ c.toggle }}" style="margin-top:9px;display:flex;align-items:center;gap:6px;background:none;border:none;padding:0;font-size:12.5px;font-weight:600;color:var(--fgm);cursor:pointer">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate({{ c.chev }});transition:transform 0.15s"><path d="m6 9 6 6 6-6"></path></svg>{{ c.repliesLabel }}</button>
+                      <sc-if value="{{ c.expanded }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top:14px;display:flex;flex-direction:column;gap:15px;border-left:2px solid var(--bds);padding-left:16px">
+                          <sc-for list="{{ c.replyList }}" as="r" hint-placeholder-count="2">
+                            <div style="display:flex;gap:10px">
+                              <div style="flex:none;width:26px;height:26px;border-radius:99px;background:{{ r.tint }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:10.5px;font-weight:600">{{ r.initial }}</div>
+                              <div style="min-width:0">
+                                <div style="font-size:12px;color:var(--fgm)"><span style="font-weight:600;color:{{ r.nameCo }}">{{ r.who }}</span> · {{ r.age }}</div>
+                                <div style="margin-top:2px;font-size:13.5px;line-height:1.5">{{ r.text }}</div>
+                              </div>
+                            </div>
+                          </sc-for>
+                          <div style="font-size:12px;font-weight:600;color:var(--fgm);cursor:pointer">Reply</div>
+                        </div>
+                      </sc-if>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <!-- related rail -->
+        <div style="flex:none;width:344px;display:flex;flex-direction:column;gap:14px">
+          <div style="font-size:13px;font-weight:700;color:var(--fgm);letter-spacing:0.02em">UP NEXT</div>
+          <sc-for list="{{ related }}" as="v" hint-placeholder-count="3">
+            <div onClick="{{ v.open }}" style="display:flex;gap:11px;cursor:pointer">
+              <div style="flex:none;width:150px;aspect-ratio:16/9;border-radius:10px;background:{{ v.tint }};position:relative">
+                <span style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.6);border-radius:5px;padding:1px 6px;color:#fff;font-size:10.5px;font-weight:600">{{ v.dur }}</span>
+              </div>
+              <div style="min-width:0;padding-top:1px">
+                <div style="font-size:13px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ v.title }}</div>
+                <div style="margin-top:4px;font-size:11.5px;color:var(--fgm)">{{ v.ch }}</div>
+                <div style="font-size:11.5px;color:var(--fgm)">{{ v.views }} views · {{ v.age }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============ CHANNEL ============ -->
+    <sc-if value="{{ sChannel }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;overflow:auto;padding-bottom:48px">
+      <div style="height:190px;background:{{ cv.tint }}"></div>
+      <div style="padding:0 36px;max-width:1180px">
+        <div style="display:flex;align-items:flex-end;gap:20px;margin-top:-40px;position:relative;z-index:2">
+          <div style="width:104px;height:104px;border-radius:99px;background:{{ cv.avatarTint }};border:4px solid var(--bg);display:flex;align-items:center;justify-content:center;color:#fff;font-size:38px;font-weight:600;box-shadow:0 2px 10px rgba(0,0,0,0.18)">{{ cv.initial }}</div>
+          <div style="padding-bottom:10px;flex:1;min-width:0">
+            <div style="font-size:24px;font-weight:700;letter-spacing:-0.03em">{{ cv.ch }}</div>
+            <div style="margin-top:2px;font-size:13.5px;color:var(--fgm)">@{{ cv.handle }} · {{ cv.followers }} followers · 34 videos</div>
+          </div>
+          <div style="padding-bottom:12px;display:flex;gap:9px">
+            <button onClick="{{ toggleFollow }}" style="background:{{ followBg }};color:{{ followCo }};border:{{ followBd }};border-radius:99px;padding:9px 20px;font-size:13.5px;font-weight:600;cursor:pointer">{{ followLabel }}</button>
+            <button onClick="{{ openSupport }}" style="display:flex;align-items:center;gap:7px;border:1px solid var(--bd);background:none;color:var(--fg);border-radius:99px;padding:9px 17px;font-size:13.5px;font-weight:600;cursor:pointer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.5-8.6C.9 9 2.7 5.5 6.2 5.5c2 0 3.3 1 4 2.1.7-1.1 2-2.1 4-2.1 3.5 0 5.3 3.5 3.7 6.9-2 4-9.9 8.6-9.9 8.6z"></path></svg>Support</button>
+            <button style="border:1px solid var(--bd);background:none;color:var(--fg);border-radius:99px;padding:9px 17px;font-size:13.5px;font-weight:600;cursor:pointer">Message</button>
+          </div>
+        </div>
+        <div style="margin-top:10px;font-size:14px;line-height:1.55;color:var(--fgm);max-width:640px">Field diaries, photography and the slow web. Filmed on medium format, graded by hand.</div>
+        <div style="display:flex;gap:26px;margin-top:22px;border-bottom:1px solid var(--bds);font-size:14px;font-weight:600">
+          <span style="padding-bottom:11px;border-bottom:2px solid var(--fg)">Videos</span>
+          <span style="padding-bottom:11px;color:var(--fgm)">Playlists</span>
+          <span style="padding-bottom:11px;color:var(--fgm)">About</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:22px 18px;padding:22px 0 0">
+          <sc-for list="{{ channelVids }}" as="v" hint-placeholder-count="4">
+            <div onClick="{{ v.open }}" style="cursor:pointer">
+              <div style="aspect-ratio:16/9;border-radius:11px;background:{{ v.tint }};position:relative">
+                <span style="position:absolute;bottom:7px;right:7px;background:rgba(0,0,0,0.6);border-radius:5px;padding:1px 6px;color:#fff;font-size:10.5px;font-weight:600">{{ v.dur }}</span>
+              </div>
+              <div style="padding:8px 2px 0;font-size:13px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ v.title }}</div>
+              <div style="padding:3px 2px 0;font-size:11.5px;color:var(--fgm)">{{ v.views }} views · {{ v.age }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============ STUDIO ============ -->
+    <sc-if value="{{ sStudio }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;overflow:auto;padding:24px 32px 48px">
+      <div style="display:flex;align-items:center;gap:16px;max-width:1180px">
+        <div>
+          <div style="font-size:22px;font-weight:700;letter-spacing:-0.03em">Studio</div>
+          <div style="margin-top:2px;font-size:13px;color:var(--fgm)">Aurora Lab · @auroralab</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:9px">
+          <button style="display:flex;align-items:center;gap:7px;border:1px solid var(--bd);background:none;color:var(--fg);border-radius:99px;padding:9px 17px;font-size:13px;font-weight:600;cursor:pointer">
+            <span style="width:7px;height:7px;border-radius:99px;background:var(--dng)"></span>Go live</button>
+          <button style="border:1px solid var(--bd);background:none;color:var(--fg);border-radius:99px;padding:9px 17px;font-size:13px;font-weight:600;cursor:pointer">Import from URL</button>
+          <button style="display:flex;align-items:center;gap:7px;background:var(--acc);color:var(--afg);border:none;border-radius:99px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Upload</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:20px;max-width:1180px">
+        <div style="flex:1;background:var(--sm);border-radius:14px;padding:16px 18px">
+          <div style="font-size:12px;color:var(--fgm)">Storage used</div>
+          <div style="margin-top:4px;font-size:20px;font-weight:700;letter-spacing:-0.02em">4.2 GB <span style="font-size:13px;font-weight:500;color:var(--fgm)">of 20 GB</span></div>
+          <div style="margin-top:10px;height:5px;border-radius:99px;background:var(--sm2)"><div style="width:21%;height:100%;border-radius:99px;background:var(--fg)"></div></div>
+        </div>
+        <div style="flex:1;background:var(--sm);border-radius:14px;padding:16px 18px">
+          <div style="font-size:12px;color:var(--fgm)">Views · 28 days</div>
+          <div style="margin-top:4px;font-size:20px;font-weight:700;letter-spacing:-0.02em">312K</div>
+          <div style="margin-top:6px;font-size:12px;color:var(--ok)">↑ 18% vs previous</div>
+        </div>
+        <div style="flex:1;background:var(--sm);border-radius:14px;padding:16px 18px">
+          <div style="font-size:12px;color:var(--fgm)">Followers</div>
+          <div style="margin-top:4px;font-size:20px;font-weight:700;letter-spacing:-0.02em">24.1K</div>
+          <div style="margin-top:6px;font-size:12px;color:var(--ok)">↑ 640 this month</div>
+        </div>
+        <div style="flex:1;background:var(--sm);border-radius:14px;padding:16px 18px">
+          <div style="font-size:12px;color:var(--fgm)">Pending jobs</div>
+          <div style="margin-top:4px;font-size:20px;font-weight:700;letter-spacing:-0.02em">2</div>
+          <div style="margin-top:6px;font-size:12px;color:var(--fgm)">1 transcode · 1 captions</div>
+        </div>
+      </div>
+      <div style="margin-top:26px;max-width:1180px">
+        <div style="display:grid;grid-template-columns:1fr 130px 110px 110px 120px 40px;gap:12px;padding:0 14px 10px;font-size:11.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--fgs);border-bottom:1px solid var(--bds)">
+          <span>Video</span><span>Status</span><span>Visibility</span><span>Views</span><span>Published</span><span></span>
+        </div>
+        <sc-for list="{{ studioVids }}" as="v" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:1fr 130px 110px 110px 120px 40px;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--bds)">
+            <div style="display:flex;gap:12px;align-items:center;min-width:0">
+              <div style="flex:none;width:88px;aspect-ratio:16/9;border-radius:8px;background:{{ v.tint }}"></div>
+              <span style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.title }}</span>
+            </div>
+            <span><span style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:3px 9px;border-radius:99px;background:{{ v.badgeBg }};color:{{ v.badgeCo }}">{{ v.state }}</span></span>
+            <span style="font-size:12.5px;color:var(--fgm)">{{ v.vis }}</span>
+            <span style="font-size:12.5px;color:var(--fgm);font-variant-numeric:tabular-nums">{{ v.views }}</span>
+            <span style="font-size:12.5px;color:var(--fgm)">{{ v.date }}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--fgs)" style="cursor:pointer"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+
+  <!-- support dialog -->
+  <sc-if value="{{ showSupport }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeSupport }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:40;display:flex;align-items:center;justify-content:center">
+      <div onClick="{{ eatClick }}" style="width:440px;background:var(--bg);border-radius:20px;padding:24px 26px;box-shadow:0 24px 60px rgba(0,0,0,0.3)">
+        <div style="display:flex;align-items:center">
+          <div style="font-size:17px;font-weight:700;letter-spacing:-0.02em">Support {{ cv.ch }}</div>
+          <button aria-label="Close" onClick="{{ closeSupport }}" style="margin-left:auto;background:none;border:none;color:var(--fgm);cursor:pointer;display:flex;padding:4px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+        </div>
+        <div style="margin-top:4px;font-size:12.5px;color:var(--fgm);line-height:1.5">Send crypto directly to the creator. Vidra never holds or processes funds.</div>
+        <div style="margin-top:16px;background:var(--sm);border-radius:14px;padding:15px 16px;display:flex;gap:14px;align-items:center">
+          <div style="flex:none;width:78px;height:78px;border-radius:9px;background:#fff;padding:6px;box-sizing:border-box">
+            <svg viewBox="0 0 21 21" width="66" height="66" shape-rendering="crispEdges"><path fill="#000" d="M0 0h7v1H0zM8 0h2v1H8zM11 0h1v1h-1zM14 0h7v1H14zM0 1h1v1H0zM6 1h1v1H6zM8 1h1v1H8zM10 1h3v1h-3zM14 1h1v1h-1zM20 1h1v1h-1zM0 2h1v1H0zM2 2h3v1H2zM6 2h1v1H6zM9 2h2v1H9zM12 2h1v1h-1zM14 2h1v1h-1zM16 2h3v1h-3zM20 2h1v1h-1zM0 3h1v1H0zM2 3h3v1H2zM6 3h1v1H6zM8 3h1v1H8zM11 3h2v1h-2zM14 3h1v1h-1zM16 3h3v1h-3zM20 3h1v1h-1zM0 4h1v1H0zM2 4h3v1H2zM6 4h1v1H6zM9 4h3v1H9zM14 4h1v1h-1zM16 4h3v1h-3zM20 4h1v1h-1zM0 5h1v1H0zM6 5h1v1H6zM8 5h2v1H8zM11 5h1v1h-1zM14 5h1v1h-1zM20 5h1v1h-1zM0 6h7v1H0zM8 6h1v1H8zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h7v1H14zM9 7h2v1H9zM12 7h1v1h-1zM0 8h2v1H0zM3 8h2v1H3zM6 8h2v1H6zM10 8h2v1h-2zM13 8h3v1h-3zM17 8h2v1h-2zM1 9h1v1H1zM4 9h1v1H4zM8 9h2v1H8zM11 9h1v1h-1zM14 9h2v1h-2zM18 9h2v1h-2zM0 10h2v1H0zM3 10h1v1H3zM6 10h1v1H6zM9 10h3v1H9zM13 10h2v1h-2zM16 10h2v1h-2zM19 10h2v1h-2zM2 11h2v1H2zM5 11h1v1H5zM7 11h2v1H7zM10 11h1v1h-1zM12 11h2v1h-2zM15 11h1v1h-1zM17 11h2v1h-2zM0 12h1v1H0zM4 12h3v1H4zM8 12h1v1H8zM11 12h2v1h-2zM14 12h3v1h-3zM18 12h1v1h-1zM20 12h1v1h-1zM8 13h2v1H8zM12 13h1v1h-1zM15 13h2v1h-2zM19 13h1v1h-1zM0 14h7v1H0zM8 14h1v1H8zM10 14h2v1h-2zM13 14h1v1h-1zM16 14h1v1h-1zM18 14h2v1h-2zM0 15h1v1H0zM6 15h1v1H6zM9 15h2v1H9zM12 15h2v1h-2zM15 15h2v1h-2zM19 15h2v1h-2zM0 16h1v1H0zM2 16h3v1H2zM6 16h1v1H6zM8 16h2v1H8zM11 16h1v1h-1zM13 16h3v1h-3zM17 16h2v1h-2zM0 17h1v1H0zM2 17h3v1H2zM6 17h1v1H6zM9 17h1v1H9zM12 17h2v1h-2zM16 17h1v1h-1zM18 17h1v1h-1zM0 18h1v1H0zM2 18h3v1H2zM6 18h1v1H6zM8 18h3v1H8zM13 18h2v1h-2zM16 18h2v1h-2zM19 18h2v1h-2zM0 19h1v1H0zM6 19h1v1H6zM8 19h1v1H8zM10 19h2v1h-2zM14 19h2v1h-2zM18 19h1v1h-1zM0 20h7v1H0zM9 20h2v1H9zM12 20h2v1h-2zM15 20h1v1h-1zM17 20h3v1h-3z"></path></svg>
+          </div>
+          <div style="min-width:0">
+            <div style="font-size:13.5px;font-weight:700">Bitcoin</div>
+            <div style="margin-top:4px;font-size:11.5px;font-family:ui-monospace,'SF Mono',monospace;color:var(--fgm);word-break:break-all;line-height:1.5">bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh</div>
+            <div style="margin-top:5px;font-size:11.5px;font-weight:600;color:var(--fgm);cursor:pointer">Copy address</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;background:var(--sm);border-radius:14px;padding:15px 16px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:13.5px;font-weight:700">Ethereum</span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--ok);color:#fff"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"></path></svg>VERIFIED</span>
+            <span style="margin-left:auto;font-size:11.5px;font-weight:600;color:var(--fgm);cursor:pointer">Copy</span>
+          </div>
+          <div style="margin-top:7px;font-size:11.5px;font-family:ui-monospace,'SF Mono',monospace;color:var(--fgm);word-break:break-all">0x71C7656EC7ab88b098defB751B7401B5f6d8976F</div>
+          <div style="margin-top:5px;font-size:11px;color:var(--ok)">Ownership proven by signed message</div>
+        </div>
+        <div style="margin-top:14px;font-size:11px;color:var(--fgs);line-height:1.5;text-align:center">Payments are peer-to-peer and irreversible. Double-check the address before sending.</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1400, &quot;height&quot;: 900}, &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;default&quot;: &quot;light&quot;, &quot;tsType&quot;: &quot;'light' | 'dark'&quot;}, &quot;ipfsEnabled&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Instance&quot;}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'home', video: null, sort: 'recent',
+    following: { auroralab: true },
+    ipfsByVid: { v1: 'ok', v3: 'error' }, sourceByVid: {},
+    openReplies: {}, support: false,
+  };
+
+  go(p) { this.setState(p); }
+
+  renderVals() {
+    const S = this.state;
+    const theme = this.props.theme ?? 'light';
+
+    const tints = [
+      'linear-gradient(140deg,oklch(0.38 0.03 250),oklch(0.2 0.02 270))',
+      'linear-gradient(140deg,oklch(0.42 0.02 150),oklch(0.24 0.02 200))',
+      'linear-gradient(140deg,oklch(0.35 0.015 60),oklch(0.2 0.015 40))',
+      'linear-gradient(140deg,oklch(0.3 0.02 320),oklch(0.18 0.02 340))',
+      'linear-gradient(140deg,oklch(0.44 0.02 220),oklch(0.26 0.015 250))',
+      'linear-gradient(140deg,oklch(0.36 0.02 100),oklch(0.22 0.015 130))',
+    ];
+    const avatars = ['oklch(0.4 0.05 260)','oklch(0.45 0.04 160)','oklch(0.45 0.04 300)','oklch(0.4 0.04 40)'];
+
+    const rawVideos = [
+      { id:'v1', title:'Shooting the Alps on medium format — a field diary', ch:'Aurora Lab', handle:'auroralab', initial:'A', views:'128K', age:'2 days ago', dur:'24:16', hls:'1080p', ipfs:true, followers:'24.1K', tint:tints[0], avatarTint:avatars[0], commentCount:'214', desc:'Five days above the treeline with a Pentax 67 and forty rolls of Portra. Notes on metering snow, keeping film warm, and why slow is better.' },
+      { id:'v2', title:'Building a federated video pipeline in Go', ch:'North Loop', handle:'northloop', initial:'N', views:'42K', age:'5 days ago', dur:'18:03', hls:'1440p', ipfs:false, followers:'9.8K', tint:tints[1], avatarTint:avatars[1], commentCount:'87', desc:'From upload session to HLS ladder: chunked uploads, ffprobe, and a durable transcode queue — all in one evening.' },
+      { id:'v3', title:'Monochrome grading — the luxury look, by hand', ch:'Grade House', handle:'gradehouse', initial:'G', views:'96K', age:'1 week ago', dur:'31:40', hls:'2160p', ipfs:true, followers:'51K', tint:tints[2], avatarTint:avatars[2], commentCount:'302', desc:'A full grade from log to print emulation, using only curves and patience. Project files in the description.' },
+      { id:'v4', title:'The quiet web: why federation matters', ch:'Field Notes', handle:'fieldnotes', initial:'F', views:'210K', age:'3 weeks ago', dur:'12:22', hls:'1080p', ipfs:false, followers:'18.7K', tint:tints[3], avatarTint:avatars[3], commentCount:'540', desc:'A short essay on owning your audience, small instances, and video that does not answer to an algorithm.' },
+      { id:'v5', title:'Printing silver gelatin at home — full darkroom setup', ch:'Aurora Lab', handle:'auroralab', initial:'A', views:'64K', age:'1 month ago', dur:'27:51', hls:'1080p', ipfs:true, followers:'24.1K', tint:tints[5], avatarTint:avatars[0], commentCount:'156', desc:'Enlarger to archival wash: the whole path from negative to print in a spare bathroom.' },
+    ];
+    const videos = rawVideos.map(v => ({ ...v, open: () => this.go({ screen:'watch', video:v.id }) }));
+    const cv = videos.find(v => v.id === (S.video || 'v1')) || videos[0];
+
+    const homeCards = [
+      { isLive:true, title:'Late-night color grading session', ch:'Grade House', initial:'G', meta:'1.2K watching', tint:tints[2], avatarTint:avatars[2], ipfs:false, dur:false, open:() => this.go({ screen:'watch', video:'v3' }) },
+      ...videos.map(v => ({ ...v, isLive:false, meta: v.views + ' views · ' + v.age })),
+    ];
+
+    // ipfs
+    const src = S.sourceByVid[cv.id] || 'ipfs';
+    const ipfsAvailable = cv.ipfs && (this.props.ipfsEnabled ?? true);
+    const ist = S.ipfsByVid[cv.id] || 'ok';
+    const usingIpfs = ipfsAvailable && src === 'ipfs';
+    const ipfsMap = {
+      ok: { dot:'var(--ok)', label:'IPFS · pinned · 12 peers' },
+      slow: { dot:'var(--wrn)', label:'IPFS · slow — 2 peers reachable' },
+      error: { dot:'var(--dng)', label:'IPFS · no peers pinning this video' },
+      fetching: { dot:'var(--wrn)', label:'IPFS · finding peers…' },
+    };
+    const info = ipfsMap[ist];
+
+    const sorts = ['Recent','Popular','Trending'].map(x => {
+      const k = x.toLowerCase(); const on = S.sort === k;
+      return { label:x, pick:() => this.go({ sort:k }),
+        bg: on ? 'var(--acc)' : 'transparent', co: on ? 'var(--afg)' : 'var(--fgm)', bd: on ? 'var(--acc)' : 'var(--bd)' };
+    });
+
+    const mkReply = r => ({ nameCo: 'var(--fg)', ...r });
+    const comments = [
+      { id:'c1', who:'tomas', initial:'T', tint:avatars[1], age:'2 h', text:'The metering notes alone are worth a follow. Snow at +2 EV finally makes sense.', hasReplies:true, replies:3, replyList:[
+        mkReply({ who:'auroralab', initial:'A', tint:avatars[0], age:'2 h', text:'Thank you! The +2 rule saved every roll on day three — the histogram video goes deeper if you want it.' }),
+        mkReply({ who:'tomas', initial:'T', tint:avatars[1], age:'1 h', text:'Please make that one. Also curious how you meter mixed shade + snow.' }),
+        mkReply({ who:'lena_k', initial:'L', tint:avatars[2], age:'40 min', text:'Seconding the histogram breakdown request.' }),
+      ]},
+      { id:'c2', who:'lena_k', initial:'L', tint:avatars[2], age:'5 h', text:'Watched on IPFS from three hops away and it played flawlessly. The future is quietly here.', hasReplies:false },
+      { id:'c3', who:'[deleted]', initial:'·', tint:'var(--sm2)', age:'1 d', text:'[deleted]', hasReplies:true, replies:1, deleted:true, replyList:[
+        mkReply({ who:'arno', initial:'A', tint:avatars[0], age:'1 d', text:'Replies stay even when a comment is removed — nice touch for thread continuity.' }),
+      ]},
+      { id:'c4', who:'arno', initial:'A', tint:avatars[0], age:'1 d', text:'Would love a breakdown of the warm-up routine for the film backs in cold weather.', hasReplies:false },
+    ].map(c => {
+      const expanded = !!S.openReplies[c.id];
+      return { ...c,
+        nameCo: c.deleted ? 'var(--fgs)' : 'var(--fg)',
+        textCo: c.deleted ? 'var(--fgs)' : 'var(--fg)',
+        textStyle: c.deleted ? 'italic' : 'normal',
+        expanded, chev: expanded ? '180deg' : '0deg',
+        repliesLabel: expanded ? 'Hide replies' : (c.replies === 1 ? 'View 1 reply' : 'View ' + c.replies + ' replies'),
+        toggle: () => this.go({ openReplies: { ...S.openReplies, [c.id]: !expanded } }),
+      };
+    });
+
+    const badge = {
+      published: { bg:'color-mix(in oklab, var(--ok) 15%, transparent)', co:'var(--ok)' },
+      processing:{ bg:'color-mix(in oklab, var(--wrn) 15%, transparent)', co:'var(--wrn)' },
+      draft: { bg:'var(--sm2)', co:'var(--fgm)' },
+      review: { bg:'color-mix(in oklab, var(--wrn) 15%, transparent)', co:'var(--wrn)' },
+      failed: { bg:'color-mix(in oklab, var(--dng) 15%, transparent)', co:'var(--dng)' },
+    };
+    const studioVids = [
+      { title:'Shooting the Alps on medium format — a field diary', state:'Published', k:'published', vis:'Public', views:'128,204', date:'Jul 4', tint:tints[0] },
+      { title:'Studio tour raw cut', state:'In review', k:'review', vis:'Unlisted', views:'—', date:'—', tint:tints[3] },
+      { title:'Winter light tests (HLS 4K)', state:'Processing', k:'processing', vis:'Public', views:'—', date:'—', tint:tints[4] },
+      { title:'Printing silver gelatin at home', state:'Published', k:'published', vis:'Public', views:'64,022', date:'Jun 6', tint:tints[5] },
+      { title:'Interview with a printmaker', state:'Draft', k:'draft', vis:'Private', views:'—', date:'—', tint:tints[1] },
+      { title:'Corrupted export test', state:'Failed', k:'failed', vis:'Private', views:'—', date:'—', tint:tints[2] },
+    ].map(v => ({ ...v, badgeBg: badge[v.k].bg, badgeCo: badge[v.k].co }));
+
+    const following = !!S.following[cv.handle];
+
+    const navIcons = {
+      home: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
+      trending: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>',
+      subs: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 5h10M9 2h6"/></svg>',
+      library: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m9 9.5 4 2.5-4 2.5z" fill="currentColor" stroke="none"/><path d="M19 5h2v14"/></svg>',
+      history: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+      messages: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.6 0-3.1-.4-4.4-1.2L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z"/></svg>',
+      studio: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg>',
+    };
+    const nav = [
+      { k:'home', label:'Home', icon:navIcons.home },
+      { k:'trending', label:'Trending', icon:navIcons.trending },
+      { k:'subs', label:'Subscriptions', icon:navIcons.subs },
+      { k:'library', label:'Library', icon:navIcons.library },
+      { k:'history', label:'History', icon:navIcons.history },
+      { k:'messages', label:'Messages', icon:navIcons.messages },
+      { k:'studio', label:'Studio', icon:navIcons.studio },
+    ].map(n => {
+      const active = (S.screen === n.k) || (n.k === 'home' && ['watch','channel'].includes(S.screen) === false && S.screen === 'home');
+      const on = S.screen === n.k;
+      return { label:n.label, icon:{ __html:n.icon },
+        bg: on ? 'var(--sm)' : 'transparent', co: on ? 'var(--fg)' : 'var(--fgm)',
+        go: () => this.go({ screen: ['home','studio'].includes(n.k) ? n.k : 'home' }) };
+    });
+
+    const follows = [
+      { name:'Grade House', initial:'G', tint:avatars[2], live:true, go:() => this.go({ screen:'channel', video:'v3' }) },
+      { name:'North Loop', initial:'N', tint:avatars[1], live:false, go:() => this.go({ screen:'channel', video:'v2' }) },
+      { name:'Field Notes', initial:'F', tint:avatars[3], live:false, go:() => this.go({ screen:'channel', video:'v4' }) },
+    ];
+
+    return {
+      theme, isDark: theme === 'dark',
+      winW: this.props.width ?? 1360, winH: this.props.height ?? 860,
+      sHome: S.screen === 'home', sWatch: S.screen === 'watch',
+      sChannel: S.screen === 'channel', sStudio: S.screen === 'studio',
+      nav, follows, sorts, homeCards, cv, comments, studioVids,
+      related: videos.filter(v => v.id !== cv.id).slice(0, 4),
+      channelVids: videos.filter(v => v.handle === cv.handle).concat(videos.filter(v => v.handle !== cv.handle)).slice(0, 4),
+      goHome: () => this.go({ screen:'home' }),
+      goStudio: () => this.go({ screen:'studio' }),
+      openChannel: () => this.go({ screen:'channel' }),
+
+      playerOk: !usingIpfs || ist === 'ok' || ist === 'slow',
+      playerError: usingIpfs && ist === 'error',
+      playerFetching: usingIpfs && ist === 'fetching',
+      showIpfsBar: ipfsAvailable,
+      ipfsDot: usingIpfs ? info.dot : 'var(--fgs)',
+      ipfsLabel: usingIpfs ? info.label : 'Playing from server (HLS)',
+      sourceBtn: usingIpfs ? 'Use server' : 'Use IPFS',
+      toggleSource: () => this.go({ sourceByVid: { ...S.sourceByVid, [cv.id]: usingIpfs ? 'server' : 'ipfs' } }),
+      refetchIpfs: () => {
+        this.go({ sourceByVid:{ ...S.sourceByVid, [cv.id]:'ipfs' }, ipfsByVid: { ...S.ipfsByVid, [cv.id]:'fetching' } });
+        setTimeout(() => this.setState(s => ({ ipfsByVid: { ...s.ipfsByVid, [cv.id]:'ok' } })), 1600);
+      },
+      useServer: () => this.go({ sourceByVid: { ...S.sourceByVid, [cv.id]:'server' } }),
+
+      followLabel: following ? 'Following' : 'Follow',
+      followBg: following ? 'transparent' : 'var(--acc)',
+      followCo: following ? 'var(--fg)' : 'var(--afg)',
+      followBd: following ? '1px solid var(--bd)' : '1px solid var(--acc)',
+      toggleFollow: () => this.go({ following: { ...S.following, [cv.handle]: !following } }),
+
+      showSupport: S.support,
+      openSupport: () => this.go({ support:true }),
+      closeSupport: () => this.go({ support:false }),
+      eatClick: e => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>
