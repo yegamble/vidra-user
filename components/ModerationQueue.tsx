@@ -8,7 +8,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { Report, ReportStatus } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -180,7 +180,7 @@ function ReportRow({
       await api.resolveReport(report.id, { status, note: note.trim() || undefined });
       onResolved(report.id, status);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not resolve this report.");
+      setError(errorMessage(err, "Could not resolve this report."));
       setRowState("idle");
     }
   }
@@ -195,7 +195,7 @@ function ReportRow({
       await api.deleteReport(report.id);
       onDeleted(report.id);
     } catch (err) {
-      setDeleteError(err instanceof ApiError ? err.message : "Could not delete this report.");
+      setDeleteError(errorMessage(err, "Could not delete this report."));
       setDeleteState("idle");
     }
   }
@@ -210,7 +210,7 @@ function ReportRow({
       await api.blockVideo(videoId, { reason: report.reason });
       setBlockState("blocked");
     } catch (err) {
-      setBlockError(err instanceof ApiError ? err.message : "Could not block this video.");
+      setBlockError(errorMessage(err, "Could not block this video."));
       setBlockState("idle");
     }
   }
@@ -225,7 +225,7 @@ function ReportRow({
       await api.blockRemoteVideo(remoteVideoId, { reason: report.reason });
       setBlockState("blocked");
     } catch (err) {
-      setBlockError(err instanceof ApiError ? err.message : "Could not block this video.");
+      setBlockError(errorMessage(err, "Could not block this video."));
       setBlockState("idle");
     }
   }

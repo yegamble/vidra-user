@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { LockIcon } from "@/components/e2ee/LockIcon";
-import { ApiError } from "@/lib/api";
+import { ApiError, errorMessage } from "@/lib/api";
 import { getEngine, type LocalDevice } from "@/lib/e2ee/engine";
 
 // DeviceSetup runs the first-encrypted-use flow on THIS browser: name the device,
@@ -29,7 +29,7 @@ export function DeviceSetup({ onReady }: { onReady: (device: LocalDevice) => voi
       if (err instanceof ApiError && err.status === 422) {
         setError("You've reached the device limit. Remove a device in Settings → Devices first.");
       } else {
-        setError("Could not set up encryption on this device. Please try again.");
+        setError(errorMessage(err, "Could not set up encryption on this device. Please try again."));
       }
     }
   }

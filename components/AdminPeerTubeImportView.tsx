@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type {
   PeerTubeImportConflictPolicy,
   PeerTubeImportMode,
@@ -144,7 +144,7 @@ function ImportPanel() {
             setLaunchError("An import is already in progress.");
           }
         } else {
-          setLaunchError(err instanceof ApiError ? err.message : "Could not launch the import.");
+          setLaunchError(errorMessage(err, "Could not launch the import."));
         }
       } finally {
         setLaunching(false);

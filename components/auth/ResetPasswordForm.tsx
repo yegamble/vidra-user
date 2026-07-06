@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { ApiError, authApi } from "@/lib/api";
+import { authApi, errorMessage } from "@/lib/api";
 
 // Requests a password-reset link. The backend always answers 202 (it never
 // reveals whether the email belongs to an account), so on success we show the
@@ -22,11 +22,9 @@ export function ResetPasswordForm() {
       setSent(true);
     } catch (err) {
       setError(
-        err instanceof ApiError
-          ? err.status === 422
-            ? "Enter a valid email address."
-            : err.message
-          : "Something went wrong. Please try again.",
+        errorMessage(err, "Something went wrong. Please try again.", {
+          "422": "Enter a valid email address.",
+        }),
       );
       setSubmitting(false);
     }

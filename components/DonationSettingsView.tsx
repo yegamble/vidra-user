@@ -8,7 +8,7 @@ import { DonationBadge } from "@/components/DonationBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { Channel, DonationAddress, DonationNetwork } from "@/lib/api";
 import { DONATION_NETWORKS, NETWORK_META, validateDonationAddress } from "@/lib/donation-address";
 
@@ -183,10 +183,8 @@ function AddAddressForm({
         setFormError("You have already added that address for this profile or channel.");
       } else if (err instanceof ApiError && err.status === 422) {
         setAddressError(err.message);
-      } else if (err instanceof ApiError) {
-        setFormError(err.message);
       } else {
-        setFormError("Something went wrong. Please try again.");
+        setFormError(errorMessage(err));
       }
     } finally {
       setSubmitting(false);
@@ -332,7 +330,7 @@ function AddressRow({
       await api.deleteDonationAddress(address.id);
       onDeleted(address.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not delete this address.");
+      setError(errorMessage(err, "Could not delete this address."));
       setDeleting(false);
     }
   }
@@ -427,7 +425,7 @@ function VerifyFlow({
       if (err instanceof ApiError && err.status === 501) {
         setError("This network does not support ownership verification.");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not start verification.");
+        setError(errorMessage(err, "Could not start verification."));
       }
     } finally {
       setBusy(false);
@@ -454,7 +452,7 @@ function VerifyFlow({
         setError("This network does not support ownership verification.");
         setStep("idle");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not verify the signature.");
+        setError(errorMessage(err, "Could not verify the signature."));
       }
     } finally {
       setBusy(false);

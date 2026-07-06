@@ -6,7 +6,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { WatchedWord } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -105,7 +105,7 @@ function AddWordForm({ onAdded }: { onAdded: (word: WatchedWord) => void }) {
       if (err instanceof ApiError && err.status === 409) {
         setError("That word is already on the list.");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not add this word.");
+        setError(errorMessage(err, "Could not add this word."));
       }
     } finally {
       setBusy(false);
@@ -155,7 +155,7 @@ function WordRow({ word, onRemoved }: { word: WatchedWord; onRemoved: (id: strin
       await api.deleteWatchedWord(word.id);
       onRemoved(word.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not remove this word.");
+      setError(errorMessage(err, "Could not remove this word."));
       setBusy(false);
     }
   }

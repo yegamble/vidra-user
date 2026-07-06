@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { LockIcon } from "@/components/e2ee/LockIcon";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import { useE2EEAvailable } from "@/lib/e2ee/availability";
 
 // StartEncryptedButton starts (or reopens) the ENCRYPTED 1:1 conversation with a
@@ -31,7 +31,7 @@ export function StartEncryptedButton({ recipientId }: { recipientId: string }) {
       if (err instanceof ApiError && err.status === 403) {
         setError("You can't message this user.");
       } else {
-        setError("Could not start an encrypted conversation.");
+        setError(errorMessage(err, "Could not start an encrypted conversation."));
       }
       setBusy(false);
     }

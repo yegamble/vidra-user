@@ -7,7 +7,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { RegistrationRequest, RegistrationRequestStatus } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -187,7 +187,7 @@ function RequestRow({
         // The username/email was taken between filing and approval.
         setError("That username or email has since been taken, so this request cannot be approved.");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not approve this request.");
+        setError(errorMessage(err, "Could not approve this request."));
       }
       setRowState("idle");
     }
@@ -202,7 +202,7 @@ function RequestRow({
       await api.rejectRegistrationRequest(request.id, trimmed ? { note: trimmed } : {});
       onResolved(request.id, "rejected", trimmed || undefined);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not reject this request.");
+      setError(errorMessage(err, "Could not reject this request."));
       setRowState("idle");
     }
   }

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 
 // MessageButton starts (or reopens) the 1:1 conversation with a user and routes
 // to that thread. It's the entry point into messaging from anywhere we already
@@ -26,7 +26,7 @@ export function MessageButton({ recipientId }: { recipientId: string }) {
       if (err instanceof ApiError && err.status === 403) {
         setError("You can't message this user.");
       } else {
-        setError("Could not open a conversation.");
+        setError(errorMessage(err, "Could not open a conversation."));
       }
       setBusy(false);
     }

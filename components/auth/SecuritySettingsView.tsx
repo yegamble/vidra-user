@@ -7,7 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { QrCode } from "@/components/QrCode";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, authApi } from "@/lib/api";
+import { ApiError, authApi, errorMessage } from "@/lib/api";
 import type { MFAStatusResponse, TOTPEnrollmentResponse } from "@/lib/api";
 
 // SecuritySettingsView is the /settings/security surface: the TOTP two-factor
@@ -88,10 +88,8 @@ function TwoFactorSection() {
       if (err instanceof ApiError && err.status === 409) {
         // Already enabled (e.g. finished in another tab) — reflect reality.
         reload();
-      } else if (err instanceof ApiError) {
-        setError(err.message);
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(errorMessage(err));
       }
     } finally {
       setBusy(false);
@@ -109,10 +107,8 @@ function TwoFactorSection() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 400) {
         setError("That code didn't verify — check your authenticator app and try again.");
-      } else if (err instanceof ApiError) {
-        setError(err.message);
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(errorMessage(err));
       }
     } finally {
       setBusy(false);
@@ -137,10 +133,8 @@ function TwoFactorSection() {
       } else if (err instanceof ApiError && err.status === 404) {
         // Not enabled after all — reflect reality.
         reload();
-      } else if (err instanceof ApiError) {
-        setError(err.message);
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(errorMessage(err));
       }
     } finally {
       setBusy(false);

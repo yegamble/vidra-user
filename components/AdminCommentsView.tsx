@@ -7,7 +7,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { AdminComment } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -147,7 +147,7 @@ function CommentRow({
       await api.deleteComment(comment.id);
       onDeleted(comment.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not delete this comment.");
+      setError(errorMessage(err, "Could not delete this comment."));
       setBusy(false);
       setConfirming(false);
     }

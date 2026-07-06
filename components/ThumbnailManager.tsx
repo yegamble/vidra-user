@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-import { ApiError, api, videoThumbnailUrl } from "@/lib/api";
+import { ApiError, api, errorMessage, videoThumbnailUrl } from "@/lib/api";
 
 // ThumbnailManager lets the owner upload/replace a video's poster image. Embedded
 // in the studio's per-video edit surface. It shows the current poster (if any) and
@@ -32,7 +32,7 @@ export function ThumbnailManager({
       if (err instanceof ApiError && err.status === 415) {
         setError("The image must be a JPEG, PNG, or WebP.");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not set the thumbnail.");
+        setError(errorMessage(err, "Could not set the thumbnail."));
       }
     } finally {
       setBusy(false);

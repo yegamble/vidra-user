@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toggle } from "@/components/ui/Toggle";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { InstanceSetting, InstanceSettingsResponse } from "@/lib/api";
 
 type Status = "loading" | "error" | "ready";
@@ -165,7 +165,7 @@ function ConfigForm() {
       setSaveError("Some values were rejected — see the highlighted fields.");
       return;
     }
-    setSaveError(err instanceof ApiError ? err.message : "Could not save the settings.");
+    setSaveError(errorMessage(err, "Could not save the settings."));
   }, []);
 
   const save = useCallback(async () => {

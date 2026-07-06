@@ -1,5 +1,12 @@
 export { ApiError, apiRequest, restoreSession } from "./client";
 export type { RequestOptions } from "./client";
+export {
+  errorMessage,
+  fieldErrors,
+  GENERIC_ERROR_MESSAGE,
+  NETWORK_ERROR_MESSAGE,
+  RATE_LIMITED_MESSAGE,
+} from "./error-message";
 export { isUploadCancelled, uploadWithProgress } from "./upload";
 export type { UploadOptions, UploadProgress } from "./upload";
 export {

@@ -6,7 +6,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { BlockedInstance } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -116,7 +116,7 @@ function BlockInstanceForm({ onBlocked }: { onBlocked: (instance: BlockedInstanc
       if (err instanceof ApiError && err.status === 422) {
         setError("Enter a valid instance domain (a bare hostname, optionally host:port).");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not block this instance.");
+        setError(errorMessage(err, "Could not block this instance."));
       }
     } finally {
       setBusy(false);
@@ -187,7 +187,7 @@ function BlockedInstanceRow({
       await api.unblockInstance(instance.domain);
       onUnblocked(instance.domain);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not unblock this instance.");
+      setError(errorMessage(err, "Could not unblock this instance."));
       setBusy(false);
     }
   }

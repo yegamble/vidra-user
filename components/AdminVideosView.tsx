@@ -7,7 +7,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { AdminVideo } from "@/lib/api";
 import { formatCount, relativeTime } from "@/lib/format";
 
@@ -158,7 +158,7 @@ function VideoRow({
         onBlockedChange(video.id, true);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update this video.");
+      setError(errorMessage(err, "Could not update this video."));
     } finally {
       setBusy(false);
     }

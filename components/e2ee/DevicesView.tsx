@@ -8,7 +8,7 @@ import { LockIcon } from "@/components/e2ee/LockIcon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { E2EEDevice } from "@/lib/api";
 import { getEngine } from "@/lib/e2ee/engine";
 import { formatSafetyNumber } from "@/lib/e2ee/envelope";
@@ -161,7 +161,7 @@ function DeviceRow({
       await api.deleteE2EEDevice(device.id);
       await onDeleted(device.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not remove this device.");
+      setError(errorMessage(err, "Could not remove this device."));
       setBusy(false);
     }
   }

@@ -7,7 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 
 type Status = "loading" | "error" | "ready";
 
@@ -115,9 +115,9 @@ function Prefs() {
     try {
       const res = await api.updateNotificationPrefs({ [type]: next });
       setPrefs(res.prefs); // the server's full map is the source of truth
-    } catch {
+    } catch (err) {
       setPrefs((p) => ({ ...p, [type]: !next })); // revert
-      setError("Could not save that preference. Please try again.");
+      setError(errorMessage(err, "Could not save that preference. Please try again."));
     }
   }
 

@@ -6,7 +6,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { QuarantinedVideo } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -120,7 +120,7 @@ function QuarantineRow({
         onDecided(video.id);
         return;
       }
-      setError(err instanceof ApiError ? err.message : "Could not update this upload.");
+      setError(errorMessage(err, "Could not update this upload."));
       setBusy(false);
     }
   }

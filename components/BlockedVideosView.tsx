@@ -7,7 +7,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { BlockedVideo } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -107,7 +107,7 @@ function BlockedRow({
       await api.unblockVideo(video.video_id);
       onUnblocked(video.video_id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not unblock this video.");
+      setError(errorMessage(err, "Could not unblock this video."));
       setRowState("idle");
     }
   }

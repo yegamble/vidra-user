@@ -10,7 +10,7 @@ import { ConnectedLogins } from "@/components/auth/ConnectedLogins";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, authApi, userAvatarUrl, userBannerUrl } from "@/lib/api";
+import { ApiError, api, authApi, errorMessage, userAvatarUrl, userBannerUrl } from "@/lib/api";
 import type { UpdateProfileRequest, User } from "@/lib/api";
 
 // SettingsView lets the signed-in user edit their profile (display name, bio)
@@ -261,9 +261,7 @@ function EmailVerificationSection({ email }: { email: string }) {
       setState("sent");
     } catch (err) {
       setState("idle");
-      setError(
-        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
-      );
+      setError(errorMessage(err));
     }
   }
 
@@ -322,11 +320,11 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
       router.push("/");
     } catch (err) {
       setSubmitting(false);
-      if (err instanceof ApiError) {
-        setError(err.status === 403 ? "Incorrect password." : err.message);
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
+      setError(
+        errorMessage(err, "Something went wrong. Please try again.", {
+          "403": "Incorrect password.",
+        }),
+      );
     }
   }
 
@@ -409,11 +407,11 @@ function DeleteAccountSection({
       onDeleted();
     } catch (err) {
       setSubmitting(false);
-      if (err instanceof ApiError) {
-        setError(err.status === 403 ? "Incorrect password." : err.message);
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
+      setError(
+        errorMessage(err, "Something went wrong. Please try again.", {
+          "403": "Incorrect password.",
+        }),
+      );
     }
   }
 
@@ -552,10 +550,8 @@ function ProfileForm({
         const map: Record<string, string> = {};
         for (const f of err.fields) map[f.field] = f.message;
         setFieldErrors(map);
-      } else if (err instanceof ApiError) {
-        setFormError(err.message);
       } else {
-        setFormError("Something went wrong. Please try again.");
+        setFormError(errorMessage(err));
       }
     }
   }

@@ -249,6 +249,39 @@ test("maps 422 field errors inline", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });
 
+test("a duplicate signup shows a friendly taken message, not a raw code", async ({ page }) => {
+  await page.route(INSTANCE, (route) => route.fulfill({ json: instanceJson(true) }));
+  await page.route(REGISTER, (route) =>
+    route.fulfill({
+      status: 409,
+      json: { error: { code: "conflict", message: "username or email already taken" } },
+    }),
+  );
+
+  await page.goto("/signup");
+  await page.getByLabel("Username").fill("ada");
+  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Create account" }).click();
+
+  await expect(page.getByText("That username or email is already taken.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+});
+
+test("a network failure on login shows a connection message, not a raw error", async ({ page }) => {
+  // Abort the request so fetch rejects — the client wraps it as a network ApiError.
+  await page.route(LOGIN, (route) => route.abort());
+
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(
+    page.getByText("Couldn't reach the server. Check your connection and try again."),
+  ).toBeVisible();
+});
+
 test("shows the registration-closed notice when disabled", async ({ page }) => {
   await page.route(INSTANCE, (route) => route.fulfill({ json: instanceJson(false) }));
   await page.goto("/signup");

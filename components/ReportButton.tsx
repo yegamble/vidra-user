@@ -7,7 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { t } from "@/lib/i18n";
 
 const MAX_REASON_LEN = 2000;
@@ -111,7 +111,7 @@ function ReportDialog({
       }
       setState("done");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("report.genericError"));
+      setError(errorMessage(err, t("report.genericError")));
       setState("idle");
     }
   }

@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 
 type RegState = "loading" | "open" | "closed";
 
@@ -100,10 +100,13 @@ export function SignupForm({
         const map: Record<string, string> = {};
         for (const f of err.fields) map[f.field] = f.message;
         setFieldErrors(map);
-      } else if (err instanceof ApiError) {
-        setFormError(err.message);
       } else {
-        setFormError("Something went wrong. Please try again.");
+        // A 409 conflict has no field list — the username or email is taken.
+        setFormError(
+          errorMessage(err, "Something went wrong. Please try again.", {
+            conflict: "That username or email is already taken.",
+          }),
+        );
       }
       setSubmitting(false);
     }

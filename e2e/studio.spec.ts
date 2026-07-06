@@ -289,6 +289,51 @@ test("a creator can upload and publish a video", async ({ page }) => {
   });
 });
 
+test("an upload the backend rejects as too large shows a friendly size message", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ json: video({ state: "draft" }) })
+      : route.fulfill({ json: { videos: [] } }),
+  );
+  // The backend refuses the upload session because the file exceeds the size cap.
+  await page.route(UPLOAD_SESSION, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 413,
+          json: {
+            error: {
+              code: "request_entity_too_large",
+              message: "file exceeds the maximum allowed size",
+            },
+          },
+        })
+      : route.continue(),
+  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByLabel("Video title").fill("Huge clip");
+  await page.getByLabel("Video description").fill("A short description.");
+  await page.getByLabel("Video category").selectOption("7");
+  await page.getByLabel("Video language").selectOption("en");
+  await page.getByLabel("Video license").selectOption("1");
+  await page.getByLabel("Video file").setInputFiles({
+    name: "huge.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("test"),
+  });
+  await page.getByRole("button", { name: "Publish" }).click();
+
+  await expect(page.getByText("That file is too large.")).toBeVisible();
+  await expect(page.getByText("Published!")).toHaveCount(0);
+});
+
 test("publish sends the entered tags, normalized, on the draft", async ({ page }) => {
   await signIn(page);
   await page.route(MY_CHANNELS, (route) =>

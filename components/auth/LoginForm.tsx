@@ -9,7 +9,7 @@ import { OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons"
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 
 // LoginForm drives the whole sign-in surface:
 //  - email/password credentials (cookie-mode session);
@@ -92,11 +92,9 @@ export function LoginForm({
       router.push("/");
     } catch (err) {
       setError(
-        err instanceof ApiError
-          ? err.status === 401
-            ? "Invalid email or password."
-            : err.message
-          : "Something went wrong. Please try again.",
+        errorMessage(err, "Something went wrong. Please try again.", {
+          "401": "Invalid email or password.",
+        }),
       );
       setSubmitting(false);
     }
@@ -117,10 +115,8 @@ export function LoginForm({
         );
       } else if (err instanceof ApiError && err.status === 429) {
         setError("Too many attempts — wait a moment and try again.");
-      } else if (err instanceof ApiError) {
-        setError(err.message);
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(errorMessage(err));
       }
     }
   }

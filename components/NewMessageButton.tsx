@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 
 // The backend caps a message body at 5000 chars (SendMessageRequest.body).
 const MAX_MESSAGE_LEN = 5000;
@@ -62,7 +62,7 @@ function ComposeDialog({ onClose }: { onClose: () => void }) {
       } else if (err instanceof ApiError && err.status === 422) {
         setError("You can't message yourself.");
       } else {
-        setError("Could not start the conversation.");
+        setError(errorMessage(err, "Could not start the conversation."));
       }
       setBusy(false);
     }

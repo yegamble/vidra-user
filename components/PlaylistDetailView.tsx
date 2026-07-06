@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { PlaylistDetail, PlaylistVisibility } from "@/lib/api";
 
 type Status = "loading" | "error" | "notfound" | "ready";
@@ -260,7 +260,7 @@ function EditPlaylistForm({
       });
       onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save the playlist.");
+      setError(errorMessage(err, "Could not save the playlist."));
       setSaving(false);
     }
   }

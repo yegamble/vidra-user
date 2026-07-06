@@ -11,7 +11,7 @@ import { ReportButton } from "@/components/ReportButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, userAvatarUrl } from "@/lib/api";
+import { api, errorMessage, userAvatarUrl } from "@/lib/api";
 import type { Comment } from "@/lib/api";
 import { buildCommentTree } from "@/lib/comments";
 import { relativeTime } from "@/lib/format";
@@ -149,7 +149,7 @@ function CommentForm({
       onPosted(created);
       setBody("");
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Could not post your comment.");
+      setError(errorMessage(err, "Could not post your comment."));
     } finally {
       setBusy(false);
     }
@@ -215,7 +215,7 @@ function ReplyComposer({
       setBody("");
       onCancel();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Could not post your reply.");
+      setError(errorMessage(err, "Could not post your reply."));
     } finally {
       setBusy(false);
     }
@@ -320,7 +320,7 @@ function CommentItem({
       onEdited(updated);
       setEditing(false);
     } catch (err: unknown) {
-      setEditError(err instanceof ApiError ? err.message : "Could not save your edit.");
+      setEditError(errorMessage(err, "Could not save your edit."));
     } finally {
       setSaving(false);
     }

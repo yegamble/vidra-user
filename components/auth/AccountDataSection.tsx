@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, authApi } from "@/lib/api";
+import { ApiError, authApi, errorMessage } from "@/lib/api";
 import type { AccountArchive, AccountExportStatus, AccountImportSummary } from "@/lib/api";
 
 // How often the export card re-reads GET /me/export while the job is
@@ -92,9 +92,7 @@ function ExportCard() {
         // One export may be active per account — show the one in progress.
         reload();
       } else {
-        setActionError(
-          err instanceof ApiError ? err.message : "Could not request the export. Please try again.",
-        );
+        setActionError(errorMessage(err, "Could not request the export. Please try again."));
       }
     } finally {
       setBusy(false);
@@ -116,9 +114,7 @@ function ExportCard() {
         setActionError("The export is not ready to download.");
         reload();
       } else {
-        setActionError(
-          err instanceof ApiError ? err.message : "Could not download the archive. Please try again.",
-        );
+        setActionError(errorMessage(err, "Could not download the archive. Please try again."));
       }
     } finally {
       setBusy(false);
@@ -275,7 +271,7 @@ function ImportCard() {
       } else if (err instanceof ApiError && err.status === 422) {
         setError("That file is not a valid vidra account archive.");
       } else {
-        setError(err instanceof ApiError ? err.message : "The import failed. Please try again.");
+        setError(errorMessage(err, "The import failed. Please try again."));
       }
     } finally {
       setBusy(false);

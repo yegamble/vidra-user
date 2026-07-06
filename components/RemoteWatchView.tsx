@@ -8,7 +8,7 @@ import { ReportButton } from "@/components/ReportButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, remoteVideoThumbnailUrl } from "@/lib/api";
+import { ApiError, api, errorMessage, remoteVideoThumbnailUrl } from "@/lib/api";
 import type { RemoteVideo } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
 import { useRemotePlayback } from "@/lib/use-remote-playback";
@@ -211,7 +211,7 @@ function MuteInstanceControl({ domain }: { domain: string }) {
         setMuted(true);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update the instance mute.");
+      setError(errorMessage(err, "Could not update the instance mute."));
     } finally {
       setBusy(false);
     }

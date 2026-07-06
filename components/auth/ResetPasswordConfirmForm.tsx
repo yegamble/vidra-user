@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { ApiError, authApi } from "@/lib/api";
+import { ApiError, authApi, errorMessage } from "@/lib/api";
 
 // Completes a password reset: the user arrives from the reset email link with a
 // single-use token in the URL, chooses a new password, and on success is sent to
@@ -36,10 +36,8 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
       } else if (err instanceof ApiError && err.fields && err.fields.length > 0) {
         const pw = err.fields.find((f) => f.field === "password");
         setPasswordError(pw ? pw.message : err.message);
-      } else if (err instanceof ApiError) {
-        setFormError(err.message);
       } else {
-        setFormError("Something went wrong. Please try again.");
+        setFormError(errorMessage(err));
       }
       setSubmitting(false);
     }

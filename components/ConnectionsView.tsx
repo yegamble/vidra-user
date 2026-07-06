@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toggle } from "@/components/ui/Toggle";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { ATProtoLinkRequest, ATProtoStatus } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -576,7 +576,7 @@ function UnlinkControl({
         onDisabled();
         return;
       }
-      setError(err instanceof ApiError ? err.message : "Could not unlink. Please try again.");
+      setError(errorMessage(err, "Could not unlink. Please try again."));
       setBusy(false);
     }
   }

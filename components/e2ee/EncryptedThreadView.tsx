@@ -6,7 +6,7 @@ import { DeviceSetup } from "@/components/e2ee/DeviceSetup";
 import { LockIcon } from "@/components/e2ee/LockIcon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { EncryptedMessage } from "@/lib/api";
 import {
   type DeviceFingerprint,
@@ -345,7 +345,7 @@ function Composer({
       if (err instanceof ApiError && err.status === 403) {
         setError("You can't message this user.");
       } else {
-        setError("Could not send your encrypted message.");
+        setError(errorMessage(err, "Could not send your encrypted message."));
       }
     } finally {
       setBusy(false);

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-import { ApiError, api, playlistThumbnailUrl } from "@/lib/api";
+import { ApiError, api, errorMessage, playlistThumbnailUrl } from "@/lib/api";
 
 // PlaylistThumbnailManager lets a playlist's owner upload/replace or remove its
 // cover image, on the playlist detail page. Mirrors ThumbnailManager: a
@@ -37,7 +37,7 @@ export function PlaylistThumbnailManager({
       if (err instanceof ApiError && err.status === 415) {
         setError("The image must be a JPEG, PNG, or WebP.");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not set the cover image.");
+        setError(errorMessage(err, "Could not set the cover image."));
       }
     } finally {
       setBusy(false);
@@ -58,7 +58,7 @@ export function PlaylistThumbnailManager({
         setShown(false);
         onChanged?.(false);
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not remove the cover image.");
+        setError(errorMessage(err, "Could not remove the cover image."));
       }
     } finally {
       setBusy(false);

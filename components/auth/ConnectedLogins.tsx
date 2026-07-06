@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { providerDisplayName } from "@/components/auth/OAuthButtons";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, authApi } from "@/lib/api";
+import { ApiError, authApi, errorMessage } from "@/lib/api";
 import type { OAuthIdentity } from "@/lib/api";
 
 // ConnectedLogins is the /settings "Connected logins" section: the OIDC
@@ -52,10 +52,8 @@ export function ConnectedLogins() {
       } else if (err instanceof ApiError && err.status === 404) {
         // Already gone (another tab/session) — reflect reality.
         setIdentities((prev) => prev?.filter((i) => i.provider !== provider) ?? prev);
-      } else if (err instanceof ApiError) {
-        setActionError(err.message);
       } else {
-        setActionError("Something went wrong. Please try again.");
+        setActionError(errorMessage(err));
       }
     } finally {
       setUnlinking(null);

@@ -7,7 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { MutedInstance } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -119,7 +119,7 @@ function MutedInstanceRow({
       await api.unmuteInstance(instance.domain);
       onUnmuted(instance.domain);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not unmute this instance.");
+      setError(errorMessage(err, "Could not unmute this instance."));
       setBusy(false);
     }
   }

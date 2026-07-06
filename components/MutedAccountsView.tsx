@@ -7,7 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { MutedAccount } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -116,7 +116,7 @@ function MutedRow({
       await api.unmuteAccount(account.user_id);
       onUnmuted(account.user_id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not unmute this account.");
+      setError(errorMessage(err, "Could not unmute this account."));
       setBusy(false);
     }
   }

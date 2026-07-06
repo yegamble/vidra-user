@@ -7,7 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { BlockedUser } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -116,7 +116,7 @@ function BlockedRow({
       await api.unblockUser(account.user_id);
       onUnblocked(account.user_id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not unblock this account.");
+      setError(errorMessage(err, "Could not unblock this account."));
       setBusy(false);
     }
   }

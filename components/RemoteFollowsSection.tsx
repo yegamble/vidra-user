@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { RemoteFollow } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import { parseRemoteFollowTarget } from "@/lib/remote-follow";
@@ -112,7 +112,7 @@ function FollowRemoteForm({ onFollowed }: { onFollowed: (follow: RemoteFollow) =
       } else if (err instanceof ApiError && err.status === 422) {
         setError("That channel could not be found. Check the handle or URL and try again.");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not follow this channel.");
+        setError(errorMessage(err, "Could not follow this channel."));
       }
     } finally {
       setBusy(false);
@@ -189,7 +189,7 @@ function RemoteFollowRow({
       await api.deleteRemoteFollow(follow.id);
       onUnfollowed(follow.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not unfollow this channel.");
+      setError(errorMessage(err, "Could not unfollow this channel."));
       setBusy(false);
     }
   }

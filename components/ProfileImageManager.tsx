@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 
 import { Avatar } from "@/components/ui/Avatar";
-import { ApiError } from "@/lib/api";
+import { ApiError, errorMessage } from "@/lib/api";
 
 // ProfileImageManager is the shared avatar/banner upload surface (account
 // settings + the studio channel rows), mirroring ThumbnailManager: it shows the
@@ -55,7 +55,7 @@ export function ProfileImageManager({
       if (err instanceof ApiError && err.status === 415) {
         setError("The image must be a JPEG, PNG, or WebP.");
       } else {
-        setError(err instanceof ApiError ? err.message : `Could not set the ${kind}.`);
+        setError(errorMessage(err, `Could not set the ${kind}.`));
       }
     } finally {
       setBusy(false);
@@ -76,7 +76,7 @@ export function ProfileImageManager({
         setShown(false);
         onChanged?.(false);
       } else {
-        setError(err instanceof ApiError ? err.message : `Could not remove the ${kind}.`);
+        setError(errorMessage(err, `Could not remove the ${kind}.`));
       }
     } finally {
       setBusy(false);

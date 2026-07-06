@@ -11,7 +11,7 @@ import { ReportButton } from "@/components/ReportButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { EncryptedMessage, Message } from "@/lib/api";
 import { formatBytes, relativeTime } from "@/lib/format";
 
@@ -404,7 +404,7 @@ function Composer({
       setBody("");
       setPending([]);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Could not send your message.");
+      setError(errorMessage(err, "Could not send your message."));
     } finally {
       setBusy(false);
     }

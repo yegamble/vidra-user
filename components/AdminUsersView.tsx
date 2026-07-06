@@ -7,7 +7,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { AdminUser, UserRole } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
@@ -172,7 +172,7 @@ function UserRow({
         const updated = await api.updateAdminUser(user.id, patch);
         onUpdated(updated);
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not update this user.");
+        setError(errorMessage(err, "Could not update this user."));
       } finally {
         setRowState("idle");
       }
@@ -187,7 +187,7 @@ function UserRow({
       await api.deleteAdminUser(user.id);
       onDeleted(user.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not delete this user.");
+      setError(errorMessage(err, "Could not delete this user."));
       setRowState("idle");
     }
   }, [user.id, onDeleted]);

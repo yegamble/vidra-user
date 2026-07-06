@@ -18,6 +18,7 @@ import {
   api,
   channelAvatarUrl,
   channelBannerUrl,
+  errorMessage,
   findResumableUploadSession,
   forgetUploadSession,
   isUploadCancelled,
@@ -165,9 +166,9 @@ function ChannelSection({
       setDisplayName("");
     } catch (err) {
       setError(
-        err instanceof ApiError && err.status === 409
-          ? "That handle is already taken."
-          : "Could not create the channel.",
+        errorMessage(err, "Could not create the channel.", {
+          "409": "That handle is already taken.",
+        }),
       );
     } finally {
       setBusy(false);
@@ -259,7 +260,7 @@ function ChannelRow({
       onUpdated(updated);
       setMode("view");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save the channel.");
+      setError(errorMessage(err, "Could not save the channel."));
     } finally {
       setBusy(false);
     }
@@ -279,7 +280,7 @@ function ChannelRow({
       await api.deleteChannel(channel.handle);
       onDeleted(channel.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not delete the channel.");
+      setError(errorMessage(err, "Could not delete the channel."));
       setBusy(false);
       setMode("view");
     }
@@ -501,11 +502,19 @@ function importOrUploadError(err: unknown, source: "file" | "url"): string {
   if (err instanceof ApiError) {
     if (err.status === 415) return "That is not a supported video type.";
     if (err.status === 413) return "That file is too large.";
+    if (err.code === "quota_exceeded") {
+      return "This upload would exceed your storage quota. Free up space or remove older videos and try again.";
+    }
     if (source === "url" && err.status === 422) {
       return "Couldn't fetch that URL — it must be a public link to a video file.";
     }
   }
-  return source === "url" ? "Import failed. Please try again." : "Upload failed. Please try again.";
+  // Network / rate-limit / 5xx get the shared friendly copy; a truly unknown
+  // failure gets the source-specific default.
+  return errorMessage(
+    err,
+    source === "url" ? "Import failed. Please try again." : "Upload failed. Please try again.",
+  );
 }
 
 // failedStateError is the message for an upload/import whose HTTP call succeeded
@@ -1272,7 +1281,7 @@ function VideoRow({
       onUpdated(updated);
       setMode("view");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update the video.");
+      setError(errorMessage(err, "Could not update the video."));
     } finally {
       setBusy(false);
     }

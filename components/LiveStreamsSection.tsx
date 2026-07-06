@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import type { Channel, LiveStream, VideoPrivacy } from "@/lib/api";
 
 type Status = "loading" | "error" | "ready";
@@ -66,7 +66,7 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
       setPermanent(false);
       setReplayEnabled(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the live stream.");
+      setError(errorMessage(err, "Could not create the live stream."));
     } finally {
       setBusy(false);
     }

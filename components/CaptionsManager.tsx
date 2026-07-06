@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { Caption, VideoConfigOption } from "@/lib/api";
 
 // How often to poll an in-progress auto-caption job for its status.
@@ -87,7 +87,7 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
       if (err instanceof ApiError && err.status === 422) {
         setError("The file must be WebVTT and the language a valid tag (e.g. en, pt-BR).");
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not upload the caption.");
+        setError(errorMessage(err, "Could not upload the caption."));
       }
     } finally {
       setBusy(false);
@@ -123,7 +123,7 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
       } else if (err instanceof ApiError && err.status === 422) {
         setAutoError("That language tag is not valid (try e.g. en or pt-BR).");
       } else {
-        setAutoError(err instanceof ApiError ? err.message : "Could not start auto-captioning.");
+        setAutoError(errorMessage(err, "Could not start auto-captioning."));
       }
     } finally {
       setAutoBusy(false);
