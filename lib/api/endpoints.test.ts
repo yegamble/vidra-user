@@ -828,6 +828,24 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ recipient_id: "u2", encrypted: true });
   });
 
+  it("startConversation POSTs recipient_username for the username (compose) form", async () => {
+    await api.startConversation({ recipientUsername: "bob" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/conversations");
+    expect(init.method).toBe("POST");
+    // Exactly one identifier — the username — and no recipient_id key.
+    expect(JSON.parse(init.body as string)).toEqual({ recipient_username: "bob" });
+  });
+
+  it("startConversation carries encrypted:true in the object (username) form", async () => {
+    await api.startConversation({ recipientUsername: "bob", encrypted: true });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      recipient_username: "bob",
+      encrypted: true,
+    });
+  });
+
   it("getConversationMessages targets a conversation's messages (union endpoint)", async () => {
     await api.getConversationMessages("c1", { limit: 50 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/conversations/c1/messages?limit=50");

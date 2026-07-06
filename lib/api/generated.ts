@@ -4784,9 +4784,15 @@ export interface components {
             /** @description The publisher's raw stream key, as presented to the RTMP ingest. */
             stream_key: string;
         };
+        /** @description Names the other participant by EXACTLY ONE of recipient_id or recipient_username — providing both, or neither, is a 422 field error. recipient_username is resolved server-side (case-insensitive, active accounts only); an unknown or deactivated username is a 404, exactly like an unknown recipient_id, so existence is not leaked differently. Resolving to yourself is a 422 (cannot message yourself). */
         StartConversationRequest: {
-            /** Format: uuid */
-            recipient_id: string;
+            /**
+             * Format: uuid
+             * @description The recipient's user id. Provide this OR recipient_username, not both.
+             */
+            recipient_id?: string;
+            /** @description The recipient's username, resolved server-side (case-insensitive, active accounts only). An alternative to recipient_id — provide exactly one. */
+            recipient_username?: string;
             /**
              * @description Choose the conversation type AT CREATION, immutably. An encrypted conversation stores only opaque per-device ciphertext envelopes (the server holds no keys and cannot decrypt); a plaintext one only {body} messages. A pair of users can have one of each — the two types are distinct conversations.
              * @default false

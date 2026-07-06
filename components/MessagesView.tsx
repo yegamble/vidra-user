@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { LockIcon } from "@/components/e2ee/LockIcon";
+import { NewMessageButton } from "@/components/NewMessageButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -37,7 +38,14 @@ export function MessagesView() {
     );
   }
 
-  return <Inbox />;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <NewMessageButton />
+      </div>
+      <Inbox />
+    </div>
+  );
 }
 
 function Inbox() {
@@ -80,7 +88,7 @@ function Inbox() {
     return (
       <EmptyState
         title="No messages yet"
-        message="Start a conversation from someone's comment, and it'll show up here."
+        message="Start one with New message above (or from someone's comment), and it'll show up here."
       />
     );
   }

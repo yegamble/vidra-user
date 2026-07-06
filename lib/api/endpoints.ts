@@ -759,17 +759,30 @@ export const api = {
   /**
    * POST /api/v1/conversations — start (or get) the 1:1 conversation with a
    * recipient (auth). Idempotent: the same pair always maps to one conversation.
-   * Pass `{ encrypted: true }` to start the pair's distinct ENCRYPTED thread
-   * (opaque per-device ciphertext). Messaging yourself → 422; unknown recipient → 404;
-   * a block either way → 403.
+   *
+   * Name the other participant by EXACTLY ONE of `recipient_id` or
+   * `recipient_username` (the backend resolves the username server-side,
+   * case-insensitive, active accounts only). Two calling forms:
+   *  - `startConversation(recipientId)` — the id form (from a comment/profile
+   *    where the user id is already known);
+   *  - `startConversation({ recipientUsername })` — the username form (the
+   *    "New message" composer, where the viewer types a username).
+   * Pass `{ encrypted: true }` (as the object field or the second arg) to start
+   * the pair's distinct ENCRYPTED thread (opaque per-device ciphertext).
+   * Messaging yourself → 422; unknown recipient → 404; a block either way → 403.
    */
-  startConversation: (recipientId: string, opts: { encrypted?: boolean } = {}) =>
-    apiRequest<Conversation>("/api/v1/conversations", {
-      method: "POST",
-      body: opts.encrypted
-        ? { recipient_id: recipientId, encrypted: true }
-        : { recipient_id: recipientId },
-    }),
+  startConversation: (
+    target: string | { recipientId?: string; recipientUsername?: string; encrypted?: boolean },
+    opts: { encrypted?: boolean } = {},
+  ) => {
+    const t = typeof target === "string" ? { recipientId: target } : target;
+    const encrypted = t.encrypted ?? opts.encrypted ?? false;
+    const body: Record<string, unknown> = {};
+    if (t.recipientId) body.recipient_id = t.recipientId;
+    if (t.recipientUsername) body.recipient_username = t.recipientUsername;
+    if (encrypted) body.encrypted = true;
+    return apiRequest<Conversation>("/api/v1/conversations", { method: "POST", body });
+  },
 
   /** GET /api/v1/me/conversations — the caller's inbox, most-recently-active first (auth). */
   getConversations: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>

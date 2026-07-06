@@ -7,6 +7,9 @@ const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const CONVERSATIONS = /\/api\/v1\/me\/conversations(\?|$)/;
 const MESSAGES = /\/api\/v1\/conversations\/c1\/messages(\?|$)/;
+// POST /conversations (start-by-id or start-by-username). Anchored to end so it
+// never collides with the inbox (/me/conversations) or a thread (/…/messages).
+const START = /\/api\/v1\/conversations$/;
 
 const session = {
   token: "acc",
@@ -354,4 +357,120 @@ test("a viewer can report the peer's message from the thread", async ({ page }) 
   await reported;
   await expect(page.getByText("your report has been sent to the moderators")).toBeVisible();
   expect(reportBody).toEqual({ reason: "harassment" });
+});
+
+// --- New message composer (start a fresh conversation by username from the
+// inbox). The persistence round trip (cross-user, by username) is proven in
+// e2e-backed/message-compose.spec.ts.
+
+// openComposer signs in, routes an empty inbox, opens /messages via client-side
+// nav (a hard goto drops the in-memory session), and opens the New message
+// dialog — returning the dialog locator.
+async function openComposer(page: Page) {
+  await signIn(page);
+  await page.route(CONVERSATIONS, (route) =>
+    route.fulfill({ json: { conversations: [], limit: 20, offset: 0 } }),
+  );
+  await page.getByRole("link", { name: "Messages" }).first().click();
+  // The empty inbox offers the entry point.
+  await expect(page.getByText("No messages yet")).toBeVisible();
+  await page.getByRole("button", { name: "New message" }).click();
+  return page.getByRole("dialog", { name: "New message" });
+}
+
+test("New message composer sends to a username and lands in the thread", async ({ page }) => {
+  const dialog = await openComposer(page);
+
+  let startBody: unknown = null;
+  await page.route(START, (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    startBody = route.request().postDataJSON();
+    return route.fulfill({
+      json: {
+        id: "c1",
+        encrypted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    });
+  });
+  // The thread's messages endpoint: echo the send (POST) and reflect it back on
+  // the thread's initial load (GET) so the just-sent message is visible.
+  let sentBody = "";
+  await page.route(MESSAGES, (route) => {
+    const req = route.request();
+    if (req.method() === "POST") {
+      sentBody = (req.postDataJSON() as { body: string }).body;
+      return route.fulfill({ json: meMessage("m1", sentBody) });
+    }
+    return route.fulfill({
+      json: { messages: sentBody ? [meMessage("m1", sentBody)] : [], limit: 100, offset: 0 },
+    });
+  });
+  await page.route(READ, (route) => route.fulfill({ status: 204, body: "" }));
+
+  await dialog.getByLabel("Username").fill("bob");
+  await dialog.getByLabel("Message").fill("hello bob");
+
+  const started = page.waitForResponse(
+    (r) => /\/api\/v1\/conversations$/.test(r.url()) && r.request().method() === "POST",
+  );
+  await dialog.getByRole("button", { name: "Send" }).click();
+  await started;
+
+  // Client-side nav to the thread, which shows the first message.
+  await expect(page).toHaveURL(/\/messages\/c1$/);
+  await expect(page.getByText("hello bob")).toBeVisible();
+  // The composer POSTed the username form (recipient_username), not an id.
+  expect(startBody).toEqual({ recipient_username: "bob" });
+});
+
+test("the composer reports an unknown username honestly", async ({ page }) => {
+  const dialog = await openComposer(page);
+  await page.route(START, (route) =>
+    route.fulfill({
+      status: 404,
+      json: { error: { code: "not_found", message: "recipient not found" } },
+    }),
+  );
+
+  await dialog.getByLabel("Username").fill("nobody");
+  await dialog.getByLabel("Message").fill("hi there");
+  await dialog.getByRole("button", { name: "Send" }).click();
+
+  await expect(dialog.getByText("No user found with that username.")).toBeVisible();
+  // Still on the inbox — no navigation on failure.
+  await expect(page).toHaveURL(/\/messages$/);
+});
+
+test("the composer explains you can't message yourself", async ({ page }) => {
+  const dialog = await openComposer(page);
+  await page.route(START, (route) =>
+    route.fulfill({
+      status: 422,
+      json: { error: { code: "unprocessable_entity", message: "cannot message yourself" } },
+    }),
+  );
+
+  await dialog.getByLabel("Username").fill("ada");
+  await dialog.getByLabel("Message").fill("note to self");
+  await dialog.getByRole("button", { name: "Send" }).click();
+
+  await expect(dialog.getByText("You can't message yourself.")).toBeVisible();
+});
+
+test("the composer explains a blocked recipient", async ({ page }) => {
+  const dialog = await openComposer(page);
+  await page.route(START, (route) =>
+    route.fulfill({
+      status: 403,
+      json: { error: { code: "forbidden", message: "cannot message this user" } },
+    }),
+  );
+
+  await dialog.getByLabel("Username").fill("blocker");
+  await dialog.getByLabel("Message").fill("hello?");
+  await dialog.getByRole("button", { name: "Send" }).click();
+
+  await expect(dialog.getByText("You can't message this user.")).toBeVisible();
 });
