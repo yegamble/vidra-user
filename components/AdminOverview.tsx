@@ -76,10 +76,10 @@ function OverviewBody() {
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {SECTIONS.map((s) => (
             <li key={s.href}>
-              <Link href={s.href} className="focus-ring block h-full rounded-lg">
+              <Link href={s.href} className="focus-ring block h-full rounded-2xl">
                 <Card interactive className="h-full">
-                  <span className="block font-medium text-fg">{s.label}</span>
-                  <span className="mt-1 block text-sm text-fg-muted">{s.description}</span>
+                  <span className="block text-sm font-semibold tracking-tight text-fg">{s.label}</span>
+                  <span className="mt-1 block text-[13px] text-fg-muted">{s.description}</span>
                 </Card>
               </Link>
             </li>
@@ -150,34 +150,43 @@ function SystemSummary() {
           <Badge variant={system.status === "degraded" ? "danger" : "success"}>
             {system.status === "degraded" ? "Degraded" : "Healthy"}
           </Badge>
-          <span className="text-fg">
+          <span className="font-semibold tracking-tight text-fg">
             {system.software.name} {system.software.version}
           </span>
-          <span className="text-fg-muted">up {formatUptime(system.uptime_seconds)}</span>
-          <Link href="/admin/system" className="underline hover:text-fg">
+          <span className="text-[13px] text-fg-muted tabular-nums">
+            up {formatUptime(system.uptime_seconds)}
+          </span>
+          <Link
+            href="/admin/system"
+            className="focus-ring rounded text-[13px] font-semibold text-fg-muted underline underline-offset-2 transition-colors hover:text-fg"
+          >
             Details
           </Link>
         </Card>
       )}
 
       {reportsStatus === "loading" ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400" aria-busy="true">
+        <p className="text-sm text-fg-muted" aria-busy="true">
           Loading open reports…
         </p>
       ) : reportsStatus === "error" ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           Could not load the open-reports count.{" "}
-          <button type="button" onClick={retry} className="underline">
+          <button
+            type="button"
+            onClick={retry}
+            className="focus-ring rounded font-semibold underline underline-offset-2"
+          >
             Retry
           </button>
         </p>
       ) : (
-        <p className="text-sm text-zinc-700 dark:text-zinc-200">
+        <p className="text-sm text-fg">
           {openReports === 0 ? (
             "No open reports."
           ) : (
             <>
-              <span className="font-medium">
+              <span className="font-semibold tabular-nums">
                 {openReportsFullPage ? `${REPORTS_PAGE}+` : openReports}
               </span>{" "}
               open {openReports === 1 && !openReportsFullPage ? "report" : "reports"}
@@ -185,7 +194,7 @@ function SystemSummary() {
           )}{" "}
           <Link
             href="/moderation"
-            className="underline hover:text-zinc-900 dark:hover:text-zinc-100"
+            className="focus-ring rounded font-semibold text-fg-muted underline underline-offset-2 transition-colors hover:text-fg"
           >
             Moderation queue
           </Link>

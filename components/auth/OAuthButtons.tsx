@@ -21,19 +21,17 @@ export function OAuthButtons({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3" aria-hidden>
-        <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-        <span className="text-xs uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-          or
-        </span>
-        <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+      <div className="my-1 flex items-center gap-3" aria-hidden>
+        <span className="h-px flex-1 bg-border-subtle" />
+        <span className="text-xs text-fg-muted">or</span>
+        <span className="h-px flex-1 bg-border-subtle" />
       </div>
       <ul className="flex flex-col gap-2">
         {providers.map((provider) => (
           <li key={provider}>
             <a
               href={oauthBeginUrl(provider, returnTo)}
-              className="flex items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="focus-ring flex items-center justify-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted"
             >
               {/* Key glyph: an external sign-in. */}
               <svg

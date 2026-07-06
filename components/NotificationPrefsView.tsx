@@ -7,6 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
+import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
 
 type Status = "loading" | "error" | "ready";
@@ -73,7 +74,7 @@ export function NotificationPrefsView() {
         title="Sign in to manage notifications"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               Sign in
             </Link>{" "}
             to choose which notifications you receive.
@@ -155,49 +156,35 @@ function Prefs() {
       {error ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {error}
         </p>
       ) : null}
-      <ul className="flex flex-col divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+      <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface">
         {types.map((type) => {
           const meta = TYPE_LABELS[type];
           const enabled = prefs[type];
           return (
             <li key={type} className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                <p className="text-sm font-medium text-fg">
                   {meta?.label ?? type}
                 </p>
                 {meta ? (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{meta.help}</p>
+                  <p className="text-xs text-fg-muted">{meta.help}</p>
                 ) : null}
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={enabled}
-                aria-label={`${meta?.label ?? type} notifications`}
-                onClick={() => void toggle(type)}
-                className={
-                  "relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 " +
-                  (enabled ? "bg-emerald-600" : "bg-zinc-300 dark:bg-zinc-700")
-                }
-              >
-                <span
-                  aria-hidden
-                  className={
-                    "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform " +
-                    (enabled ? "translate-x-5" : "")
-                  }
-                />
-              </button>
+              <Toggle
+                checked={enabled}
+                onChange={() => void toggle(type)}
+                label={`${meta?.label ?? type} notifications`}
+              />
             </li>
           );
         })}
       </ul>
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      <p className="text-xs text-fg-muted">
         Turning a type off stops new notifications of that kind; ones you already have stay in
         your list.
       </p>

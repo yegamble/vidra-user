@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { LockIcon } from "@/components/e2ee/LockIcon";
 import { NewMessageButton } from "@/components/NewMessageButton";
+import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -28,7 +29,10 @@ export function MessagesView() {
         title="Sign in to see your messages"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link
+              href="/login"
+              className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
+            >
               Sign in
             </Link>{" "}
             to read and send direct messages.
@@ -94,56 +98,60 @@ function Inbox() {
   }
 
   return (
-    <ul className="flex flex-col divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-      {items.map((c) => (
-        <li key={c.id}>
-          <Link
-            // Encrypted threads carry the peer id so the encrypted composer can
-            // fan out without a participant lookup (previews are always empty —
-            // the server can't read the ciphertext).
-            href={c.encrypted ? `/messages/${c.id}?to=${encodeURIComponent(c.other_user_id)}` : `/messages/${c.id}`}
-            className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:bg-zinc-900/40"
-          >
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span className="flex items-center gap-1.5 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                {c.encrypted ? (
-                  <span
-                    className="text-emerald-600 dark:text-emerald-400"
-                    aria-label="Encrypted conversation"
-                    title="Encrypted conversation"
-                  >
-                    <LockIcon />
+    <ul className="flex flex-col">
+      {items.map((c) => {
+        const name = c.other_display_name || c.other_username;
+        return (
+          <li key={c.id}>
+            <Link
+              // Encrypted threads carry the peer id so the encrypted composer can
+              // fan out without a participant lookup (previews are always empty —
+              // the server can't read the ciphertext).
+              href={c.encrypted ? `/messages/${c.id}?to=${encodeURIComponent(c.other_user_id)}` : `/messages/${c.id}`}
+              className="focus-ring flex items-center gap-3 rounded-xl px-1 py-3 transition-colors hover:bg-surface-muted"
+            >
+              <Avatar src={null} name={name} className="h-11 w-11 text-base" />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate text-[14.5px] font-semibold text-fg">{name}</span>
+                  {c.encrypted ? (
+                    <span
+                      className="shrink-0 text-fg-muted"
+                      aria-label="Encrypted conversation"
+                      title="Encrypted conversation"
+                    >
+                      <LockIcon className="h-3 w-3" />
+                    </span>
+                  ) : null}
+                  <span className="ml-auto shrink-0 text-[11.5px] text-fg-muted">
+                    {relativeTime(c.last_message_at)}
                   </span>
-                ) : null}
-                {c.other_display_name || c.other_username}
-              </span>
-              <span
-                className={
-                  "truncate text-sm " +
-                  (c.unread_count && c.unread_count > 0
-                    ? "font-medium text-zinc-900 dark:text-zinc-100"
-                    : "text-zinc-500 dark:text-zinc-400")
-                }
-              >
-                {c.encrypted
-                  ? "Encrypted conversation"
-                  : c.last_message_body || "No messages yet"}
-              </span>
-            </div>
-            {c.unread_count && c.unread_count > 0 ? (
-              <span
-                className="inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-zinc-900 px-1.5 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
-                aria-label={`${c.unread_count} unread ${c.unread_count === 1 ? "message" : "messages"}`}
-              >
-                {c.unread_count > 99 ? "99+" : c.unread_count}
-              </span>
-            ) : null}
-            <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">
-              {relativeTime(c.last_message_at)}
-            </span>
-          </Link>
-        </li>
-      ))}
+                </span>
+                <span
+                  className={
+                    "mt-0.5 truncate text-[13px] " +
+                    (c.unread_count && c.unread_count > 0
+                      ? "font-medium text-fg"
+                      : "text-fg-muted")
+                  }
+                >
+                  {c.encrypted
+                    ? "Encrypted conversation"
+                    : c.last_message_body || "No messages yet"}
+                </span>
+              </div>
+              {c.unread_count && c.unread_count > 0 ? (
+                <span
+                  className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-fg px-[5px] text-[11px] font-bold tabular-nums text-canvas"
+                  aria-label={`${c.unread_count} unread ${c.unread_count === 1 ? "message" : "messages"}`}
+                >
+                  {c.unread_count > 99 ? "99+" : c.unread_count}
+                </span>
+              ) : null}
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -26,7 +26,10 @@ export function WatchHistoryView() {
         title="Sign in to see your history"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link
+              href="/login"
+              className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
+            >
               Sign in
             </Link>{" "}
             to keep track of what you have watched.
@@ -116,7 +119,7 @@ function History() {
           type="button"
           onClick={() => void clearAll()}
           disabled={clearing}
-          className="text-sm font-medium text-zinc-600 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-300 dark:hover:text-zinc-100"
+          className="focus-ring rounded-full px-3.5 py-2 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-60"
         >
           Clear all history
         </button>
@@ -134,8 +137,8 @@ function History() {
                   : undefined
               }
             />
-            <div className="flex items-center justify-between gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-              <span>
+            <div className="flex items-center justify-between gap-2 text-[13px] text-fg-muted">
+              <span className="tabular-nums">
                 {item.position_seconds > 0
                   ? `Resume at ${formatDuration(item.position_seconds)}`
                   : "Watched"}
@@ -145,7 +148,7 @@ function History() {
                 type="button"
                 onClick={() => void remove(item.id)}
                 aria-label={`Remove ${item.title} from history`}
-                className="shrink-0 font-medium hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:text-zinc-200"
+                className="focus-ring -m-2 shrink-0 rounded-full p-2 font-semibold transition-colors hover:text-fg"
               >
                 Remove
               </button>

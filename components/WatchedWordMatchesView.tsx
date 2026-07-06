@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
+import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -73,30 +74,26 @@ function MatchesList() {
   }
 
   return (
-    <ul className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
+    <ul className="flex flex-col divide-y divide-border-subtle">
       {matches.map((m) => (
         <li key={m.id} className="flex flex-col gap-1 py-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-400">
-              {m.word}
-            </span>
+            <Badge variant="warning">{m.word}</Badge>
             {/* What was flagged: the comment's body, or the video itself. */}
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 capitalize dark:bg-zinc-800 dark:text-zinc-300">
-              {m.type}
-            </span>
-            <span className="text-sm text-zinc-600 dark:text-zinc-400">
+            <Badge className="capitalize">{m.type}</Badge>
+            <span className="text-sm text-fg-muted">
               by {m.author_username}
             </span>
             <Link
               href={`/videos/${m.video_id}`}
-              className="text-sm text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              className="focus-ring rounded-sm text-sm text-fg-muted underline transition-colors hover:text-fg"
             >
               {m.type === "video" ? m.video_title || "on video" : "on video"}
             </Link>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">{relativeTime(m.created_at)}</span>
+            <span className="text-[13px] text-fg-muted">{relativeTime(m.created_at)}</span>
           </div>
           {m.type === "comment" ? (
-            <blockquote className="border-l-2 border-zinc-300 pl-3 text-sm whitespace-pre-wrap text-zinc-700 italic dark:border-zinc-700 dark:text-zinc-300">
+            <blockquote className="border-l-2 border-border pl-3 text-sm whitespace-pre-wrap text-fg-muted italic">
               {m.comment_body}
             </blockquote>
           ) : null}

@@ -25,7 +25,10 @@ export function SavedVideosView() {
         title="Sign in to see your library"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link
+              href="/login"
+              className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
+            >
               Sign in
             </Link>{" "}
             to save videos and find them here later.

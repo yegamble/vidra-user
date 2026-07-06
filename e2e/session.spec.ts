@@ -44,7 +44,7 @@ async function signInViaForm(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
 }
 
 test("a hard reload keeps you signed in via the cookie refresh", async ({ page }) => {
@@ -67,7 +67,7 @@ test("a hard reload keeps you signed in via the cookie refresh", async ({ page }
   await page.reload();
 
   // The boot-time silent refresh + /auth/me restore the session.
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "ada" })).toBeVisible();
 
   // The silent refresh never carries a body token — the cookie is the carrier.
@@ -83,7 +83,7 @@ test("a failed boot refresh lands signed out with no error UI", async ({ page })
   await page.goto("/");
 
   await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
   // Quietly anonymous: no error surface anywhere (ErrorState never renders).
   await expect(page.getByText(/something went wrong/i)).toHaveCount(0);
 });
@@ -132,7 +132,7 @@ test("an expired access token triggers one silent refresh and a retry", async ({
 
   await expect(page.getByText("Profile saved.")).toBeVisible();
   // Still signed in, exactly one silent refresh, retried once with the new token.
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
   expect(refreshesWhileSignedIn).toBe(1);
   expect(patchAuths).toEqual(["Bearer acc1", "Bearer acc2"]);
 });
@@ -164,7 +164,7 @@ test("a second 401 after the silent refresh signs you out", async ({ page }) => 
   // the signed-out prompt instead of the form.
   await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
   await expect(page.getByText("Sign in to manage your account")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
 });
 
 test("signing out clears the cookie session (empty-body logout with credentials)", async ({
@@ -190,7 +190,7 @@ test("signing out clears the cookie session (empty-body logout with credentials)
 
   await signInViaForm(page);
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
   // The logout body carries no token — the httpOnly cookie identifies the session.
   expect(logoutBody).toEqual({});
@@ -198,5 +198,5 @@ test("signing out clears the cookie session (empty-body logout with credentials)
   // A reload stays signed out: the refresh cookie is gone.
   await page.reload();
   await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
 });

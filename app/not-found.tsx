@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
+import { LinkButton } from "@/components/ui";
 import { t } from "@/lib/i18n";
 
 export const metadata: Metadata = {
@@ -13,19 +13,12 @@ export const metadata: Metadata = {
 export default function NotFound() {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-4 px-4 py-24 text-center">
-      <p className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        404
-      </p>
-      <h1 className="text-2xl font-semibold tracking-tight">{t("state.notFoundTitle")}</h1>
-      <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-        {t("state.notFoundBody")}
-      </p>
-      <Link
-        href="/"
-        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-      >
+      <p className="text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted">404</p>
+      <h1 className="text-2xl font-bold tracking-tight">{t("state.notFoundTitle")}</h1>
+      <p className="max-w-sm text-sm text-fg-muted">{t("state.notFoundBody")}</p>
+      <LinkButton href="/" variant="secondary" size="sm">
         {t("state.notFoundHome")}
-      </Link>
+      </LinkButton>
     </main>
   );
 }

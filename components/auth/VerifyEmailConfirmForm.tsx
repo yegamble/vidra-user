@@ -39,9 +39,9 @@ export function VerifyEmailConfirmForm({ token }: { token: string }) {
 
   if (state === "verifying") {
     return (
-      <div className="flex items-center gap-3 py-4">
+      <div className="flex items-center justify-center gap-3 py-4">
         <Spinner label="Verifying" />
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">Verifying your email…</p>
+        <p className="text-sm text-fg-muted">Verifying your email…</p>
       </div>
     );
   }
@@ -51,12 +51,12 @@ export function VerifyEmailConfirmForm({ token }: { token: string }) {
       <div className="flex flex-col gap-4">
         <p
           role="status"
-          className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300"
+          className="rounded-xl bg-success/15 px-3.5 py-2.5 text-sm text-success"
         >
           Your email has been verified. Thanks!
         </p>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          <Link href="/" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+        <p className="text-center text-sm text-fg-muted">
+          <Link href="/" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
             Back to home
           </Link>
         </p>
@@ -69,22 +69,22 @@ export function VerifyEmailConfirmForm({ token }: { token: string }) {
     <div className="flex flex-col gap-4">
       <p
         role="alert"
-        className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+        className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
       >
         {state === "expired"
           ? "This verification link is invalid or has expired."
           : "Something went wrong verifying your email. Please try again."}
       </p>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-center text-sm text-fg-muted">
         {status === "authed" ? (
           <Link
             href="/settings"
-            className="underline hover:text-zinc-700 dark:hover:text-zinc-200"
+            className="focus-ring rounded-sm font-semibold text-fg hover:underline"
           >
             Resend the verification email
           </Link>
         ) : (
-          <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+          <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
             Sign in
           </Link>
         )}

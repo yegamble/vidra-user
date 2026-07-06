@@ -27,7 +27,7 @@ export default async function TrendingPage({
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Trending videos</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Trending videos</h1>
         <FeedSortTabs active="trending" filters={filters} />
       </div>
       <div className="mb-6">

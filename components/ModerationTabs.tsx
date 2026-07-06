@@ -26,27 +26,29 @@ export function ModerationTabs() {
   if (user?.role !== "admin" && user?.role !== "moderator") return null;
 
   return (
-    <nav className="mb-6 flex flex-wrap gap-2" aria-label="Moderation sections">
-      {TABS.map((tab) => {
-        // "Blocked videos" stays lit on its sub-tabs (/moderation/blocked/remote).
-        const active =
-          pathname === tab.href ||
-          (tab.href === "/moderation/blocked" && pathname.startsWith("/moderation/blocked/"));
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            aria-current={active ? "page" : undefined}
-            className={
-              active
-                ? "rounded-full bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            }
-          >
-            {tab.label}
-          </Link>
-        );
-      })}
+    <nav className="-mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0" aria-label="Moderation sections">
+      <div className="flex min-w-max items-center gap-5 border-b border-border-subtle">
+        {TABS.map((tab) => {
+          // "Blocked videos" stays lit on its sub-tabs (/moderation/blocked/remote).
+          const active =
+            pathname === tab.href ||
+            (tab.href === "/moderation/blocked" && pathname.startsWith("/moderation/blocked/"));
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              aria-current={active ? "page" : undefined}
+              className={
+                active
+                  ? "focus-ring -mb-px flex h-11 items-center whitespace-nowrap border-b-2 border-fg text-sm font-semibold text-fg"
+                  : "focus-ring -mb-px flex h-11 items-center whitespace-nowrap border-b-2 border-transparent text-sm font-semibold text-fg-muted transition-colors hover:text-fg"
+              }
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

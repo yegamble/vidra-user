@@ -177,14 +177,14 @@ function ImportPanel() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card className="flex flex-col gap-1 border-border-subtle bg-surface-muted">
-        <p className="text-sm font-medium text-fg">The source connection comes from the server.</p>
+      <div className="flex flex-col gap-1 rounded-2xl bg-surface-muted p-4">
+        <p className="text-sm font-semibold text-fg">The source connection comes from the server.</p>
         <p className="text-sm text-fg-muted">
           Vidra never asks for or accepts your PeerTube database or storage credentials in the
           browser. The read-only source connection is set in this server&rsquo;s configuration; this
           page only launches and monitors the one-way migration.
         </p>
-      </Card>
+      </div>
 
       {notConfigured ? (
         <NotConfiguredGuidance />
@@ -240,7 +240,7 @@ function NotConfiguredGuidance() {
     <Card className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <Badge variant="warning">Not configured</Badge>
-        <h2 className="text-base font-semibold tracking-tight text-fg">
+        <h2 className="text-[15px] font-bold tracking-tight text-fg">
           PeerTube import is not set up on this instance
         </h2>
       </div>
@@ -265,7 +265,7 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
   return (
     <section aria-label="Import run" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-base font-semibold tracking-tight text-fg">
+        <h2 className="text-[15px] font-bold tracking-tight text-fg">
           {modeLabel} {isDryRun ? "preview" : "run"}
         </h2>
         <RunStateBadge state={run.state} />
@@ -330,16 +330,16 @@ function ReportView({
       {entities.length === 0 ? (
         <EmptyState title="Nothing to import" message="The source has no mappable entities." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border-subtle">
+        <div className="overflow-x-auto rounded-2xl border border-border-subtle">
           <table className="w-full min-w-[36rem] text-left text-sm">
             <caption className="sr-only">Per-entity import counts</caption>
-            <thead className="border-b border-border-subtle text-xs uppercase tracking-wide text-fg-muted">
+            <thead className="border-b border-border-subtle text-[10.5px] font-bold uppercase tracking-[0.05em] text-fg-muted">
               <tr>
-                <th scope="col" className="px-3 py-2 font-medium">
+                <th scope="col" className="px-3 py-2.5">
                   Entity
                 </th>
                 {COUNT_COLUMNS.map((c) => (
-                  <th key={c} scope="col" className="px-3 py-2 text-right font-medium">
+                  <th key={c} scope="col" className="px-3 py-2.5 text-right">
                     {c}
                   </th>
                 ))}
@@ -358,7 +358,7 @@ function ReportView({
                       <td
                         key={c}
                         className={`px-3 py-2 text-right tabular-nums ${
-                          danger ? "font-semibold text-danger" : "text-fg"
+                          danger ? "font-semibold text-danger" : "text-fg-muted"
                         }`}
                       >
                         {formatCount(value)}
@@ -413,7 +413,7 @@ function HistorySection({
   if (runs.length === 0) {
     return (
       <section aria-label="Import history">
-        <h2 className="mb-2 text-base font-semibold tracking-tight text-fg">Recent runs</h2>
+        <h2 className="mb-2 text-[15px] font-bold tracking-tight text-fg">Recent runs</h2>
         <EmptyState title="No import runs yet" message="Launch a dry run to preview a migration." />
       </section>
     );
@@ -421,8 +421,8 @@ function HistorySection({
 
   return (
     <section aria-label="Import history">
-      <h2 className="mb-2 text-base font-semibold tracking-tight text-fg">Recent runs</h2>
-      <ul className="flex flex-col divide-y divide-border-subtle rounded-lg border border-border-subtle">
+      <h2 className="mb-2 text-[15px] font-bold tracking-tight text-fg">Recent runs</h2>
+      <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle">
         {runs.map((run) => {
           const active = run.id === activeId;
           return (

@@ -48,7 +48,7 @@ export function AttachmentImage({ attachment }: { attachment: DMAttachment }) {
   if (state === "loading" || !url) {
     return (
       <div
-        className="flex h-40 w-56 max-w-full animate-pulse items-center justify-center rounded-md bg-zinc-200 text-xs text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400"
+        className="flex h-40 w-56 max-w-full animate-pulse items-center justify-center rounded-xl bg-surface-strong text-xs text-fg-muted"
         aria-label={`Loading image ${attachment.filename}`}
       >
         Loading image…
@@ -61,7 +61,7 @@ export function AttachmentImage({ attachment }: { attachment: DMAttachment }) {
     <img
       src={url}
       alt={attachment.filename}
-      className="max-h-64 max-w-full rounded-md object-contain"
+      className="max-h-64 max-w-full rounded-xl object-contain"
     />
   );
 }

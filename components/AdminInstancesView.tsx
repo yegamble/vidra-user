@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -141,7 +142,7 @@ function BlockInstanceForm({ onBlocked }: { onBlocked: (instance: BlockedInstanc
             setDomain(e.target.value);
             setError(null);
           }}
-          className="w-full max-w-xs rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          className="focus-ring w-full max-w-xs rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
         />
         <input
           type="text"
@@ -150,18 +151,14 @@ function BlockInstanceForm({ onBlocked }: { onBlocked: (instance: BlockedInstanc
           maxLength={MAX_REASON_LEN}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="w-full max-w-sm rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          className="focus-ring w-full max-w-sm rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
         />
-        <button
-          type="submit"
-          disabled={busy || domain.trim() === ""}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
+        <Button type="submit" size="sm" disabled={busy || domain.trim() === ""}>
           {busy ? "Blocking…" : "Block"}
-        </button>
+        </Button>
       </div>
       {error ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       ) : null}
@@ -193,28 +190,29 @@ function BlockedInstanceRow({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        <p className="truncate text-sm font-semibold tracking-tight text-fg">
           {instance.domain}
         </p>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-[13px] text-fg-muted">
           blocked {relativeTime(instance.blocked_at)}
         </p>
         {instance.reason ? (
-          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">{instance.reason}</p>
+          <p className="mt-1 text-[13px] text-fg-muted">{instance.reason}</p>
         ) : null}
-        {error ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+        {error ? <p className="mt-1 text-xs text-danger">{error}</p> : null}
       </div>
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
+        className="shrink-0"
         disabled={busy}
         aria-label={`Unblock ${instance.domain}`}
         onClick={() => void unblock()}
-        className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
       >
         Unblock
-      </button>
+      </Button>
     </div>
   );
 }

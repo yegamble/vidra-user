@@ -47,19 +47,19 @@ export function TagsInput({
 
   return (
     <div className="flex flex-col gap-1 text-sm">
-      <span className="font-medium">{label}</span>
-      <div className="flex flex-wrap items-center gap-1.5 rounded border border-zinc-300 px-2 py-1.5 focus-within:ring-2 focus-within:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900">
+      <span className="font-medium text-fg">{label}</span>
+      <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-surface px-2.5 py-1.5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
         {value.map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-2 pr-1 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+            className="inline-flex items-center gap-1 rounded-full bg-surface-muted py-1 pl-3 pr-1.5 text-xs font-semibold text-fg"
           >
             #{tag}
             <button
               type="button"
               aria-label={`Remove tag ${tag}`}
               onClick={() => remove(tag)}
-              className="flex h-4 w-4 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+              className="flex h-4 w-4 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg focus-ring"
             >
               <svg
                 aria-hidden="true"
@@ -95,10 +95,10 @@ export function TagsInput({
           aria-label={ariaLabel}
           aria-describedby={hintId}
           placeholder={value.length === 0 ? "Add a tag and press Enter" : ""}
-          className="min-w-24 flex-1 bg-transparent px-1 py-0.5 focus:outline-none"
+          className="min-w-24 flex-1 bg-transparent px-1 py-1 text-sm text-fg placeholder:text-fg-muted focus:outline-none"
         />
       </div>
-      <p id={hintId} role="status" className="text-xs text-zinc-500 dark:text-zinc-400">
+      <p id={hintId} role="status" className="text-xs text-fg-muted">
         {error ?? `Up to ${MAX_TAGS} tags — press Enter or comma to add.`}
       </p>
     </div>

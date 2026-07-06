@@ -14,9 +14,9 @@ export function PlaylistCard({ playlist }: { playlist: Playlist }) {
     <div className="flex flex-col gap-2">
       <Link
         href={`/playlists/${playlist.id}`}
-        className="group flex flex-col gap-2 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+        className="focus-ring group flex flex-col gap-2 rounded-xl"
       >
-        <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
+        <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl bg-surface-muted">
           {playlist.has_thumbnail ? (
             // eslint-disable-next-line @next/next/no-img-element -- backend-served cover, not a static asset
             <img
@@ -29,7 +29,7 @@ export function PlaylistCard({ playlist }: { playlist: Playlist }) {
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
-              className="h-8 w-8 text-zinc-400 dark:text-zinc-500"
+              className="h-8 w-8 text-fg-muted"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
@@ -38,15 +38,15 @@ export function PlaylistCard({ playlist }: { playlist: Playlist }) {
               <path d="M3 5h12M3 10h12M3 15h12M18 5v10.55A4 4 0 1 0 20 19V7h3V5z" />
             </svg>
           )}
-          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
+          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums">
             {playlist.video_count} {playlist.video_count === 1 ? "video" : "videos"}
           </span>
         </div>
-        <h3 className="line-clamp-2 text-sm font-medium text-zinc-900 group-hover:text-zinc-600 dark:text-zinc-100 dark:group-hover:text-zinc-300">
+        <h3 className="line-clamp-2 text-sm font-semibold text-fg transition-colors group-hover:text-fg-muted">
           {playlist.title}
         </h3>
       </Link>
-      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+      <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg-muted">
         <PrivacyBadge privacy={playlist.visibility} />
         {updated ? <span>Updated {updated}</span> : null}
       </div>

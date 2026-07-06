@@ -6,13 +6,13 @@ import { Modal } from "@/components/ui";
 import { formatDuration } from "@/lib/format";
 
 const PILL =
-  "flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800";
+  "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
 
 const COPY_BUTTON =
-  "shrink-0 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800";
+  "focus-ring shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted";
 
 const FIELD =
-  "min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 font-mono text-xs text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  "focus-ring min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2 font-mono text-xs text-fg";
 
 // Minified Feather-style "share" icon.
 function ShareIcon() {
@@ -143,7 +143,7 @@ function ShareDialog({
               {copied === "link" ? "Copied" : "Copy"}
             </button>
           </div>
-          <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+          <label className="flex items-center gap-2 text-sm text-fg">
             <input
               type="checkbox"
               checked={startAtChecked}
@@ -152,14 +152,14 @@ function ShareDialog({
                 setStartAtChecked(e.target.checked);
                 setCopied(null); // the URLs changed; "Copied" no longer holds
               }}
-              className="h-4 w-4 rounded border-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700"
+              className="focus-ring h-4 w-4 rounded border-border"
             />
-            <span>Start at {formatDuration(atSeconds)}</span>
+            <span className="tabular-nums">Start at {formatDuration(atSeconds)}</span>
           </label>
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Embed</span>
+          <span className="text-sm font-medium text-fg">Embed</span>
           <div className="flex items-center gap-2">
             <input
               readOnly
@@ -180,7 +180,7 @@ function ShareDialog({
         </div>
 
         {copyFailed ? (
-          <p className="text-sm text-red-600 dark:text-red-400">
+          <p className="text-sm text-danger">
             Couldn&apos;t copy automatically — select the text and copy it manually.
           </p>
         ) : null}

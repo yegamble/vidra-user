@@ -10,9 +10,14 @@ import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { TagsInput } from "@/components/TagsInput";
 import { ThumbnailManager } from "@/components/ThumbnailManager";
 import { useSession } from "@/components/auth/AuthProvider";
+import { ChevronDownIcon } from "@/components/icons";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
+import { Textarea } from "@/components/ui/Textarea";
 import {
   ApiError,
   api,
@@ -38,6 +43,19 @@ import { formatDateTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
+// Token recipes for the hand-written form fields in this file (the upload form
+// keeps bespoke markup for its per-field 422 wiring; these mirror the ui
+// primitives' styling so both render identically).
+const FIELD =
+  "w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted focus-ring disabled:opacity-60";
+const SELECT_FIELD =
+  "w-full appearance-none rounded-xl border border-border bg-surface px-3.5 py-2 pr-9 text-sm text-fg focus-ring disabled:opacity-60";
+const FILE_FIELD =
+  "text-sm focus-ring file:mr-3 file:rounded-full file:border-0 file:bg-surface-muted file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-fg";
+// Quiet pill treatment for inline row actions (Edit / Delete / Confirm / Cancel).
+const ROW_ACTION =
+  "rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors focus-ring disabled:opacity-50";
+
 // StudioView is the creator surface: create a channel, then upload a video to it.
 // The session lives in memory, so a hard reload lands here signed out.
 export function StudioView() {
@@ -49,7 +67,7 @@ export function StudioView() {
         title="Sign in to use the studio"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="underline hover:text-fg">
               Sign in
             </Link>{" "}
             to create a channel and publish videos.
@@ -177,13 +195,13 @@ function ChannelSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold">Your channels</h2>
+      <h2 className="text-[15px] font-bold tracking-tight">Your channels</h2>
       {channels.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-fg-muted">
           Create your first channel to start publishing.
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+        <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface">
           {channels.map((ch) => (
             <ChannelRow key={ch.id} channel={ch} onUpdated={onUpdated} onDeleted={onDeleted} />
           ))}
@@ -192,40 +210,37 @@ function ChannelSection({
 
       <form
         onSubmit={(e) => void create(e)}
-        className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 sm:flex-row sm:items-end dark:border-zinc-800"
+        className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4 sm:flex-row sm:items-end"
       >
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Handle</span>
-          <input
+        <div className="sm:w-48">
+          <Input
+            label="Handle"
             value={handle}
             onChange={(e) => setHandle(e.target.value)}
             placeholder="ada_makes"
             aria-label="Channel handle"
             minLength={3}
             maxLength={30}
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
           />
-        </label>
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="font-medium">Display name</span>
-          <input
+        </div>
+        <div className="flex-1">
+          <Input
+            label="Display name"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Ada Makes"
             aria-label="Channel display name"
             maxLength={50}
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
           />
-        </label>
-        <button
+        </div>
+        <Button
           type="submit"
           disabled={busy || handle.trim() === "" || displayName.trim() === ""}
-          className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
           Create channel
-        </button>
+        </Button>
       </form>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
     </section>
   );
 }
@@ -288,29 +303,24 @@ function ChannelRow({
 
   if (mode === "edit") {
     return (
-      <li className="flex flex-col gap-3 px-4 py-3">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Display name</span>
-          <input
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            aria-label="Edit channel name"
-            maxLength={50}
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Description</span>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            aria-label="Edit channel description"
-            rows={3}
-            maxLength={1000}
-            className="resize-y rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <li className="flex flex-col gap-3 px-4 py-4">
+        <Input
+          label="Display name"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          aria-label="Edit channel name"
+          maxLength={50}
+        />
+        <Textarea
+          label="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          aria-label="Edit channel description"
+          rows={3}
+          maxLength={1000}
+          className="resize-y"
+        />
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
         <ProfileImageManager
           kind="avatar"
           label="Channel avatar"
@@ -332,22 +342,16 @@ function ChannelRow({
           onChanged={(has) => onUpdated({ ...channel, has_banner: has })}
         />
         <div className="flex gap-2">
-          <button
-            type="button"
+          <Button
+            size="sm"
             disabled={busy || displayName.trim() === ""}
             onClick={() => void save()}
-            className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             Save
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={cancelEdit}
-            className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
+          </Button>
+          <Button variant="secondary" size="sm" disabled={busy} onClick={cancelEdit}>
             Cancel
-          </button>
+          </Button>
         </div>
       </li>
     );
@@ -356,21 +360,21 @@ function ChannelRow({
   return (
     <li className="flex items-center gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">
+        <p className="truncate text-sm font-semibold">
           <Link href={`/channels/${channel.handle}`} className="hover:underline">
             {channel.display_name}
           </Link>
         </p>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">@{channel.handle}</span>
+        <span className="text-[13px] text-fg-muted">@{channel.handle}</span>
       </div>
       {mode === "confirm-delete" ? (
-        <div className="flex shrink-0 items-center gap-2 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-300">Delete channel?</span>
+        <div className="flex shrink-0 items-center gap-1 text-sm">
+          <span className="text-[13px] text-fg-muted">Delete channel?</span>
           <button
             type="button"
             disabled={busy}
             onClick={() => void remove()}
-            className="font-medium text-red-600 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:text-red-400"
+            className={`${ROW_ACTION} text-danger hover:bg-danger-surface`}
           >
             Confirm
           </button>
@@ -378,18 +382,18 @@ function ChannelRow({
             type="button"
             disabled={busy}
             onClick={() => setMode("view")}
-            className="font-medium text-zinc-500 hover:text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:text-zinc-400 dark:hover:text-zinc-200"
+            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-muted hover:text-fg`}
           >
             Cancel
           </button>
         </div>
       ) : (
-        <div className="flex shrink-0 items-center gap-2 text-sm">
+        <div className="flex shrink-0 items-center gap-1 text-sm">
           <button
             type="button"
             aria-label={`Edit ${channel.handle}`}
             onClick={() => setMode("edit")}
-            className="font-medium text-zinc-600 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-300 dark:hover:text-zinc-100"
+            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-muted hover:text-fg`}
           >
             Edit
           </button>
@@ -397,7 +401,7 @@ function ChannelRow({
             type="button"
             aria-label={`Delete ${channel.handle}`}
             onClick={() => setMode("confirm-delete")}
-            className="font-medium text-zinc-500 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:text-red-400"
+            className={`${ROW_ACTION} text-fg-muted hover:bg-danger-surface hover:text-danger`}
           >
             Delete
           </button>
@@ -414,7 +418,7 @@ type UploadState = "idle" | "uploading" | "done" | "cancelled" | "error";
 function FieldErrorText({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
   return (
-    <p id={id} className="text-xs text-red-600 dark:text-red-400">
+    <p id={id} className="text-xs text-danger">
       {message}
     </p>
   );
@@ -442,22 +446,28 @@ function TaxonomySelect({
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={ariaLabel}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error && errorId ? errorId : undefined}
-        className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-      >
-        <option value="">—</option>
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+      <span className="font-medium text-fg">{label}</span>
+      <span className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={ariaLabel}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error && errorId ? errorId : undefined}
+          className={SELECT_FIELD}
+        >
+          <option value="">—</option>
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDownIcon
+          size={16}
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted"
+        />
+      </span>
       {errorId ? <FieldErrorText id={errorId} message={error} /> : null}
     </label>
   );
@@ -827,30 +837,36 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold">Upload a video</h2>
+      <h2 className="text-[15px] font-bold tracking-tight">Upload a video</h2>
       <form
         onSubmit={(e) => void upload(e)}
-        className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
+        className="flex flex-col gap-4 rounded-2xl border border-border-subtle bg-surface p-4 sm:p-5"
       >
         {channels.length > 1 ? (
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Channel</span>
-            <select
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              aria-label="Channel"
-              className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              {channels.map((ch) => (
-                <option key={ch.id} value={ch.handle}>
-                  {ch.display_name} (@{ch.handle})
-                </option>
-              ))}
-            </select>
+            <span className="font-medium text-fg">Channel</span>
+            <span className="relative">
+              <select
+                value={handle}
+                onChange={(e) => setHandle(e.target.value)}
+                aria-label="Channel"
+                className={SELECT_FIELD}
+              >
+                {channels.map((ch) => (
+                  <option key={ch.id} value={ch.handle}>
+                    {ch.display_name} (@{ch.handle})
+                  </option>
+                ))}
+              </select>
+              <ChevronDownIcon
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted"
+              />
+            </span>
           </label>
         ) : null}
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Title</span>
+          <span className="font-medium text-fg">Title</span>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -859,12 +875,12 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             maxLength={200}
             aria-invalid={fieldErrors.title ? true : undefined}
             aria-describedby={fieldErrors.title ? "publish-title-error" : undefined}
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            className={FIELD}
           />
           <FieldErrorText id="publish-title-error" message={fieldErrors.title} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Description</span>
+          <span className="font-medium text-fg">Description</span>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -874,7 +890,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             maxLength={5000}
             aria-invalid={fieldErrors.description ? true : undefined}
             aria-describedby={fieldErrors.description ? "publish-description-error" : undefined}
-            className="resize-y rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            className={`resize-y ${FIELD}`}
           />
           <FieldErrorText id="publish-description-error" message={fieldErrors.description} />
         </label>
@@ -907,23 +923,29 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
         />
         <TagsInput value={tags} onChange={setTags} ariaLabel="Video tags" />
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Privacy</span>
-          <select
-            value={privacy}
-            onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
-            aria-label="Privacy"
-            aria-invalid={fieldErrors.privacy ? true : undefined}
-            aria-describedby={fieldErrors.privacy ? "publish-privacy-error" : undefined}
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="public">Public</option>
-            <option value="unlisted">Unlisted</option>
-            <option value="private">Private</option>
-          </select>
+          <span className="font-medium text-fg">Privacy</span>
+          <span className="relative">
+            <select
+              value={privacy}
+              onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
+              aria-label="Privacy"
+              aria-invalid={fieldErrors.privacy ? true : undefined}
+              aria-describedby={fieldErrors.privacy ? "publish-privacy-error" : undefined}
+              className={SELECT_FIELD}
+            >
+              <option value="public">Public</option>
+              <option value="unlisted">Unlisted</option>
+              <option value="private">Private</option>
+            </select>
+            <ChevronDownIcon
+              size={16}
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted"
+            />
+          </span>
           <FieldErrorText id="publish-privacy-error" message={fieldErrors.privacy} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Schedule publish (optional)</span>
+          <span className="font-medium text-fg">Schedule publish (optional)</span>
           <input
             type="datetime-local"
             value={publishAt}
@@ -931,16 +953,16 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             aria-label="Schedule publish"
             aria-invalid={fieldErrors.publish_at ? true : undefined}
             aria-describedby={fieldErrors.publish_at ? "publish-schedule-error" : undefined}
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            className={FIELD}
           />
           <FieldErrorText id="publish-schedule-error" message={fieldErrors.publish_at} />
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-xs text-fg-muted">
             Leave empty to publish as soon as processing finishes. A scheduled video stays
             hidden from public surfaces until this time (must be in the future).
           </span>
         </label>
-        <fieldset className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Source</span>
+        <fieldset className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-fg">Source</span>
           <div className="flex gap-4">
             <label className="flex items-center gap-1.5">
               <input
@@ -948,6 +970,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
                 name="video-source"
                 checked={source === "file"}
                 onChange={() => setSource("file")}
+                className="h-4 w-4 accent-accent focus-ring"
               />
               Upload file
             </label>
@@ -957,6 +980,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
                 name="video-source"
                 checked={source === "url"}
                 onChange={() => setSource("url")}
+                className="h-4 w-4 accent-accent focus-ring"
               />
               Import from URL
             </label>
@@ -964,22 +988,22 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
         </fieldset>
         {source === "file" ? (
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Video file</span>
+            <span className="font-medium text-fg">Video file</span>
             <input
               ref={fileRef}
               type="file"
               accept="video/*"
               aria-label="Video file"
               onChange={onFilePicked}
-              className="text-sm file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:file:bg-zinc-800"
+              className={FILE_FIELD}
             />
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="text-xs text-fg-muted">
               Large files upload in chunks and can be resumed if interrupted.
             </span>
           </label>
         ) : (
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Video URL</span>
+            <span className="font-medium text-fg">Video URL</span>
             <input
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
@@ -988,10 +1012,10 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
               aria-label="Video URL"
               aria-invalid={fieldErrors.url ? true : undefined}
               aria-describedby={fieldErrors.url ? "publish-url-error" : undefined}
-              className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              className={FIELD}
             />
             <FieldErrorText id="publish-url-error" message={fieldErrors.url} />
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="text-xs text-fg-muted">
               A public direct link to a video file. We fetch and publish it.
             </span>
           </label>
@@ -1001,30 +1025,26 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           // file — offer to resume from the chunks that already landed.
           <div
             role="status"
-            className="flex flex-col gap-2 rounded-md border border-sky-300 bg-sky-50 p-3 text-sm dark:border-sky-800 dark:bg-sky-950/40"
+            className="flex flex-col gap-3 rounded-2xl bg-surface-muted p-4 text-sm"
           >
-            <p className="text-sky-800 dark:text-sky-200">
+            <p className="text-fg">
               Unfinished upload found for “{resumeCandidate.filename}”. Resume where you left off,
               or start a new upload.
             </p>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => void resumeUpload()}
-                className="rounded-full bg-sky-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:bg-sky-600 dark:hover:bg-sky-500"
-              >
+              <Button size="sm" onClick={() => void resumeUpload()}>
                 Resume upload
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   void discardSession(resumeCandidate);
                   setResumeCandidate(null);
                 }}
-                className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
                 Discard
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}
@@ -1033,7 +1053,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             ref={publishRef}
             type="submit"
             disabled={state === "uploading"}
-            className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            className={buttonClasses("primary", "md")}
           >
             {state === "uploading" ? (source === "url" ? "Importing…" : "Uploading…") : "Publish"}
           </button>
@@ -1048,68 +1068,63 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={progress}
-                className="h-2 min-w-24 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
+                className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-surface-strong"
               >
                 <div
-                  className="h-full rounded-full bg-zinc-900 transition-[width] duration-300 dark:bg-zinc-100"
+                  className="h-full rounded-full bg-fg transition-[width] duration-300"
                   style={{ width: `${progress}%` }}
                 />
               </div>
               <span
                 aria-hidden="true"
-                className="text-xs font-medium tabular-nums text-zinc-600 dark:text-zinc-300"
+                className="text-xs font-semibold tabular-nums text-fg-muted"
               >
                 {progress}%
               </span>
-              <button
-                type="button"
-                aria-label="Cancel upload"
-                onClick={cancelUpload}
-                className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
+              <Button variant="secondary" aria-label="Cancel upload" onClick={cancelUpload}>
                 Cancel
-              </button>
+              </Button>
             </>
           ) : null}
         </div>
       </form>
       {state === "done" && result ? (
         result.state === "published" ? (
-          <p role="status" className="text-sm text-green-700 dark:text-green-400">
+          <p role="status" className="text-sm text-success">
             Published!{" "}
-            <Link href={`/videos/${result.id}`} className="font-medium underline">
+            <Link href={`/videos/${result.id}`} className="font-semibold underline">
               View “{result.title}”
             </Link>
           </p>
         ) : result.state === "scheduled" ? (
           // Honest scheduled outcome: processed and parked until publish_at.
-          <p role="status" className="text-sm text-sky-700 dark:text-sky-300">
+          <p role="status" className="text-sm text-fg-muted">
             “{result.title}” is scheduled — it will publish automatically
             {result.publish_at ? ` on ${formatDateTime(result.publish_at)}` : " at the scheduled time"}.
           </p>
         ) : result.state === "quarantined" ? (
           // Quarantine is its own outcome, not a failure: the upload succeeded
           // but this instance holds new uploads for moderator review.
-          <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
+          <p role="status" className="text-sm text-warning">
             “{result.title}” was received and is held for review — this instance reviews new
             uploads before they go public. It will publish once a moderator approves it.
           </p>
         ) : (
           // An honest in-progress message: the file was received but the backend
           // has not finished processing it — it is not watchable yet.
-          <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
+          <p role="status" className="text-sm text-warning">
             “{result.title}” was received and is still processing — it will appear in Your videos
             once it’s ready.
           </p>
         )
       ) : null}
       {state === "cancelled" ? (
-        <p role="status" className="text-sm text-zinc-600 dark:text-zinc-300">
+        <p role="status" className="text-sm text-fg-muted">
           Upload cancelled — nothing was published. Your details are kept so you can try again.
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       ) : null}
@@ -1158,35 +1173,28 @@ function MyVideosSection({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Your videos</h2>
-        <button
-          type="button"
-          onClick={refetch}
-          className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
+        <h2 className="text-[15px] font-bold tracking-tight">Your videos</h2>
+        <Button variant="secondary" size="sm" onClick={refetch}>
           Refresh
-        </button>
+        </Button>
       </div>
 
       {channels.length > 1 ? (
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Channel</span>
-          <select
-            value={handle}
-            onChange={(e) => {
-              setStatus("loading");
-              setHandle(e.target.value);
-            }}
-            aria-label="Videos channel"
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            {channels.map((ch) => (
-              <option key={ch.id} value={ch.handle}>
-                {ch.display_name} (@{ch.handle})
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          label="Channel"
+          value={handle}
+          onChange={(e) => {
+            setStatus("loading");
+            setHandle(e.target.value);
+          }}
+          aria-label="Videos channel"
+        >
+          {channels.map((ch) => (
+            <option key={ch.id} value={ch.handle}>
+              {ch.display_name} (@{ch.handle})
+            </option>
+          ))}
+        </Select>
       ) : null}
 
       {status === "loading" ? (
@@ -1196,9 +1204,9 @@ function MyVideosSection({
       ) : status === "error" ? (
         <ErrorState message="Could not load your videos." onRetry={refetch} />
       ) : videos.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No videos in this channel yet.</p>
+        <p className="text-sm text-fg-muted">No videos in this channel yet.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+        <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface">
           {videos.map((v) => (
             <VideoRow
               key={v.id}
@@ -1336,28 +1344,23 @@ function VideoRow({
 
   if (mode === "edit") {
     return (
-      <li className="flex flex-col gap-2 px-4 py-3">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Title</span>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            aria-label="Edit title"
-            maxLength={200}
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Description</span>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            aria-label="Edit description"
-            rows={3}
-            maxLength={5000}
-            className="resize-y rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
+      <li className="flex flex-col gap-3 px-4 py-4">
+        <Input
+          label="Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          aria-label="Edit title"
+          maxLength={200}
+        />
+        <Textarea
+          label="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          aria-label="Edit description"
+          rows={3}
+          maxLength={5000}
+          className="resize-y"
+        />
         <TaxonomySelect
           label="Category"
           ariaLabel="Edit category"
@@ -1382,58 +1385,40 @@ function VideoRow({
         {/* Tags are editable only when the detail fetch supplied the current
             set (see save()); otherwise the editor would show a false empty. */}
         {detail ? <TagsInput value={tags} onChange={setTags} ariaLabel="Edit tags" /> : null}
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Privacy</span>
-          <select
-            value={privacy}
-            onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
-            aria-label="Edit privacy"
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="public">Public</option>
-            <option value="unlisted">Unlisted</option>
-            <option value="private">Private</option>
-          </select>
-        </label>
+        <Select
+          label="Privacy"
+          value={privacy}
+          onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
+          aria-label="Edit privacy"
+        >
+          <option value="public">Public</option>
+          <option value="unlisted">Unlisted</option>
+          <option value="private">Private</option>
+        </Select>
         {canSchedule ? (
           // Scheduling is only editable while the video has not published yet —
           // the backend rejects publish_at on a published video, and a schedule
           // cannot be cleared through the contract (only moved).
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Scheduled publish</span>
-            <input
-              type="datetime-local"
-              value={publishAt}
-              onChange={(e) => setPublishAt(e.target.value)}
-              aria-label="Edit scheduled publish"
-              className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              Set or move the automatic publish time (must be in the future).
-            </span>
-          </label>
+          <Input
+            label="Scheduled publish"
+            type="datetime-local"
+            value={publishAt}
+            onChange={(e) => setPublishAt(e.target.value)}
+            aria-label="Edit scheduled publish"
+            hint="Set or move the automatic publish time (must be in the future)."
+          />
         ) : null}
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
         {detail ? <StreamingStatus video={detail} /> : null}
         <ThumbnailManager videoId={video.id} hasThumbnail={video.has_thumbnail ?? false} />
         <CaptionsManager videoId={video.id} />
         <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={busy || title.trim() === ""}
-            onClick={() => void save()}
-            className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-          >
+          <Button size="sm" disabled={busy || title.trim() === ""} onClick={() => void save()}>
             Save
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={cancelEdit}
-            className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
+          </Button>
+          <Button variant="secondary" size="sm" disabled={busy} onClick={cancelEdit}>
             Cancel
-          </button>
+          </Button>
         </div>
       </li>
     );
@@ -1442,39 +1427,39 @@ function VideoRow({
   return (
     <li className="flex items-center gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">
+        <p className="truncate text-sm font-semibold">
           <Link href={`/videos/${video.id}`} className="hover:underline">
             {video.title}
           </Link>
         </p>
-        <div className="mt-1 flex items-center gap-2 text-xs">
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
           <StateBadge state={video.state ?? "draft"} />
           {video.privacy === "public" ? (
-            <span className="text-zinc-500 dark:text-zinc-400">Public</span>
+            <span className="text-fg-muted">Public</span>
           ) : (
             <PrivacyBadge privacy={video.privacy ?? "private"} />
           )}
           {video.state === "scheduled" && video.publish_at ? (
-            <span className="text-zinc-500 dark:text-zinc-400">
+            <span className="text-fg-muted tabular-nums">
               publishes {formatDateTime(video.publish_at)}
             </span>
           ) : null}
         </div>
         {video.state === "quarantined" ? (
-          <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+          <p className="mt-1 text-xs text-warning">
             Held for review — this instance reviews new uploads before they go public. Only you
             and the moderators can see it until it is approved.
           </p>
         ) : null}
       </div>
       {mode === "confirm-delete" ? (
-        <div className="flex shrink-0 items-center gap-2 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-300">Delete?</span>
+        <div className="flex shrink-0 items-center gap-1 text-sm">
+          <span className="text-[13px] text-fg-muted">Delete?</span>
           <button
             type="button"
             disabled={busy}
             onClick={() => void remove()}
-            className="font-medium text-red-600 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:text-red-400"
+            className={`${ROW_ACTION} text-danger hover:bg-danger-surface`}
           >
             Confirm
           </button>
@@ -1482,24 +1467,24 @@ function VideoRow({
             type="button"
             disabled={busy}
             onClick={() => setMode("view")}
-            className="font-medium text-zinc-500 hover:text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:text-zinc-400 dark:hover:text-zinc-200"
+            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-muted hover:text-fg`}
           >
             Cancel
           </button>
         </div>
       ) : (
-        <div className="flex shrink-0 items-center gap-2 text-sm">
+        <div className="flex shrink-0 items-center gap-1 text-sm">
           <button
             type="button"
             onClick={() => void startEdit()}
-            className="font-medium text-zinc-600 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-300 dark:hover:text-zinc-100"
+            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-muted hover:text-fg`}
           >
             Edit
           </button>
           <button
             type="button"
             onClick={() => setMode("confirm-delete")}
-            className="font-medium text-zinc-500 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:text-red-400"
+            className={`${ROW_ACTION} text-fg-muted hover:bg-danger-surface hover:text-danger`}
           >
             Delete
           </button>
@@ -1522,13 +1507,13 @@ function StreamingStatus({ video }: { video: Video }) {
   if (video.hls_url) {
     const heights = (video.renditions ?? []).map((r) => `${r.height}p`).join(", ");
     return (
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      <p className="text-xs text-fg-muted">
         Streaming (HLS) ready{heights ? `: ${heights}` : ""}.
       </p>
     );
   }
   return (
-    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+    <p className="text-xs text-fg-muted">
       HD streaming versions are not ready — viewers currently watch the original file. They
       appear automatically once transcoding completes (if enabled on this instance).
     </p>
@@ -1537,14 +1522,18 @@ function StreamingStatus({ video }: { video: Video }) {
 
 function StateBadge({ state }: { state: VideoState }) {
   const styles: Record<VideoState, string> = {
-    draft: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
-    processing: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
-    scheduled: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200",
-    quarantined: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
-    published: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200",
-    failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
+    draft: "bg-surface-strong text-fg-muted",
+    processing: "bg-warning/15 text-warning",
+    scheduled: "bg-surface-strong text-fg-muted",
+    quarantined: "bg-warning/15 text-warning",
+    published: "bg-success/15 text-success",
+    failed: "bg-danger-surface text-danger",
   };
   return (
-    <span className={`rounded px-1.5 py-0.5 font-medium capitalize ${styles[state]}`}>{state}</span>
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] ${styles[state]}`}
+    >
+      {state}
+    </span>
   );
 }

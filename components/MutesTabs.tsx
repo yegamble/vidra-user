@@ -24,8 +24,8 @@ export function MutesTabs() {
             aria-current={active ? "page" : undefined}
             className={
               active
-                ? "rounded-full bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                ? "focus-ring rounded-full border border-accent bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg"
+                : "focus-ring rounded-full border border-border px-4 py-1.5 text-sm font-semibold text-fg-muted transition-colors hover:bg-surface-muted"
             }
           >
             {tab.label}

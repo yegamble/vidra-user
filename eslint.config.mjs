@@ -35,6 +35,9 @@ const eslintConfig = defineConfig([
     // Vendored @matrix-org/olm runtime, copied in by scripts/copy-olm-wasm.mjs
     // (emscripten glue — not our source to lint).
     "public/olm/**",
+    // Vendored design templates (the visual source of truth for the redesign;
+    // see .ralph/specs/design-system.md) — reference artifacts, never imported.
+    ".ralph/design-templates/**",
   ]),
 ]);
 

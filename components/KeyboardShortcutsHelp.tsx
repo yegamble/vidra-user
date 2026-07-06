@@ -39,7 +39,7 @@ export function KeyboardShortcutsHelp() {
         aria-expanded={open}
         aria-controls="player-shortcuts-help"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         {/* Minified inline command-key icon */}
         <svg
@@ -61,17 +61,17 @@ export function KeyboardShortcutsHelp() {
           id="player-shortcuts-help"
           role="region"
           aria-label="Keyboard shortcuts"
-          className="absolute bottom-full left-0 z-20 mb-2 w-64 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
+          className="absolute bottom-full left-0 z-20 mb-2 w-64 rounded-xl border border-border-subtle bg-surface-raised p-3 shadow-lg"
         >
           <dl className="flex flex-col gap-1.5 text-sm">
             {SHORTCUTS.map(([keys, action]) => (
               <div key={keys} className="flex items-baseline justify-between gap-3">
-                <dt className="shrink-0 font-medium text-zinc-900 dark:text-zinc-100">{keys}</dt>
-                <dd className="text-right text-zinc-600 dark:text-zinc-300">{action}</dd>
+                <dt className="shrink-0 font-semibold text-fg">{keys}</dt>
+                <dd className="text-right text-fg-muted">{action}</dd>
               </div>
             ))}
           </dl>
-          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 text-xs text-fg-muted">
             Shortcuts pause while you are typing in a field.
           </p>
         </div>

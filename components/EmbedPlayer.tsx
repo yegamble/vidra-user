@@ -44,23 +44,25 @@ export function EmbedPlayer({ id }: { id: string }) {
     return () => controller.abort();
   }, [id]);
 
+  // The embed frame is chrome-less media: everything sits on black, so the
+  // text stays theme-invariant white (documented media-overlay exception).
   if (status === "loading") {
     return (
-      <div className="flex h-dvh items-center justify-center bg-black text-sm text-zinc-400">
+      <div className="flex h-dvh items-center justify-center bg-black text-sm text-white/65">
         Loading…
       </div>
     );
   }
   if (status === "notfound") {
     return (
-      <div className="flex h-dvh items-center justify-center bg-black px-4 text-center text-sm text-zinc-300">
+      <div className="flex h-dvh items-center justify-center bg-black px-4 text-center text-sm text-white/80">
         This video is not available.
       </div>
     );
   }
   if (status === "error" || video === null) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-black px-4 text-center text-sm text-zinc-300">
+      <div className="flex h-dvh items-center justify-center bg-black px-4 text-center text-sm text-white/80">
         Could not load this video.
       </div>
     );
@@ -91,7 +93,7 @@ function EmbedVideo({ video, startAt }: { video: Video; startAt: number | null }
         href={`/videos/${video.id}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="absolute left-0 top-0 max-w-full truncate bg-black/60 px-3 py-1.5 text-sm font-medium text-white hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        className="absolute left-0 top-0 max-w-full truncate rounded-br-lg bg-black/60 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
       >
         {video.title}
       </Link>

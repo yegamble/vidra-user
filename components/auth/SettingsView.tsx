@@ -33,7 +33,7 @@ export function SettingsView() {
           <>
             Your channels and videos were permanently removed, and your comments were replaced
             with anonymous tombstones. This cannot be undone.{" "}
-            <Link href="/" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               Go home
             </Link>
           </>
@@ -57,7 +57,7 @@ export function SettingsView() {
         message={
           <>
             Your session has ended.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               Sign in
             </Link>{" "}
             to edit your profile.
@@ -69,9 +69,9 @@ export function SettingsView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1 border-b border-zinc-200 pb-4 dark:border-zinc-800">
-        <h1 className="text-2xl font-semibold tracking-tight">Account settings</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <header className="flex flex-col gap-1 border-b border-border-subtle pb-4">
+        <h1 className="text-2xl font-bold tracking-tight">Account settings</h1>
+        <p className="text-[13px] text-fg-muted">
           Signed in as @{user.username}
         </p>
       </header>
@@ -88,114 +88,114 @@ export function SettingsView() {
         user={user}
         onChanged={() => void reloadUser().catch(() => {})}
       />
-      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Security</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <h2 className="text-base font-semibold tracking-tight text-fg">Security</h2>
+          <p className="text-sm text-fg-muted">
             Two-factor authentication and recovery codes.
           </p>
         </div>
         <Link
           href="/settings/security"
           aria-label="Manage security settings"
-          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Manage
         </Link>
       </section>
       <ConnectedLogins />
-      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+          <h2 className="text-base font-semibold tracking-tight text-fg">
             Connected accounts
           </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-fg-muted">
             Connect Bluesky to cross-post your new public videos (ATProto).
           </p>
         </div>
         <Link
           href="/settings/connections"
           aria-label="Manage connected accounts"
-          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Manage
         </Link>
       </section>
-      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+          <h2 className="text-base font-semibold tracking-tight text-fg">
             Encrypted-messaging devices
           </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-fg-muted">
             Devices that can read your encrypted messages, and their safety numbers.
           </p>
         </div>
         <Link
           href="/settings/devices"
           aria-label="Manage encrypted-messaging devices"
-          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Manage
         </Link>
       </section>
-      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Notifications</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <h2 className="text-base font-semibold tracking-tight text-fg">Notifications</h2>
+          <p className="text-sm text-fg-muted">
             Choose which notifications you receive.
           </p>
         </div>
         <Link
           href="/settings/notifications"
           aria-label="Manage notification preferences"
-          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Manage
         </Link>
       </section>
-      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+          <h2 className="text-base font-semibold tracking-tight text-fg">
             Donation addresses
           </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-fg-muted">
             Public crypto addresses shown on your profile and channels (display only).
           </p>
         </div>
         <Link
           href="/settings/donations"
           aria-label="Manage donation addresses"
-          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Manage
         </Link>
       </section>
-      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Mutes</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <h2 className="text-base font-semibold tracking-tight text-fg">Mutes</h2>
+          <p className="text-sm text-fg-muted">
             Accounts and federated instances whose content is hidden from you.
           </p>
         </div>
         <Link
           href="/settings/mutes"
           aria-label="Manage muted accounts"
-          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Manage
         </Link>
       </section>
-      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Blocked accounts</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <h2 className="text-base font-semibold tracking-tight text-fg">Blocked accounts</h2>
+          <p className="text-sm text-fg-muted">
             Accounts you have blocked. Neither of you can direct-message the other.
           </p>
         </div>
         <Link
           href="/settings/blocks"
           aria-label="Manage blocked accounts"
-          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Manage
         </Link>
@@ -204,10 +204,10 @@ export function SettingsView() {
       {/* Header sign-out is hidden on phones (the avatar is the only account
           control there), so settings must offer it. Named distinctly from the
           header's "Sign out" so the two never collide in the a11y tree. */}
-      <section className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Session</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <h2 className="text-base font-semibold tracking-tight text-fg">Session</h2>
+          <p className="text-sm text-fg-muted">
             Sign out of Vidra on this device.
           </p>
         </div>
@@ -216,7 +216,7 @@ export function SettingsView() {
           onClick={() => {
             void logout();
           }}
-          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Sign out of this device
         </button>
@@ -245,7 +245,7 @@ function ProfileImagesSection({
   const name = user.display_name || user.username;
   return (
     <div className="flex max-w-xl flex-col gap-3">
-      <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Profile images</h2>
+      <h2 className="text-base font-semibold tracking-tight text-fg">Profile images</h2>
       <ProfileImageManager
         kind="avatar"
         label="Avatar"
@@ -287,20 +287,20 @@ function EmailVerificationSection({ email }: { email: string }) {
   }
 
   return (
-    <section className="flex max-w-xl flex-col gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
+    <section className="flex max-w-xl flex-col gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-amber-800 dark:text-amber-300">
+        <h2 className="text-base font-semibold tracking-tight text-warning">
           Verify your email
         </h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Your email <span className="font-medium">{email}</span> is not verified yet. Check your
+        <p className="text-sm text-fg-muted">
+          Your email <span className="font-medium text-fg">{email}</span> is not verified yet. Check your
           inbox for the verification link, or resend it below.
         </p>
       </div>
       {error ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {error}
         </p>
@@ -308,7 +308,7 @@ function EmailVerificationSection({ email }: { email: string }) {
       {state === "sent" ? (
         <p
           role="status"
-          className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300"
+          className="rounded-xl bg-success/15 px-3.5 py-2.5 text-sm text-success"
         >
           Verification email sent. Check your inbox.
         </p>
@@ -317,7 +317,7 @@ function EmailVerificationSection({ email }: { email: string }) {
           type="button"
           onClick={() => void resend()}
           disabled={state === "sending"}
-          className="self-start rounded-md border border-amber-400 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-60 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-900/30"
+          className="focus-ring self-start rounded-full border border-warning/40 bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-warning transition-colors hover:bg-warning/10 disabled:opacity-60"
         >
           {state === "sending" ? "Sending…" : "Resend verification email"}
         </button>
@@ -350,10 +350,10 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
   }
 
   return (
-    <section className="flex max-w-xl flex-col gap-3 rounded-md border border-red-200 p-4 dark:border-red-900/50">
+    <section className="flex max-w-xl flex-col gap-3 rounded-2xl border border-danger-border p-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-red-700 dark:text-red-300">Deactivate account</h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <h2 className="text-base font-semibold tracking-tight text-danger">Deactivate account</h2>
+        <p className="text-sm text-fg-muted">
           This disables your account and signs you out everywhere. You will not be able to sign in
           again. Confirm your password to continue.
         </p>
@@ -369,13 +369,13 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
         {error ? (
           <p
             role="alert"
-            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+            className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
           >
             {error}
           </p>
         ) : null}
         <div className="flex flex-col gap-1">
-          <label htmlFor="deactivate-password" className="text-sm font-medium">
+          <label htmlFor="deactivate-password" className="text-sm font-medium text-fg">
             Current password
           </label>
           <input
@@ -386,13 +386,13 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg"
           />
         </div>
         <button
           type="submit"
           disabled={submitting || password === ""}
-          className="self-start rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60"
+          className="focus-ring self-start rounded-full bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
         >
           {submitting ? "Deactivating…" : "Deactivate account"}
         </button>
@@ -437,12 +437,12 @@ function DeleteAccountSection({
   }
 
   return (
-    <section className="flex max-w-xl flex-col gap-3 rounded-md border border-red-300 p-4 dark:border-red-900/70">
+    <section className="flex max-w-xl flex-col gap-3 rounded-2xl border border-danger-border p-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-red-700 dark:text-red-300">
+        <h2 className="text-base font-semibold tracking-tight text-danger">
           Delete account permanently
         </h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm text-fg-muted">
           This permanently deletes your account. Your channels and videos are removed for good,
           your comments are replaced with anonymous &ldquo;[deleted]&rdquo; tombstones (replies to
           them are kept), and your playlists, follows, history, and settings are erased. This
@@ -453,7 +453,7 @@ function DeleteAccountSection({
         <button
           type="button"
           onClick={() => setArmed(true)}
-          className="self-start rounded-md border border-red-600 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-300 dark:hover:bg-red-950/30"
+          className="focus-ring self-start rounded-full border border-danger-border px-4 py-2 text-sm font-semibold text-danger transition-colors hover:bg-danger-surface"
         >
           Delete account permanently
         </button>
@@ -469,13 +469,13 @@ function DeleteAccountSection({
           {error ? (
             <p
               role="alert"
-              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+              className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
             >
               {error}
             </p>
           ) : null}
           <div className="flex flex-col gap-1">
-            <label htmlFor="delete-password" className="text-sm font-medium">
+            <label htmlFor="delete-password" className="text-sm font-medium text-fg">
               Password
             </label>
             <input
@@ -486,11 +486,11 @@ function DeleteAccountSection({
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg"
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="delete-confirm-username" className="text-sm font-medium">
+            <label htmlFor="delete-confirm-username" className="text-sm font-medium text-fg">
               Confirm your username
             </label>
             <input
@@ -502,13 +502,13 @@ function DeleteAccountSection({
               value={confirmName}
               onChange={(e) => setConfirmName(e.target.value)}
               aria-describedby="delete-confirm-username-help"
-              className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg"
             />
             <span
               id="delete-confirm-username-help"
-              className="text-xs text-zinc-500 dark:text-zinc-400"
+              className="text-xs text-fg-muted"
             >
-              Type <span className="font-mono font-medium">{username}</span> exactly to enable
+              Type <span className="font-mono font-medium text-fg">{username}</span> exactly to enable
               deletion.
             </span>
           </div>
@@ -516,7 +516,7 @@ function DeleteAccountSection({
             <button
               type="submit"
               disabled={submitting || password === "" || confirmName !== username}
-              className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60"
+              className="focus-ring rounded-full bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
             >
               {submitting ? "Deleting…" : "Permanently delete my account"}
             </button>
@@ -529,7 +529,7 @@ function DeleteAccountSection({
                 setConfirmName("");
                 setError(null);
               }}
-              className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="focus-ring rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
             >
               Cancel
             </button>
@@ -596,7 +596,7 @@ function ProfileForm({
       {formError ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {formError}
         </p>
@@ -604,14 +604,14 @@ function ProfileForm({
       {state === "saved" ? (
         <p
           role="status"
-          className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300"
+          className="rounded-xl bg-success/15 px-3.5 py-2.5 text-sm text-success"
         >
           Profile saved.
         </p>
       ) : null}
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="settings-display-name" className="text-sm font-medium">
+        <label htmlFor="settings-display-name" className="text-sm font-medium text-fg">
           Display name
         </label>
         <input
@@ -623,17 +623,17 @@ function ProfileForm({
           onChange={(e) => edited(setDisplayName)(e.target.value)}
           aria-invalid={fieldErrors.display_name ? true : undefined}
           aria-describedby={fieldErrors.display_name ? "settings-display-name-error" : undefined}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+          className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
         />
         {fieldErrors.display_name ? (
-          <p id="settings-display-name-error" className="text-xs text-red-600 dark:text-red-400">
+          <p id="settings-display-name-error" className="text-xs text-danger">
             {fieldErrors.display_name}
           </p>
         ) : null}
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="settings-bio" className="text-sm font-medium">
+        <label htmlFor="settings-bio" className="text-sm font-medium text-fg">
           Bio
         </label>
         <textarea
@@ -645,10 +645,10 @@ function ProfileForm({
           onChange={(e) => edited(setBio)(e.target.value)}
           aria-invalid={fieldErrors.bio ? true : undefined}
           aria-describedby={fieldErrors.bio ? "settings-bio-error" : undefined}
-          className="resize-y rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+          className="focus-ring w-full resize-y rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
         />
         {fieldErrors.bio ? (
-          <p id="settings-bio-error" className="text-xs text-red-600 dark:text-red-400">
+          <p id="settings-bio-error" className="text-xs text-danger">
             {fieldErrors.bio}
           </p>
         ) : null}
@@ -665,13 +665,13 @@ function ProfileForm({
             setState("idle");
           }}
           aria-describedby="settings-unlisted-help"
-          className="mt-0.5 h-4 w-4 rounded border-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700"
+          className="focus-ring mt-0.5 h-4 w-4 rounded border-border accent-accent"
         />
         <div className="flex flex-col">
-          <label htmlFor="settings-unlisted" className="text-sm font-medium">
+          <label htmlFor="settings-unlisted" className="text-sm font-medium text-fg">
             Hide my account from discovery
           </label>
-          <span id="settings-unlisted-help" className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span id="settings-unlisted-help" className="text-xs text-fg-muted">
             Your channels and videos stay reachable by direct link but no longer appear in the
             public feed or search on this instance.
           </span>
@@ -681,7 +681,7 @@ function ProfileForm({
       <button
         type="submit"
         disabled={state === "saving"}
-        className="self-start rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+        className="focus-ring self-start rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
       >
         {state === "saving" ? "Saving…" : "Save"}
       </button>

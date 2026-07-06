@@ -38,7 +38,10 @@ export function DevicesView() {
         message={
           <>
             Your session has ended.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link
+              href="/login"
+              className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
+            >
               Sign in
             </Link>{" "}
             to manage the devices that can read your encrypted messages.
@@ -167,21 +170,21 @@ function DeviceRow({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex flex-col gap-2 rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            <span className="text-emerald-600 dark:text-emerald-400">
+          <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-fg">
+            <span className="text-success">
               <LockIcon />
             </span>
             {device.device_name}
             {isCurrent ? (
-              <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-fg-muted">
                 This device
               </span>
             ) : null}
           </p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-xs text-fg-muted">
             Added {relativeTime(device.created_at)}
           </p>
         </div>
@@ -191,7 +194,7 @@ function DeviceRow({
               type="button"
               disabled={busy}
               onClick={() => void remove()}
-              className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60"
+              className="focus-ring rounded-full bg-danger-solid px-3.5 py-1.5 text-[13px] font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
             >
               {busy ? "Removing…" : "Confirm remove"}
             </button>
@@ -199,7 +202,7 @@ function DeviceRow({
               type="button"
               disabled={busy}
               onClick={() => setArmed(false)}
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="focus-ring rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
             >
               Cancel
             </button>
@@ -209,27 +212,27 @@ function DeviceRow({
             type="button"
             aria-label={`Remove device ${device.device_name}`}
             onClick={() => setArmed(true)}
-            className="shrink-0 rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30"
+            className="focus-ring shrink-0 rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger/10"
           >
             Remove
           </button>
         )}
       </div>
       {armed ? (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-xs text-fg-muted">
           Removing a device permanently deletes the encrypted messages stored for it — it can no
           longer read this or future conversations. This cannot be undone.
         </p>
       ) : null}
       <div className="flex flex-col gap-0.5">
-        <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+        <span className="text-[11px] font-medium text-fg-muted">
           Safety number
         </span>
-        <code className="break-all font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+        <code className="break-all font-mono text-[11px] text-fg-muted">
           {formatSafetyNumber(device.signing_key)}
         </code>
       </div>
-      {error ? <p className="text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
     </div>
   );
 }

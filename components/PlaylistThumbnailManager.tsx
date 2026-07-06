@@ -70,18 +70,18 @@ export function PlaylistThumbnailManager({
   return (
     <section
       aria-label="Playlist cover"
-      className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
+      className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4"
     >
-      <p className="text-sm font-medium">Cover image</p>
+      <p className="text-[15px] font-bold tracking-tight">Cover image</p>
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element -- backend-served cover, not a static asset
         <img
           src={src}
           alt="Current cover"
-          className="aspect-video w-48 rounded bg-zinc-100 object-cover dark:bg-zinc-800"
+          className="aspect-video w-48 rounded-xl bg-surface-muted object-cover"
         />
       ) : (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">No cover yet.</p>
+        <p className="text-[13px] text-fg-muted">No cover yet.</p>
       )}
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -94,7 +94,7 @@ export function PlaylistThumbnailManager({
             const f = e.target.files?.[0];
             if (f) void upload(f);
           }}
-          className="text-sm"
+          className="focus-ring rounded-full text-sm text-fg-muted file:mr-3 file:rounded-full file:border-0 file:bg-surface-muted file:px-3.5 file:py-1.5 file:text-[13px] file:font-semibold file:text-fg file:transition-colors hover:file:bg-surface-strong disabled:opacity-60"
         />
         {shown ? (
           <button
@@ -102,15 +102,15 @@ export function PlaylistThumbnailManager({
             aria-label="Remove cover"
             disabled={busy}
             onClick={() => void remove()}
-            className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-red-400"
+            className="focus-ring rounded-full border border-border px-3.5 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-danger-surface hover:text-danger disabled:opacity-60"
           >
             Remove
           </button>
         ) : null}
       </div>
-      {busy ? <p className="text-xs text-zinc-500 dark:text-zinc-400">Working…</p> : null}
+      {busy ? <p className="text-[13px] text-fg-muted">Working…</p> : null}
       {error ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       ) : null}

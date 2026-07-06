@@ -45,7 +45,7 @@ export function AttachmentDownloadRow({ attachment }: { attachment: DMAttachment
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="flex items-center gap-2.5 rounded-xl border border-border-subtle bg-surface px-3 py-2">
         <svg
           aria-hidden
           viewBox="0 0 24 24"
@@ -54,15 +54,13 @@ export function AttachmentDownloadRow({ attachment }: { attachment: DMAttachment
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400"
+          className="h-5 w-5 shrink-0 text-fg-muted"
         >
           <path d={KIND_ICON[attachment.kind]} />
         </svg>
         <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            {attachment.filename}
-          </span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="truncate text-sm font-medium text-fg">{attachment.filename}</span>
+          <span className="text-xs tabular-nums text-fg-muted">
             {formatBytes(attachment.size_bytes)}
           </span>
         </div>
@@ -71,13 +69,13 @@ export function AttachmentDownloadRow({ attachment }: { attachment: DMAttachment
           onClick={() => void download()}
           disabled={state === "downloading"}
           aria-label={`Download ${attachment.filename}`}
-          className="shrink-0 rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
         >
           {state === "downloading" ? "Downloading…" : "Download"}
         </button>
       </div>
       {state === "error" ? (
-        <p className="text-xs text-red-600 dark:text-red-400">Could not download this file.</p>
+        <p className="text-xs text-danger">Could not download this file.</p>
       ) : null}
     </div>
   );

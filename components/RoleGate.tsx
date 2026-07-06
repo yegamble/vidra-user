@@ -44,7 +44,7 @@ export function RoleGate({
               : "This page is for moderators and administrators."}{" "}
             <Link
               href="/login"
-              className="underline hover:text-zinc-700 dark:hover:text-zinc-200"
+              className="focus-ring rounded underline underline-offset-2 transition-colors hover:text-fg"
             >
               Sign in
             </Link>{" "}

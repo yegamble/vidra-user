@@ -5,9 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ReportButton } from "@/components/ReportButton";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
+import { Button, EmptyState, ErrorState, Spinner, buttonClasses } from "@/components/ui";
 import { ApiError, api, errorMessage, remoteVideoThumbnailUrl } from "@/lib/api";
 import type { RemoteVideo } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
@@ -78,9 +76,11 @@ export function RemoteWatchView({ id }: { id: string }) {
       <RemotePlayer video={video} />
 
       <div className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold tracking-tight">{video.title}</h1>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
-          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+        <h1 className="text-[17px] font-bold leading-snug tracking-[-0.015em] sm:text-[19px]">
+          {video.title}
+        </h1>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-fg-muted">
+          <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-fg-muted">
             <svg
               aria-hidden
               viewBox="0 0 24 24"
@@ -100,7 +100,7 @@ export function RemoteWatchView({ id }: { id: string }) {
           <ProtocolBadge protocol="activitypub" />
           {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
           {typeof video.duration_seconds === "number" && video.duration_seconds > 0 ? (
-            <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            <span className="rounded-md bg-surface-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums text-fg-muted">
               {formatDuration(video.duration_seconds)}
             </span>
           ) : null}
@@ -110,7 +110,7 @@ export function RemoteWatchView({ id }: { id: string }) {
             href={video.watch_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            className={buttonClasses("primary", "sm")}
           >
             Watch on {video.domain}
             <svg
@@ -129,12 +129,25 @@ export function RemoteWatchView({ id }: { id: string }) {
           <ReportButton kind="remote_video" targetId={video.id} />
           <MuteInstanceControl domain={video.domain} />
         </div>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          This is a federated video from {video.domain}. Comments, ratings, and saving live on
-          the origin instance. Reports go to the moderators of this instance.
-        </p>
+        <div className="flex items-start gap-2.5 rounded-2xl bg-surface-muted p-4 text-[13px] leading-relaxed text-fg-muted">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="mt-0.5 h-3.5 w-3.5 flex-none"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
+          </svg>
+          <p>
+            This is a federated video from {video.domain}. Comments, ratings, and saving live on
+            the origin instance. Reports go to the moderators of this instance.
+          </p>
+        </div>
         {video.description ? (
-          <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
             {video.description}
           </p>
         ) : null}
@@ -152,19 +165,19 @@ function RemotePlayer({ video }: { video: RemoteVideo }) {
 
   if (playback.mode === "none") {
     return (
-      <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-lg bg-zinc-200 p-6 text-center dark:bg-zinc-800">
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-2xl bg-surface-muted p-6 text-center">
         {video.has_thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={remoteVideoThumbnailUrl(video.id)}
             alt=""
-            className="max-h-32 rounded object-cover opacity-80"
+            className="max-h-32 rounded-lg object-cover opacity-80"
           />
         ) : null}
-        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
+        <p className="text-sm font-bold tracking-tight text-fg">
           This video can&rsquo;t be played here.
         </p>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-[13px] text-fg-muted">
           The origin instance did not provide a playable stream — use &ldquo;Watch on{" "}
           {video.domain}&rdquo; below.
         </p>
@@ -177,7 +190,7 @@ function RemotePlayer({ video }: { video: RemoteVideo }) {
       ref={videoRef}
       controls
       playsInline
-      className="aspect-video w-full rounded-lg bg-black"
+      className="aspect-video w-full rounded-2xl bg-black"
       src={playback.src}
       poster={video.has_thumbnail ? remoteVideoThumbnailUrl(video.id) : undefined}
     >
@@ -219,22 +232,22 @@ function MuteInstanceControl({ domain }: { domain: string }) {
 
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         disabled={busy}
         aria-label={muted ? `Unmute instance ${domain}` : `Mute instance ${domain}`}
         onClick={() => void toggle()}
-        className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
       >
         {muted ? "Unmute instance" : "Mute instance"}
-      </button>
+      </Button>
       {muted ? (
-        <span role="status" className="text-xs text-zinc-500 dark:text-zinc-400">
+        <span role="status" className="text-xs text-fg-muted">
           Muted {domain}. Its videos and comments no longer appear for you.
         </span>
       ) : null}
       {error ? (
-        <span role="alert" className="text-xs text-red-600 dark:text-red-400">
+        <span role="alert" className="text-xs text-danger">
           {error}
         </span>
       ) : null}

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { PlaylistCard } from "@/components/PlaylistCard";
+import { Button, Input, Select } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -24,7 +25,10 @@ export function PlaylistsView() {
         title="Sign in to see your playlists"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link
+              href="/login"
+              className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
+            >
               Sign in
             </Link>{" "}
             to create playlists and organise videos.
@@ -101,41 +105,33 @@ function Playlists() {
     <div className="flex flex-col gap-6">
       <form
         onSubmit={(e) => void create(e)}
-        className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 sm:flex-row sm:items-end dark:border-zinc-800"
+        className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4 sm:flex-row sm:items-end"
       >
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="font-medium">New playlist</span>
-          <input
+        <div className="flex-1">
+          <Input
+            label="New playlist"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Playlist title"
             aria-label="Playlist title"
             maxLength={200}
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Visibility</span>
-          <select
-            value={visibility}
-            onChange={(e) => setVisibility(e.target.value as PlaylistVisibility)}
-            aria-label="Visibility"
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="private">Private</option>
-            <option value="unlisted">Unlisted</option>
-            <option value="public">Public</option>
-          </select>
-        </label>
-        <button
-          type="submit"
-          disabled={creating || title.trim() === ""}
-          className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+        </div>
+        <Select
+          label="Visibility"
+          value={visibility}
+          onChange={(e) => setVisibility(e.target.value as PlaylistVisibility)}
+          aria-label="Visibility"
         >
+          <option value="private">Private</option>
+          <option value="unlisted">Unlisted</option>
+          <option value="public">Public</option>
+        </Select>
+        <Button type="submit" disabled={creating || title.trim() === ""}>
           Create
-        </button>
+        </Button>
       </form>
-      {createError ? <p className="text-sm text-red-600">{createError}</p> : null}
+      {createError ? <p className="text-sm text-danger">{createError}</p> : null}
 
       {playlists.length === 0 ? (
         <EmptyState

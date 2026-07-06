@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { RoleGate } from "@/components/RoleGate";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -147,8 +148,8 @@ function FilterButton({
       onClick={onClick}
       className={
         active
-          ? "rounded-full bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-          : "rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          ? "focus-ring rounded-full border border-accent bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-accent-fg"
+          : "focus-ring rounded-full border border-border px-3.5 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted"
       }
     >
       {children}
@@ -157,9 +158,9 @@ function FilterButton({
 }
 
 const STATUS_STYLE: Record<RegistrationRequestStatus, string> = {
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  approved: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  rejected: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  pending: "bg-warning/15 text-warning",
+  approved: "bg-success/15 text-success",
+  rejected: "bg-surface-strong text-fg-muted",
 };
 
 type RowState = "idle" | "submitting";
@@ -208,28 +209,28 @@ function RequestRow({
   }
 
   return (
-    <article className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="font-medium text-zinc-900 dark:text-zinc-100">{request.username}</span>
-        <span className="text-sm text-zinc-500 dark:text-zinc-400">{request.email}</span>
+        <span className="font-semibold tracking-tight text-fg">{request.username}</span>
+        <span className="text-[13px] text-fg-muted">{request.email}</span>
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLE[request.status]}`}
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${STATUS_STYLE[request.status]}`}
         >
           {request.status}
         </span>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+        <span className="text-[13px] text-fg-muted">
           requested {relativeTime(request.created_at)}
         </span>
       </div>
 
       {request.note ? (
-        <blockquote className="mt-2 border-l-2 border-zinc-300 pl-3 text-sm text-zinc-700 italic dark:border-zinc-700 dark:text-zinc-300">
+        <blockquote className="mt-2 border-l-2 border-border pl-3 text-sm text-fg-muted italic">
           {request.note}
         </blockquote>
       ) : null}
 
       {request.status !== "pending" ? (
-        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="mt-2 text-xs text-fg-muted">
           {request.status === "approved" ? "Approved" : "Rejected"}
           {request.reviewer_username ? (
             <>
@@ -248,7 +249,7 @@ function RequestRow({
       ) : (
         <div className="mt-3 flex flex-col gap-2">
           <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-zinc-600 dark:text-zinc-300">
+            <span className="font-medium text-fg-muted">
               Internal note (optional, recorded on reject)
             </span>
             <textarea
@@ -257,33 +258,32 @@ function RequestRow({
               maxLength={MAX_NOTE_LEN}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
             />
           </label>
           {error ? (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm text-danger">
               {error}
             </p>
           ) : null}
           <div className="flex gap-2">
-            <button
-              type="button"
+            <Button
+              size="sm"
               aria-label={`Approve ${request.username}`}
               disabled={rowState === "submitting"}
               onClick={() => void approve()}
-              className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
             >
               Approve
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               aria-label={`Reject ${request.username}`}
               disabled={rowState === "submitting"}
               onClick={() => void reject()}
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
             >
               Reject
-            </button>
+            </Button>
           </div>
         </div>
       )}

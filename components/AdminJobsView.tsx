@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -89,7 +88,7 @@ function JobsPanel() {
             const stuck = q.pending > 0 && q.oldest_pending_age_seconds >= STUCK_AGE_SECONDS;
             return (
               <li key={q.queue}>
-                <Card className="flex h-full flex-col gap-3">
+                <div className="flex h-full flex-col gap-3 rounded-2xl bg-surface-muted p-4">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-sm font-medium text-fg">{q.queue}</span>
                     {q.failed > 0 ? (
@@ -111,7 +110,7 @@ function JobsPanel() {
                       ? `Oldest pending ${formatUptime(q.oldest_pending_age_seconds)} old`
                       : "Nothing pending"}
                   </p>
-                </Card>
+                </div>
               </li>
             );
           })}
@@ -119,18 +118,18 @@ function JobsPanel() {
       )}
 
       <section aria-label="Recent failures">
-        <h2 className="mb-2 text-base font-semibold tracking-tight">Recent failures</h2>
+        <h2 className="mb-2 text-[15px] font-bold tracking-tight">Recent failures</h2>
         {data.recent_failures.length === 0 ? (
           <EmptyState title="No recent failures" message="No jobs have dead-lettered recently." />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border-subtle">
+          <div className="overflow-x-auto rounded-2xl border border-border-subtle">
             <table className="w-full min-w-[36rem] text-left text-sm">
-              <thead className="border-b border-border-subtle text-xs uppercase tracking-wide text-fg-muted">
+              <thead className="border-b border-border-subtle text-[10.5px] font-bold uppercase tracking-[0.05em] text-fg-muted">
                 <tr>
-                  <th scope="col" className="px-3 py-2 font-medium">Queue</th>
-                  <th scope="col" className="px-3 py-2 font-medium">Error</th>
-                  <th scope="col" className="px-3 py-2 font-medium">Attempts</th>
-                  <th scope="col" className="px-3 py-2 font-medium">Failed</th>
+                  <th scope="col" className="px-3 py-2.5">Queue</th>
+                  <th scope="col" className="px-3 py-2.5">Error</th>
+                  <th scope="col" className="px-3 py-2.5">Attempts</th>
+                  <th scope="col" className="px-3 py-2.5">Failed</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
@@ -138,7 +137,7 @@ function JobsPanel() {
                   <tr key={f.id}>
                     <td className="px-3 py-2 align-top font-mono text-xs text-fg-muted">{f.queue}</td>
                     <td className="px-3 py-2 align-top text-fg">{f.error}</td>
-                    <td className="px-3 py-2 align-top tabular-nums">{f.attempts}</td>
+                    <td className="px-3 py-2 align-top text-fg-muted tabular-nums">{f.attempts}</td>
                     <td className="px-3 py-2 align-top whitespace-nowrap text-fg-muted">
                       {relativeTime(f.failed_at)}
                     </td>

@@ -32,22 +32,26 @@ export function QrCode({
 
   if (!encoded) {
     return (
-      <p role="alert" className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p role="alert" className="text-sm text-fg-muted">
         The QR code could not be generated — enter the secret manually instead.
       </p>
     );
   }
 
+  // QR codes are a documented theming exception: always dark modules on a
+  // white padded tile, in both schemes — scanners need the contrast.
   return (
-    <svg
-      role="img"
-      aria-label={label}
-      viewBox={`${-QUIET_ZONE} ${-QUIET_ZONE} ${encoded.span} ${encoded.span}`}
-      // The quiet zone must stay light in dark mode too — scanners need it.
-      className={`h-44 w-44 rounded-md bg-white ${className}`}
-      shapeRendering="crispEdges"
-    >
-      <path d={encoded.path} fill="#18181b" />
-    </svg>
+    <div className="inline-flex shrink-0 rounded-xl bg-white p-2">
+      <svg
+        role="img"
+        aria-label={label}
+        viewBox={`${-QUIET_ZONE} ${-QUIET_ZONE} ${encoded.span} ${encoded.span}`}
+        // The quiet zone must stay light in dark mode too — scanners need it.
+        className={`h-40 w-40 ${className}`}
+        shapeRendering="crispEdges"
+      >
+        <path d={encoded.path} fill="#18181b" />
+      </svg>
+    </div>
   );
 }

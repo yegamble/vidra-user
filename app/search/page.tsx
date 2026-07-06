@@ -17,12 +17,14 @@ export default async function SearchPage({
   const resultsKey = [query, filters.category ?? "", filters.language ?? "", filters.tag ?? ""].join(
     "|",
   );
+  // max-w-4xl: search results are a dense list (thumbnail-left rows), so the
+  // page keeps a comfortable reading measure instead of the grid pages' 7xl.
   return (
-    <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
-      <h1 className="mb-4 text-2xl font-semibold tracking-tight">
+    <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:py-8">
+      <h1 className="mb-4 text-2xl font-bold tracking-tight">
         {query ? `Results for “${query}”` : "Search"}
       </h1>
-      <div className="mb-6">
+      <div className="mb-3 sm:mb-4">
         <SearchFilters query={query} filters={filters} />
       </div>
       <SearchResults key={resultsKey} query={query} filters={filters} />

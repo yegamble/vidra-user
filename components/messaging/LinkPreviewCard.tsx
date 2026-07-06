@@ -32,7 +32,7 @@ export function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
       target="_blank"
       rel="noopener noreferrer nofollow ugc"
       aria-label={`Open link: ${preview.title || preview.url}`}
-      className="mt-2 flex flex-col overflow-hidden rounded-md border border-zinc-300 bg-white text-left hover:bg-zinc-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
+      className="focus-ring mt-2 flex flex-col overflow-hidden rounded-xl border border-border-subtle bg-surface text-left transition-colors hover:bg-surface-muted"
     >
       {preview.image && imageOk ? (
         // eslint-disable-next-line @next/next/no-img-element -- remote OG thumbnail, unmounts on error
@@ -45,18 +45,12 @@ export function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
       ) : null}
       <div className="flex flex-col gap-0.5 px-3 py-2">
         {preview.title ? (
-          <span className="line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            {preview.title}
-          </span>
+          <span className="line-clamp-2 text-sm font-semibold text-fg">{preview.title}</span>
         ) : null}
         {preview.description ? (
-          <span className="line-clamp-2 text-xs text-zinc-600 dark:text-zinc-400">
-            {preview.description}
-          </span>
+          <span className="line-clamp-2 text-xs text-fg-muted">{preview.description}</span>
         ) : null}
-        <span className="mt-0.5 truncate text-xs text-zinc-400 dark:text-zinc-500">
-          {hostOf(preview.url)}
-        </span>
+        <span className="mt-0.5 truncate text-xs text-fg-muted">{hostOf(preview.url)}</span>
       </div>
     </a>
   );

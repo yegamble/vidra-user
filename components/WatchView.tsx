@@ -159,23 +159,25 @@ export function WatchView({ id }: { id: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+    <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-7">
       <div className="flex min-w-0 flex-1 flex-col gap-8">
       <article className="flex flex-col gap-4">
         <Player video={video} videoRef={playerRef} startAt={startAt} />
 
-        <div className="flex flex-col gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">{video.title}</h1>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
+        <div className="flex flex-col gap-3">
+          <h1 className="text-lg font-bold leading-snug tracking-tight sm:text-xl">
+            {video.title}
+          </h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-fg-muted">
             {/* Owner-facing badge: a private video only ever loads for its
                 owner; an unlisted one tells anyone with the link how it is
                 shared. Public renders nothing. */}
             <PrivacyBadge privacy={video.privacy ?? "public"} />
-            {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
+            {meta.length > 0 ? <span className="tabular-nums">{meta.join(" · ")}</span> : null}
             {chips.map((c) => (
               <span
                 key={c.key}
-                className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium tabular-nums text-fg-muted"
               >
                 {c.sr ? <span className="sr-only">{c.sr}</span> : null}
                 {c.label}
@@ -201,7 +203,7 @@ export function WatchView({ id }: { id: string }) {
                   <Link
                     href={feedHref("recent", { tag })}
                     aria-label={`Browse videos tagged ${tag}`}
-                    className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+                    className="focus-ring inline-flex rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
                   >
                     #{tag}
                   </Link>
@@ -210,7 +212,7 @@ export function WatchView({ id }: { id: string }) {
             </ul>
           ) : null}
           {video.description ? (
-            <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
+            <p className="whitespace-pre-wrap rounded-2xl bg-surface-muted p-4 text-[13.5px] leading-relaxed text-fg">
               {video.description}
             </p>
           ) : null}
@@ -392,7 +394,7 @@ function Player({
         ref={videoRef}
         controls
         playsInline
-        className="aspect-video w-full rounded-lg bg-black"
+        className="aspect-video w-full overflow-hidden rounded-xl bg-black sm:rounded-2xl"
         src={playback.src}
         poster={video.has_thumbnail ? videoThumbnailUrl(video.id) : undefined}
         onPlay={recordThrottled}
@@ -427,7 +429,7 @@ function Player({
           <button
             type="button"
             onClick={resume}
-            className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            className="focus-ring inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold tabular-nums text-fg transition-colors hover:bg-surface-strong"
           >
             Resume from {formatDuration(resumeAt)}
           </button>

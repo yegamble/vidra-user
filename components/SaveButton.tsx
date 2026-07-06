@@ -30,7 +30,7 @@ export function SaveButton({ videoId }: { videoId: string }) {
     return (
       <Link
         href="/login"
-        className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="focus-ring inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         Sign in to save
       </Link>
@@ -62,10 +62,10 @@ export function SaveButton({ videoId }: { videoId: string }) {
       disabled={busy || saved === null}
       onClick={() => void toggle()}
       className={
-        "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 " +
+        "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 " +
         (saved
-          ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-          : "border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800")
+          ? "bg-accent text-accent-fg hover:bg-accent/90"
+          : "bg-surface-muted text-fg hover:bg-surface-strong")
       }
     >
       <span aria-hidden>{saved ? "★" : "☆"}</span>

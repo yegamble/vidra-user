@@ -35,7 +35,7 @@ type ExportView =
 export function AccountDataSection() {
   return (
     <section className="flex max-w-xl flex-col gap-4" aria-labelledby="your-data-heading">
-      <h2 id="your-data-heading" className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+      <h2 id="your-data-heading" className="text-base font-semibold tracking-tight text-fg">
         Your data
       </h2>
       <ExportCard />
@@ -129,10 +129,10 @@ function ExportCard() {
   const expired = status !== null && status.state === "done" && !status.download_ready;
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Export your data</h3>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <h3 className="text-[15px] font-bold tracking-tight text-fg">Export your data</h3>
+        <p className="text-sm text-fg-muted">
           Download one JSON archive of your profile, channels, video details (including tags and
           categories), playlists, comments, follows, saved videos, watch history, and notification
           preferences. It never contains your password or sign-in tokens, and media files are not
@@ -144,7 +144,7 @@ function ExportCard() {
       {actionError ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {actionError}
         </p>
@@ -156,7 +156,7 @@ function ExportCard() {
         </div>
       ) : view.kind === "load-error" ? (
         <div className="flex flex-col gap-2">
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger">
             Could not load your export status.
           </p>
           <button
@@ -165,19 +165,19 @@ function ExportCard() {
               setView({ kind: "loading" });
               reload();
             }}
-            className="self-start rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            className="focus-ring self-start rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
           >
             Retry
           </button>
         </div>
       ) : preparing ? (
-        <p role="status" className="text-sm text-zinc-600 dark:text-zinc-300">
+        <p role="status" className="text-sm text-fg-muted">
           Preparing your export… This runs in the background; the download appears here when the
           archive is ready.
         </p>
       ) : ready ? (
         <div className="flex flex-col gap-2">
-          <p role="status" className="text-sm text-green-700 dark:text-green-300">
+          <p role="status" className="text-sm font-medium text-success">
             Your export is ready.
             {status?.expires_at
               ? ` Downloadable until ${new Date(status.expires_at).toLocaleDateString()}.`
@@ -188,7 +188,7 @@ function ExportCard() {
               type="button"
               disabled={busy}
               onClick={() => void download()}
-              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              className="focus-ring rounded-full bg-accent px-4 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
             >
               {busy ? "Downloading…" : "Download archive"}
             </button>
@@ -196,7 +196,7 @@ function ExportCard() {
               type="button"
               disabled={busy}
               onClick={() => void requestExport()}
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="focus-ring rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
             >
               Request a new export
             </button>
@@ -205,11 +205,11 @@ function ExportCard() {
       ) : (
         <div className="flex flex-col gap-2">
           {failed ? (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm text-danger">
               Your last export failed. You can request a new one.
             </p>
           ) : expired ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-sm text-fg-muted">
               Your previous export expired. Request a new one to download your data.
             </p>
           ) : null}
@@ -217,7 +217,7 @@ function ExportCard() {
             type="button"
             disabled={busy}
             onClick={() => void requestExport()}
-            className="self-start rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            className="focus-ring self-start rounded-full bg-accent px-4 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
           >
             {busy ? "Requesting…" : "Request export"}
           </button>
@@ -279,12 +279,12 @@ function ImportCard() {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+        <h3 className="text-[15px] font-bold tracking-tight text-fg">
           Import an archive
         </h3>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-fg-muted">
           Re-creates the safe parts of a vidra export archive on this account: profile name and
           bio, playlists (items whose videos exist on this instance), follows of local channels,
           and notification preferences. Channels, videos, comments, saved videos, and watch
@@ -296,7 +296,7 @@ function ImportCard() {
       {error ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {error}
         </p>
@@ -310,7 +310,7 @@ function ImportCard() {
         }}
         className="flex flex-col gap-2"
       >
-        <label htmlFor="import-archive-file" className="text-sm font-medium">
+        <label htmlFor="import-archive-file" className="text-sm font-medium text-fg">
           Archive file (JSON)
         </label>
         <input
@@ -324,12 +324,12 @@ function ImportCard() {
             setError(null);
             setSummary(null);
           }}
-          className="text-sm text-zinc-600 file:mr-3 file:rounded-md file:border file:border-zinc-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-zinc-700 hover:file:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-300 dark:file:border-zinc-700 dark:file:bg-zinc-900 dark:file:text-zinc-200"
+          className="focus-ring rounded-sm text-sm text-fg-muted file:mr-3 file:rounded-full file:border file:border-border file:bg-surface file:px-3.5 file:py-1.5 file:text-[13px] file:font-semibold file:text-fg hover:file:bg-surface-muted"
         />
         <button
           type="submit"
           disabled={busy || !fileName}
-          className="self-start rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          className="focus-ring self-start rounded-full bg-accent px-4 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
         >
           {busy ? "Importing…" : "Import archive"}
         </button>
@@ -345,9 +345,9 @@ function ImportSummaryView({ summary }: { summary: AccountImportSummary }) {
   return (
     <div
       role="status"
-      className="flex flex-col gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-zinc-700 dark:border-green-900/50 dark:bg-green-950/20 dark:text-zinc-200"
+      className="flex flex-col gap-2 rounded-xl bg-success/15 p-3.5 text-sm text-fg"
     >
-      <p className="font-medium text-green-800 dark:text-green-300">Import finished.</p>
+      <p className="font-semibold text-success">Import finished.</p>
       <ul className="flex list-disc flex-col gap-1 pl-5">
         <li>Profile: {summary.profile_applied ? "display name and bio applied" : "not changed"}</li>
         <li>
@@ -371,7 +371,7 @@ function ImportSummaryView({ summary }: { summary: AccountImportSummary }) {
         </li>
       </ul>
       {skipped.length > 0 ? (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-xs text-fg-muted">
           Not importable from an archive:{" "}
           {skipped
             .map(([section, count]) => `${SKIPPED_SECTION_LABELS[section] ?? section} (${count})`)

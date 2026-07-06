@@ -30,7 +30,7 @@ export function Toggle({ checked, onChange, label, disabled, className }: Toggle
       onClick={() => onChange(!checked)}
       className={cn(
         "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-ring disabled:pointer-events-none disabled:opacity-60",
-        checked ? "bg-accent" : "bg-surface-muted",
+        checked ? "bg-accent" : "bg-surface-strong",
         className,
       )}
     >

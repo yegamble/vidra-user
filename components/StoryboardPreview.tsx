@@ -153,24 +153,26 @@ export function StoryboardPreview({
         seekTo(time);
       }}
       onKeyDown={onKeyDown}
-      className="relative h-2 w-full cursor-pointer rounded-full bg-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:bg-zinc-700"
+      className="focus-ring relative h-2 w-full cursor-pointer rounded-full bg-surface-strong"
     >
       {/* The played/hovered fill, for a visible scrub position. */}
       {preview ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-zinc-500 dark:bg-zinc-400"
+          className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-accent"
           style={{ width: `${preview.fraction * 100}%` }}
         />
       ) : null}
       {preview ? (
+        // The preview tile is a media thumbnail: it stays black-on-white-text
+        // regardless of theme (documented media-overlay exception).
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-4 z-10 -translate-x-1/2 rounded-md border border-zinc-300 bg-black p-1 shadow-lg dark:border-zinc-600"
+          className="pointer-events-none absolute bottom-4 z-10 -translate-x-1/2 rounded-lg bg-black p-1 shadow-lg"
           style={{ left: `calc(${preview.fraction * 100}% )` }}
         >
           <div
-            className="rounded-sm bg-zinc-900"
+            className="rounded-sm bg-black"
             style={{
               width: `${preview.cue.w}px`,
               height: `${preview.cue.h}px`,

@@ -241,8 +241,8 @@ function ConfigForm() {
         return (
           <section key={group.id} aria-label={group.title} className="flex flex-col gap-3">
             <div>
-              <h2 className="text-base font-semibold tracking-tight text-fg">{group.title}</h2>
-              <p className="text-sm text-fg-muted">{group.description}</p>
+              <h2 className="text-[15px] font-bold tracking-tight text-fg">{group.title}</h2>
+              <p className="text-[13px] text-fg-muted">{group.description}</p>
             </div>
             <Card className="flex flex-col divide-y divide-border-subtle">
               {keys.map((key) => {

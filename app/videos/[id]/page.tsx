@@ -6,7 +6,7 @@ import { WatchView } from "@/components/WatchView";
 export default async function WatchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
-    <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">
+    <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-4 sm:px-6 sm:py-6">
       <WatchView id={id} />
     </main>
   );

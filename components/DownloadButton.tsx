@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui";
 import { videoOriginalUrl } from "@/lib/api";
 
 const PILL =
-  "flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800";
+  "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
 
 // Minified Feather-style "download" icon.
 function DownloadIcon() {
@@ -52,20 +52,22 @@ function DownloadDialog({ videoId, onClose }: { videoId: string; onClose: () => 
   return (
     <Modal title="Download this video" onClose={onClose}>
       <ul className="flex flex-col gap-2">
-        <li className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+        <li className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted px-3.5 py-2.5">
           <div className="flex min-w-0 flex-col">
             <a
               href={videoOriginalUrl(videoId)}
               download
-              className="truncate text-sm font-medium text-zinc-900 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-100"
+              className="focus-ring truncate rounded text-sm font-semibold text-fg underline-offset-2 hover:underline"
             >
               Original file
             </a>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="text-xs text-fg-muted">
               The file as originally uploaded.
             </span>
           </div>
-          <DownloadIcon />
+          <span aria-hidden className="text-fg-muted">
+            <DownloadIcon />
+          </span>
         </li>
       </ul>
     </Modal>

@@ -13,11 +13,11 @@ import type { Channel, DonationAddress, DonationNetwork } from "@/lib/api";
 import { DONATION_NETWORKS, NETWORK_META, validateDonationAddress } from "@/lib/donation-address";
 
 const INPUT =
-  "rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900";
+  "focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted disabled:opacity-60";
 const PRIMARY_BTN =
-  "self-start rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300";
+  "focus-ring self-start rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60";
 const SECONDARY_BTN =
-  "rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800";
+  "focus-ring rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60";
 
 type Status = "loading" | "error" | "ready";
 
@@ -42,7 +42,7 @@ export function DonationSettingsView() {
         title="Sign in to manage donation addresses"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               Sign in
             </Link>{" "}
             to add the crypto addresses shown on your profile and channels.
@@ -100,7 +100,7 @@ function Donations() {
 
   return (
     <div className="flex flex-col gap-8">
-      <p className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+      <p className="rounded-xl bg-surface-muted px-3.5 py-3 text-[13px] leading-relaxed text-fg-muted">
         Vidra only displays the addresses you add here — it never holds funds, balances, or your
         private keys, and processes no payments. Viewers send crypto to you directly, entirely
         outside Vidra.
@@ -112,7 +112,7 @@ function Donations() {
       />
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Your addresses</h2>
+        <h2 className="text-base font-semibold tracking-tight text-fg">Your addresses</h2>
         {addresses.length === 0 ? (
           <EmptyState
             title="No donation addresses yet"
@@ -201,19 +201,19 @@ function AddAddressForm({
       className="flex max-w-xl flex-col gap-4"
       aria-label="Add a donation address"
     >
-      <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Add an address</h2>
+      <h2 className="text-base font-semibold tracking-tight text-fg">Add an address</h2>
 
       {formError ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {formError}
         </p>
       ) : null}
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="donation-network" className="text-sm font-medium">
+        <label htmlFor="donation-network" className="text-sm font-medium text-fg">
           Network
         </label>
         <select
@@ -234,7 +234,7 @@ function AddAddressForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="donation-address" className="text-sm font-medium">
+        <label htmlFor="donation-address" className="text-sm font-medium text-fg">
           Wallet address
         </label>
         <input
@@ -254,15 +254,15 @@ function AddAddressForm({
           className={`${INPUT} font-mono`}
         />
         {addressError ? (
-          <p id="donation-address-error" className="text-xs text-red-600 dark:text-red-400">
+          <p id="donation-address-error" className="text-xs text-danger">
             {addressError}
           </p>
         ) : null}
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="donation-label" className="text-sm font-medium">
-          Label <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+        <label htmlFor="donation-label" className="text-sm font-medium text-fg">
+          Label <span className="font-normal text-fg-muted">(optional)</span>
         </label>
         <input
           id="donation-label"
@@ -276,7 +276,7 @@ function AddAddressForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="donation-scope" className="text-sm font-medium">
+        <label htmlFor="donation-scope" className="text-sm font-medium text-fg">
           Show on
         </label>
         <select
@@ -336,27 +336,27 @@ function AddressRow({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex flex-col gap-3 rounded-2xl bg-surface-muted p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            <span className="rounded-full bg-surface-strong px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted">
               {meta.ticker}
             </span>
             {address.label ? (
-              <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              <span className="text-sm font-semibold text-fg">
                 {address.label}
               </span>
             ) : null}
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="text-xs text-fg-muted">
               · {scopeLabel(address, channels)}
             </span>
             <DonationBadge verified={address.verified} />
           </div>
-          <p className="truncate font-mono text-xs text-zinc-600 dark:text-zinc-400" title={address.address}>
+          <p className="break-all font-mono text-xs text-fg-muted" title={address.address}>
             {address.address}
           </p>
-          {error ? <p className="text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+          {error ? <p className="text-xs text-danger">{error}</p> : null}
         </div>
         <button
           type="button"
@@ -388,7 +388,7 @@ function VerifyArea({
 
   if (!meta.verificationSupported) {
     return (
-      <p className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+      <p className="rounded-xl bg-surface-strong/60 px-3.5 py-2.5 text-xs leading-relaxed text-fg-muted">
         Ownership verification is not available for {meta.label} — it will show as unverified. That
         is normal; only some networks support message signing.
       </p>
@@ -471,7 +471,7 @@ function VerifyFlow({
   if (step === "idle") {
     return (
       <div className="flex flex-col gap-1">
-        {error ? <p className="text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+        {error ? <p className="text-xs text-danger">{error}</p> : null}
         <button
           type="button"
           disabled={busy}
@@ -488,9 +488,9 @@ function VerifyFlow({
   const signatureId = `donation-signature-${address.id}`;
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+    <div className="flex flex-col gap-3 rounded-xl border border-border-subtle bg-surface p-3">
       <div className="flex flex-col gap-1">
-        <label htmlFor={messageId} className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+        <label htmlFor={messageId} className="text-xs font-medium text-fg">
           1. Sign this exact message with your {meta.label} wallet
         </label>
         <div className="flex items-start gap-2">
@@ -500,7 +500,7 @@ function VerifyFlow({
             rows={3}
             value={message}
             onFocus={(e) => e.currentTarget.select()}
-            className="min-w-0 flex-1 resize-none rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 font-mono text-xs text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            className="focus-ring min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2 font-mono text-xs text-fg"
           />
           <button
             type="button"
@@ -512,14 +512,14 @@ function VerifyFlow({
           </button>
         </div>
         {meta.signingInstructions ? (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">{meta.signingInstructions}</p>
+          <p className="text-xs text-fg-muted">{meta.signingInstructions}</p>
         ) : null}
       </div>
 
       <div className="flex flex-col gap-1">
         <label
           htmlFor={signatureId}
-          className="text-xs font-medium text-zinc-700 dark:text-zinc-300"
+          className="text-xs font-medium text-fg"
         >
           2. Paste the signature
         </label>
@@ -533,12 +533,12 @@ function VerifyFlow({
             setSignature(e.target.value);
             setError(null);
           }}
-          className="resize-y rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 font-mono text-xs text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          className="focus-ring resize-y rounded-xl border border-border bg-surface px-3 py-2 font-mono text-xs text-fg placeholder:text-fg-muted"
         />
       </div>
 
       {error ? (
-        <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+        <p role="alert" className="text-xs text-danger">
           {error}
         </p>
       ) : null}

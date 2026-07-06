@@ -29,7 +29,7 @@ export function MutedInstancesView() {
         message={
           <>
             Your session has ended.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               Sign in
             </Link>{" "}
             to see the instances you have muted.
@@ -125,22 +125,22 @@ function MutedInstanceRow({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-muted px-4 py-3">
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        <p className="truncate text-sm font-semibold text-fg">
           {instance.domain}
         </p>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-[13px] text-fg-muted">
           muted {relativeTime(instance.muted_at)}
         </p>
-        {error ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+        {error ? <p className="mt-1 text-xs text-danger">{error}</p> : null}
       </div>
       <button
         type="button"
         disabled={busy}
         aria-label={`Unmute ${instance.domain}`}
         onClick={() => void unmute()}
-        className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong disabled:opacity-60"
       >
         Unmute
       </button>

@@ -2,11 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { Caption, VideoConfigOption } from "@/lib/api";
 
 // How often to poll an in-progress auto-caption job for its status.
 const AUTO_POLL_MS = 2_000;
+
+// Shared token recipes for the compact inline controls in this panel.
+const FIELD =
+  "rounded-xl border border-border bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-muted focus-ring disabled:opacity-60";
 
 function sortByLanguage(list: Caption[]): Caption[] {
   return [...list].sort((a, b) => a.language.localeCompare(b.language));
@@ -170,22 +175,22 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
   }, [autoState, videoId]);
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
-      <p className="text-sm font-medium">Captions</p>
+    <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
+      <p className="text-sm font-semibold">Captions</p>
 
       {captions.length > 0 ? (
         <ul className="flex flex-col gap-1">
           {captions.map((c) => (
             <li key={c.language} className="flex items-center justify-between gap-2 text-sm">
               <span>
-                <span className="font-medium">{c.language}</span>
-                {c.label ? <span className="text-zinc-500 dark:text-zinc-400"> · {c.label}</span> : null}
+                <span className="font-semibold">{c.language}</span>
+                {c.label ? <span className="text-fg-muted"> · {c.label}</span> : null}
               </span>
               <button
                 type="button"
                 aria-label={`Remove ${c.language} caption`}
                 onClick={() => void remove(c.language)}
-                className="text-xs font-medium text-zinc-500 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:text-red-400"
+                className="rounded-full px-2.5 py-1 text-xs font-semibold text-fg-muted transition-colors hover:bg-danger-surface hover:text-danger focus-ring"
               >
                 Remove
               </button>
@@ -193,17 +198,17 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
           ))}
         </ul>
       ) : loaded ? (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">No captions yet.</p>
+        <p className="text-xs text-fg-muted">No captions yet.</p>
       ) : null}
 
       <form className="flex flex-col gap-2" onSubmit={upload}>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {languages.length > 0 ? (
             <select
               aria-label="Caption language"
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="w-40 rounded border border-zinc-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              className={`w-40 ${FIELD}`}
             >
               <option value="">Select a language…</option>
               {languages.map((l) => (
@@ -219,7 +224,7 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
               value={language}
               maxLength={35}
               onChange={(e) => setLanguage(e.target.value)}
-              className="w-28 rounded border border-zinc-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              className={`w-28 ${FIELD}`}
             />
           )}
           <input
@@ -228,7 +233,7 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
             value={label}
             maxLength={100}
             onChange={(e) => setLabel(e.target.value)}
-            className="w-40 rounded border border-zinc-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            className={`w-40 ${FIELD}`}
           />
           <input
             ref={fileRef}
@@ -236,27 +241,23 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
             aria-label="Caption file"
             accept=".vtt,text/vtt"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="text-sm"
+            className="text-sm focus-ring file:mr-3 file:rounded-full file:border-0 file:bg-surface-muted file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-fg"
           />
-          <button
-            type="submit"
-            disabled={busy || !file || language.trim() === ""}
-            className="rounded-full bg-zinc-900 px-3 py-1 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-          >
+          <Button type="submit" size="sm" disabled={busy || !file || language.trim() === ""}>
             {busy ? "Uploading…" : "Upload"}
-          </button>
+          </Button>
         </div>
-        {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
       </form>
 
-      <div className="flex flex-col gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-        <p className="text-sm font-medium">Generate automatically</p>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      <div className="flex flex-col gap-2 border-t border-border-subtle pt-3">
+        <p className="text-sm font-semibold">Generate automatically</p>
+        <p className="text-xs text-fg-muted">
           Transcribe this video&apos;s audio into a caption track automatically. Pick
           a language hint, or leave it on the default to let the server decide.
         </p>
         {autoState === "unsupported" ? (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-xs text-fg-muted">
             Automatic captions aren&apos;t available on this server.
           </p>
         ) : (
@@ -267,7 +268,7 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
                 value={autoLang}
                 onChange={(e) => setAutoLang(e.target.value)}
                 disabled={autoState === "running"}
-                className="w-40 rounded border border-zinc-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+                className={`w-40 ${FIELD}`}
               >
                 <option value="">Default language</option>
                 {languages.map((l) => (
@@ -284,35 +285,35 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
                 maxLength={35}
                 onChange={(e) => setAutoLang(e.target.value)}
                 disabled={autoState === "running"}
-                className="w-40 rounded border border-zinc-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+                className={`w-40 ${FIELD}`}
               />
             )}
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => void generateAuto()}
               disabled={autoBusy || autoState === "running"}
-              className="rounded-full border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
             >
               {autoState === "running" ? "Generating…" : "Generate automatically"}
-            </button>
+            </Button>
           </div>
         )}
         {autoState === "running" ? (
-          <p role="status" className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p role="status" className="text-xs text-fg-muted">
             Generating captions… this can take a few minutes. You&apos;ll be notified
             when they&apos;re ready.
           </p>
         ) : null}
         {autoState === "done" ? (
-          <p role="status" className="text-xs text-green-600 dark:text-green-400">
+          <p role="status" className="text-xs text-success">
             Automatic captions added.
           </p>
         ) : null}
         {autoState === "failed" && autoError ? (
-          <p className="text-xs text-red-600 dark:text-red-400">{autoError}</p>
+          <p className="text-xs text-danger">{autoError}</p>
         ) : null}
         {autoState !== "failed" && autoError ? (
-          <p className="text-xs text-red-600 dark:text-red-400">{autoError}</p>
+          <p className="text-xs text-danger">{autoError}</p>
         ) : null}
       </div>
     </div>

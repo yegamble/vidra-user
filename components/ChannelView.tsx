@@ -1,14 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
 import { DonateButton } from "@/components/DonateButton";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { LinkButton } from "@/components/ui/LinkButton";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
@@ -70,53 +71,60 @@ export function ChannelView({ handle }: { handle: string }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-3 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-        {channel.has_banner ? <ChannelBanner handle={channel.handle} /> : null}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
+      <header className="flex flex-col gap-4 border-b border-border-subtle pb-6">
+        <div>
+          {/* Banner strip: the channel image when one exists, a quiet muted
+              block otherwise — the avatar always has something to overlap. */}
+          <div
+            aria-hidden="true"
+            className="h-36 w-full overflow-hidden rounded-2xl bg-surface-muted sm:h-48"
+          >
+            {channel.has_banner ? <ChannelBanner handle={channel.handle} /> : null}
+          </div>
+          <div className="-mt-9 flex flex-wrap items-end justify-between gap-3 px-2 sm:-mt-10 sm:px-4">
             <Avatar
               src={channel.has_avatar ? channelAvatarUrl(channel.handle) : null}
               name={channel.display_name || channel.handle}
-              className="h-14 w-14 text-xl"
+              className="relative z-[1] h-18 w-18 border-4 border-canvas text-[26px] shadow-md sm:h-26 sm:w-26 sm:text-[38px]"
             />
-            <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {channel.display_name || channel.handle}
-              </h1>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                @{channel.handle} · {formatCount(channel.follower_count)} followers
-              </p>
+            <div className="flex flex-wrap items-center gap-2 pb-1">
+              <ChannelLiveBadge handle={channel.handle} ownerId={channel.owner_id} />
+              <DonateButton
+                sources={[
+                  { kind: "channel", handle: channel.handle },
+                  { kind: "user", userId: channel.owner_id },
+                ]}
+                name={channel.display_name || channel.handle}
+              />
+              <SubscribeButton
+                handle={channel.handle}
+                onDelta={(d) =>
+                  setChannel((c) => (c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c))
+                }
+              />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <ChannelLiveBadge handle={channel.handle} ownerId={channel.owner_id} />
-            <DonateButton
-              sources={[
-                { kind: "channel", handle: channel.handle },
-                { kind: "user", userId: channel.owner_id },
-              ]}
-              name={channel.display_name || channel.handle}
-            />
-            <SubscribeButton
-              handle={channel.handle}
-              onDelta={(d) =>
-                setChannel((c) => (c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c))
-              }
-            />
-          </div>
         </div>
-        {channel.description ? (
-          <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
-            {channel.description}
+        <div className="flex flex-col gap-1 px-2 sm:px-4">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+            {channel.display_name || channel.handle}
+          </h1>
+          <p className="text-[13px] text-fg-muted tabular-nums">
+            @{channel.handle} · {formatCount(channel.follower_count)} followers
           </p>
-        ) : null}
+          {channel.description ? (
+            <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
+              {channel.description}
+            </p>
+          ) : null}
+        </div>
       </header>
 
       {videos.length === 0 ? (
         <EmptyState title="No videos yet" message="This channel has not published anything." />
       ) : (
         <div className="flex flex-col gap-6">
-          <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 lg:grid-cols-4">
             {videos.slice(0, visibleCount).map((video) => (
               <li key={video.id}>
                 <VideoCard video={video} />
@@ -132,10 +140,10 @@ export function ChannelView({ handle }: { handle: string }) {
   );
 }
 
-// ChannelBanner renders the channel's banner across the top of the header when
-// has_banner says one exists. A broken image (e.g. deleted between the view
-// read and the image fetch) unmounts entirely, so the layout falls back to the
-// same header the bannerless state uses — nothing shifts around a dead frame.
+// ChannelBanner renders the channel's banner image inside the header's banner
+// strip when has_banner says one exists. A broken image (e.g. deleted between
+// the view read and the image fetch) unmounts entirely, so the strip falls back
+// to its muted fill — nothing shifts around a dead frame.
 function ChannelBanner({ handle }: { handle: string }) {
   const [broken, setBroken] = useState(false);
   if (broken) return null;
@@ -145,7 +153,7 @@ function ChannelBanner({ handle }: { handle: string }) {
       src={channelBannerUrl(handle)}
       alt=""
       onError={() => setBroken(true)}
-      className="h-32 w-full rounded-lg bg-zinc-100 object-cover sm:h-48 dark:bg-zinc-800"
+      className="h-full w-full object-cover"
     />
   );
 }
@@ -162,12 +170,9 @@ function SubscribeButton({ handle, onDelta }: { handle: string; onDelta: (d: num
 
   if (status !== "authed") {
     return (
-      <Link
-        href="/login"
-        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-      >
+      <LinkButton href="/login" variant="secondary" className="px-5">
         Sign in to subscribe
-      </Link>
+      </LinkButton>
     );
   }
 
@@ -190,17 +195,13 @@ function SubscribeButton({ handle, onDelta }: { handle: string; onDelta: (d: num
   }
 
   return (
-    <button
-      type="button"
+    <Button
+      variant={subscribed ? "secondary" : "primary"}
       disabled={busy}
       onClick={() => void toggle()}
-      className={
-        subscribed
-          ? "rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          : "rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-      }
+      className="px-5"
     >
       {subscribed ? "Subscribed" : "Subscribe"}
-    </button>
+    </Button>
   );
 }

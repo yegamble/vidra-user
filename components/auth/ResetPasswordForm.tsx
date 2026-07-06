@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { authApi, errorMessage } from "@/lib/api";
 
 // Requests a password-reset link. The backend always answers 202 (it never
@@ -35,13 +37,13 @@ export function ResetPasswordForm() {
       <div className="flex flex-col gap-4">
         <p
           role="status"
-          className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300"
+          className="rounded-xl bg-success/15 px-3.5 py-2.5 text-sm text-success"
         >
           If an account exists for that email, we&apos;ve sent a link to reset your
           password. Check your inbox.
         </p>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+        <p className="text-center text-sm text-fg-muted">
+          <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
             Back to sign in
           </Link>
         </p>
@@ -61,43 +63,34 @@ export function ResetPasswordForm() {
       {error ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {error}
         </p>
       ) : null}
 
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-sm text-fg-muted">
         Enter your account email and we&apos;ll send you a link to reset your password.
       </p>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="reset-email" className="text-sm font-medium">
-          Email
-        </label>
-        <input
-          id="reset-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-        />
-      </div>
+      <Input
+        id="reset-email"
+        name="email"
+        type="email"
+        label="Email"
+        autoComplete="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-      >
+      <Button type="submit" size="lg" className="w-full" disabled={submitting}>
         {submitting ? "Sending…" : "Send reset link"}
-      </button>
+      </Button>
 
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-center text-sm text-fg-muted">
         Remembered it?{" "}
-        <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+        <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
           Back to sign in
         </Link>
       </p>

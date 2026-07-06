@@ -35,12 +35,12 @@ export function DeviceSetup({ onReady }: { onReady: (device: LocalDevice) => voi
   }
 
   return (
-    <section className="flex max-w-md flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-      <div className="flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+    <section className="flex max-w-md flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
+      <div className="flex items-center gap-2 text-fg">
         <LockIcon className="h-4 w-4" />
-        <h2 className="text-base font-semibold">Set up encryption on this device</h2>
+        <h2 className="text-[15px] font-bold tracking-tight">Set up encryption on this device</h2>
       </div>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="text-sm text-fg-muted">
         Encrypted messages are locked to the devices you set up. Give this browser a name so you can
         recognise it later. Messages sent before this device existed can&rsquo;t be read here.
       </p>
@@ -52,7 +52,7 @@ export function DeviceSetup({ onReady }: { onReady: (device: LocalDevice) => voi
         }}
         className="flex flex-col gap-2"
       >
-        <label htmlFor="e2ee-device-name" className="text-sm font-medium">
+        <label htmlFor="e2ee-device-name" className="text-sm font-semibold text-fg">
           Device name
         </label>
         <input
@@ -62,17 +62,17 @@ export function DeviceSetup({ onReady }: { onReady: (device: LocalDevice) => voi
           maxLength={100}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+          className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-fg placeholder:text-fg-muted"
         />
         {error ? (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         ) : null}
         <button
           type="submit"
           disabled={busy || name.trim() === ""}
-          className="self-start rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          className="focus-ring self-start rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
         >
           {busy ? "Setting up…" : "Set up this device"}
         </button>

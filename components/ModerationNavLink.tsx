@@ -9,7 +9,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 // after a hard reload (until refresh-token rehydration lands). `className` lets
 // the desktop nav and the collapsed mobile menu style the same link differently.
 export function ModerationNavLink({
-  className = "hover:text-zinc-900 dark:hover:text-zinc-100",
+  className = "focus-ring rounded-sm transition-colors hover:text-fg",
 }: {
   className?: string;
 }) {

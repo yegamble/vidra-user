@@ -120,7 +120,7 @@ export function SignupForm({
           <>
             Your signup was sent to the administrators of this instance for review. Once it is
             approved you can{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               sign in
             </Link>{" "}
             as <span className="font-medium">{pendingEmail}</span>. No account exists until then.
@@ -158,7 +158,7 @@ export function SignupForm({
         message={
           <>
             This instance is not accepting new accounts right now.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               Sign in
             </Link>{" "}
             instead.
@@ -180,7 +180,7 @@ export function SignupForm({
       {displayFormError ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {displayFormError}
         </p>
@@ -232,12 +232,23 @@ export function SignupForm({
         />
       ) : null}
 
-      <Button type="submit" className="w-full" disabled={submitting}>
+      <Button type="submit" size="lg" className="w-full" disabled={submitting}>
         {submitting ? "Creating account…" : "Create account"}
       </Button>
 
       {requiresApproval ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="flex items-start gap-2.5 rounded-xl bg-surface-muted px-3.5 py-3 text-[13px] leading-relaxed text-fg-muted">
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
+          </svg>
           New accounts on this instance require administrator approval. Your signup will be
           reviewed before you can sign in.
         </p>
@@ -245,9 +256,9 @@ export function SignupForm({
 
       <OAuthButtons providers={providers} returnTo="/signup?oauth=1" />
 
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-center text-sm text-fg-muted">
         Already have an account?{" "}
-        <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+        <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
           Sign in
         </Link>
       </p>

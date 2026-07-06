@@ -9,7 +9,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 // (until refresh-token rehydration lands). `className` lets the desktop nav and
 // the collapsed mobile menu style the same link differently.
 export function AdminNavLink({
-  className = "hover:text-zinc-900 dark:hover:text-zinc-100",
+  className = "transition-colors hover:text-fg",
 }: {
   className?: string;
 }) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ChevronDownIcon } from "@/components/icons";
 import type { VideoConfigResponse } from "@/lib/api";
 import { getVideoConfigCached } from "@/lib/api/video-config";
 import { searchHref, type SearchFilters as Filters } from "@/lib/search-url";
@@ -16,6 +17,12 @@ import { searchHref, type SearchFilters as Filters } from "@/lib/search-url";
 // re-reads searchParams and remounts the results. The selects stay disabled
 // until the taxonomy arrives (and if it fails to load), so an active tag chip
 // still renders and searching without filters keeps working.
+//
+// Presentation follows the template's SEARCH filter-chip row: a single
+// horizontally scrollable strip of pill-shaped controls on mobile (wrapping on
+// wider viewports). The selects stay native selects (converting them to chips
+// would change the form semantics the tests pin) restyled as rounded-xl
+// fields; the active ?tag= filter renders as an accent-filled pill chip.
 export function SearchFilters({ query, filters }: { query: string; filters: Filters }) {
   const router = useRouter();
   const [config, setConfig] = useState<VideoConfigResponse | null>(null);
@@ -39,51 +46,67 @@ export function SearchFilters({ query, filters }: { query: string; filters: Filt
   }
 
   const selectClass =
-    "rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200";
+    "appearance-none rounded-xl border border-border bg-surface py-1.5 pl-3 pr-8 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted focus-ring disabled:opacity-50";
 
   return (
-    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter results">
-      <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-300">
+    <div
+      className="flex items-center gap-2 overflow-x-auto py-1 sm:flex-wrap"
+      role="group"
+      aria-label="Filter results"
+    >
+      <label className="flex flex-none items-center gap-1.5 text-[13px] text-fg-muted">
         <span>Category</span>
-        <select
-          value={filters.category ?? ""}
-          onChange={(e) => apply({ category: e.target.value || undefined })}
-          aria-label="Filter by category"
-          disabled={config === null}
-          className={selectClass}
-        >
-          <option value="">All</option>
-          {(config?.categories ?? []).map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <span className="relative flex">
+          <select
+            value={filters.category ?? ""}
+            onChange={(e) => apply({ category: e.target.value || undefined })}
+            aria-label="Filter by category"
+            disabled={config === null}
+            className={selectClass}
+          >
+            <option value="">All</option>
+            {(config?.categories ?? []).map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDownIcon
+            size={14}
+            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-muted"
+          />
+        </span>
       </label>
-      <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-300">
+      <label className="flex flex-none items-center gap-1.5 text-[13px] text-fg-muted">
         <span>Language</span>
-        <select
-          value={filters.language ?? ""}
-          onChange={(e) => apply({ language: e.target.value || undefined })}
-          aria-label="Filter by language"
-          disabled={config === null}
-          className={selectClass}
-        >
-          <option value="">All</option>
-          {(config?.languages ?? []).map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <span className="relative flex">
+          <select
+            value={filters.language ?? ""}
+            onChange={(e) => apply({ language: e.target.value || undefined })}
+            aria-label="Filter by language"
+            disabled={config === null}
+            className={selectClass}
+          >
+            <option value="">All</option>
+            {(config?.languages ?? []).map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDownIcon
+            size={14}
+            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-muted"
+          />
+        </span>
       </label>
       {filters.tag ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 py-1 pl-3 pr-1 text-sm text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+        <span className="inline-flex flex-none items-center gap-1 rounded-full bg-accent py-1.5 pl-3 pr-1 text-xs font-semibold text-accent-fg">
           <span className="sr-only">Filtered by tag </span>#{filters.tag}
           <Link
             href={searchHref(query, { ...filters, tag: undefined })}
             aria-label={`Remove tag filter ${filters.tag}`}
-            className="flex h-5 w-5 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+            className="focus-ring flex h-6 w-6 items-center justify-center rounded-full text-accent-fg transition-colors hover:bg-accent-fg/20"
           >
             <svg
               aria-hidden

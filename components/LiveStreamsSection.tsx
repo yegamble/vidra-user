@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { Channel, LiveStream, VideoPrivacy } from "@/lib/api";
@@ -114,70 +117,62 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Live streams</h2>
-        <button
-          type="button"
+        <h2 className="text-[15px] font-bold tracking-tight">Live streams</h2>
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => {
             setStatus("loading");
             setReloadKey((k) => k + 1);
           }}
-          className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
         >
           Reload
-        </button>
+        </Button>
       </div>
 
       <form
         onSubmit={(e) => void create(e)}
-        className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
+        className="flex flex-col gap-4 rounded-2xl border border-border-subtle bg-surface p-4"
       >
         {channels.length > 1 ? (
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Channel</span>
-            <select
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              aria-label="Live channel"
-              className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              {channels.map((ch) => (
-                <option key={ch.id} value={ch.handle}>
-                  {ch.display_name} (@{ch.handle})
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Title</span>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="My live show"
-            aria-label="Live stream title"
-            maxLength={200}
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Privacy</span>
-          <select
-            value={privacy}
-            onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
-            aria-label="Live privacy"
-            className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+          <Select
+            label="Channel"
+            value={handle}
+            onChange={(e) => setHandle(e.target.value)}
+            aria-label="Live channel"
           >
-            <option value="public">Public</option>
-            <option value="unlisted">Unlisted</option>
-            <option value="private">Private</option>
-          </select>
-        </label>
+            {channels.map((ch) => (
+              <option key={ch.id} value={ch.handle}>
+                {ch.display_name} (@{ch.handle})
+              </option>
+            ))}
+          </Select>
+        ) : null}
+        <Input
+          label="Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="My live show"
+          aria-label="Live stream title"
+          maxLength={200}
+        />
+        <Select
+          label="Privacy"
+          value={privacy}
+          onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
+          aria-label="Live privacy"
+        >
+          <option value="public">Public</option>
+          <option value="unlisted">Unlisted</option>
+          <option value="private">Private</option>
+        </Select>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={permanent}
             onChange={(e) => setPermanent(e.target.checked)}
             aria-label="Permanent live stream"
+            className="h-4 w-4 rounded border-border accent-accent focus-ring"
           />
           Permanent (reuse this stream + key across sessions)
         </label>
@@ -188,24 +183,21 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
               checked={replayEnabled}
               onChange={(e) => setReplayEnabled(e.target.checked)}
               aria-label="Save replay as a video"
+              className="h-4 w-4 rounded border-border accent-accent focus-ring"
             />
             Save replay as a video
           </span>
-          <span className="pl-6 text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="pl-6 text-xs text-fg-muted">
             Records this stream and publishes it as a normal video (with the same
             privacy) once the stream ends.
           </span>
         </label>
         <div>
-          <button
-            type="submit"
-            disabled={busy || title.trim() === ""}
-            className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-          >
+          <Button type="submit" disabled={busy || title.trim() === ""}>
             {busy ? "Creating…" : "Create live stream"}
-          </button>
+          </Button>
         </div>
-        {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
       </form>
 
       {revealed ? <StreamKeyReveal revealed={revealed} onDismiss={() => setRevealed(null)} /> : null}
@@ -223,42 +215,43 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
           }}
         />
       ) : streams.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No live streams yet.</p>
+        <p className="text-sm text-fg-muted">No live streams yet.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+        <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface">
           {streams.map((s) => (
             <li key={s.id} className="flex items-center gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{s.title}</p>
-                <div className="mt-1 flex items-center gap-2 text-xs">
+                <p className="truncate text-sm font-semibold">{s.title}</p>
+                <div className="mt-1.5 flex items-center gap-2 text-xs">
                   <LiveStateBadge state={s.state} />
-                  <span className="text-zinc-500 dark:text-zinc-400">{s.privacy}</span>
+                  <span className="text-fg-muted">{s.privacy}</span>
                   {s.permanent ? (
-                    <span className="text-zinc-500 dark:text-zinc-400">· permanent</span>
+                    <span className="text-fg-muted">· permanent</span>
                   ) : null}
                 </div>
-                <label className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                <label className="mt-1.5 flex items-center gap-1.5 text-xs text-fg-muted">
                   <input
                     type="checkbox"
                     checked={s.replay_enabled}
                     onChange={() => void toggleReplay(s)}
                     aria-label={`Save replay as a video for ${s.title}`}
+                    className="h-3.5 w-3.5 rounded border-border accent-accent focus-ring"
                   />
                   Save replay as a video
                 </label>
               </div>
-              <div className="flex shrink-0 items-center gap-3 text-sm">
+              <div className="flex shrink-0 items-center gap-1 text-sm">
                 <button
                   type="button"
                   onClick={() => void regenerate(s.id)}
-                  className="font-medium text-zinc-600 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-300 dark:hover:text-zinc-100"
+                  className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-ring"
                 >
                   Regenerate key
                 </button>
                 <button
                   type="button"
                   onClick={() => void remove(s.id)}
-                  className="font-medium text-zinc-500 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:text-red-400"
+                  className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-danger-surface hover:text-danger focus-ring"
                 >
                   Delete
                 </button>
@@ -273,12 +266,25 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
 
 function LiveStateBadge({ state }: { state: LiveStream["state"] }) {
   const styles: Record<LiveStream["state"], string> = {
-    offline: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
-    live: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300",
-    ended: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
+    offline: "bg-surface-strong text-fg-muted",
+    live: "bg-danger/15 text-danger",
+    ended: "bg-surface-strong text-fg-muted",
   };
   return (
-    <span className={"rounded px-1.5 py-0.5 font-medium " + styles[state]}>{state}</span>
+    <span
+      className={
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] " +
+        styles[state]
+      }
+    >
+      {state === "live" ? (
+        <span
+          aria-hidden="true"
+          className="h-1.5 w-1.5 rounded-full bg-live animate-[live-pulse_1.6s_infinite]"
+        />
+      ) : null}
+      {state}
+    </span>
   );
 }
 
@@ -297,35 +303,45 @@ function StreamKeyReveal({ revealed, onDismiss }: { revealed: RevealedKey; onDis
   return (
     <div
       role="status"
-      className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800/60 dark:bg-amber-950/30"
+      className="flex flex-col gap-3 rounded-2xl bg-surface-muted p-4 text-sm"
     >
-      <p className="font-medium text-amber-800 dark:text-amber-200">
-        Copy your stream key now — it won&apos;t be shown again.
+      <p className="flex items-start gap-2.5">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="mt-0.5 h-4 w-4 flex-none text-warning"
+        >
+          <path d="M12 9v4M12 17h.01" />
+          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+        </svg>
+        <span className="font-semibold text-fg">
+          Copy your stream key now — it won&apos;t be shown again.
+        </span>
       </p>
       <div className="flex items-center gap-2">
         <input
           readOnly
           value={revealed.key}
           aria-label="Stream key"
-          className="min-w-0 flex-1 rounded border border-amber-300 bg-white px-2 py-1 font-mono text-xs dark:border-amber-800/60 dark:bg-zinc-900"
+          className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2 font-mono text-[13px] text-fg focus-ring"
         />
-        <button
-          type="button"
-          onClick={() => void copy()}
-          className="shrink-0 rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-800/60 dark:text-amber-200"
-        >
+        <Button variant="secondary" size="sm" className="shrink-0" onClick={() => void copy()}>
           {copied ? "Copied" : "Copy"}
-        </button>
+        </Button>
       </div>
       {revealed.rtmp ? (
-        <p className="text-xs text-amber-800 dark:text-amber-200">
-          RTMP URL: <span className="font-mono">{revealed.rtmp}</span>
+        <p className="text-[13px] text-fg-muted">
+          RTMP URL: <span className="font-mono text-fg">{revealed.rtmp}</span>
         </p>
       ) : null}
       <button
         type="button"
         onClick={onDismiss}
-        className="self-start text-xs font-medium text-amber-700 underline hover:no-underline dark:text-amber-300"
+        className="self-start rounded-full text-xs font-semibold text-fg-muted underline transition-colors hover:text-fg hover:no-underline focus-ring"
       >
         Dismiss
       </button>

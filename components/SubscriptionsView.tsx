@@ -28,7 +28,10 @@ export function SubscriptionsView() {
         title="Sign in to see your subscriptions"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link
+              href="/login"
+              className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
+            >
               Sign in
             </Link>{" "}
             to follow channels and watch their latest videos here.
@@ -92,7 +95,7 @@ function Feed() {
   }
 
   return (
-    <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <ul className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 lg:grid-cols-4">
       {videos.map((video) => (
         <li key={video.id}>
           <VideoCard video={video} />

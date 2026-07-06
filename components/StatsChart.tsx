@@ -14,13 +14,13 @@ export function StatsChart({ series, label }: { series: DailyViews[]; label: str
   const barWidth = Math.max(step - 1.5, 1);
 
   return (
-    <figure className="flex flex-col gap-1">
+    <figure className="flex flex-col gap-1.5">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label={`${label}: ${total} views over the last ${series.length} days`}
         preserveAspectRatio="none"
-        className="h-24 w-full rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+        className="h-24 w-full rounded-xl border border-border-subtle bg-surface"
       >
         {series.map((d, i) => {
           // Zero days render as a 1px baseline sliver so every day is visible
@@ -33,14 +33,14 @@ export function StatsChart({ series, label }: { series: DailyViews[]; label: str
               y={height - h}
               width={barWidth}
               height={h}
-              className={d.views === 0 ? "fill-zinc-200 dark:fill-zinc-800" : "fill-zinc-700 dark:fill-zinc-300"}
+              className={d.views === 0 ? "fill-surface-strong" : "fill-fg"}
             >
               <title>{`${d.day}: ${d.views} ${d.views === 1 ? "view" : "views"}`}</title>
             </rect>
           );
         })}
       </svg>
-      <figcaption className="text-xs text-zinc-500 dark:text-zinc-400">
+      <figcaption className="text-xs text-fg-muted">
         {total === 0
           ? `No views in the last ${series.length} days.`
           : `Daily views over the last ${series.length} days, oldest first.`}

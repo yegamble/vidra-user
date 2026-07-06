@@ -43,17 +43,17 @@ export function ThumbnailManager({
   const src = shown ? `${videoThumbnailUrl(videoId)}?v=${version}` : null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
-      <p className="text-sm font-medium">Thumbnail</p>
+    <div className="flex flex-col gap-2 rounded-2xl border border-border-subtle bg-surface p-4">
+      <p className="text-sm font-semibold">Thumbnail</p>
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element -- backend-served poster, not a static asset
         <img
           src={src}
           alt="Current thumbnail"
-          className="aspect-video w-40 rounded bg-zinc-100 object-cover dark:bg-zinc-800"
+          className="aspect-video w-40 rounded-lg bg-surface-muted object-cover"
         />
       ) : (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">No thumbnail yet.</p>
+        <p className="text-xs text-fg-muted">No thumbnail yet.</p>
       )}
       <input
         ref={fileRef}
@@ -65,10 +65,10 @@ export function ThumbnailManager({
           const f = e.target.files?.[0];
           if (f) void upload(f);
         }}
-        className="text-sm"
+        className="text-sm focus-ring disabled:opacity-60 file:mr-3 file:rounded-full file:border-0 file:bg-surface-muted file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-fg"
       />
-      {busy ? <p className="text-xs text-zinc-500 dark:text-zinc-400">Uploading…</p> : null}
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      {busy ? <p className="text-xs text-fg-muted">Uploading…</p> : null}
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
     </div>
   );
 }

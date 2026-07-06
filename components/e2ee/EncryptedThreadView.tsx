@@ -150,12 +150,12 @@ export function EncryptedThreadView({
 function LockHeader({ recipientId }: { recipientId?: string }) {
   const [showSafety, setShowSafety] = useState(false);
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-      <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+    <div className="flex flex-col gap-2 rounded-2xl border border-success/25 bg-success/10 p-4">
+      <div className="flex items-center gap-2 text-success">
         <LockIcon className="h-4 w-4" />
         <span className="text-sm font-semibold">End-to-end encrypted</span>
       </div>
-      <p className="text-xs text-zinc-600 dark:text-zinc-400">
+      <p className="text-xs text-fg-muted">
         Only you and the people in this conversation can read these messages. The server still sees
         who you talk to and when, and a device added later can&rsquo;t read earlier messages.
       </p>
@@ -164,7 +164,7 @@ function LockHeader({ recipientId }: { recipientId?: string }) {
           type="button"
           onClick={() => setShowSafety((v) => !v)}
           aria-expanded={showSafety}
-          className="text-xs font-medium text-emerald-800 underline hover:text-emerald-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300"
+          className="focus-ring rounded text-xs font-semibold text-success underline transition-opacity hover:opacity-80"
         >
           {showSafety ? "Hide safety numbers" : "View safety numbers"}
         </button>
@@ -200,24 +200,22 @@ function SafetyNumbers({ recipientId }: { recipientId?: string }) {
   }, [recipientId]);
 
   if (status === "loading") {
-    return <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading safety numbers…</p>;
+    return <p className="text-xs text-fg-muted">Loading safety numbers…</p>;
   }
   if (status === "error") {
-    return (
-      <p className="text-xs text-red-600 dark:text-red-400">Could not load safety numbers.</p>
-    );
+    return <p className="text-xs text-danger">Could not load safety numbers.</p>;
   }
 
   return (
     <div className="flex flex-col gap-3 text-xs">
-      <p className="text-zinc-600 dark:text-zinc-400">
+      <p className="text-fg-muted">
         Compare these numbers with the other person over a channel you trust (in person, a call). If
         they match, no one is intercepting. The server could substitute keys for anyone you never
         verify.
       </p>
       {mine ? <FingerprintRow label={`This device (${mine.device_name})`} fp={mine} /> : null}
       {peers.length === 0 ? (
-        <p className="text-zinc-500 dark:text-zinc-400">The other person has no devices yet.</p>
+        <p className="text-fg-muted">The other person has no devices yet.</p>
       ) : (
         peers.map((p) => <FingerprintRow key={p.device_id} label={p.device_name} fp={p} />)
       )}
@@ -228,8 +226,8 @@ function SafetyNumbers({ recipientId }: { recipientId?: string }) {
 function FingerprintRow({ label, fp }: { label: string; fp: DeviceFingerprint }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-medium text-zinc-700 dark:text-zinc-300">{label}</span>
-      <code className="break-all font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+      <span className="font-medium text-fg">{label}</span>
+      <code className="break-all font-mono text-[11px] text-fg-muted">
         {formatSafetyNumber(fp.fingerprint)}
       </code>
     </div>
@@ -244,24 +242,24 @@ function MessageList({ messages }: { messages: ShownMessage[] }) {
 
   if (messages.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="py-8 text-center text-sm text-fg-muted">
         No messages yet. Encrypted messages you send will appear here.
       </p>
     );
   }
 
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col gap-2.5">
       {messages.map((m) => (
         <li key={m.key} className={"flex " + (m.mine ? "justify-end" : "justify-start")}>
           <div
             className={
-              "max-w-[75%] rounded-2xl px-3 py-2 text-sm " +
+              "max-w-[78%] rounded-[18px] px-3.5 py-2.5 text-[14.5px] leading-normal " +
               (m.text === null
-                ? "border border-dashed border-zinc-300 bg-transparent text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
+                ? "border border-dashed border-border bg-transparent text-fg-muted"
                 : m.mine
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100")
+                  ? "rounded-br-md bg-accent text-accent-fg"
+                  : "rounded-bl-md bg-surface-muted text-fg")
             }
           >
             {m.text === null ? (
@@ -275,9 +273,7 @@ function MessageList({ messages }: { messages: ShownMessage[] }) {
             <span
               className={
                 "mt-1 block text-right text-[10px] " +
-                (m.mine && m.text !== null
-                  ? "text-zinc-300 dark:text-zinc-500"
-                  : "text-zinc-500 dark:text-zinc-400")
+                (m.mine && m.text !== null ? "text-accent-fg/70" : "text-fg-muted")
               }
             >
               {relativeTime(m.created_at)}
@@ -367,17 +363,17 @@ function Composer({
         maxLength={MAX_MESSAGE_LEN}
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        className="focus-ring w-full resize-none rounded-[22px] bg-surface-muted px-4 py-2.5 text-[14.5px] text-fg placeholder:text-fg-muted"
       />
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
       <div className="flex items-center justify-between gap-2">
-        <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+        <label className="flex items-center gap-2 text-xs text-fg-muted">
           Disappearing
           <select
             aria-label="Disappearing messages timer"
             value={timer}
             onChange={(e) => setTimer(e.target.value as DisappearingOption)}
-            className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            className="focus-ring rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs text-fg"
           >
             {DISAPPEARING_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -389,7 +385,7 @@ function Composer({
         <button
           type="submit"
           disabled={busy || body.trim() === ""}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          className="focus-ring rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
         >
           {busy ? "Sending…" : "Send"}
         </button>

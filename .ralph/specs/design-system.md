@@ -67,15 +67,18 @@ Rules for components:
 | `danger` | danger **text/icons** | `#c81e1e` | `#f87171` |
 | `danger-solid` / `danger-fg` | danger **fills** (buttons) | `#dc2626` / white | same |
 | `danger-surface` / `danger-border` | danger panels | `#fef2f2` / `#fecaca` | `#450a0a` / `#7f1d1d` |
-| `success` | positive text/icons/badges | `#15803d` | `#22c55e` |
-| `warning` | caution text/icons/badges | `#b45309` | `#f59e0b` |
+| `success` | positive text/icons/badges | `#166534` | `#22c55e` |
+| `warning` | caution text/icons/badges | `#92400e` | `#f59e0b` |
 | `live` | the LIVE pulse dot (sits on media) | `#ff453a` | `#ff453a` |
 
 Contrast contract (verified): `fg`/`fg-muted` pass AA (≥4.5:1) on `canvas`,
 `surface`, `surface-muted`, and `surface-strong` in both schemes; `danger`
 passes as text on `canvas`/`surface`/`danger-surface`; `success`/`warning`
-pass on `canvas`/`surface`/`surface-muted`. Use `text-danger` for danger text
-and `bg-danger-solid text-danger-fg` for danger fills — never `bg-danger`.
+pass on `canvas`/`surface`/`surface-muted` AND inside their own 15% tint
+pills (`bg-success/15 text-success`, `bg-warning/15 text-warning`) — axe
+verifies this, so never lighten these tokens without recomputing the tinted
+pairs. Use `text-danger` for danger text and `bg-danger-solid text-danger-fg`
+for danger fills — never `bg-danger`.
 
 **Documented exceptions** (the only allowed non-token colors):
 - **Media overlays** — badges/scrims painted ON TOP of thumbnails or video are

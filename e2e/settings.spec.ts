@@ -25,7 +25,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
 }
 
 test("editing the profile shows a saved confirmation", async ({ page }) => {
@@ -120,7 +120,7 @@ test("deactivating the account signs the user out", async ({ page }) => {
   // signed-out prompt in the page body during the redirect would otherwise make
   // an unscoped "Sign in" match two elements and trip strict mode).
   await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
 });
 
 test("shows an error when the deactivate password is wrong", async ({ page }) => {
@@ -137,7 +137,7 @@ test("shows an error when the deactivate password is wrong", async ({ page }) =>
   await page.getByRole("button", { name: "Deactivate account" }).click();
 
   await expect(page.getByText("Incorrect password.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
 });
 
 test("permanently deleting the account takes the two-step confirm and shows a goodbye state", async ({
@@ -171,7 +171,7 @@ test("permanently deleting the account takes the two-step confirm and shows a go
   // Goodbye state + signed out (the session is gone).
   await expect(page.getByText("Your account has been deleted")).toBeVisible();
   await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
   expect(deleteMethod).toBe("DELETE");
   expect(deleteBody).toEqual({ password: "supersecret" });
 });
@@ -193,6 +193,6 @@ test("a wrong password on permanent delete is surfaced and nothing is deleted", 
 
   await expect(page.getByText("Incorrect password.")).toBeVisible();
   // Still signed in, still on the confirm step — no goodbye state.
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
   await expect(page.getByText("Your account has been deleted")).toHaveCount(0);
 });

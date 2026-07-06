@@ -51,19 +51,19 @@ export function InstanceAboutView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-2 border-b border-zinc-200 pb-4 dark:border-zinc-800">
+      <header className="flex flex-col gap-2 border-b border-border-subtle pb-4">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{instance.name}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{instance.name}</h1>
           <ProtocolBadge protocol={instance.federation_enabled ? "activitypub" : "local"} />
         </div>
         {instance.description ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">{instance.description}</p>
+          <p className="text-sm text-fg-muted">{instance.description}</p>
         ) : null}
       </header>
 
       <section className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Federation</h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <h2 className="text-[15px] font-bold tracking-tight text-fg">Federation</h2>
+        <p className="text-sm text-fg-muted">
           {instance.federation_enabled
             ? "This instance federates over ActivityPub: public videos and channels here can be followed and watched from other instances, and remote content can appear in local feeds."
             : "This instance does not federate — everything published here stays on this server."}
@@ -71,8 +71,8 @@ export function InstanceAboutView() {
       </section>
 
       <section className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Registration</h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <h2 className="text-[15px] font-bold tracking-tight text-fg">Registration</h2>
+        <p className="text-sm text-fg-muted">
           {instance.registration_enabled
             ? instance.registration_requires_approval
               ? "Open — new accounts require administrator approval."
@@ -82,15 +82,15 @@ export function InstanceAboutView() {
       </section>
 
       <section className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Software</h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <h2 className="text-[15px] font-bold tracking-tight text-fg">Software</h2>
+        <p className="text-sm text-fg-muted">
           {instance.software.name} v{instance.software.version}
         </p>
       </section>
 
       {instance.contact_email || instance.terms_url || instance.privacy_url ? (
         <section className="flex flex-col gap-1">
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            <h2 className="text-[15px] font-bold tracking-tight text-fg">
             Contact and policies
           </h2>
           <ul className="flex flex-col gap-1 text-sm">
@@ -98,7 +98,7 @@ export function InstanceAboutView() {
               <li>
                 <a
                   href={`mailto:${instance.contact_email}`}
-                  className="text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2"
                 >
                   {instance.contact_email}
                 </a>
@@ -108,7 +108,7 @@ export function InstanceAboutView() {
               <li>
                 <a
                   href={instance.terms_url}
-                  className="text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2"
                 >
                   Terms of service
                 </a>
@@ -118,7 +118,7 @@ export function InstanceAboutView() {
               <li>
                 <a
                   href={instance.privacy_url}
-                  className="text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2"
                 >
                   Privacy policy
                 </a>

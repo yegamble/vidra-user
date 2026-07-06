@@ -34,7 +34,7 @@ export function SecuritySettingsView() {
         message={
           <>
             Your session has ended.{" "}
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               Sign in
             </Link>{" "}
             to manage two-factor authentication.
@@ -146,21 +146,21 @@ function TwoFactorSection() {
       {error ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {error}
         </p>
       ) : null}
 
       {loadError ? (
-        <div className="flex items-center gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="text-sm text-zinc-600 dark:text-zinc-400" role="alert">
+        <div className="flex items-center gap-3 rounded-2xl border border-border-subtle p-4">
+          <p className="text-sm text-fg-muted" role="alert">
             Could not load your two-factor status.
           </p>
           <button
             type="button"
             onClick={reload}
-            className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            className="focus-ring rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
           >
             Retry
           </button>
@@ -194,7 +194,7 @@ function TwoFactorSection() {
               type="button"
               onClick={() => void start()}
               disabled={busy}
-              className="self-start rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              className="focus-ring self-start rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
             >
               {busy ? "Starting…" : "Turn on two-factor authentication"}
             </button>
@@ -207,26 +207,26 @@ function TwoFactorSection() {
 
 function StatusCard({ mfa }: { mfa: MFAStatusResponse }) {
   return (
-    <section className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+    <section className="flex flex-col gap-2 rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+        <h2 className="text-base font-semibold tracking-tight text-fg">
           Two-factor authentication
         </h2>
         <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
             mfa.enabled
-              ? "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300"
-              : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+              ? "bg-success/15 text-success"
+              : "bg-surface-strong text-fg-muted"
           }`}
         >
           {mfa.enabled ? "On" : "Off"}
         </span>
       </div>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-sm text-fg-muted">
         {mfa.enabled ? (
           <>
             Signing in requires a code from your authenticator app.{" "}
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+            <span className="font-medium text-fg">
               {mfa.recovery_codes_remaining} recovery{" "}
               {mfa.recovery_codes_remaining === 1 ? "code" : "codes"} left.
             </span>
@@ -255,12 +255,12 @@ function EnrollStep({
 }) {
   const [code, setCode] = useState("");
   return (
-    <section className="flex flex-col gap-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+    <section className="flex flex-col gap-4 rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+        <h2 className="text-base font-semibold tracking-tight text-fg">
           Set up your authenticator app
         </h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-fg-muted">
           Scan the QR code with an authenticator app (or enter the secret manually), then confirm
           with the app&apos;s current 6-digit code. The secret is shown only once.
         </p>
@@ -269,10 +269,10 @@ function EnrollStep({
       <div className="flex flex-col items-start gap-4 sm:flex-row">
         <QrCode value={enrollment.otpauth_uri} label="Authenticator enrollment QR code" />
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-sm font-medium">Secret for manual entry</span>
+          <span className="text-sm font-medium text-fg">Secret for manual entry</span>
           <code
             data-testid="totp-secret"
-            className="break-all rounded-md bg-zinc-100 px-2 py-1 font-mono text-sm dark:bg-zinc-800"
+            className="break-all rounded-lg bg-surface-muted px-2 py-1 font-mono text-sm text-fg"
           >
             {enrollment.secret}
           </code>
@@ -289,7 +289,7 @@ function EnrollStep({
         className="flex flex-col gap-3"
       >
         <div className="flex flex-col gap-1">
-          <label htmlFor="totp-verify-code" className="text-sm font-medium">
+          <label htmlFor="totp-verify-code" className="text-sm font-medium text-fg">
             Verification code
           </label>
           <input
@@ -301,21 +301,21 @@ function EnrollStep({
             required
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            className="w-40 rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            className="focus-ring w-40 rounded-xl border border-border bg-surface px-3.5 py-2 text-sm tabular-nums text-fg"
           />
         </div>
         <div className="flex items-center gap-3">
           <button
             type="submit"
             disabled={busy || code.trim() === ""}
-            className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            className="focus-ring rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
           >
             {busy ? "Verifying…" : "Verify code"}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="text-sm text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+            className="focus-ring rounded-sm text-sm font-semibold text-fg hover:underline"
           >
             Cancel
           </button>
@@ -327,21 +327,21 @@ function EnrollStep({
 
 function RecoveryCodesStep({ codes, onConfirm }: { codes: string[]; onConfirm: () => void }) {
   return (
-    <section className="flex flex-col gap-4 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
+    <section className="flex flex-col gap-4 rounded-2xl border border-warning/30 bg-warning/10 p-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-amber-800 dark:text-amber-300">
+        <h2 className="text-base font-semibold tracking-tight text-warning">
           Save your recovery codes
         </h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm text-fg-muted">
           Two-factor authentication is now on. Each code below signs you in once if you lose your
           authenticator.{" "}
-          <span className="font-medium">They are shown only this once — store them safely.</span>
+          <span className="font-medium text-fg">They are shown only this once — store them safely.</span>
         </p>
       </div>
 
       <ol
         aria-label="Recovery codes"
-        className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-md bg-white p-3 font-mono text-sm dark:bg-zinc-900"
+        className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl bg-surface p-3 font-mono text-sm text-fg"
       >
         {codes.map((code) => (
           <li key={code}>
@@ -355,7 +355,7 @@ function RecoveryCodesStep({ codes, onConfirm }: { codes: string[]; onConfirm: (
         <button
           type="button"
           onClick={() => downloadTextFile("vidra-recovery-codes.txt", codes.join("\n") + "\n")}
-          className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="focus-ring rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Download codes
         </button>
@@ -364,7 +364,7 @@ function RecoveryCodesStep({ codes, onConfirm }: { codes: string[]; onConfirm: (
       <button
         type="button"
         onClick={onConfirm}
-        className="self-start rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+        className="focus-ring self-start rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90"
       >
         I saved my recovery codes
       </button>
@@ -381,12 +381,12 @@ function DisableForm({
 }) {
   const [password, setPassword] = useState("");
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-red-200 p-4 dark:border-red-900/50">
+    <section className="flex flex-col gap-3 rounded-2xl border border-danger-border p-4">
       <div className="flex flex-col gap-1">
-        <h3 className="text-base font-semibold text-red-700 dark:text-red-300">
+        <h3 className="text-base font-semibold tracking-tight text-danger">
           Turn off two-factor authentication
         </h3>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm text-fg-muted">
           Sign-in goes back to password only, and every recovery code is deleted. Confirm your
           password to continue.
         </p>
@@ -400,7 +400,7 @@ function DisableForm({
         className="flex flex-col gap-3"
       >
         <div className="flex flex-col gap-1">
-          <label htmlFor="mfa-disable-password" className="text-sm font-medium">
+          <label htmlFor="mfa-disable-password" className="text-sm font-medium text-fg">
             Current password
           </label>
           <input
@@ -411,13 +411,13 @@ function DisableForm({
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+            className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg"
           />
         </div>
         <button
           type="submit"
           disabled={busy || password === ""}
-          className="self-start rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60"
+          className="focus-ring self-start rounded-full bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
         >
           {busy ? "Turning off…" : "Turn off two-factor authentication"}
         </button>
@@ -441,16 +441,16 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       <button
         type="button"
         onClick={() => void copy()}
-        className="self-start rounded-md border border-zinc-300 px-2.5 py-1 text-sm text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="focus-ring self-start rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
       >
         {label}
       </button>
       {state === "copied" ? (
-        <span role="status" className="text-xs text-green-700 dark:text-green-300">
+        <span role="status" className="text-xs font-medium text-success">
           Copied.
         </span>
       ) : state === "failed" ? (
-        <span role="status" className="text-xs text-zinc-500 dark:text-zinc-400">
+        <span role="status" className="text-xs text-fg-muted">
           Copy failed — select the text manually.
         </span>
       ) : null}

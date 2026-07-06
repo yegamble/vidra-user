@@ -13,18 +13,51 @@ import { relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
-// describe renders a notification as a human message plus the link to its target.
-function describe(n: Notification): { text: string; href: string } {
+// A minified Feather-style glyph per notification type (24x24 stroke grid),
+// rendered inside the round leading icon chip. Purely decorative (aria-hidden).
+const TYPE_ICON: Record<string, string> = {
+  comment:
+    "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
+  message: "M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6",
+  video_rejected:
+    "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
+  report_resolved: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4",
+  follow: "M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 8v6M23 11h-6",
+};
+
+function TypeIcon({ type }: { type: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <path d={TYPE_ICON[type] ?? TYPE_ICON.follow} />
+    </svg>
+  );
+}
+
+// describe renders a notification as a human message plus the link to its
+// target. `lead` is the bold opening (actor / "A moderator") and `rest` the
+// remainder — concatenated they read exactly as before.
+function describe(n: Notification): { lead: string; rest: string; href: string } {
   const actor = n.actor?.display_name || n.actor?.username || "Someone";
   if (n.type === "comment") {
     return {
-      text: `${actor} commented on ${n.video_title || "your video"}`,
+      lead: actor,
+      rest: ` commented on ${n.video_title || "your video"}`,
       href: n.video_id ? `/videos/${n.video_id}` : "#",
     };
   }
   if (n.type === "message") {
     return {
-      text: `${actor} sent you a message`,
+      lead: actor,
+      rest: " sent you a message",
       href: n.conversation_id ? `/messages/${n.conversation_id}` : "#",
     };
   }
@@ -34,7 +67,8 @@ function describe(n: Notification): { text: string; href: string } {
     // says what happened and points at the studio, where the failed row lives.
     const upload = n.video_title ? `your upload “${n.video_title}”` : "your upload";
     return {
-      text: `A moderator rejected ${upload} — it was not published`,
+      lead: "A moderator",
+      rest: ` rejected ${upload} — it was not published`,
       href: "/studio",
     };
   }
@@ -44,12 +78,13 @@ function describe(n: Notification): { text: string; href: string } {
         ? n.report_status
         : "resolved";
     const target = n.report_target_type ? `${n.report_target_type} report` : "report";
-    return { text: `A moderator ${outcome} your ${target}`, href: "#" };
+    return { lead: "A moderator", rest: ` ${outcome} your ${target}`, href: "#" };
   }
   // follow
   const channel = n.channel_display_name || n.channel_handle || "your channel";
   return {
-    text: `${actor} started following ${channel}`,
+    lead: actor,
+    rest: ` started following ${channel}`,
     href: n.channel_handle ? `/channels/${n.channel_handle}` : "#",
   };
 }
@@ -66,7 +101,10 @@ export function NotificationsView() {
         title="Sign in to see your notifications"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link
+              href="/login"
+              className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
+            >
               Sign in
             </Link>{" "}
             to see when people follow your channel or comment on your videos.
@@ -150,55 +188,60 @@ function Notifications() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <div className="flex justify-end">
         <button
           type="button"
           onClick={() => void markAll()}
           disabled={unread === 0}
-          className="text-sm font-medium text-zinc-600 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:text-zinc-300 dark:hover:text-zinc-100"
+          className="focus-ring rounded-full px-3 py-2 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-50"
         >
           Mark all as read
         </button>
       </div>
-      <ul className="flex flex-col divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+      <ul className="flex flex-col">
         {items.map((n) => {
-          const { text, href } = describe(n);
+          const { lead, rest, href } = describe(n);
           return (
             <li
               key={n.id}
               className={
-                "flex items-center gap-3 px-4 py-3 " +
-                (n.read ? "" : "bg-zinc-50 dark:bg-zinc-900/40")
+                "flex items-start gap-3.5 rounded-xl py-3.5 " +
+                (n.read ? "px-1" : "bg-surface-muted px-3")
               }
             >
               <span
                 aria-hidden
-                className={
-                  "h-2 w-2 shrink-0 rounded-full " + (n.read ? "bg-transparent" : "bg-blue-600")
-                }
-              />
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-muted text-fg-muted"
+              >
+                <TypeIcon type={n.type} />
+              </span>
               <div className="flex min-w-0 flex-1 flex-col">
                 <Link
                   href={href}
                   onClick={() => void markRead(n.id)}
-                  className="truncate text-sm text-zinc-800 hover:underline dark:text-zinc-100"
+                  className="focus-ring rounded text-sm leading-normal text-fg hover:underline"
                 >
-                  {text}
+                  <span className="font-semibold">{lead}</span>
+                  {rest}
                 </Link>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {relativeTime(n.created_at)}
-                </span>
+                <span className="mt-0.5 text-xs text-fg-muted">{relativeTime(n.created_at)}</span>
               </div>
               {n.read ? null : (
                 <button
                   type="button"
                   onClick={() => void markRead(n.id)}
                   aria-label="Mark as read"
-                  className="shrink-0 text-xs font-medium text-zinc-500 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:text-zinc-200"
+                  className="focus-ring mt-1 shrink-0 rounded-full text-xs font-semibold text-fg-muted transition-colors hover:text-fg"
                 >
                   Mark read
                 </button>
+              )}
+              {n.read ? null : (
+                <span
+                  aria-hidden
+                  className="mt-2 h-[7px] w-[7px] shrink-0 rounded-full bg-fg"
+                />
               )}
             </li>
           );

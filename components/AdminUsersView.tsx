@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { RoleGate } from "@/components/RoleGate";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -93,25 +94,22 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
           placeholder="Search by username or email"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className="w-full max-w-sm rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          className="focus-ring w-full max-w-sm rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
         />
-        <button
-          type="submit"
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
+        <Button type="submit" size="sm">
           Search
-        </button>
+        </Button>
         {query ? (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => {
               setInput("");
               submitSearch("");
             }}
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
           >
             Clear
-          </button>
+          </Button>
         ) : null}
       </form>
 
@@ -193,38 +191,38 @@ function UserRow({
   }, [user.id, onDeleted]);
 
   return (
-    <article className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="font-medium text-zinc-900 dark:text-zinc-100">{user.username}</span>
+        <span className="font-semibold tracking-tight text-fg">{user.username}</span>
         {isSelf ? (
-          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+          <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] text-accent-fg uppercase">
             you
           </span>
         ) : null}
-        <span className="text-sm text-zinc-500 dark:text-zinc-400">{user.email}</span>
+        <span className="text-[13px] text-fg-muted">{user.email}</span>
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${
             user.email_verified
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-              : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+              ? "bg-success/15 text-success"
+              : "bg-surface-strong text-fg-muted"
           }`}
         >
           {user.email_verified ? "verified" : "unverified"}
         </span>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+        <span className="text-[13px] text-fg-muted">
           joined {relativeTime(user.created_at)}
         </span>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-1.5 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-300">Role</span>
+          <span className="text-[13px] font-medium text-fg-muted">Role</span>
           <select
             aria-label={`Role for ${user.username}`}
             value={user.role}
             disabled={isSelf || rowState === "saving"}
             onChange={(e) => void save({ role: e.target.value as UserRole })}
-            className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            className="focus-ring rounded-xl border border-border bg-surface px-2.5 py-1.5 text-sm text-fg disabled:opacity-60"
           >
             {ROLES.map((r) => (
               <option key={r} value={r}>
@@ -235,45 +233,45 @@ function UserRow({
         </label>
 
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${
             user.is_active
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-              : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+              ? "bg-success/15 text-success"
+              : "bg-danger-surface text-danger"
           }`}
         >
           {user.is_active ? "active" : "deactivated"}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
           disabled={isSelf || rowState === "saving"}
           onClick={() => void save({ is_active: !user.is_active })}
-          className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
         >
           {user.is_active ? "Deactivate" : "Reactivate"}
-        </button>
+        </Button>
         {!deleteArmed ? (
           <button
             type="button"
             aria-label={`Delete ${user.username} permanently`}
             disabled={isSelf || rowState === "saving"}
             onClick={() => setDeleteArmed(true)}
-            className="rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30"
+            className="focus-ring inline-flex items-center justify-center rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger/10 disabled:pointer-events-none disabled:opacity-60"
           >
             Delete permanently
           </button>
         ) : null}
         {isSelf ? (
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-xs text-fg-muted">
             You can&apos;t change your own role or status, or delete your own account.
           </span>
         ) : null}
       </div>
 
       {deleteArmed ? (
-        <div className="mt-3 flex flex-col gap-2 rounded-md border border-red-300 p-3 dark:border-red-900/60">
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            This permanently deletes <span className="font-medium">{user.username}</span>&apos;s
+        <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-danger-border p-3">
+          <p className="text-sm text-fg-muted">
+            This permanently deletes <span className="font-semibold text-fg">{user.username}</span>&apos;s
             account: their channels and videos are removed for good, their comments become
             &ldquo;[deleted]&rdquo; tombstones, and this cannot be undone. Deactivate is the
             reversible alternative.
@@ -286,34 +284,34 @@ function UserRow({
               placeholder={`Type ${user.username} to confirm`}
               value={deleteConfirmName}
               onChange={(e) => setDeleteConfirmName(e.target.value)}
-              className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
             />
-            <button
-              type="button"
+            <Button
+              variant="danger"
+              size="sm"
               aria-label={`Confirm permanent deletion of ${user.username}`}
               disabled={rowState === "saving" || deleteConfirmName !== user.username}
               onClick={() => void doDelete()}
-              className="rounded-md bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60"
             >
               {rowState === "saving" ? "Deleting…" : "Confirm permanent delete"}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={rowState === "saving"}
               onClick={() => {
                 setDeleteArmed(false);
                 setDeleteConfirmName("");
                 setError(null);
               }}
-              className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
 
-      {error ? <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
     </article>
   );
 }

@@ -9,8 +9,10 @@ import { MessageButton } from "@/components/MessageButton";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ReportButton } from "@/components/ReportButton";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
+import { Textarea } from "@/components/ui/Textarea";
 import { api, errorMessage, userAvatarUrl } from "@/lib/api";
 import type { Comment } from "@/lib/api";
 import { buildCommentTree } from "@/lib/comments";
@@ -74,7 +76,7 @@ export function CommentsSection({ videoId }: { videoId: string }) {
 
   return (
     <section aria-label="Comments" className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold tracking-tight">
+      <h2 className="text-[15px] font-bold tracking-tight">
         {status === "ready" ? `Comments (${comments.length})` : "Comments"}
       </h2>
 
@@ -87,11 +89,11 @@ export function CommentsSection({ videoId }: { videoId: string }) {
       ) : status === "error" ? (
         <ErrorState message="Could not load comments." onRetry={retry} />
       ) : comments.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-fg-muted">
           No comments yet. Be the first to comment.
         </p>
       ) : (
-        <ul className="flex flex-col gap-4">
+        <ul className="flex flex-col gap-5">
           {threads.map(({ root, replies }) => (
             <CommentItem
               key={root.id}
@@ -127,10 +129,10 @@ function CommentForm({
 
   if (status !== "authed") {
     return (
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-sm text-fg-muted">
         <Link
           href="/login"
-          className="font-medium text-zinc-900 underline hover:no-underline dark:text-zinc-100"
+          className="focus-ring rounded font-semibold text-fg underline hover:no-underline"
         >
           Sign in
         </Link>{" "}
@@ -163,24 +165,19 @@ function CommentForm({
         void submit();
       }}
     >
-      <textarea
+      <Textarea
         aria-label="Add a comment"
         placeholder="Add a comment…"
         rows={3}
         maxLength={MAX_COMMENT_LEN}
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        error={error ?? undefined}
       />
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={busy || body.trim() === ""}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
+        <Button type="submit" size="sm" disabled={busy || body.trim() === ""}>
           Post
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -229,31 +226,22 @@ function ReplyComposer({
         void submit();
       }}
     >
-      <textarea
+      <Textarea
         aria-label="Write a reply"
         placeholder="Write a reply…"
         rows={2}
         maxLength={MAX_COMMENT_LEN}
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        error={error ?? undefined}
       />
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
+        <Button variant="secondary" size="sm" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={busy || body.trim() === ""}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
+        </Button>
+        <Button type="submit" size="sm" disabled={busy || body.trim() === ""}>
           {busy ? "Posting…" : "Post reply"}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -384,11 +372,11 @@ function CommentItem({
         <Avatar
           src={authorId ? userAvatarUrl(authorId) : null}
           name={comment.author_display_name || comment.author_username}
-          className="mt-0.5 h-8 w-8 text-sm"
+          className="mt-0.5 h-[34px] w-[34px] text-[13px]"
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium text-zinc-900 dark:text-zinc-100">
+          <div className="flex flex-wrap items-center gap-2 text-[13px]">
+            <span className="font-semibold text-fg">
               {comment.author_display_name || comment.author_username}
             </span>
             {isRemote && comment.author_domain ? (
@@ -396,7 +384,7 @@ function CommentItem({
               // profile to link), plus the shared protocol label.
               <>
                 <span
-                  className="inline-flex max-w-full items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                  className="inline-flex max-w-full items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted"
                   title={`Federated comment from ${comment.author_domain}`}
                 >
                   <svg
@@ -418,9 +406,9 @@ function CommentItem({
                 <ProtocolBadge protocol="activitypub" />
               </>
             ) : null}
-            {when ? <span className="text-zinc-500 dark:text-zinc-400">{when}</span> : null}
+            {when ? <span className="text-fg-muted">{when}</span> : null}
             {comment.edited ? (
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">(edited)</span>
+              <span className="text-xs text-fg-muted">(edited)</span>
             ) : null}
             <span className="ml-auto flex items-center gap-3">
               {!editing ? (
@@ -428,7 +416,7 @@ function CommentItem({
                   type="button"
                   aria-expanded={replying}
                   onClick={() => setReplying((v) => !v)}
-                  className="text-xs font-medium text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg"
                 >
                   Reply
                 </button>
@@ -439,7 +427,7 @@ function CommentItem({
                     <button
                       type="button"
                       onClick={startEdit}
-                      className="text-xs font-medium text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg"
                     >
                       Edit
                     </button>
@@ -448,7 +436,7 @@ function CommentItem({
                     type="button"
                     disabled={busy}
                     onClick={() => void remove()}
-                    className="text-xs font-medium text-zinc-500 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-red-400"
+                    className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-danger disabled:opacity-60"
                   >
                     Delete
                   </button>
@@ -463,7 +451,7 @@ function CommentItem({
                       disabled={muting}
                       aria-label={`Mute instance ${comment.author_domain}`}
                       onClick={() => void muteInstance()}
-                      className="text-xs font-medium text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
                     >
                       {muting ? "Muting…" : "Mute instance"}
                     </button>
@@ -476,7 +464,7 @@ function CommentItem({
                     type="button"
                     disabled={muting}
                     onClick={() => void mute()}
-                    className="text-xs font-medium text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
                   >
                     {muting ? "Muting…" : "Mute"}
                   </button>
@@ -486,7 +474,7 @@ function CommentItem({
                     type="button"
                     disabled={blocking || blocked}
                     onClick={() => void block()}
-                    className="text-xs font-medium text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
                   >
                     {blocked ? "Blocked" : blocking ? "Blocking…" : "Block"}
                   </button>
@@ -504,36 +492,25 @@ function CommentItem({
                 void saveEdit();
               }}
             >
-              <textarea
+              <Textarea
                 aria-label="Edit comment"
                 rows={3}
                 maxLength={MAX_COMMENT_LEN}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                error={editError ?? undefined}
               />
-              {editError ? (
-                <p className="text-sm text-red-600 dark:text-red-400">{editError}</p>
-              ) : null}
               <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditing(false)}
-                  className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                >
+                <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
                   Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving || draft.trim() === ""}
-                  className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-                >
+                </Button>
+                <Button type="submit" size="sm" disabled={saving || draft.trim() === ""}>
                   {saving ? "Saving…" : "Save"}
-                </button>
+                </Button>
               </div>
             </form>
           ) : (
-            <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">
               {comment.body}
             </p>
           )}
@@ -542,7 +519,7 @@ function CommentItem({
 
       {/* Inline reply composer / sign-in prompt, aligned under the comment body. */}
       {replying ? (
-        <div className="ml-11">
+        <div className="ml-[46px]">
           {status === "authed" ? (
             <ReplyComposer
               videoId={videoId}
@@ -551,10 +528,10 @@ function CommentItem({
               onCancel={() => setReplying(false)}
             />
           ) : (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-sm text-fg-muted">
               <Link
                 href="/login"
-                className="font-medium text-zinc-900 underline hover:no-underline dark:text-zinc-100"
+                className="focus-ring rounded font-semibold text-fg underline hover:no-underline"
               >
                 Sign in
               </Link>{" "}
@@ -566,13 +543,13 @@ function CommentItem({
 
       {/* Flattened replies (one visual level, PeerTube-style). */}
       {replies.length > 0 ? (
-        <div className="ml-11 flex flex-col gap-3">
-          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+        <div className="ml-[46px] flex flex-col gap-3">
+          <p className="text-xs font-semibold text-fg-muted">
             {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
           </p>
           <ul
             aria-label="Replies"
-            className="flex flex-col gap-3 border-l border-zinc-200 pl-4 dark:border-zinc-800"
+            className="flex flex-col gap-4 border-l-2 border-border-subtle pl-4"
           >
             {replies.map((r) => (
               <CommentItem

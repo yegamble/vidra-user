@@ -82,8 +82,8 @@
   --danger-fg: #ffffff;
   --danger-surface: light-dark(#fef2f2, #450a0a);
   --danger-border: light-dark(#fecaca, #7f1d1d);
-  --success: light-dark(#15803d, #22c55e);
-  --warning: light-dark(#b45309, #f59e0b);
+  --success: light-dark(#166534, #22c55e);
+  --warning: light-dark(#92400e, #f59e0b);
 
   /* the LIVE pulse dot — Apple systemRed, same in both schemes (sits on media) */
   --live: #ff453a;

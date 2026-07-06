@@ -49,7 +49,10 @@ export function ConversationView({
         title="Sign in to see this conversation"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link
+              href="/login"
+              className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
+            >
               Sign in
             </Link>{" "}
             to read and send direct messages.
@@ -131,14 +134,14 @@ function Thread({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5 border-b border-border-subtle pb-3">
         <Link
           href="/messages"
-          className="text-sm text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-100"
+          className="focus-ring shrink-0 rounded-full text-sm font-medium text-fg-muted transition-colors hover:text-fg"
         >
           ← Messages
         </Link>
-        <h1 className="truncate text-xl font-semibold tracking-tight">
+        <h1 className="truncate text-xl font-bold tracking-tight text-fg">
           {encrypted ? "Encrypted conversation" : otherName}
         </h1>
       </div>
@@ -201,7 +204,7 @@ function MessageList({
 
   if (messages.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="py-8 text-center text-sm text-fg-muted">
         No messages yet. Say hello.
       </p>
     );
@@ -217,17 +220,17 @@ function MessageList({
   const seenIndex = lastMineIndex >= 0 && peerReadIndex >= lastMineIndex ? lastMineIndex : -1;
 
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col gap-2.5">
       {messages.map((m, i) => {
         const mine = m.sender_id === meId;
         return (
           <li key={m.id} className={"flex flex-col " + (mine ? "items-end" : "items-start")}>
             <div
               className={
-                "max-w-[75%] rounded-2xl px-3 py-2 text-sm " +
+                "max-w-[78%] rounded-[18px] px-3.5 py-2.5 text-[14.5px] leading-normal " +
                 (mine
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100")
+                  ? "rounded-br-md bg-accent text-accent-fg"
+                  : "rounded-bl-md bg-surface-muted text-fg")
               }
             >
               {m.deleted ? (
@@ -242,7 +245,7 @@ function MessageList({
               <span
                 className={
                   "mt-1 block text-right text-[10px] " +
-                  (mine ? "text-zinc-300 dark:text-zinc-500" : "text-zinc-500 dark:text-zinc-400")
+                  (mine ? "text-accent-fg/70" : "text-fg-muted")
                 }
               >
                 {relativeTime(m.created_at)}
@@ -252,7 +255,7 @@ function MessageList({
               <MessageControls message={m} mine={mine} onDeleted={onDeleted} />
             ) : null}
             {i === seenIndex ? (
-              <span className="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">Seen</span>
+              <span className="mt-0.5 text-[10px] text-fg-muted">Seen</span>
             ) : null}
           </li>
         );
@@ -298,11 +301,11 @@ function MessageControls({
           onClick={() => void del()}
           disabled={deleting}
           aria-label="Delete this message"
-          className="text-[11px] font-medium text-zinc-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-500 dark:hover:text-red-400"
+          className="focus-ring rounded text-[11px] font-medium text-fg-muted transition-colors hover:text-danger disabled:opacity-60"
         >
           {deleting ? "Deleting…" : "Delete"}
         </button>
-        {error ? <span className="text-[11px] text-red-600 dark:text-red-400">{error}</span> : null}
+        {error ? <span className="text-[11px] text-danger">{error}</span> : null}
       </span>
     );
   }
@@ -424,23 +427,23 @@ function Composer({
             <li
               key={p.localId}
               className={
-                "flex items-center gap-2 rounded-md border px-2 py-1 text-xs " +
+                "flex items-center gap-2 rounded-full border px-3 py-1 text-xs " +
                 (p.status === "error"
-                  ? "border-red-300 text-red-700 dark:border-red-800 dark:text-red-300"
-                  : "border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-200")
+                  ? "border-danger-border bg-danger-surface text-danger"
+                  : "border-border text-fg")
               }
             >
               <span className="max-w-[10rem] truncate font-medium">{p.filename}</span>
-              <span className="text-zinc-400 dark:text-zinc-500">{formatBytes(p.size)}</span>
-              {p.status === "uploading" ? (
-                <span className="text-zinc-400 dark:text-zinc-500">Uploading…</span>
-              ) : null}
+              <span className={p.status === "error" ? "" : "text-fg-muted"}>
+                {formatBytes(p.size)}
+              </span>
+              {p.status === "uploading" ? <span className="text-fg-muted">Uploading…</span> : null}
               {p.status === "error" ? <span>{p.error}</span> : null}
               <button
                 type="button"
                 onClick={() => removePending(p.localId)}
                 aria-label={`Remove attachment ${p.filename}`}
-                className="text-zinc-400 hover:text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-500 dark:hover:text-zinc-200"
+                className="focus-ring rounded-full text-fg-muted transition-colors hover:text-fg"
               >
                 ✕
               </button>
@@ -448,17 +451,8 @@ function Composer({
           ))}
         </ul>
       ) : null}
-      <textarea
-        aria-label="Write a message"
-        placeholder="Write a message…"
-        rows={2}
-        maxLength={MAX_MESSAGE_LEN}
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-      />
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-      <div className="flex items-center justify-between gap-2">
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      <div className="flex items-end gap-2.5">
         <input
           ref={fileInputRef}
           type="file"
@@ -472,7 +466,7 @@ function Composer({
           onClick={() => fileInputRef.current?.click()}
           disabled={pending.length >= MAX_ATTACHMENTS}
           aria-label="Attach a file"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-zinc-300 text-zinc-600 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-muted text-fg-muted transition-colors hover:text-fg disabled:opacity-50"
         >
           <svg
             aria-hidden
@@ -487,10 +481,19 @@ function Composer({
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
           </svg>
         </button>
+        <textarea
+          aria-label="Write a message"
+          placeholder="Write a message…"
+          rows={2}
+          maxLength={MAX_MESSAGE_LEN}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          className="focus-ring w-full min-w-0 flex-1 resize-none rounded-[22px] bg-surface-muted px-4 py-2.5 text-[14.5px] text-fg placeholder:text-fg-muted"
+        />
         <button
           type="submit"
           disabled={!canSend}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          className="focus-ring h-11 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
         >
           {busy ? "Sending…" : "Send"}
         </button>

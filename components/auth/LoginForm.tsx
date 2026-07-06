@@ -137,7 +137,7 @@ export function LoginForm({
   const errorBanner = displayError ? (
     <p
       role="alert"
-      className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+      className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
     >
       {displayError}
     </p>
@@ -153,9 +153,24 @@ export function LoginForm({
         }}
         className="flex flex-col gap-4"
       >
-        <div className="flex flex-col gap-1">
-          <h2 className="text-base font-semibold">Two-factor authentication</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <div className="flex flex-col gap-1 text-center">
+          <div
+            aria-hidden
+            className="mb-2 flex h-13 w-13 items-center justify-center self-center rounded-full bg-surface-muted"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              className="h-5.5 w-5.5 text-fg"
+            >
+              <rect x="4" y="11" width="16" height="10" rx="2" />
+              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+            </svg>
+          </div>
+          <h2 className="text-base font-semibold tracking-tight">Two-factor authentication</h2>
+          <p className="text-sm text-fg-muted">
             Enter the 6-digit code from your authenticator app, or one of your recovery codes.
           </p>
         </div>
@@ -174,7 +189,7 @@ export function LoginForm({
           onChange={(e) => setCode(e.target.value)}
         />
 
-        <Button type="submit" className="w-full" disabled={submitting || code.trim() === ""}>
+        <Button type="submit" size="lg" className="w-full" disabled={submitting || code.trim() === ""}>
           {submitting ? "Verifying…" : "Verify code"}
         </Button>
 
@@ -187,7 +202,7 @@ export function LoginForm({
             setCode("");
             setError(null);
           }}
-          className="self-start text-sm text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="focus-ring self-center rounded-sm text-sm font-semibold text-fg hover:underline"
         >
           Back to sign in
         </button>
@@ -230,21 +245,21 @@ export function LoginForm({
         />
         <Link
           href="/reset-password"
-          className="self-start text-sm text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="focus-ring self-start rounded-sm text-[13px] font-semibold text-fg-muted hover:text-fg"
         >
           Forgot your password?
         </Link>
       </div>
 
-      <Button type="submit" className="w-full" disabled={submitting}>
+      <Button type="submit" size="lg" className="w-full" disabled={submitting}>
         {submitting ? "Signing in…" : "Sign in"}
       </Button>
 
       <OAuthButtons providers={providers} returnTo="/login?oauth=1" />
 
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-center text-sm text-fg-muted">
         No account?{" "}
-        <Link href="/signup" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+        <Link href="/signup" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
           Create one
         </Link>
       </p>

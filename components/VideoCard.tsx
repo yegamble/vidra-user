@@ -41,12 +41,12 @@ export function VideoCard({
   // The card is a <div>, not a single <Link>, so the channel can be its own
   // (sibling, non-nested) link to /channels/{handle}.
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1">
       <Link
         href={isRemote ? `/remote/${video.id}` : `/videos/${video.id}`}
-        className="group flex flex-col gap-2 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+        className="focus-ring group flex flex-col gap-2 rounded-2xl"
       >
-        <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
+        <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-surface-muted">
           {video.has_thumbnail ? (
             // Backend-served image; a plain <img> avoids next/image remote config.
             // eslint-disable-next-line @next/next/no-img-element
@@ -57,33 +57,33 @@ export function VideoCard({
               className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-zinc-600 dark:text-zinc-400">
+            <div className="flex h-full w-full items-center justify-center text-xs text-fg-muted">
               No preview
             </div>
           )}
           {duration !== null ? (
-            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
+            <span className="absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-white">
               {formatDuration(duration)}
             </span>
           ) : null}
           {progressPct !== null ? (
-            <div aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-black/40">
+            <div aria-hidden className="absolute inset-x-0 bottom-0 h-[3px]">
               <div
                 data-resume-progress={String(progressPct)}
                 style={{ width: `${progressPct}%` }}
-                className="h-full bg-red-600"
+                className="h-full bg-white"
               />
             </div>
           ) : null}
         </div>
-        <h3 className="line-clamp-2 text-sm font-medium text-zinc-900 group-hover:text-zinc-600 dark:text-zinc-100 dark:group-hover:text-zinc-300">
+        <h3 className="line-clamp-2 text-sm font-semibold leading-snug tracking-[-0.01em] text-fg">
           {video.title}
         </h3>
       </Link>
       {isRemote && video.domain ? (
         <span className="flex max-w-full flex-wrap items-center gap-1">
           <span
-            className="inline-flex w-fit max-w-full items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+            className="inline-flex w-fit max-w-full items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted"
             title={`Federated video from ${video.domain}`}
           >
             <svg
@@ -108,20 +108,20 @@ export function VideoCard({
       {video.channel_handle ? (
         isRemote ? (
           // Remote channel identity ("name@domain") — not a local channel route.
-          <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="truncate text-[13px] text-fg-muted">
             {video.channel_display_name || video.channel_handle}
           </span>
         ) : (
           <Link
             href={`/channels/${video.channel_handle}`}
-            className="text-xs text-zinc-500 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-200"
+            className="focus-ring w-fit rounded-sm text-[13px] text-fg-muted transition-colors hover:text-fg"
           >
             {video.channel_display_name || video.channel_handle}
           </Link>
         )
       ) : null}
       {meta.length > 0 ? (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{meta.join(" · ")}</p>
+        <p className="text-[13px] tabular-nums text-fg-muted">{meta.join(" · ")}</p>
       ) : null}
     </div>
   );

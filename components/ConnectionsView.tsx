@@ -18,13 +18,13 @@ import { relativeTime } from "@/lib/format";
 const APP_PASSWORD_HELP_URL = "https://bsky.app/settings/app-passwords";
 
 const INPUT =
-  "rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900";
+  "focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted disabled:opacity-60";
 const PRIMARY_BTN =
-  "self-start rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300";
+  "focus-ring self-start rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60";
 const SECONDARY_BTN =
-  "rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800";
+  "focus-ring rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60";
 const DANGER_BTN =
-  "rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30";
+  "focus-ring rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger-surface disabled:opacity-60";
 
 type Phase = "loading" | "error" | "disabled" | "ready";
 
@@ -49,7 +49,7 @@ export function ConnectionsView() {
         title="Sign in to manage connected accounts"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               Sign in
             </Link>{" "}
             to connect a Bluesky account for cross-posting.
@@ -98,12 +98,12 @@ function BlueskySection() {
   }
 
   return (
-    <section className="flex flex-col gap-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+    <section className="flex flex-col gap-4 rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Bluesky</h2>
+        <h2 className="text-base font-semibold tracking-tight text-fg">Bluesky</h2>
         <ProtocolBadge protocol="atproto" />
       </div>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-sm text-fg-muted">
         Connect a Bluesky account so Vidra can announce your newly published{" "}
         <span className="font-medium">public</span> videos there. Cross-posting is outbound only —
         Vidra never reads your Bluesky feed, and posting happens automatically on publish (there is
@@ -118,7 +118,7 @@ function BlueskySection() {
         <ErrorState message="Could not load your Bluesky connection." onRetry={retry} />
       ) : phase === "disabled" ? (
         <p
-          className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400"
+          className="rounded-xl bg-surface-muted px-3.5 py-2.5 text-sm text-fg-muted"
           data-testid="atproto-disabled"
         >
           Bluesky cross-posting isn&rsquo;t enabled on this instance. Ask your administrator to turn
@@ -164,15 +164,15 @@ function mapLinkError(err: unknown): string {
 // auto-post re-auth confirm).
 function AppPasswordHelp() {
   return (
-    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-      Use a Bluesky <span className="font-semibold text-zinc-700 dark:text-zinc-300">app password</span> —{" "}
+    <p className="text-xs text-fg-muted">
+      Use a Bluesky <span className="font-semibold text-fg">app password</span> —{" "}
       <span className="font-medium">not your main password</span>. Create one under Bluesky
       Settings &rarr; App Passwords.{" "}
       <a
         href={APP_PASSWORD_HELP_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="underline hover:text-zinc-700 dark:hover:text-zinc-200"
+        className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2"
       >
         Create an app password
       </a>
@@ -249,14 +249,14 @@ function BlueskyConnect({
       {error ? (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
         >
           {error}
         </p>
       ) : null}
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="atproto-handle" className="text-sm font-medium">
+        <label htmlFor="atproto-handle" className="text-sm font-medium text-fg">
           Bluesky handle
         </label>
         <input
@@ -276,7 +276,7 @@ function BlueskyConnect({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="atproto-app-password" className="text-sm font-medium">
+        <label htmlFor="atproto-app-password" className="text-sm font-medium text-fg">
           App password
         </label>
         <input
@@ -304,21 +304,21 @@ function BlueskyConnect({
           label="Automatically post new public videos to Bluesky"
         />
         <div className="flex flex-col">
-          <span className="text-sm font-medium">Auto-post new public videos</span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-sm font-medium text-fg">Auto-post new public videos</span>
+          <span className="text-xs text-fg-muted">
             When on, each new public video you publish is announced on Bluesky. Unlisted and private
             videos are never posted.
           </span>
         </div>
       </div>
 
-      <details className="text-sm text-zinc-600 dark:text-zinc-400">
-        <summary className="cursor-pointer select-none font-medium text-zinc-700 dark:text-zinc-300">
+      <details className="text-sm text-fg-muted">
+        <summary className="cursor-pointer select-none font-medium text-fg">
           Advanced: custom PDS
         </summary>
         <div className="mt-2 flex flex-col gap-1">
-          <label htmlFor="atproto-pds" className="text-sm font-medium">
-            PDS URL <span className="font-normal text-zinc-500 dark:text-zinc-400">(optional)</span>
+          <label htmlFor="atproto-pds" className="text-sm font-medium text-fg">
+            PDS URL <span className="font-normal text-fg-muted">(optional)</span>
           </label>
           <input
             id="atproto-pds"
@@ -334,7 +334,7 @@ function BlueskyConnect({
             }}
             className={INPUT}
           />
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-xs text-fg-muted">
             Leave blank for the default (bsky.social). Must be an https, public address.
           </span>
         </div>
@@ -381,8 +381,8 @@ function BlueskyStatus({
   if (reconnecting) {
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Reconnect <span className="font-medium">@{account.handle}</span> or link a different
+        <p className="text-sm text-fg-muted">
+          Reconnect <span className="font-medium text-fg">@{account.handle}</span> or link a different
           account. Enter your app password to confirm.
         </p>
         <BlueskyConnect
@@ -402,16 +402,16 @@ function BlueskyStatus({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <div className="flex flex-col gap-2 rounded-2xl bg-surface-muted p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          <span className="text-sm font-semibold text-fg">
             @{account.handle}
           </span>
-          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:bg-green-950/50 dark:text-green-300">
+          <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
             Connected
           </span>
         </div>
-        <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+        <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs text-fg-muted">
           <dt className="font-medium">DID</dt>
           <dd className="truncate font-mono" title={account.did}>
             {account.did}
@@ -503,8 +503,8 @@ function AutoPostControl({
           label="Automatically post new public videos to Bluesky"
         />
         <div className="flex flex-col">
-          <span className="text-sm font-medium">Auto-post new public videos</span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-sm font-medium text-fg">Auto-post new public videos</span>
+          <span className="text-xs text-fg-muted">
             {account.auto_post
               ? "On — new public videos are announced on Bluesky."
               : "Off — nothing is posted automatically."}
@@ -513,9 +513,9 @@ function AutoPostControl({
       </div>
 
       {dirty ? (
-        <div className="flex max-w-md flex-col gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+        <div className="flex max-w-md flex-col gap-2 rounded-2xl bg-surface-muted p-4">
           <div className="flex flex-col gap-1">
-            <label htmlFor="atproto-autopost-password" className="text-sm font-medium">
+            <label htmlFor="atproto-autopost-password" className="text-sm font-medium text-fg">
               Confirm your app password to {autoPost ? "turn on" : "turn off"} auto-posting
             </label>
             <input
@@ -533,7 +533,7 @@ function AutoPostControl({
             <AppPasswordHelp />
           </div>
           {error ? (
-            <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+            <p role="alert" className="text-xs text-danger">
               {error}
             </p>
           ) : null}
@@ -592,7 +592,7 @@ function UnlinkControl({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-zinc-600 dark:text-zinc-400">
+        <span className="text-sm text-fg-muted">
           Unlink Bluesky? Auto-posting stops immediately.
         </span>
         <button type="button" disabled={busy} onClick={() => void unlink()} className={DANGER_BTN}>
@@ -611,7 +611,7 @@ function UnlinkControl({
         </button>
       </div>
       {error ? (
-        <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+        <p role="alert" className="text-xs text-danger">
           {error}
         </p>
       ) : null}

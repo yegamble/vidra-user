@@ -74,7 +74,7 @@ export function PlayerMenu<T extends string | number>({
             setOpen(true);
           }
         }}
-        className="flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         {icon}
         <span>{buttonLabel}</span>
@@ -90,7 +90,7 @@ export function PlayerMenu<T extends string | number>({
               buttonRef.current?.focus();
             }
           }}
-          className="absolute bottom-full left-0 z-20 mb-2 w-36 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
+          className="absolute bottom-full left-0 z-20 mb-2 w-36 rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
         >
           {items.map((item, i) => (
             <button
@@ -112,7 +112,7 @@ export function PlayerMenu<T extends string | number>({
                   moveFocus(i, -1);
                 }
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-muted"
             >
               <span aria-hidden="true" className="w-4">
                 {item.value === current ? "✓" : ""}

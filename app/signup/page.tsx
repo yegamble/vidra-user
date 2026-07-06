@@ -10,8 +10,8 @@ export default async function SignupPage({
 }) {
   const sp = await searchParams;
   return (
-    <main className="mx-auto w-full max-w-sm flex-1 px-4 py-12">
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Create your account</h1>
+    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 py-12">
+      <h1 className="mb-8 text-center text-3xl font-bold tracking-[-0.05em]">Create your account</h1>
       <SignupForm oauthPending={sp.oauth === "1"} oauthError={sp.oauth_error ?? ""} />
     </main>
   );

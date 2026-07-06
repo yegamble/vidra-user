@@ -88,9 +88,9 @@ export function ProfileImageManager({
   return (
     <section
       aria-label={label}
-      className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
+      className="flex flex-col gap-2.5 rounded-2xl border border-border-subtle bg-surface p-4"
     >
-      <p className="text-sm font-medium">{label}</p>
+      <p className="text-sm font-semibold text-fg">{label}</p>
       {kind === "avatar" ? (
         <Avatar src={url} name={name} alt={url ? `Current ${lowerLabel}` : ""} className="h-16 w-16 text-xl" />
       ) : url ? (
@@ -98,10 +98,10 @@ export function ProfileImageManager({
         <img
           src={url}
           alt={`Current ${lowerLabel}`}
-          className="aspect-[4/1] w-full max-w-md rounded bg-zinc-100 object-cover dark:bg-zinc-800"
+          className="aspect-[4/1] w-full max-w-md rounded-xl bg-surface-muted object-cover"
         />
       ) : (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">No banner yet.</p>
+        <p className="text-xs text-fg-muted">No banner yet.</p>
       )}
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -114,7 +114,7 @@ export function ProfileImageManager({
             const f = e.target.files?.[0];
             if (f) void doUpload(f);
           }}
-          className="text-sm"
+          className="focus-ring rounded-sm text-sm text-fg-muted file:mr-3 file:rounded-full file:border file:border-border file:bg-surface file:px-3.5 file:py-1.5 file:text-[13px] file:font-semibold file:text-fg hover:file:bg-surface-muted disabled:opacity-60"
         />
         {shown ? (
           <button
@@ -122,15 +122,15 @@ export function ProfileImageManager({
             aria-label={`Remove ${lowerLabel}`}
             disabled={busy}
             onClick={() => void doRemove()}
-            className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-red-400"
+            className="focus-ring rounded-full border border-border bg-surface px-3 py-1 text-xs font-semibold text-fg-muted transition-colors hover:text-danger disabled:opacity-60"
           >
             Remove
           </button>
         ) : null}
       </div>
-      {busy ? <p className="text-xs text-zinc-500 dark:text-zinc-400">Working…</p> : null}
+      {busy ? <p className="text-xs text-fg-muted">Working…</p> : null}
       {error ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       ) : null}

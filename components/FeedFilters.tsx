@@ -39,11 +39,11 @@ export function FeedFilters({ sort, filters }: { sort: FeedSort; filters: Filter
   }
 
   const selectClass =
-    "rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200";
+    "focus-ring rounded-xl border border-border bg-surface px-3 py-1.5 text-[13px] font-semibold text-fg disabled:opacity-60";
 
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter videos">
-      <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-300">
+      <label className="flex items-center gap-1.5 text-[13px] text-fg-muted">
         <span>Category</span>
         <select
           value={filters.category ?? ""}
@@ -60,7 +60,7 @@ export function FeedFilters({ sort, filters }: { sort: FeedSort; filters: Filter
           ))}
         </select>
       </label>
-      <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-300">
+      <label className="flex items-center gap-1.5 text-[13px] text-fg-muted">
         <span>Language</span>
         <select
           value={filters.language ?? ""}
@@ -78,12 +78,12 @@ export function FeedFilters({ sort, filters }: { sort: FeedSort; filters: Filter
         </select>
       </label>
       {filters.tag ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 py-1 pl-3 pr-1 text-sm text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+        <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted py-1 pl-3 pr-1 text-[13px] font-semibold text-fg">
           <span className="sr-only">Filtered by tag </span>#{filters.tag}
           <Link
             href={feedHref(sort, { ...filters, tag: undefined })}
             aria-label={`Remove tag filter ${filters.tag}`}
-            className="flex h-5 w-5 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+            className="focus-ring flex h-6 w-6 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
           >
             <svg
               aria-hidden

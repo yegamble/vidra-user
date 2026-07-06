@@ -3,17 +3,13 @@
 import { useEffect, useState } from "react";
 
 import { DonationBadge } from "@/components/DonationBadge";
-import { Modal } from "@/components/ui";
+import { Button, Modal } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { DonationAddress } from "@/lib/api";
 import { DONATION_NETWORKS, NETWORK_META } from "@/lib/donation-address";
 
-const PILL =
-  "flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800";
-const COPY_BUTTON =
-  "shrink-0 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800";
 const FIELD =
-  "min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 font-mono text-xs text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+  "focus-ring min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2 font-mono text-xs text-fg";
 
 /** A public donation-address source: a channel (by handle) or a user (by id). */
 export type DonateSource =
@@ -85,10 +81,10 @@ export function DonateButton({
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={PILL}>
+      <Button variant="secondary" onClick={() => setOpen(true)} className="gap-1.5">
         <HeartIcon />
         <span>Donate</span>
-      </button>
+      </Button>
       {open ? (
         <DonateDialog addresses={addresses} name={name} onClose={() => setOpen(false)} />
       ) : null}
@@ -137,13 +133,13 @@ function DonateDialog({
       <div className="flex flex-col gap-4">
         {groups.map((group) => (
           <div key={group.network} className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            <h3 className="text-[15px] font-bold tracking-tight text-fg">
               {NETWORK_META[group.network].label}
             </h3>
             {group.items.map((addr) => (
               <div key={addr.id} className="flex flex-col gap-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="truncate text-xs text-fg-muted">
                     {addr.label || NETWORK_META[addr.network].ticker}
                   </span>
                   <DonationBadge verified={addr.verified} />
@@ -158,16 +154,17 @@ function DonateDialog({
                     onFocus={(e) => e.currentTarget.select()}
                     className={FIELD}
                   />
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     aria-label={`Copy ${NETWORK_META[addr.network].label} address${
                       addr.label ? ` (${addr.label})` : ""
                     }`}
                     onClick={() => void copy(addr.id, addr.address)}
-                    className={COPY_BUTTON}
+                    className="shrink-0"
                   >
                     {copiedId === addr.id ? "Copied" : "Copy"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -175,12 +172,12 @@ function DonateDialog({
         ))}
 
         {copyFailed ? (
-          <p className="text-xs text-red-600 dark:text-red-400">
+          <p className="text-xs text-danger">
             Couldn&apos;t copy automatically — select the address and copy it manually.
           </p>
         ) : null}
 
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+        <p className="rounded-xl bg-warning/15 px-3.5 py-2.5 text-xs leading-relaxed text-warning">
           These addresses are provided by {name} and shown as-is — Vidra does not hold funds or
           process payments. Never send crypto you can&apos;t afford to lose, and always
           double-check the address before sending.

@@ -12,13 +12,11 @@ const DESCRIPTIONS: Record<Exclude<VideoPrivacy, "public">, string> = {
 export function PrivacyBadge({ privacy }: { privacy: VideoPrivacy }) {
   if (privacy === "public") return null;
   const styles =
-    privacy === "private"
-      ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
-      : "bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200";
+    privacy === "private" ? "bg-warning/15 text-warning" : "bg-surface-muted text-fg-muted";
   return (
     <span
       title={DESCRIPTIONS[privacy]}
-      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${styles}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${styles}`}
     >
       {/* Minified inline lock / link icon */}
       <svg

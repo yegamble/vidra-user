@@ -4,9 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { QualityMenu } from "@/components/QualityMenu";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
+import { Button, EmptyState, ErrorState, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import type { LiveStream } from "@/lib/api";
 import { useLivePlayback } from "@/lib/use-live-playback";
@@ -110,14 +108,16 @@ export function LiveWatchView({ id }: { id: string }) {
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {stream.state === "live" ? <LiveBadge /> : null}
-          <h1 className="text-xl font-semibold tracking-tight">{stream.title}</h1>
+          <h1 className="text-[17px] font-bold leading-snug tracking-[-0.015em] sm:text-[19px]">
+            {stream.title}
+          </h1>
         </div>
         {channelName ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-[13px] text-fg-muted">
             {stream.channel_handle ? (
               <Link
                 href={`/channels/${encodeURIComponent(stream.channel_handle)}`}
-                className="font-medium text-zinc-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-200"
+                className="focus-ring rounded font-semibold text-fg hover:underline"
               >
                 {channelName}
               </Link>
@@ -127,7 +127,7 @@ export function LiveWatchView({ id }: { id: string }) {
           </p>
         ) : null}
         {stream.description ? (
-          <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
             {stream.description}
           </p>
         ) : null}
@@ -160,7 +160,7 @@ function LivePlayer({ stream }: { stream: LiveStream }) {
         autoPlay
         playsInline
         aria-label={`Live: ${stream.title}`}
-        className="aspect-video w-full rounded-lg bg-black"
+        className="aspect-video w-full rounded-2xl bg-black"
         src={playback.src}
       >
         Your browser does not support the video tag.
@@ -188,17 +188,24 @@ function StreamState({
   onRefresh?: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-6 py-16 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
-      <p className="text-lg font-medium text-zinc-700 dark:text-zinc-200">{title}</p>
-      <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">{message}</p>
+    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-surface-muted px-6 py-16 text-center">
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        className="h-5 w-5 text-fg-muted"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
+      </svg>
+      <p className="text-[15px] font-bold tracking-tight text-fg">{title}</p>
+      <p className="max-w-sm text-[13px] leading-relaxed text-fg-muted">{message}</p>
       {onRefresh ? (
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
+        <Button variant="secondary" size="sm" onClick={onRefresh}>
           Refresh
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -206,8 +213,11 @@ function StreamState({
 
 function LiveBadge() {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded bg-red-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-red-700 dark:bg-red-950/40 dark:text-red-300">
-      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-red-600 dark:bg-red-400" />
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/15 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.04em] text-danger">
+      <span
+        aria-hidden="true"
+        className="h-1.5 w-1.5 rounded-full bg-live animate-[live-pulse_1.6s_ease-in-out_infinite]"
+      />
       Live
     </span>
   );

@@ -24,10 +24,13 @@ const TITLE: Record<Protocol, string> = {
   local: "Local-only content — not federated to other instances",
 };
 
+// Monochrome by design (Apple HIG deference): the protocol is metadata, not
+// status, so every variant shares the neutral chip tone — the glyph + label
+// carry the distinction.
 const TONE: Record<Protocol, string> = {
-  activitypub: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300",
-  atproto: "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-  local: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+  activitypub: "bg-surface-muted text-fg-muted",
+  atproto: "bg-surface-muted text-fg-muted",
+  local: "bg-surface-muted text-fg-muted",
 };
 
 function Glyph({ protocol }: { protocol: Protocol }) {

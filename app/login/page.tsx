@@ -11,8 +11,8 @@ export default async function LoginPage({
 }) {
   const sp = await searchParams;
   return (
-    <main className="mx-auto w-full max-w-sm flex-1 px-4 py-12">
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Sign in</h1>
+    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 py-12">
+      <h1 className="mb-8 text-center text-3xl font-bold tracking-[-0.05em]">Sign in</h1>
       <LoginForm oauthPending={sp.oauth === "1"} oauthError={sp.oauth_error ?? ""} />
     </main>
   );

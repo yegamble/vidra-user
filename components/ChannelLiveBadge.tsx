@@ -47,12 +47,17 @@ export function ChannelLiveBadge({
 
   if (!isOwner || !live) return null;
 
+  // Rendered in the channel header (a themed surface, not on media), so this is
+  // a token pill with the pulsing live dot — not the white-on-black media pill.
   return (
     <Link
       href={`/live/${encodeURIComponent(live.id)}`}
-      className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 text-sm font-semibold text-white hover:bg-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+      className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-border px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
     >
-      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-white" />
+      <span
+        aria-hidden="true"
+        className="h-1.5 w-1.5 rounded-full bg-live animate-[live-pulse_1.6s_ease-in-out_infinite]"
+      />
       Live now
       <span className="sr-only">: {live.title}</span>
     </Link>

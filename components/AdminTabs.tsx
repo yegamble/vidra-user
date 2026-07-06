@@ -26,24 +26,26 @@ export function AdminTabs() {
   if (user?.role !== "admin") return null;
 
   return (
-    <nav className="mb-6 flex gap-2" aria-label="Admin sections">
-      {TABS.map((tab) => {
-        const active = pathname === tab.href;
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            aria-current={active ? "page" : undefined}
-            className={
-              active
-                ? "rounded-full bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            }
-          >
-            {tab.label}
-          </Link>
-        );
-      })}
+    <nav className="-mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0" aria-label="Admin sections">
+      <div className="flex min-w-max items-center gap-1 border-b border-border-subtle">
+        {TABS.map((tab) => {
+          const active = pathname === tab.href;
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              aria-current={active ? "page" : undefined}
+              className={
+                active
+                  ? "focus-ring whitespace-nowrap border-b-2 border-accent px-3 py-3 text-sm font-semibold text-fg"
+                  : "focus-ring whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-medium text-fg-muted transition-colors hover:text-fg"
+              }
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

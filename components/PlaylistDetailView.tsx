@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { PlaylistThumbnailManager } from "@/components/PlaylistThumbnailManager";
+import { Button, Input, Select, Textarea } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -140,31 +141,27 @@ export function PlaylistDetailView({ id }: { id: string }) {
       ) : (
         <header className="flex flex-col gap-2">
           <div className="flex items-start justify-between gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{playlist.title}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{playlist.title}</h1>
             {isOwner ? (
               <div className="flex shrink-0 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditing(true)}
-                  className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                >
+                <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
                   Edit
-                </button>
+                </Button>
                 <button
                   type="button"
                   onClick={() => void deletePlaylist()}
-                  className="rounded-full border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40"
+                  className="focus-ring rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger-surface"
                 >
                   Delete playlist
                 </button>
               </div>
             ) : null}
           </div>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-[13px] text-fg-muted tabular-nums">
             {playlist.video_count} {playlist.video_count === 1 ? "video" : "videos"} · {playlist.visibility}
           </p>
           {playlist.description ? (
-            <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
+            <p className="whitespace-pre-wrap text-sm text-fg">
               {playlist.description}
             </p>
           ) : null}
@@ -197,7 +194,7 @@ export function PlaylistDetailView({ id }: { id: string }) {
                       onClick={() => void moveItem(index, -1)}
                       disabled={reordering || index === 0}
                       aria-label={`Move ${video.title} up`}
-                      className="text-xs font-medium text-zinc-500 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-40 dark:hover:text-zinc-200"
+                      className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-40"
                     >
                       Move up
                     </button>
@@ -206,7 +203,7 @@ export function PlaylistDetailView({ id }: { id: string }) {
                       onClick={() => void moveItem(index, 1)}
                       disabled={reordering || index === playlist.videos.length - 1}
                       aria-label={`Move ${video.title} down`}
-                      className="text-xs font-medium text-zinc-500 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-40 dark:hover:text-zinc-200"
+                      className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-40"
                     >
                       Move down
                     </button>
@@ -215,7 +212,7 @@ export function PlaylistDetailView({ id }: { id: string }) {
                     type="button"
                     onClick={() => void removeItem(video.id)}
                     aria-label={`Remove ${video.title} from playlist`}
-                    className="text-xs font-medium text-zinc-500 hover:text-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:hover:text-zinc-200"
+                    className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
                   >
                     Remove
                   </button>
@@ -267,63 +264,46 @@ function EditPlaylistForm({
 
   return (
     <form
-      className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
+      className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4"
       onSubmit={(e) => {
         e.preventDefault();
         void save();
       }}
     >
-      <h2 className="text-base font-semibold tracking-tight">Edit playlist</h2>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">Title</span>
-        <input
-          aria-label="Playlist title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          maxLength={200}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">Description</span>
-        <textarea
-          aria-label="Playlist description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          maxLength={5000}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">Visibility</span>
-        <select
-          aria-label="Playlist visibility"
-          value={visibility}
-          onChange={(e) => setVisibility(e.target.value as PlaylistVisibility)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        >
-          <option value="private">Private</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="public">Public</option>
-        </select>
-      </label>
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      <h2 className="text-[15px] font-bold tracking-tight">Edit playlist</h2>
+      <Input
+        label="Title"
+        aria-label="Playlist title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        maxLength={200}
+      />
+      <Textarea
+        label="Description"
+        aria-label="Playlist description"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        rows={3}
+        maxLength={5000}
+      />
+      <Select
+        label="Visibility"
+        aria-label="Playlist visibility"
+        value={visibility}
+        onChange={(e) => setVisibility(e.target.value as PlaylistVisibility)}
+      >
+        <option value="private">Private</option>
+        <option value="unlisted">Unlisted</option>
+        <option value="public">Public</option>
+      </Select>
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
       <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
+        <Button variant="secondary" size="sm" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={saving || title.trim() === ""}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
+        </Button>
+        <Button type="submit" size="sm" disabled={saving || title.trim() === ""}>
           {saving ? "Saving…" : "Save"}
-        </button>
+        </Button>
       </div>
     </form>
   );

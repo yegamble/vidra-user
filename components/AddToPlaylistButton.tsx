@@ -23,7 +23,7 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
     return (
       <Link
         href="/login"
-        className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="focus-ring inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         Sign in to save to a playlist
       </Link>
@@ -83,22 +83,22 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
   }
 
   return (
-    <div className="relative">
+    <div className="relative shrink-0">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => void toggle()}
-        className="flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         <span aria-hidden>＋</span>
         <span>Save to playlist</span>
       </button>
       {open ? (
-        <div className="absolute left-0 z-20 mt-2 w-64 rounded-lg border border-zinc-200 bg-white p-2 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="absolute left-0 z-20 mt-2 w-64 rounded-xl border border-border-subtle bg-surface-raised p-2 shadow-lg">
           {playlists === null ? (
-            <p className="px-2 py-1.5 text-sm text-zinc-500">Loading…</p>
+            <p className="px-2 py-1.5 text-sm text-fg-muted">Loading…</p>
           ) : playlists.length === 0 ? (
-            <p className="px-2 py-1.5 text-sm text-zinc-500">No playlists yet — create one below.</p>
+            <p className="px-2 py-1.5 text-sm text-fg-muted">No playlists yet — create one below.</p>
           ) : (
             <ul className="max-h-56 overflow-auto">
               {playlists.map((pl) => (
@@ -108,7 +108,7 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
                     onClick={() => void add(pl.id)}
                     disabled={busy === pl.id}
                     aria-pressed={added.has(pl.id)}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:hover:bg-zinc-800"
+                    className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
                   >
                     <span aria-hidden className="w-4">
                       {added.has(pl.id) ? "✓" : ""}
@@ -121,7 +121,7 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
           )}
           <form
             onSubmit={(e) => void createAndAdd(e)}
-            className="mt-2 flex items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800"
+            className="mt-2 flex items-center gap-2 border-t border-border-subtle pt-2"
           >
             <input
               value={newTitle}
@@ -129,12 +129,12 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
               placeholder="New playlist"
               aria-label="New playlist name"
               maxLength={200}
-              className="min-w-0 flex-1 rounded border border-zinc-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              className="focus-ring min-w-0 flex-1 rounded-xl border border-border bg-surface px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
             />
             <button
               type="submit"
               disabled={creating || newTitle.trim() === ""}
-              className="shrink-0 rounded bg-zinc-900 px-2.5 py-1 text-sm font-medium text-white hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              className="focus-ring shrink-0 rounded-full bg-accent px-3 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-50"
             >
               Create
             </button>

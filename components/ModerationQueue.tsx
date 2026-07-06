@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
 import { useSession } from "@/components/auth/AuthProvider";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -137,8 +138,8 @@ function FilterButton({
       onClick={onClick}
       className={
         active
-          ? "rounded-full bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-          : "rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          ? "focus-ring rounded-full border border-accent bg-accent px-4 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors"
+          : "focus-ring rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted"
       }
     >
       {children}
@@ -147,9 +148,9 @@ function FilterButton({
 }
 
 const STATUS_STYLE: Record<ReportStatus, string> = {
-  open: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  accepted: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  rejected: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  open: "bg-warning/15 text-warning",
+  accepted: "bg-success/15 text-success",
+  rejected: "bg-surface-strong text-fg-muted",
 };
 
 type RowState = "idle" | "submitting";
@@ -231,19 +232,19 @@ function ReportRow({
   }
 
   return (
-    <article className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg-muted">
         <span
-          className={`rounded-full px-2 py-0.5 font-medium capitalize ${STATUS_STYLE[report.status]}`}
+          className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] ${STATUS_STYLE[report.status]}`}
         >
           {report.status}
         </span>
-        <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-600 capitalize dark:bg-zinc-800 dark:text-zinc-300">
+        <span className="rounded-full bg-surface-strong px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted">
           {/* "remote_video" reads as "remote video". */}
           {report.target_type.replace("_", " ")}
         </span>
         <span>
-          by <span className="font-medium text-zinc-700 dark:text-zinc-200">{report.reporter.username}</span>
+          by <span className="font-medium text-fg">{report.reporter.username}</span>
         </span>
         <span aria-hidden>·</span>
         <span>{relativeTime(report.created_at)}</span>
@@ -251,13 +252,13 @@ function ReportRow({
 
       <ReportTarget report={report} />
 
-      <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-        <span className="font-medium">Reason:</span> {report.reason}
+      <p className="mt-2 text-sm text-fg-muted">
+        <span className="font-semibold text-fg">Reason:</span> {report.reason}
       </p>
 
       {report.status !== "open" && report.moderator_note ? (
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          <span className="font-medium">Note:</span> {report.moderator_note}
+        <p className="mt-1 text-[13px] text-fg-muted">
+          <span className="font-semibold text-fg">Note:</span> {report.moderator_note}
         </p>
       ) : null}
 
@@ -266,24 +267,25 @@ function ReportRow({
       {report.status !== "open" && user?.role === "admin" ? (
         <div className="mt-3 flex flex-col gap-1">
           {deleteState === "idle" ? (
-            <button
-              type="button"
+            <Button
+              variant="danger"
+              size="sm"
               aria-label={`Delete this ${report.target_type.replace("_", " ")} report`}
               onClick={() => setDeleteState("confirm")}
-              className="self-start rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+              className="self-start"
             >
               Delete
-            </button>
+            </Button>
           ) : (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-zinc-600 dark:text-zinc-300">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-fg-muted">
                 Permanently delete this report? This cannot be undone.
               </span>
               <button
                 type="button"
                 disabled={deleteState === "deleting"}
                 onClick={() => void hardDelete()}
-                className="font-medium text-red-600 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 dark:text-red-400"
+                className="focus-ring rounded-full font-semibold text-danger transition-colors hover:text-danger/80 disabled:opacity-60"
               >
                 {deleteState === "deleting" ? "Deleting…" : "Confirm"}
               </button>
@@ -291,22 +293,20 @@ function ReportRow({
                 type="button"
                 disabled={deleteState === "deleting"}
                 onClick={() => setDeleteState("idle")}
-                className="font-medium text-zinc-500 hover:text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-200"
+                className="focus-ring rounded-full font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
               >
                 Cancel
               </button>
             </div>
           )}
-          {deleteError ? (
-            <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>
-          ) : null}
+          {deleteError ? <p className="text-sm text-danger">{deleteError}</p> : null}
         </div>
       ) : null}
 
       {report.status === "open" ? (
         <div className="mt-3 flex flex-col gap-2">
           <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-zinc-600 dark:text-zinc-300">
+            <span className="font-medium text-fg-muted">
               Internal note (optional)
             </span>
             <textarea
@@ -315,73 +315,72 @@ function ReportRow({
               maxLength={MAX_NOTE_LEN}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
             />
           </label>
-          {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-          <div className="flex gap-2">
-            <button
-              type="button"
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
               disabled={rowState === "submitting"}
               onClick={() => void resolve("accepted")}
-              className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
             >
               Accept
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={rowState === "submitting"}
               onClick={() => void resolve("rejected")}
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
             >
               Reject
-            </button>
+            </Button>
             {report.target_type === "video" && report.video_id ? (
               blockState === "blocked" ? (
-                <span className="inline-flex items-center gap-1 text-sm text-zinc-600 dark:text-zinc-300">
+                <span className="inline-flex items-center gap-1 text-sm text-fg-muted">
                   Video blocked ·{" "}
                   <Link
                     href="/moderation/blocked"
-                    className="underline hover:text-zinc-900 dark:hover:text-zinc-100"
+                    className="focus-ring rounded-sm underline transition-colors hover:text-fg"
                   >
                     Manage
                   </Link>
                 </span>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="danger"
+                  size="sm"
                   disabled={blockState === "blocking"}
                   onClick={() => void blockVideo(report.video_id as string)}
-                  className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                 >
                   {blockState === "blocking" ? "Blocking…" : "Block video"}
-                </button>
+                </Button>
               )
             ) : null}
             {report.target_type === "remote_video" && report.remote_video_id ? (
               blockState === "blocked" ? (
-                <span className="inline-flex items-center gap-1 text-sm text-zinc-600 dark:text-zinc-300">
+                <span className="inline-flex items-center gap-1 text-sm text-fg-muted">
                   Video blocked ·{" "}
                   <Link
                     href="/moderation/blocked/remote"
-                    className="underline hover:text-zinc-900 dark:hover:text-zinc-100"
+                    className="focus-ring rounded-sm underline transition-colors hover:text-fg"
                   >
                     Manage
                   </Link>
                 </span>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="danger"
+                  size="sm"
                   disabled={blockState === "blocking"}
                   onClick={() => void blockRemoteVideo(report.remote_video_id as string)}
-                  className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                 >
                   {blockState === "blocking" ? "Blocking…" : "Block video"}
-                </button>
+                </Button>
               )
             ) : null}
           </div>
-          {blockError ? <p className="text-sm text-red-600 dark:text-red-400">{blockError}</p> : null}
+          {blockError ? <p className="text-sm text-danger">{blockError}</p> : null}
         </div>
       ) : null}
     </article>
@@ -398,7 +397,7 @@ function ReportTarget({ report }: { report: Report }) {
       <p className="mt-2 text-sm">
         <Link
           href={`/videos/${report.video_id}`}
-          className="font-medium text-zinc-900 underline hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
+          className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
         >
           {report.video_title || "Untitled video"}
         </Link>
@@ -411,17 +410,17 @@ function ReportTarget({ report }: { report: Report }) {
         {report.remote_video_id ? (
           <Link
             href={`/remote/${report.remote_video_id}`}
-            className="font-medium text-zinc-900 underline hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
+            className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
           >
             {report.remote_video_title || "(remote video unavailable)"}
           </Link>
         ) : (
-          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+          <span className="font-semibold text-fg">
             {report.remote_video_title || "(remote video unavailable)"}
           </span>
         )}
         {report.remote_video_domain ? (
-          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-fg-muted">
             <span className="sr-only">From </span>
             {report.remote_video_domain}
           </span>
@@ -431,7 +430,7 @@ function ReportTarget({ report }: { report: Report }) {
   }
   if (report.target_type === "comment") {
     return (
-      <blockquote className="mt-2 border-l-2 border-zinc-300 pl-3 text-sm text-zinc-700 italic dark:border-zinc-700 dark:text-zinc-300">
+      <blockquote className="mt-2 border-l-2 border-border pl-3 text-sm text-fg-muted italic">
         {report.comment_body || "(comment unavailable)"}
       </blockquote>
     );
@@ -442,18 +441,18 @@ function ReportTarget({ report }: { report: Report }) {
     // moderators act on the snapshot, resolve/reject, or report-purge (admin).
     return (
       <div className="mt-2">
-        <blockquote className="border-l-2 border-zinc-300 pl-3 text-sm text-zinc-700 italic dark:border-zinc-700 dark:text-zinc-300">
+        <blockquote className="border-l-2 border-border pl-3 text-sm text-fg-muted italic">
           {report.message_body || "(message unavailable)"}
         </blockquote>
-        <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">Direct message</p>
+        <p className="mt-1 text-xs text-fg-muted">Direct message</p>
       </div>
     );
   }
   if (report.target_type === "account") {
     return (
-      <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
+      <p className="mt-2 text-sm text-fg-muted">
         Reported account:{" "}
-        <span className="font-medium text-zinc-900 dark:text-zinc-100">
+        <span className="font-semibold text-fg">
           {report.reported_username || "(account unavailable)"}
         </span>
       </p>

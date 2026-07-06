@@ -138,7 +138,7 @@ function MediaGCPanel() {
             </Card>
           ) : (
             <>
-              <div className="max-h-72 overflow-auto rounded-lg border border-border-subtle">
+              <div className="max-h-72 overflow-auto rounded-xl border border-border-subtle">
                 <ul className="divide-y divide-border-subtle">
                   {preview.orphans.map((key) => (
                     <li
@@ -158,7 +158,7 @@ function MediaGCPanel() {
                   </Button>
                 </div>
               ) : (
-                <Card className="flex flex-col gap-3 border-danger">
+                <Card className="flex flex-col gap-3 border-danger-border">
                   <p className="text-sm text-fg">
                     This permanently deletes the {formatCount(orphanCount)} object
                     {orphanCount === 1 ? "" : "s"} listed above from storage. This cannot be

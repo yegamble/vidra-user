@@ -7,6 +7,7 @@ import { StatsChart } from "@/components/StatsChart";
 import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Channel, ChannelStatsResponse, Video, VideoStatsResponse } from "@/lib/api";
@@ -27,7 +28,7 @@ export function StudioStatsView() {
         title="Sign in to see your stats"
         message={
           <>
-            <Link href="/login" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/login" className="underline hover:text-fg">
               Sign in
             </Link>{" "}
             to see how your channels and videos are doing.
@@ -86,7 +87,7 @@ function StatsHome() {
         message={
           <>
             Stats appear once you publish.{" "}
-            <Link href="/studio" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">
+            <Link href="/studio" className="underline hover:text-fg">
               Create a channel in the studio
             </Link>{" "}
             to get started.
@@ -123,24 +124,23 @@ function ChannelStatsSection({ channels }: { channels: Channel[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <label className="flex max-w-xs flex-col gap-1 text-sm">
-        <span className="font-medium">Channel</span>
-        <select
+      <div className="max-w-xs">
+        <Select
+          label="Channel"
           value={handle}
           onChange={(e) => {
             setStatus("loading");
             setHandle(e.target.value);
           }}
           aria-label="Stats channel"
-          className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
         >
           {channels.map((ch) => (
             <option key={ch.id} value={ch.handle}>
               {ch.display_name} (@{ch.handle})
             </option>
           ))}
-        </select>
-      </label>
+        </Select>
+      </div>
 
       {status === "loading" ? (
         <div className="flex justify-center py-16">
@@ -201,8 +201,8 @@ function VideoStatsSection({ handle }: { handle: string }) {
   }, [handle, reloadKey]);
 
   return (
-    <section className="flex flex-col gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-      <h2 className="text-lg font-semibold">Per-video stats</h2>
+    <section className="flex flex-col gap-3 border-t border-border-subtle pt-6">
+      <h2 className="text-[15px] font-bold tracking-tight">Per-video stats</h2>
       {status === "loading" ? (
         <div className="flex justify-center py-8">
           <Spinner label="Loading your videos" />
@@ -216,18 +216,17 @@ function VideoStatsSection({ handle }: { handle: string }) {
           }}
         />
       ) : videos.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-fg-muted">
           No videos in this channel yet.
         </p>
       ) : (
         <>
-          <label className="flex max-w-md flex-col gap-1 text-sm">
-            <span className="font-medium">Video</span>
-            <select
+          <div className="max-w-md">
+            <Select
+              label="Video"
               value={videoId}
               onChange={(e) => setVideoId(e.target.value)}
               aria-label="Stats video"
-              className="rounded border border-zinc-300 px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
             >
               <option value="">— choose a video —</option>
               {videos.map((v) => (
@@ -235,8 +234,8 @@ function VideoStatsSection({ handle }: { handle: string }) {
                   {v.title}
                 </option>
               ))}
-            </select>
-          </label>
+            </Select>
+          </div>
           {videoId ? <VideoStatsPanel key={videoId} videoId={videoId} /> : null}
         </>
       )}
@@ -305,11 +304,11 @@ function TotalsGrid({ items }: { items: Array<{ label: string; value: number }> 
       {items.map((item) => (
         <div
           key={item.label}
-          className="flex flex-col gap-0.5 rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
+          className="flex flex-col gap-1 rounded-2xl bg-surface-muted p-4"
         >
-          <dt className="text-xs text-zinc-500 dark:text-zinc-400">{item.label}</dt>
+          <dt className="text-xs text-fg-muted">{item.label}</dt>
           <dd
-            className="text-lg font-semibold tabular-nums"
+            className="text-xl font-bold tracking-tight tabular-nums"
             title={String(item.value)}
           >
             {formatCount(item.value)}

@@ -38,11 +38,11 @@ export function MessageButton({ recipientId }: { recipientId: string }) {
         type="button"
         disabled={busy}
         onClick={() => void open()}
-        className="text-xs font-medium text-zinc-500 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-100"
+        className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
       >
         {busy ? "Opening…" : "Message"}
       </button>
-      {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
+      {error ? <span className="text-xs text-danger">{error}</span> : null}
     </>
   );
 }
