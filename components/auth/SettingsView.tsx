@@ -2,16 +2,69 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { AccountDataSection } from "@/components/auth/AccountDataSection";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ConnectedLogins } from "@/components/auth/ConnectedLogins";
+import { ChevronRightIcon } from "@/components/icons";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, authApi, errorMessage, userAvatarUrl, userBannerUrl } from "@/lib/api";
 import type { UpdateProfileRequest, User } from "@/lib/api";
+
+// SettingsGroup is one iOS-style grouped block: an uppercase micro group-header
+// (design-system group-header spec) above a surface-muted rounded card whose
+// rows are hairline-divided. No `overflow-hidden` (it would clip the row links'
+// box-shadow focus ring) — the first/last row links round themselves to the
+// card corners instead.
+function SettingsGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="px-1 text-xs font-bold uppercase tracking-[0.06em] text-fg-muted">
+        {label}
+      </h2>
+      <ul className="flex flex-col divide-y divide-border-subtle rounded-2xl bg-surface-muted [&>li:first-child>a]:rounded-t-2xl [&>li:last-child>a]:rounded-b-2xl">
+        {children}
+      </ul>
+    </section>
+  );
+}
+
+// SettingsNavRow is one navigation row: a full-row link (title + muted sub-line
+// + trailing chevron). The exact "Manage …" name each sub-page's e2e navigates
+// by is carried as sr-only text INSIDE the link, so the link's name-from-content
+// includes it (keeps every getByRole("link", { name: "Manage …" }) green)
+// without an aria-label — an aria-label would trip axe's
+// label-content-name-mismatch against the visible sub-line.
+function SettingsNavRow({
+  href,
+  action,
+  title,
+  desc,
+}: {
+  href: string;
+  action: string;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <li>
+      <Link
+        href={href}
+        className="focus-ring flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-surface-strong"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-fg">{title}</span>
+          <span className="mt-0.5 block text-[13px] text-fg-muted">{desc}</span>
+        </span>
+        <span className="sr-only">{action}</span>
+        <ChevronRightIcon size={18} className="shrink-0 text-fg-subtle" />
+      </Link>
+    </li>
+  );
+}
 
 // SettingsView lets the signed-in user edit their profile (display name, bio)
 // and deactivate their account. On a hard reload the session is restored via
@@ -88,118 +141,56 @@ export function SettingsView() {
         user={user}
         onChanged={() => void reloadUser().catch(() => {})}
       />
-      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-fg">Security</h2>
-          <p className="text-sm text-fg-muted">
-            Two-factor authentication and recovery codes.
-          </p>
-        </div>
-        <Link
+      {/* Account & privacy navigation — iOS-style grouped rows (design-system
+          "grouped settings rows"): a surface-muted card of hairline-divided
+          full-row links, each a title + muted sub-line + trailing chevron. */}
+      <SettingsGroup label="Account">
+        <SettingsNavRow
           href="/settings/security"
-          aria-label="Manage security settings"
-          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
-        >
-          Manage
-        </Link>
-      </section>
-      <ConnectedLogins />
-      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-fg">
-            Connected accounts
-          </h2>
-          <p className="text-sm text-fg-muted">
-            Connect Bluesky to cross-post your new public videos (ATProto).
-          </p>
-        </div>
-        <Link
+          action="Manage security settings"
+          title="Security"
+          desc="Two-factor authentication and recovery codes."
+        />
+        <SettingsNavRow
           href="/settings/connections"
-          aria-label="Manage connected accounts"
-          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
-        >
-          Manage
-        </Link>
-      </section>
-      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-fg">
-            Encrypted-messaging devices
-          </h2>
-          <p className="text-sm text-fg-muted">
-            Devices that can read your encrypted messages, and their safety numbers.
-          </p>
-        </div>
-        <Link
+          action="Manage connected accounts"
+          title="Connected accounts"
+          desc="Connect Bluesky to cross-post your new public videos (ATProto)."
+        />
+        <SettingsNavRow
           href="/settings/devices"
-          aria-label="Manage encrypted-messaging devices"
-          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
-        >
-          Manage
-        </Link>
-      </section>
-      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-fg">Notifications</h2>
-          <p className="text-sm text-fg-muted">
-            Choose which notifications you receive.
-          </p>
-        </div>
-        <Link
+          action="Manage encrypted-messaging devices"
+          title="Encrypted-messaging devices"
+          desc="Devices that can read your encrypted messages, and their safety numbers."
+        />
+        <SettingsNavRow
           href="/settings/notifications"
-          aria-label="Manage notification preferences"
-          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
-        >
-          Manage
-        </Link>
-      </section>
-      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-fg">
-            Donation addresses
-          </h2>
-          <p className="text-sm text-fg-muted">
-            Public crypto addresses shown on your profile and channels (display only).
-          </p>
-        </div>
-        <Link
+          action="Manage notification preferences"
+          title="Notifications"
+          desc="Choose which notifications you receive."
+        />
+        <SettingsNavRow
           href="/settings/donations"
-          aria-label="Manage donation addresses"
-          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
-        >
-          Manage
-        </Link>
-      </section>
-      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-fg">Mutes</h2>
-          <p className="text-sm text-fg-muted">
-            Accounts and federated instances whose content is hidden from you.
-          </p>
-        </div>
-        <Link
+          action="Manage donation addresses"
+          title="Donation addresses"
+          desc="Public crypto addresses shown on your profile and channels (display only)."
+        />
+      </SettingsGroup>
+      <SettingsGroup label="Privacy & safety">
+        <SettingsNavRow
           href="/settings/mutes"
-          aria-label="Manage muted accounts"
-          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
-        >
-          Manage
-        </Link>
-      </section>
-      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-fg">Blocked accounts</h2>
-          <p className="text-sm text-fg-muted">
-            Accounts you have blocked. Neither of you can direct-message the other.
-          </p>
-        </div>
-        <Link
+          action="Manage muted accounts"
+          title="Mutes"
+          desc="Accounts and federated instances whose content is hidden from you."
+        />
+        <SettingsNavRow
           href="/settings/blocks"
-          aria-label="Manage blocked accounts"
-          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
-        >
-          Manage
-        </Link>
-      </section>
+          action="Manage blocked accounts"
+          title="Blocked accounts"
+          desc="Accounts you have blocked. Neither of you can direct-message the other."
+        />
+      </SettingsGroup>
+      <ConnectedLogins />
       <AccountDataSection />
       {/* Header sign-out is hidden on phones (the avatar is the only account
           control there), so settings must offer it. Named distinctly from the
@@ -221,12 +212,19 @@ export function SettingsView() {
           Sign out of this device
         </button>
       </section>
-      <DeactivateSection deactivate={deactivate} />
-      <DeleteAccountSection
-        username={user.username}
-        deleteAccount={deleteAccount}
-        onDeleted={() => setDeleted(true)}
-      />
+      {/* Danger zone — the reversible + irreversible account destructions
+          grouped under one header for a consistent, hard-to-mistake block. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="px-1 text-xs font-bold uppercase tracking-[0.06em] text-danger">
+          Danger zone
+        </h2>
+        <DeactivateSection deactivate={deactivate} />
+        <DeleteAccountSection
+          username={user.username}
+          deleteAccount={deleteAccount}
+          onDeleted={() => setDeleted(true)}
+        />
+      </section>
     </div>
   );
 }
