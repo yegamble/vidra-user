@@ -12,20 +12,39 @@ import { ApiError, api, errorMessage } from "@/lib/api";
 // The backend caps a message body at 5000 chars (SendMessageRequest.body).
 const MAX_MESSAGE_LEN = 5000;
 
-// NewMessageButton is the "start a fresh conversation" entry point on the inbox
-// (/messages). Unlike MessageButton (which already knows a user's id from a
-// comment), here the viewer types the recipient's *username*: the composer
-// resolves it server-side by starting the conversation, sends the first message,
-// then routes to the thread. Rendered only inside MessagesView's authenticated
-// branch.
+// NewMessageButton is the "start a fresh conversation" entry point in the
+// conversation rail (/messages). Unlike MessageButton (which already knows a
+// user's id from a comment), here the viewer types the recipient's *username*:
+// the composer resolves it server-side by starting the conversation, sends the
+// first message, then routes to the thread. Rendered only inside the rail's
+// authenticated branch. Styled as a compact compose icon button (template
+// language) with the accessible name "New message".
 export function NewMessageButton() {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        New message
-      </Button>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="New message"
+        title="New message"
+        className="focus-ring inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+      >
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-5 w-5"
+        >
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+      </button>
       {open ? <ComposeDialog onClose={() => setOpen(false)} /> : null}
     </>
   );
@@ -50,6 +69,9 @@ function ComposeDialog({ onClose }: { onClose: () => void }) {
       // in-memory session survives (a hard load lands signed out).
       const conv = await api.startConversation({ recipientUsername: username.trim() });
       await api.sendMessage(conv.id, body.trim());
+      // Close before navigating: the dialog lives in the persistent conversation
+      // rail (it does not unmount on route change), so it must dismiss itself.
+      onClose();
       router.push(`/messages/${conv.id}`);
     } catch (err) {
       // Honest, backend-driven states: an unknown/inactive username is a 404, a

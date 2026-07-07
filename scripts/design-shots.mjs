@@ -405,6 +405,107 @@ const SAMPLE_INBOX = {
   offset: 0,
 };
 
+// A 1x1 PNG so mocked attachment bytes actually decode into an <img>; stretched
+// object-cover it reads as a solid tile — enough to show the media grid mask,
+// rounded corners, and single-image bound. Illustrative only.
+const SAMPLE_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNwcHAAAAGEAMGDX2mUAAAAAElFTkSuQmCC";
+
+// A messaging thread whose messages carry image attachments, to exercise the
+// Messaging v2 part 2 media UX: a peer message with a 3-image grid and an own
+// message with a single bounded image. Newest-first. Illustrative only.
+function sampleMediaThread() {
+  const now = Date.now();
+  const at = (ms) => new Date(now - ms).toISOString();
+  const img = (id, name) => ({
+    id,
+    kind: "image",
+    content_type: "image/png",
+    filename: name,
+    size_bytes: 220_000,
+  });
+  return {
+    messages: [
+      {
+        id: "m3",
+        conversation_id: "c1",
+        sender_id: "u1",
+        sender_username: "boss",
+        sender_display_name: "Mara",
+        body: "Here's the reference frame I mentioned.",
+        created_at: at(60_000),
+        attachments: [img("a4", "reference.png")],
+      },
+      {
+        id: "m2",
+        conversation_id: "c1",
+        sender_id: "u2",
+        sender_username: "gradehouse",
+        sender_display_name: "Grade House",
+        body: "The three looks side by side:",
+        created_at: at(4 * 60_000),
+        attachments: [img("a1", "look-a.png"), img("a2", "look-b.png"), img("a3", "look-c.png")],
+      },
+      {
+        id: "m1",
+        conversation_id: "c1",
+        sender_id: "u2",
+        sender_username: "gradehouse",
+        sender_display_name: "Grade House",
+        body: "Morning! Sending the grade options now.",
+        created_at: at(6 * 60_000),
+      },
+    ],
+    peer_last_read_message_id: "m3",
+    limit: 50,
+    offset: 0,
+  };
+}
+
+// A notifications list (GET /me/notifications) mixing types + read state so the
+// icon chips, bold lead / muted rest copy, unread weighting and dots all render.
+// Illustrative only.
+const SAMPLE_NOTIFICATIONS = {
+  notifications: [
+    {
+      id: "n1",
+      type: "comment",
+      read: false,
+      created_at: new Date(Date.now() - 5 * 60_000).toISOString(),
+      actor: { username: "auroralab", display_name: "Aurora Lab" },
+      video_id: "v1",
+      video_title: "Late-night color grading session",
+    },
+    {
+      id: "n2",
+      type: "message",
+      read: false,
+      created_at: new Date(Date.now() - 40 * 60_000).toISOString(),
+      actor: { username: "gradehouse", display_name: "Grade House" },
+      conversation_id: "c1",
+    },
+    {
+      id: "n3",
+      type: "follow",
+      read: true,
+      created_at: new Date(Date.now() - 6 * 3600_000).toISOString(),
+      actor: { username: "northloop", display_name: "North Loop" },
+      channel_handle: "grade-house",
+      channel_display_name: "Grade House",
+    },
+    {
+      id: "n4",
+      type: "video_rejected",
+      read: true,
+      created_at: new Date(Date.now() - 28 * 3600_000).toISOString(),
+      video_title: "Untitled draft",
+    },
+  ],
+  unread_count: 2,
+  limit: 20,
+  offset: 0,
+};
+
 // ---- area registry -----------------------------------------------------------
 
 /** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void>, act?: (page: import("@playwright/test").Page) => Promise<void> }>} */
@@ -619,6 +720,59 @@ const AREAS = {
       await page.route(/\/api\/v1\/users\/[^/]+\/avatar$/, (route) =>
         route.fulfill({ status: 404, body: "" }),
       );
+    },
+  },
+  // Messaging media (Messaging v2 part 2): a thread whose messages carry image
+  // attachments — the bubble-less 3-image grid mask + a single bounded image.
+  "messaging-media": {
+    path: "/messages/c1",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/conversations(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_INBOX }),
+      );
+      await page.route(/\/api\/v1\/conversations\/c1\/messages(\?|$)/, (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        return route.fulfill({ json: sampleMediaThread() });
+      });
+      await page.route(/\/api\/v1\/conversations\/c1\/read$/, (route) =>
+        route.fulfill({ status: 204, body: "" }),
+      );
+      await page.route(/\/api\/v1\/attachments\/[^/]+$/, (route) =>
+        route.fulfill({ contentType: "image/png", body: Buffer.from(SAMPLE_PNG_BASE64, "base64") }),
+      );
+      await page.route(/\/api\/v1\/users\/[^/]+\/avatar$/, (route) =>
+        route.fulfill({ status: 404, body: "" }),
+      );
+    },
+  },
+  // Notifications (backport W0.10): the full notifications list to template
+  // language — round icon chips, bold lead / muted rest copy, unread weighting.
+  notifications: {
+    path: "/notifications",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/notifications(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_NOTIFICATIONS }),
+      );
+    },
+  },
+  // Notifications bell popover (backport W0.10): the header disclosure panel —
+  // recent items above a "See all notifications" footer. Opened via the act hook.
+  "notifications-bell": {
+    path: "/",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+      );
+      await page.route(/\/api\/v1\/me\/notifications(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_NOTIFICATIONS }),
+      );
+    },
+    async act(page) {
+      await page.getByRole("button", { name: /Notifications/ }).first().click();
+      await page.getByText("See all notifications").waitFor({ state: "visible" });
     },
   },
   // Auth — sign in (backport W0.12): the credentials form + the OAuth section

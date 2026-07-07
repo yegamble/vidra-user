@@ -89,7 +89,9 @@ async function openThreadC1(page: Page) {
             other_user_id: "u2",
             other_username: "bob",
             other_display_name: "Bob Builder",
-            last_message_body: "hey ada",
+            // A rail snippet distinct from any thread body so the persistent
+            // rail never collides with a bubble under getByText.
+            last_message_body: "tap to open",
             last_message_at: new Date().toISOString(),
           },
         ],
@@ -144,7 +146,7 @@ test("opening a thread shows messages and sending one appends it", async ({ page
   await expect(page.getByText("hey ada")).toBeVisible();
 
   await page.getByLabel("Write a message").fill("hello bob");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("hello bob")).toBeVisible();
 });
 
@@ -440,7 +442,7 @@ test("an optimistic send that fails shows Not sent · Retry and recovers on retr
 
   await openThreadC1(page);
   await page.getByLabel("Write a message").fill("second try");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send message" }).click();
 
   // The optimistic bubble stays and flips to a failed state with a Retry.
   await expect(page.getByText("second try")).toBeVisible();
@@ -494,6 +496,154 @@ test("a NEW-messages divider appears from the inbox unread hint", async ({ page 
   await expect(page).toHaveURL(/\/messages\/c1\?unread=2$/);
   await expect(page.getByText("one unread")).toBeVisible();
   await expect(page.getByText("New", { exact: true })).toBeVisible();
+});
+
+// --- Messaging v2 part 2: composer v2 (auto-grow, Enter-to-send, counter),
+// media grids + lightbox, and the desktop split-pane rail. Persistence round
+// trips are proven in e2e-backed/messaging.spec.ts.
+
+test("Composer sends on Enter and Shift+Enter inserts a newline (desktop pointer)", async ({
+  page,
+}) => {
+  await signIn(page);
+  let posts = 0;
+  await page.route(MESSAGES, (route) => {
+    const req = route.request();
+    if (req.method() === "POST") {
+      posts += 1;
+      const body = (req.postDataJSON() as { body: string }).body;
+      return route.fulfill({ json: meMessage("m2", body) });
+    }
+    return route.fulfill({
+      json: { messages: [peerMessage("m1", "hey ada")], limit: 100, offset: 0 },
+    });
+  });
+  await page.route(READ, (route) => route.fulfill({ status: 204, body: "" }));
+
+  await openThreadC1(page);
+  const field = page.getByLabel("Write a message");
+  // Shift+Enter inserts a newline and does NOT send (desktop = fine pointer).
+  await field.fill("draft line");
+  await field.press("Shift+Enter");
+  await expect(field).toHaveValue("draft line\n");
+  expect(posts).toBe(0);
+
+  // Enter (no modifier) sends on a fine-pointer device.
+  await field.fill("sent with enter");
+  await field.press("Enter");
+  await expect(page.getByText("sent with enter")).toBeVisible();
+  expect(posts).toBe(1);
+});
+
+test("Composer shows a character counter near the limit", async ({ page }) => {
+  await signIn(page);
+  await routeMessages(page, { messages: [peerMessage("m1", "hey ada")] });
+  await page.route(READ, (route) => route.fulfill({ status: 204, body: "" }));
+  await openThreadC1(page);
+
+  const field = page.getByLabel("Write a message");
+  await expect(page.getByText(/\/ 5000/)).toHaveCount(0);
+  await field.fill("a".repeat(4501));
+  await expect(page.getByText("4501 / 5000")).toBeVisible();
+});
+
+test("multiple image attachments render as a grid and open in a lightbox", async ({ page }) => {
+  await signIn(page);
+  await routeMessages(page, {
+    messages: [
+      peerMessage("m1", "trip photos", {
+        attachments: [
+          { id: "i1", kind: "image", content_type: "image/png", filename: "one.png", size_bytes: 100 },
+          { id: "i2", kind: "image", content_type: "image/png", filename: "two.png", size_bytes: 100 },
+          { id: "i3", kind: "image", content_type: "image/png", filename: "three.png", size_bytes: 100 },
+        ],
+      }),
+    ],
+  });
+  await page.route(READ, (route) => route.fulfill({ status: 204, body: "" }));
+  await page.route(ATTACHMENTS, (route) =>
+    route.fulfill({ contentType: "image/png", body: Buffer.from(TINY_PNG_BASE64, "base64") }),
+  );
+
+  await openThreadC1(page);
+  // Each image is a grid cell that opens the lightbox.
+  await expect(page.getByRole("button", { name: /^View image/ })).toHaveCount(3);
+  await page.getByRole("button", { name: "View image two.png" }).click();
+  const dialog = page.getByRole("dialog", { name: "two.png" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Download" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
+// A second conversation so the split-pane + search tests have something to sort.
+function inboxTwo() {
+  return {
+    conversations: [
+      {
+        id: "c1",
+        updated_at: new Date().toISOString(),
+        other_user_id: "u2",
+        other_username: "bob",
+        other_display_name: "Bob Builder",
+        last_message_body: "tap to open",
+        last_message_at: new Date().toISOString(),
+      },
+      {
+        id: "c2",
+        updated_at: new Date(Date.now() - 3600_000).toISOString(),
+        other_user_id: "u3",
+        other_username: "aurora",
+        other_display_name: "Aurora Lab",
+        last_message_body: "shoot list soon",
+        last_message_at: new Date(Date.now() - 3600_000).toISOString(),
+      },
+    ],
+    limit: 20,
+    offset: 0,
+  };
+}
+
+test("desktop split-pane opens a thread while the rail persists", async ({ page }) => {
+  await signIn(page);
+  await page.route(CONVERSATIONS, (route) => route.fulfill({ json: inboxTwo() }));
+  await page.route(MESSAGES, (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    return route.fulfill({ json: { messages: [peerMessage("m1", "hey ada")], limit: 100, offset: 0 } });
+  });
+  await page.route(READ, (route) => route.fulfill({ status: 204, body: "" }));
+
+  await page.getByRole("link", { name: "Messages" }).first().click();
+  // The empty right pane shows the resting placeholder beside the rail.
+  await expect(page.getByText("Your messages")).toBeVisible();
+  await expect(page.getByText("Pick a conversation, or start a new one.")).toBeVisible();
+
+  // Clicking a rail row swaps the thread and updates the URL.
+  await page.getByText("Bob Builder").click();
+  await expect(page).toHaveURL(/\/messages\/c1$/);
+  await expect(page.getByRole("heading", { name: "Bob Builder" })).toBeVisible();
+  await expect(page.getByText("hey ada")).toBeVisible();
+  // The rail did not unmount: its search field is still present and still lists
+  // the other conversation.
+  await expect(page.getByRole("searchbox", { name: "Search conversations" })).toBeVisible();
+  await expect(page.getByText("Aurora Lab")).toBeVisible();
+});
+
+test("the rail search filters conversations", async ({ page }) => {
+  await signIn(page);
+  await page.route(CONVERSATIONS, (route) => route.fulfill({ json: inboxTwo() }));
+
+  await page.getByRole("link", { name: "Messages" }).first().click();
+  await expect(page.getByText("Bob Builder")).toBeVisible();
+  await expect(page.getByText("Aurora Lab")).toBeVisible();
+
+  const search = page.getByRole("searchbox", { name: "Search conversations" });
+  await search.fill("aurora");
+  await expect(page.getByText("Aurora Lab")).toBeVisible();
+  await expect(page.getByText("Bob Builder")).toHaveCount(0);
+
+  await search.fill("nobody-here");
+  await expect(page.getByText(/No conversations match/)).toBeVisible();
 });
 
 // --- New message composer (start a fresh conversation by username from the

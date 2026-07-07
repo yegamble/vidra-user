@@ -854,14 +854,29 @@ export const api = {
    * multipart "file"). Returns an id to reference in a subsequent sendMessage.
    * Allowed kinds image/video/audio/pdf, ≤25 MiB; 413 oversize, 415 unsupported
    * type, 422 encrypted conversation or failed malware scan, 503 storage off.
+   *
+   * With no `onProgress` this runs on the shared fetch client (indeterminate
+   * "Uploading…"). Pass `onProgress` to observe byte-level upload progress —
+   * fetch() can't, so a determinate composer chip routes through the same
+   * XHR helper as the studio upload; errors map to the identical ApiError
+   * envelope, so callers branch on status the same way regardless of transport.
    */
-  uploadDMAttachment: (conversationId: string, file: File) => {
+  uploadDMAttachment: (
+    conversationId: string,
+    file: File,
+    opts?: { onProgress?: (progress: UploadProgress) => void; signal?: AbortSignal },
+  ) => {
     const form = new FormData();
     form.append("file", file);
-    return apiRequest<UploadAttachmentResponse>(
-      `/api/v1/conversations/${encodeURIComponent(conversationId)}/attachments`,
-      { method: "POST", body: form },
-    );
+    const path = `/api/v1/conversations/${encodeURIComponent(conversationId)}/attachments`;
+    if (!opts?.onProgress) {
+      return apiRequest<UploadAttachmentResponse>(path, { method: "POST", body: form });
+    }
+    return uploadWithProgress<UploadAttachmentResponse>(`${apiBaseUrl}${path}`, form, {
+      token: getAccessToken(),
+      onProgress: opts.onProgress,
+      signal: opts.signal,
+    });
   },
 
   /**
