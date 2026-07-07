@@ -1,6 +1,6 @@
 "use client";
 
-import { PlayerMenu } from "@/components/PlayerMenu";
+import { PlayerMenu, type PlayerMenuVariant } from "@/components/PlayerMenu";
 
 // The selectable playback rates (native video.playbackRate), 0.25×–2×.
 export const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
@@ -16,14 +16,18 @@ function rateLabel(rate: number): string {
 export function SpeedMenu({
   speed,
   onSelect,
+  variant = "bar",
 }: {
   speed: number;
   onSelect: (rate: number) => void;
+  variant?: PlayerMenuVariant;
 }) {
   return (
     <PlayerMenu
       buttonLabel={`Speed: ${rateLabel(speed)}`}
+      buttonText={rateLabel(speed)}
       menuLabel="Playback speed"
+      variant={variant}
       icon={
         // Minified inline gauge icon
         <svg

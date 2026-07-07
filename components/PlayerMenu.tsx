@@ -2,35 +2,59 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { cn } from "@/lib/cn";
+
 export interface PlayerMenuItem<T extends string | number> {
   value: T;
   label: string;
 }
+
+// Where the menu-button lives, which is all `variant` changes — the accessible
+// menu machinery (roles, focus, arrows, Escape) is identical for both:
+// - "bar":     a themed pill on a normal surface (the legacy below-player row).
+// - "overlay": a white-on-scrim control INSIDE the player's media overlay, per
+//              the design-system's documented media-overlay exception (white
+//              controls on the video surface). ≥44pt hit area, compact label.
+export type PlayerMenuVariant = "bar" | "overlay";
 
 // PlayerMenu is the player's shared accessible menu-button primitive (quality +
 // speed selectors): a labelled button opening a role="menu" of menuitemradio
 // entries. Keyboard: Enter/Space/ArrowDown open and focus the checked item,
 // arrows cycle, Escape/outside-click closes (Escape returns focus to the
 // button). Selection closes the menu and restores focus to the button.
+//
+// `buttonLabel` is the accessible name (aria-label + tooltip); `buttonText` is
+// the shorter visible label (defaults to buttonLabel). On the overlay variant
+// the visible text is the tail of the accessible name (e.g. "Normal" of
+// "Speed: Normal"), so it stays contained in the accessible name (WCAG 2.5.3).
 export function PlayerMenu<T extends string | number>({
   buttonLabel,
+  buttonText,
   menuLabel,
   icon,
   items,
   current,
   onSelect,
+  variant = "bar",
 }: {
   buttonLabel: string;
+  buttonText?: string;
   menuLabel: string;
   icon: ReactNode;
   items: PlayerMenuItem<T>[];
   current: T;
   onSelect: (value: T) => void;
+  variant?: PlayerMenuVariant;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const overlay = variant === "overlay";
+  // On the overlay the visible text is a compact tail (aria-label carries the
+  // full name); the legacy bar shows the full label as its visible text (and so
+  // as its accessible name, unchanged).
+  const visibleText = overlay ? (buttonText ?? buttonLabel) : buttonLabel;
 
   // Focus the checked entry when the menu opens.
   useEffect(() => {
@@ -67,6 +91,8 @@ export function PlayerMenu<T extends string | number>({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={overlay ? buttonLabel : undefined}
+        title={overlay ? buttonLabel : undefined}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" && !open) {
@@ -74,10 +100,15 @@ export function PlayerMenu<T extends string | number>({
             setOpen(true);
           }
         }}
-        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
+        className={cn(
+          "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold transition-colors",
+          overlay
+            ? "h-11 rounded-full px-2 text-[13px] text-white/90 hover:bg-white/15 hover:text-white"
+            : "rounded-full bg-surface-muted px-4 py-2 text-[13px] text-fg hover:bg-surface-strong",
+        )}
       >
         {icon}
-        <span>{buttonLabel}</span>
+        <span className="tabular-nums">{visibleText}</span>
       </button>
       {open ? (
         <div
@@ -90,7 +121,7 @@ export function PlayerMenu<T extends string | number>({
               buttonRef.current?.focus();
             }
           }}
-          className="absolute bottom-full left-0 z-20 mb-2 w-36 rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
+          className="absolute bottom-full right-0 z-30 mb-2 max-h-[min(16rem,55vh)] w-40 overflow-y-auto overscroll-contain rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
         >
           {items.map((item, i) => (
             <button

@@ -1,0 +1,109 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  bufferedBands,
+  clamp,
+  fractionAt,
+  fractionOfTime,
+  seekValueText,
+  stepVolume,
+  timeAtFraction,
+  volumePercent,
+} from "./player-ui";
+
+describe("clamp", () => {
+  it("restricts to the bounds", () => {
+    expect(clamp(5, 0, 10)).toBe(5);
+    expect(clamp(-1, 0, 10)).toBe(0);
+    expect(clamp(11, 0, 10)).toBe(10);
+  });
+});
+
+describe("fractionAt", () => {
+  it("maps clientX to a 0..1 fraction of the track", () => {
+    expect(fractionAt(50, 0, 100)).toBe(0.5);
+    expect(fractionAt(0, 0, 100)).toBe(0);
+    expect(fractionAt(100, 0, 100)).toBe(1);
+  });
+
+  it("clamps outside the track and offsets by the track's left edge", () => {
+    expect(fractionAt(-20, 0, 100)).toBe(0);
+    expect(fractionAt(200, 0, 100)).toBe(1);
+    expect(fractionAt(60, 40, 100)).toBe(0.2); // (60-40)/100
+  });
+
+  it("returns 0 for an unlaid-out (zero-width) track", () => {
+    expect(fractionAt(50, 0, 0)).toBe(0);
+  });
+});
+
+describe("timeAtFraction / fractionOfTime", () => {
+  it("round-trips a fraction through a duration", () => {
+    expect(timeAtFraction(0.25, 200)).toBe(50);
+    expect(fractionOfTime(50, 200)).toBe(0.25);
+  });
+
+  it("guards a zero/unknown duration", () => {
+    expect(timeAtFraction(0.5, 0)).toBe(0);
+    expect(fractionOfTime(10, 0)).toBe(0);
+    expect(timeAtFraction(0.5, Number.NaN)).toBe(0);
+  });
+
+  it("clamps out-of-range inputs", () => {
+    expect(timeAtFraction(2, 100)).toBe(100);
+    expect(fractionOfTime(500, 100)).toBe(1);
+  });
+});
+
+describe("bufferedBands", () => {
+  it("maps [start,end] ranges to 0..1 left+width bands", () => {
+    expect(bufferedBands([[0, 30]], 120)).toEqual([{ left: 0, width: 0.25 }]);
+    expect(bufferedBands([[30, 60], [90, 120]], 120)).toEqual([
+      { left: 0.25, width: 0.25 },
+      { left: 0.75, width: 0.25 },
+    ]);
+  });
+
+  it("clamps ranges to the duration and drops degenerate/empty ones", () => {
+    expect(bufferedBands([[-10, 60]], 120)).toEqual([{ left: 0, width: 0.5 }]);
+    expect(bufferedBands([[100, 200]], 120)).toEqual([{ left: 100 / 120, width: 20 / 120 }]);
+    expect(bufferedBands([[50, 50]], 120)).toEqual([]);
+  });
+
+  it("yields nothing when the duration is unknown", () => {
+    expect(bufferedBands([[0, 30]], 0)).toEqual([]);
+    expect(bufferedBands([[0, 30]], Number.NaN)).toEqual([]);
+  });
+});
+
+describe("seekValueText", () => {
+  it("reads 'elapsed of total'", () => {
+    expect(seekValueText(83, 760)).toBe("1:23 of 12:40");
+    expect(seekValueText(0, 65)).toBe("0:00 of 1:05");
+  });
+
+  it("collapses to just the elapsed time when the duration is unknown", () => {
+    expect(seekValueText(83, 0)).toBe("1:23");
+    expect(seekValueText(83, Number.NaN)).toBe("1:23");
+  });
+});
+
+describe("stepVolume", () => {
+  it("nudges by a percentage of the full range, clamped and rounded", () => {
+    expect(stepVolume(0.5, 5)).toBe(0.55);
+    expect(stepVolume(0.5, -5)).toBe(0.45);
+    expect(stepVolume(0.98, 5)).toBe(1);
+    expect(stepVolume(0.02, -5)).toBe(0);
+  });
+});
+
+describe("volumePercent", () => {
+  it("scales the level to whole percent", () => {
+    expect(volumePercent(0.5, false)).toBe(50);
+    expect(volumePercent(1, false)).toBe(100);
+  });
+
+  it("reads 0 while muted regardless of the underlying level", () => {
+    expect(volumePercent(0.8, true)).toBe(0);
+  });
+});

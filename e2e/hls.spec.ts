@@ -7,6 +7,12 @@ import { expect, test, type Page } from "@playwright/test";
 // happened). Segment requests are aborted: actual frames are not asserted here
 // (hermetic mock, no real encoder output); the full pipeline is proven against
 // a real transcoded video in e2e-backed/hls-playback.spec.ts.
+//
+// The master advertises THREE rungs (1080p/720p/480p) so the quality selector is
+// exercised against a real multi-rendition ladder — the W1.U1 requirement. Real
+// multi-rendition switching depends on the backend ladder emitting >1 rung
+// (vidra-core W1.C0 pins that contract; the backed spec asserts the real rung
+// count and flips to ≥2 once that investigation closes).
 const DETAIL = /\/api\/v1\/videos\/v1$/;
 const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;
 const MASTER = /\/api\/v1\/videos\/v1\/hls\/master\.m3u8$/;
@@ -26,6 +32,7 @@ const HLS_DETAIL = {
   duration_seconds: 8,
   hls_url: "/api/v1/videos/v1/hls/master.m3u8",
   renditions: [
+    { height: 1080, width: 1920 },
     { height: 720, width: 1280 },
     { height: 480, width: 854 },
   ],
@@ -33,6 +40,8 @@ const HLS_DETAIL = {
 
 const MASTER_PLAYLIST = [
   "#EXTM3U",
+  "#EXT-X-STREAM-INF:BANDWIDTH=3200000,RESOLUTION=1920x1080",
+  "1080p/playlist.m3u8",
   "#EXT-X-STREAM-INF:BANDWIDTH=1540000,RESOLUTION=1280x720",
   "720p/playlist.m3u8",
   "#EXT-X-STREAM-INF:BANDWIDTH=968000,RESOLUTION=854x480",
@@ -95,21 +104,25 @@ test("the watch page streams HLS via hls.js and the quality menu drives level se
   await expect(quality).toBeVisible();
   expect(await page.locator("video").getAttribute("src")).toMatch(/^blob:/);
 
-  // The menu lists Auto (checked) + one entry per parsed rendition height.
+  // The menu lists Auto (checked) + one entry per parsed rendition height,
+  // tallest first (three synthetic rungs).
   await quality.click();
   const menu = page.getByRole("menu", { name: "Playback quality" });
   await expect(menu).toBeVisible();
   const items = menu.getByRole("menuitemradio");
-  await expect(items).toHaveCount(3);
+  await expect(items).toHaveCount(4);
   await expect(items.nth(0)).toHaveAccessibleName("Auto");
-  await expect(items.nth(1)).toHaveAccessibleName("720p");
-  await expect(items.nth(2)).toHaveAccessibleName("480p");
+  await expect(items.nth(1)).toHaveAccessibleName("1080p");
+  await expect(items.nth(2)).toHaveAccessibleName("720p");
+  await expect(items.nth(3)).toHaveAccessibleName("480p");
   await expect(menu.getByRole("menuitemradio", { name: "Auto" })).toHaveAttribute(
     "aria-checked",
     "true",
   );
 
-  // Selecting a rendition pins it: the button relabels, the selection persists.
+  // Selecting a rendition pins it: the button relabels (a smooth switch that
+  // shows a busy "…" until it lands — no fragments load in the mock, so it stays
+  // pending, which the substring name match tolerates), the selection persists.
   await menu.getByRole("menuitemradio", { name: "480p" }).click();
   const pinned = page.getByRole("button", { name: "Quality: 480p" });
   await expect(pinned).toBeVisible();
@@ -195,7 +208,7 @@ test("a video without hls_url keeps progressive original playback and no selecto
   await expect(page.getByRole("button", { name: /^Quality:/ })).toHaveCount(0);
 });
 
-test("the embed player streams HLS at the adaptive default with no quality menu", async ({
+test("the embed player streams HLS with the same custom shell and quality menu", async ({
   page,
 }) => {
   await page.route(DETAIL, (route) => route.fulfill({ json: HLS_DETAIL }));
@@ -210,6 +223,8 @@ test("the embed player streams HLS at the adaptive default with no quality menu"
   await expect
     .poll(async () => page.locator("video").getAttribute("src"))
     .toMatch(/^blob:/);
-  // Chrome-less embed: adaptive default only, no selector.
-  await expect(page.getByRole("button", { name: /^Quality:/ })).toHaveCount(0);
+  // The embed runs the same bespoke shell (minus theater), so the quality menu
+  // is present here too — the chrome-less native <video controls> is gone.
+  expect(await page.locator("video").getAttribute("controls")).toBeNull();
+  await expect(page.getByRole("button", { name: "Quality: Auto" })).toBeVisible();
 });

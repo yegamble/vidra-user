@@ -25,8 +25,12 @@ export interface HlsPlayback {
   src: string | undefined;
   /** Quality menu entries (Auto + one per height); [] when nothing is selectable. */
   levels: LevelOption[];
-  /** The selected hls.js level (-1 = Auto). */
+  /** The user's selected level (-1 = Auto). Drives the menu's checked entry. */
   currentLevel: number;
+  /** Pixel height of the rung actually playing (from LEVEL_SWITCHED); null until known. */
+  activeHeight: number | null;
+  /** True while a manual rung switch has been requested but not yet confirmed. */
+  pending: boolean;
   setLevel: (level: number) => void;
 }
 
@@ -47,9 +51,17 @@ function probeSupport(): { mseSupported: boolean; nativeHls: boolean } {
  * hls.js (dynamically imported, so non-HLS videos never load it) when the
  * detail carries hls_url and MSE exists, native HLS without MSE (iOS Safari),
  * else the progressive /original file. In hls.js mode it exposes the parsed
- * quality levels and a setter driving hls.currentLevel (Auto = -1); a fatal
+ * quality levels and a setter driving hls.nextLevel (Auto = -1); a fatal
  * hls.js failure falls back to the original file after bounded recovery
  * attempts, so playback degrades instead of dying.
+ *
+ * Quality switching uses `hls.nextLevel` (a SMOOTH switch that takes effect at
+ * the next fragment boundary) rather than `hls.currentLevel` (which flushes the
+ * buffer and re-seeks). A manual pick is held `pending` until the matching
+ * `LEVEL_SWITCHED` fires — the shell paints a busy "…" on the label meanwhile —
+ * and the active rung's height (reported by every LEVEL_SWITCHED, including ABR
+ * switches on Auto) drives the "Auto (720p)" readout. This is a deliberate
+ * behaviour change from the previous hard `currentLevel` switch.
  */
 export function useHlsPlayback(
   videoRef: RefObject<HTMLVideoElement | null>,
@@ -62,6 +74,11 @@ export function useHlsPlayback(
   const [failedId, setFailedId] = useState<string | null>(null);
   const [levels, setLevels] = useState<LevelOption[]>([]);
   const [currentLevel, setCurrentLevel] = useState(AUTO_LEVEL);
+  // The level index a manual switch is heading to, until LEVEL_SWITCHED confirms
+  // it; null when nothing is in flight (Auto/ABR or already settled).
+  const [pendingLevel, setPendingLevel] = useState<number | null>(null);
+  // Pixel height of the rung hls.js is actually playing (last LEVEL_SWITCHED).
+  const [activeHeight, setActiveHeight] = useState<number | null>(null);
   const hlsRef = useRef<Hls | null>(null);
 
   const decided = useMemo(
@@ -77,6 +94,8 @@ export function useHlsPlayback(
     let disposed = false;
     setLevels([]);
     setCurrentLevel(AUTO_LEVEL);
+    setPendingLevel(null);
+    setActiveHeight(null);
     // Dynamic import: the hls.js chunk loads only when an HLS video actually
     // plays through MSE — never for original/native playback.
     void import("hls.js")
@@ -93,6 +112,14 @@ export function useHlsPlayback(
         hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
           parsed = true;
           setLevels(buildLevelMenu(hls.levels));
+        });
+        // Every effective rung switch (ABR on Auto, or a confirmed manual pick):
+        // record the active height for the "Auto (720p)" readout, and clear the
+        // pending flag once the switch reaches the requested rung.
+        hls.on(HlsClass.Events.LEVEL_SWITCHED, (_event, data) => {
+          const height = hls.levels[data.level]?.height;
+          setActiveHeight(typeof height === "number" && height > 0 ? height : null);
+          setPendingLevel((p) => (p === null || data.level === p ? null : p));
         });
         hls.on(HlsClass.Events.ERROR, (_event, data) => {
           if (!data.fatal) return;
@@ -142,11 +169,16 @@ export function useHlsPlayback(
     src,
     levels: mode === "hls-js" ? levels : [],
     currentLevel,
+    activeHeight: mode === "hls-js" ? activeHeight : null,
+    pending: pendingLevel !== null,
     setLevel: (level: number) => {
       const hls = hlsRef.current;
       if (!hls) return;
-      hls.currentLevel = level;
+      // Smooth switch at the next fragment boundary (nextLevel), not a buffer
+      // flush (currentLevel). Hold the pick pending until LEVEL_SWITCHED lands.
+      hls.nextLevel = level;
       setCurrentLevel(level);
+      setPendingLevel(level === AUTO_LEVEL ? null : level);
     },
   };
 }

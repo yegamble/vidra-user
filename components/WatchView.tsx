@@ -8,31 +8,24 @@ import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
 import { CommentsSection } from "@/components/CommentsSection";
 import { DownloadButton } from "@/components/DownloadButton";
 import { KeyboardShortcutsHelp } from "@/components/KeyboardShortcutsHelp";
+import { VideoPlayer, type CaptionTrack } from "@/components/player/VideoPlayer";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
-import { QualityMenu } from "@/components/QualityMenu";
 import { RatingControls } from "@/components/RatingControls";
 import { RelatedVideos } from "@/components/RelatedVideos";
 import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
-import { SpeedMenu } from "@/components/SpeedMenu";
 import { StoryboardPreview } from "@/components/StoryboardPreview";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, channelAvatarUrl, videoCaptionUrl, videoThumbnailUrl } from "@/lib/api";
+import { ApiError, api, channelAvatarUrl, videoCaptionUrl } from "@/lib/api";
 import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
 import type { Video, VideoConfigResponse } from "@/lib/api";
 import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
-import {
-  SHORTCUT_IGNORE_SELECTOR,
-  clampSeekTarget,
-  shortcutForKey,
-} from "@/lib/player-shortcuts";
 import { parseStartTime } from "@/lib/start-time";
-import { useHlsPlayback } from "@/lib/use-hls-playback";
 
 type Status = "loading" | "error" | "notfound" | "ready";
 
@@ -260,14 +253,14 @@ export function WatchView({ id }: { id: string }) {
   );
 }
 
-// Player wraps the native <video> with watch-history behaviour: for a signed-in
-// viewer it reports playback position (throttled, plus on pause and unmount) and
-// surfaces a Resume control loaded from the saved position. An explicit
-// ?t=<seconds> start (startAt) is honoured via a media-fragment `#t=` on the
-// stream src (or hls.js startPosition) — and suppresses the resume offer (the
-// explicit link intent wins). When the detail carries hls_url the stream is the
-// transcoded HLS ladder (hls.js over MSE, quality selectable via QualityMenu;
-// native <video src> on MSE-less Safari), otherwise the progressive original.
+// Player wraps the bespoke VideoPlayer shell with watch-history behaviour: for a
+// signed-in viewer it reports playback position (throttled, plus on pause and
+// unmount, via the shell's onPlay/onTimeUpdate/onPause hooks) and surfaces a
+// Resume control loaded from the saved position. An explicit ?t=<seconds> start
+// (startAt) is honoured via a media-fragment `#t=` on the stream src (or hls.js
+// startPosition) — and suppresses the resume offer (the explicit link intent
+// wins). Caption tracks are fetched here and handed to the shell as same-origin
+// blob URLs (the cross-origin-safe technique that preserves Range streaming).
 function Player({
   video,
   videoRef,
@@ -279,65 +272,9 @@ function Player({
 }) {
   const { status: sessionStatus } = useSession();
   const authed = sessionStatus === "authed";
-  const playback = useHlsPlayback(videoRef, video, startAt);
   const lastSentRef = useRef(0);
   const [resumeAt, setResumeAt] = useState<number | null>(null);
-  const [speed, setSpeed] = useState(1);
-  const [tracks, setTracks] = useState<
-    Array<{ language: string; label: string; url: string }>
-  >([]);
-
-  // Apply the selected playback rate; re-applied when the src changes because
-  // a media load() resets the element back to its default rate.
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    el.defaultPlaybackRate = speed;
-    el.playbackRate = speed;
-  }, [speed, playback.src, videoRef]);
-
-  // Player keyboard shortcuts (space/K, J/L, arrows, M, F, C — see
-  // KeyboardShortcutsHelp). Ignored while typing in / operating another
-  // interactive control, when the video's own native controls have focus
-  // (they already handle these keys), or on modified presses.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.defaultPrevented) return;
-      const target = e.target;
-      if (target instanceof HTMLElement && target.isContentEditable) return;
-      if (target instanceof Element && target.closest(SHORTCUT_IGNORE_SELECTOR)) return;
-      const shortcut = shortcutForKey(e);
-      const el = videoRef.current;
-      if (!shortcut || !el) return;
-      e.preventDefault();
-      switch (shortcut.kind) {
-        case "toggle-play":
-          if (el.paused) void el.play().catch(() => {});
-          else el.pause();
-          break;
-        case "seek-by":
-          el.currentTime = clampSeekTarget(el.currentTime, shortcut.seconds, el.duration);
-          break;
-        case "toggle-mute":
-          el.muted = !el.muted;
-          break;
-        case "toggle-fullscreen":
-          if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-          else void el.requestFullscreen().catch(() => {});
-          break;
-        case "toggle-captions": {
-          const list = Array.from(el.textTracks);
-          if (list.length === 0) break;
-          const anyShowing = list.some((t) => t.mode === "showing");
-          for (const t of list) t.mode = "disabled";
-          if (!anyShowing) list[0].mode = "showing";
-          break;
-        }
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [videoRef]);
+  const [tracks, setTracks] = useState<CaptionTrack[]>([]);
 
   // Report the current position (whole seconds). No-op unless signed in.
   const record = useCallback(() => {
@@ -423,24 +360,18 @@ function Player({
 
   return (
     <div className="flex flex-col gap-2">
-      <video
-        ref={videoRef}
-        controls
-        playsInline
-        className="aspect-video w-full overflow-hidden rounded-2xl bg-black"
-        src={playback.src}
-        poster={video.has_thumbnail ? videoThumbnailUrl(video.id) : undefined}
+      <VideoPlayer
+        video={video}
+        videoRef={videoRef}
+        startAt={startAt}
+        tracks={tracks}
         onPlay={recordThrottled}
         onTimeUpdate={recordThrottled}
         onPause={record}
-      >
-        {tracks.map((t) => (
-          <track key={t.language} kind="captions" srcLang={t.language} label={t.label} src={t.url} />
-        ))}
-        Your browser does not support the video tag.
-      </video>
-      {/* Seek-hover preview thumbnails from the storyboard, when one exists. The
-          native seekbar keeps working; this is an additional accessible scrubber. */}
+      />
+      {/* Seek-hover preview thumbnails from the storyboard, when one exists. An
+          additional accessible scrubber alongside the shell's own seek bar (W1.U4
+          folds this into the seek tooltip and removes the separate strip). */}
       {video.has_storyboard ? (
         <StoryboardPreview
           videoId={video.id}
@@ -449,15 +380,6 @@ function Player({
         />
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Speed applies to every playback path (native video.playbackRate). */}
-        <SpeedMenu speed={speed} onSelect={setSpeed} />
-        {/* Only hls.js playback exposes controllable quality; the menu hides
-            itself for native-HLS/original playback (levels is empty). */}
-        <QualityMenu
-          levels={playback.levels}
-          currentLevel={playback.currentLevel}
-          onSelect={playback.setLevel}
-        />
         {resumeAt !== null ? (
           <button
             type="button"

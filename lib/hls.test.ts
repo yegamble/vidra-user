@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { AUTO_LEVEL, buildLevelMenu, canPlayNativeHls, choosePlaybackMode } from "./hls";
+import {
+  AUTO_LEVEL,
+  buildLevelMenu,
+  canPlayNativeHls,
+  choosePlaybackMode,
+  qualityLabel,
+  type LevelOption,
+} from "./hls";
 
 describe("choosePlaybackMode", () => {
   it("plays the original when the detail carries no hls_url", () => {
@@ -79,5 +86,44 @@ describe("buildLevelMenu", () => {
   it("yields an empty menu (no selector) when no level has a height", () => {
     expect(buildLevelMenu([])).toEqual([]);
     expect(buildLevelMenu([{}])).toEqual([]);
+  });
+});
+
+describe("qualityLabel", () => {
+  const LEVELS: LevelOption[] = [
+    { level: AUTO_LEVEL, label: "Auto" },
+    { level: 2, label: "1080p" },
+    { level: 1, label: "720p" },
+    { level: 0, label: "480p" },
+  ];
+
+  it("reads 'Auto' on the adaptive selection with no known active rung", () => {
+    expect(
+      qualityLabel({ levels: LEVELS, selected: AUTO_LEVEL, activeHeight: null, pending: false }),
+    ).toBe("Auto");
+  });
+
+  it("reads 'Auto (Np)' once the active ABR rung height is known", () => {
+    expect(
+      qualityLabel({ levels: LEVELS, selected: AUTO_LEVEL, activeHeight: 720, pending: false }),
+    ).toBe("Auto (720p)");
+  });
+
+  it("shows the pinned rung once the switch is confirmed", () => {
+    expect(
+      qualityLabel({ levels: LEVELS, selected: 1, activeHeight: 720, pending: false }),
+    ).toBe("720p");
+  });
+
+  it("shows the target rung with a busy ellipsis while a manual switch is pending", () => {
+    expect(qualityLabel({ levels: LEVELS, selected: 0, activeHeight: 720, pending: true })).toBe(
+      "480p…",
+    );
+  });
+
+  it("ignores a pending flag on Auto (ABR is never 'busy')", () => {
+    expect(
+      qualityLabel({ levels: LEVELS, selected: AUTO_LEVEL, activeHeight: 480, pending: true }),
+    ).toBe("Auto (480p)");
   });
 });

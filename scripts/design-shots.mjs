@@ -197,7 +197,41 @@ const SAMPLE_DETAIL = {
   language: "en",
   license: "cc-by",
   tags: ["colorgrading", "monochrome", "filmmaking"],
+  // Transcoded HLS ladder so the bespoke player's quality selector renders in the
+  // capture (W1.U1). The master playlist is mocked below; segments are aborted
+  // (we screenshot chrome, not frames), so the video stays paused and its custom
+  // overlay controls are pinned visible.
+  hls_url: "/api/v1/videos/v1/hls/master.m3u8",
+  renditions: [
+    { height: 1080, width: 1920 },
+    { height: 720, width: 1280 },
+    { height: 480, width: 854 },
+  ],
 };
+
+// A synthetic 3-rung master playlist so hls.js parses a real ladder and the
+// quality menu lists Auto + 1080p/720p/480p in the watch capture.
+const SAMPLE_HLS_MASTER = [
+  "#EXTM3U",
+  "#EXT-X-STREAM-INF:BANDWIDTH=3200000,RESOLUTION=1920x1080",
+  "1080p/playlist.m3u8",
+  "#EXT-X-STREAM-INF:BANDWIDTH=1540000,RESOLUTION=1280x720",
+  "720p/playlist.m3u8",
+  "#EXT-X-STREAM-INF:BANDWIDTH=968000,RESOLUTION=854x480",
+  "480p/playlist.m3u8",
+  "",
+].join("\n");
+
+const SAMPLE_HLS_VARIANT = [
+  "#EXTM3U",
+  "#EXT-X-VERSION:3",
+  "#EXT-X-TARGETDURATION:4",
+  "#EXT-X-MEDIA-SEQUENCE:0",
+  "#EXTINF:4.0,",
+  "seg_00000.ts",
+  "#EXT-X-ENDLIST",
+  "",
+].join("\n");
 
 const SAMPLE_COMMENTS = {
   comments: [
@@ -703,6 +737,14 @@ const AREAS = {
         route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
       );
       await page.route(/\/api\/v1\/videos\/v1\/original/, (route) => route.abort());
+      // HLS ladder so the quality selector renders; segments abort (chrome, not frames).
+      await page.route(/\/api\/v1\/videos\/v1\/hls\/master\.m3u8$/, (route) =>
+        route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: SAMPLE_HLS_MASTER }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/hls\/\d+p\/playlist\.m3u8$/, (route) =>
+        route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: SAMPLE_HLS_VARIANT }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/hls\/\d+p\/seg_\d+\.ts$/, (route) => route.abort());
       await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
         route.fulfill({ json: { captions: [] } }),
       );
@@ -716,6 +758,23 @@ const AREAS = {
       await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
         route.fulfill({ json: SAMPLE_CHANNEL_VIDEOS }),
       );
+    },
+  },
+  // Embed player (backport W1.U1): the bespoke shell sized to fill the iframe
+  // (same custom chrome as watch, minus theater) with the escape-hatch title link.
+  // The HLS ladder is mocked so the quality selector renders; segments abort.
+  embed: {
+    path: "/embed/v1",
+    async mock(page) {
+      await page.route(/\/api\/v1\/videos\/v1$/, (route) => route.fulfill({ json: SAMPLE_DETAIL }));
+      await page.route(/\/api\/v1\/videos\/v1\/original/, (route) => route.abort());
+      await page.route(/\/api\/v1\/videos\/v1\/hls\/master\.m3u8$/, (route) =>
+        route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: SAMPLE_HLS_MASTER }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/hls\/\d+p\/playlist\.m3u8$/, (route) =>
+        route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: SAMPLE_HLS_VARIANT }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/hls\/\d+p\/seg_\d+\.ts$/, (route) => route.abort());
     },
   },
   // Channel page (backport W0.6): banner/avatar header, Follow affordance, sort

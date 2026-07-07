@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { ApiError, api, videoThumbnailUrl } from "@/lib/api";
+import { VideoPlayer } from "@/components/player/VideoPlayer";
+import { ApiError, api } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { parseStartTime } from "@/lib/start-time";
-import { useHlsPlayback } from "@/lib/use-hls-playback";
 
 type Status = "loading" | "notfound" | "error" | "ready";
 
@@ -71,32 +71,25 @@ export function EmbedPlayer({ id }: { id: string }) {
   return <EmbedVideo video={video} startAt={startAt} />;
 }
 
-// EmbedVideo is the ready-state frame: the media element (owned here so the
-// HLS hook can attach to it) plus the escape-hatch title link.
+// EmbedVideo is the ready-state frame: the bespoke player shell sized to fill the
+// iframe (variant="embed" — the same custom chrome as the watch page, minus the
+// watch-only theater mode), plus the escape-hatch title link over the video. The
+// videoRef is owned here so the shell can attach the HLS pipeline to it.
 function EmbedVideo({ video, startAt }: { video: Video; startAt: number | null }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const playback = useHlsPlayback(videoRef, video, startAt);
 
   return (
-    <div className="relative flex h-dvh w-full bg-black">
-      <video
-        ref={videoRef}
-        controls
-        playsInline
-        className="h-full w-full bg-black"
-        src={playback.src}
-        poster={video.has_thumbnail ? videoThumbnailUrl(video.id) : undefined}
-      >
-        Your browser does not support the video tag.
-      </video>
-      <Link
-        href={`/videos/${video.id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute left-0 top-0 max-w-full truncate rounded-br-lg bg-black/60 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-      >
-        {video.title}
-      </Link>
+    <div className="flex h-dvh w-full bg-black">
+      <VideoPlayer video={video} videoRef={videoRef} startAt={startAt} variant="embed">
+        <Link
+          href={`/videos/${video.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute left-0 top-0 z-30 max-w-full truncate rounded-br-lg bg-black/60 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        >
+          {video.title}
+        </Link>
+      </VideoPlayer>
     </div>
   );
 }

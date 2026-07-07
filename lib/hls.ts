@@ -67,3 +67,32 @@ export function buildLevelMenu(levels: Array<{ height?: number }>): LevelOption[
     .map(([height, level]) => ({ level, label: `${height}p` }));
   return [{ level: AUTO_LEVEL, label: "Auto" }, ...entries];
 }
+
+/**
+ * qualityLabel renders the quality menu-button's label from the current
+ * selection state, matching the smooth-switch (hls.nextLevel + LEVEL_SWITCHED)
+ * pending model in use-hls-playback:
+ * - a manual pick not yet confirmed by LEVEL_SWITCHED shows the target rung with
+ *   a trailing ellipsis ("720p…") — the "busy" state the spec requires;
+ * - once confirmed (or picked while ABR was already there) it shows that rung;
+ * - on Auto it shows "Auto", or "Auto (720p)" when the active ABR rung height is
+ *   known (from the last LEVEL_SWITCHED).
+ * `selected` / `active` are hls.js level indices (AUTO_LEVEL = -1); `activeHeight`
+ * is the pixel height of the active rung (null when unknown, e.g. pre-manifest or
+ * in a mocked run where no fragment ever loads).
+ */
+export function qualityLabel(opts: {
+  levels: LevelOption[];
+  selected: number;
+  activeHeight: number | null;
+  pending: boolean;
+}): string {
+  const { levels, selected, activeHeight, pending } = opts;
+  const labelOf = (level: number): string =>
+    levels.find((l) => l.level === level)?.label ?? "Auto";
+  if (selected === AUTO_LEVEL) {
+    return activeHeight && activeHeight > 0 ? `Auto (${activeHeight}p)` : "Auto";
+  }
+  const base = labelOf(selected);
+  return pending ? `${base}…` : base;
+}

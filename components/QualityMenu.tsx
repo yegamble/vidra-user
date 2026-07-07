@@ -1,30 +1,45 @@
 "use client";
 
-import { PlayerMenu } from "@/components/PlayerMenu";
-import type { LevelOption } from "@/lib/hls";
+import { PlayerMenu, type PlayerMenuVariant } from "@/components/PlayerMenu";
+import { qualityLabel, type LevelOption } from "@/lib/hls";
 
-// QualityMenu is the player's quality selector: a menu button ("Quality: Auto")
-// opening a menu of Auto + one entry per rendition height, driving hls.js level
-// selection. Rendered only for hls.js playback — native-HLS and original
-// playback expose nothing controllable, so the menu hides there (the caller
-// passes no levels). Interaction/keyboard semantics live in PlayerMenu.
+// QualityMenu is the player's quality/resolution selector: a menu button
+// ("Quality: Auto") opening a menu of Auto + one entry per rendition height,
+// driving hls.js level selection via hls.nextLevel (smooth switch). Rendered
+// only for hls.js playback — native-HLS and original playback expose nothing
+// controllable, so the menu hides there (the caller passes no levels).
+//
+// The visible label reflects the smooth-switch state: the picked rung with a
+// busy "…" until LEVEL_SWITCHED confirms it (`pending`), and "Auto (720p)" once
+// the active ABR rung height is known (`activeHeight`). Interaction/keyboard
+// semantics live in PlayerMenu.
 export function QualityMenu({
   levels,
   currentLevel,
+  activeHeight = null,
+  pending = false,
   onSelect,
+  variant = "bar",
 }: {
   levels: LevelOption[];
   currentLevel: number;
+  /** Active ABR rung height (for the "Auto (720p)" readout); omit where unknown. */
+  activeHeight?: number | null;
+  /** True while a manual smooth switch is in flight (paints a busy "…"); omit if N/A. */
+  pending?: boolean;
   onSelect: (level: number) => void;
+  variant?: PlayerMenuVariant;
 }) {
   if (levels.length === 0) return null;
 
-  const currentLabel = levels.find((l) => l.level === currentLevel)?.label ?? "Auto";
+  const label = qualityLabel({ levels, selected: currentLevel, activeHeight, pending });
 
   return (
     <PlayerMenu
-      buttonLabel={`Quality: ${currentLabel}`}
+      buttonLabel={`Quality: ${label}`}
+      buttonText={label}
       menuLabel="Playback quality"
+      variant={variant}
       icon={
         // Minified inline sliders icon
         <svg
