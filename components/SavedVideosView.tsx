@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
+import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { Video } from "@/lib/api";
 
@@ -87,12 +88,12 @@ function Library() {
   }
 
   return (
-    <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <VideoGrid>
       {videos.map((video) => (
         <li key={video.id}>
           <VideoCard video={video} />
         </li>
       ))}
-    </ul>
+    </VideoGrid>
   );
 }

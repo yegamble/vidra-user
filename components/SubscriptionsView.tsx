@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
+import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { Video } from "@/lib/api";
 
@@ -95,12 +96,12 @@ function Feed() {
   }
 
   return (
-    <ul className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 lg:grid-cols-4">
+    <VideoGrid>
       {videos.map((video) => (
         <li key={video.id}>
           <VideoCard video={video} />
         </li>
       ))}
-    </ul>
+    </VideoGrid>
   );
 }

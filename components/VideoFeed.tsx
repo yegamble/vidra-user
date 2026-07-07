@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
+import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { FeedSort, Video } from "@/lib/api";
 import type { FeedFilters } from "@/lib/feed-url";
@@ -100,13 +101,13 @@ export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: Fe
   }
   return (
     <div className="flex flex-col gap-6">
-      <ul className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+      <VideoGrid>
         {videos.map((video) => (
           <li key={video.id}>
             <VideoCard video={video} />
           </li>
         ))}
-      </ul>
+      </VideoGrid>
       {hasMore ? (
         <LoadMoreButton
           busy={more === "loading"}

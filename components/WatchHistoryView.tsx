@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
+import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { HistoryItem } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
@@ -124,7 +125,7 @@ function History() {
           Clear all history
         </button>
       </div>
-      <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <VideoGrid>
         {items.map((item) => (
           <li key={item.id} className="flex flex-col gap-2">
             <VideoCard
@@ -155,7 +156,7 @@ function History() {
             </div>
           </li>
         ))}
-      </ul>
+      </VideoGrid>
     </div>
   );
 }

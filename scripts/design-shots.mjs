@@ -239,6 +239,23 @@ const SAMPLE_CHANNEL_VIDEOS = {
   ],
 };
 
+// A search-results payload (GET /videos/search) — the search surface is a dense
+// thumbnail-left row list, so this reuses the feed's illustrative videos.
+const SAMPLE_SEARCH = { query: "grading", videos: SAMPLE_FEED.videos, limit: 20, offset: 0 };
+
+// A watch-history payload (GET /me/history): each card carries a resume position
+// and a watched_at, so the grid renders the resume-progress bar + "Resume at m:ss".
+const SAMPLE_HISTORY = {
+  videos: [
+    { ...sampleVideo("v1", "Late-night color grading session", { views: 1200, duration: 1830, ageDays: 0 }), position_seconds: 540, watched_at: new Date(Date.now() - 2 * 3_600_000).toISOString() },
+    { ...sampleVideo("v2", "Shooting the Alps on medium format — a field diary", { views: 128_000, duration: 1456, ageDays: 2, handle: "aurora-lab", channel: "Aurora Lab" }), position_seconds: 0, watched_at: new Date(Date.now() - 26 * 3_600_000).toISOString() },
+    { ...sampleVideo("v3", "Building a federated video pipeline in Go", { views: 42_000, duration: 1083, ageDays: 5, handle: "north-loop", channel: "North Loop" }), position_seconds: 300, watched_at: new Date(Date.now() - 3 * 86_400_000).toISOString() },
+    { ...sampleVideo("v4", "Monochrome grading — the luxury look, by hand", { views: 96_000, duration: 1900, ageDays: 7 }), position_seconds: 1200, watched_at: new Date(Date.now() - 8 * 86_400_000).toISOString() },
+  ],
+  limit: 20,
+  offset: 0,
+};
+
 // ---- area registry -----------------------------------------------------------
 
 /** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void> }>} */
@@ -324,6 +341,50 @@ const AREAS = {
       await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
         route.fulfill({ json: SAMPLE_CHANNEL_VIDEOS }),
       );
+    },
+  },
+  // Search results (backport W0.7): the dense thumbnail-left row list plus the
+  // filter row. Public surface, so no authed shell needed.
+  search: {
+    path: "/search?q=grading",
+    async mock(page) {
+      await page.route(/\/api\/v1\/videos\/search/, (route) => route.fulfill({ json: SAMPLE_SEARCH }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG }),
+      );
+    },
+  },
+  // Subscriptions feed (backport W0.7): the Remote-subscriptions affordance above
+  // a home-consistent video grid of followed-channel videos. Auth-gated.
+  subscriptions: {
+    path: "/subscriptions",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/subscriptions\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_FEED }),
+      );
+      await page.route(/\/api\/v1\/me\/remote-follows(\?|$)/, (route) =>
+        route.fulfill({ json: { follows: [], limit: 100, offset: 0 } }),
+      );
+    },
+  },
+  // Library / saved videos (backport W0.7): a home-consistent grid of saved
+  // cards under the Library title + Playlists link. Auth-gated.
+  library: {
+    path: "/library",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/saved(\?|$)/, (route) => route.fulfill({ json: SAMPLE_FEED }));
+    },
+  },
+  // Watch history (backport W0.7): a home-consistent grid of watched cards with
+  // resume-progress bars, per-item resume/remove footers, and a clear-all
+  // control. Auth-gated.
+  history: {
+    path: "/history",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/history(\?|$)/, (route) => route.fulfill({ json: SAMPLE_HISTORY }));
     },
   },
 };

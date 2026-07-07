@@ -13,6 +13,7 @@ import { LinkButton } from "@/components/ui/LinkButton";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
+import { VideoGrid } from "@/components/VideoGrid";
 import { ApiError, api, channelAvatarUrl, channelBannerUrl } from "@/lib/api";
 import type { Channel, Video } from "@/lib/api";
 import { formatCount } from "@/lib/format";
@@ -152,13 +153,13 @@ export function ChannelView({ handle }: { handle: string }) {
           {/* Sort chips in the shared template pill language (filled = active),
               above a grid that matches the home feed's cards exactly. */}
           <ChannelSortChips sort={sort} onChange={changeSort} />
-          <ul className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+          <VideoGrid>
             {sortedVideos.slice(0, visibleCount).map((video) => (
               <li key={video.id}>
                 <VideoCard video={video} />
               </li>
             ))}
-          </ul>
+          </VideoGrid>
           {sortedVideos.length > visibleCount ? (
             <LoadMoreButton onClick={() => setVisibleCount((c) => c + PAGE_SIZE)} />
           ) : null}
