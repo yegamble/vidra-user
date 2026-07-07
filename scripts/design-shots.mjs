@@ -777,6 +777,22 @@ const AREAS = {
       await page.route(/\/api\/v1\/videos\/v1\/hls\/\d+p\/seg_\d+\.ts$/, (route) => route.abort());
     },
   },
+  // Watch page — speed menu open (backport W1.U2 / PLAY-03): the player's
+  // settings-cluster Speed menu opened over the media surface, showing the full
+  // 0.25×–4× rate ladder as menuitemradio entries with 1× (the button now reads
+  // "1×", not the old "Normal") checked. Reuses the watch mock; the act hook opens
+  // the menu. The height-capped menu is scrollable, so it auto-scrolls to the
+  // checked 1× — the extended rungs (2.5×–4×) sit just below the fold.
+  "watch-speed": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+    },
+    async act(page) {
+      await page.getByRole("button", { name: "Speed: 1×" }).click();
+      await page.getByRole("menu", { name: "Playback speed" }).waitFor({ state: "visible" });
+    },
+  },
   // Channel page (backport W0.6): banner/avatar header, Follow affordance, sort
   // chips, and a home-consistent video grid. Authed so the Follow button (not
   // the signed-out prompt) renders.

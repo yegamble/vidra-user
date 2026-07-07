@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -17,6 +18,7 @@ import { SpeedMenu } from "@/components/SpeedMenu";
 import { videoThumbnailUrl, type Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
+import { readStoredRate, serverRate, storeRate, subscribeRate } from "@/lib/player-rates";
 import { readBuffered } from "@/lib/player-ui";
 import {
   SHORTCUT_IGNORE_SELECTOR,
@@ -74,7 +76,14 @@ export function VideoPlayer({
   const playback = useHlsPlayback(videoRef, video, startAt);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const [speed, setSpeed] = useState(1);
+  // The chosen playback rate is remembered for the browsing session (a stop-gap
+  // until W1.U6's per-user default_speed). Read through useSyncExternalStore so
+  // the SSR snapshot is the default (no hydration mismatch) and the client
+  // restores the session's rate after hydration; user picks (the menu now,
+  // `<`/`>` in W1.U8) go through setSpeed, which broadcasts to every player.
+  const speed = useSyncExternalStore(subscribeRate, readStoredRate, serverRate);
+  const setSpeed = useCallback((rate: number) => storeRate(rate), []);
+
   const [paused, setPaused] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);

@@ -62,26 +62,33 @@ async function mockWatchPage(page: Page, opts: { realVideo?: boolean; captions?:
   );
 }
 
-test("the speed selector applies the chosen rate to the player", async ({ page }) => {
+test("the speed selector offers the full 0.25×–4× ladder and applies the chosen rate", async ({
+  page,
+}) => {
   await mockWatchPage(page);
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
 
-  const button = page.getByRole("button", { name: "Speed: Normal" });
+  // Normal speed reads "1×" on the button (PLAY-03 — not the old "Normal").
+  const button = page.getByRole("button", { name: "Speed: 1×" });
   await button.click();
   const menu = page.getByRole("menu", { name: "Playback speed" });
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("menuitemradio", { name: "Normal" })).toHaveAttribute(
+  // The full mined ladder: 12 rungs, 1× currently checked, 4× at the bottom.
+  await expect(menu.getByRole("menuitemradio")).toHaveCount(12);
+  await expect(menu.getByRole("menuitemradio", { name: "1×" })).toHaveAttribute(
     "aria-checked",
     "true",
   );
-  await menu.getByRole("menuitemradio", { name: "1.5×" }).click();
+  await menu.getByRole("menuitemradio", { name: "4×" }).click();
 
-  await expect(page.getByRole("button", { name: "Speed: 1.5×" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Speed: 4×" })).toBeVisible();
   await expect(page.getByRole("menu", { name: "Playback speed" })).toHaveCount(0);
   await expect
     .poll(() => page.locator("video").evaluate((el: HTMLVideoElement) => el.playbackRate))
-    .toBe(1.5);
+    .toBe(4);
+  // The choice is remembered for the browsing session (stop-gap until W1.U6).
+  expect(await page.evaluate(() => sessionStorage.getItem("vidra.player.speed"))).toBe("4");
 });
 
 test("keyboard shortcuts toggle mute and start playback", async ({ page }) => {

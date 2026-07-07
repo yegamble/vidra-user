@@ -1,18 +1,14 @@
 "use client";
 
 import { PlayerMenu, type PlayerMenuVariant } from "@/components/PlayerMenu";
+import { PLAYBACK_RATES, rateLabel } from "@/lib/player-rates";
 
-// The selectable playback rates (native video.playbackRate), 0.25×–2×.
-export const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
-
-function rateLabel(rate: number): string {
-  return rate === 1 ? "Normal" : `${rate}×`;
-}
-
-// SpeedMenu is the player's playback-speed selector: a menu button
-// ("Speed: Normal") opening a menu of 0.25×–2× rates. Always available — every
+// SpeedMenu is the player's playback-speed selector: a menu button ("Speed: 1×")
+// opening a menu of the full 0.25×–4× rate ladder (PLAY-03) as menuitemradio
+// entries driving the native video.playbackRate. Always available — every
 // playback path (hls.js, native HLS, progressive original) honours the native
-// video.playbackRate. Interaction/keyboard semantics live in PlayerMenu.
+// rate. The rate ladder + labels live in lib/player-rates (the single shared
+// source); interaction/keyboard semantics live in PlayerMenu.
 export function SpeedMenu({
   speed,
   onSelect,

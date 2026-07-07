@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { TINY_MP4_BASE64 } from "../e2e-backed/fixtures";
+
 // Mocked HLS playback coverage (a real backend is not running in `npm run ci`).
 // Tiny valid m3u8 fixtures are served via page.route so REAL hls.js parses a
 // real master playlist (MANIFEST_PARSED is what reveals the quality menu — the
@@ -161,6 +163,48 @@ test("a missing HLS playlist falls back to the original file", async ({ page }) 
     { timeout: 15_000 },
   );
   await expect(page.getByRole("button", { name: /^Quality:/ })).toHaveCount(0);
+});
+
+test("the chosen playback speed survives an HLS→original fallback (PLAY-03)", async ({ page }) => {
+  // The detail advertises hls_url, but the master resolves (slowly) to a 404 —
+  // giving us a window to pick a rate while hls.js is still in flight before the
+  // player degrades to the progressive original. The rate must ride through the
+  // src change (defaultPlaybackRate + the shell's re-apply-on-src effect), not be
+  // reset to 1× by the media load.
+  await page.route(DETAIL, (route) => route.fulfill({ json: HLS_DETAIL }));
+  await page.route(ORIGINAL, (route) =>
+    route.fulfill({ contentType: "video/mp4", body: Buffer.from(TINY_MP4_BASE64, "base64") }),
+  );
+  await mockWatchExtras(page);
+  await page.route(MASTER, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    await route.fulfill({
+      status: 404,
+      json: { error: { code: "not_found", message: "playlist not ready" } },
+    });
+  });
+
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Adaptive Clip" })).toBeVisible();
+
+  // Pick 4× while hls.js is still attempting the master (fallback fires ~800ms in).
+  await page.getByRole("button", { name: "Speed: 1×" }).click();
+  await page
+    .getByRole("menu", { name: "Playback speed" })
+    .getByRole("menuitemradio", { name: "4×" })
+    .click();
+  await expect(page.getByRole("button", { name: "Speed: 4×" })).toBeVisible();
+
+  // hls.js gives up and the element degrades to the progressive original...
+  await expect(page.locator("video")).toHaveAttribute(
+    "src",
+    "http://localhost:8080/api/v1/videos/v1/original",
+    { timeout: 15_000 },
+  );
+  // ...and the chosen 4× is intact on the newly-loaded original stream.
+  await expect
+    .poll(() => page.locator("video").evaluate((el: HTMLVideoElement) => el.playbackRate))
+    .toBe(4);
 });
 
 test("without MSE the master playlist plays natively and no selector is shown", async ({

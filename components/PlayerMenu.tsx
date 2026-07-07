@@ -25,8 +25,8 @@ export type PlayerMenuVariant = "bar" | "overlay";
 //
 // `buttonLabel` is the accessible name (aria-label + tooltip); `buttonText` is
 // the shorter visible label (defaults to buttonLabel). On the overlay variant
-// the visible text is the tail of the accessible name (e.g. "Normal" of
-// "Speed: Normal"), so it stays contained in the accessible name (WCAG 2.5.3).
+// the visible text is the tail of the accessible name (e.g. "1.5×" of
+// "Speed: 1.5×"), so it stays contained in the accessible name (WCAG 2.5.3).
 export function PlayerMenu<T extends string | number>({
   buttonLabel,
   buttonText,

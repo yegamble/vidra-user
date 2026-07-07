@@ -32,6 +32,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.sessionStorage.clear();
 });
 
 describe("VideoPlayer shell", () => {
@@ -46,7 +47,7 @@ describe("VideoPlayer shell", () => {
     expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Mute" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Fullscreen" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Speed: Normal" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Speed: 1×" })).toBeTruthy();
   });
 
   it("hides the quality selector and captions toggle when neither is available", () => {
@@ -75,14 +76,30 @@ describe("VideoPlayer shell", () => {
     expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
   });
 
-  it("opens the speed menu, applies the rate, and relabels the button", () => {
+  it("opens the speed menu with the full 0.25×–4× ladder, applies a rate, relabels, and persists it", () => {
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
-    fireEvent.click(screen.getByRole("button", { name: "Speed: Normal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Speed: 1×" }));
     const menu = screen.getByRole("menu", { name: "Playback speed" });
-    fireEvent.click(within(menu).getByRole("menuitemradio", { name: "1.5×" }));
-    expect(screen.getByRole("button", { name: "Speed: 1.5×" })).toBeTruthy();
-    expect(video.playbackRate).toBe(1.5);
+    // Full mined ladder, ascending, normal reads "1×" (not "Normal").
+    const items = within(menu).getAllByRole("menuitemradio");
+    expect(items.map((i) => i.textContent?.replace("✓", "").trim())).toEqual([
+      "0.25×", "0.5×", "0.75×", "1×", "1.25×", "1.5×", "1.75×", "2×", "2.5×", "3×", "3.5×", "4×",
+    ]);
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: "4×" }));
+    expect(screen.getByRole("button", { name: "Speed: 4×" })).toBeTruthy();
+    expect(video.playbackRate).toBe(4);
+    expect(video.defaultPlaybackRate).toBe(4);
+    // The choice is remembered for the session.
+    expect(window.sessionStorage.getItem("vidra.player.speed")).toBe("4");
+  });
+
+  it("restores the session's remembered speed on mount", () => {
+    window.sessionStorage.setItem("vidra.player.speed", "2");
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    expect(screen.getByRole("button", { name: "Speed: 2×" })).toBeTruthy();
+    expect(video.playbackRate).toBe(2);
   });
 
   it("pins the controls while paused and auto-hides ~3s after playback starts", () => {
