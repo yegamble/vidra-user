@@ -595,6 +595,31 @@ the item `BLOCKED` on the backend dependency — do not mark it `VERIFIED` on mo
 
 ---
 
+# W0 — Design/Template Parity (Backport Programme)
+
+Spec: `.ralph/specs/backport-w0-design-parity.md` — read it (and LOOK at the two
+template JPEGs in `.ralph/specs/design/`) before touching any of these. The token
+migration is already complete; W0 is visual/layout parity with the templates. Every
+task follows the spec's working rules: before/after screenshots (light+dark ×
+mobile+desktop) into the git-ignored `.ralph/design-review/w0/<area>/`, tokens only,
+e2e + a11y suites updated in the same slice and green, one area per slice.
+
+- [ ] W0.1 Set up the parity harness: add `.ralph/design-review/` to `.gitignore`; add a small Playwright capture script (`scripts/design-shots.ts` or npm script) that screenshots a given route in light+dark × mobile+desktop into `.ralph/design-review/w0/<area>/`.
+- [ ] W0.2 Desktop app shell to template: sidebar order Home/Trending/Subscriptions/Library/History/Messages/Studio + FOLLOWING section (channel avatars, names, unread/live dot); header with centered pill search ("Search videos, channels, tags"), `+ Create` pill, bell with dot, avatar menu.
+- [ ] W0.3 Mobile app shell to template: bottom tab bar Home/Search/Create/Inbox/Library as primary navigation (hamburger only for secondary/overflow); large page-title header with bell + avatar.
+- [ ] W0.4 Home/feed to template: pill filter chips (Recent/Popular/Trending, filled=active); "Live now" rail with `● LIVE` badge + "N watching" chip + stream count; borderless rounded-2xl video cards (duration chip bottom-right, IPFS badge where applicable, avatar + title-first two-line metadata); 3-column desktop grid.
+- [ ] W0.5 Watch page to template language: player chrome, metadata block (title-first, muted channel·views·age), action row, related rail, comments styling.
+- [ ] W0.6 Channel page to template language: banner/avatar header, follow affordance, chips + video grid consistent with home cards.
+- [ ] W0.7 Search, trending, subscriptions, library, history to template language: shared chips, grids, card treatment, empty states.
+- [ ] W0.8 Studio surfaces to template language (tables, upload entry points, stats cards) with Apple-HIG hierarchy and spacing.
+- [ ] W0.9 Settings (all tabs) to template language: grouped sections, HIG-style rows/controls, consistent danger zones.
+- [ ] W0.10 Messages + notifications to template language (inbox lists, thread view, bell popover).
+- [ ] W0.11 Admin + moderation screens to template language: HIG tables, toolbars, filters, empty/error states (utilitarian ≠ unstyled).
+- [ ] W0.12 Auth screens (login/signup/reset/MFA) to template language.
+- [ ] W0.13 Exit sweep: re-screenshot every area, verify template-language checklist per screen, axe + full mocked suite + `npm run ci` green; record the final parity review in this note.
+
+---
+
 # Optional / Deferred / Non-Blocking
 
 These items do not block Ralph exit if configured as optional in `.ralphrc` and explicitly kept in this section.
