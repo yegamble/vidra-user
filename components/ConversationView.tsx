@@ -1,25 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { EncryptedThreadView } from "@/components/e2ee/EncryptedThreadView";
-import { LinkPreviewCard } from "@/components/messaging/LinkPreviewCard";
-import { MessageAttachments } from "@/components/messaging/MessageAttachments";
-import { ReportButton } from "@/components/ReportButton";
+import { MessageTimeline } from "@/components/messaging/MessageTimeline";
+import { ThreadHeader } from "@/components/messaging/ThreadHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, errorMessage } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type { EncryptedMessage, Message } from "@/lib/api";
-import { formatBytes, relativeTime } from "@/lib/format";
+import { formatBytes } from "@/lib/format";
+import type { DisplayMessage } from "@/lib/messaging/grouping";
 
 const MAX_MESSAGE_LEN = 5000;
 const MAX_ATTACHMENTS = 4;
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MiB, matching the backend cap.
+const POLL_INTERVAL_MS = 10_000;
+const INITIAL_LIMIT = 100;
+const POLL_LIMIT = 50;
 
 type Status = "loading" | "error" | "ready";
+
+// A local, optimistic message: the DisplayMessage plus the attachment ids we
+// need to re-post it on retry (never surfaced to the timeline).
+interface PendingMessage extends DisplayMessage {
+  clientId: string;
+  attachmentIds: string[];
+}
 
 // A file is allowed if it is an image, video, audio clip, or PDF (the backend
 // attachment allowlist). Checked client-side for an instant error; the backend
@@ -31,72 +41,113 @@ function isAllowedAttachment(file: File): boolean {
   );
 }
 
-// ConversationView renders a single 1:1 thread: the messages (oldest → newest,
-// chat-style) plus a compose box. A non-participant or unknown conversation is a
-// 404 from the backend, which we surface as a "conversation not found" state.
+// mergeMessages upserts an incoming (server) batch into the loaded, oldest→newest
+// list: server copies win on id overlap, brand-new ids are inserted, and nothing
+// already loaded is dropped (so a short poll page never truncates history).
+function mergeMessages(prev: DisplayMessage[], incoming: DisplayMessage[]): DisplayMessage[] {
+  if (incoming.length === 0) return prev;
+  const map = new Map<string, DisplayMessage>(prev.map((m) => [m.id, m]));
+  for (const m of incoming) map.set(m.id, { ...map.get(m.id), ...m });
+  return Array.from(map.values()).sort((a, b) => {
+    const t = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    if (t !== 0) return t;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+}
+
+// ConversationView renders a single 1:1 thread. A non-participant or unknown
+// conversation is a 404 from the backend, surfaced as a "not found" state.
 export function ConversationView({
   conversationId,
   recipientHint,
+  unreadCount,
 }: {
   conversationId: string;
   recipientHint?: string;
+  unreadCount?: number;
 }) {
   const { status } = useSession();
 
   if (status !== "authed") {
     return (
-      <EmptyState
-        title="Sign in to see this conversation"
-        message={
-          <>
-            <Link
-              href="/login"
-              className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
-            >
-              Sign in
-            </Link>{" "}
-            to read and send direct messages.
-          </>
-        }
-      />
+      <div className="mx-auto w-full max-w-3xl px-4 py-8">
+        <EmptyState
+          title="Sign in to see this conversation"
+          message={
+            <>
+              <Link
+                href="/login"
+                className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
+              >
+                Sign in
+              </Link>{" "}
+              to read and send direct messages.
+            </>
+          }
+        />
+      </div>
     );
   }
 
-  return <Thread conversationId={conversationId} recipientHint={recipientHint} />;
+  // Key by id so navigating between threads remounts with fresh loading state.
+  return (
+    <Thread
+      key={conversationId}
+      conversationId={conversationId}
+      recipientHint={recipientHint}
+      unreadCount={unreadCount}
+    />
+  );
 }
 
 function Thread({
   conversationId,
   recipientHint,
+  unreadCount,
 }: {
   conversationId: string;
   recipientHint?: string;
+  unreadCount?: number;
 }) {
   const { user } = useSession();
+  const meId = user?.id;
   const [status, setStatus] = useState<Status>("loading");
   const [notFound, setNotFound] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  // The peer's read watermark (last message id they've read), for a "Seen"
-  // marker. Undefined when they've read nothing or disabled read receipts.
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [pending, setPending] = useState<PendingMessage[]>([]);
   const [peerReadId, setPeerReadId] = useState<string | undefined>(undefined);
-  // Non-null once the conversation is detected as encrypted (envelopes, not
-  // plaintext bodies). The backend fixes the type at creation; we branch on the
-  // shape of the messages response rather than assuming it.
   const [envelopes, setEnvelopes] = useState<EncryptedMessage[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [offline, setOffline] = useState(false);
 
+  const mountedRef = useRef(true);
+  const atBottomRef = useRef(true);
+  const inFlightSendsRef = useRef(0);
+  const pollFailuresRef = useRef(0);
+  const pendingRef = useRef<PendingMessage[]>(pending);
+
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Initial load (and manual retry — retry() resets loading state before bumping
+  // reloadKey, so the effect body never calls setState directly).
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getConversationMessages(conversationId, { limit: 100 }, controller.signal)
+      .getConversationMessages(conversationId, { limit: INITIAL_LIMIT }, controller.signal)
       .then((res) => {
         if ("messages" in res) {
-          // The API returns newest-first; show oldest-first so the latest is at the bottom.
-          setMessages([...res.messages].reverse());
+          setMessages(mergeMessages([], [...res.messages].reverse()));
           setPeerReadId(res.peer_last_read_message_id);
           setEnvelopes(null);
-          // Mark the conversation read on view (idempotent, advance-only). Best
-          // effort — a failure never blocks reading the thread.
           void api.markConversationRead(conversationId).catch(() => {});
         } else {
           setEnvelopes(res.envelopes);
@@ -111,209 +162,197 @@ function Thread({
     return () => controller.abort();
   }, [conversationId, reloadKey]);
 
+  // Poll page 1 every 10s while visible; merge by id (server wins), advance the
+  // read watermark only when at the bottom and focused (never in the background).
+  // Reads only refs + response data + stable setters, so it is a stable callback.
+  const poll = useCallback(async () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (inFlightSendsRef.current > 0) return;
+    try {
+      const res = await api.getConversationMessages(conversationId, { limit: POLL_LIMIT });
+      if (!mountedRef.current) return;
+      if (!("messages" in res)) return;
+      setMessages((prev) => mergeMessages(prev, [...res.messages].reverse()));
+      setPeerReadId(res.peer_last_read_message_id);
+      pollFailuresRef.current = 0;
+      setOffline(false);
+      if (atBottomRef.current && document.hasFocus()) {
+        void api.markConversationRead(conversationId).catch(() => {});
+      }
+    } catch {
+      if (!mountedRef.current) return;
+      pollFailuresRef.current += 1;
+      if (pollFailuresRef.current >= 2) setOffline(true);
+    }
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (status !== "ready" || envelopes !== null) return;
+    const interval = setInterval(() => void poll(), POLL_INTERVAL_MS);
+    const onFocus = () => void poll();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [status, envelopes, poll]);
+
+  const setAtBottom = useCallback((atBottom: boolean) => {
+    atBottomRef.current = atBottom;
+  }, []);
+
   function retry() {
     setStatus("loading");
     setNotFound(false);
     setReloadKey((k) => k + 1);
   }
 
-  // The other participant is whoever sent a plaintext message that isn't me.
-  const other = messages.find((m) => m.sender_id !== user?.id);
-  const otherName = other?.sender_display_name || other?.sender_username || "Conversation";
-  const encrypted = status === "ready" && envelopes !== null;
+  // Optimistic send: append a pending bubble immediately, then reconcile.
+  const dispatchSend = useCallback(
+    (clientId: string, body: string, attachmentIds: string[]) => {
+      inFlightSendsRef.current += 1;
+      api
+        .sendMessage(conversationId, body, attachmentIds)
+        .then((sent: Message) => {
+          if (!mountedRef.current) return;
+          setPending((p) => p.filter((x) => x.clientId !== clientId));
+          setMessages((prev) => mergeMessages(prev, [sent]));
+        })
+        .catch(() => {
+          if (!mountedRef.current) return;
+          setPending((p) =>
+            p.map((x) => (x.clientId === clientId ? { ...x, sendState: "failed" } : x)),
+          );
+        })
+        .finally(() => {
+          inFlightSendsRef.current -= 1;
+        });
+    },
+    [conversationId],
+  );
 
-  // Locally tombstone a message the sender just deleted (idempotent 204 already
-  // returned); a later refetch confirms persistence.
-  function onDeleted(id: string) {
+  const onSend = useCallback(
+    (body: string, attachmentIds: string[]) => {
+      const clientId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `tmp-${Date.now()}-${Math.random()}`;
+      const optimistic: PendingMessage = {
+        id: clientId,
+        clientId,
+        attachmentIds,
+        sendState: "sending",
+        sender_id: meId ?? "",
+        sender_display_name: user?.display_name,
+        sender_username: user?.username,
+        body,
+        created_at: new Date().toISOString(),
+      };
+      setPending((p) => [...p, optimistic]);
+      dispatchSend(clientId, body, attachmentIds);
+    },
+    [dispatchSend, meId, user?.display_name, user?.username],
+  );
+
+  const onRetry = useCallback(
+    (clientId: string) => {
+      const item = pendingRef.current.find((x) => x.clientId === clientId);
+      if (!item) return;
+      setPending((p) =>
+        p.map((x) => (x.clientId === clientId ? { ...x, sendState: "sending" } : x)),
+      );
+      dispatchSend(clientId, item.body, item.attachmentIds);
+    },
+    [dispatchSend],
+  );
+
+  const onDiscard = useCallback((clientId: string) => {
+    setPending((p) => p.filter((x) => x.clientId !== clientId));
+  }, []);
+
+  const onDeleted = useCallback((id: string) => {
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === id ? { ...m, deleted: true, body: "[deleted]", attachments: undefined, preview: undefined } : m,
+        m.id === id
+          ? { ...m, deleted: true, body: "[deleted]", attachments: undefined, preview: undefined }
+          : m,
       ),
     );
-  }
+  }, []);
+
+  const displayMessages = useMemo<DisplayMessage[]>(
+    () => [...messages, ...pending],
+    [messages, pending],
+  );
+
+  const encrypted = status === "ready" && envelopes !== null;
+  const other = messages.find((m) => m.sender_id !== meId);
+  const otherName = other?.sender_display_name || other?.sender_username || "Conversation";
+  const otherUsername = other?.sender_username;
+  const otherUserId = other?.sender_id ?? recipientHint;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2.5 border-b border-border-subtle pb-3">
-        <Link
-          href="/messages"
-          className="focus-ring shrink-0 rounded-full text-sm font-medium text-fg-muted transition-colors hover:text-fg"
+    <div className="flex min-h-0 flex-1 flex-col">
+      <ThreadHeader
+        name={encrypted ? "Encrypted conversation" : otherName}
+        username={otherUsername}
+        otherUserId={otherUserId}
+        encrypted={encrypted}
+      />
+
+      {offline ? (
+        <div
+          role="status"
+          className="shrink-0 bg-warning/15 px-4 py-1.5 text-center text-[12px] font-semibold text-warning"
         >
-          ← Messages
-        </Link>
-        <h1 className="truncate text-xl font-bold tracking-tight text-fg">
-          {encrypted ? "Encrypted conversation" : otherName}
-        </h1>
-      </div>
+          Connection lost — retrying…
+        </div>
+      ) : null}
 
       {status === "loading" ? (
-        <div className="flex justify-center py-24">
+        <div className="flex min-h-0 flex-1 items-center justify-center">
           <Spinner label="Loading conversation" />
         </div>
       ) : status === "error" ? (
-        <ErrorState
-          title={notFound ? "Conversation not found" : "Something went wrong"}
-          message={
-            notFound
-              ? "This conversation doesn't exist, or you're not a participant."
-              : "Could not load this conversation."
-          }
-          onRetry={notFound ? undefined : retry}
-        />
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+          <ErrorState
+            title={notFound ? "Conversation not found" : "Something went wrong"}
+            message={
+              notFound
+                ? "This conversation doesn't exist, or you're not a participant."
+                : "Could not load this conversation."
+            }
+            onRetry={notFound ? undefined : retry}
+          />
+        </div>
       ) : envelopes !== null ? (
-        <EncryptedThreadView
-          conversationId={conversationId}
-          initialEnvelopes={envelopes}
-          recipientId={recipientHint}
-          myUserId={user?.id ?? ""}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="mx-auto w-full max-w-3xl">
+            <EncryptedThreadView
+              conversationId={conversationId}
+              initialEnvelopes={envelopes}
+              recipientId={recipientHint}
+              myUserId={meId ?? ""}
+            />
+          </div>
+        </div>
       ) : (
         <>
-          <MessageList
-            messages={messages}
-            meId={user?.id}
+          <MessageTimeline
+            messages={displayMessages}
+            meId={meId}
             peerReadId={peerReadId}
+            unreadCount={unreadCount}
+            otherName={otherName}
             onDeleted={onDeleted}
+            onRetry={onRetry}
+            onDiscard={onDiscard}
+            onAtBottomChange={setAtBottom}
           />
-          <Composer
-            conversationId={conversationId}
-            onSent={(m) => setMessages((prev) => [...prev, m])}
-          />
+          <Composer conversationId={conversationId} onSend={onSend} />
         </>
       )}
     </div>
-  );
-}
-
-function MessageList({
-  messages,
-  meId,
-  peerReadId,
-  onDeleted,
-}: {
-  messages: Message[];
-  meId?: string;
-  peerReadId?: string;
-  onDeleted: (id: string) => void;
-}) {
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
-
-  if (messages.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-fg-muted">
-        No messages yet. Say hello.
-      </p>
-    );
-  }
-
-  // "Seen" watermark: the peer has read up to peerReadId. If my most-recent
-  // message sits at or before that watermark, show "Seen" beneath it.
-  const peerReadIndex = peerReadId ? messages.findIndex((m) => m.id === peerReadId) : -1;
-  let lastMineIndex = -1;
-  for (let i = 0; i < messages.length; i += 1) {
-    if (messages[i].sender_id === meId) lastMineIndex = i;
-  }
-  const seenIndex = lastMineIndex >= 0 && peerReadIndex >= lastMineIndex ? lastMineIndex : -1;
-
-  return (
-    <ul className="flex flex-col gap-2.5">
-      {messages.map((m, i) => {
-        const mine = m.sender_id === meId;
-        return (
-          <li key={m.id} className={"flex flex-col " + (mine ? "items-end" : "items-start")}>
-            <div
-              className={
-                "max-w-[78%] rounded-[18px] px-3.5 py-2.5 text-[14.5px] leading-normal " +
-                (mine
-                  ? "rounded-br-md bg-accent text-accent-fg"
-                  : "rounded-bl-md bg-surface-muted text-fg")
-              }
-            >
-              {m.deleted ? (
-                <p className="text-sm italic opacity-70">[deleted]</p>
-              ) : (
-                <>
-                  {m.body ? <p className="whitespace-pre-wrap break-words">{m.body}</p> : null}
-                  <MessageAttachments attachments={m.attachments} />
-                  {m.preview ? <LinkPreviewCard preview={m.preview} /> : null}
-                </>
-              )}
-              <span
-                className={
-                  "mt-1 block text-right text-[10px] " +
-                  (mine ? "text-accent-fg/70" : "text-fg-muted")
-                }
-              >
-                {relativeTime(m.created_at)}
-              </span>
-            </div>
-            {!m.deleted ? (
-              <MessageControls message={m} mine={mine} onDeleted={onDeleted} />
-            ) : null}
-            {i === seenIndex ? (
-              <span className="mt-0.5 text-[10px] text-fg-muted">Seen</span>
-            ) : null}
-          </li>
-        );
-      })}
-      <div ref={bottomRef} />
-    </ul>
-  );
-}
-
-// MessageControls renders the per-message affordance: Delete on your own
-// messages (sender-only tombstone), Report on the peer's (kind=message). Both
-// stay subtle beneath the bubble.
-function MessageControls({
-  message,
-  mine,
-  onDeleted,
-}: {
-  message: Message;
-  mine: boolean;
-  onDeleted: (id: string) => void;
-}) {
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function del() {
-    if (deleting) return;
-    setDeleting(true);
-    setError(null);
-    try {
-      await api.deleteMessage(message.id);
-      onDeleted(message.id);
-    } catch {
-      setError("Could not delete.");
-      setDeleting(false);
-    }
-  }
-
-  if (mine) {
-    return (
-      <span className="mt-0.5 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void del()}
-          disabled={deleting}
-          aria-label="Delete this message"
-          className="focus-ring rounded text-[11px] font-medium text-fg-muted transition-colors hover:text-danger disabled:opacity-60"
-        >
-          {deleting ? "Deleting…" : "Delete"}
-        </button>
-        {error ? <span className="text-[11px] text-danger">{error}</span> : null}
-      </span>
-    );
-  }
-
-  return (
-    <span className="mt-0.5">
-      <ReportButton kind="message" targetId={message.id} variant="link" />
-    </span>
   );
 }
 
@@ -339,22 +378,26 @@ function uploadErrorMessage(err: unknown): string {
   return "Upload failed.";
 }
 
+// Composer stays usable while a send is in flight (optimistic send is handled by
+// the parent). Auto-grow, Enter-to-send, and an icon send button are Composer v2
+// (Messaging v2 slice S5) — this keeps the existing controls and labels.
 function Composer({
   conversationId,
-  onSent,
+  onSend,
 }: {
   conversationId: string;
-  onSent: (m: Message) => void;
+  onSend: (body: string, attachmentIds: string[]) => void;
 }) {
   const [body, setBody] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const uploading = pending.some((p) => p.status === "uploading");
-  const readyIds = pending.filter((p) => p.status === "ready" && p.attachmentId).map((p) => p.attachmentId as string);
-  const canSend = !busy && !uploading && (body.trim() !== "" || readyIds.length > 0);
+  const readyIds = pending
+    .filter((p) => p.status === "ready" && p.attachmentId)
+    .map((p) => p.attachmentId as string);
+  const canSend = !uploading && (body.trim() !== "" || readyIds.length > 0);
 
   function updatePending(localId: string, patch: Partial<PendingAttachment>) {
     setPending((prev) => prev.map((p) => (p.localId === localId ? { ...p, ...patch } : p)));
@@ -391,34 +434,24 @@ function Composer({
         .then((res) => updatePending(localId, { status: "ready", attachmentId: res.attachment_id }))
         .catch((err: unknown) => updatePending(localId, { status: "error", error: uploadErrorMessage(err) }));
     }
-    // Reset the input so re-choosing the same file fires change again.
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  async function submit() {
+  function submit() {
     const trimmed = body.trim();
-    if (busy || uploading) return;
+    if (uploading) return;
     if (trimmed === "" && readyIds.length === 0) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const sent = await api.sendMessage(conversationId, trimmed, readyIds);
-      onSent(sent);
-      setBody("");
-      setPending([]);
-    } catch (err: unknown) {
-      setError(errorMessage(err, "Could not send your message."));
-    } finally {
-      setBusy(false);
-    }
+    onSend(trimmed, readyIds);
+    setBody("");
+    setPending([]);
   }
 
   return (
     <form
-      className="flex flex-col gap-2"
+      className="flex shrink-0 flex-col gap-2 border-t border-border-subtle px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        submit();
       }}
     >
       {pending.length > 0 ? (
@@ -495,7 +528,7 @@ function Composer({
           disabled={!canSend}
           className="focus-ring h-11 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
         >
-          {busy ? "Sending…" : "Send"}
+          Send
         </button>
       </div>
     </form>

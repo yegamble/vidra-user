@@ -49,7 +49,7 @@ export default function RootLayout({
             <div
               id="main-content"
               tabIndex={-1}
-              className="flex min-w-0 flex-1 flex-col focus:outline-none"
+              className="flex min-h-0 min-w-0 flex-1 flex-col focus:outline-none"
             >
               {children}
             </div>

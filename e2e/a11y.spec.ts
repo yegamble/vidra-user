@@ -198,6 +198,72 @@ test("the messages page passes axe (signed in, inbox rendered)", async ({ page }
   await expectNoSevereViolations(page);
 });
 
+test("the messages thread passes axe (grouped runs, separators, seen)", async ({ page }) => {
+  await signIn(page, "user");
+  await page.route(/\/api\/v1\/me\/conversations(\?|$)/, (route) =>
+    route.fulfill({
+      json: {
+        conversations: [
+          {
+            id: "c1",
+            updated_at: new Date().toISOString(),
+            other_user_id: "u2",
+            other_username: "bob",
+            other_display_name: "Bob Builder",
+            last_message_body: "see you then",
+            last_message_at: new Date().toISOString(),
+          },
+        ],
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/conversations\/c1\/messages(\?|$)/, (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    return route.fulfill({
+      json: {
+        messages: [
+          {
+            id: "m2",
+            conversation_id: "c1",
+            sender_id: "u1",
+            sender_username: "boss",
+            sender_display_name: "Boss",
+            body: "sounds good",
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: "m1",
+            conversation_id: "c1",
+            sender_id: "u2",
+            sender_username: "bob",
+            sender_display_name: "Bob Builder",
+            body: "see you then",
+            created_at: new Date().toISOString(),
+          },
+        ],
+        peer_last_read_message_id: "m2",
+        limit: 100,
+        offset: 0,
+      },
+    });
+  });
+  await page.route(/\/api\/v1\/conversations\/c1\/read$/, (route) =>
+    route.fulfill({ status: 204, body: "" }),
+  );
+  await page.route(/\/api\/v1\/users\/[^/]+\/avatar$/, (route) =>
+    route.fulfill({ status: 404, body: "" }),
+  );
+
+  await page.getByRole("link", { name: "Messages" }).click();
+  await page.getByText("Bob Builder").click();
+  await expect(page.getByRole("heading", { name: "Bob Builder" })).toBeVisible();
+  await expect(page.getByText("sounds good")).toBeVisible();
+  await expect(page.getByText("Seen")).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
 test("the admin users page passes axe (admin, list rendered)", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(USERS, (route) =>

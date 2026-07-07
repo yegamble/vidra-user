@@ -359,6 +359,143 @@ test("a viewer can report the peer's message from the thread", async ({ page }) 
   expect(reportBody).toEqual({ reason: "harassment" });
 });
 
+// --- Messaging v2 thread-view core (grouping, separators, avatars, header,
+// optimistic send + failed-retry, NEW divider). The persistence / cross-context
+// delivery round trips are proven in e2e-backed/messaging.spec.ts.
+
+const HOURS = 3600_000;
+
+test("groups runs, shows day/gap separators, and drops per-bubble timestamps", async ({
+  page,
+}) => {
+  await signIn(page);
+  const now = Date.now();
+  const iso = (ms: number) => new Date(now - ms).toISOString();
+  await routeMessages(page, {
+    // newest-first, as the API returns.
+    messages: [
+      peerMessage("p3", "standing by", { created_at: iso(60_000) }),
+      meMessage("m1", "three passes to get it right", { created_at: iso(2 * HOURS) }),
+      peerMessage("p2", "the highlights look incredible", { created_at: iso(26 * HOURS - 90_000) }),
+      peerMessage("p1", "did the grade land", { created_at: iso(26 * HOURS) }),
+    ],
+    peer_last_read_message_id: "m1",
+  });
+  await page.route(READ, (route) => route.fulfill({ status: 204, body: "" }));
+
+  await openThreadC1(page);
+  // All four bodies render.
+  await expect(page.getByText("did the grade land")).toBeVisible();
+  await expect(page.getByText("three passes to get it right")).toBeVisible();
+  await expect(page.getByText("standing by")).toBeVisible();
+  // Three centered day/gap separators (leading day header, the today boundary,
+  // and the >60-min gap) replace the in-bubble times. Separator <time> elements
+  // carry the "·" mid-dot; the bubbles' hidden <time> (absolute time) does not.
+  await expect(page.locator("time").filter({ hasText: "·" })).toHaveCount(3);
+  // No per-message relative timestamps remain inside the bubbles.
+  await expect(page.getByText(/\d+[a-z]+ ago/)).toHaveCount(0);
+  // One avatar per OTHER-party run (p1+p2 run, p3 run); my run has none.
+  await expect(page.getByTestId("run-avatar")).toHaveCount(2);
+  // The peer read my last message → a single quiet "Seen".
+  await expect(page.getByText("Seen")).toBeVisible();
+});
+
+test("the thread header shows the peer's name, handle, and a report affordance", async ({
+  page,
+}) => {
+  await signIn(page);
+  await routeMessages(page, { messages: [peerMessage("m1", "hey ada")] });
+  await page.route(READ, (route) => route.fulfill({ status: 204, body: "" }));
+
+  await openThreadC1(page);
+  await expect(page.getByRole("heading", { name: "Bob Builder" })).toBeVisible();
+  await expect(page.getByText("@bob")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to messages" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Report this user" })).toBeVisible();
+});
+
+test("an optimistic send that fails shows Not sent · Retry and recovers on retry", async ({
+  page,
+}) => {
+  await signIn(page);
+  let posts = 0;
+  await page.route(MESSAGES, (route) => {
+    const req = route.request();
+    if (req.method() === "POST") {
+      posts += 1;
+      if (posts === 1) {
+        return route.fulfill({
+          status: 500,
+          json: { error: { code: "server_error", message: "boom" } },
+        });
+      }
+      const body = (req.postDataJSON() as { body: string }).body;
+      return route.fulfill({ json: meMessage("m2", body) });
+    }
+    return route.fulfill({
+      json: { messages: [peerMessage("m1", "hey ada")], limit: 100, offset: 0 },
+    });
+  });
+  await page.route(READ, (route) => route.fulfill({ status: 204, body: "" }));
+
+  await openThreadC1(page);
+  await page.getByLabel("Write a message").fill("second try");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  // The optimistic bubble stays and flips to a failed state with a Retry.
+  await expect(page.getByText("second try")).toBeVisible();
+  await expect(page.getByText(/Not sent/)).toBeVisible();
+  const retry = page.getByRole("button", { name: "Retry" });
+  await expect(retry).toBeVisible();
+
+  await retry.click();
+  // The retry succeeds: the message persists and the failed state clears.
+  await expect(page.getByText("second try")).toBeVisible();
+  await expect(page.getByText(/Not sent/)).toHaveCount(0);
+});
+
+test("a NEW-messages divider appears from the inbox unread hint", async ({ page }) => {
+  await signIn(page);
+  const now = Date.now();
+  const iso = (ms: number) => new Date(now - ms).toISOString();
+  await routeMessages(page, {
+    messages: [
+      peerMessage("p2", "and another", { created_at: iso(60_000) }),
+      peerMessage("p1", "one unread", { created_at: iso(120_000) }),
+      meMessage("m1", "my earlier note", { created_at: iso(3 * HOURS) }),
+    ],
+  });
+  await page.route(READ, (route) => route.fulfill({ status: 204, body: "" }));
+
+  // Route the inbox with an unread count so the row link carries ?unread=2.
+  await page.route(CONVERSATIONS, (route) =>
+    route.fulfill({
+      json: {
+        conversations: [
+          {
+            id: "c1",
+            updated_at: new Date().toISOString(),
+            other_user_id: "u2",
+            other_username: "bob",
+            other_display_name: "Bob Builder",
+            last_message_body: "and another",
+            last_message_at: new Date().toISOString(),
+            unread_count: 2,
+          },
+        ],
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.getByRole("link", { name: "Messages" }).first().click();
+  await page.getByText("Bob Builder").click();
+
+  await expect(page).toHaveURL(/\/messages\/c1\?unread=2$/);
+  await expect(page.getByText("one unread")).toBeVisible();
+  await expect(page.getByText("New", { exact: true })).toBeVisible();
+});
+
 // --- New message composer (start a fresh conversation by username from the
 // inbox). The persistence round trip (cross-user, by username) is proven in
 // e2e-backed/message-compose.spec.ts.

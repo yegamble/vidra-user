@@ -620,6 +620,102 @@ e2e + a11y suites updated in the same slice and green, one area per slice.
 
 ---
 
+# P-MSG2 — Messaging v2 (proper messenger)
+
+## Operating notes
+- [ ] Read `.ralph/specs/messaging-v2.md` before any P-MSG2 slice; keep `design-system.md` and the encrypted-thread branch (`EncryptedThreadView`) working in every slice.
+- [ ] Contract-first: slices marked "needs core" consume `vidra-core` deltas (dimensions, before_id, has_avatar) ONLY once they appear in the regenerated `lib/api/generated.ts`; until then ship the documented degraded behavior — never stub fake contract fields.
+- [ ] Canonical gates for every slice: full mocked suite green, `npm run ci` green, pushed; backed specs run via `npm run e2e:backed` where the slice mutates data.
+
+## P-MSG2.1 Timeline model (grouping + separators)
+- [x] Add `lib/messaging/grouping.ts` + `time.ts` (pure `buildTimeline`: runs = same sender ≤ 5 min gap; separators on day change or > 60 min gap; NEW divider before first unread) with exhaustive vitest coverage (run boundaries, day/year label matrix, tombstones, empty list). **(W0.10a)**
+- [x] Refactor the thread list into `MessageTimeline`/`MessageGroup`/`MessageBubble` rendering runs with position-dependent radii (18px base, 6px inner corners, tail corner on last-of-run only), 2px intra-run / 12px inter-run / 20px separator spacing; REMOVE in-bubble timestamps; add hidden `<time datetime title>` + accessible name "{sender}, {time}: {content}" per message. **(W0.10a)**
+- [x] Update mocked `e2e/messaging.spec.ts` fixtures/selectors in the same slice (grouped runs, separator on >60min fixture, no per-bubble time); axe green both themes. **(W0.10a)**
+
+## P-MSG2.2 Avatars + thread identity
+- [x] Inbox rows load real avatars: `Avatar src={userAvatarUrl(other_user_id)}` (404 → initials); adopt `other_has_avatar` to skip probes when the regenerated client exposes it (needs core D3 — degrade fine without). **(W0.10a)**
+- [x] Thread: 28px other-party avatar once per run, bottom-aligned in a reserved gutter; own runs no avatar; `ThreadHeader` with back chevron, 32px avatar, name + @username line, lock pill on encrypted, Report affordance replacing the always-visible per-message links footprint. **(W0.10a — deviations: back chevron is shown at ALL breakpoints (not `<lg` only) since the split-pane rail lands in P-MSG2.7; the header action is a direct "Report user" affordance rather than a Dropdown overflow menu, and "View profile" is omitted — no user-profile route exists yet.)**
+- [x] Mocked e2e: one-avatar-per-run assertion (`getByTestId("run-avatar")`), header roles/names; axe green. **(W0.10a)**
+
+## P-MSG2.3 Scroll architecture + live-ness
+- [x] Make the timeline its own scroll container (page no longer scrolls on /messages/[id]); open pinned to bottom pre-paint; auto-stick only within 120px of bottom; `behavior:"auto"` everywhere (reduced-motion safe). **(W0.10a)**
+- [ ] Scroll-to-bottom pill (>300px from bottom; shows "N new" when messages arrive while scrolled up; labelled button) + NEW divider from unread watermark + "Load earlier" prepend with scroll anchoring (offset paging now; switch to `before_id` when core D2 lands). **(W0.10a: pill + NEW divider DONE (divider anchored via a contract-free `?unread` hint on the inbox row link, since the thread has no viewer-watermark endpoint yet); "Load earlier"/history prepend DEFERRED to part 2 pending keyset `before_id` — core D2 — offset paging is incorrect under concurrent sends.)**
+- [x] Poll thread page 1 every 10s (visible tab only, abortable, merge-by-id) and inbox every 30s + on focus; mark-read only when at bottom AND focused; offline banner after 2 failed polls with `role="status"`. **(W0.10a)**
+- [ ] BACKED (DB-proof): second browser context receives a sent message within one poll interval WITHOUT reload; assert recipient UI + API read-back; read receipt propagates to sender's poll ("Seen"). (Evidence: `e2e-backed/messaging.spec.ts` extended, trace + API read-back captured.) **(Part 2 — needs the docker-backed stack.)**
+
+## P-MSG2.4 Sending states + message actions
+- [x] Optimistic send: pending bubble (60% opacity, "Sending…"), replaced by server Message on 201; composer no longer hard-locks during send. **(W0.10a)**
+- [x] Failed send: "Not sent · Retry" (`text-danger`, `role="alert"`) with Retry (re-post same body/attachment_ids) and Discard; mocked e2e covers 500→retry→success. **(W0.10a)**
+- [x] "Seen" rendered ONLY under the last own message covered by `peer_last_read_message_id`; hover/focus-revealed per-message actions (Delete own / Report peer) replace always-visible links; coarse-pointer fallback always-visible at reduced opacity. **(W0.10a — deviation: actions are hover/focus-revealed inline buttons, NOT yet consolidated into a Dropdown overflow with "Copy text" + padded 44px hit targets; that consolidation lands in part 2.)**
+- [ ] Read receipts ON by default (decided 2026-07-07): Settings → Privacy "Read receipts" Toggle (default on) wired to `GET/PATCH /api/v1/me/messaging-prefs`, reciprocity copy ("…you won't see when they read yours"), local-off also suppresses rendering the peer's Seen; optimistic toggle with rollback; mocked e2e for default-on + PATCH + rollback. **(Part 2 — Settings surface, out of the thread-view core.)**
+- [ ] BACKED (DB-proof): retry-after-abort persists (API read-back proves the row); delete tombstone + report unchanged and still green; prefs toggle off → peer's Seen disappears (settings + thread round trip). (Evidence: backed spec + trace.) **(Part 2 — needs the docker-backed stack.)**
+
+> **### W0.10a evidence — Messaging v2 part 1 of 2 (thread-view core) — DONE 2026-07-07.**
+> **What shipped:** the bare `/messages/[id]` thread became a proper messenger. New pure lib
+> `lib/messaging/{grouping,time}.ts` (`buildTimeline` → separators/NEW-divider/runs; 24h-local
+> separator labels + absolute-time formatter) with 21 vitest cases (run boundaries, sender change,
+> 5-min/60-min thresholds, day/year label matrix, Seen skipping a pending copy, NEW-divider split,
+> tombstone-in-run, empty). New components `components/messaging/{MessageTimeline,MessageGroup,
+> MessageBubble,ThreadHeader,TimeSeparator}.tsx`; `ConversationView.tsx` rewired to render them.
+> Thread now: message-run grouping (same sender ≤5 min), day/gap separators replacing per-bubble
+> timestamps (hidden `<time datetime>` + `title` + accessible-name prefix keep the exact time),
+> position-dependent bubble radii, other-party 28px avatar once per run (bottom-aligned gutter),
+> quiet "Seen" under the last own read message (from the existing read watermark — no invented
+> delivered tick), sticky `ThreadHeader` (back chevron + 32px avatar + name/@username + lock),
+> its own scroll container (page no longer scrolls; pinned-to-bottom pre-paint; 120px auto-stick;
+> `behavior:"auto"`), scroll-to-bottom "N new" pill, NEW-messages divider (from the inbox `?unread`
+> hint), optimistic send (pending 60%-opacity bubble → server message on 201) with "Not sent ·
+> Retry/Discard" on failure, 10s scroll-preserving merge-by-id polling (+ 30s inbox polling on
+> interval/focus), mark-read only at-bottom-and-focused, and a `role="status"` offline banner after
+> 2 failed polls. Inbox rows now load real avatars (`userAvatarUrl`, 404→initials). Per-message
+> Delete/Report moved to hover/focus reveal (coarse-pointer always-on). Encrypted branch preserved
+> (rendered under the same header in a scroll wrapper). App-shell `#main-content` got `min-h-0` so
+> the thread pane can own its scroll.
+> **Evidence:** BEFORE/AFTER screenshots (light+dark × 390/1440) in
+> `.ralph/design-review/w0/{messaging,messaging-inbox}/` (git-ignored; `before/` subdir) via two new
+> `design-shots.mjs` areas — AFTER read against the App template's Apple-HIG language: grouped runs,
+> separators, one bottom-aligned avatar per peer run, quiet Seen, pinned composer, dark tokens invert
+> cleanly. Unit 21/21. Mocked `e2e/messaging.spec.ts` extended (grouping+separators+no-per-bubble-time
+> +run-avatar count; header name/@handle/back/report; optimistic 500→Retry→success; NEW divider from
+> `?unread`) — 18/18 in isolation; new thread-route axe test in `e2e/a11y.spec.ts`; `e2ee` 7/7,
+> `responsive`+`a11y` messages green. **Gate:** `npm run ci` ran to completion — typecheck ✓ lint ✓
+> unit (32 files) ✓ `next build` ✓ mocked e2e **369/373**; the 4 fails are the documented
+> full-parallel flakes (`admin-overview` ×3 + `quarantine.spec.ts:255` NotificationsBell popover),
+> which pass **10/10 in isolation** — none in this slice's diff. Token grep guard clean (semantic
+> tokens only; no raw palette/hex/`dark:`).
+> **Dependencies recorded (graceful degrade, no fake data):** D1 `DMAttachment.width/height`
+> (intrinsic-ratio media — media UX is part 2 anyway), D2 keyset `before_id` (blocks "Load earlier"),
+> D3 `other_has_avatar`/`sender_has_avatar` (skip the 404 avatar probe). NEW-divider currently uses a
+> contract-free `?unread` URL hint from the inbox row (the thread has no viewer-watermark endpoint);
+> the split-pane shell (P-MSG2.7) will pass it through instead. **Part 2 (leaves W0.10 open):** composer
+> v2 (P-MSG2.5), media grids/lightbox (P-MSG2.6), desktop split-pane + rail (P-MSG2.7), Settings
+> read-receipts toggle + per-message overflow/Copy-text consolidation + "Load earlier", backed
+> DB-proof specs, and polish (P-MSG2.8).
+
+## P-MSG2.5 Composer v2
+- [ ] Auto-grow textarea rows=1 → 6 lines (field-sizing/content with scrollHeight fallback); DECIDED keyboard contract: desktop Enter sends / Shift+Enter newline; mobile (coarse pointer) Enter = newline, send button only; IME-composition safe; `aria-keyshortcuts` on send.
+- [ ] 44px circular icon send button (`bg-accent text-accent-fg`, `aria-label="Send message"`, disabled per existing `canSend`); char counter `n / 5000` above 4500 (`aria-live="polite"`); per-conversation draft preservation in the shell.
+- [ ] Unit tests for the keyboard matrix; mocked e2e Enter-to-send + newline + counter. (Evidence: unit + mocked e2e + screenshots.)
+
+## P-MSG2.6 Media v2 (attachments UX)
+- [ ] Multi-image messages: 2-col grid in one `rounded-2xl` mask (3rd spans full width), `aspect-square object-cover` cells; 5+ images → first 4 cells with `+N` overlay on the 4th opening the lightbox strip; single image `max-h-[320px] rounded-2xl`; media-only messages render without bubble fill.
+- [ ] Intrinsic-ratio boxes from `DMAttachment.width/height` once core D1 lands (needs core; until then keep fixed skeleton); `MessageLightbox` on the Modal primitive (natural size, filename+size caption, Download, focus trap).
+- [ ] Upload chips: XHR-based progress %, image thumbnail previews from local File, failed chip Retry (kept File) + Remove; send never blocked by a failed optional upload.
+- [ ] Adopt Messenger-parity limits when core D6 lands (needs core): `MAX_ATTACHMENT_BYTES` → 100 MiB, `MAX_ATTACHMENTS` → 30, accept list + `isAllowedAttachment` gain office-doc MIME types, `doc` kind renders via `AttachmentDownloadRow` (new glyph), 413 copy updated; until then current 25 MiB / 4 constants stay.
+- [ ] BACKED (DB-proof): multi-image send round-trips — recipient sees the grid; attachment rows verified via API read-back; existing single-attachment backed spec stays green. (Evidence: backed spec + screenshots.)
+
+## P-MSG2.7 Desktop split-pane + rail
+- [ ] `MessagingShell`: ≥lg two-pane (`w-[360px]` rail + thread, page never scrolls, `h-[calc(100dvh-…)]`), row click swaps thread via router without unmounting rail, `aria-current="page"` + `bg-surface-muted` active row; empty right pane "Your messages" state; <lg stacked routes unchanged with safe-area composer above the tab bar.
+- [ ] Rail: search field filtering loaded conversations (client-side; adopt `q` if core D4 ships), skeleton rows replace spinner, unread bolding for name+snippet, New-message icon button in rail header.
+- [ ] Mocked e2e at 1280px + 390px (split behavior, no horizontal overflow, landmarks single-`<main>`); `e2e/responsive.spec.ts` + `a11y-landmarks` stay green. (Evidence: mocked e2e + screenshots.)
+
+## P-MSG2.8 Polish + evidence close-out
+- [ ] Sweep states table from the spec (loading/empty/error/permission × rail/thread/media/composer/send) — every cell implemented; encrypted-thread branch re-verified end to end (compose, lock badges, no attachments affordance on encrypted).
+- [ ] Full axe pass (both routes × both themes), W0 before/after screenshot set committed to `.ralph/design-review/w0/messaging/`, `peertube-ui-inventory.md` + extensions ledger rows updated (typing/presence stays INTENTIONAL_DIFFERENCE), i18n: shared-primitive strings through `t()`.
+- [ ] Final: full mocked suite + `npm run ci` + backed suite green; all P-MSG2 evidence notes filled; pushed. (Evidence: CI runs + ledger diff.)
+
+---
+
 # Optional / Deferred / Non-Blocking
 
 These items do not block Ralph exit if configured as optional in `.ralphrc` and explicitly kept in this section.

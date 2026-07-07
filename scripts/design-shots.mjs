@@ -327,6 +327,84 @@ const SAMPLE_HISTORY = {
   offset: 0,
 };
 
+// A messaging thread (GET /conversations/{id}/messages) crafted to exercise the
+// v2 thread view: a yesterday run + a today run + a Seen watermark, so the day
+// header, the >60-min gap separator, other-party run avatars, and the quiet
+// "Seen" all render. Newest-first, as the API returns. Illustrative only.
+function sampleThread() {
+  const now = Date.now();
+  const at = (ms) => new Date(now - ms).toISOString();
+  const peer = (id, body, ms) => ({
+    id,
+    conversation_id: "c1",
+    sender_id: "u2",
+    sender_username: "gradehouse",
+    sender_display_name: "Grade House",
+    body,
+    created_at: at(ms),
+  });
+  const me = (id, body, ms) => ({
+    id,
+    conversation_id: "c1",
+    sender_id: "u1",
+    sender_username: "boss",
+    sender_display_name: "Mara",
+    body,
+    created_at: at(ms),
+  });
+  return {
+    // newest-first
+    messages: [
+      peer("m5", "Perfect — standing by for the stills.", 90 * 1000),
+      me("m4", "Sending the stills over now.", 2 * 3600_000 - 60_000),
+      me("m3", "Thank you — it took three passes to get the roll-off right.", 2 * 3600_000),
+      peer("m2", "The highlights look incredible in motion.", 26 * 3600_000 - 90_000),
+      peer("m1", "Morning! Did the grade land the way you wanted?", 26 * 3600_000),
+    ],
+    peer_last_read_message_id: "m4",
+    limit: 50,
+    offset: 0,
+  };
+}
+
+const SAMPLE_INBOX = {
+  conversations: [
+    {
+      id: "c1",
+      updated_at: new Date(Date.now() - 90_000).toISOString(),
+      encrypted: false,
+      other_user_id: "u2",
+      other_username: "gradehouse",
+      other_display_name: "Grade House",
+      last_message_body: "Perfect — standing by for the stills.",
+      last_message_at: new Date(Date.now() - 90_000).toISOString(),
+      unread_count: 1,
+    },
+    {
+      id: "c2",
+      updated_at: new Date(Date.now() - 3 * 3600_000).toISOString(),
+      encrypted: false,
+      other_user_id: "u3",
+      other_username: "auroralab",
+      other_display_name: "Aurora Lab",
+      last_message_body: "Let's lock the shoot list this week.",
+      last_message_at: new Date(Date.now() - 3 * 3600_000).toISOString(),
+    },
+    {
+      id: "c3",
+      updated_at: new Date(Date.now() - 40 * 3600_000).toISOString(),
+      encrypted: true,
+      other_user_id: "u4",
+      other_username: "northloop",
+      other_display_name: "North Loop",
+      last_message_body: "",
+      last_message_at: new Date(Date.now() - 40 * 3600_000).toISOString(),
+    },
+  ],
+  limit: 20,
+  offset: 0,
+};
+
 // ---- area registry -----------------------------------------------------------
 
 /** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void>, act?: (page: import("@playwright/test").Page) => Promise<void> }>} */
@@ -503,6 +581,43 @@ const AREAS = {
       // 404 → the export card shows its idle "Request export" state.
       await page.route(/\/api\/v1\/me\/export$/, (route) =>
         route.fulfill({ status: 404, json: { error: { code: "not_found", message: "none" } } }),
+      );
+    },
+  },
+  // Messaging thread (backport W0.10 / Messaging v2): the thread-view core —
+  // grouped runs, day/gap separators, other-party run avatars, quiet "Seen".
+  // Authed so the thread (not the sign-in prompt) renders.
+  messaging: {
+    path: "/messages/c1",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/conversations(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_INBOX }),
+      );
+      await page.route(/\/api\/v1\/conversations\/c1\/messages(\?|$)/, (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        return route.fulfill({ json: sampleThread() });
+      });
+      await page.route(/\/api\/v1\/conversations\/c1\/read$/, (route) =>
+        route.fulfill({ status: 204, body: "" }),
+      );
+      // Peer avatar probe (userAvatarUrl) — 404 → the initial-letter fallback.
+      await page.route(/\/api\/v1\/users\/[^/]+\/avatar$/, (route) =>
+        route.fulfill({ status: 404, body: "" }),
+      );
+    },
+  },
+  // Messaging inbox / rail (backport W0.10): conversation rows with avatars,
+  // unread weighting + badge, encrypted lock glyph. Authed.
+  "messaging-inbox": {
+    path: "/messages",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/conversations(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_INBOX }),
+      );
+      await page.route(/\/api\/v1\/users\/[^/]+\/avatar$/, (route) =>
+        route.fulfill({ status: 404, body: "" }),
       );
     },
   },
