@@ -28,6 +28,16 @@ test("phones show the bottom tab bar, not a hamburger or the sidebar", async ({ 
   await expect(page.getByRole("link", { name: "Playlists" })).toHaveCount(0);
 });
 
+test("phones show the large-title 'Vidra' header brand in the compact top row", async ({
+  page,
+}) => {
+  // The mobile app template pairs the bottom tab bar with a compact top row
+  // whose large page title is the "Vidra" wordmark (backport W0.3). It stays a
+  // link to home (not a heading) so page landmarks/headings are unaffected.
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Vidra" })).toBeVisible();
+});
+
 test("the active tab is marked with aria-current and follows navigation", async ({ page }) => {
   await page.goto("/");
   const tabBar = page.getByRole("navigation", { name: "Primary" });

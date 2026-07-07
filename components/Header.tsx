@@ -7,12 +7,15 @@ import { AccountMenu } from "@/components/auth/AccountMenu";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchBox } from "@/components/SearchBox";
 
-// App shell header (design template "Vidra Desktop"): brand wordmark, centered
-// pill search, Create, notifications, account. Primary navigation lives in the
-// Sidebar (desktop/tablet) and the BottomTabBar (phones) — no hamburger menu
-// (design-system.md). On phones the search box and Create collapse away: Search
-// and Create are bottom tabs there. Hidden on the embeddable player routes
-// (/embed/*), which are meant to be iframed bare.
+// App shell header (design templates "Vidra App" + "Vidra Desktop"): the brand
+// wordmark, centered pill search, Create, notifications, account. Primary
+// navigation lives in the Sidebar (desktop/tablet) and the BottomTabBar
+// (phones) — no hamburger menu (design-system.md). On phones the "Vidra"
+// wordmark reads as the large page title of the mobile app template
+// (text-2xl large-title feel) in a compact top row with just the bell + avatar;
+// the search box and Create collapse away there (Search and Create are bottom
+// tabs). At sm+ it settles into the smaller desktop wordmark beside the centered
+// search. Hidden on the embeddable player routes (/embed/*), iframed bare.
 export function Header() {
   const pathname = usePathname();
 
@@ -22,10 +25,10 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-10 border-b border-border-subtle bg-canvas/80 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full items-center gap-3 px-4 sm:gap-5 sm:px-6">
+      <div className="mx-auto flex h-16 w-full items-center gap-3 px-4 sm:h-14 sm:gap-5 sm:px-6">
         <Link
           href="/"
-          className="focus-ring rounded-lg text-xl font-bold tracking-[-0.045em] text-fg"
+          className="focus-ring rounded-lg text-2xl font-bold tracking-tight text-fg sm:text-xl sm:tracking-[-0.045em]"
         >
           Vidra
         </Link>
