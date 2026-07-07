@@ -163,6 +163,44 @@ describe("VideoPlayer shell", () => {
     expect(screen.getByRole("button", { name: "Picture-in-picture" })).toBeTruthy();
   });
 
+  it("wires the T shortcut to the theater toggle on the watch variant", () => {
+    render(<Harness />);
+    expect(
+      screen.getByRole("button", { name: "Theater mode" }).getAttribute("aria-pressed"),
+    ).toBe("false");
+    // A document keydown (not from a form field) flips theater via the shared store.
+    act(() => void fireEvent.keyDown(document.body, { key: "t" }));
+    expect(window.sessionStorage.getItem("vidra.theater")).toBe("1");
+    expect(
+      screen.getByRole("button", { name: "Theater mode" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("wires the > shortcut to step the playback speed up the shared ladder", () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    act(() => void fireEvent.keyDown(document.body, { key: ">" }));
+    expect(screen.getByRole("button", { name: "Speed: 1.25×" })).toBeTruthy();
+    expect(video.playbackRate).toBe(1.25);
+    expect(window.sessionStorage.getItem("vidra.player.speed")).toBe("1.25");
+  });
+
+  it("wires the number keys to a decile seek (5 → 50% of the duration)", () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    const seeks: number[] = [];
+    Object.defineProperty(video, "duration", { configurable: true, get: () => 120 });
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      get: () => 0,
+      set: (v: number) => {
+        seeks.push(v);
+      },
+    });
+    act(() => void fireEvent.keyDown(document.body, { key: "5" }));
+    expect(seeks.at(-1)).toBe(60);
+  });
+
   it("pins the controls while paused and auto-hides ~3s after playback starts", () => {
     vi.useFakeTimers();
     try {

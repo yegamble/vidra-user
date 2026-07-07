@@ -143,6 +143,91 @@ test("shortcuts are ignored while typing in a field", async ({ page }) => {
   expect(await page.locator("video").evaluate((el: HTMLVideoElement) => el.muted)).toBe(false);
 });
 
+test("the T shortcut toggles theater mode from anywhere on the watch page", async ({ page }) => {
+  await mockWatchPage(page);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+
+  const stage = page.locator("[data-theater]").first();
+  await expect(stage).toHaveAttribute("data-theater", "off");
+  await page.keyboard.press("t");
+  await expect(stage).toHaveAttribute("data-theater", "on");
+  await page.keyboard.press("t");
+  await expect(stage).toHaveAttribute("data-theater", "off");
+});
+
+test("the > shortcut steps the playback speed up the ladder", async ({ page }) => {
+  await mockWatchPage(page);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("button", { name: "Speed: 1×" })).toBeVisible();
+
+  await page.keyboard.press(">");
+  await expect(page.getByRole("button", { name: "Speed: 1.25×" })).toBeVisible();
+  await expect
+    .poll(() => page.locator("video").evaluate((el: HTMLVideoElement) => el.playbackRate))
+    .toBe(1.25);
+  await page.keyboard.press(">");
+  await expect(page.getByRole("button", { name: "Speed: 1.5×" })).toBeVisible();
+});
+
+test("the number keys seek to deciles (5 jumps to 50%)", async ({ page }) => {
+  await mockWatchPage(page);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+
+  // Stamp a known duration and record every requested seek WITHOUT writing the
+  // media element (the /original stream is aborted, so there is no media whose
+  // own seeking/timeupdate could push extra values); the recorded write is the
+  // honest, deterministic proof the shortcut computed the right decile.
+  await page.locator("video").evaluate((el: HTMLVideoElement) => {
+    Object.defineProperty(el, "duration", { configurable: true, get: () => 120 });
+    el.dispatchEvent(new Event("durationchange"));
+    const w = window as unknown as { __seeks: number[] };
+    w.__seeks = [];
+    Object.defineProperty(el, "currentTime", {
+      configurable: true,
+      get: () => 0,
+      set: (v: number) => {
+        w.__seeks.push(v);
+      },
+    });
+  });
+
+  await page.keyboard.press("5");
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __seeks: number[] }).__seeks.at(-1)))
+    .toBe(60);
+  await page.keyboard.press("0");
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __seeks: number[] }).__seeks.at(-1)))
+    .toBe(0);
+});
+
+test("volume arrows adjust volume only while the player region has focus", async ({ page }) => {
+  await mockWatchPage(page, { realVideo: true });
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+
+  const vol = () =>
+    page.locator("video").evaluate((el: HTMLVideoElement) => Math.round(el.volume * 100) / 100);
+  // Start from a mid level so a step is unambiguous in either direction.
+  await page.locator("video").evaluate((el: HTMLVideoElement) => {
+    el.volume = 0.6;
+  });
+
+  // Focus is NOT inside the player (the document body) → ArrowDown is left to
+  // the page (scroll), not the volume. Body is not in the ignore selector, so
+  // this isolates the focus scoping (not the typing/interactive-control guard).
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("ArrowDown");
+  expect(await vol()).toBe(0.6);
+
+  // Focus the seek slider (inside the player region) → ArrowDown steps −5%.
+  await page.getByRole("slider", { name: "Seek" }).focus();
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(vol).toBe(0.55);
+});
+
 test("the keyboard shortcuts are documented in an accessible disclosure", async ({ page }) => {
   await mockWatchPage(page);
   await page.goto("/videos/v1");
@@ -152,8 +237,12 @@ test("the keyboard shortcuts are documented in an accessible disclosure", async 
   await help.click();
   const region = page.getByRole("region", { name: "Keyboard shortcuts" });
   await expect(region).toBeVisible();
+  // The panel is the user-facing contract: it lists the full PLAY-09 set.
   await expect(region.getByText("Play or pause")).toBeVisible();
   await expect(region.getByText("Toggle captions")).toBeVisible();
+  await expect(region.getByText("Volume up / down")).toBeVisible();
+  await expect(region.getByText("Theater mode")).toBeVisible();
+  await expect(region.getByText("Picture-in-picture")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(region).toHaveCount(0);
   await expect(help).toBeFocused();

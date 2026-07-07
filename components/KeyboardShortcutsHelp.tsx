@@ -2,14 +2,22 @@
 
 import { useRef, useState } from "react";
 
-// The documented shortcut set — keep in sync with lib/player-shortcuts.ts.
+// The documented shortcut set — the user-facing contract for lib/player-shortcuts.ts;
+// keep the two in sync (every mapping there appears here, and vice versa).
 const SHORTCUTS: Array<[keys: string, action: string]> = [
   ["Space / K", "Play or pause"],
-  ["J / L", "Back / forward 10 seconds"],
-  ["← / →", "Back / forward 5 seconds"],
+  ["← / →", "Back / forward 5s"],
+  ["J / L", "Back / forward 10s"],
+  ["0 – 9", "Jump to 0–90%"],
+  ["Home / End", "Start / end"],
+  [", / .", "Step frame (paused)"],
+  ["↑ / ↓", "Volume up / down"],
   ["M", "Mute or unmute"],
-  ["F", "Fullscreen"],
+  ["< / >", "Slower / faster"],
   ["C", "Toggle captions"],
+  ["T", "Theater mode"],
+  ["I", "Picture-in-picture"],
+  ["F", "Fullscreen"],
 ];
 
 // KeyboardShortcutsHelp documents the player's keyboard shortcuts behind an
@@ -61,7 +69,7 @@ export function KeyboardShortcutsHelp() {
           id="player-shortcuts-help"
           role="region"
           aria-label="Keyboard shortcuts"
-          className="absolute bottom-full left-0 z-20 mb-2 w-64 rounded-xl border border-border-subtle bg-surface-raised p-3 shadow-lg"
+          className="absolute bottom-full left-0 z-20 mb-2 max-h-64 w-72 overflow-y-auto rounded-xl border border-border-subtle bg-surface-raised p-3 shadow-lg sm:max-h-none sm:overflow-visible"
         >
           <dl className="flex flex-col gap-1.5 text-sm">
             {SHORTCUTS.map(([keys, action]) => (

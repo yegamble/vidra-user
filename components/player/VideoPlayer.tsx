@@ -18,17 +18,24 @@ import { SpeedMenu } from "@/components/SpeedMenu";
 import { videoThumbnailUrl, type Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
-import { readStoredRate, serverRate, storeRate, subscribeRate } from "@/lib/player-rates";
+import {
+  readStoredRate,
+  serverRate,
+  stepPlaybackRate,
+  storeRate,
+  subscribeRate,
+} from "@/lib/player-rates";
 import {
   readStoredTheater,
   serverTheater,
   subscribeTheater,
   toggleTheater,
 } from "@/lib/player-theater";
-import { readBuffered } from "@/lib/player-ui";
+import { readBuffered, stepVolume } from "@/lib/player-ui";
 import {
   SHORTCUT_IGNORE_SELECTOR,
   clampSeekTarget,
+  seekTargetForFraction,
   shortcutForKey,
 } from "@/lib/player-shortcuts";
 import { useHlsPlayback } from "@/lib/use-hls-playback";
@@ -313,25 +320,42 @@ export function VideoPlayer({
     };
   }, [videoRef, playback.src]);
 
-  // Player keyboard shortcuts (space/K, J/L, arrows ±5s, M, F, C). Ignored while
-  // typing / operating another control (SHORTCUT_IGNORE_SELECTOR) or on a
-  // modified press. Fullscreen targets the container (custom chrome survives).
+  // Player keyboard shortcuts (the full PLAY-09 set — see lib/player-shortcuts).
+  // Ignored while typing / operating another control (SHORTCUT_IGNORE_SELECTOR)
+  // or on a modified press. Volume arrows act only while the player region holds
+  // focus (otherwise the page keeps its scroll); frame-stepping only while
+  // paused — both gated inside shortcutForKey via the context. Fullscreen and
+  // theater target the container / page layout (the custom chrome survives).
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.defaultPrevented) return;
       const target = e.target;
       if (target instanceof HTMLElement && target.isContentEditable) return;
       if (target instanceof Element && target.closest(SHORTCUT_IGNORE_SELECTOR)) return;
-      const shortcut = shortcutForKey(e);
       const el = videoRef.current;
-      if (!shortcut || !el) return;
+      if (!el) return;
+      const playerFocused = containerRef.current?.contains(document.activeElement) ?? false;
+      const shortcut = shortcutForKey(e, { playerFocused, paused: el.paused });
+      if (!shortcut) return;
       e.preventDefault();
       switch (shortcut.kind) {
         case "toggle-play":
           togglePlay();
           break;
         case "seek-by":
+        case "frame-step":
           el.currentTime = clampSeekTarget(el.currentTime, shortcut.seconds, el.duration);
+          break;
+        case "seek-to-fraction": {
+          const t = seekTargetForFraction(shortcut.fraction, el.duration);
+          if (t !== null) el.currentTime = t;
+          break;
+        }
+        case "volume-by":
+          applyVolume(stepVolume(el.muted ? 0 : el.volume, shortcut.deltaPercent));
+          break;
+        case "speed-step":
+          setSpeed(stepPlaybackRate(el.playbackRate, shortcut.direction));
           break;
         case "toggle-mute":
           toggleMute();
@@ -342,11 +366,30 @@ export function VideoPlayer({
         case "toggle-captions":
           toggleCaptions();
           break;
+        case "toggle-theater":
+          // Theater is a watch-page layout mode; the embed shell has none.
+          if (variant === "watch") toggleTheater();
+          break;
+        case "toggle-pip":
+          // Only where the browser supports PiP (the button is hidden otherwise).
+          if (pipSupported) togglePip();
+          break;
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [videoRef, togglePlay, toggleMute, toggleFullscreen, toggleCaptions]);
+  }, [
+    videoRef,
+    togglePlay,
+    toggleMute,
+    toggleFullscreen,
+    toggleCaptions,
+    togglePip,
+    applyVolume,
+    setSpeed,
+    variant,
+    pipSupported,
+  ]);
 
   function onContainerBlur(e: React.FocusEvent<HTMLDivElement>) {
     const c = containerRef.current;

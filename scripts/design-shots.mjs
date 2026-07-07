@@ -793,6 +793,20 @@ const AREAS = {
       await page.getByRole("menu", { name: "Playback speed" }).waitFor({ state: "visible" });
     },
   },
+  // Watch page — keyboard-shortcuts reference (backport W1.U8 / PLAY-09): the
+  // "Keyboard shortcuts" disclosure opened below the player, listing the full
+  // shortcut set (the user-facing contract for lib/player-shortcuts). Reuses the
+  // watch mock; the act hook opens the panel.
+  "watch-shortcuts": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+    },
+    async act(page) {
+      await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
+      await page.getByRole("region", { name: "Keyboard shortcuts" }).waitFor({ state: "visible" });
+    },
+  },
   // Watch page — theater mode (backport W1.U3 / PLAY-04): the stage widened to the
   // full content width with the related rail reflowed below, and the shell's
   // Theater/PiP toggles visible in the settings cluster (aria-pressed). Reuses the
