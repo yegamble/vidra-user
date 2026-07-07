@@ -17,10 +17,11 @@ import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
 import { SpeedMenu } from "@/components/SpeedMenu";
 import { StoryboardPreview } from "@/components/StoryboardPreview";
+import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, videoCaptionUrl, videoThumbnailUrl } from "@/lib/api";
+import { ApiError, api, channelAvatarUrl, videoCaptionUrl, videoThumbnailUrl } from "@/lib/api";
 import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
 import type { Video, VideoConfigResponse } from "@/lib/api";
 import { feedHref } from "@/lib/feed-url";
@@ -125,6 +126,12 @@ export function WatchView({ id }: { id: string }) {
   const when = relativeTime(video.created_at);
   if (when) meta.push(when);
 
+  // The detail response carries the owning channel's handle/display name (Wave A
+  // contract) when it is a local video; a remote card has neither. Rendered as a
+  // real affordance to /channels/{handle} rather than muted grey text.
+  const channelHandle = video.channel_handle ?? null;
+  const channelName = video.channel_display_name || channelHandle || "";
+
   const chips: Array<{ key: string; label: string; sr?: string }> = [];
   if (typeof video.duration_seconds === "number") {
     chips.push({ key: "duration", label: formatDuration(video.duration_seconds) });
@@ -168,23 +175,49 @@ export function WatchView({ id }: { id: string }) {
           <h1 className="text-lg font-bold leading-snug tracking-tight sm:text-xl">
             {video.title}
           </h1>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-fg-muted">
-            {/* Owner-facing badge: a private video only ever loads for its
-                owner; an unlisted one tells anyone with the link how it is
-                shared. Public renders nothing. */}
-            <PrivacyBadge privacy={video.privacy ?? "public"} />
-            {meta.length > 0 ? <span className="tabular-nums">{meta.join(" · ")}</span> : null}
-            {chips.map((c) => (
-              <span
-                key={c.key}
-                className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium tabular-nums text-fg-muted"
+          {/* Title-first metadata block: channel identity (avatar + name) leads,
+              then a muted `views · age` remainder — reading `channel · views ·
+              age` in the template's card language, sized up for the watch page. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {channelHandle ? (
+              <Link
+                href={`/channels/${channelHandle}`}
+                className="focus-ring group -mx-1 inline-flex items-center gap-2.5 rounded-full px-1"
               >
-                {c.sr ? <span className="sr-only">{c.sr}</span> : null}
-                {c.label}
-              </span>
-            ))}
+                <Avatar
+                  src={channelAvatarUrl(channelHandle)}
+                  name={channelName}
+                  className="h-9 w-9 text-[13px]"
+                />
+                <span className="text-sm font-semibold text-fg transition-colors group-hover:text-fg-muted">
+                  {channelName}
+                </span>
+              </Link>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-muted">
+              {/* Owner-facing badge: a private video only ever loads for its
+                  owner; an unlisted one tells anyone with the link how it is
+                  shared. Public renders nothing. */}
+              <PrivacyBadge privacy={video.privacy ?? "public"} />
+              {meta.length > 0 ? <span className="tabular-nums">{meta.join(" · ")}</span> : null}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Secondary technical/taxonomy chips (duration, dimensions,
+              category/language/license) on their own quiet row. */}
+          {chips.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {chips.map((c) => (
+                <span
+                  key={c.key}
+                  className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-medium tabular-nums text-fg-muted"
+                >
+                  {c.sr ? <span className="sr-only">{c.sr}</span> : null}
+                  {c.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2 border-t border-border-subtle pt-4">
             <RatingControls videoId={video.id} />
             <SaveButton videoId={video.id} />
             <AddToPlaylistButton videoId={video.id} />
@@ -394,7 +427,7 @@ function Player({
         ref={videoRef}
         controls
         playsInline
-        className="aspect-video w-full overflow-hidden rounded-xl bg-black sm:rounded-2xl"
+        className="aspect-video w-full overflow-hidden rounded-2xl bg-black"
         src={playback.src}
         poster={video.has_thumbnail ? videoThumbnailUrl(video.id) : undefined}
         onPlay={recordThrottled}

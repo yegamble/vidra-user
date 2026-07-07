@@ -132,6 +132,113 @@ const SAMPLE_FOLLOWING = {
   offset: 0,
 };
 
+// Authed-shell route mocks shared by the watch/channel areas: restoreSession()
+// POSTs /auth/refresh on boot, then reads /auth/me; mocking both lands the shell
+// signed in (so the FOLLOWING sidebar, account menu, comment composer, rating,
+// and Follow affordance all render) with no UI login flow. Illustrative only.
+async function mockAuthedShell(page) {
+  await page.route(/\/api\/v1\/auth\/refresh$/, (route) => route.fulfill({ json: SAMPLE_AUTH }));
+  await page.route(/\/api\/v1\/auth\/me$/, (route) => route.fulfill({ json: SAMPLE_USER }));
+  await page.route(/\/api\/v1\/me\/subscriptions(\?|$)/, (route) =>
+    route.fulfill({ json: SAMPLE_FOLLOWING }),
+  );
+  await page.route(/\/api\/v1\/me\/notifications\/unread-count$/, (route) =>
+    route.fulfill({ json: { unread_count: 3 } }),
+  );
+}
+
+// Full taxonomy so the watch page's category/language/license chips resolve to
+// human labels instead of raw ids.
+const SAMPLE_VIDEO_CONFIG_FULL = {
+  categories: [{ id: "film", label: "Film & Animation" }],
+  languages: [{ id: "en", label: "English" }],
+  licenses: [{ id: "cc-by", label: "CC BY" }],
+  privacies: [{ id: "public", label: "Public" }],
+};
+
+// A watch-page detail (GET /videos/{id}) — carries channel identity, taxonomy,
+// tags and a description so the whole metadata block renders.
+const SAMPLE_DETAIL = {
+  id: "v1",
+  remote: false,
+  channel_id: "c1",
+  channel_handle: "grade-house",
+  channel_display_name: "Grade House",
+  title: "Late-night color grading session — the luxury monochrome look, by hand",
+  description:
+    "A calm, unhurried walkthrough of the exact grade behind the last three films: " +
+    "how the highlights roll off, where the shadows get their split-tone, and why I " +
+    "keep the whole thing on a calibrated panel in a dark room.\n\nChapters in the pinned comment.",
+  privacy: "public",
+  state: "published",
+  created_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+  views: 128_000,
+  has_thumbnail: false,
+  has_storyboard: false,
+  duration_seconds: 1456,
+  width: 3840,
+  height: 2160,
+  category: "film",
+  language: "en",
+  license: "cc-by",
+  tags: ["colorgrading", "monochrome", "filmmaking"],
+};
+
+const SAMPLE_COMMENTS = {
+  comments: [
+    {
+      id: "cm1",
+      video_id: "v1",
+      author_id: "a1",
+      author_username: "aurora",
+      author_display_name: "Aurora Lab",
+      body: "The roll-off on the highlights here is gorgeous — what are you starting from before the split-tone?",
+      created_at: new Date(Date.now() - 3_600_000).toISOString(),
+    },
+    {
+      id: "cm2",
+      video_id: "v1",
+      author_id: "a2",
+      author_username: "northloop",
+      author_display_name: "North Loop",
+      body: "Saved. The section on toning the shadows without muddying skin tones finally made it click.",
+      created_at: new Date(Date.now() - 7_200_000).toISOString(),
+    },
+  ],
+  limit: 100,
+  offset: 0,
+};
+
+const SAMPLE_RATING = { like_count: 3400, dislike_count: 12, my_rating: "like" };
+
+const SAMPLE_CHANNEL = {
+  id: "c1",
+  owner_id: "u9",
+  handle: "grade-house",
+  display_name: "Grade House",
+  description:
+    "Color grading, monochrome craft, and the quiet luxury of getting an image exactly " +
+    "right. New sessions most weeks.",
+  follower_count: 48_200,
+  created_at: new Date(Date.now() - 400 * 86_400_000).toISOString(),
+  has_avatar: false,
+  has_banner: false,
+};
+
+// All owned by grade-house, so every card reads the same channel (channel-page
+// realism). channel_id "c1" matches the detail's, so they also fill the watch
+// page's related rail.
+const SAMPLE_CHANNEL_VIDEOS = {
+  videos: [
+    sampleVideo("cv1", "Monochrome grading — the luxury look, by hand", { views: 96_000, duration: 1900, ageDays: 7 }),
+    sampleVideo("cv2", "Split-toning shadows without muddying skin tones", { views: 54_000, duration: 1122, ageDays: 12 }),
+    sampleVideo("cv3", "Building a print-first grade for silver gelatin", { views: 31_000, duration: 1671, ageDays: 20 }),
+    sampleVideo("cv4", "Why I grade on a calibrated OLED in a dark room", { views: 77_000, duration: 843, ageDays: 33 }),
+    sampleVideo("cv5", "The quiet web: archiving your masters on IPFS", { views: 22_000, duration: 742, ageDays: 46 }),
+    sampleVideo("cv6", "A field diary: shooting the Alps on medium format", { views: 128_000, duration: 1456, ageDays: 60 }),
+  ],
+};
+
 // ---- area registry -----------------------------------------------------------
 
 /** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void> }>} */
@@ -173,6 +280,49 @@ const AREAS = {
       );
       await page.route(/\/api\/v1\/me\/notifications\/unread-count$/, (route) =>
         route.fulfill({ json: { unread_count: 3 } }),
+      );
+    },
+  },
+  // Watch page (backport W0.5): player chrome + title-first metadata block
+  // (channel · views · age), action row, related rail, and comments. Authed so
+  // the rating/comment affordances render. The <video>'s /original preload is
+  // aborted (hermetic — we screenshot chrome, not playback).
+  watch: {
+    path: "/videos/v1",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/videos\/v1$/, (route) => route.fulfill({ json: SAMPLE_DETAIL }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/original/, (route) => route.abort());
+      await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
+        route.fulfill({ json: { captions: [] } }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/comments/, (route) =>
+        route.fulfill({ json: SAMPLE_COMMENTS }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
+        route.fulfill({ json: SAMPLE_RATING }),
+      );
+      // Same-channel listing feeds the related rail (RelatedVideos).
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_CHANNEL_VIDEOS }),
+      );
+    },
+  },
+  // Channel page (backport W0.6): banner/avatar header, Follow affordance, sort
+  // chips, and a home-consistent video grid. Authed so the Follow button (not
+  // the signed-out prompt) renders.
+  channel: {
+    path: "/channels/grade-house",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/channels\/grade-house$/, (route) =>
+        route.fulfill({ json: SAMPLE_CHANNEL }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_CHANNEL_VIDEOS }),
       );
     },
   },
