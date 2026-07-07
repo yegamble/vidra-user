@@ -35,6 +35,10 @@ export type VideoPrivacy = NonNullable<Schemas["Video"]["privacy"]>;
 export type VideoState = NonNullable<Schemas["Video"]["state"]>;
 export type Video = Schemas["Video"];
 export type VideoRendition = Schemas["VideoRendition"];
+// IPFS mirror CIDs on the public video detail (present only when public+published
+// and at least one object is pinned). The card/feed IPFS badge reads the boolean
+// Video["ipfs_pinned"]; this object carries the gateway CIDs for detail consumers.
+export type VideoIPFS = Schemas["VideoIPFS"];
 export type VideoConfigOption = Schemas["VideoConfigOption"];
 export type VideoConfigResponse = Schemas["VideoConfigResponse"];
 export type FeedSort = NonNullable<Schemas["VideoFeedResponse"]["sort"]>;

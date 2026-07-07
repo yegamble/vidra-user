@@ -2823,7 +2823,7 @@ export interface paths {
         };
         /**
          * List messages in a conversation
-         * @description Returns a conversation's messages, newest first. Behind auth. A non-participant (or unknown conversation) is 404 so a conversation's existence is not leaked. Paginated via limit (1–100, default 20)/offset. On an ENCRYPTED conversation the response is an EncryptedMessageListResponse instead, containing ONLY the envelopes addressed to the caller's own devices (expired disappearing messages filtered).
+         * @description Returns a conversation's messages, newest first. Behind auth. A non-participant (or unknown conversation) is 404 so a conversation's existence is not leaked. Paginated via limit (1–100, default 20)/offset, or via the before_id keyset cursor for stable upward history paging. On an ENCRYPTED conversation the response is an EncryptedMessageListResponse instead, containing ONLY the envelopes addressed to the caller's own devices (expired disappearing messages filtered); encrypted threads page identically, including before_id.
          */
         get: operations["listMessages"];
         put?: never;
@@ -2849,7 +2849,7 @@ export interface paths {
         put?: never;
         /**
          * Upload a direct-message attachment
-         * @description Stores an attachment (multipart field "file") for a plaintext conversation the caller participates in and returns an id to reference in a subsequent send (send accepts up to 4 own-uploaded attachment_ids). Behind auth. Allowed kinds: image, video, audio, pdf; capped at 25 MiB; malware-scanned fail-closed when scanning is enabled. Non-participant/ unknown conversation → 404; an ENCRYPTED conversation → 422 (attachment ciphertext is exchanged out of band); unsupported type → 415; oversize → 413; failed scan → 422. Returns 503 when blob storage is not configured.
+         * @description Stores an attachment (multipart field "file") for a plaintext conversation the caller participates in and returns an id to reference in a subsequent send (send accepts up to 30 own-uploaded attachment_ids). Behind auth. Facebook-Messenger-parity platform limits (DM attachments do NOT count against the storage quota): allowed kinds image, video, audio, pdf, and doc (office documents — application/msword, the OOXML Word/ PowerPoint/Excel types, application/vnd.ms-powerpoint, and application/vnd.ms-excel); capped at 100 MiB (104,857,600 bytes); malware-scanned fail-closed when scanning is enabled (load-bearing for the macro-carrying office formats — the scan runs before the attachment becomes linkable). This route is additionally rate limited per user (the no-quota compensating control). Non-participant/unknown conversation → 404; an ENCRYPTED conversation → 422 (attachment ciphertext is exchanged out of band); unsupported type → 415; oversize → 413; failed scan → 422; too many uploads → 429. Returns 503 when blob storage is not configured.
          */
         post: operations["uploadDMAttachment"];
         delete?: never;
@@ -3208,6 +3208,46 @@ export interface paths {
         get: operations["getPeerTubeImport"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ipfs/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * IPFS mirror status (admin)
+         * @description Reports the hybrid IPFS media mirror's status (fix_plan P19, .ralph/specs/ipfs-media.md): whether it is enabled, node reachability, the public gateway URL in use, whether an IPFS Cluster is configured, and pin counts overall and per media class. IPFS is a MIRROR SIDECAR — local/S3 stays authoritative — so this never reflects on the readiness of media serving. Returns 503 ipfs_disabled when IPFS_ENABLED=false. Restricted to admins. (Status aggregation is delivered in P19.2; until then an enabled instance answers 501 not_implemented.)
+         */
+        get: operations["getIPFSStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ipfs/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Kick an IPFS reconciliation/backfill scan (admin)
+         * @description Triggers an immediate reconciliation scan of the IPFS mirror: re-enqueue failed pins and upsert pin intents for eligible ALREADY-PUBLIC objects that have no ledger row yet (the outage-backfill path). Idempotent — a second run enqueues nothing new. Returns 503 ipfs_disabled when IPFS_ENABLED=false. Restricted to admins; audited. (The real scan is delivered in P19.6; until then an enabled instance answers 501 not_implemented.)
+         */
+        post: operations["reconcileIPFS"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3704,6 +3744,25 @@ export interface components {
             hls_url?: string;
             /** @description The available HLS ladder rungs (tallest first), present alongside hls_url on the detail endpoint once transcoding completed. */
             renditions?: components["schemas"]["VideoRendition"][];
+            /** @description Whether at least one of this video's media objects is currently pinned to IPFS (fix_plan P19, .ralph/specs/ipfs-media.md). Drives the "IPFS" thumbnail badge on card/feed views. Present (true) only for public+published videos whose media the mirror has pinned; omitted (treat as false) otherwise, and always absent when IPFS_ENABLED is off. IPFS is a MIRROR SIDECAR — local/S3 remains authoritative, so a false/absent value never affects playback. */
+            ipfs_pinned?: boolean;
+            /** @description IPFS mirror CIDs for this video, present on the DETAIL endpoint only when the video is public+published and at least one object is pinned; omitted otherwise. CIDs are NEVER emitted for non-public videos regardless of caller (privacy invariant). Serving is unchanged — these are additive, content-address handles for clients that prefer a gateway fetch. */
+            ipfs?: components["schemas"]["VideoIPFS"];
+        };
+        /** @description Pinned IPFS content identifiers for a public+published video (fix_plan P19). Each CID is a validated CIDv1; a client resolves an object as {gateway_url}/ipfs/{cid}. Fields are omitted when the corresponding object is not pinned. */
+        VideoIPFS: {
+            /**
+             * @description CIDv1 of the pinned video original (web-videos/<id><ext>). Omitted until the original is pinned.
+             * @example bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi
+             */
+            original_cid?: string;
+            /** @description CIDv1 (wrap-directory root) of the pinned HLS tree. Populated once the HLS directory add lands (P19.4); omitted until then or when the video has no transcoded HLS. */
+            hls_cid?: string;
+            /**
+             * @description Public IPFS gateway base (from IPFS_GATEWAY_URL) under which the CIDs resolve, e.g. https://ipfs.example.org. Built only from the configured gateway and validated CIDs — never a caller-supplied value.
+             * @example https://ipfs.example.org
+             */
+            gateway_url?: string;
         };
         /** @description One transcoded HLS rendition (ladder rung) of a video. */
         VideoRendition: {
@@ -4853,6 +4912,8 @@ export interface components {
             other_user_id: string;
             other_username: string;
             other_display_name: string;
+            /** @description Whether the other participant has an avatar set (served at GET /users/{id}/avatar). Lets clients skip a guaranteed-404 avatar probe for avatar-less users. */
+            other_has_avatar?: boolean;
             /** @description Empty when the conversation has no messages yet, and always empty for encrypted conversations. */
             last_message_body: string;
             /** Format: date-time */
@@ -4873,7 +4934,7 @@ export interface components {
         /** @description The PLAINTEXT send shape — valid only on a plaintext conversation (sending it to an encrypted conversation is 422, and vice versa). A message needs a body OR at least one attachment. */
         SendMessageRequest: {
             body?: string;
-            /** @description Ids from POST /conversations/{id}/attachments — own-uploaded, in this conversation, not yet sent. */
+            /** @description Ids from POST /conversations/{id}/attachments — own-uploaded, in this conversation, not yet sent. Up to 30 per message (Facebook-Messenger parity); the 31st and beyond are a 422 field error. */
             attachment_ids?: string[];
         };
         /** @description One per-recipient-device ciphertext blob. The CLIENT encrypts once per device pair (Olm session) and fans out; the server stores each blob opaquely and returns it byte-identical. */
@@ -5013,6 +5074,8 @@ export interface components {
             sender_id: string;
             sender_username?: string;
             sender_display_name?: string;
+            /** @description Whether the sender has an avatar set (served at GET /users/{id}/avatar). Lets clients skip a guaranteed-404 avatar probe for avatar-less senders. */
+            sender_has_avatar?: boolean;
             /** @description The message text, or "[deleted]" for a tombstoned message. */
             body: string;
             /** @description True when the sender has deleted (tombstoned) the message. */
@@ -5027,12 +5090,19 @@ export interface components {
         DMAttachment: {
             /** Format: uuid */
             id: string;
-            /** @enum {string} */
-            kind: "image" | "video" | "audio" | "pdf";
+            /**
+             * @description Coarse attachment kind. "doc" covers office documents (DOC/DOCX/PPT/PPTX/XLS/XLSX); PDFs keep their own "pdf" kind.
+             * @enum {string}
+             */
+            kind: "image" | "video" | "audio" | "pdf" | "doc";
             content_type: string;
             filename: string;
             /** Format: int64 */
             size_bytes: number;
+            /** @description Intrinsic pixel width, present only for kind=image when probed successfully. */
+            width?: number;
+            /** @description Intrinsic pixel height, present only for kind=image when probed successfully. */
+            height?: number;
         };
         LinkPreview: {
             url: string;
@@ -5043,12 +5113,19 @@ export interface components {
         UploadAttachmentResponse: {
             /** Format: uuid */
             attachment_id: string;
-            /** @enum {string} */
-            kind: "image" | "video" | "audio" | "pdf";
+            /**
+             * @description Coarse attachment kind. "doc" covers office documents (DOC/DOCX/PPT/PPTX/XLS/XLSX); PDFs keep their own "pdf" kind.
+             * @enum {string}
+             */
+            kind: "image" | "video" | "audio" | "pdf" | "doc";
             content_type: string;
             filename: string;
             /** Format: int64 */
             size_bytes: number;
+            /** @description Intrinsic pixel width, present only for kind=image when probed successfully. */
+            width?: number;
+            /** @description Intrinsic pixel height, present only for kind=image when probed successfully. */
+            height?: number;
         };
         /** @description Optionally pins the read watermark to a specific message; when absent the newest message is used. */
         MarkConversationReadRequest: {
@@ -5271,6 +5348,58 @@ export interface components {
         };
         PeerTubeImportRunList: {
             runs: components["schemas"]["PeerTubeImportRun"][];
+        };
+        /** @description Status of the hybrid IPFS media mirror (fix_plan P19). IPFS is a mirror sidecar; these fields are informational and never gate media serving. */
+        IPFSStatus: {
+            /** @description Whether IPFS_ENABLED is set on this instance. */
+            enabled: boolean;
+            /** @description Whether the Kubo node answered the /api/v0/version health probe. */
+            node_reachable: boolean;
+            /** @description The public gateway base URL emitted in media responses. */
+            gateway_url: string;
+            /** @description Whether an IPFS Cluster REST API is configured for replication. */
+            cluster_enabled: boolean;
+            /** @description Whether the configured IPFS Cluster REST API answered its /id health probe. Always false when cluster_enabled is false. */
+            cluster_reachable: boolean;
+            pins: components["schemas"]["IPFSPinCounts"];
+            /** @description Pin counts broken down per media class. */
+            by_class: components["schemas"]["IPFSClassPinCounts"][];
+        };
+        /** @description Pin counts by ledger state. */
+        IPFSPinCounts: {
+            /** Format: int64 */
+            pinned: number;
+            /** Format: int64 */
+            pending: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            unpinned: number;
+        };
+        /** @description Pin counts for one media class. */
+        IPFSClassPinCounts: {
+            /** @description e.g. video_original, hls, thumbnail, user_avatar. */
+            media_class: string;
+            /** Format: int64 */
+            pinned: number;
+            /** Format: int64 */
+            pending: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            unpinned: number;
+        };
+        /** @description Result of an IPFS reconciliation scan: how many pin intents were enqueued, overall and per media class. Idempotent — a second run enqueues zero. */
+        IPFSReconcileResult: {
+            /**
+             * Format: int64
+             * @description Total pin intents enqueued by this scan.
+             */
+            enqueued: number;
+            /** @description Enqueued counts keyed by media class. */
+            by_class: {
+                [key: string]: number;
+            };
         };
         InstanceSettingsResponse: {
             settings: components["schemas"]["InstanceSetting"][];
@@ -13289,6 +13418,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                /** @description Return only messages strictly older than this message (keyset cursor; pair with limit for stable history paging that does not shift as new messages arrive). Mutually exclusive with offset — providing both is a 422. An unknown id, or a message outside this conversation, is a 422. */
+                before_id?: string;
             };
             header?: never;
             path: {
@@ -13318,6 +13449,15 @@ export interface operations {
             };
             /** @description No such conversation for this caller. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description before_id combined with offset, or a before_id that is unknown or outside this conversation. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13434,7 +13574,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The attachment exceeds the 25 MiB limit. */
+            /** @description The attachment exceeds the 100 MiB limit. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -13443,7 +13583,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unsupported attachment type. */
+            /** @description Unsupported attachment type (allowed: image, video, audio, pdf, doc). */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -13452,8 +13592,17 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The conversation is encrypted, or the attachment failed the malware scan. */
+            /** @description The conversation is encrypted, the attachment failed the malware scan, or a probed image reported dimensions over 20000px on either side. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Per-user attachment upload rate limit exceeded (the no-quota compensating control). Carries Retry-After and X-RateLimit-* headers. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14369,6 +14518,118 @@ export interface operations {
             };
             /** @description No run with that id. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getIPFSStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The mirror status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Enabled, but status aggregation is not implemented yet (P19.2). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reconcileIPFS: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scan was accepted; counts of what was enqueued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSReconcileResult"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Enabled, but the reconcile scan is not implemented yet (P19.6). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

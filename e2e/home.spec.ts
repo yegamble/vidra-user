@@ -71,6 +71,31 @@ test("feed cards show a duration badge when the card carries a duration", async 
   await expect(page.getByText("1:23")).toBeVisible();
 });
 
+test("feed cards show the IPFS badge only for pinned videos", async ({ page }) => {
+  // ipfs_pinned is the real card/feed field (vidra-core P19); the badge reflects
+  // true pin state only — absent/false ⇒ no badge (never stubbed).
+  await page.route(FEED_URL, (route) =>
+    route.fulfill({
+      json: {
+        videos: [
+          { ...video("v1", "Pinned To IPFS", 10), ipfs_pinned: true },
+          { ...video("v2", "Not Pinned", 10), ipfs_pinned: false },
+          video("v3", "Field Absent", 10),
+        ],
+        sort: "recent",
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Not Pinned" })).toBeVisible();
+  // Exactly one badge, on the pinned card only.
+  const badges = page.getByTitle("Mirrored to IPFS");
+  await expect(badges).toHaveCount(1);
+  await expect(badges.first()).toBeVisible();
+});
+
 test("shows the empty state when there are no videos", async ({ page }) => {
   await page.route(FEED_URL, (route) =>
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),

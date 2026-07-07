@@ -12,6 +12,14 @@
 // other /api/v1/* call is aborted so the page renders its signed-out/empty
 // state instead of hanging on a refused connection.
 //
+// Evidence hygiene: those aborted /api/v1/* calls legitimately log console
+// errors, which light up Next's dev-tools "Issues" indicator — a `<nextjs-portal>`
+// overlay that renders ON the page and even overlaps the mobile bottom tab bar,
+// polluting the evidence. We keep the abort fallback (it is what drops pages to
+// their empty/signed-out state — never faking product data) and instead HIDE the
+// dev overlay at capture time (hideDevOverlay below). This is scoped entirely to
+// the harness — a developer's normal `npm run dev` keeps its indicator untouched.
+//
 // Theme note: the app follows `prefers-color-scheme` when no theme is pinned
 // (lib/theme.ts default "system" sets no data-theme attribute), so emulating
 // the color scheme per browser context is all that's needed to flip every
@@ -32,7 +40,9 @@ import path from "node:path";
 
 const PORT = process.env.E2E_PORT ?? process.env.PORT ?? "3000";
 const BASE_URL = (process.env.DESIGN_BASE_URL ?? `http://localhost:${PORT}`).replace(/\/+$/, "");
-const OUT_ROOT = path.join(".ralph", "design-review", "w0");
+// Evidence root defaults to the W0 dir; a later wave points it at its own dir
+// (e.g. DESIGN_REVIEW_DIR=.ralph/design-review/w1) without forking the harness.
+const OUT_ROOT = process.env.DESIGN_REVIEW_DIR ?? path.join(".ralph", "design-review", "w0");
 const FULL_PAGE = process.env.DESIGN_FULLPAGE === "1";
 
 const VIEWPORTS = [
@@ -57,6 +67,9 @@ function sampleVideo(id, title, opts = {}) {
     duration_seconds: opts.duration,
     channel_handle: opts.handle ?? "grade-house",
     channel_display_name: opts.channel ?? "Grade House",
+    // Real feed/card field (vidra-core P19): drives the IPFS thumbnail badge.
+    // Illustrative pin state — omitted (⇒ no badge) unless the fixture opts in.
+    ...(opts.ipfsPinned ? { ipfs_pinned: true } : {}),
   };
 }
 
@@ -65,16 +78,18 @@ const SAMPLE_FEED = {
     sampleVideo("v1", "Late-night color grading session", { views: 1200, duration: 1830, ageDays: 0 }),
     sampleVideo("v2", "Shooting the Alps on medium format — a field diary", {
       views: 128_000, duration: 1456, ageDays: 2, handle: "aurora-lab", channel: "Aurora Lab",
+      ipfsPinned: true,
     }),
     sampleVideo("v3", "Building a federated video pipeline in Go", {
       views: 42_000, duration: 1083, ageDays: 5, handle: "north-loop", channel: "North Loop",
     }),
-    sampleVideo("v4", "Monochrome grading — the luxury look, by hand", { views: 96_000, duration: 1900, ageDays: 7 }),
+    sampleVideo("v4", "Monochrome grading — the luxury look, by hand", { views: 96_000, duration: 1900, ageDays: 7, ipfsPinned: true }),
     sampleVideo("v5", "The quiet web: why federation matters", {
       views: 210_000, duration: 742, ageDays: 21, handle: "field-notes", channel: "Field Notes",
     }),
     sampleVideo("v6", "Printing silver gelatin at home — full darkroom setup", {
       views: 64_000, duration: 1671, ageDays: 30, handle: "aurora-lab", channel: "Aurora Lab",
+      ipfsPinned: true,
     }),
   ],
   sort: "recent",
@@ -1044,6 +1059,15 @@ const AREAS = {
 
 // ---- capture -----------------------------------------------------------------
 
+// Hide Next's dev-tools "Issues" overlay so it never appears in a capture. It
+// mounts inside a `<nextjs-portal>` custom element (its shadow content only
+// renders while the host is displayed), so hiding the host is sufficient; the
+// `next-route-announcer` (a11y live region, visually hidden already) is left
+// alone. Purely a screenshot-time cosmetic — no product code or data is touched.
+async function hideDevOverlay(page) {
+  await page.addStyleTag({ content: "nextjs-portal{display:none !important}" });
+}
+
 async function reachable(url) {
   try {
     await fetch(url, { method: "GET" });
@@ -1096,6 +1120,9 @@ async function main() {
           // Optional post-navigation interaction (e.g. drive the login form into
           // its MFA challenge state, which has no URL of its own).
           if (area.act) await area.act(page);
+          // Suppress the dev-tools overlay AFTER any interaction (it re-mounts on
+          // fresh console errors), immediately before the capture.
+          await hideDevOverlay(page);
           const file = path.join(dir, `${viewport.name}-${theme}.png`);
           await page.screenshot({ path: file, fullPage: FULL_PAGE });
           written.push(file);

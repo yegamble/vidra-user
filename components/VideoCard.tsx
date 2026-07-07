@@ -9,10 +9,11 @@ import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 // Grid video card in the template's language (specs/design/{app,desktop}-template):
 // a borderless rounded-2xl thumbnail on the page background, then a row with the
 // channel avatar on the left and a title-first block on the right whose second,
-// muted line reads `channel · views · age`. IPFS/LIVE thumbnail badges from the
-// templates are intentionally omitted — the feed Video contract carries no
-// storage/live field, and design-system rule #4 forbids stubbing fake data into
-// production components (tracked as a backend dependency in the W0 fix_plan note).
+// muted line reads `channel · views · age`. The IPFS thumbnail badge (top-left,
+// per the templates) reflects the REAL `ipfs_pinned` field the feed/card contract
+// now carries (vidra-core P19) — shown only when true (public+published videos the
+// IPFS mirror has pinned; absent ⇒ treated as false, never stubbed). LIVE badges
+// stay omitted until the feed contract carries a live/state field for cards.
 export function VideoCard({
   video,
   progressFraction,
@@ -74,6 +75,33 @@ export function VideoCard({
               No preview
             </div>
           )}
+          {/* IPFS mirror badge (media-overlay exception: theme-invariant dark pill
+              on the thumbnail, per design-system §Documented exceptions). Shown
+              only when the real pin state is true. The wrapping link is labelled
+              by the title, so this "IPFS" text does not affect its accessible
+              name; the title attribute supplies the tooltip explanation. */}
+          {video.ipfs_pinned === true ? (
+            <span
+              className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold leading-none text-white backdrop-blur"
+              title="Mirrored to IPFS"
+            >
+              <svg
+                aria-hidden
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3 w-3 shrink-0"
+              >
+                {/* Hexagon-cube glyph (IPFS-style): outer hex + top vertex spokes. */}
+                <path d="M12 2l8.66 5v10L12 22l-8.66-5V7z" />
+                <path d="M12 2v6M12 8l5.2-3M12 8L6.8 5" />
+              </svg>
+              IPFS
+            </span>
+          ) : null}
           {duration !== null ? (
             <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-white">
               {formatDuration(duration)}
