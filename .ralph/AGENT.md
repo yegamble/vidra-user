@@ -211,6 +211,19 @@ npm run lint                # eslint
 npm run typecheck           # tsc --noEmit (strict)
 npx playwright test         # e2e / smoke
 ```
+
+## Design-parity capture (backport W0)
+```bash
+E2E_PORT=3181 npm run dev                                   # start the app on any free port
+DESIGN_BASE_URL=http://localhost:3181 npm run design:shots  # all registered areas
+DESIGN_BASE_URL=http://localhost:3181 npm run design:shots -- home   # one area
+DESIGN_FULLPAGE=1 DESIGN_BASE_URL=… npm run design:shots     # full scroll height
+```
+`scripts/design-shots.mjs` screenshots each area in `mobile`+`desktop` × `light`+`dark`
+into the git-ignored `.ralph/design-review/w0/<area>/` — the before/after evidence every
+W0 slice attaches to its fix_plan note. It mocks the backend per-area (`page.route`), so
+no real `vidra-core` is needed; add an area by extending `AREAS` in the script. Dev-only,
+never part of `npm run ci`.
 Playwright serves the app on port 3000 by default (what CI + these docs assume). If
 3000 is taken locally (e.g. another project's dev server), override the port:
 `E2E_PORT=3100 npm run e2e` (and `E2E_PORT=3100 npm run e2e:backed`). The default is

@@ -42,6 +42,9 @@ yarn-error.log*
 /test-results/
 /playwright/.cache/
 
+# W0 design-parity capture output (scripts/design-shots.mjs) — evidence only
+/.ralph/design-review/
+
 # vercel
 .vercel
 
