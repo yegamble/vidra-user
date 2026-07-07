@@ -46,14 +46,19 @@ export default async function Home({
   ].join("|");
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">{HEADINGS[active]}</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <FeedScopeToggle active={scope} sort={active} filters={filters} />
-          <FeedSortTabs active={active} filters={filters} />
-        </div>
+      {/* The template leads the feed with the pill chips and shows no page
+          heading; the h1 is kept for the page's programmatic heading (a11y /
+          landmarks / e2e) but visually hidden so the chips carry the hierarchy. */}
+      <h1 className="sr-only">{HEADINGS[active]}</h1>
+      {/* Primary: Recent / Popular / Trending filter chips lead (template language). */}
+      <div className="mb-4">
+        <FeedSortTabs active={active} filters={filters} />
       </div>
-      <div className="mb-6">
+      {/* Secondary controls — federation scope + taxonomy filters. The template
+          mockup shows neither; they are retained (real, tested features) but
+          demoted below the chips as a quieter row so the chips stay the lead. */}
+      <div className="mb-7 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <FeedScopeToggle active={scope} sort={active} filters={filters} />
         <FeedFilters sort={active} filters={filters} />
       </div>
       <VideoFeed key={feedKey} sort={active} filters={filters} />

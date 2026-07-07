@@ -146,6 +146,17 @@ const AREAS = {
       );
     },
   },
+  // /trending shares the home feed's chip-led layout (backport W0.4): same
+  // pill chips + secondary taxonomy filters + VideoFeed grid, Trending preselected.
+  trending: {
+    path: "/trending",
+    async mock(page) {
+      await page.route(/\/api\/v1\/videos(\?|$)/, (route) => route.fulfill({ json: SAMPLE_FEED }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG }),
+      );
+    },
+  },
   // Signed-in desktop app shell (backport W0.2): exercises the sidebar FOLLOWING
   // group (GET /me/subscriptions) and the header's bell-with-dot + account menu.
   shell: {

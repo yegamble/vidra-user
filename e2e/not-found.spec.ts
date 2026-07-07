@@ -17,5 +17,6 @@ test("an unknown route renders the 404 page with site chrome and a way home", as
   // The escape hatch works.
   await page.getByRole("link", { name: "Go home" }).click();
   await expect(page).toHaveURL("/");
-  await expect(page.getByRole("heading", { name: "Recent videos" })).toBeVisible();
+  // The home h1 is sr-only (template leads with chips): assert it is attached.
+  await expect(page.getByRole("heading", { name: "Recent videos" })).toBeAttached();
 });

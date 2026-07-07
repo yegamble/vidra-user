@@ -36,7 +36,9 @@ test("the skip link is the first tab stop and moves focus to the main content", 
 }) => {
   await mockFeed(page);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Recent videos" })).toBeVisible();
+  // The home h1 is sr-only (template leads with chips, not a title), so assert
+  // it is in the a11y tree rather than visible.
+  await expect(page.getByRole("heading", { name: "Recent videos" })).toBeAttached();
 
   // The skip link is the very first focusable element in the document.
   await page.keyboard.press("Tab");

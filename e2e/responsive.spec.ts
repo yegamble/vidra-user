@@ -85,7 +85,9 @@ for (const vp of VIEWPORTS) {
         }),
       );
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: "Recent videos" })).toBeVisible();
+      // The home h1 is sr-only (template leads with chips); the visible feed
+      // content is covered by the card heading assertion just below.
+      await expect(page.getByRole("heading", { name: "Recent videos" })).toBeAttached();
       await expect(page.getByRole("heading", { name: "First clip" })).toBeVisible();
       await assertNoHorizontalScroll(page);
     });

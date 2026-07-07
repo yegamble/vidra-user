@@ -26,11 +26,15 @@ export default async function TrendingPage({
   ].join("|");
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">Trending videos</h1>
+      {/* Heading kept for the page's programmatic heading (a11y / e2e) but
+          visually hidden — the template leads with the chips, not a title. */}
+      <h1 className="sr-only">Trending videos</h1>
+      {/* Primary: shared sort chips lead (Recent/Popular link back to home). */}
+      <div className="mb-4">
         <FeedSortTabs active="trending" filters={filters} />
       </div>
-      <div className="mb-6">
+      {/* Secondary taxonomy filters — demoted below the chips (see home page). */}
+      <div className="mb-7 flex flex-wrap items-center gap-x-3 gap-y-2">
         <FeedFilters sort="trending" filters={filters} />
       </div>
       <VideoFeed key={feedKey} sort="trending" filters={filters} />

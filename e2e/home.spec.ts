@@ -3,6 +3,11 @@ import { expect, test } from "@playwright/test";
 // The feed loads client-side, so we route-mock the backend call (a real backend
 // is not running in `npm run ci`). Match the feed endpoint but not its subpaths
 // (/videos/search, /videos/{id}).
+//
+// The sort heading ("Popular videos" etc.) is an sr-only h1 — the template
+// leads with the pill chips and shows no visible title — so it is asserted with
+// toBeAttached() (present in the a11y tree), while the chip's aria-pressed
+// carries the visible active-sort state.
 const FEED_URL = /\/api\/v1\/videos(\?|$)/;
 
 function video(id: string, title: string, views: number) {
@@ -97,7 +102,7 @@ test("the sort control refetches with the selected sort and updates the URL", as
 
   await popular.click();
   await expect(page).toHaveURL(/\/\?sort=popular$/);
-  await expect(page.getByRole("heading", { name: "Popular videos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Popular videos" })).toBeAttached();
   await expect(page.getByRole("heading", { name: "Popular Pick" })).toBeVisible();
   await expect(popular).toHaveAttribute("aria-pressed", "true");
   expect(sorts).toEqual(["recent", "popular"]);
@@ -118,7 +123,7 @@ test("a sort mode URL is shareable (deep link)", async ({ page }) => {
     });
   });
   await page.goto("/?sort=trending");
-  await expect(page.getByRole("heading", { name: "Trending videos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Trending videos" })).toBeAttached();
   await expect(page.getByRole("button", { name: "Trending" })).toHaveAttribute(
     "aria-pressed",
     "true",

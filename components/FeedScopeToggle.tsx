@@ -10,13 +10,17 @@ const OPTIONS: { scope: FeedScope; label: string }[] = [
   { scope: "all", label: "All" },
 ];
 
-// FeedScopeToggle is the home feed's federation-scope switcher (segmented
-// buttons with aria-pressed, same pattern as FeedSortTabs): Local shows only
-// this instance's videos (the default), All mixes in federated remote videos
-// for discovery. The active scope lives in the URL (?scope=all; local stays
-// implicit) so scoped views are shareable and back/forward friendly — clicking
-// pushes a new URL and the server page remounts the feed. Active sort/filters
-// ride along via feedHref.
+// FeedScopeToggle is the home feed's federation-scope switcher: Local shows
+// only this instance's videos (the default), All mixes in federated remote
+// videos for discovery. It is a binary segmented switcher (design-system
+// "Segmented switcher" pattern — a muted track with the active segment raised),
+// deliberately quieter than the Recent/Popular/Trending sort *chips* so the
+// primary filter row leads and this secondary control does not read as a second
+// competing selection. The active scope lives in the URL (?scope=all; local
+// stays implicit) so scoped views are shareable and back/forward friendly —
+// clicking pushes a new URL and the server page remounts the feed. Active
+// sort/filters ride along via feedHref. Toggle-button semantics (role="group"
+// + aria-pressed) are unchanged.
 export function FeedScopeToggle({
   active,
   sort,
@@ -28,7 +32,11 @@ export function FeedScopeToggle({
 }) {
   const router = useRouter();
   return (
-    <div role="group" aria-label="Feed scope" className="inline-flex items-center gap-2">
+    <div
+      role="group"
+      aria-label="Feed scope"
+      className="inline-flex items-center rounded-full bg-surface-muted p-1"
+    >
       {OPTIONS.map(({ scope, label }) => (
         <button
           key={scope}
@@ -43,8 +51,8 @@ export function FeedScopeToggle({
           }}
           className={
             active === scope
-              ? "focus-ring rounded-full border border-accent bg-accent px-4 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors"
-              : "focus-ring rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted"
+              ? "focus-ring rounded-full bg-surface px-3.5 py-1 text-[13px] font-semibold text-fg shadow-sm transition-colors"
+              : "focus-ring rounded-full px-3.5 py-1 text-[13px] font-medium text-fg-muted transition-colors hover:text-fg"
           }
         >
           {label}

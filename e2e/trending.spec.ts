@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 
 // The /trending route: the public feed with sort=trending preselected. The feed
 // call is route-mocked (no backend in `npm run ci`).
+//
+// The page's sort heading (Recent/Popular/Trending videos) is an sr-only h1 —
+// the template leads with the pill chips and shows no visible title — so the
+// heading is asserted with toBeAttached() (present in the a11y tree) rather than
+// toBeVisible(); the visible sort state is carried by the chip's aria-pressed.
 const FEED_URL = /\/api\/v1\/videos(\?|$)/;
 
 function video(id: string, title: string) {
@@ -31,7 +36,7 @@ test("/trending fetches the trending feed and marks the Trending tab active", as
   });
 
   await page.goto("/trending");
-  await expect(page.getByRole("heading", { name: "Trending videos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Trending videos" })).toBeAttached();
   await expect(page.getByRole("heading", { name: "Hot Right Now" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Trending" })).toHaveAttribute(
     "aria-pressed",
@@ -54,12 +59,12 @@ test("the sidebar links to /trending and the tabs link back to the home modes", 
     .getByRole("link", { name: "Trending" })
     .click();
   await expect(page).toHaveURL(/\/trending$/);
-  await expect(page.getByRole("heading", { name: "Trending videos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Trending videos" })).toBeAttached();
 
   // The segmented control leads back to the home-feed modes.
   await page.getByRole("button", { name: "Recent" }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "Recent videos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent videos" })).toBeAttached();
 });
 
 test("the home Trending tab navigates to the /trending route", async ({ page }) => {
@@ -70,5 +75,5 @@ test("the home Trending tab navigates to the /trending route", async ({ page }) 
   await page.goto("/");
   await page.getByRole("button", { name: "Trending" }).click();
   await expect(page).toHaveURL(/\/trending$/);
-  await expect(page.getByRole("heading", { name: "Trending videos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Trending videos" })).toBeAttached();
 });
