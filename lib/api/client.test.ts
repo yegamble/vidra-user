@@ -1,3 +1,13 @@
+import {
+  context,
+  type Context,
+  type ContextManager,
+  propagation,
+  ROOT_CONTEXT,
+  trace,
+  TraceFlags,
+} from "@opentelemetry/api";
+import { W3CTraceContextPropagator } from "@opentelemetry/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getAccessToken, setAccessToken, setSessionExpiredHandler } from "./auth-store";
@@ -131,6 +141,84 @@ describe("apiRequest", () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.code).toBe("network_error");
     expect(err.status).toBe(0);
+  });
+});
+
+// Minimal synchronous OTel context manager (see lib/observability/trace.test.ts)
+// so context.with(...) makes a span active for the synchronous apiRequest call.
+class SyncStackContextManager implements ContextManager {
+  private active_: Context = ROOT_CONTEXT;
+  active(): Context {
+    return this.active_;
+  }
+  with<A extends unknown[], F extends (...args: A) => ReturnType<F>>(
+    ctx: Context,
+    fn: F,
+    thisArg?: ThisParameterType<F>,
+    ...args: A
+  ): ReturnType<F> {
+    const previous = this.active_;
+    this.active_ = ctx;
+    try {
+      return fn.call(thisArg, ...args);
+    } finally {
+      this.active_ = previous;
+    }
+  }
+  bind<T>(_ctx: Context, target: T): T {
+    return target;
+  }
+  enable(): this {
+    return this;
+  }
+  disable(): this {
+    this.active_ = ROOT_CONTEXT;
+    return this;
+  }
+}
+
+describe("trace-context propagation to vidra-core", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
+  const SPAN_ID = "b7ad6b7169203331";
+
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    propagation.disable();
+    context.disable();
+  });
+
+  function headersOf(callIndex = 0): Record<string, string> {
+    const [, init] = fetchMock.mock.calls[callIndex] as [string, RequestInit];
+    return init.headers as Record<string, string>;
+  }
+
+  it("sends X-Correlation-ID but no traceparent when OTel is off", async () => {
+    await apiRequest("/api/v1/instance");
+    const headers = headersOf();
+    expect(headers["x-correlation-id"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(headers.traceparent).toBeUndefined();
+  });
+
+  it("injects the active span's W3C traceparent (and keeps X-Correlation-ID) when OTel is on", async () => {
+    propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+    context.setGlobalContextManager(new SyncStackContextManager());
+
+    const ctx = trace.setSpanContext(context.active(), {
+      traceId: TRACE_ID,
+      spanId: SPAN_ID,
+      traceFlags: TraceFlags.SAMPLED,
+      isRemote: false,
+    });
+    await context.with(ctx, () => apiRequest("/api/v1/instance"));
+
+    const headers = headersOf();
+    expect(headers.traceparent).toBe(`00-${TRACE_ID}-${SPAN_ID}-01`);
+    expect(headers["x-correlation-id"]).toMatch(/^[0-9a-f-]{36}$/);
   });
 });
 

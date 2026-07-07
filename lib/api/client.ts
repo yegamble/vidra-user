@@ -1,5 +1,6 @@
 import { apiBaseUrl } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { activeTraceFields, injectTraceContext } from "@/lib/observability/trace";
 
 import { getAccessToken, notifySessionExpired, setAccessToken } from "./auth-store";
 import type { ApiErrorEnvelope, AuthResponse, FieldError, RefreshRequest } from "./types";
@@ -126,6 +127,11 @@ async function doRequest<T>(
   if (token) {
     headers.authorization = `Bearer ${token}`;
   }
+  // Inject the W3C `traceparent` for the active span so this call and its
+  // vidra-core handling share one trace (no-op when OTel is off — the X-
+  // Correlation-ID above is then the sole correlation carrier). Runs after our
+  // own headers so it only adds trace-context keys, never overwrites them.
+  injectTraceContext(headers);
 
   let res: Response;
   try {
@@ -146,6 +152,7 @@ async function doRequest<T>(
       method,
       path,
       correlation_id: correlationId,
+      ...activeTraceFields(),
       error: cause instanceof Error ? cause.message : String(cause),
     });
     throw new ApiError({
@@ -163,6 +170,7 @@ async function doRequest<T>(
       status: err.status,
       error_code: err.code,
       correlation_id: correlationId,
+      ...activeTraceFields(),
       request_id: err.requestId,
     });
     throw err;
