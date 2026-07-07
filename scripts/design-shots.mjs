@@ -84,6 +84,54 @@ const SAMPLE_FEED = {
 
 const SAMPLE_VIDEO_CONFIG = { categories: [], languages: [], licenses: [] };
 
+// A signed-in session for shell captures. restoreSession() does a silent
+// POST /auth/refresh on boot; success then reads GET /auth/me — mocking both
+// lands the shell authed (so the sidebar FOLLOWING group and the account menu
+// render) without any UI login flow. Illustrative data only.
+const SAMPLE_USER = {
+  id: "u1",
+  username: "boss",
+  email: "boss@example.test",
+  role: "user",
+  email_verified: true,
+  display_name: "Mara",
+  bio: "",
+  created_at: new Date().toISOString(),
+};
+
+const SAMPLE_AUTH = {
+  token: "design-shots-access",
+  refresh_token: "design-shots-refresh",
+  token_type: "Bearer",
+  expires_in: 900,
+  user: SAMPLE_USER,
+};
+
+function sampleFollowedChannel(id, handle, displayName) {
+  return {
+    id,
+    owner_id: `${id}-owner`,
+    handle,
+    display_name: displayName,
+    description: "",
+    follower_count: 1200,
+    created_at: new Date().toISOString(),
+    has_avatar: false,
+    has_banner: false,
+    followed_at: new Date().toISOString(),
+  };
+}
+
+const SAMPLE_FOLLOWING = {
+  channels: [
+    sampleFollowedChannel("ch1", "grade_house", "Grade House"),
+    sampleFollowedChannel("ch2", "north_loop", "North Loop"),
+    sampleFollowedChannel("ch3", "field_notes", "Field Notes"),
+  ],
+  limit: 15,
+  offset: 0,
+};
+
 // ---- area registry -----------------------------------------------------------
 
 /** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void> }>} */
@@ -95,6 +143,25 @@ const AREAS = {
       await page.route(/\/api\/v1\/videos(\?|$)/, (route) => route.fulfill({ json: SAMPLE_FEED }));
       await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
         route.fulfill({ json: SAMPLE_VIDEO_CONFIG }),
+      );
+    },
+  },
+  // Signed-in desktop app shell (backport W0.2): exercises the sidebar FOLLOWING
+  // group (GET /me/subscriptions) and the header's bell-with-dot + account menu.
+  shell: {
+    path: "/",
+    async mock(page) {
+      await page.route(/\/api\/v1\/videos(\?|$)/, (route) => route.fulfill({ json: SAMPLE_FEED }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG }),
+      );
+      await page.route(/\/api\/v1\/auth\/refresh$/, (route) => route.fulfill({ json: SAMPLE_AUTH }));
+      await page.route(/\/api\/v1\/auth\/me$/, (route) => route.fulfill({ json: SAMPLE_USER }));
+      await page.route(/\/api\/v1\/me\/subscriptions(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_FOLLOWING }),
+      );
+      await page.route(/\/api\/v1\/me\/notifications\/unread-count$/, (route) =>
+        route.fulfill({ json: { unread_count: 3 } }),
       );
     },
   },
