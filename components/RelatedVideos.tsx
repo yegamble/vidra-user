@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { api, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 
 const RELATED_COUNT = 6;
@@ -18,7 +19,18 @@ const RELATED_COUNT = 6;
 // The current video is excluded and results deduped, capped at 6 cards. The
 // section hides itself while loading, on failure, and when nothing relates — it
 // is pure polish and must never break the watch page.
-export function RelatedVideos({ video }: { video: Video }) {
+//
+// `belowLayout` (theater mode, PLAY-04): when the watch page is in theater mode
+// the rail reflows to a full-width row of cards BELOW the stage instead of the
+// fixed-width right rail — the width cap is dropped and the card list becomes a
+// responsive multi-column grid.
+export function RelatedVideos({
+  video,
+  belowLayout = false,
+}: {
+  video: Video;
+  belowLayout?: boolean;
+}) {
   const [related, setRelated] = useState<Video[] | null>(null);
 
   const { id, channel_handle: channelHandle, channel_id: channelId, category } = video;
@@ -69,10 +81,18 @@ export function RelatedVideos({ video }: { video: Video }) {
   return (
     <aside
       aria-label="Related videos"
-      className="flex w-full shrink-0 flex-col gap-3.5 lg:w-[344px]"
+      className={cn(
+        "flex w-full shrink-0 flex-col gap-3.5",
+        belowLayout ? null : "lg:w-[344px]",
+      )}
     >
       <h2 className="text-[13px] font-bold tracking-[0.02em] text-fg-muted">Related videos</h2>
-      <ul className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-1 lg:gap-y-3.5">
+      <ul
+        className={cn(
+          "grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2",
+          belowLayout ? "lg:grid-cols-3" : "lg:grid-cols-1 lg:gap-y-3.5",
+        )}
+      >
         {related.map((v) => (
           <li key={v.id}>
             <RelatedRow video={v} />

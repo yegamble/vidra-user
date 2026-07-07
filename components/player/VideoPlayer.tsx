@@ -19,6 +19,12 @@ import { videoThumbnailUrl, type Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
 import { readStoredRate, serverRate, storeRate, subscribeRate } from "@/lib/player-rates";
+import {
+  readStoredTheater,
+  serverTheater,
+  subscribeTheater,
+  toggleTheater,
+} from "@/lib/player-theater";
 import { readBuffered } from "@/lib/player-ui";
 import {
   SHORTCUT_IGNORE_SELECTOR,
@@ -84,6 +90,12 @@ export function VideoPlayer({
   const speed = useSyncExternalStore(subscribeRate, readStoredRate, serverRate);
   const setSpeed = useCallback((rate: number) => storeRate(rate), []);
 
+  // Theater mode (PLAY-04, watch variant only): a page-layout concern WatchView
+  // reacts to. The shell only owns the toggle button — it reads the same session
+  // store WatchView does, so the button's aria-pressed stays in lockstep with the
+  // layout. serverTheater keeps the SSR/first-client snapshot off (no mismatch).
+  const theater = useSyncExternalStore(subscribeTheater, readStoredTheater, serverTheater);
+
   const [paused, setPaused] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -92,6 +104,14 @@ export function VideoPlayer({
   const [muted, setMuted] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Picture-in-Picture (PLAY-05). pipSupported is resolved in an effect (reads
+  // document.pictureInPictureEnabled — a client-only global), so it starts false
+  // for SSR + the first client render (no hydration mismatch) and the button only
+  // appears once support is confirmed. pipActive mirrors the element's
+  // enter/leave events, so it reflects PiP started or ended from the browser's
+  // own UI too.
+  const [pipSupported, setPipSupported] = useState(false);
+  const [pipActive, setPipActive] = useState(false);
 
   // Auto-hide bookkeeping: controls show while paused, while focus is inside the
   // bar (covers open menus, whose items/button hold focus), or briefly after any
@@ -170,6 +190,16 @@ export function VideoPlayer({
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
     else void c.requestFullscreen().catch(() => {});
   }, []);
+
+  const togglePip = useCallback(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (document.pictureInPictureElement) {
+      void document.exitPictureInPicture().catch(() => {});
+    } else {
+      void el.requestPictureInPicture?.().catch(() => {});
+    }
+  }, [videoRef]);
 
   // ---- media-element state subscription (mounted once) ----
 
@@ -260,6 +290,28 @@ export function VideoPlayer({
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
+
+  // Resolve PiP support (client-only) and mirror the element's PiP state from its
+  // own enter/leave events — so the button hides where PiP is unavailable (not
+  // disabled-forever) and its aria-pressed follows PiP toggled from the browser UI.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    setPipSupported(
+      typeof document !== "undefined" &&
+        document.pictureInPictureEnabled === true &&
+        !el.disablePictureInPicture,
+    );
+    setPipActive(document.pictureInPictureElement === el);
+    const onEnter = () => setPipActive(true);
+    const onLeave = () => setPipActive(false);
+    el.addEventListener("enterpictureinpicture", onEnter);
+    el.addEventListener("leavepictureinpicture", onLeave);
+    return () => {
+      el.removeEventListener("enterpictureinpicture", onEnter);
+      el.removeEventListener("leavepictureinpicture", onLeave);
+    };
+  }, [videoRef, playback.src]);
 
   // Player keyboard shortcuts (space/K, J/L, arrows ±5s, M, F, C). Ignored while
   // typing / operating another control (SHORTCUT_IGNORE_SELECTOR) or on a
@@ -411,6 +463,49 @@ export function VideoPlayer({
             onSelect={playback.setLevel}
             variant="overlay"
           />
+
+          {/* Theater is a watch-page layout mode and only reflows the two-column
+              stage at lg+, so the toggle appears only there (below lg the page is
+              already single-column — the button would be a no-op, and it would
+              crowd the phone control bar). display:contents keeps it a flush flex
+              item without an extra box. */}
+          {variant === "watch" ? (
+            <div className="hidden lg:contents">
+              <OverlayButton
+                label="Theater mode"
+                pressed={theater}
+                onClick={() => toggleTheater()}
+              >
+                {theater ? (
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="6" y="7" width="12" height="10" rx="1.5" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="6" width="18" height="12" rx="1.5" />
+                  </svg>
+                )}
+              </OverlayButton>
+            </div>
+          ) : null}
+
+          {/* PiP hidden (not disabled) where the browser can't support it; also
+              held off the narrowest phone bar (< sm) so it never crowds the
+              always-visible core controls. */}
+          {pipSupported ? (
+            <div className="hidden sm:contents">
+              <OverlayButton
+                label={pipActive ? "Exit picture-in-picture" : "Picture-in-picture"}
+                pressed={pipActive}
+                onClick={togglePip}
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <rect x="11" y="11" width="8" height="5" rx="1" fill="currentColor" stroke="none" />
+                </svg>
+              </OverlayButton>
+            </div>
+          ) : null}
 
           <OverlayButton
             label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}

@@ -144,6 +144,33 @@ test("the watch page passes axe (player, metadata, comments)", async ({ page }) 
   await expectNoSevereViolations(page);
 });
 
+test("the watch page passes axe in theater mode (reflowed layout)", async ({ page }) => {
+  await page.route(/\/api\/v1\/videos\/v1$/, (route) =>
+    route.fulfill({ json: { ...video("v1", "Watch Me", 4200), width: 1280, height: 720 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/original/, (route) => route.abort());
+  await page.route(/\/api\/v1\/videos\/v1\/comments/, (route) =>
+    route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
+    route.fulfill({ json: { captions: [] } }),
+  );
+  // The related rail so the reflowed-below grid is exercised by axe.
+  await page.route(/\/api\/v1\/channels\/ada\/videos(\?|$)/, (route) =>
+    route.fulfill({ json: { videos: [video("v2", "Follow-up", 12), video("v3", "Encore", 8)] } }),
+  );
+  await page.route(/\/avatar/, (route) => route.abort());
+
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  await page.getByRole("button", { name: "Theater mode" }).click();
+  await expect(page.locator("[data-theater='on']")).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
 test("the login page passes axe", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();

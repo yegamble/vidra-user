@@ -793,6 +793,26 @@ const AREAS = {
       await page.getByRole("menu", { name: "Playback speed" }).waitFor({ state: "visible" });
     },
   },
+  // Watch page — theater mode (backport W1.U3 / PLAY-04): the stage widened to the
+  // full content width with the related rail reflowed below, and the shell's
+  // Theater/PiP toggles visible in the settings cluster (aria-pressed). Reuses the
+  // watch mock; the act hook flips theater on.
+  "watch-theater": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+    },
+    async act(page) {
+      // Theater only reflows the two-column stage at lg+, so its toggle is
+      // hidden on the mobile bar — skip the click there (the mobile capture is
+      // the already-single-column watch page, which is what "theater" is on a phone).
+      const toggle = page.getByRole("button", { name: "Theater mode" });
+      if (await toggle.isVisible()) {
+        await toggle.click();
+        await page.locator("[data-theater='on']").first().waitFor();
+      }
+    },
+  },
   // Channel page (backport W0.6): banner/avatar header, Follow affordance, sort
   // chips, and a home-consistent video grid. Authed so the Follow button (not
   // the signed-out prompt) renders.

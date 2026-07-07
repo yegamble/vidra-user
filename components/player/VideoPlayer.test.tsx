@@ -18,9 +18,17 @@ const VIDEO = {
   // no hls_url → progressive "original" mode (no hls.js import in jsdom)
 } as unknown as Video;
 
-function Harness({ tracks = [] as CaptionTrack[] }: { tracks?: CaptionTrack[] }) {
+function Harness({
+  tracks = [] as CaptionTrack[],
+  variant = "watch" as "watch" | "embed",
+}: {
+  tracks?: CaptionTrack[];
+  variant?: "watch" | "embed";
+}) {
   const ref = useRef<HTMLVideoElement | null>(null);
-  return <VideoPlayer video={VIDEO} videoRef={ref} startAt={null} tracks={tracks} />;
+  return (
+    <VideoPlayer video={VIDEO} videoRef={ref} startAt={null} tracks={tracks} variant={variant} />
+  );
 }
 
 beforeEach(() => {
@@ -33,6 +41,11 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   window.sessionStorage.clear();
+  // Undo any PiP capability stubs a test installed.
+  delete (document as unknown as { pictureInPictureEnabled?: boolean }).pictureInPictureEnabled;
+  delete (document as unknown as { pictureInPictureElement?: unknown }).pictureInPictureElement;
+  delete (HTMLVideoElement.prototype as unknown as { requestPictureInPicture?: unknown })
+    .requestPictureInPicture;
 });
 
 describe("VideoPlayer shell", () => {
@@ -100,6 +113,54 @@ describe("VideoPlayer shell", () => {
     const video = container.querySelector("video") as HTMLVideoElement;
     expect(screen.getByRole("button", { name: "Speed: 2×" })).toBeTruthy();
     expect(video.playbackRate).toBe(2);
+  });
+
+  it("shows a Theater toggle on the watch variant whose aria-pressed follows the session store", () => {
+    render(<Harness />);
+    const theater = screen.getByRole("button", { name: "Theater mode" });
+    expect(theater.getAttribute("aria-pressed")).toBe("false");
+    act(() => void fireEvent.click(theater));
+    expect(window.sessionStorage.getItem("vidra.theater")).toBe("1");
+    expect(screen.getByRole("button", { name: "Theater mode" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("does not render the Theater toggle on the embed variant", () => {
+    render(<Harness variant="embed" />);
+    expect(screen.queryByRole("button", { name: "Theater mode" })).toBeNull();
+  });
+
+  it("hides the PiP button when the browser reports no Picture-in-Picture support", () => {
+    // jsdom exposes no pictureInPictureEnabled → unsupported → button hidden.
+    render(<Harness />);
+    expect(screen.queryByRole("button", { name: /picture-in-picture/i })).toBeNull();
+  });
+
+  it("shows the PiP button when supported, enters PiP on click, and mirrors the element events", () => {
+    Object.defineProperty(document, "pictureInPictureEnabled", {
+      configurable: true,
+      value: true,
+    });
+    const requestPip = vi.fn(() => Promise.resolve({} as PictureInPictureWindow));
+    (
+      HTMLVideoElement.prototype as unknown as { requestPictureInPicture: () => Promise<unknown> }
+    ).requestPictureInPicture = requestPip;
+
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    const pip = screen.getByRole("button", { name: "Picture-in-picture" });
+    expect(pip.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(pip);
+    expect(requestPip).toHaveBeenCalledTimes(1);
+
+    // The element entering PiP (its event) flips the button's pressed state + label.
+    act(() => void fireEvent(video, new Event("enterpictureinpicture")));
+    expect(screen.getByRole("button", { name: "Exit picture-in-picture" })).toBeTruthy();
+    // Leaving PiP (e.g. from the browser UI) returns it.
+    act(() => void fireEvent(video, new Event("leavepictureinpicture")));
+    expect(screen.getByRole("button", { name: "Picture-in-picture" })).toBeTruthy();
   });
 
   it("pins the controls while paused and auto-hides ~3s after playback starts", () => {

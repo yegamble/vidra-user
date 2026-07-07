@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
@@ -23,8 +30,10 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, channelAvatarUrl, videoCaptionUrl } from "@/lib/api";
 import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
 import type { Video, VideoConfigResponse } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { parseStartTime } from "@/lib/start-time";
 
 type Status = "loading" | "error" | "notfound" | "ready";
@@ -45,6 +54,11 @@ export function WatchView({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<Video | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Theater mode (PLAY-04): a page-layout concern the player shell toggles. The
+  // SSR snapshot is always off (serverTheater) so hydration matches; after
+  // hydration the client restores the session's mode. Widens the stage to the
+  // full content width and reflows the related rail below.
+  const theater = useSyncExternalStore(subscribeTheater, readStoredTheater, serverTheater);
   // The player element, owned here so the Share dialog can read currentTime.
   const playerRef = useRef<HTMLVideoElement | null>(null);
   // An explicit ?t=<seconds> start position from the URL, parsed once. The
@@ -159,7 +173,15 @@ export function WatchView({ id }: { id: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-7">
+    <div
+      data-theater={theater ? "on" : "off"}
+      className={cn(
+        "flex flex-col gap-8",
+        // Two-column at lg by default; theater collapses to a single full-width
+        // column so the stage widens and the related rail reflows below.
+        theater ? null : "lg:flex-row lg:items-start lg:gap-7",
+      )}
+    >
       <div className="flex min-w-0 flex-1 flex-col gap-8">
       <article className="flex flex-col gap-4">
         <Player video={video} videoRef={playerRef} startAt={startAt} />
@@ -248,7 +270,7 @@ export function WatchView({ id }: { id: string }) {
       <CommentsSection videoId={video.id} />
       </div>
 
-      <RelatedVideos video={video} />
+      <RelatedVideos video={video} belowLayout={theater} />
     </div>
   );
 }
