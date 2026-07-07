@@ -27,9 +27,16 @@ const RELATED_COUNT = 6;
 export function RelatedVideos({
   video,
   belowLayout = false,
+  onFirstRelated,
 }: {
   video: Video;
   belowLayout?: boolean;
+  /**
+   * Reports the first related entry (or null) up to the watch page, so the
+   * player's end card (PLAY-08) can queue it as "next" without a second fetch.
+   * Fires once the list resolves — pass a stable setter (never an inline arrow).
+   */
+  onFirstRelated?: (video: Video | null) => void;
 }) {
   const [related, setRelated] = useState<Video[] | null>(null);
 
@@ -66,7 +73,10 @@ export function RelatedVideos({
         picks.push(v);
         if (picks.length === RELATED_COUNT) break;
       }
-      if (!cancelled) setRelated(picks);
+      if (!cancelled) {
+        setRelated(picks);
+        onFirstRelated?.(picks[0] ?? null);
+      }
     }
 
     void load();
@@ -74,7 +84,7 @@ export function RelatedVideos({
       cancelled = true;
       controller.abort();
     };
-  }, [id, channelHandle, channelId, category]);
+  }, [id, channelHandle, channelId, category, onFirstRelated]);
 
   if (!related || related.length === 0) return null;
 

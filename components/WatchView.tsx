@@ -58,6 +58,10 @@ export function WatchView({ id }: { id: string }) {
   // hydration the client restores the session's mode. Widens the stage to the
   // full content width and reflows the related rail below.
   const theater = useSyncExternalStore(subscribeTheater, readStoredTheater, serverTheater);
+  // The "next" video for the player's autoplay end card (PLAY-08): the first
+  // related entry, reported up by RelatedVideos so the end card reuses that fetch
+  // (no second request). null until the rail resolves, or when nothing relates.
+  const [nextVideo, setNextVideo] = useState<Video | null>(null);
   // The player element, owned here so the Share dialog can read currentTime.
   const playerRef = useRef<HTMLVideoElement | null>(null);
   // An explicit ?t=<seconds> start position from the URL, parsed once. The
@@ -183,7 +187,7 @@ export function WatchView({ id }: { id: string }) {
     >
       <div className="flex min-w-0 flex-1 flex-col gap-8">
       <article className="flex flex-col gap-4">
-        <Player video={video} videoRef={playerRef} startAt={startAt} />
+        <Player video={video} videoRef={playerRef} startAt={startAt} nextVideo={nextVideo} />
 
         <div className="flex flex-col gap-3">
           <h1 className="text-lg font-bold leading-snug tracking-tight sm:text-xl">
@@ -269,7 +273,7 @@ export function WatchView({ id }: { id: string }) {
       <CommentsSection videoId={video.id} />
       </div>
 
-      <RelatedVideos video={video} belowLayout={theater} />
+      <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setNextVideo} />
     </div>
   );
 }
@@ -286,10 +290,12 @@ function Player({
   video,
   videoRef,
   startAt,
+  nextVideo,
 }: {
   video: Video;
   videoRef: RefObject<HTMLVideoElement | null>;
   startAt: number | null;
+  nextVideo: Video | null;
 }) {
   const { status: sessionStatus } = useSession();
   const authed = sessionStatus === "authed";
@@ -386,6 +392,7 @@ function Player({
         videoRef={videoRef}
         startAt={startAt}
         tracks={tracks}
+        nextVideo={nextVideo}
         onPlay={recordThrottled}
         onTimeUpdate={recordThrottled}
         onPause={record}

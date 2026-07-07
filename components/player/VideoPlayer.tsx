@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 
+import { EndCard } from "@/components/player/EndCard";
 import { OverlayButton } from "@/components/player/OverlayButton";
 import { SeekBar } from "@/components/player/SeekBar";
 import { VolumeControl } from "@/components/player/VolumeControl";
@@ -18,6 +19,12 @@ import { SpeedMenu } from "@/components/SpeedMenu";
 import { videoThumbnailUrl, type Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
+import {
+  readStoredAutoplay,
+  serverAutoplay,
+  subscribeAutoplay,
+  toggleAutoplay,
+} from "@/lib/player-autoplay";
 import {
   readStoredRate,
   serverRate,
@@ -69,6 +76,7 @@ export function VideoPlayer({
   variant = "watch",
   tracks = [],
   poster,
+  nextVideo = null,
   onPlay,
   onTimeUpdate,
   onPause,
@@ -81,6 +89,12 @@ export function VideoPlayer({
   tracks?: CaptionTrack[];
   /** Explicit poster override; defaults to the video's own thumbnail when it has one. */
   poster?: string;
+  /**
+   * The video to queue on the end card (PLAY-08) — the first related entry,
+   * supplied by WatchView. null (embed, or nothing related) ⇒ the end card shows
+   * a plain replay affordance with no countdown.
+   */
+  nextVideo?: Video | null;
   onPlay?: () => void;
   onTimeUpdate?: () => void;
   onPause?: () => void;
@@ -109,6 +123,25 @@ export function VideoPlayer({
   // store WatchView does, so the button's aria-pressed stays in lockstep with the
   // layout. serverTheater keeps the SSR/first-client snapshot off (no mismatch).
   const theater = useSyncExternalStore(subscribeTheater, readStoredTheater, serverTheater);
+
+  // Autoplay-next (PLAY-08): the effective preference the end card honours. A
+  // per-session store with a baked default of ON (the signed-out default) — the
+  // interim scope until W1.U6's per-user `autoplay_next` lands. serverAutoplay
+  // and an unset store both read ON, so the SSR/first-client snapshot matches.
+  const autoplayEnabled = useSyncExternalStore(
+    subscribeAutoplay,
+    readStoredAutoplay,
+    serverAutoplay,
+  );
+
+  // End card shown when the media element fires `ended`. Set only by the `ended`
+  // event; cleared when playback (re)starts (the `play`/`loadstart` events), or
+  // explicitly on dismiss — so all writes stay in event handlers (never a bare
+  // effect body).
+  const [ended, setEnded] = useState(false);
+  // Flags that focus should return to the player controls once the card hides
+  // (set by the dismiss / replay handlers; the countdown navigates away instead).
+  const restoreFocus = useRef(false);
 
   const [paused, setPaused] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -215,6 +248,33 @@ export function VideoPlayer({
     }
   }, [videoRef]);
 
+  // End-card actions (PLAY-08). Replay restarts the finished video from the top;
+  // dismiss just closes the card. Both hand focus back to the player controls.
+  const replayVideo = useCallback(() => {
+    restoreFocus.current = true;
+    setEnded(false); // the `play` event also clears it — this keeps the UI snappy
+    const el = videoRef.current;
+    if (!el) return;
+    el.currentTime = 0;
+    void el.play().catch(() => {});
+  }, [videoRef]);
+
+  const dismissEndCard = useCallback(() => {
+    restoreFocus.current = true;
+    setEnded(false);
+  }, []);
+
+  // When the card hides after a dismiss/replay, return focus to the first player
+  // control (the card had focus, so it must not be dropped to <body>).
+  useEffect(() => {
+    if (ended || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    const btn = containerRef.current?.querySelector<HTMLElement>(
+      '[data-testid="player-controls"] button',
+    );
+    btn?.focus();
+  }, [ended]);
+
   // ---- media-element state subscription (mounted once) ----
 
   useEffect(() => {
@@ -222,6 +282,7 @@ export function VideoPlayer({
     if (!el) return;
     const onPlayEv = () => {
       setPaused(false);
+      setEnded(false); // any (re)start clears the end card
       bump(); // playback started → begin the auto-hide countdown
       cbRef.current.onPlay?.();
     };
@@ -230,6 +291,13 @@ export function VideoPlayer({
       window.clearTimeout(idleRef.current); // pause pins the controls visible
       cbRef.current.onPause?.();
     };
+    const onEndedEv = () => {
+      setEnded(true);
+      window.clearTimeout(idleRef.current); // the end card takes over the surface
+    };
+    // A new source (navigation to another video within the page, or an
+    // HLS→original fallback) resets the element, so drop any stale end card.
+    const onLoadStartEv = () => setEnded(false);
     const onTimeEv = () => {
       setCurrentTime(el.currentTime);
       setBuffered(readBuffered(el.buffered));
@@ -244,6 +312,8 @@ export function VideoPlayer({
     };
     el.addEventListener("play", onPlayEv);
     el.addEventListener("pause", onPauseEv);
+    el.addEventListener("ended", onEndedEv);
+    el.addEventListener("loadstart", onLoadStartEv);
     el.addEventListener("timeupdate", onTimeEv);
     el.addEventListener("progress", onProgressEv);
     el.addEventListener("loadedmetadata", onDurationEv);
@@ -259,6 +329,8 @@ export function VideoPlayer({
     return () => {
       el.removeEventListener("play", onPlayEv);
       el.removeEventListener("pause", onPauseEv);
+      el.removeEventListener("ended", onEndedEv);
+      el.removeEventListener("loadstart", onLoadStartEv);
       el.removeEventListener("timeupdate", onTimeEv);
       el.removeEventListener("progress", onProgressEv);
       el.removeEventListener("loadedmetadata", onDurationEv);
@@ -436,8 +508,9 @@ export function VideoPlayer({
       {children}
 
       {/* Center play affordance while paused — decorative; the surface click and
-          the bar's Play button are the real, accessible controls. */}
-      {paused ? (
+          the bar's Play button are the real, accessible controls. Suppressed once
+          the end card takes over the surface. */}
+      {paused && !ended ? (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 flex items-center justify-center"
@@ -575,6 +648,18 @@ export function VideoPlayer({
           </OverlayButton>
         </div>
       </div>
+
+      {/* End-of-playback card (PLAY-08): autoplay-next countdown when a next
+          video is available, else a plain replay affordance. Media-overlay zone. */}
+      {ended ? (
+        <EndCard
+          nextVideo={nextVideo}
+          autoplayEnabled={autoplayEnabled}
+          onToggleAutoplay={toggleAutoplay}
+          onReplay={replayVideo}
+          onDismiss={dismissEndCard}
+        />
+      ) : null}
     </div>
   );
 }

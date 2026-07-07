@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VideoPlayer, type CaptionTrack } from "./VideoPlayer";
 import type { Video } from "@/lib/api";
 
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+
 const VIDEO = {
   id: "v1",
   channel_id: "c1",
@@ -18,16 +21,32 @@ const VIDEO = {
   // no hls_url → progressive "original" mode (no hls.js import in jsdom)
 } as unknown as Video;
 
+const NEXT_VIDEO = {
+  id: "v2",
+  title: "Up next clip",
+  channel_display_name: "Grade House",
+  has_thumbnail: false,
+} as unknown as Video;
+
 function Harness({
   tracks = [] as CaptionTrack[],
   variant = "watch" as "watch" | "embed",
+  nextVideo = null as Video | null,
 }: {
   tracks?: CaptionTrack[];
   variant?: "watch" | "embed";
+  nextVideo?: Video | null;
 }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   return (
-    <VideoPlayer video={VIDEO} videoRef={ref} startAt={null} tracks={tracks} variant={variant} />
+    <VideoPlayer
+      video={VIDEO}
+      videoRef={ref}
+      startAt={null}
+      tracks={tracks}
+      variant={variant}
+      nextVideo={nextVideo}
+    />
   );
 }
 
@@ -40,6 +59,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  push.mockClear();
   window.sessionStorage.clear();
   // Undo any PiP capability stubs a test installed.
   delete (document as unknown as { pictureInPictureEnabled?: boolean }).pictureInPictureEnabled;
@@ -220,5 +240,32 @@ describe("VideoPlayer shell", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("shows the autoplay end card with the next video when the media ends, and clears it on (re)start", () => {
+    const { container } = render(<Harness nextVideo={NEXT_VIDEO} />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    // No card while playing/paused mid-clip.
+    expect(screen.queryByTestId("player-end-card")).toBeNull();
+    // The element ending surfaces the end card with the queued next video.
+    act(() => void fireEvent(video, new Event("ended")));
+    expect(screen.getByTestId("player-end-card")).toBeTruthy();
+    expect(screen.getByText("Up next clip")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Play now" })).toBeTruthy();
+    // Playback restarting (e.g. Replay, or a new source's loadstart) clears it.
+    act(() => void fireEvent(video, new Event("play")));
+    expect(screen.queryByTestId("player-end-card")).toBeNull();
+  });
+
+  it("shows a replay-only end card (no next) when there is nothing queued", () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    act(() => void fireEvent(video, new Event("ended")));
+    expect(screen.getByTestId("player-end-card")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Play now" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Replay" })).toBeTruthy();
+    // A new source (navigation / fallback) clears any stale end card.
+    act(() => void fireEvent(video, new Event("loadstart")));
+    expect(screen.queryByTestId("player-end-card")).toBeNull();
   });
 });

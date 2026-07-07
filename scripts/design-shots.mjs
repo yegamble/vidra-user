@@ -925,6 +925,25 @@ const AREAS = {
       await seek.locator('div[style*="storyboard.jpg"]').first().waitFor({ state: "visible" });
     },
   },
+  // Watch page — autoplay end card (backport W1 / PLAY-08): the end-of-playback
+  // overlay shown when the media fires `ended` — the next video (first related
+  // entry) with an 8s countdown, Play now / Cancel, and the "Autoplay next"
+  // switch. Reuses the watch mock; the act hook waits for the related rail to
+  // resolve (so a "next" is queued), ends playback, and waits for the card.
+  "watch-endcard": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+    },
+    async act(page) {
+      await page.getByRole("complementary", { name: "Related videos" }).waitFor({ state: "visible" });
+      await page
+        .locator("video")
+        .first()
+        .evaluate((el) => el.dispatchEvent(new Event("ended")));
+      await page.getByTestId("player-end-card").waitFor({ state: "visible" });
+    },
+  },
   // Channel page (backport W0.6): banner/avatar header, Follow affordance, sort
   // chips, and a home-consistent video grid. Authed so the Follow button (not
   // the signed-out prompt) renders.

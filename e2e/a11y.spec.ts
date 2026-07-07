@@ -171,6 +171,42 @@ test("the watch page passes axe in theater mode (reflowed layout)", async ({ pag
   await expectNoSevereViolations(page);
 });
 
+test("the watch page passes axe with the autoplay end card shown (PLAY-08)", async ({ page }) => {
+  await page.route(/\/api\/v1\/videos\/v1$/, (route) =>
+    route.fulfill({ json: { ...video("v1", "Watch Me", 4200), width: 1280, height: 720 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/original/, (route) => route.abort());
+  await page.route(/\/api\/v1\/videos\/v1\/comments/, (route) =>
+    route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
+    route.fulfill({ json: { captions: [] } }),
+  );
+  // A related entry so the end card renders its "next" branch (thumbnail + title
+  // + Play now + the Autoplay switch), the richest a11y surface of the card.
+  await page.route(/\/api\/v1\/channels\/ada\/videos(\?|$)/, (route) =>
+    route.fulfill({ json: { videos: [video("v2", "Follow-up", 12)] } }),
+  );
+  await page.route(/\/avatar/, (route) => route.abort());
+
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Related videos" }).getByRole("heading", {
+      name: "Follow-up",
+    }),
+  ).toBeVisible();
+  await page
+    .locator("video")
+    .first()
+    .evaluate((el: HTMLVideoElement) => el.dispatchEvent(new Event("ended")));
+  await expect(page.getByTestId("player-end-card")).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
 test("the login page passes axe", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
