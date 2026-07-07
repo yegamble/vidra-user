@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
@@ -73,14 +72,29 @@ function OverviewBody() {
     <div className="flex flex-col gap-8">
       <SystemSummary />
       <section aria-label="Admin sections">
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
           {SECTIONS.map((s) => (
             <li key={s.href}>
-              <Link href={s.href} className="focus-ring block h-full rounded-2xl">
-                <Card interactive className="h-full">
+              <Link
+                href={s.href}
+                className="focus-ring flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-surface-strong"
+              >
+                <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold tracking-tight text-fg">{s.label}</span>
-                  <span className="mt-1 block text-[13px] text-fg-muted">{s.description}</span>
-                </Card>
+                  <span className="mt-0.5 block text-[13px] text-fg-muted">{s.description}</span>
+                </span>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3.5 w-3.5 shrink-0 text-fg-subtle"
+                >
+                  <path d="m9 5 7 7-7 7" />
+                </svg>
               </Link>
             </li>
           ))}
@@ -146,7 +160,7 @@ function SystemSummary() {
       ) : status === "error" || system === null ? (
         <ErrorState message="Could not load the system summary." onRetry={retry} />
       ) : (
-        <Card className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-surface-muted p-4 text-sm">
           <Badge variant={system.status === "degraded" ? "danger" : "success"}>
             {system.status === "degraded" ? "Degraded" : "Healthy"}
           </Badge>
@@ -162,7 +176,7 @@ function SystemSummary() {
           >
             Details
           </Link>
-        </Card>
+        </div>
       )}
 
       {reportsStatus === "loading" ? (

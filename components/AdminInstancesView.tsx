@@ -190,7 +190,7 @@ function BlockedInstanceRow({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-muted p-4">
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold tracking-tight text-fg">
           {instance.domain}

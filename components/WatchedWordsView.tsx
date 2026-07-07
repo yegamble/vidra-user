@@ -158,7 +158,7 @@ function WordRow({ word, onRemoved }: { word: WatchedWord; onRemoved: (id: strin
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface px-4 py-3">
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-muted px-4 py-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-fg">{word.word}</p>
         <p className="text-[13px] text-fg-muted">

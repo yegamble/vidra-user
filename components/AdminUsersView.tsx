@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { AdminSearch, RolePill } from "@/components/admin/AdminControls";
 import { useSession } from "@/components/auth/AuthProvider";
 import { RoleGate } from "@/components/RoleGate";
+import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -80,38 +82,18 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <form
-        role="search"
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submitSearch(input.trim());
+      <AdminSearch
+        label="Search users"
+        placeholder="Search by username or email"
+        value={input}
+        onChange={setInput}
+        onSubmit={() => submitSearch(input.trim())}
+        onClear={() => {
+          setInput("");
+          submitSearch("");
         }}
-      >
-        <input
-          type="search"
-          aria-label="Search users"
-          placeholder="Search by username or email"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="focus-ring w-full max-w-sm rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
-        />
-        <Button type="submit" size="sm">
-          Search
-        </Button>
-        {query ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setInput("");
-              submitSearch("");
-            }}
-          >
-            Clear
-          </Button>
-        ) : null}
-      </form>
+        hasQuery={Boolean(query)}
+      />
 
       {status === "loading" ? (
         <div className="flex justify-center py-24">
@@ -125,7 +107,7 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
           message={query ? "Try a different search term." : "Accounts will appear here as people sign up."}
         />
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
           {users.map((u) => (
             <li key={u.id}>
               <UserRow
@@ -191,30 +173,39 @@ function UserRow({
   }, [user.id, onDeleted]);
 
   return (
-    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="font-semibold tracking-tight text-fg">{user.username}</span>
-        {isSelf ? (
-          <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] text-accent-fg uppercase">
-            you
-          </span>
-        ) : null}
-        <span className="text-[13px] text-fg-muted">{user.email}</span>
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${
-            user.email_verified
-              ? "bg-success/15 text-success"
-              : "bg-surface-strong text-fg-muted"
-          }`}
-        >
-          {user.email_verified ? "verified" : "unverified"}
-        </span>
-        <span className="text-[13px] text-fg-muted">
-          joined {relativeTime(user.created_at)}
-        </span>
+    <div className="p-4">
+      <div className="flex items-start gap-3">
+        <Avatar src={null} name={user.username} className="h-10 w-10 text-sm" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-semibold tracking-tight text-fg">{user.username}</span>
+            {isSelf ? (
+              <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] text-accent-fg uppercase">
+                you
+              </span>
+            ) : null}
+            <RolePill role={user.role} />
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${
+                user.is_active
+                  ? "bg-success/15 text-success"
+                  : "bg-danger-surface text-danger"
+              }`}
+            >
+              {user.is_active ? "active" : "deactivated"}
+            </span>
+          </div>
+          <div className="mt-0.5 text-[13px] text-fg-muted">
+            <span className="break-all">{user.email}</span>
+            <span aria-hidden> · </span>
+            <span>joined {relativeTime(user.created_at)}</span>
+            <span aria-hidden> · </span>
+            <span>{user.email_verified ? "verified" : "unverified"}</span>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2 sm:pl-[3.25rem]">
         <label className="flex items-center gap-1.5 text-sm">
           <span className="text-[13px] font-medium text-fg-muted">Role</span>
           <select
@@ -232,15 +223,6 @@ function UserRow({
           </select>
         </label>
 
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${
-            user.is_active
-              ? "bg-success/15 text-success"
-              : "bg-danger-surface text-danger"
-          }`}
-        >
-          {user.is_active ? "active" : "deactivated"}
-        </span>
         <Button
           variant="secondary"
           size="sm"
@@ -312,6 +294,6 @@ function UserRow({
       ) : null}
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
-    </article>
+    </div>
   );
 }

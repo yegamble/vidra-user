@@ -127,7 +127,7 @@ function QuarantineRow({
   }
 
   return (
-    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
+    <article className="rounded-2xl bg-surface-muted p-4">
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg-muted">
         <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-warning">
           quarantined

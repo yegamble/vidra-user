@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { AdminSearch } from "@/components/admin/AdminControls";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -69,38 +70,18 @@ function CommentsList() {
 
   return (
     <div className="flex flex-col gap-4">
-      <form
-        role="search"
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submitSearch(input.trim());
+      <AdminSearch
+        label="Search comments"
+        placeholder="Search by text"
+        value={input}
+        onChange={setInput}
+        onSubmit={() => submitSearch(input.trim())}
+        onClear={() => {
+          setInput("");
+          submitSearch("");
         }}
-      >
-        <input
-          type="search"
-          aria-label="Search comments"
-          placeholder="Search by text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="focus-ring w-full max-w-sm rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
-        />
-        <Button type="submit" size="sm">
-          Search
-        </Button>
-        {query ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setInput("");
-              submitSearch("");
-            }}
-          >
-            Clear
-          </Button>
-        ) : null}
-      </form>
+        hasQuery={Boolean(query)}
+      />
 
       {status === "loading" ? (
         <div className="flex justify-center py-24">
@@ -152,7 +133,7 @@ function CommentRow({
   }
 
   return (
-    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
+    <article className="rounded-2xl bg-surface-muted p-4">
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg-muted">
         <span className="font-semibold text-fg">
           {comment.author_display_name || comment.author_username}

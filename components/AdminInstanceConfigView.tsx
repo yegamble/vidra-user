@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
@@ -244,7 +243,7 @@ function ConfigForm() {
               <h2 className="text-[15px] font-bold tracking-tight text-fg">{group.title}</h2>
               <p className="text-[13px] text-fg-muted">{group.description}</p>
             </div>
-            <Card className="flex flex-col divide-y divide-border-subtle">
+            <div className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
               {keys.map((key) => {
                 const setting = byKey.get(key);
                 if (!setting) return null;
@@ -261,7 +260,7 @@ function ConfigForm() {
                   />
                 );
               })}
-            </Card>
+            </div>
           </section>
         );
       })}

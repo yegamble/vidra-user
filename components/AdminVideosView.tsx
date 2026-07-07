@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { AdminSearch } from "@/components/admin/AdminControls";
 import { RoleGate } from "@/components/RoleGate";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -70,38 +70,18 @@ function VideosList() {
 
   return (
     <div className="flex flex-col gap-4">
-      <form
-        role="search"
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submitSearch(input.trim());
+      <AdminSearch
+        label="Search videos by title"
+        placeholder="Search by title"
+        value={input}
+        onChange={setInput}
+        onSubmit={() => submitSearch(input.trim())}
+        onClear={() => {
+          setInput("");
+          submitSearch("");
         }}
-      >
-        <input
-          type="search"
-          aria-label="Search videos by title"
-          placeholder="Search by title"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="focus-ring w-full max-w-sm rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
-        />
-        <Button type="submit" size="sm">
-          Search
-        </Button>
-        {query ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setInput("");
-              submitSearch("");
-            }}
-          >
-            Clear
-          </Button>
-        ) : null}
-      </form>
+        hasQuery={Boolean(query)}
+      />
 
       {status === "loading" ? (
         <div className="flex justify-center py-24">
@@ -167,7 +147,7 @@ function VideoRow({
   }
 
   return (
-    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
+    <article className="rounded-2xl bg-surface-muted p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link

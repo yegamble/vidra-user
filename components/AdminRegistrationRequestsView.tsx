@@ -209,7 +209,7 @@ function RequestRow({
   }
 
   return (
-    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
+    <article className="rounded-2xl bg-surface-muted p-4">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-semibold tracking-tight text-fg">{request.username}</span>
         <span className="text-[13px] text-fg-muted">{request.email}</span>

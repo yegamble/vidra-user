@@ -506,6 +506,131 @@ const SAMPLE_NOTIFICATIONS = {
   offset: 0,
 };
 
+// ---- admin / moderation fixtures (W0.11) ------------------------------------
+
+// A signed-in ADMIN session so the admin/moderation surfaces render their
+// privileged bodies (RoleGate passes) instead of the "Administrators only" gate.
+const SAMPLE_ADMIN_USER = { ...SAMPLE_USER, role: "admin" };
+const SAMPLE_ADMIN_AUTH = { ...SAMPLE_AUTH, user: SAMPLE_ADMIN_USER };
+
+async function mockAdminShell(page) {
+  await page.route(/\/api\/v1\/auth\/refresh$/, (route) => route.fulfill({ json: SAMPLE_ADMIN_AUTH }));
+  await page.route(/\/api\/v1\/auth\/me$/, (route) => route.fulfill({ json: SAMPLE_ADMIN_USER }));
+  await page.route(/\/api\/v1\/me\/subscriptions(\?|$)/, (route) =>
+    route.fulfill({ json: SAMPLE_FOLLOWING }),
+  );
+  await page.route(/\/api\/v1\/me\/notifications\/unread-count$/, (route) =>
+    route.fulfill({ json: { unread_count: 0 } }),
+  );
+}
+
+const SAMPLE_SYSTEM_STATUS = {
+  status: "ok",
+  software: {
+    name: "vidra",
+    version: "1.4.2",
+    commit: "abc1234",
+    build_date: "2026-07-01T00:00:00Z",
+    go_version: "go1.26.2",
+  },
+  environment: "production",
+  uptime_seconds: 21 * 86_400 + 3 * 3_600,
+  components: {
+    postgres: { status: "ok" },
+    redis: { status: "ok" },
+    object_storage: { status: "ok" },
+  },
+};
+
+function sampleAdminUser(id, username, role, opts = {}) {
+  return {
+    id,
+    username,
+    email: opts.email ?? `${username}@example.test`,
+    role,
+    is_active: opts.active ?? true,
+    email_verified: opts.verified ?? true,
+    display_name: opts.display ?? username,
+    created_at: new Date(Date.now() - (opts.ageDays ?? 120) * 86_400_000).toISOString(),
+  };
+}
+
+const SAMPLE_ADMIN_USERS = {
+  users: [
+    sampleAdminUser("u1", "boss", "admin", { display: "Mara", ageDays: 180 }),
+    sampleAdminUser("u2", "northloop", "moderator", { email: "noel@example.net", display: "North Loop", ageDays: 120 }),
+    sampleAdminUser("u3", "gradehouse", "user", { email: "studio@gradehouse.tv", display: "Grade House", ageDays: 150 }),
+    sampleAdminUser("u4", "fieldnotes", "user", { email: "ed@fieldnotes.blog", display: "Field Notes", ageDays: 60 }),
+    sampleAdminUser("u5", "spam_account_291", "user", { email: "x91@tempmail.cc", active: false, verified: false, ageDays: 1 }),
+  ],
+  limit: 100,
+  offset: 0,
+};
+
+function sampleReport(id, opts) {
+  return {
+    id,
+    target_type: opts.type,
+    reason: opts.reason,
+    status: "open",
+    moderator_note: "",
+    created_at: new Date(Date.now() - opts.ageMin * 60_000).toISOString(),
+    reporter: { username: opts.by },
+    video_id: opts.videoId,
+    video_title: opts.videoTitle,
+    comment_body: opts.commentBody,
+  };
+}
+
+const SAMPLE_REPORTS = {
+  reports: [
+    sampleReport("r1", { type: "video", reason: "Scam / misleading", ageMin: 25, by: "lena_k", videoId: "v1", videoTitle: "Get rich with this one trick" }),
+    sampleReport("r2", { type: "comment", reason: "Harassment", ageMin: 120, by: "arno", commentBody: "Check my channel for the REAL secret, link in bio…" }),
+    sampleReport("r3", { type: "video", reason: "Copyright", ageMin: 360, by: "printroom", videoId: "v2", videoTitle: "Free movies stream HD" }),
+  ],
+  limit: 100,
+  offset: 0,
+};
+
+const SAMPLE_REGISTRATION_REQUESTS = {
+  requests: [
+    { id: "rr1", username: "printroom", email: "ella@risograph.studio", note: "I publish printmaking process videos, moving from YouTube.", status: "pending", created_at: new Date(Date.now() - 3_600_000).toISOString() },
+    { id: "rr2", username: "slowcinema", email: "jb@slowcinema.org", note: "Archive of public-domain restorations.", status: "pending", created_at: new Date(Date.now() - 5 * 3_600_000).toISOString() },
+    { id: "rr3", username: "dronezzz", email: "mk9@tempmail.cc", note: "", status: "pending", created_at: new Date(Date.now() - 2 * 86_400_000).toISOString() },
+  ],
+  limit: 100,
+  offset: 0,
+};
+
+const SAMPLE_QUARANTINE = {
+  videos: [
+    { id: "q1", title: "Studio tour raw cut", privacy: "public", state: "quarantined", owner_username: "northloop", channel_display_name: "North Loop", channel_handle: "north-loop", created_at: new Date(Date.now() - 40 * 60_000).toISOString() },
+    { id: "q2", title: "promo_final_FINAL.mp4", privacy: "unlisted", state: "quarantined", owner_username: "freestuff44", channel_display_name: "Free Stuff", channel_handle: "free-stuff", created_at: new Date(Date.now() - 3 * 3_600_000).toISOString() },
+  ],
+  limit: 100,
+  offset: 0,
+};
+
+const SAMPLE_ADMIN_VIDEOS = {
+  videos: [
+    { id: "v1", title: "Get rich with this one trick", channel_handle: "spamlord", channel_display_name: "Spam Lord", views: 3, created_at: new Date(Date.now() - 2 * 3_600_000).toISOString(), privacy: "public", state: "published", blocked: false },
+    { id: "v2", title: "Free movies stream HD", channel_handle: "mirrorbot", channel_display_name: "Mirror Bot", views: 12, created_at: new Date(Date.now() - 20 * 86_400_000).toISOString(), privacy: "public", state: "published", blocked: true },
+    { id: "v3", title: "Shooting the Alps on medium format", channel_handle: "aurora-lab", channel_display_name: "Aurora Lab", views: 128_000, created_at: new Date(Date.now() - 2 * 86_400_000).toISOString(), privacy: "public", state: "published", blocked: false },
+    { id: "v4", title: "Winter light tests (HLS 4K)", channel_handle: "north-loop", channel_display_name: "North Loop", views: 0, created_at: new Date(Date.now() - 1 * 3_600_000).toISOString(), privacy: "unlisted", state: "processing", blocked: false },
+  ],
+  limit: 100,
+  offset: 0,
+};
+
+const SAMPLE_ADMIN_COMMENTS = {
+  comments: [
+    { id: "cm1", author_username: "coldcaller", author_display_name: "Cold Caller", created_at: new Date(Date.now() - 2 * 3_600_000).toISOString(), video_id: "v1", video_title: "Monochrome grading — the luxury look", body: "Check my channel for the REAL secret, link in bio…" },
+    { id: "cm2", author_username: "arno", author_display_name: "Arno", created_at: new Date(Date.now() - 86_400_000).toISOString(), video_id: "v2", video_title: "The quiet web", body: "Would love a breakdown of the instance block policy." },
+  ],
+  limit: 100,
+  offset: 0,
+};
+
 // ---- area registry -----------------------------------------------------------
 
 /** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void>, act?: (page: import("@playwright/test").Page) => Promise<void> }>} */
@@ -842,6 +967,77 @@ const AREAS = {
       await page.route(/\/api\/v1\/auth\/me$/, (route) =>
         route.fulfill({ status: 401, json: { error: { code: "unauthorized", message: "no" } } }),
       );
+    },
+  },
+  // Admin — overview (backport W0.11): the /admin index — system summary, the
+  // open-reports count, and the section list. Admin-shell so RoleGate passes.
+  "admin-overview": {
+    path: "/admin",
+    async mock(page) {
+      await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/system$/, (route) => route.fulfill({ json: SAMPLE_SYSTEM_STATUS }));
+      await page.route(/\/api\/v1\/admin\/reports(\?|$)/, (route) => route.fulfill({ json: SAMPLE_REPORTS }));
+      await page.route(/\/api\/v1\/admin\/users(\?|$)/, (route) =>
+        route.fulfill({ json: { users: [], limit: 100, offset: 0 } }),
+      );
+    },
+  },
+  // Admin — users (backport W0.11): the flagship account-management surface —
+  // pill search toolbar + HIG user list with avatar, role/status pills.
+  "admin-users": {
+    path: "/admin/users",
+    async mock(page) {
+      await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/users(\?|$)/, (route) => route.fulfill({ json: SAMPLE_ADMIN_USERS }));
+    },
+  },
+  // Moderation — report queue (backport W0.11): filter chips + report panels with
+  // kind/status pills and the resolve/block action row.
+  "moderation-reports": {
+    path: "/moderation",
+    async mock(page) {
+      await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/reports(\?|$)/, (route) => route.fulfill({ json: SAMPLE_REPORTS }));
+    },
+  },
+  // Admin — registration approval queue (backport W0.11): pending sign-up panels
+  // with Approve / Deny.
+  "admin-registration": {
+    path: "/admin/registration-requests",
+    async mock(page) {
+      await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/registration-requests(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_REGISTRATION_REQUESTS }),
+      );
+    },
+  },
+  // Moderation — quarantine queue (backport W0.11): held-upload panels with the
+  // Approve / Reject decision row.
+  "moderation-quarantine": {
+    path: "/moderation/quarantine",
+    async mock(page) {
+      await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/videos\/quarantined(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_QUARANTINE }),
+      );
+    },
+  },
+  // Moderation — all videos (backport W0.11): searchable video list with
+  // privacy/state/blocked pills and the block/unblock control.
+  "moderation-videos": {
+    path: "/moderation/videos",
+    async mock(page) {
+      await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/videos(\?|$)/, (route) => route.fulfill({ json: SAMPLE_ADMIN_VIDEOS }));
+    },
+  },
+  // Moderation — all comments (backport W0.11): searchable comment list with the
+  // delete control.
+  "moderation-comments": {
+    path: "/moderation/comments",
+    async mock(page) {
+      await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/comments(\?|$)/, (route) => route.fulfill({ json: SAMPLE_ADMIN_COMMENTS }));
     },
   },
 };
