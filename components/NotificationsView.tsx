@@ -25,7 +25,7 @@ const TYPE_ICON: Record<string, string> = {
   follow: "M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 8v6M23 11h-6",
 };
 
-function TypeIcon({ type }: { type: string }) {
+export function NotificationTypeIcon({ type }: { type: string }) {
   return (
     <svg
       aria-hidden
@@ -42,10 +42,15 @@ function TypeIcon({ type }: { type: string }) {
   );
 }
 
-// describe renders a notification as a human message plus the link to its
-// target. `lead` is the bold opening (actor / "A moderator") and `rest` the
-// remainder — concatenated they read exactly as before.
-function describe(n: Notification): { lead: string; rest: string; href: string } {
+// describeNotification renders a notification as a human message plus the link
+// to its target. `lead` is the bold opening (actor / "A moderator") and `rest`
+// the remainder — concatenated they read exactly as before. Shared with the
+// header bell popover (NotificationsBell) so the two surfaces never drift.
+export function describeNotification(n: Notification): {
+  lead: string;
+  rest: string;
+  href: string;
+} {
   const actor = n.actor?.display_name || n.actor?.username || "Someone";
   if (n.type === "comment") {
     return {
@@ -201,7 +206,7 @@ function Notifications() {
       </div>
       <ul className="flex flex-col">
         {items.map((n) => {
-          const { lead, rest, href } = describe(n);
+          const { lead, rest, href } = describeNotification(n);
           return (
             <li
               key={n.id}
@@ -214,7 +219,7 @@ function Notifications() {
                 aria-hidden
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-muted text-fg-muted"
               >
-                <TypeIcon type={n.type} />
+                <NotificationTypeIcon type={n.type} />
               </span>
               <div className="flex min-w-0 flex-1 flex-col">
                 <Link

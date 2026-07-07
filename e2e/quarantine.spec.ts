@@ -275,7 +275,8 @@ test("a video_rejected notification tells the owner and links to the studio", as
   );
 
   // Client-side nav via the header bell keeps the in-memory session alive.
-  await page.getByRole("link", { name: /Notifications/ }).click();
+  await page.getByRole("button", { name: /Notifications/ }).click();
+  await page.getByRole("link", { name: "See all notifications" }).click();
   const link = page.getByRole("link", {
     name: "A moderator rejected your upload “My clip” — it was not published",
   });

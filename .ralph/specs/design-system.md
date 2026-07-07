@@ -145,6 +145,14 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   `rounded-2xl` panel; danger-surface panel).
 - **Dialogs**: `Modal` primitive (`rounded-2xl`, `bg-black/45` scrim). Bottom
   sheets on mobile may extend it later — same a11y contract.
+- **Notifications popover** (header bell, `NotificationsBell`): a disclosure
+  button (`aria-expanded`/`aria-controls`, unread badge) opening a
+  `rounded-2xl border-border-subtle bg-surface-raised shadow-lg` panel — recent
+  items (icon chip + lead/rest text + age + unread dot, reusing
+  `describeNotification`) above a full-width "See all notifications" footer
+  link to `/notifications`. Focus moves into the panel on open and back to the
+  bell on close; Escape / outside-click / route-change dismiss. Anchored
+  `right-0` under the bell at `sm+`, full-width fixed card on phones.
 
 ## Motion
 
