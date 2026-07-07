@@ -100,8 +100,11 @@ export function VideoCard({
           />
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h3 className="line-clamp-2 text-sm font-semibold leading-snug tracking-[-0.01em]">
-            <Link href={watchHref} className="focus-ring rounded-sm text-fg">
+          <h3 className="text-sm font-semibold leading-snug tracking-[-0.01em]">
+            {/* line-clamp lives on the Link so the anchor fills the title block
+                (its own width, not just the text run): the whole two-line title
+                is the click/tap target, matching the card thumbnail link. */}
+            <Link href={watchHref} className="focus-ring line-clamp-2 rounded-sm text-fg">
               {video.title}
             </Link>
           </h3>

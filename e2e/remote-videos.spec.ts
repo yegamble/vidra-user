@@ -115,15 +115,17 @@ test("the subscriptions feed renders remote cards with an origin badge linking t
   await expect(remoteItem.getByText("Films")).toBeVisible();
   // Remote cards carry the shared ActivityPub protocol label (fix_plan P11).
   await expect(remoteItem.getByText("ActivityPub")).toBeVisible();
+  // The card exposes two links to the same watch surface (the media thumbnail,
+  // aria-labelled by the title, and the visible title link); either proves the
+  // remote card points at /remote/[id], so assert the first.
   await expect(
-    remoteItem.getByRole("link", { name: /Remote Documentary/ }),
+    remoteItem.getByRole("link", { name: /Remote Documentary/ }).first(),
   ).toHaveAttribute("href", "/remote/rv1");
   // The local card keeps its local watch link and shows no origin/protocol badge.
   const localItem = page.locator("li", { hasText: "Local Video" });
-  await expect(localItem.getByRole("link", { name: /Local Video/ })).toHaveAttribute(
-    "href",
-    "/videos/v1",
-  );
+  await expect(
+    localItem.getByRole("link", { name: /Local Video/ }).first(),
+  ).toHaveAttribute("href", "/videos/v1");
   await expect(localItem.getByText("videos.example")).toHaveCount(0);
   await expect(localItem.getByText("ActivityPub")).toHaveCount(0);
 });
