@@ -100,7 +100,7 @@ export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: Fe
   }
   return (
     <div className="flex flex-col gap-6">
-      <ul className="grid grid-cols-1 gap-x-5 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <ul className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
         {videos.map((video) => (
           <li key={video.id}>
             <VideoCard video={video} />
