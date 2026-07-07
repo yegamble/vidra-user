@@ -25,8 +25,8 @@ test("subscribing from a video card persists the follow", async ({ page, request
   await page.getByRole("link", { name: displayName }).click();
   await expect(page.getByRole("heading", { name: displayName })).toBeVisible();
 
-  // Subscribe, then prove the follow persisted in the database.
-  await page.getByRole("button", { name: "Subscribe" }).click();
-  await expect(page.getByRole("button", { name: "Subscribed" })).toBeVisible();
+  // Follow, then prove the follow persisted in the database.
+  await page.getByRole("button", { name: "Follow", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Following" })).toBeVisible();
   expect(await followerCount(request, handle)).toBe(1);
 });

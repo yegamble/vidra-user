@@ -39,8 +39,18 @@ test("shows the channel header and its videos", async ({ page }) => {
   await expect(page.getByText("@ada")).toBeVisible();
   await expect(page.getByText("1.5K followers")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Building a Desk" })).toBeVisible();
-  // Anonymous visitors are invited to sign in before subscribing.
-  await expect(page.getByRole("link", { name: "Sign in to subscribe" })).toBeVisible();
+  // Anonymous visitors are invited to sign in before following.
+  await expect(page.getByRole("link", { name: "Sign in to follow" })).toBeVisible();
+  // The grid carries the shared sort chips (Latest active by default).
+  const sort = page.getByRole("group", { name: "Sort videos" });
+  await expect(sort.getByRole("button", { name: "Latest" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(sort.getByRole("button", { name: "Oldest" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
 });
 
 test("load more reveals the rest of a long channel grid", async ({ page }) => {

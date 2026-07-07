@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
@@ -19,6 +19,17 @@ import { formatCount } from "@/lib/format";
 
 type Status = "loading" | "notfound" | "error" | "ready";
 
+// Channel-grid sort. Both keys ride on `created_at`, the one card field the
+// channel-videos contract always carries (views is detail-only), so the chips
+// never depend on data the list omits. "Latest" is the backend's natural
+// newest-first order (no client re-sort — the default view is untouched);
+// "Oldest" sorts ascending by created_at.
+type ChannelSort = "latest" | "oldest";
+const CHANNEL_SORTS: { sort: ChannelSort; label: string }[] = [
+  { sort: "latest", label: "Latest" },
+  { sort: "oldest", label: "Oldest" },
+];
+
 // ChannelView loads a channel and its videos client-side. The page mounts it with
 // key={handle} so the initial status is "loading" (no synchronous setState in the
 // effect) and a new handle gives a fresh load.
@@ -31,6 +42,7 @@ export function ChannelView({ handle }: { handle: string }) {
   // Switch to server paging if/when the contract grows pagination params.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [reloadKey, setReloadKey] = useState(0);
+  const [sort, setSort] = useState<ChannelSort>("latest");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -49,6 +61,19 @@ export function ChannelView({ handle }: { handle: string }) {
       });
     return () => controller.abort();
   }, [handle, reloadKey]);
+
+  // "latest" keeps the backend's natural (newest-first) order untouched;
+  // "oldest" sorts a copy ascending by the always-present created_at.
+  const sortedVideos = useMemo(() => {
+    if (sort !== "oldest") return videos;
+    return [...videos].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  }, [videos, sort]);
+
+  function changeSort(next: ChannelSort) {
+    if (next === sort) return;
+    setSort(next);
+    setVisibleCount(PAGE_SIZE); // reveal the top of the re-sorted list
+  }
 
   function retry() {
     setStatus("loading");
@@ -96,7 +121,7 @@ export function ChannelView({ handle }: { handle: string }) {
                 ]}
                 name={channel.display_name || channel.handle}
               />
-              <SubscribeButton
+              <FollowButton
                 handle={channel.handle}
                 onDelta={(d) =>
                   setChannel((c) => (c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c))
@@ -124,14 +149,17 @@ export function ChannelView({ handle }: { handle: string }) {
         <EmptyState title="No videos yet" message="This channel has not published anything." />
       ) : (
         <div className="flex flex-col gap-6">
-          <ul className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 lg:grid-cols-4">
-            {videos.slice(0, visibleCount).map((video) => (
+          {/* Sort chips in the shared template pill language (filled = active),
+              above a grid that matches the home feed's cards exactly. */}
+          <ChannelSortChips sort={sort} onChange={changeSort} />
+          <ul className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+            {sortedVideos.slice(0, visibleCount).map((video) => (
               <li key={video.id}>
                 <VideoCard video={video} />
               </li>
             ))}
           </ul>
-          {videos.length > visibleCount ? (
+          {sortedVideos.length > visibleCount ? (
             <LoadMoreButton onClick={() => setVisibleCount((c) => c + PAGE_SIZE)} />
           ) : null}
         </div>
@@ -158,34 +186,37 @@ function ChannelBanner({ handle }: { handle: string }) {
   );
 }
 
-// SubscribeButton toggles a follow on the channel for the signed-in user. The
+// FollowButton toggles a follow on the channel for the signed-in user, in the
+// template's follow affordance: an accent-filled "Follow" when not following,
+// an outlined "Following" once followed (design-system channel-header pattern,
+// matching the app's FOLLOWING vocabulary and the follow/unfollow API). The
 // public channel endpoint carries no "is following" flag, so the button starts
-// at "Subscribe" and tracks state locally (follow/unfollow are idempotent
+// at "Follow" and tracks state locally (follow/unfollow are idempotent
 // server-side); onDelta nudges the displayed follower count optimistically.
 // Anonymous visitors get a sign-in link instead.
-function SubscribeButton({ handle, onDelta }: { handle: string; onDelta: (d: number) => void }) {
+function FollowButton({ handle, onDelta }: { handle: string; onDelta: (d: number) => void }) {
   const { status } = useSession();
-  const [subscribed, setSubscribed] = useState(false);
+  const [following, setFollowing] = useState(false);
   const [busy, setBusy] = useState(false);
 
   if (status !== "authed") {
     return (
       <LinkButton href="/login" variant="secondary" className="px-5">
-        Sign in to subscribe
+        Sign in to follow
       </LinkButton>
     );
   }
 
   async function toggle() {
     setBusy(true);
-    const next = !subscribed;
+    const next = !following;
     try {
       if (next) {
         await api.followChannel(handle);
       } else {
         await api.unfollowChannel(handle);
       }
-      setSubscribed(next);
+      setFollowing(next);
       onDelta(next ? 1 : -1);
     } catch {
       // Leave the button state unchanged on failure.
@@ -196,12 +227,44 @@ function SubscribeButton({ handle, onDelta }: { handle: string; onDelta: (d: num
 
   return (
     <Button
-      variant={subscribed ? "secondary" : "primary"}
+      variant={following ? "secondary" : "primary"}
       disabled={busy}
       onClick={() => void toggle()}
       className="px-5"
     >
-      {subscribed ? "Subscribed" : "Subscribe"}
+      {following ? "Following" : "Follow"}
     </Button>
+  );
+}
+
+// ChannelSortChips is the channel grid's sort switcher in the shared pill-chip
+// language (filled = active, outlined = inactive), a role="group" of
+// aria-pressed buttons — the same vocabulary as the home feed's FeedSortTabs,
+// but client-side (the sort re-orders the already-loaded list, no navigation).
+function ChannelSortChips({
+  sort,
+  onChange,
+}: {
+  sort: ChannelSort;
+  onChange: (next: ChannelSort) => void;
+}) {
+  return (
+    <div role="group" aria-label="Sort videos" className="inline-flex items-center gap-2">
+      {CHANNEL_SORTS.map(({ sort: value, label }) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={sort === value}
+          onClick={() => onChange(value)}
+          className={
+            sort === value
+              ? "focus-ring rounded-full border border-accent bg-accent px-4 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors"
+              : "focus-ring rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted"
+          }
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
