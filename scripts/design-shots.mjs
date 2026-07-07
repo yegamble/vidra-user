@@ -243,6 +243,24 @@ const SAMPLE_CHANNEL_VIDEOS = {
 // thumbnail-left row list, so this reuses the feed's illustrative videos.
 const SAMPLE_SEARCH = { query: "grading", videos: SAMPLE_FEED.videos, limit: 20, offset: 0 };
 
+// An instance document (GET /instance) — the login/signup surfaces read it for
+// the configured OIDC providers (→ the "Continue with …" buttons + "or"
+// divider) and the registration policy. Illustrative only.
+function sampleInstance(opts = {}) {
+  return {
+    name: "Vidra",
+    description: "",
+    software: { name: "vidra", version: "0.1.0" },
+    registration_enabled: opts.registrationEnabled ?? true,
+    registration_requires_approval: opts.requiresApproval ?? false,
+    oauth_providers: opts.providers ?? [],
+    federation_enabled: false,
+    terms_url: "",
+    privacy_url: "",
+    contact_email: "",
+  };
+}
+
 // The signed-in creator's own channels (GET /me/channels) — one channel so the
 // studio renders its list "table", upload form, and per-channel video list.
 const SAMPLE_MY_CHANNELS = {
@@ -311,7 +329,7 @@ const SAMPLE_HISTORY = {
 
 // ---- area registry -----------------------------------------------------------
 
-/** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void> }>} */
+/** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void>, act?: (page: import("@playwright/test").Page) => Promise<void> }>} */
 const AREAS = {
   home: {
     path: "/",
@@ -488,6 +506,75 @@ const AREAS = {
       );
     },
   },
+  // Auth — sign in (backport W0.12): the credentials form + the OAuth section
+  // ("or" divider + one "Continue with …" pill per configured provider). Public
+  // surface; the instance mock supplies two providers so the OAuth block renders.
+  "auth-login": {
+    path: "/login",
+    async mock(page) {
+      await page.route(/\/api\/v1\/instance$/, (route) =>
+        route.fulfill({ json: sampleInstance({ providers: ["google", "github"] }) }),
+      );
+    },
+  },
+  // Auth — two-factor challenge (backport W0.12): the code-entry surface login
+  // swaps to when credentials answer {mfa_required}. Reached by acting on the
+  // login form (fill + submit) since it has no URL of its own.
+  "auth-mfa": {
+    path: "/login",
+    async mock(page) {
+      await page.route(/\/api\/v1\/instance$/, (route) =>
+        route.fulfill({ json: sampleInstance({ providers: [] }) }),
+      );
+      await page.route(/\/api\/v1\/auth\/login$/, (route) =>
+        route.fulfill({ json: { mfa_required: true, mfa_token: "design-shots-mfa" } }),
+      );
+    },
+    async act(page) {
+      await page.getByLabel("Email").fill("mira@example.test");
+      await page.getByLabel("Password").fill("supersecret");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page
+        .getByRole("heading", { name: "Two-factor authentication" })
+        .waitFor({ state: "visible" });
+    },
+  },
+  // Auth — create account (backport W0.12): the signup form. The instance mock
+  // enables registration WITH approval so the approval note + message field also
+  // render, plus a provider for the OAuth block.
+  "auth-signup": {
+    path: "/signup",
+    async mock(page) {
+      await page.route(/\/api\/v1\/instance$/, (route) =>
+        route.fulfill({
+          json: sampleInstance({ providers: ["google"], requiresApproval: true }),
+        }),
+      );
+    },
+  },
+  // Auth — request a reset link (backport W0.12): the enumeration-safe
+  // password-reset request form. No API on mount.
+  "auth-reset": {
+    path: "/reset-password",
+  },
+  // Auth — choose a new password (backport W0.12): the reset-confirm form the
+  // user reaches from the emailed link (a token in the URL renders the form).
+  "auth-reset-confirm": {
+    path: "/reset-password/confirm?token=design-shots-reset",
+  },
+  // Auth — verify email (backport W0.12): the confirm surface auto-submits the
+  // token on mount; mocking a 204 shows the success state.
+  "auth-verify": {
+    path: "/verify-email/confirm?token=design-shots-verify",
+    async mock(page) {
+      await page.route(/\/api\/v1\/auth\/verify-email\/confirm$/, (route) =>
+        route.fulfill({ status: 204, body: "" }),
+      );
+      await page.route(/\/api\/v1\/auth\/me$/, (route) =>
+        route.fulfill({ status: 401, json: { error: { code: "unauthorized", message: "no" } } }),
+      );
+    },
+  },
 };
 
 // ---- capture -----------------------------------------------------------------
@@ -541,6 +628,9 @@ async function main() {
           if (area.mock) await area.mock(page);
 
           await page.goto(`${BASE_URL}${area.path}`, { waitUntil: "networkidle" });
+          // Optional post-navigation interaction (e.g. drive the login form into
+          // its MFA challenge state, which has no URL of its own).
+          if (area.act) await area.act(page);
           const file = path.join(dir, `${viewport.name}-${theme}.png`);
           await page.screenshot({ path: file, fullPage: FULL_PAGE });
           written.push(file);

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { ApiError, authApi, errorMessage } from "@/lib/api";
 
 // Completes a password reset: the user arrives from the reset email link with a
@@ -85,9 +86,6 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
     );
   }
 
-  const inputClass =
-    "focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted disabled:opacity-60";
-
   return (
     <form
       noValidate
@@ -106,46 +104,30 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="reset-password" className="text-sm font-medium">
-          New password
-        </label>
-        <input
-          id="reset-password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          aria-invalid={passwordError ? true : undefined}
-          aria-describedby={passwordError ? "reset-password-error" : undefined}
-          className={inputClass}
-        />
-      </div>
+      <Input
+        id="reset-password"
+        name="password"
+        type="password"
+        label="New password"
+        autoComplete="new-password"
+        required
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="reset-password-confirm" className="text-sm font-medium">
-          Confirm new password
-        </label>
-        <input
-          id="reset-password-confirm"
-          name="confirm"
-          type="password"
-          autoComplete="new-password"
-          required
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          aria-invalid={passwordError ? true : undefined}
-          aria-describedby={passwordError ? "reset-password-error" : undefined}
-          className={inputClass}
-        />
-        {passwordError ? (
-          <p id="reset-password-error" className="text-xs text-danger">
-            {passwordError}
-          </p>
-        ) : null}
-      </div>
+      {/* The mismatch error is anchored to the confirm field — that's the one
+          the user needs to correct. */}
+      <Input
+        id="reset-password-confirm"
+        name="confirm"
+        type="password"
+        label="Confirm new password"
+        autoComplete="new-password"
+        required
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        error={passwordError ?? undefined}
+      />
 
       <Button type="submit" size="lg" className="w-full" disabled={submitting}>
         {submitting ? "Resetting…" : "Reset password"}

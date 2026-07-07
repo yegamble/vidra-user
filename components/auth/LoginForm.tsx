@@ -153,7 +153,7 @@ export function LoginForm({
         }}
         className="flex flex-col gap-4"
       >
-        <div className="flex flex-col gap-1 text-center">
+        <div className="mb-2 flex flex-col gap-1.5 text-center">
           <div
             aria-hidden
             className="mb-2 flex h-13 w-13 items-center justify-center self-center rounded-full bg-surface-muted"
@@ -169,7 +169,7 @@ export function LoginForm({
               <path d="M8 11V7a4 4 0 0 1 8 0v4" />
             </svg>
           </div>
-          <h2 className="text-base font-semibold tracking-tight">Two-factor authentication</h2>
+          <h1 className="text-2xl font-bold tracking-tight">Two-factor authentication</h1>
           <p className="text-sm text-fg-muted">
             Enter the 6-digit code from your authenticator app, or one of your recovery codes.
           </p>
@@ -219,6 +219,11 @@ export function LoginForm({
       }}
       className="flex flex-col gap-4"
     >
+      <div className="mb-2 flex flex-col gap-1.5 text-center">
+        <h1 className="text-2xl font-bold tracking-tight">Sign in</h1>
+        <p className="text-sm text-fg-muted">The quiet home for independent video</p>
+      </div>
+
       {errorBanner}
 
       <Input
