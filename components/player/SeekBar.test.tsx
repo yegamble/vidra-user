@@ -55,4 +55,54 @@ describe("SeekBar", () => {
     const band = container.querySelector('[style*="width: 50%"]');
     expect(band).not.toBeNull();
   });
+
+  it("previews the storyboard frame in the scrub bubble and lazily activates it", () => {
+    const activate = vi.fn();
+    const cue = { start: 2, end: 4, x: 160, y: 0, w: 160, h: 90 };
+    const storyboard = {
+      cueAt: () => cue,
+      spriteUrl: "http://api.test/api/v1/videos/v1/storyboard.jpg",
+      activate,
+    };
+    const { container } = render(
+      <SeekBar currentTime={0} duration={120} buffered={[]} onSeek={() => {}} storyboard={storyboard} />,
+    );
+    const slider = screen.getByRole("slider", { name: "Seek" });
+    // Focus shows the bubble (keyboard parity) AND triggers the lazy fetch.
+    fireEvent.focus(slider);
+    expect(activate).toHaveBeenCalled();
+    const frame = container.querySelector('div[style*="storyboard.jpg"]') as HTMLElement | null;
+    expect(frame).not.toBeNull();
+    expect(frame!.style.width).toBe("160px");
+    expect(frame!.style.height).toBe("90px");
+  });
+
+  it("activates the storyboard on hover as well as focus", () => {
+    const activate = vi.fn();
+    const storyboard = {
+      cueAt: () => null,
+      spriteUrl: "http://api.test/api/v1/videos/v1/storyboard.jpg",
+      activate,
+    };
+    render(
+      <SeekBar currentTime={0} duration={120} buffered={[]} onSeek={() => {}} storyboard={storyboard} />,
+    );
+    fireEvent.pointerMove(screen.getByRole("slider", { name: "Seek" }), { clientX: 40 });
+    expect(activate).toHaveBeenCalled();
+  });
+
+  it("degrades to a time-only bubble when the storyboard has no cue for the position", () => {
+    const storyboard = {
+      cueAt: () => null,
+      spriteUrl: "http://api.test/api/v1/videos/v1/storyboard.jpg",
+      activate: vi.fn(),
+    };
+    const { container } = render(
+      <SeekBar currentTime={0} duration={120} buffered={[]} onSeek={() => {}} storyboard={storyboard} />,
+    );
+    fireEvent.focus(screen.getByRole("slider", { name: "Seek" }));
+    // The bubble still shows the timestamp, but paints no sprite frame.
+    expect(container.querySelector('div[style*="storyboard.jpg"]')).toBeNull();
+    expect(screen.getByText("0:00")).toBeTruthy();
+  });
 });

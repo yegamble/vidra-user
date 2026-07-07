@@ -37,6 +37,7 @@
 import { chromium } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import zlib from "node:zlib";
 
 const PORT = process.env.E2E_PORT ?? process.env.PORT ?? "3000";
 const BASE_URL = (process.env.DESIGN_BASE_URL ?? `http://localhost:${PORT}`).replace(/\/+$/, "");
@@ -232,6 +233,77 @@ const SAMPLE_HLS_VARIANT = [
   "#EXT-X-ENDLIST",
   "",
 ].join("\n");
+
+// A seek-preview storyboard (CORE-16) for the watch-storyboard capture: a WebVTT
+// map of three 160×90 sprite tiles spanning the clip, and the matching sprite
+// sheet built below. The tiles map ascending time ranges to `#xywh` rectangles,
+// exactly the contract lib/storyboard.ts parses.
+const SAMPLE_STORYBOARD_VTT = [
+  "WEBVTT",
+  "",
+  "00:00:00.000 --> 00:03:20.000",
+  "storyboard.jpg#xywh=0,0,160,90",
+  "",
+  "00:03:20.000 --> 00:06:40.000",
+  "storyboard.jpg#xywh=160,0,160,90",
+  "",
+  "00:06:40.000 --> 00:10:00.000",
+  "storyboard.jpg#xywh=320,0,160,90",
+  "",
+].join("\n");
+
+// storyboardSpritePng builds a real 480×90 PNG sprite sheet (three 160×90 tiles
+// in quiet filmic tones with a faint gradient) so the scrub-bubble preview shows
+// an actual image window, not a blank box. A tiny self-contained truecolor PNG
+// encoder — the harness is a dev tool, so no image dependency is pulled in.
+function storyboardSpritePng() {
+  const W = 480;
+  const H = 90;
+  const tiles = [
+    [54, 52, 64],
+    [70, 64, 58],
+    [52, 60, 58],
+  ];
+  const raw = Buffer.alloc((W * 3 + 1) * H);
+  let p = 0;
+  for (let y = 0; y < H; y++) {
+    raw[p++] = 0; // filter byte: none
+    for (let x = 0; x < W; x++) {
+      const [r, g, b] = tiles[Math.min(2, Math.floor(x / 160))];
+      const k = 1 + (y / H) * 0.25;
+      raw[p++] = Math.min(255, Math.round(r * k));
+      raw[p++] = Math.min(255, Math.round(g * k));
+      raw[p++] = Math.min(255, Math.round(b * k));
+    }
+  }
+  const crc32 = (buf) => {
+    let c = ~0;
+    for (let i = 0; i < buf.length; i++) {
+      c ^= buf[i];
+      for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+    }
+    return ~c >>> 0;
+  };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(W, 0);
+  ihdr.writeUInt32BE(H, 4);
+  ihdr[8] = 8; // 8-bit depth
+  ihdr[9] = 2; // truecolor RGB
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", zlib.deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
 
 const SAMPLE_COMMENTS = {
   comments: [
@@ -825,6 +897,32 @@ const AREAS = {
         await toggle.click();
         await page.locator("[data-theater='on']").first().waitFor();
       }
+    },
+  },
+  // Watch page — storyboard scrub bubble (backport W1 / CORE-16): the seek bar's
+  // hover preview showing the storyboard sprite frame above the timestamp. Builds
+  // on the watch mock, overrides the detail to advertise a storyboard, serves the
+  // sprite + VTT, then the act hook hovers the seek bar so the bubble renders.
+  "watch-storyboard": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+      // Override the detail (the base one has has_storyboard:false) and set a
+      // 10-minute duration so the VTT's tile ranges span the whole clip.
+      await page.route(/\/api\/v1\/videos\/v1$/, (route) =>
+        route.fulfill({ json: { ...SAMPLE_DETAIL, has_storyboard: true, duration_seconds: 600 } }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/storyboard\.vtt$/, (route) =>
+        route.fulfill({ contentType: "text/vtt", body: SAMPLE_STORYBOARD_VTT }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/storyboard\.jpg$/, (route) =>
+        route.fulfill({ contentType: "image/png", body: storyboardSpritePng() }),
+      );
+    },
+    async act(page) {
+      const seek = page.getByRole("slider", { name: "Seek" });
+      await seek.hover();
+      await seek.locator('div[style*="storyboard.jpg"]').first().waitFor({ state: "visible" });
     },
   },
   // Channel page (backport W0.6): banner/avatar header, Follow affordance, sort

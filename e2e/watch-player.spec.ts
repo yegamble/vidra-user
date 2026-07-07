@@ -260,7 +260,9 @@ storyboard.jpg#xywh=160,0,160,90
 storyboard.jpg#xywh=320,0,160,90
 `;
 
-test("the storyboard seek-preview previews a frame on hover and seeks on click", async ({ page }) => {
+test("the seek bar previews a storyboard frame in the scrub bubble on hover and focus", async ({
+  page,
+}) => {
   // A published video that advertises a storyboard (has_storyboard on the detail).
   await page.route(DETAIL, (route) =>
     route.fulfill({
@@ -279,51 +281,52 @@ test("the storyboard seek-preview previews a frame on hover and seeks on click",
   await page.route(RATING, (route) =>
     route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
   );
-  await page.route(/\/api\/v1\/videos\/v1\/storyboard\.vtt$/, (route) =>
-    route.fulfill({ contentType: "text/vtt", body: STORYBOARD_VTT }),
-  );
+  // Count VTT fetches so we can prove the storyboard loads lazily (only on the
+  // first preview interaction, never on page load).
+  let vttRequests = 0;
+  await page.route(/\/api\/v1\/videos\/v1\/storyboard\.vtt$/, (route) => {
+    vttRequests += 1;
+    return route.fulfill({ contentType: "text/vtt", body: STORYBOARD_VTT });
+  });
   await page.route(/\/api\/v1\/videos\/v1\/storyboard\.jpg$/, (route) =>
     route.fulfill({ contentType: "image/jpeg", body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]) }),
   );
 
   await page.goto("/videos/v1");
-  const slider = page.getByRole("slider", { name: "Seek preview" });
-  await expect(slider).toBeVisible();
+  // The old separate "Seek preview" scrubber strip is gone — its accessible
+  // seeking duty moved into the now keyboard-operable seek bar.
+  await expect(page.getByRole("slider", { name: "Seek preview" })).toHaveCount(0);
 
-  // Record every requested seek (the fixture clip has a single keyframe, so
-  // currentTime snaps back to 0 — asserting the seek intent is the honest proof).
-  await page.locator("video").evaluate((el: HTMLVideoElement) => {
-    const w = window as unknown as { __seeks: number[] };
-    w.__seeks = [];
-    const proto = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime")!;
-    Object.defineProperty(el, "currentTime", {
-      configurable: true,
-      get() {
-        return proto.get!.call(this);
-      },
-      set(v: number) {
-        w.__seeks.push(v);
-        proto.set!.call(this, v);
-      },
-    });
-  });
+  const seek = page.getByRole("slider", { name: "Seek" });
+  await expect(seek).toBeVisible();
+  const frame = seek.locator('div[style*="storyboard.jpg"]');
+  // Lazy: nothing is fetched, and no frame paints, until the first preview.
+  await expect(frame).toHaveCount(0);
+  expect(vttRequests).toBe(0);
 
-  // Hovering moves the pointer over the track → a storyboard frame previews from
-  // the sprite sheet (rendered as a background image of the sprite URL).
-  await slider.hover();
-  await expect(slider.locator('div[style*="storyboard.jpg"]')).toBeVisible();
+  // Hovering the seek bar previews a storyboard frame from the sprite sheet
+  // (a background-image window into the sprite URL) and fires the lazy fetch once.
+  await seek.hover();
+  await expect(frame).toBeVisible();
+  await expect.poll(() => vttRequests).toBe(1);
 
-  // Clicking seeks the player to the hovered position (a positive time).
-  await slider.click();
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __seeks: number[] }).__seeks.at(-1) ?? -1))
-    .toBeGreaterThan(0);
+  // Keyboard parity: focusing the seek bar shows the frame too (no pointer).
+  await page.mouse.move(0, 0);
+  await seek.focus();
+  await expect(frame).toBeVisible();
+  // Still only the single fetch (activate is idempotent).
+  expect(vttRequests).toBe(1);
 });
 
-test("no storyboard scrubber is shown when the video has none", async ({ page }) => {
+test("the seek bar shows no storyboard frame when the video has none", async ({ page }) => {
   await mockWatchPage(page);
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  const seek = page.getByRole("slider", { name: "Seek" });
+  await seek.hover();
+  // The time-only bubble may appear, but never a storyboard frame, and the old
+  // separate preview strip is gone.
+  await expect(seek.locator('div[style*="storyboard.jpg"]')).toHaveCount(0);
   await expect(page.getByRole("slider", { name: "Seek preview" })).toHaveCount(0);
 });
 

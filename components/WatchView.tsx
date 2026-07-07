@@ -22,7 +22,6 @@ import { RelatedVideos } from "@/components/RelatedVideos";
 import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
-import { StoryboardPreview } from "@/components/StoryboardPreview";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -391,16 +390,6 @@ function Player({
         onTimeUpdate={recordThrottled}
         onPause={record}
       />
-      {/* Seek-hover preview thumbnails from the storyboard, when one exists. An
-          additional accessible scrubber alongside the shell's own seek bar (W1.U4
-          folds this into the seek tooltip and removes the separate strip). */}
-      {video.has_storyboard ? (
-        <StoryboardPreview
-          videoId={video.id}
-          videoRef={videoRef}
-          durationSeconds={video.duration_seconds ?? undefined}
-        />
-      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         {resumeAt !== null ? (
           <button

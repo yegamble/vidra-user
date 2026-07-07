@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   bufferedBands,
   clamp,
+  clampBubbleLeft,
   fractionAt,
   fractionOfTime,
   seekValueText,
@@ -105,5 +106,23 @@ describe("volumePercent", () => {
 
   it("reads 0 while muted regardless of the underlying level", () => {
     expect(volumePercent(0.8, true)).toBe(0);
+  });
+});
+
+describe("clampBubbleLeft", () => {
+  it("centres the bubble on the pointer well inside the track", () => {
+    // 50% of 400 = 200; a 160px bubble has 120px of slack on each side.
+    expect(clampBubbleLeft(0.5, 400, 160)).toBe(200);
+  });
+
+  it("shifts the bubble in so neither edge is clipped near the ends", () => {
+    // At the very start/end a 160px bubble (half = 80) is pinned to [80, 320].
+    expect(clampBubbleLeft(0, 400, 160)).toBe(80);
+    expect(clampBubbleLeft(1, 400, 160)).toBe(320);
+  });
+
+  it("centres on the pointer when the bubble cannot fit / the track is unmeasured", () => {
+    expect(clampBubbleLeft(0.25, 100, 160)).toBe(25); // wider than the track → no clamp
+    expect(clampBubbleLeft(0.5, 0, 160)).toBe(0); // unmeasured track
   });
 });

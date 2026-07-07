@@ -39,6 +39,7 @@ import {
   shortcutForKey,
 } from "@/lib/player-shortcuts";
 import { useHlsPlayback } from "@/lib/use-hls-playback";
+import { useStoryboard } from "@/lib/use-storyboard";
 
 // How long the overlay controls linger after the last pointer activity while
 // playing before auto-hiding (they never hide while paused, focused, or a menu
@@ -88,6 +89,12 @@ export function VideoPlayer({
 }) {
   const playback = useHlsPlayback(videoRef, video, startAt);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Seek-preview storyboard (CORE-16): null when the detail has none, so the
+  // seek bar's scrub bubble degrades to the timestamp alone. The VTT/sprite only
+  // load once the bar first previews (it calls storyboard.activate() on hover /
+  // focus) — no fetch for a viewer who never scrubs.
+  const storyboard = useStoryboard(video.id, video.has_storyboard);
 
   // The chosen playback rate is remembered for the browsing session (a stop-gap
   // until W1.U6's per-user default_speed). Read through useSyncExternalStore so
@@ -458,6 +465,7 @@ export function VideoPlayer({
           duration={duration}
           buffered={buffered}
           onSeek={seekTo}
+          storyboard={storyboard}
         />
         <div className="flex items-center gap-0.5 sm:gap-1">
           <OverlayButton label={paused ? "Play" : "Pause"} onClick={togglePlay}>

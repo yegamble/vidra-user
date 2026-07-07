@@ -102,3 +102,19 @@ export function volumePercent(volume: number, muted: boolean): number {
   if (muted) return 0;
   return Math.round(clamp(volume, 0, 1) * 100);
 }
+
+/**
+ * clampBubbleLeft is the pixel x for the seek-preview scrub bubble's centre,
+ * kept fully inside the track [0, trackWidth]. The bubble is centred on the
+ * pointer (`fraction` of the track), then shifted just enough that neither edge
+ * of a `bubbleWidth`-wide chip is clipped by the media container's overflow.
+ * A bubble wider than the track (or an unmeasured track) is simply centred on
+ * the pointer — there is nowhere to clamp it to.
+ */
+export function clampBubbleLeft(fraction: number, trackWidth: number, bubbleWidth: number): number {
+  if (!(trackWidth > 0)) return 0;
+  const centre = clamp(fraction, 0, 1) * trackWidth;
+  if (!(bubbleWidth > 0) || bubbleWidth >= trackWidth) return centre;
+  const half = bubbleWidth / 2;
+  return clamp(centre, half, trackWidth - half);
+}
