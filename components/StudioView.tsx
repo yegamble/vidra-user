@@ -201,7 +201,7 @@ function ChannelSection({
           Create your first channel to start publishing.
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+        <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
           {channels.map((ch) => (
             <ChannelRow key={ch.id} channel={ch} onUpdated={onUpdated} onDeleted={onDeleted} />
           ))}
@@ -382,7 +382,7 @@ function ChannelRow({
             type="button"
             disabled={busy}
             onClick={() => setMode("view")}
-            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-muted hover:text-fg`}
+            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
           >
             Cancel
           </button>
@@ -393,7 +393,7 @@ function ChannelRow({
             type="button"
             aria-label={`Edit ${channel.handle}`}
             onClick={() => setMode("edit")}
-            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-muted hover:text-fg`}
+            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
           >
             Edit
           </button>
@@ -1206,7 +1206,7 @@ function MyVideosSection({
       ) : videos.length === 0 ? (
         <p className="text-sm text-fg-muted">No videos in this channel yet.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+        <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
           {videos.map((v) => (
             <VideoRow
               key={v.id}
@@ -1467,7 +1467,7 @@ function VideoRow({
             type="button"
             disabled={busy}
             onClick={() => setMode("view")}
-            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-muted hover:text-fg`}
+            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
           >
             Cancel
           </button>
@@ -1477,7 +1477,7 @@ function VideoRow({
           <button
             type="button"
             onClick={() => void startEdit()}
-            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-muted hover:text-fg`}
+            className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
           >
             Edit
           </button>

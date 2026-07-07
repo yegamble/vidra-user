@@ -217,7 +217,7 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
       ) : streams.length === 0 ? (
         <p className="text-sm text-fg-muted">No live streams yet.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+        <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
           {streams.map((s) => (
             <li key={s.id} className="flex items-center gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
@@ -244,7 +244,7 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
                 <button
                   type="button"
                   onClick={() => void regenerate(s.id)}
-                  className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-ring"
+                  className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg focus-ring"
                 >
                   Regenerate key
                 </button>

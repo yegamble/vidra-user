@@ -243,6 +243,59 @@ const SAMPLE_CHANNEL_VIDEOS = {
 // thumbnail-left row list, so this reuses the feed's illustrative videos.
 const SAMPLE_SEARCH = { query: "grading", videos: SAMPLE_FEED.videos, limit: 20, offset: 0 };
 
+// The signed-in creator's own channels (GET /me/channels) — one channel so the
+// studio renders its list "table", upload form, and per-channel video list.
+const SAMPLE_MY_CHANNELS = {
+  channels: [
+    {
+      id: "c1",
+      owner_id: "u1",
+      handle: "grade-house",
+      display_name: "Grade House",
+      description: "Color grading, monochrome craft, and quiet-luxury imagery.",
+      follower_count: 48_200,
+      created_at: new Date(Date.now() - 400 * 86_400_000).toISOString(),
+      has_avatar: false,
+      has_banner: false,
+    },
+  ],
+};
+
+// The owner's video list (GET /channels/{handle}/videos) — a spread of states so
+// the studio "Your videos" table shows every StateBadge variant + privacy.
+const SAMPLE_STUDIO_VIDEOS = {
+  videos: [
+    { ...sampleVideo("sv1", "Late-night color grading session", { views: 1200, duration: 1830, ageDays: 1 }), state: "published", privacy: "public" },
+    { ...sampleVideo("sv2", "Split-toning shadows without muddying skin tones", { views: 0, duration: 1122, ageDays: 0 }), state: "processing", privacy: "unlisted" },
+    { ...sampleVideo("sv3", "Building a print-first grade for silver gelatin", { views: 0, duration: 1671, ageDays: 0 }), state: "draft", privacy: "private" },
+    { ...sampleVideo("sv4", "Q&A — self-hosting your own instance", { views: 0, duration: 843, ageDays: 0 }), state: "scheduled", privacy: "public", publish_at: new Date(Date.now() + 3 * 86_400_000).toISOString() },
+  ],
+};
+
+// A 30-day daily-views series (oldest first) for the stats chart.
+function sampleDailyViews(peak) {
+  const series = [];
+  const start = Date.now() - 29 * 86_400_000;
+  for (let i = 0; i < 30; i++) {
+    series.push({
+      day: new Date(start + i * 86_400_000).toISOString().slice(0, 10),
+      views: Math.round(peak * (0.3 + 0.7 * Math.abs(Math.sin(i / 3)))),
+    });
+  }
+  return series;
+}
+
+// Channel totals (GET /channels/{handle}/stats) for the creator-stats tiles.
+const SAMPLE_CHANNEL_STATS = {
+  views: 512_400,
+  likes: 34_100,
+  dislikes: 210,
+  comments: 4_820,
+  followers: 48_200,
+  videos: 42,
+  daily_views: sampleDailyViews(24_000),
+};
+
 // A watch-history payload (GET /me/history): each card carries a resume position
 // and a watched_at, so the grid renders the resume-progress bar + "Resume at m:ss".
 const SAMPLE_HISTORY = {
@@ -385,6 +438,54 @@ const AREAS = {
     async mock(page) {
       await mockAuthedShell(page);
       await page.route(/\/api\/v1\/me\/history(\?|$)/, (route) => route.fulfill({ json: SAMPLE_HISTORY }));
+    },
+  },
+  // Studio (backport W0.8): the creator surface — channels "table", upload entry
+  // point, and the "Your videos" list with state/privacy badges. Auth-gated.
+  studio: {
+    path: "/studio",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
+        route.fulfill({ json: { live_streams: [] } }),
+      );
+    },
+  },
+  // Creator stats (backport W0.8): the totals stat tiles + 30-day chart, and the
+  // per-video stats drill-in. Auth-gated.
+  "studio-stats": {
+    path: "/studio/stats",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/channels\/grade-house\/stats$/, (route) =>
+        route.fulfill({ json: SAMPLE_CHANNEL_STATS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+    },
+  },
+  // Account settings hub (backport W0.9): the grouped iOS-style settings rows,
+  // profile form, data section, and danger zone. Auth-gated.
+  settings: {
+    path: "/settings",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/oauth-identities$/, (route) =>
+        route.fulfill({ json: { identities: [] } }),
+      );
+      // 404 → the export card shows its idle "Request export" state.
+      await page.route(/\/api\/v1\/me\/export$/, (route) =>
+        route.fulfill({ status: 404, json: { error: { code: "not_found", message: "none" } } }),
+      );
     },
   },
 };
