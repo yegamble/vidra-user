@@ -77,6 +77,20 @@ async function signIn(page: Page) {
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 }
 
+// Reach /playlists the way the desktop template intends (backport W0.2): the
+// sidebar no longer links Playlists, so it is reached from the Library page.
+// Uses client-side navigation (Link clicks) — a hard page.goto would drop the
+// in-memory session and land signed out.
+async function goToPlaylists(page: Page) {
+  await page
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Library" })
+    .click();
+  await expect(page).toHaveURL(/\/library$/);
+  await page.getByRole("main").getByRole("link", { name: "Playlists" }).click();
+  await expect(page).toHaveURL(/\/playlists$/);
+}
+
 test("playlists prompt anonymous viewers to sign in", async ({ page }) => {
   await page.goto("/playlists");
   await expect(page.getByText("Sign in to see your playlists")).toBeVisible();
@@ -90,7 +104,7 @@ test("creating a playlist adds it to the list", async ({ page }) => {
     return route.fulfill({ json: { playlists: [] } });
   });
 
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await goToPlaylists(page);
   await expect(page.getByText("No playlists yet")).toBeVisible();
   await page.getByLabel("Playlist title").fill("My Mix");
   await page.getByRole("button", { name: "Create" }).click();
@@ -110,7 +124,7 @@ test("playlists render as cards with a count badge and a privacy badge", async (
     }),
   );
 
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await goToPlaylists(page);
   const cards = page.getByRole("main").getByRole("listitem");
   await expect(cards).toHaveCount(2);
   // The private playlist carries its badge; the count badge reads naturally.
@@ -138,7 +152,7 @@ test("the playlist detail shows videos and the owner can remove one", async ({ p
   );
   await page.route(REMOVE, (route) => route.fulfill({ status: 204, body: "" }));
 
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await goToPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
   await expect(page.getByRole("heading", { name: "My Mix" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Clip" })).toBeVisible();
@@ -159,7 +173,7 @@ test("the owner can reorder playlist items", async ({ page }) => {
   // PUT reorder → 204; the body is asserted below via waitForRequest.
   await page.route(/\/api\/v1\/playlists\/p1\/videos$/, (route) => route.fulfill({ status: 204, body: "" }));
 
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await goToPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
   await expect(page.getByRole("heading", { name: "First" })).toBeVisible();
 
@@ -191,7 +205,7 @@ test("the owner can edit a playlist's title and visibility", async ({ page }) =>
     return route.fulfill({ json: current });
   });
 
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await goToPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
   await expect(page.getByRole("heading", { name: "My Mix" })).toBeVisible();
 
@@ -220,7 +234,7 @@ test("the owner can delete a playlist", async ({ page }) => {
   });
 
   // Reach the detail page via client-side nav so the in-memory session survives.
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await goToPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
   await page.getByRole("button", { name: "Delete playlist" }).click();
   await expect(page).toHaveURL(/\/playlists$/);
@@ -246,7 +260,7 @@ test("the owner can upload and remove a playlist cover from the detail page", as
     return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from([137, 80, 78, 71]) });
   });
 
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await goToPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
   await expect(page.getByRole("heading", { name: "My Mix" })).toBeVisible();
 
@@ -288,7 +302,7 @@ test("an unsupported playlist cover type shows a friendly error", async ({ page 
       : route.continue(),
   );
 
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await goToPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
   const cover = page.getByRole("region", { name: "Playlist cover" });
   await page.getByLabel("Cover image").setInputFiles({
@@ -308,7 +322,7 @@ test("playlist cards render the uploaded cover image when set", async ({ page })
     route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from([137, 80, 78, 71]) }),
   );
 
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await goToPlaylists(page);
   const card = page.getByRole("main").getByRole("listitem").filter({ hasText: "Covered Mix" });
   // The cover is decorative (alt=""), so match the backend image by its src.
   await expect(card.locator('img[src*="/api/v1/playlists/p1/thumbnail"]')).toBeVisible();

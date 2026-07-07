@@ -12,6 +12,7 @@ import {
   isActiveNavLink,
   type NavLinkDef,
 } from "@/components/nav-links";
+import { SidebarFollowing } from "@/components/SidebarFollowing";
 
 // The collapse preference is a harmless UI setting (never a secret/token), so
 // localStorage is the right place for it to survive reloads. It is read through
@@ -77,17 +78,20 @@ export function Sidebar() {
         collapsed ? "w-14" : "w-56"
       }`}
     >
-      <ul className="flex flex-col gap-0.5">
-        {links.map((item) => (
-          <li key={item.href}>
-            <SidebarLink
-              item={item}
-              collapsed={collapsed}
-              active={isActiveNavLink(item, pathname)}
-            />
-          </li>
-        ))}
-      </ul>
+      <div className="flex flex-col gap-4">
+        <ul className="flex flex-col gap-0.5">
+          {links.map((item) => (
+            <li key={item.href}>
+              <SidebarLink
+                item={item}
+                collapsed={collapsed}
+                active={isActiveNavLink(item, pathname)}
+              />
+            </li>
+          ))}
+        </ul>
+        <SidebarFollowing collapsed={collapsed} />
+      </div>
       <div className="flex flex-col gap-0.5">
         <SidebarLink
           item={{

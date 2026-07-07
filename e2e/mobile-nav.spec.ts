@@ -67,11 +67,12 @@ test.describe("desktop", () => {
     await page.goto("/");
     // The Inbox tab exists only in the tab bar, so it must not be exposed.
     await expect(page.getByRole("link", { name: "Inbox" })).toHaveCount(0);
-    // Primary navigation is the sidebar (it carries the full destination set).
+    // Primary navigation is the sidebar (it carries the full destination set) —
+    // e.g. History, a primary destination the bottom tab bar does not surface.
     await expect(
       page
         .getByRole("navigation", { name: "Primary" })
-        .getByRole("link", { name: "Playlists" }),
+        .getByRole("link", { name: "History" }),
     ).toBeVisible();
   });
 });

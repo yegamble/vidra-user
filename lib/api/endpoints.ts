@@ -24,6 +24,7 @@ import type {
   CaptionListResponse,
   Channel,
   ChannelListResponse,
+  FollowedChannelsResponse,
   AddDonationAddressRequest,
   DonationAddress,
   DonationAddressListResponse,
@@ -561,6 +562,18 @@ export const api = {
   /** GET /api/v1/me/subscriptions/videos — videos from followed channels (auth). */
   getSubscriptionVideos: (params: SearchParams = {}, signal?: AbortSignal) =>
     apiRequest<VideoFeedResponse>("/api/v1/me/subscriptions/videos", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * GET /api/v1/me/subscriptions — the LOCAL channels the caller follows
+   * ("FOLLOWING" list), most recently followed first, each with follower_count
+   * and followed_at (auth). Remote-channel follows are listed separately via
+   * getRemoteFollows. Paginated via limit (1–100, default 20) and offset.
+   */
+  listFollowedChannels: (params: SearchParams = {}, signal?: AbortSignal) =>
+    apiRequest<FollowedChannelsResponse>("/api/v1/me/subscriptions", {
       query: { limit: params.limit, offset: params.offset },
       signal,
     }),

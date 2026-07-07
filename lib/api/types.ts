@@ -110,6 +110,8 @@ export type AuthResponse = Schemas["AuthResponse"];
 // --- Channels ---------------------------------------------------------------
 export type Channel = Schemas["Channel"];
 export type ChannelListResponse = Schemas["ChannelListResponse"];
+export type FollowedChannel = Schemas["FollowedChannel"];
+export type FollowedChannelsResponse = Schemas["FollowedChannelsResponse"];
 
 // --- Donation addresses (simple NON-CUSTODIAL crypto donation display) ------
 export type DonationNetwork = NonNullable<Schemas["DonationAddress"]["network"]>;

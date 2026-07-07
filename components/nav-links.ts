@@ -31,11 +31,10 @@ export const NAV_LINKS: readonly NavLinkDef[] = [
     label: "Library",
     iconPath: "M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z",
   },
-  {
-    href: "/playlists",
-    label: "Playlists",
-    iconPath: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
-  },
+  // Playlists is intentionally NOT a primary sidebar destination: the desktop
+  // template (backport W0.2) lists exactly Home/Trending/Subscriptions/Library/
+  // History/Messages/Studio. Playlists is reached from the Library page (its
+  // route lives on and the BottomTabBar already groups /playlists under Library).
   {
     href: "/history",
     label: "History",

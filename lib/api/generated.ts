@@ -934,6 +934,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the local channels the caller follows
+         * @description The authenticated user's "FOLLOWING" list: the LOCAL channels they follow, most recently followed first, each with the channel's total follower_count and the followed_at timestamp. Remote-channel follows are listed separately at GET /me/remote-follows. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listFollowedChannels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/subscriptions/videos": {
         parameters: {
             query?: never;
@@ -3551,6 +3571,19 @@ export interface components {
         };
         ChannelListResponse: {
             channels: components["schemas"]["Channel"][];
+        };
+        /** @description A channel the caller follows, with the follow timestamp. */
+        FollowedChannel: components["schemas"]["Channel"] & {
+            /**
+             * Format: date-time
+             * @description When the caller followed this channel.
+             */
+            followed_at: string;
+        };
+        FollowedChannelsResponse: {
+            channels: components["schemas"]["FollowedChannel"][];
+            limit: number;
+            offset: number;
         };
         /** @description A public crypto wallet address displayed for NON-CUSTODIAL donations. Vidra never holds funds or private keys and there is deliberately no balance/amount field. The internal verification nonce/expiry are never exposed. */
         DonationAddress: {
@@ -7965,6 +7998,38 @@ export interface operations {
             };
             /** @description No such user, or no banner set. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listFollowedChannels: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of followed channels (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowedChannelsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

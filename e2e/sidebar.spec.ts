@@ -6,16 +6,19 @@ const FEED_URL = /\/api\/v1\/videos(\?|$)/;
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 
+// Desktop template (backport W0.2): exactly these primary destinations, in this
+// order, then a FOLLOWING group. Playlists is intentionally NOT here — it is
+// reached from the Library page.
 const PRIMARY = [
   "Home",
   "Trending",
   "Subscriptions",
   "Library",
-  "Playlists",
   "History",
   "Messages",
   "Studio",
 ];
+const SUBSCRIPTIONS = /\/api\/v1\/me\/subscriptions(\?|$)/;
 
 test.beforeEach(async ({ page }) => {
   await page.route(FEED_URL, (route) =>
@@ -66,11 +69,13 @@ test("the sidebar carries every primary destination and marks the active route",
   await expect(nav.getByRole("link", { name: "Admin" })).toHaveCount(0);
   // The hamburger is a phone-only control; at desktop it is not exposed.
   await expect(page.getByRole("button", { name: "Menu" })).toHaveCount(0);
+  // Playlists is no longer a primary destination (reached from Library instead).
+  await expect(nav.getByRole("link", { name: "Playlists" })).toHaveCount(0);
   // Active-route marking follows navigation.
   await expect(nav.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
-  await nav.getByRole("link", { name: "Playlists" }).click();
-  await expect(page).toHaveURL(/\/playlists$/);
-  await expect(nav.getByRole("link", { name: "Playlists" })).toHaveAttribute(
+  await nav.getByRole("link", { name: "Subscriptions" }).click();
+  await expect(page).toHaveURL(/\/subscriptions$/);
+  await expect(nav.getByRole("link", { name: "Subscriptions" })).toHaveAttribute(
     "aria-current",
     "page",
   );
@@ -78,6 +83,58 @@ test("the sidebar carries every primary destination and marks the active route",
     "aria-current",
     "page",
   );
+});
+
+test("the Library page links to Playlists (the sidebar no longer does)", async ({ page }) => {
+  await page.goto("/library");
+  const playlists = page.getByRole("main").getByRole("link", { name: "Playlists" });
+  await expect(playlists).toBeVisible();
+  await playlists.click();
+  await expect(page).toHaveURL(/\/playlists$/);
+});
+
+test("the FOLLOWING group lists the channels the signed-in user follows", async ({ page }) => {
+  await page.route(SUBSCRIPTIONS, (route) =>
+    route.fulfill({
+      json: {
+        channels: [
+          {
+            id: "ch1",
+            owner_id: "o1",
+            handle: "grade_house",
+            display_name: "Grade House",
+            description: "",
+            follower_count: 1200,
+            created_at: new Date().toISOString(),
+            has_avatar: false,
+            has_banner: false,
+            followed_at: new Date().toISOString(),
+          },
+          {
+            id: "ch2",
+            owner_id: "o2",
+            handle: "north_loop",
+            display_name: "North Loop",
+            description: "",
+            follower_count: 42,
+            created_at: new Date().toISOString(),
+            has_avatar: false,
+            has_banner: false,
+            followed_at: new Date().toISOString(),
+          },
+        ],
+        limit: 15,
+        offset: 0,
+      },
+    }),
+  );
+  await signIn(page, "moderator");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  // The FOLLOWING channels appear as links to their channel pages.
+  const grade = nav.getByRole("link", { name: "Grade House" });
+  await expect(grade).toBeVisible();
+  await expect(nav.getByRole("link", { name: "North Loop" })).toBeVisible();
+  await expect(grade).toHaveAttribute("href", "/channels/grade_house");
 });
 
 test("the sidebar collapses to an icon rail, stays usable, and persists", async ({ page }) => {
