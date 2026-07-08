@@ -122,9 +122,17 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   active `bg-accent text-accent-fg border-accent`, inactive `border-border
   text-fg-muted` with `hover:bg-surface-muted`. Group carries
   `role="group"` + `aria-label`; buttons use `aria-pressed`.
-- **Segmented switcher** (Inbox: Notifications | Messages; ThemeToggle): a
-  `bg-surface-muted rounded-full p-1` track with the active segment
-  `bg-surface font-semibold shadow-sm rounded-full`.
+- **Segmented switcher** — the `SegmentedControl` primitive
+  (`components/ui/SegmentedControl.tsx`), the app-wide single-select switcher
+  (Inbox Notifications | Messages, ThemeToggle Light/System/Dark, FeedScope
+  Local/All, admin role picker). Rounded-rect, NOT pill: a
+  `rounded-[10px] bg-surface-muted p-[3px]` track with `rounded-lg` segments;
+  the active segment raises on `bg-canvas` with a `0 1px 4px` shadow +
+  `font-semibold`. `role="group"` of `aria-pressed` toggle buttons; named via
+  `label` (→`aria-label`) or `labelledBy` (visible heading); `size` sm/md,
+  `fullWidth` (flex-1 segments), optional muted `tabular-nums` `count` suffix.
+  Distinct from the pill **sort chips** above — never reuse the chip look for a
+  switcher.
 - **Video card**: thumbnail (`aspect-video rounded-xl`/`2xl`, `bg-surface-muted`
   fallback) with overlay badges (duration bottom-right `bg-black/60`; LIVE
   top-left pill with `bg-live animate-[live-pulse_1.6s_infinite]` dot; IPFS
@@ -165,13 +173,51 @@ globally in `globals.css` — components never branch on it.
 
 Import from the barrel `@/components/ui`. All primitives are token-driven and
 carry the a11y contract (see their doc comments): `Button`/`LinkButton`
-(pill, variants primary/secondary/danger/ghost), `IconButton` (round,
-label required), `Input`/`Textarea`/`Select` (rounded-xl, label/hint/error
-wiring), `Checkbox`/`Radio` (native), `Toggle` (`role="switch"`), `Modal`
-(focus trap/restore, Escape, scrim), `Dropdown` (menu-button pattern), `Tabs`
-(WAI-ARIA tabs), `Toast` (live regions), `Card`, `Badge`, `Avatar`,
-`Skeleton`, `Spinner`, `EmptyState`, `ErrorState`, `LoadMoreButton`.
+(pill, variants primary/secondary/danger/ghost + **`tonal`** = borderless
+`bg-surface-muted text-fg hover:bg-surface-strong`, the design's dominant
+secondary action; + **`danger-outline`** = `border-danger/45 text-danger`
+using the AA-safe danger *text* token, not the solid fill), `IconButton`
+(round, label required), `SegmentedControl` (see switcher above),
+`Input`/`Textarea`/`Select` (rounded-xl, label/hint/error wiring),
+`Checkbox`/`Radio` (native), `Toggle` (`role="switch"`; **46×28 track, 24px
+`bg-canvas` knob travelling 2→20px**, on-track `bg-accent`), `Modal` (focus
+trap/restore, Escape, scrim; `variant="dialog"` centered `rounded-[20px]` /
+`variant="sheet"` mobile bottom-sheet `rounded-t-[22px]` + grab handle +
+safe-area), `Dropdown` (menu-button pattern), `Tabs` (WAI-ARIA tabs), `Toast`
+(live regions), `Card`, `Badge` (default sentence pill + **`status`** =
+`text-[10.5px] font-bold uppercase tracking-[0.04em]` micro-label, + role
+pills **`inverse`** `bg-fg text-canvas` (ADMIN) / **`strong`**
+`bg-surface-strong text-fg-muted` (MOD)), `Avatar`, `Skeleton`, `Spinner`,
+`EmptyState`, `ErrorState`, `LoadMoreButton`.
 Custom components, not UI-kit wrappers. Do not fork these patterns locally.
+
+## Iconography (`components/icons`)
+
+`components/icons/index.tsx` is the **single source of truth** for iconography —
+the 41-icon feather-style set (24×24 viewBox, `stroke="currentColor"`, round
+caps/joins, 1.8px default stroke; filled glyphs — Play/Playlist/MoreHorizontal/
+Library inner play — set `fill=currentColor stroke=none`). Paths are vendored
+**VERBATIM** from the design source (`.ralph/specs/design-refresh-icons.md`);
+never substitute a library's variant when the design's path differs. Typed
+`IconProps` (`size` default 20, `strokeWidth`, `label`); an icon is decorative
+(`aria-hidden`) unless given a `label` (→ `role="img"` + `<title>`).
+
+- **No ad-hoc inline `<svg>` icons** in components/pages. If a glyph exists in
+  the set, import it; if the design uses a new glyph, add it to the set
+  path-verbatim (with MIT/Feather attribution where applicable) — do not inline
+  it at a call site. The DR13 sweep converged all duplicated design glyphs
+  (search, close, bell, share, download, playlist, external-link, check, info,
+  chevron) onto the set. Legitimately-inline SVGs that remain are NOT icons: the
+  QR renderer (`QrCode`), the stats chart (`StatsChart`), the animated `Spinner`,
+  the bespoke player chrome (`player/*`), keyboard keycaps (`KeyboardShortcutsHelp`),
+  and a few app-specific marks with no design-vocabulary equivalent (federated
+  globe, protocol/privacy glyphs, quality sliders, messaging attachment-kind
+  glyphs, the new-message compose mark, and the sidebar collapse double-chevron).
+- **SVG only, never emoji or unicode-glyph icons.** `npm run lint:icons`
+  (`scripts/check-no-emoji.mjs`) is a **hard CI gate** that fails on emoji
+  codepoints in `components/` and `app/` JSX. Non-icon glyphs it deliberately
+  allows: `·` separators, `…`, `×` multipliers/dimensions, `←/→` keycaps, `—`
+  placeholders, `→` in prose.
 
 ## App shell
 

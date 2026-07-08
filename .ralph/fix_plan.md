@@ -1800,10 +1800,49 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
         `dark:`/raw palette; no emoji; zero token-value changes.
 
 ## DR13 — Sweep & guardrails closeout
-- [ ] Ad-hoc inline-SVG convergence audit (remaining components → `components/icons`); update
-      `.ralph/specs/design-system.md` (SegmentedControl shape, Button/Toggle/Badge additions,
-      icon set as single source, emoji-lint guard); full-app screenshot pass vs templates.
-      CI + push.
+- [x] Ad-hoc inline-SVG convergence audit + `.ralph/specs/design-system.md` update + full-app
+      screenshot pass. Shipped 2026-07-08.
+      • **Inline-SVG convergence (`components/icons` as the single source).** The components
+        that still carried ad-hoc inline `<svg>` icons duplicating the design vocabulary now
+        import the shared set, each deleting its local `<svg>` block: `SearchBox` +
+        `admin/AdminControls` (search), `FeedFilters`/`SearchFilters`/`TagsInput` (close-X),
+        `NotificationsBell` (bell), `ShareButton` (share), `DownloadButton` (download tray),
+        `PlaylistCard` (filled playlist glyph placeholder), `RemoteWatchView` (external-link +
+        info), `LiveWatchView`/`auth/SignupForm` (info), `DonationBadge` (check), and
+        `messaging/MessageLightbox` (prev/next chevrons → `ChevronLeft/RightIcon`, the one
+        straggler the earlier sweep missed). `components/DonateButton.tsx` — dead since the DR5
+        Support surface superseded it (no importers) — is deleted; its `DonateSource` type is
+        rehomed in `SupportButton.tsx` (the sole consumer) and `WatchView` re-points its import.
+      • **Legitimately-inline SVGs kept (NOT icons).** `QrCode` (QR renderer), `StatsChart`,
+        the animated `Spinner`, the bespoke player chrome (`player/*`), `KeyboardShortcutsHelp`
+        keycaps, `PrivacyBadge`/`ProtocolBadge` marks, `QualityMenu`/`SpeedMenu` player glyphs,
+        `OAuthButtons` SSO brand marks, and app-specific marks with no design-vocabulary
+        equivalent (federated globe in `VideoCard`/`SearchResults`/`CommentsSection`,
+        `AttachmentDownloadRow` per-kind file glyphs, `NewMessageButton` compose mark, `Sidebar`
+        collapse double-chevron). None exist in the design's 41-icon set; converging them would
+        either pollute the paths-verbatim-from-design set or add churn with no vocabulary
+        benefit — recorded as the documented carve-out in design-system.md.
+      • **design-system.md.** SegmentedControl rewritten to the rounded-rect primitive
+        (`rounded-[10px]` track / `rounded-lg` segments / raised `bg-canvas` active), Button
+        `tonal` + `danger-outline`, Toggle 46×28, Badge `status`/`inverse`/`strong`, and a new
+        "Iconography" section naming `components/icons` the single source (paths verbatim, no
+        ad-hoc inline icons, the legit-inline carve-out) + the emoji gate. `npm run lint:icons`
+        (`scripts/check-no-emoji.mjs`) stays a hard CI gate; emoji sweep clean.
+      • **Evidence.** Full-app screenshot pass via `design:shots` — **51 areas × {mobile 390 /
+        desktop 1440} × {light/dark} = 204 PNGs** at `.ralph/design-review/dr13/` (git-ignored;
+        dev server on :3181, killed after). Read the AFTER PNGs against the four `.dc.html`
+        design sources + template JPEGs: search (converged search/clear icons + pill filters),
+        library (filled `PlaylistIcon` rows + History rail + bottom tabs), watch Support dialog
+        (QR tiles, VERIFIED tint pill w/ converged check, peer-free IPFS source bar,
+        Support-first tonal action row w/ converged share/download/thumbs), signup (converged
+        `InfoIcon` approval card + SSO), home dark (token integrity, FeedScope SegmentedControl
+        rounded-rect, Live rail w/ no aspirational watching-count), messaging dark (thread
+        bubbles + compose). No residual gaps; every surface tracks the design.
+      • **Gate.** Full `npm run ci` on the final tree — typecheck ✓ lint ✓ lint:icons ✓ unit
+        **719 passed** (73 files) ✓ clean `next build` ✓ mocked e2e **436 passed** (2.0m; 0
+        failures, incl. the axe serious/critical gate, landmarks/names/focus, responsive
+        overflow). Semantic tokens only; no `dark:`/raw palette; no emoji; zero token-value
+        changes.
 
 ---
 

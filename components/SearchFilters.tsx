@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { ChevronDownIcon } from "@/components/icons";
+import { ChevronDownIcon, CloseIcon } from "@/components/icons";
 import type { VideoConfigResponse } from "@/lib/api";
 import { getVideoConfigCached } from "@/lib/api/video-config";
 import { searchHref, type SearchFilters as Filters } from "@/lib/search-url";
@@ -111,17 +111,7 @@ export function SearchFilters({ query, filters }: { query: string; filters: Filt
             aria-label={`Remove tag filter ${filters.tag}`}
             className="focus-ring flex h-6 w-6 items-center justify-center rounded-full text-accent-fg transition-colors hover:bg-accent-fg/20"
           >
-            <svg
-              aria-hidden
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              className="h-3.5 w-3.5"
-            >
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
+            <CloseIcon size={14} strokeWidth={2} />
           </Link>
         </span>
       ) : null}

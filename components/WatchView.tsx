@@ -14,7 +14,7 @@ import {
 import { useSession } from "@/components/auth/AuthProvider";
 import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
 import { CommentsSection } from "@/components/CommentsSection";
-import type { DonateSource } from "@/components/DonateButton";
+import type { DonateSource } from "@/components/SupportButton";
 import { DownloadButton } from "@/components/DownloadButton";
 import { KeyboardShortcutsHelp } from "@/components/KeyboardShortcutsHelp";
 import { VideoPlayer, type CaptionTrack } from "@/components/player/VideoPlayer";

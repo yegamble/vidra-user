@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ShareIcon } from "@/components/icons";
 import { Modal } from "@/components/ui";
 import { formatDuration } from "@/lib/format";
 
@@ -13,27 +14,6 @@ const COPY_BUTTON =
 
 const FIELD =
   "focus-ring min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2 font-mono text-xs text-fg";
-
-// Minified Feather-style "share" icon.
-function ShareIcon() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="18" cy="5" r="3" />
-      <circle cx="6" cy="12" r="3" />
-      <circle cx="18" cy="19" r="3" />
-      <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
-    </svg>
-  );
-}
 
 // escapeAttr makes a title safe inside the embed snippet's HTML attribute.
 function escapeAttr(s: string): string {
@@ -73,7 +53,7 @@ export function ShareButton({
         }}
         className={PILL}
       >
-        <ShareIcon />
+        <ShareIcon size={16} strokeWidth={2} />
         <span>Share</span>
       </button>
       {open ? (

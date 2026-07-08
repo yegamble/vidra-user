@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
+import { InfoIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
@@ -238,17 +239,7 @@ export function SignupForm({
 
       {requiresApproval ? (
         <p className="flex items-start gap-2.5 rounded-xl bg-surface-muted px-3.5 py-3 text-[13px] leading-relaxed text-fg-muted">
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="mt-0.5 h-3.5 w-3.5 shrink-0"
-          >
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
-          </svg>
+          <InfoIcon size={14} strokeWidth={2} className="mt-0.5 shrink-0" />
           New accounts on this instance require administrator approval. Your signup will be
           reviewed before you can sign in.
         </p>

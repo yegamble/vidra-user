@@ -2,29 +2,12 @@
 
 import { useState } from "react";
 
+import { DownloadIcon } from "@/components/icons";
 import { Modal } from "@/components/ui";
 import { videoOriginalUrl } from "@/lib/api";
 
 const PILL =
   "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
-
-// Minified Feather-style "download" icon.
-function DownloadIcon() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-    </svg>
-  );
-}
 
 // DownloadButton opens a small accessible dialog listing the video's
 // downloadable files. The contract currently exposes only the original stream
@@ -39,7 +22,7 @@ export function DownloadButton({ videoId }: { videoId: string }) {
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className={PILL}>
-        <DownloadIcon />
+        <DownloadIcon size={16} strokeWidth={2} />
         <span>Download</span>
       </button>
       {open ? <DownloadDialog videoId={videoId} onClose={() => setOpen(false)} /> : null}
@@ -65,8 +48,8 @@ function DownloadDialog({ videoId, onClose }: { videoId: string; onClose: () => 
               The file as originally uploaded.
             </span>
           </div>
-          <span aria-hidden className="text-fg-muted">
-            <DownloadIcon />
+          <span className="text-fg-muted">
+            <DownloadIcon size={16} strokeWidth={2} />
           </span>
         </li>
       </ul>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { PlaylistIcon } from "@/components/icons";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { playlistThumbnailUrl, type Playlist } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
@@ -25,18 +26,8 @@ export function PlaylistCard({ playlist }: { playlist: Playlist }) {
               className="h-full w-full object-cover"
             />
           ) : (
-            /* Minified inline stacked-list icon as the cover placeholder */
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-8 w-8 text-fg-muted"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <path d="M3 5h12M3 10h12M3 15h12M18 5v10.55A4 4 0 1 0 20 19V7h3V5z" />
-            </svg>
+            /* Design's filled playlist glyph as the cover placeholder */
+            <PlaylistIcon size={32} className="text-fg-muted" />
           )}
           <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums">
             {playlist.video_count} {playlist.video_count === 1 ? "video" : "videos"}

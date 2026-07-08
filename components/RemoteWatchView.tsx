@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ExternalLinkIcon, InfoIcon } from "@/components/icons";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ReportButton } from "@/components/ReportButton";
 import { Button, EmptyState, ErrorState, Spinner, buttonClasses } from "@/components/ui";
@@ -113,34 +114,13 @@ export function RemoteWatchView({ id }: { id: string }) {
             className={buttonClasses("primary", "sm")}
           >
             Watch on {video.domain}
-            <svg
-              aria-hidden
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-3.5 w-3.5"
-            >
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" />
-            </svg>
+            <ExternalLinkIcon size={14} strokeWidth={2} />
           </a>
           <ReportButton kind="remote_video" targetId={video.id} />
           <MuteInstanceControl domain={video.domain} />
         </div>
         <div className="flex items-start gap-2.5 rounded-2xl bg-surface-muted p-4 text-[13px] leading-relaxed text-fg-muted">
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="mt-0.5 h-3.5 w-3.5 flex-none"
-          >
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
-          </svg>
+          <InfoIcon size={14} strokeWidth={2} className="mt-0.5 flex-none" />
           <p>
             This is a federated video from {video.domain}. Comments, ratings, and saving live on
             the origin instance. Reports go to the moderators of this instance.

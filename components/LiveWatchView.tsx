@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { InfoIcon } from "@/components/icons";
 import { QualityMenu } from "@/components/QualityMenu";
 import { Button, EmptyState, ErrorState, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
@@ -189,17 +190,7 @@ function StreamState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-surface-muted px-6 py-16 text-center">
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        className="h-5 w-5 text-fg-muted"
-      >
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
-      </svg>
+      <InfoIcon size={20} strokeWidth={2} className="text-fg-muted" />
       <p className="text-[15px] font-bold tracking-tight text-fg">{title}</p>
       <p className="max-w-sm text-[13px] leading-relaxed text-fg-muted">{message}</p>
       {onRefresh ? (

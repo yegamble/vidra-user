@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import type { DonateSource } from "@/components/DonateButton";
 import { CheckIcon, HeartIcon } from "@/components/icons";
 import { Badge, Modal } from "@/components/ui";
 import { QrCode } from "@/components/QrCode";
@@ -10,6 +9,11 @@ import { api } from "@/lib/api";
 import type { DonationAddress } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { DONATION_NETWORKS, NETWORK_META } from "@/lib/donation-address";
+
+/** A public donation-address source: a channel (by handle) or a user (by id). */
+export type DonateSource =
+  | { kind: "channel"; handle: string }
+  | { kind: "user"; userId: string };
 
 function fetchSource(source: DonateSource, signal: AbortSignal): Promise<DonationAddress[]> {
   const req =

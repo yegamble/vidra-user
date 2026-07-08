@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
@@ -84,9 +85,7 @@ export function MessageLightbox({
               onClick={() => onIndexChange((index - 1 + images.length) % images.length)}
               className="focus-ring absolute left-0 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface-raised text-fg shadow-md transition-colors hover:bg-surface-muted"
             >
-              <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
+              <ChevronLeftIcon size={20} strokeWidth={2} />
             </button>
           ) : null}
           <LightboxImage key={current.id} attachment={current} />
@@ -97,9 +96,7 @@ export function MessageLightbox({
               onClick={() => onIndexChange((index + 1) % images.length)}
               className="focus-ring absolute right-0 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface-raised text-fg shadow-md transition-colors hover:bg-surface-muted"
             >
-              <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
+              <ChevronRightIcon size={20} strokeWidth={2} />
             </button>
           ) : null}
         </div>

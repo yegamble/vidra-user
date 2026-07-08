@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 
+import { CloseIcon } from "@/components/icons";
 import { MAX_TAGS, addTags } from "@/lib/tags";
 
 // TagsInput is the free-form tags editor for the studio publish/edit forms:
@@ -61,17 +62,7 @@ export function TagsInput({
               onClick={() => remove(tag)}
               className="flex h-4 w-4 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg focus-ring"
             >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                className="h-3 w-3"
-              >
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
+              <CloseIcon size={12} strokeWidth={2} />
             </button>
           </span>
         ))}

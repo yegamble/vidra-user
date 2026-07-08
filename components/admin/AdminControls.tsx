@@ -2,6 +2,7 @@
 
 import type { FormEvent } from "react";
 
+import { SearchIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import type { UserRole } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -50,18 +51,7 @@ export function AdminSearch({
   return (
     <form role="search" className="flex flex-wrap items-center gap-2" onSubmit={handleSubmit}>
       <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-full bg-surface-muted px-4 py-2 transition-colors sm:max-w-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          className="h-4 w-4 shrink-0 text-fg-muted"
-        >
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4-4" />
-        </svg>
+        <SearchIcon size={16} strokeWidth={2} className="shrink-0 text-fg-muted" />
         <input
           type="search"
           aria-label={label}
