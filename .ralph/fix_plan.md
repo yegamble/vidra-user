@@ -33,6 +33,45 @@ Item notes below are kept for provenance; where a note still says a backed spec 
 "written / not executed this loop", read it through this banner — it has since been executed
 and passes, unless it is one of the five env-gated specs listed above.
 
+## ✅ frontend-e2e-backed CI repair (2026-07-08)
+
+The chronically-red `frontend-e2e-backed` job was **100% stale backed specs**, not product
+regressions — each asserted a pre-redesign surface that the W0/DR waves legitimately changed.
+Fixed in place (assertions updated to the NEW truth at the same strength — no weakened checks,
+no `.skip`, no try/catch, DB-effect proofs kept) and re-proven: the full backed suite is
+**green twice consecutively against a fresh `vidra-core` + Postgres stack (88 passed / 0
+failed)**. Only test files under `e2e-backed/` changed; **no `vidra-core` change was needed**
+— the backend contract was correct throughout. Specs updated:
+
+- **playlists.spec / playlist-thumbnail.spec** — Playlists left the primary sidebar (W0.2);
+  reach it via **Library → Playlists** (helper). (playlist-thumbnail was red for the same
+  reason but was not in the hand-off diagnosis.)
+- **instance-settings.spec** — the admin `Config` tab lives only in the desktop-hidden
+  (`lg:hidden`) `AdminTabs`; the DR12 **AdminConsole** rail (`lg:flex`) labels the
+  instance-config link **`Instance`** (→ `/admin/config`). `loginAsAdmin` clicks that.
+- **donations.spec** — the add-address form is collapsed behind a dashed **`Add address`**
+  disclosure (open it, then submit **`Save address`**). The public affordance is the DR5
+  **`Support`** heart pill (was `Donate`) opening a `Support {name}` dialog that lists each
+  address as mono TEXT; it is intentionally hidden on your OWN channel, so it is verified as
+  an anonymous visitor in a second browser context (owner session left intact for delete).
+- **mfa.spec** — the login challenge TOTP field is the segmented **OtpInput** (`role=group`
+  + six digit boxes → `getByLabel` matched 7); fill the boxes. The recovery-code path uses
+  the **`Use a recovery code instead`** free-text field.
+- **admin-users.spec** — the desktop console is a **master → detail table** with a
+  **SegmentedControl** role control, and BOTH responsive layouts render in the DOM; scoped
+  to `data-testid="admin-users-desktop"`, open the row, click the `Moderator` segment
+  (assert `aria-pressed`), deactivate, and remount via the console wordmark → app sidebar
+  `Admin`. (Rewrite from the old `<select>`/single-layout flow — 4 hidden-duplicate /
+  missing-`Home` traps fixed.)
+- **notifications.spec** — the header bell is a **button + popover**, not a link; open it
+  then click `See all notifications`. Thread-body assert scoped to `role=log`.
+- **messaging.spec** — the desktop split-pane renders the body in BOTH the rail preview and
+  the thread bubble → thread asserts scoped to `role=log`; the inbox-preview flake is fixed
+  structurally by remounting the rail (Home → Messages) and awaiting `GET /me/conversations`
+  (a real readiness signal — no blanket retry).
+- **deactivate.spec / profile-edit.spec** — the settings page now also has a
+  `Sign out of this device` button; the header control is matched with `exact: true`.
+
 ## 🔴 Critical Verification Rule: Real Database Effects
 
 A frontend feature that talks to the backend is **NOT done** until Ralph has proven

@@ -57,10 +57,25 @@ test("a viewer can message a commenter and the message persists", async ({ page,
   await page.getByLabel("Write a message").fill(messageBody);
   await page.getByRole("button", { name: "Send" }).click();
   await sent;
-  await expect(page.getByText(messageBody)).toBeVisible();
+  // Scope to the thread's role=log: at desktop the split-pane also surfaces the
+  // body in the conversation-rail preview, so an unscoped getByText would match
+  // both the thread bubble and the inbox row.
+  await expect(page.getByRole("log").getByText(messageBody)).toBeVisible();
 
-  // Persistence via a fresh UI refetch: the inbox shows the conversation + preview.
+  // Persistence via a fresh inbox refetch. At desktop the messenger is a split-
+  // pane where the rail and thread share one layout, so navigating within
+  // /messages* keeps the rail mounted with its stale snapshot — the just-sent
+  // body wouldn't reach the inbox preview until the rail's 30s poll (a race under
+  // CI load). Leave the messenger and return so the rail REMOUNTS and refetches
+  // GET /me/conversations from the backend (pure client-side nav keeps the
+  // in-memory session); await that fetch, then assert the preview reflects the
+  // persisted last message.
+  await page.getByRole("link", { name: "Home" }).click();
+  const inboxLoaded = page.waitForResponse(
+    (r) => /\/me\/conversations(\?|$)/.test(r.url()) && r.request().method() === "GET" && r.ok(),
+  );
   await page.getByRole("link", { name: "Messages" }).first().click();
+  await inboxLoaded;
   await expect(page.getByText(commenter.username)).toBeVisible();
   await expect(page.getByText(messageBody)).toBeVisible();
 
@@ -168,7 +183,9 @@ test("a read receipt persists: opening a thread clears unread and the sender see
   await page.getByRole("link", { name: "Messages" }).first().click();
   await page.getByText(body).click();
   await read;
-  await expect(page.getByText(body)).toBeVisible();
+  // Scope to the thread's role=log — at desktop the split-pane also renders the
+  // body in the conversation-rail preview, so an unscoped getByText matches both.
+  await expect(page.getByRole("log").getByText(body)).toBeVisible();
 
   // After reading: the recipient's unread count for the conversation is zero.
   const afterInbox = await inboxFor(request, recipient.token);

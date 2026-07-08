@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import {
   API_URL,
@@ -8,6 +8,17 @@ import {
   TINY_PNG_BASE64,
   uniqueId,
 } from "./fixtures";
+
+// The backport-W0.2 redesign moved Playlists OFF the primary sidebar: it is now
+// reached from the Library hub (nav-links.ts keeps Home/Trending/Subscriptions/
+// Library/History/Messages/Studio; the Library page carries the single
+// "Playlists" link, and the BottomTabBar groups /playlists under Library). So a
+// user reaches /playlists via Library → Playlists. Navigate that way with
+// client-side clicks so the in-memory session survives.
+async function openPlaylists(page: Page) {
+  await page.getByRole("link", { name: "Library" }).click();
+  await page.getByRole("link", { name: "Playlists" }).click();
+}
 
 // Proves the playlist round trip against a real vidra-core + PostgreSQL: a viewer
 // creates a playlist and adds a video from the watch page, the video then appears
@@ -46,7 +57,7 @@ test("create a playlist, add a video from the watch page, then remove it", async
   await added;
 
   // The playlist now contains the video (a fresh detail fetch from the backend).
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await openPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
   await expect(page.getByRole("heading", { name: videoTitle })).toBeVisible();
 
@@ -56,7 +67,7 @@ test("create a playlist, add a video from the watch page, then remove it", async
   );
   await page.getByRole("button", { name: `Remove ${videoTitle} from playlist` }).click();
   await removed;
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await openPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
   await expect(page.getByText("This playlist is empty")).toBeVisible();
 });
@@ -74,7 +85,7 @@ test("an owner can edit a playlist's title and visibility, and it persists", asy
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 
   // Create a playlist from the /playlists inline form.
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await openPlaylists(page);
   await page.getByLabel("Playlist title").fill(`Mix ${id}`);
   const created = page.waitForResponse(
     (r) => /\/api\/v1\/playlists$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
@@ -98,7 +109,7 @@ test("an owner can edit a playlist's title and visibility, and it persists", asy
 
   // Persisted: navigate away and back → a fresh backend detail fetch still shows
   // the new title and visibility.
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await openPlaylists(page);
   await page.getByRole("link", { name: new RegExp(`Renamed ${id}`) }).click();
   await expect(page.getByRole("heading", { name: `Renamed ${id}` })).toBeVisible();
   await expect(page.getByText(/· public/)).toBeVisible();
@@ -146,7 +157,7 @@ test("an owner can reorder playlist items, and the order persists", async ({ pag
 
   // Open the playlist detail via client-side nav (keeps the in-memory session):
   // initial order is [A, B].
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await openPlaylists(page);
   await page.getByRole("link", { name: /Order Mix/ }).click();
   await expect(page.getByRole("heading", { name: aTitle })).toBeVisible();
   await expect(page.getByRole("heading", { name: bTitle })).toBeVisible();
@@ -164,7 +175,7 @@ test("an owner can reorder playlist items, and the order persists", async ({ pag
   expect(detail.videos.map((v) => v.id)).toEqual([bId, aId]);
 
   // And a fresh UI refetch reflects it: B is now first, so its Move up is disabled.
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await openPlaylists(page);
   await page.getByRole("link", { name: /Order Mix/ }).click();
   await expect(page.getByRole("button", { name: `Move ${bTitle} up` })).toBeDisabled();
 });
@@ -185,7 +196,7 @@ test("a playlist cover uploaded from the detail page persists", async ({ page, r
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 
   // Create a PUBLIC playlist so the cover is readable via the public API.
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await openPlaylists(page);
   await page.getByLabel("Playlist title").fill(title);
   await page.getByLabel("Visibility").selectOption("public");
   const created = page.waitForResponse(

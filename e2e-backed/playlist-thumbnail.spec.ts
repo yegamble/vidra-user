@@ -1,6 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { API_URL, TINY_PNG_BASE64, uniqueId } from "./fixtures";
+
+// The backport-W0.2 redesign moved Playlists off the primary sidebar; it is now
+// reached from the Library hub. Navigate Library → Playlists with client-side
+// clicks so the in-memory session survives.
+async function openPlaylists(page: Page) {
+  await page.getByRole("link", { name: "Library" }).click();
+  await page.getByRole("link", { name: "Playlists" }).click();
+}
 
 // Regression lock for the playlist-cover flow a demo build flagged as 404ing.
 // The current code works; this proves the whole round trip against a real
@@ -31,7 +39,7 @@ test("a playlist cover uploaded on the detail page survives a refetch (no 404)",
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 
   // Create a PUBLIC playlist so its cover is readable via the public API.
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await openPlaylists(page);
   await page.getByLabel("Playlist title").fill(title);
   await page.getByLabel("Visibility").selectOption("public");
   const created = page.waitForResponse(
@@ -63,7 +71,7 @@ test("a playlist cover uploaded on the detail page survives a refetch (no 404)",
   // editor stays mounted). The cover editor seeds `shown` from the FRESH detail
   // fetch's has_thumbnail, so a re-rendered "Current cover" image proves the flag
   // round-tripped true — not just optimistic local state after the upload.
-  await page.getByRole("link", { name: "Playlists" }).click();
+  await openPlaylists(page);
   await page.getByRole("link", { name: new RegExp(title) }).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   await expect(page.getByRole("img", { name: "Current cover" })).toBeVisible();

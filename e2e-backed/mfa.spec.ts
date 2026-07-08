@@ -32,6 +32,28 @@ async function loginExpectingChallenge(page: Page, email: string, password: stri
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 }
 
+// The challenge's TOTP entry is the segmented OtpInput: a role=group named
+// "Authentication code" wrapping six single-digit boxes (each also substring-
+// named "Authentication code digit N"). Fill the boxes one digit at a time — the
+// key path a real user takes — instead of a single getByLabel, which now matches
+// the group plus all six boxes (7 elements → strict-mode violation).
+async function fillAuthenticationCode(page: Page, code: string) {
+  const boxes = page.getByRole("group", { name: "Authentication code" }).getByRole("textbox");
+  const digits = code.trim().split("");
+  for (let i = 0; i < digits.length; i++) {
+    await boxes.nth(i).fill(digits[i]);
+  }
+}
+
+// The recovery-code path is a distinct free-text field revealed by the
+// challenge's "Use a recovery code instead" toggle (recovery codes are not six
+// digits, so they never belong in the segmented input). Switch to it and submit.
+async function completeChallengeWithRecoveryCode(page: Page, recoveryCode: string) {
+  await page.getByRole("button", { name: "Use a recovery code instead" }).click();
+  await page.getByLabel("Recovery code").fill(recoveryCode.trim());
+  await page.getByRole("button", { name: "Verify code" }).click();
+}
+
 test("TOTP enroll -> logout -> login gated by a computed code; a recovery code is consumed", async ({
   page,
 }) => {
@@ -81,7 +103,7 @@ test("TOTP enroll -> logout -> login gated by a computed code; a recovery code i
   await signOut(page);
   await loginExpectingChallenge(page, email, password);
 
-  await page.getByLabel("Authentication code").fill(totpCode(secret));
+  await fillAuthenticationCode(page, totpCode(secret));
   await page.getByRole("button", { name: "Verify code" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   await expect(page.getByRole("link", { name: username })).toBeVisible();
@@ -93,8 +115,7 @@ test("TOTP enroll -> logout -> login gated by a computed code; a recovery code i
   // Recovery-code path: it completes the challenge and is consumed (single-use).
   await signOut(page);
   await loginExpectingChallenge(page, email, password);
-  await page.getByLabel("Authentication code").fill(recoveryCodes[0].trim());
-  await page.getByRole("button", { name: "Verify code" }).click();
+  await completeChallengeWithRecoveryCode(page, recoveryCodes[0]);
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 
   // The consumed code is reflected in the persisted status (10 -> 9), read
@@ -106,8 +127,7 @@ test("TOTP enroll -> logout -> login gated by a computed code; a recovery code i
   // And a used recovery code must NOT work again.
   await signOut(page);
   await loginExpectingChallenge(page, email, password);
-  await page.getByLabel("Authentication code").fill(recoveryCodes[0].trim());
-  await page.getByRole("button", { name: "Verify code" }).click();
+  await completeChallengeWithRecoveryCode(page, recoveryCodes[0]);
   await expect(page.getByText(/That code didn't work/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });

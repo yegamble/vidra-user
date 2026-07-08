@@ -26,6 +26,7 @@ const BTC = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2";
 test("donation addresses persist, show on public reads, and survive delete + reload", async ({
   page,
   request,
+  browser,
 }) => {
   const id = uniqueId();
   const username = `don${id}`;
@@ -51,21 +52,26 @@ test("donation addresses persist, show on public reads, and survive delete + rel
   await page.getByRole("link", { name: "Manage donation addresses" }).click();
   await expect(page.getByRole("heading", { name: "Donation addresses" })).toBeVisible();
 
-  // Add an account-level (profile) Ethereum address.
+  // Add an account-level (profile) Ethereum address. The DR redesign collapses
+  // the add-address form behind a dashed "Add address" disclosure button, so
+  // open it before filling the fields; the form's own submit is "Save address".
+  await page.getByRole("button", { name: "Add address" }).click();
   await page.getByLabel("Network").selectOption("ethereum");
   await page.getByLabel("Wallet address").fill(ETH);
   await page.getByLabel(/^Label/).fill("Profile tips");
-  await page.getByRole("button", { name: "Add address" }).click();
+  await page.getByRole("button", { name: "Save address" }).click();
   await expect(page.getByText(ETH)).toBeVisible();
   await expect(page.getByText("Unverified", { exact: true })).toBeVisible();
 
-  // Add a channel-scoped Bitcoin address.
+  // Add a channel-scoped Bitcoin address. A successful add closes the form back
+  // to the dashed button, so reopen the disclosure for the second address.
+  await page.getByRole("button", { name: "Add address" }).click();
   await page.getByLabel("Network").selectOption("bitcoin");
   await page.getByLabel("Wallet address").fill(BTC);
   await page.getByLabel(/^Label/).fill("Channel tips");
   // Option 0 is "Your profile"; option 1 is the seeded channel.
   await page.getByLabel("Show on").selectOption({ index: 1 });
-  await page.getByRole("button", { name: "Add address" }).click();
+  await page.getByRole("button", { name: "Save address" }).click();
   await expect(page.getByText(BTC)).toBeVisible();
 
   // Persisted: the API read shows BOTH rows for the owner.
@@ -84,14 +90,23 @@ test("donation addresses persist, show on public reads, and survive delete + rel
   const userPublic = await userDonationAddresses(request, userId);
   expect(userPublic.map((r) => r.address)).toContain(ETH);
 
-  // The public "Donate" affordance renders on the channel page and lists the address.
-  await page.goto(`/channels/${handle}`);
-  await page.getByRole("button", { name: "Donate" }).click();
-  const dialog = page.getByRole("dialog", { name: new RegExp(`Donate to Donate ${id}`) });
-  // The dialog lists each address in a read-only, copy-friendly <input>, so the
-  // address is the field's VALUE (not text) — assert on the labelled textbox.
-  await expect(dialog.getByRole("textbox", { name: /Bitcoin.*address/ })).toHaveValue(BTC);
-  await page.getByRole("button", { name: "Close" }).click();
+  // The public support affordance (DR5 redesign: a heart "Support" pill — the old
+  // "Donate" button) opens a dialog listing each public address as copy-friendly
+  // mono TEXT (no longer a read-only <input>). The Follow/Support/Message cluster
+  // is intentionally hidden on your OWN channel, so verify it as an anonymous
+  // visitor in a fresh browser context — leaving the owner's session on `page`
+  // untouched for the delete step below.
+  const origin = new URL(page.url()).origin;
+  const visitor = await browser.newContext({ baseURL: origin });
+  try {
+    const visitorPage = await visitor.newPage();
+    await visitorPage.goto(`/channels/${handle}`);
+    await visitorPage.getByRole("button", { name: "Support" }).click();
+    const dialog = visitorPage.getByRole("dialog", { name: `Support Donate ${id}` });
+    await expect(dialog.getByText(BTC)).toBeVisible();
+  } finally {
+    await visitor.close();
+  }
 
   // Delete the account-level address through the UI.
   await page.goto("/settings/donations");

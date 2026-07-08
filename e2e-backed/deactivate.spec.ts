@@ -31,8 +31,10 @@ test("deactivating the account prevents future logins", async ({ page }) => {
   // Deactivation signs the account out everywhere (the session is gone, so the
   // header no longer offers "Sign out"). We assert the absence of the session
   // rather than presence of a "Sign in" link, which is ambiguous now that several
-  // signed-out views render their own "Sign in" link.
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeHidden();
+  // signed-out views render their own "Sign in" link. Match the header's exact
+  // "Sign out" — the settings page also has a "Sign out of this device" button,
+  // which a substring match would collide with.
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeHidden();
 
   // A fresh login with the same credentials is refused — proof the deactivation
   // persisted in the database.

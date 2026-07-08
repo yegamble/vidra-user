@@ -30,8 +30,10 @@ test("profile edit persists across a fresh login", async ({ page }) => {
   await expect(page.getByText("Profile saved.")).toBeVisible();
 
   // Sign out, then sign back in — the fresh session is loaded from the database.
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  // Match the header's exact "Sign out": this runs on the settings page, which
+  // also renders a "Sign out of this device" button (a substring match collides).
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
