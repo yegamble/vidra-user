@@ -923,9 +923,76 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
       with rating/save specs (11/11). Pushed.
 
 ## DR3 — Shell: BottomTabBar + Header + Sidebar + Create sheet
-- [ ] Tab/sidebar/header icons → design paths; Create tab opens bottom sheet (Upload / Go
-      live / Open Studio); sidebar FOLLOWING pulsing live dot; row radius 9px.
-- [ ] Evidence + `npm run ci` + push.
+- [x] Tab/sidebar/header icons → design paths; Create tab opens bottom sheet (Upload / Go
+      live / Open Studio); sidebar FOLLOWING pulsing live dot; row radius 9px. **DONE
+      2026-07-07.** The three shell surfaces now render iconography from the shared
+      `components/icons` set (DR1's single source) instead of ad-hoc inline `<svg>`s, and
+      the Create tab opens a sheet instead of navigating.
+      • **Icons.** The **tab bar** glyphs were already the design paths (W0.3) — converted
+        the inline `tabIcon()` SVGs to `<HomeIcon/SearchIcon/PlusSquareIcon/BellIcon/
+        LibraryIcon>` components (Create = `PlusSquareIcon size=30 sw=1.5`, the design's
+        rounded plus-square). The **sidebar** was the real gap: it drew the OLD
+        `nav-links` single-path strings (RSS-style Subscriptions, bookmark Library,
+        video-camera Studio). Refactored `components/nav-links.ts` to carry an `Icon`
+        component ref per entry (Home→`HomeIcon`, Trending→`TrendingUpIcon`,
+        Subscriptions→`TvIcon`, Library→`LibraryIcon`, History→`ClockIcon`,
+        Messages→`MessageCircleIcon`, Studio→`VideoIcon`; Moderation→`ShieldIcon`,
+        Admin→`UsersIcon`; About→`InfoIcon`) so `Sidebar` renders the exact design glyphs
+        at 18px sw1.9. `nav-links` has exactly one consumer (`Sidebar`), so the shape
+        change is contained. The **header** desktop "+ Create" pill's inline plus →
+        `PlusIcon size=14 sw=2.2` (outlined-pill style kept).
+      • **Create sheet (new surface).** `components/CreateSheet.tsx` on the shared Modal
+        `sheet` skin (DR1 — grab handle, rounded-t-[22px], safe-area footer, backdrop +
+        Escape dismiss, focus-trap + restore-to-opener). The Create tab is now a
+        `<button aria-haspopup="dialog" aria-expanded>` (was a `<Link>` to /studio) that
+        opens it; three rows — **Upload a video** (`/studio#upload`, `UploadIcon`,
+        "Resumable, up to 8 GB") · **Go live** (`/studio#go-live`, red status dot [not a
+        glyph, per the design], "Stream via RTMP with optional replay") · **Open Studio**
+        (`/studio`, `VideoIcon`, "Manage videos, streams and captions") — each a `<Link>`
+        in a 40px `rounded-xl bg-surface-muted` tile that calls `onClose` on navigate.
+        `hideClose` (the design shows no X). Added `id="upload"`/`id="go-live"` +
+        `scroll-mt-20` anchors around the Upload/Live sections in `StudioView` so the rows
+        land in place (the app consolidates upload + go-live onto `/studio`; no standalone
+        `/upload` or `/go-live` route exists).
+      • **Row radius 9px.** Sidebar nav rows, About, Collapse, and `SidebarFollowing` rows:
+        `rounded-lg` (8px) → `rounded-[9px]` (design).
+      • **FOLLOWING pulsing live dot — NOT built (dependency recorded, not stubbed).**
+        Re-verified the contract FRESH against `vidra-core/api/openapi.yaml` at execution
+        time: the `/me/subscriptions` payload is `FollowedChannel = Channel & {followed_at}`
+        and `Channel` carries **no `is_live`/unread field** — there is no per-followed-
+        channel live signal anywhere. Per the truthfulness rule the dot stays deferred
+        (matches the existing `SidebarFollowing` W0.2 note); the buildable FOLLOWING delta
+        (row radius) shipped. **Backend dependency:** a live/unread flag on the followed-
+        channel list item.
+      • **Tests (unit + e2e, same slice).** New `components/CreateSheet.test.tsx` (4:
+        renders null when closed; dialog "Create" + the 3 rows with correct hrefs;
+        dismiss-on-navigate; Escape closes). Updated `e2e/mobile-nav.spec.ts`: Create is now
+        asserted as a **button** (not a link); split the old routing test into "Library tab
+        routes" + a new "Create tab opens the sheet, whose rows lead into the studio"
+        (asserts `aria-expanded` false→true, Upload/Go live rows visible, Open Studio →
+        `/studio`). `sidebar.spec`/`a11y-landmarks` are label/role-based → unaffected by the
+        icon swap and stay green. Extended `scripts/design-shots.mjs` with a `create-sheet`
+        area (opens the sheet via an act hook, guarded so the desktop capture — where the
+        bottom bar is hidden — is just the feed).
+      • **Deviation:** the header bell keeps its numeric unread-count badge (the W0.3-
+        accepted divergence from the mockup's plain red dot — more information, sanctioned
+        by design-system.md) — not regressed here.
+- [x] Evidence + `npm run ci` + push. **DONE 2026-07-07.** Before/after
+      `.ralph/design-review/dr3/{before,after}/` (home + shell, light+dark, 390/1280; after
+      adds `create-sheet`), git-ignored, captured against `PORT=3181 npm run dev` (stale
+      port killed before + server killed after). Read the after PNGs vs the design source:
+      the Create sheet matches the "Vidra App" create sheet exactly (grab handle + "Create"
+      + Upload/Go live[red dot]/Open Studio rows in 40px muted tiles over a dimmed feed);
+      the desktop sidebar now shows the design glyphs (house / trending-up / tv /
+      library-play / clock / message-circle / video) on rounded-9 rows — before = RSS
+      Subscriptions / bookmark Library / video-camera Studio; the mobile tab bar + large
+      "Vidra" title are unchanged (already design paths). Dark inverts via tokens; no
+      horizontal overflow at 390. **Gate:** full `npm run ci` GREEN on the final tree —
+      typecheck ✓ lint ✓ lint:icons ✓ unit **568/568** (49 files, +4 CreateSheet) ✓
+      `next build` ✓ mocked e2e **399/399 (0 failed)** on the first full run. Token grep
+      clean on the changed files: no raw palette/hex/`dark:` variants (the Go-live dot uses
+      the sanctioned `bg-danger-solid` token; the sheet scrim is the Modal's existing
+      black/45). Pushed.
 
 ## DR4 — Home/feed + Live rail (mobile + desktop)
 - [ ] Mobile single-column cards (16px thumbs, IPFS cube chip top-left, duration chip, 36px

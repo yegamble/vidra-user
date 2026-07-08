@@ -777,6 +777,28 @@ const AREAS = {
       );
     },
   },
+  // Create bottom sheet (design refresh DR3): the phone Create tab opens a sheet
+  // (Upload a video / Go live / Open Studio) instead of navigating. The act hook
+  // opens it — guarded so the desktop capture (where the bottom bar is hidden) is
+  // just the home feed.
+  "create-sheet": {
+    path: "/",
+    async mock(page) {
+      await page.route(/\/api\/v1\/videos(\?|$)/, (route) => route.fulfill({ json: SAMPLE_FEED }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG }),
+      );
+    },
+    async act(page) {
+      const create = page
+        .getByRole("navigation", { name: "Primary" })
+        .getByRole("button", { name: "Create" });
+      if (await create.isVisible()) {
+        await create.click();
+        await page.getByRole("dialog", { name: "Create" }).waitFor({ state: "visible" });
+      }
+    },
+  },
   // Signed-in desktop app shell (backport W0.2): exercises the sidebar FOLLOWING
   // group (GET /me/subscriptions) and the header's bell-with-dot + account menu.
   shell: {

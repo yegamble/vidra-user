@@ -144,13 +144,19 @@ function Studio() {
         onDeleted={(id) => setChannels((list) => list.filter((c) => c.id !== id))}
       />
       {channels.length > 0 ? (
-        <UploadSection key={`upload-${channelsKey}`} channels={channels} config={config} />
+        // #upload / #go-live anchors are the landing targets for the phone Create
+        // sheet's rows; scroll-mt clears the sticky app header.
+        <div id="upload" className="scroll-mt-20">
+          <UploadSection key={`upload-${channelsKey}`} channels={channels} config={config} />
+        </div>
       ) : null}
       {channels.length > 0 ? (
         <MyVideosSection key={`videos-${channelsKey}`} channels={channels} config={config} />
       ) : null}
       {channels.length > 0 ? (
-        <LiveStreamsSection key={`live-${channelsKey}`} channels={channels} />
+        <div id="go-live" className="scroll-mt-20">
+          <LiveStreamsSection key={`live-${channelsKey}`} channels={channels} />
+        </div>
       ) : null}
     </div>
   );

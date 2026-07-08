@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { AccountMenu } from "@/components/auth/AccountMenu";
+import { PlusIcon } from "@/components/icons";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchBox } from "@/components/SearchBox";
 
@@ -40,17 +41,7 @@ export function Header() {
           href="/studio"
           className="focus-ring hidden items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted sm:flex"
         >
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            className="h-3.5 w-3.5"
-          >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+          <PlusIcon size={14} strokeWidth={2.2} />
           Create
         </Link>
         <NotificationsBell />

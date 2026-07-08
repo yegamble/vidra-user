@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { InfoIcon } from "@/components/icons";
 import {
   ADMIN_LINK,
   MODERATION_LINK,
@@ -94,12 +95,7 @@ export function Sidebar() {
       </div>
       <div className="flex flex-col gap-0.5">
         <SidebarLink
-          item={{
-            href: "/about",
-            label: "About",
-            // Info glyph: circle with an i.
-            iconPath: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16v-4M12 8h.01",
-          }}
+          item={{ href: "/about", label: "About", Icon: InfoIcon }}
           collapsed={collapsed}
           active={pathname === "/about"}
         />
@@ -108,7 +104,7 @@ export function Sidebar() {
           onClick={toggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!collapsed}
-          className="focus-ring flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+          className="focus-ring flex items-center gap-3 rounded-[9px] px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
         >
           <svg
             aria-hidden
@@ -138,29 +134,19 @@ function SidebarLink({
   collapsed: boolean;
   active: boolean;
 }) {
+  const { Icon } = item;
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       title={collapsed ? item.label : undefined}
-      className={`focus-ring flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+      className={`focus-ring flex items-center gap-3 rounded-[9px] px-3 py-2 text-sm transition-colors ${
         active
           ? "bg-surface-muted font-semibold text-fg"
           : "font-medium text-fg-muted hover:bg-surface-muted hover:text-fg"
       }`}
     >
-      <svg
-        aria-hidden
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="h-[18px] w-[18px] shrink-0"
-      >
-        <path d={item.iconPath} />
-      </svg>
+      <Icon size={18} strokeWidth={1.9} className="shrink-0" />
       <span className={collapsed ? "sr-only" : "truncate"}>{item.label}</span>
     </Link>
   );

@@ -20,9 +20,12 @@ test("phones show the bottom tab bar, not a hamburger or the sidebar", async ({ 
   await page.goto("/");
   const tabBar = page.getByRole("navigation", { name: "Primary" });
   await expect(tabBar).toBeVisible();
-  for (const name of ["Home", "Search", "Create", "Inbox", "Library"]) {
+  // The four navigating destinations are links…
+  for (const name of ["Home", "Search", "Inbox", "Library"]) {
     await expect(tabBar.getByRole("link", { name })).toBeVisible();
   }
+  // …and Create is a button (it opens the Create bottom sheet, it does not navigate).
+  await expect(tabBar.getByRole("button", { name: "Create" })).toBeVisible();
   // No hamburger button, and sidebar-only destinations are not exposed.
   await expect(page.getByRole("button", { name: "Menu" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Playlists" })).toHaveCount(0);
@@ -57,7 +60,7 @@ test("the active tab is marked with aria-current and follows navigation", async 
   );
 });
 
-test("Library and Create tabs route to their destinations", async ({ page }) => {
+test("the Library tab routes to its destination", async ({ page }) => {
   await page.goto("/");
   const tabBar = page.getByRole("navigation", { name: "Primary" });
   await tabBar.getByRole("link", { name: "Library" }).click();
@@ -66,7 +69,26 @@ test("Library and Create tabs route to their destinations", async ({ page }) => 
     "aria-current",
     "page",
   );
-  await tabBar.getByRole("link", { name: "Create" }).click();
+});
+
+test("the Create tab opens the Create sheet, whose rows lead into the studio", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const tabBar = page.getByRole("navigation", { name: "Primary" });
+  const create = tabBar.getByRole("button", { name: "Create" });
+  await expect(create).toHaveAttribute("aria-expanded", "false");
+  await create.click();
+
+  // A dialog labeled "Create" with the three entry points (Upload / Go live /
+  // Open Studio) — none is stubbed; each deep-links into surfaces that exist.
+  const sheet = page.getByRole("dialog", { name: "Create" });
+  await expect(sheet).toBeVisible();
+  await expect(create).toHaveAttribute("aria-expanded", "true");
+  await expect(sheet.getByRole("link", { name: /Upload a video/ })).toBeVisible();
+  await expect(sheet.getByRole("link", { name: /Go live/ })).toBeVisible();
+
+  await sheet.getByRole("link", { name: /Open Studio/ }).click();
   await expect(page).toHaveURL(/\/studio$/);
 });
 
