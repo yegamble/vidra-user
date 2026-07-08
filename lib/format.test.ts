@@ -5,6 +5,7 @@ import {
   formatCount,
   formatDateTime,
   formatDuration,
+  formatMonthYear,
   formatUptime,
   relativeTime,
 } from "./format";
@@ -106,5 +107,18 @@ describe("formatDateTime", () => {
 
   it("returns empty for an unparseable timestamp", () => {
     expect(formatDateTime("not-a-date")).toBe("");
+  });
+});
+
+describe("formatMonthYear", () => {
+  it("renders a locale-formatted month + year with no day precision", () => {
+    const out = formatMonthYear("2026-07-10T14:30:00Z");
+    // Locale-dependent, so assert the stable parts: the year and no day number.
+    expect(out).toContain("2026");
+    expect(out).not.toMatch(/\b10\b/);
+  });
+
+  it("returns empty for an unparseable timestamp", () => {
+    expect(formatMonthYear("not-a-date")).toBe("");
   });
 });

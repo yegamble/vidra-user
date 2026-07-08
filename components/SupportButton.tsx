@@ -8,6 +8,7 @@ import { Badge, Modal } from "@/components/ui";
 import { QrCode } from "@/components/QrCode";
 import { api } from "@/lib/api";
 import type { DonationAddress } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { DONATION_NETWORKS, NETWORK_META } from "@/lib/donation-address";
 
 function fetchSource(source: DonateSource, signal: AbortSignal): Promise<DonationAddress[]> {
@@ -18,22 +19,31 @@ function fetchSource(source: DonateSource, signal: AbortSignal): Promise<Donatio
   return req.then((r) => r.addresses).catch(() => []);
 }
 
-// SupportButton is the design's watch/channel "Support" affordance (DR5): an
-// accent-filled heart pill that opens a crypto-donation dialog (QR tile + mono
-// address + copy + verified/unverified pill) bound to the public donation-address
-// reads. Display + copy only — Vidra is non-custodial and processes no payments
-// (P13). Renders NOTHING unless the entity exposes at least one public address,
-// so the accent action never opens an empty dialog. `name` is the entity being
-// supported (dialog heading). `label` lets a caller show "Support {name}".
+// SupportButton is the design's watch/channel "Support" affordance (DR5): a heart
+// pill that opens a crypto-donation dialog (QR tile + mono address + copy +
+// verified/unverified pill) bound to the public donation-address reads. Display +
+// copy only — Vidra is non-custodial and processes no payments (P13). Renders
+// NOTHING unless the entity exposes at least one public address, so the action
+// never opens an empty dialog. `name` is the entity being supported (dialog
+// heading). `label` lets a caller show "Support {name}".
+//
+// `variant` picks the trigger skin: "accent" (default — the watch action row's
+// accent-filled lead) or "outline" (the channel header cluster's hairline pill).
+// `compact` renders the channel's responsive icon-circle: a 34px heart-only circle
+// on phones (the label supplies the accessible name), a labelled pill from sm up.
 export function SupportButton({
   sources,
   name,
   label = "Support",
+  variant = "accent",
+  compact = false,
   className,
 }: {
   sources: DonateSource[];
   name: string;
   label?: string;
+  variant?: "accent" | "outline";
+  compact?: boolean;
   className?: string;
 }) {
   const [addresses, setAddresses] = useState<DonationAddress[]>([]);
@@ -64,13 +74,20 @@ export function SupportButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={
-          "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-accent-fg transition-colors hover:bg-accent/90 " +
-          (className ?? "")
-        }
+        aria-label={compact ? label : undefined}
+        className={cn(
+          "focus-ring flex shrink-0 items-center justify-center whitespace-nowrap rounded-full text-[13px] font-semibold transition-colors",
+          variant === "accent"
+            ? "bg-accent text-accent-fg hover:bg-accent/90"
+            : "border border-border bg-transparent text-fg hover:bg-surface-muted",
+          compact
+            ? "h-[34px] w-[34px] sm:h-auto sm:w-auto sm:gap-1.5 sm:px-4 sm:py-2"
+            : "gap-1.5 px-4 py-2",
+          className,
+        )}
       >
         <HeartIcon size={16} />
-        <span>{label}</span>
+        <span className={compact ? "hidden sm:inline" : undefined}>{label}</span>
       </button>
       {open ? (
         <SupportDialog addresses={addresses} name={name} onClose={() => setOpen(false)} />

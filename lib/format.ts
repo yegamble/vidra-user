@@ -89,6 +89,17 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+/**
+ * formatMonthYear renders an ISO timestamp as a "Month YYYY" label in the
+ * viewer's locale (e.g. "July 2026") — the "Joined …" affordance on a channel's
+ * About panel, where the day-level precision of formatDateTime is unwanted.
+ */
+export function formatMonthYear(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "long" });
+}
+
 /** formatDuration renders whole seconds as m:ss, or h:mm:ss past an hour. */
 export function formatDuration(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";

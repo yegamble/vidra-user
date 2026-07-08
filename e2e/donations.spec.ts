@@ -221,7 +221,7 @@ const channel = {
   created_at: new Date().toISOString(),
 };
 
-test("the channel Donate dialog lists an address and copies it", async ({ page }) => {
+test("the channel Support dialog lists an address and copies it", async ({ page }) => {
   await page.route(CH_DETAIL, (route) => route.fulfill({ json: channel }));
   await page.route(CH_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
   await page.route(CH_DONATIONS, (route) =>
@@ -237,23 +237,27 @@ test("the channel Donate dialog lists an address and copies it", async ({ page }
 
   await page.goto("/channels/ada");
 
-  const donate = page.getByRole("button", { name: "Donate" });
-  await expect(donate).toBeVisible();
-  await donate.click();
+  // The channel header's Support affordance (DR6) opens the shared crypto-donation
+  // dialog (QR tile + mono address + verified pill + copy).
+  const support = page.getByRole("button", { name: "Support" });
+  await expect(support).toBeVisible();
+  await support.click();
 
-  const dialog = page.getByRole("dialog", { name: "Donate to Ada Makes" });
+  const dialog = page.getByRole("dialog", { name: "Support Ada Makes" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText("Bitcoin (BTC)")).toBeVisible();
+  await expect(dialog.getByText(BTC)).toBeVisible();
+  await expect(dialog.getByRole("img", { name: /donation address QR/i })).toBeVisible();
   await expect(dialog.getByText("Verified", { exact: true })).toBeVisible();
   // The honesty line is present.
-  await expect(dialog.getByText(/Never send crypto you can't afford to lose/i)).toBeVisible();
+  await expect(dialog.getByText(/never holds or processes funds/i)).toBeVisible();
 
   await dialog.getByRole("button", { name: /Copy Bitcoin/ }).click();
   await expect(dialog.getByRole("button", { name: /Copy Bitcoin/ })).toHaveText("Copied");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(BTC);
 });
 
-test("no Donate affordance appears when a channel has no addresses", async ({ page }) => {
+test("no Support affordance appears when a channel has no addresses", async ({ page }) => {
   await page.route(CH_DETAIL, (route) => route.fulfill({ json: channel }));
   await page.route(CH_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
   await page.route(CH_DONATIONS, (route) => route.fulfill({ json: { addresses: [] } }));
@@ -261,5 +265,5 @@ test("no Donate affordance appears when a channel has no addresses", async ({ pa
 
   await page.goto("/channels/ada");
   await expect(page.getByRole("heading", { name: "Ada Makes" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Donate" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Support" })).toHaveCount(0);
 });

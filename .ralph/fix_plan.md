@@ -1260,7 +1260,63 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
       390px overflow.
 
 ## DR6 — Channel page
-- [ ] Banner + overlapping avatar, action cluster, underline tabs, 2/4-col grids. CI + push.
+- [x] Banner + overlapping avatar, action cluster, underline tabs, 2/4-col grids. CI + push.
+      **DONE 2026-07-08.** **What changed:**
+      (1) **Header cluster** (`components/ChannelView.tsx`) — reordered to the design's
+      Follow-first cluster and split the affordances into a responsive icon-circle
+      (mobile) / labelled-pill (desktop) treatment: **Follow** pill, **Support** (heart) and
+      **Message** (message-circle). Support now uses the shared DR5 `SupportButton` (new
+      `variant="outline"` + `compact` props) instead of the old `DonateButton`, so the
+      channel and watch surfaces share one crypto-donation dialog (QR + mono address +
+      verified pill, non-custodial copy). Message uses the existing `MessageButton` (new
+      `variant="pill"` + `compact` props) wired to the REAL `startConversation(owner_id)`
+      contract. The cluster is **owner-gated**: viewing your own channel hides Follow/
+      Support/Message (you can't follow, tip, or message yourself — messaging yourself is a
+      backend 422); the owner-only `ChannelLiveBadge` still self-gates and stays. Message
+      only renders for authenticated visitors (anon would 401 on start-conversation).
+      (2) **Banner + avatar** — banner 150px→190px (`h-[150px] sm:h-[190px]`), avatar ring
+      3px mobile / 4px desktop (`border-[3px] sm:border-4`), overlap unchanged; name+meta
+      reflow to the design's middle-column on desktop / below-the-row on mobile via flex
+      `order`. Meta line gained the **· N videos** count (derived from the loaded list —
+      the contract carries no `video_count`, so this is the honest listed count).
+      (3) **Underline tabs** — new `Videos | About` tab set on the shared a11y-correct
+      `ui/Tabs` (accent≡fg underline, roving tabindex, arrow keys). Videos = sort chips +
+      dense grid + Load more (the shipped client-side sort/reveal is preserved, moved into
+      the panel). About = a real facts card (**Joined** {month year}, **Followers**,
+      **Videos**), all from the public `Channel` payload + listed count.
+      (4) **Dense grid** — new `components/ChannelVideoCard.tsx` (compact 11px-radius thumb,
+      duration chip only, 2-line title, `N views · age` with age hidden on mobile) in a
+      **2-col mobile / 4-col desktop** grid, replacing the home feed's `VideoCard`+`VideoGrid`
+      (the design channel card drops the redundant avatar/channel row — every tile is the
+      same channel). New helper `lib/format.ts:formatMonthYear`.
+      **Unit (same slice):** `lib/format.test.ts` (+formatMonthYear), `components/ChannelVideoCard.test.tsx`
+      (new — title heading/link, views, duration chip, zero-duration + missing-views guards).
+      **e2e (same slice):** `e2e/channel.spec.ts` — meta now reads "@… · followers · N videos"
+      (existing substring assertions still hold), +3 tests (authed-visitor Follow/Support/Message
+      cluster; owner sees no cluster; About tab shows Joined/Followers/Videos and unmounts the
+      grid); `e2e/a11y.spec.ts` — new channel-page axe test (visitor cluster + tabs, signed in
+      as a non-owner via refresh→me); `e2e/donations.spec.ts` — the two channel tests migrated
+      from the old **Donate** affordance to the new **Support** dialog (button/dialog/QR/copy).
+      **Evidence:** `scripts/design-shots.mjs` — the `channel` area now mocks donation addresses
+      (so Support renders) and a new `channel-about` area drives the About tab. BEFORE
+      (`.ralph/design-review/w0/channel/before/`) vs AFTER (`channel/*`, `channel-about/*`),
+      light+dark × mobile+desktop (git-ignored). Read the AFTER PNGs against `Vidra App.dc.html`
+      / `Vidra Desktop.dc.html` channel screens: mobile icon-circle cluster + 2-col grid,
+      desktop labelled-pill cluster + 4-col grid, underline tabs, overlapping avatar, About
+      facts card; dark flips via tokens (Follow inverts per the monochrome accent); no
+      horizontal overflow at 390px.
+      **Gate:** full `npm run ci` green on the final tree — typecheck ✓ lint ✓ lint:icons ✓
+      unit **602/602** ✓ `next build` ✓ mocked e2e **415/415** (0 failed, no flakes) ✓.
+      **Deviations / dependencies:** (1) **Playlists tab OMITTED** — the design's third tab
+      (Videos/Playlists/About) has **no contract**: only `/me/playlists` (caller-only) +
+      create/get-by-id exist; there is no endpoint to list *another* channel's public
+      playlists ⇒ backend dependency (a `GET /channels/{handle}/playlists`), not stubbed
+      (working-rule: aspirational items are not faked). Videos + About are the truthful pair.
+      (2) The design's floating in-banner **back button** is a mockup full-screen-overlay
+      artifact; our channel route lives inside the persistent Header + BottomTabBar shell, so
+      it is intentionally not added (redundant with the shell's nav). (3) `components/DonateButton.tsx`
+      is now unused as a rendered component (only its `DonateSource` type is imported by
+      Support/Watch); left in place for the DR13 dead-code sweep rather than deleted here.
 
 ## DR7 — Library / History / Playlists / Search
 - [ ] Library rails (white progress only if resume % is real — verify §5.6), playlist/saved

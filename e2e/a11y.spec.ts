@@ -234,6 +234,66 @@ test("the studio page passes axe (signed in, channels + create form)", async ({ 
   await expectNoSevereViolations(page);
 });
 
+test("the channel page passes axe (visitor cluster + tabs)", async ({ page }) => {
+  // A fresh page load re-boots the auth store, so land authed via
+  // /auth/refresh → /auth/me (design-shots technique) instead of the login UI.
+  // The signed-in "u1" is NOT the owner ("u9"), so the full visitor action
+  // cluster (Follow / Support / Message) and the underline tabs all render.
+  const me = session("user").user;
+  await page.route(/\/api\/v1\/auth\/refresh$/, (route) => route.fulfill({ json: session("user") }));
+  await page.route(/\/api\/v1\/auth\/me$/, (route) => route.fulfill({ json: me }));
+  await page.route(UNREAD, (route) => route.fulfill({ json: { unread_count: 0 } }));
+  await page.route(/\/api\/v1\/me\/subscriptions(\?|$)/, (route) =>
+    route.fulfill({ json: { channels: [], limit: 15, offset: 0 } }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada$/, (route) =>
+    route.fulfill({
+      json: {
+        id: "c1",
+        owner_id: "u9",
+        handle: "ada",
+        display_name: "Ada Makes",
+        description: "Making things, on camera.",
+        follower_count: 1500,
+        created_at: "2024-03-10T00:00:00Z",
+        has_avatar: false,
+        has_banner: false,
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada\/videos(\?|$)/, (route) =>
+    route.fulfill({ json: { videos: [video("v1", "Building a Desk", 10), video("v2", "Encore", 8)] } }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada\/donation-addresses/, (route) =>
+    route.fulfill({
+      json: {
+        addresses: [
+          {
+            id: "da1",
+            owner_id: "u9",
+            network: "bitcoin",
+            address: "bc1qexampleaddress",
+            label: "",
+            verified: false,
+            created_at: new Date().toISOString(),
+          },
+        ],
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/users\/u9\/donation-addresses/, (route) =>
+    route.fulfill({ json: { addresses: [], limit: 20, offset: 0 } }),
+  );
+  await page.route(/\/avatar/, (route) => route.abort());
+
+  await page.goto("/channels/ada");
+  await expect(page.getByRole("heading", { name: "Ada Makes" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Support" })).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
 test("the messages page passes axe (signed in, inbox rendered)", async ({ page }) => {
   await signIn(page, "user");
   await page.route(/\/api\/v1\/me\/conversations(\?|$)/, (route) =>

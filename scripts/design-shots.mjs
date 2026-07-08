@@ -1146,9 +1146,11 @@ const AREAS = {
       await page.getByTestId("player-end-card").waitFor({ state: "visible" });
     },
   },
-  // Channel page (backport W0.6): banner/avatar header, Follow affordance, sort
-  // chips, and a home-consistent video grid. Authed so the Follow button (not
-  // the signed-out prompt) renders.
+  // Channel page (design refresh DR6): banner + overlapping avatar, the visitor
+  // action cluster (Follow + Support/Message icon-circles on mobile, labelled
+  // pills on desktop), underline Videos/About tabs, and the dense 2-col/4-col
+  // grid. Authed as a NON-owner (SAMPLE_USER u1 ≠ SAMPLE_CHANNEL owner u9) so the
+  // whole cluster renders; a public donation address lights up Support.
   channel: {
     path: "/channels/grade-house",
     async mock(page) {
@@ -1159,6 +1161,25 @@ const AREAS = {
       await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
         route.fulfill({ json: SAMPLE_CHANNEL_VIDEOS }),
       );
+      await page.route(/\/api\/v1\/channels\/grade-house\/donation-addresses/, (route) =>
+        route.fulfill({ json: SAMPLE_DONATIONS }),
+      );
+      await page.route(/\/api\/v1\/users\/u9\/donation-addresses/, (route) =>
+        route.fulfill({ json: { addresses: [], limit: 20, offset: 0 } }),
+      );
+    },
+  },
+  // Channel page — About tab (DR6): the underline tab switched to About, showing
+  // the channel's real facts card (Joined / Followers / Videos). Reuses the
+  // channel mock; the act hook selects the tab.
+  "channel-about": {
+    path: "/channels/grade-house",
+    async mock(page) {
+      await AREAS.channel.mock(page);
+    },
+    async act(page) {
+      await page.getByRole("tab", { name: "About" }).click();
+      await page.getByRole("tabpanel").getByText("Joined").waitFor({ state: "visible" });
     },
   },
   // Search results (backport W0.7): the dense thumbnail-left row list plus the
