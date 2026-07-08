@@ -220,6 +220,27 @@ test("the settings page passes axe (signed in)", async ({ page }) => {
   await expectNoSevereViolations(page);
 });
 
+test("the playback settings page passes axe (grouped toggles + selects)", async ({ page }) => {
+  await signIn(page, "user");
+  await page.route(/\/api\/v1\/me\/player-settings$/, (route) =>
+    route.fulfill({
+      json: {
+        autoplay_next: true,
+        default_speed: 1.5,
+        default_quality: "1080p",
+        captions_default: false,
+        theater_default: true,
+      },
+    }),
+  );
+  // Client-side nav (avatar → settings → Playback) keeps the in-memory session.
+  await page.getByRole("link", { name: "boss" }).click();
+  await page.getByRole("link", { name: "Manage playback settings" }).click();
+  await expect(page.getByRole("switch", { name: "Autoplay next" })).toBeVisible();
+  await expect(page.getByLabel("Default speed")).toHaveValue("1.5");
+  await expectNoSevereViolations(page);
+});
+
 test("the studio page passes axe (signed in, channels + create form)", async ({ page }) => {
   await signIn(page, "user");
   await page.route(/\/api\/v1\/me\/channels$/, (route) =>

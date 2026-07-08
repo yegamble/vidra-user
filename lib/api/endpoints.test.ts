@@ -1129,6 +1129,19 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ prefs: { follow: false } });
   });
 
+  it("getPlayerSettings targets the player-settings endpoint", async () => {
+    await api.getPlayerSettings();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/player-settings");
+  });
+
+  it("updatePlayerSettings PUTs only the changed field (merge)", async () => {
+    await api.updatePlayerSettings({ default_speed: 1.5 });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/player-settings");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ default_speed: 1.5 });
+  });
+
   it("deleteReport DELETEs the report by id", async () => {
     await api.deleteReport("r1");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

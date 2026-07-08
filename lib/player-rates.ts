@@ -8,6 +8,11 @@
 // vidra-core W1.C3 server-side validation must all agree with this list — keep
 // them in lockstep.
 
+import {
+  PLAYER_SETTINGS_EVENT,
+  getPlayerSettingsSnapshot,
+} from "@/lib/player-settings";
+
 /** The selectable playback rates (native video.playbackRate), 0.25×–4×. */
 export const PLAYBACK_RATES = [
   0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4,
@@ -19,6 +24,13 @@ export const DEFAULT_PLAYBACK_RATE = 1;
 /** True when `rate` is exactly one of the selectable rungs. */
 export function isPlaybackRate(rate: number): boolean {
   return (PLAYBACK_RATES as readonly number[]).includes(rate);
+}
+
+/** normalizePlaybackRate coerces any value to a valid rung: an off-ladder or
+ * non-finite input (a corrupt stored value, or a bad server default_speed) falls
+ * back to normal speed — the "invalid stored speed → 1" rule W1.6 requires. */
+export function normalizePlaybackRate(rate: number): number {
+  return isPlaybackRate(rate) ? rate : DEFAULT_PLAYBACK_RATE;
 }
 
 /** The button/menu label for a rate, e.g. `1×`, `1.5×`, `0.25×`. */
@@ -43,53 +55,59 @@ export function stepPlaybackRate(current: number, direction: number): number {
   return down ?? PLAYBACK_RATES[0];
 }
 
-// --- session persistence -----------------------------------------------------
-// Stop-gap until the signed-in per-user player settings land (W1.U6 wires
-// GET/PUT /api/v1/me/player-settings, backed by vidra-core W1.C3). Until then the
-// chosen speed is remembered for the browsing session only (sessionStorage), so
-// it survives reloads/navigations within the tab but never leaks past it and
-// never masks a future server-side default. DEPENDENCY (recorded): W1.U6
-// replaces this with the effective per-user `default_speed`.
+// --- session + per-user persistence ------------------------------------------
+// The chosen speed is remembered for the browsing SESSION (sessionStorage), so it
+// survives reloads/navigations within the tab but never leaks past it. This is
+// the in-session OVERRIDE layer: a value the user picked this session wins. When
+// no session value is stored, the fallback is the signed-in user's effective
+// `default_speed` (GET /api/v1/me/player-settings, hydrated into
+// lib/player-settings), or the baked default for signed-out users — so a fresh
+// (untouched) session honours the per-user default.
 //
 // Read through useSyncExternalStore (the house pattern — see Sidebar's collapse
-// preference): serverRate is the SSR snapshot (default), readStoredRate the
+// preference): serverRate is the SSR snapshot (baked default), readStoredRate the
 // client snapshot after hydration (no server/client render mismatch), and
 // storeRate writes + broadcasts so every player in the tab re-reads at once.
+// subscribeRate also re-reads when the per-user settings hydrate.
 
 const RATE_KEY = "vidra.player.speed";
 const RATE_EVENT = "vidra:player-speed";
 
-/** subscribeRate notifies on any speed change (this tab via the custom event, or
- * another tab via `storage`). For useSyncExternalStore. */
+/** subscribeRate notifies on any speed change (this tab via the custom event,
+ * another tab via `storage`, or the per-user settings hydrating). */
 export function subscribeRate(onChange: () => void): () => void {
   window.addEventListener("storage", onChange);
   window.addEventListener(RATE_EVENT, onChange);
+  window.addEventListener(PLAYER_SETTINGS_EVENT, onChange);
   return () => {
     window.removeEventListener("storage", onChange);
     window.removeEventListener(RATE_EVENT, onChange);
+    window.removeEventListener(PLAYER_SETTINGS_EVENT, onChange);
   };
 }
 
-/** serverRate is the SSR snapshot for useSyncExternalStore — always the default,
- * so the server HTML never disagrees with the pre-hydration client. */
+/** serverRate is the SSR snapshot for useSyncExternalStore — always the baked
+ * default, so the server HTML never disagrees with the pre-hydration client. */
 export function serverRate(): number {
   return DEFAULT_PLAYBACK_RATE;
 }
 
 /**
- * readStoredRate returns the session's remembered rate, or the default when
- * nothing valid is stored (unset, corrupt, or an off-ladder value — the same
- * "invalid stored speed → 1" guard W1.U6 applies to the server value). Safe when
- * storage is unavailable (private mode).
+ * readStoredRate returns the session's remembered rate; when none is stored
+ * (unset, corrupt, or an off-ladder value) it falls back to the effective
+ * per-user `default_speed` (baked default for signed-out users), normalized so
+ * an invalid server value still lands on 1. Safe when storage is unavailable
+ * (private mode).
  */
 export function readStoredRate(): number {
+  const fallback = normalizePlaybackRate(getPlayerSettingsSnapshot().default_speed);
   try {
     const raw = window.sessionStorage.getItem(RATE_KEY);
-    if (raw === null) return DEFAULT_PLAYBACK_RATE;
+    if (raw === null) return fallback;
     const n = Number(raw);
-    return isPlaybackRate(n) ? n : DEFAULT_PLAYBACK_RATE;
+    return isPlaybackRate(n) ? n : fallback;
   } catch {
-    return DEFAULT_PLAYBACK_RATE;
+    return fallback;
   }
 }
 

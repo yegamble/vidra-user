@@ -38,6 +38,8 @@ import {
   subscribeTheater,
   toggleTheater,
 } from "@/lib/player-theater";
+import { matchQualityLevel, usePlayerSettings } from "@/lib/player-settings";
+import { AUTO_LEVEL } from "@/lib/hls";
 import { readBuffered, stepVolume } from "@/lib/player-ui";
 import {
   SHORTCUT_IGNORE_SELECTOR,
@@ -152,6 +154,14 @@ export function VideoPlayer({
     readStoredAutoplay,
     serverAutoplay,
   );
+
+  // The signed-in user's effective player defaults (PLAY-07 / W1.6). speed,
+  // theater and autoplay flow through the session stores above (whose fallback is
+  // the per-user default); default_quality and captions_default are consumed
+  // directly here, applied once per video on load. Baked defaults (quality
+  // "auto", captions off) until the watch page hydrates the settings, so a
+  // signed-out player is unchanged.
+  const settings = usePlayerSettings();
 
   // End card shown when the media element fires `ended`. Set only by the `ended`
   // event; cleared when playback (re)starts (the `play`/`loadstart` events), or
@@ -387,6 +397,37 @@ export function VideoPlayer({
     el.defaultPlaybackRate = speed;
     el.playbackRate = speed;
   }, [speed, playback.src, videoRef]);
+
+  // Apply the per-user default quality (PLAY-07) once the HLS levels parse, once
+  // per video: a stored rung this video actually offers switches to it; "auto"
+  // (or an unavailable rung) stays adaptive. Guarded per video id so a later
+  // manual pick in the quality menu is never overridden.
+  const appliedQualityRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (appliedQualityRef.current === video.id) return;
+    if (playback.levels.length === 0) return; // levels not parsed yet
+    appliedQualityRef.current = video.id;
+    const target = matchQualityLevel(settings.default_quality, playback.levels);
+    if (target !== AUTO_LEVEL) playback.setLevel(target);
+  }, [playback, settings.default_quality, video.id]);
+
+  // Apply the per-user "captions on by default" (PLAY-07) once per video when a
+  // caption track exists: show the first track. Guarded per video id so turning
+  // captions back off (or a later track change) doesn't re-enable them.
+  const appliedCaptionsRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!settings.captions_default) return;
+    if (tracks.length === 0) return;
+    if (appliedCaptionsRef.current === video.id) return;
+    const el = videoRef.current;
+    if (!el) return;
+    const list = Array.from(el.textTracks);
+    if (list.length === 0) return; // <track>s not attached yet — retry on change
+    appliedCaptionsRef.current = video.id;
+    for (const t of list) t.mode = "disabled";
+    list[0].mode = "showing";
+    setCaptionsOn(true);
+  }, [settings.captions_default, tracks.length, video.id, videoRef]);
 
   // Reflect fullscreen changes (including exits via Esc / browser UI) on the
   // container so the toggle's aria-pressed / icon stay truthful.

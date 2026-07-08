@@ -10,23 +10,31 @@
 // lib/player-rates' speed store), so the button's aria-pressed and the page
 // layout stay in lockstep without prop-drilling or a context provider.
 //
-// Persistence is session-only in this slice (survives reloads/navigations within
-// the tab, never leaks past it). DEPENDENCY (recorded): W1.U6's signed-in
-// `theater_default` (GET/PUT /me/player-settings, backed by vidra-core W1.C3)
-// supersedes this session stop-gap. Deviation from the upstream plan's
-// `?theater=1` URL param — recorded: URL params leak into shares.
+// Persistence is session-only for an in-session OVERRIDE (survives reloads/
+// navigations within the tab, never leaks past it). When no session value is
+// stored, the fallback is the signed-in user's effective `theater_default`
+// (GET /api/v1/me/player-settings, hydrated into lib/player-settings), or off for
+// signed-out users. Deviation from the upstream plan's `?theater=1` URL param —
+// recorded: URL params leak into shares.
+
+import {
+  PLAYER_SETTINGS_EVENT,
+  getPlayerSettingsSnapshot,
+} from "@/lib/player-settings";
 
 const THEATER_KEY = "vidra.theater";
 const THEATER_EVENT = "vidra:theater";
 
 /** subscribeTheater notifies on any theater change (this tab via the custom
- * event, or another tab via `storage`). For useSyncExternalStore. */
+ * event, another tab via `storage`, or the per-user settings hydrating). */
 export function subscribeTheater(onChange: () => void): () => void {
   window.addEventListener("storage", onChange);
   window.addEventListener(THEATER_EVENT, onChange);
+  window.addEventListener(PLAYER_SETTINGS_EVENT, onChange);
   return () => {
     window.removeEventListener("storage", onChange);
     window.removeEventListener(THEATER_EVENT, onChange);
+    window.removeEventListener(PLAYER_SETTINGS_EVENT, onChange);
   };
 }
 
@@ -37,15 +45,19 @@ export function serverTheater(): boolean {
 }
 
 /**
- * readStoredTheater returns the session's remembered theater state. Anything but
- * the exact stored "on" marker (unset, "0", or a corrupt value) reads as off.
- * Safe when storage is unavailable (private mode).
+ * readStoredTheater returns the session's remembered theater state: the exact
+ * "1"/"0" markers win (an in-session choice); when unset — or a corrupt value —
+ * it falls back to the effective per-user `theater_default` (off for signed-out
+ * users). Safe when storage is unavailable (private mode).
  */
 export function readStoredTheater(): boolean {
   try {
-    return window.sessionStorage.getItem(THEATER_KEY) === "1";
+    const raw = window.sessionStorage.getItem(THEATER_KEY);
+    if (raw === "1") return true;
+    if (raw === "0") return false;
+    return getPlayerSettingsSnapshot().theater_default;
   } catch {
-    return false;
+    return getPlayerSettingsSnapshot().theater_default;
   }
 }
 

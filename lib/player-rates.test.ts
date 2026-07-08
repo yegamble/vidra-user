@@ -5,11 +5,14 @@ import {
   DEFAULT_PLAYBACK_RATE,
   PLAYBACK_RATES,
   isPlaybackRate,
+  normalizePlaybackRate,
   rateLabel,
   readStoredRate,
   stepPlaybackRate,
   storeRate,
 } from "./player-rates";
+import { hydratePlayerSettings, resetPlayerSettings } from "./player-settings";
+import { DEFAULT_PLAYER_SETTINGS } from "./player-settings";
 
 describe("PLAYBACK_RATES ladder", () => {
   it("is the full 0.25×–4× mined ladder in ascending order", () => {
@@ -59,8 +62,22 @@ describe("stepPlaybackRate", () => {
   });
 });
 
+describe("normalizePlaybackRate", () => {
+  it("keeps a valid rung and coerces anything else to normal speed", () => {
+    expect(normalizePlaybackRate(1.5)).toBe(1.5);
+    expect(normalizePlaybackRate(0.25)).toBe(0.25);
+    // off-ladder / non-finite / bad server value → 1 (the W1.6 guard)
+    expect(normalizePlaybackRate(1.1)).toBe(DEFAULT_PLAYBACK_RATE);
+    expect(normalizePlaybackRate(99)).toBe(DEFAULT_PLAYBACK_RATE);
+    expect(normalizePlaybackRate(Number.NaN)).toBe(DEFAULT_PLAYBACK_RATE);
+  });
+});
+
 describe("session persistence", () => {
-  afterEach(() => window.sessionStorage.clear());
+  afterEach(() => {
+    window.sessionStorage.clear();
+    resetPlayerSettings();
+  });
 
   it("returns the default when nothing is stored", () => {
     expect(readStoredRate()).toBe(DEFAULT_PLAYBACK_RATE);
@@ -77,6 +94,20 @@ describe("session persistence", () => {
     window.sessionStorage.setItem("vidra.player.speed", "banana");
     expect(readStoredRate()).toBe(DEFAULT_PLAYBACK_RATE);
     window.sessionStorage.setItem("vidra.player.speed", "1.1");
+    expect(readStoredRate()).toBe(DEFAULT_PLAYBACK_RATE);
+  });
+
+  it("falls back to the hydrated per-user default_speed when no session value is stored", () => {
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, default_speed: 1.5 });
+    // no session value → the per-user default wins
+    expect(readStoredRate()).toBe(1.5);
+    // an in-session pick still overrides the per-user default
+    storeRate(2);
+    expect(readStoredRate()).toBe(2);
+  });
+
+  it("normalizes an invalid hydrated default_speed back to 1", () => {
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, default_speed: 1.1 });
     expect(readStoredRate()).toBe(DEFAULT_PLAYBACK_RATE);
   });
 });

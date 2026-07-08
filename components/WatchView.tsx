@@ -37,6 +37,7 @@ import type { Channel, Video, VideoConfigResponse } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { hydratePlayerSettings, resetPlayerSettings } from "@/lib/player-settings";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { parseStartTime } from "@/lib/start-time";
 
@@ -55,6 +56,7 @@ const RESUME_MIN_SECONDS = 5;
 // their history and can be resumed) and offers a Resume control from the saved
 // position.
 export function WatchView({ id }: { id: string }) {
+  const { status: authStatus } = useSession();
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<Video | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -111,6 +113,27 @@ export function WatchView({ id }: { id: string }) {
       });
     return () => controller.abort();
   }, [id, reloadKey]);
+
+  // Hydrate the signed-in user's player settings (PLAY-07 / W1.6) so the bespoke
+  // shell starts at their default speed, quality, captions and theater mode.
+  // Signed-out (or on sign-out): reset to the baked defaults so a shared tab
+  // never inherits the previous user's preferences. Failures are silent — the
+  // player just keeps the baked defaults.
+  useEffect(() => {
+    if (authStatus === "restoring") return;
+    if (authStatus !== "authed") {
+      resetPlayerSettings();
+      return;
+    }
+    const controller = new AbortController();
+    api
+      .getPlayerSettings(controller.signal)
+      .then((s) => hydratePlayerSettings(s))
+      .catch(() => {
+        /* keep the baked defaults on failure */
+      });
+    return () => controller.abort();
+  }, [authStatus]);
 
   const hasTaxonomy = Boolean(video && (video.category || video.language || video.license));
   useEffect(() => {

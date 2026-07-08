@@ -5,6 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VideoPlayer, type CaptionTrack } from "./VideoPlayer";
 import { api, type Video } from "@/lib/api";
+import {
+  DEFAULT_PLAYER_SETTINGS,
+  hydratePlayerSettings,
+  resetPlayerSettings,
+} from "@/lib/player-settings";
 
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -63,6 +68,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   push.mockClear();
   window.sessionStorage.clear();
+  resetPlayerSettings(); // drop any per-user settings a test hydrated
   // Undo any PiP capability stubs a test installed.
   delete (document as unknown as { pictureInPictureEnabled?: boolean }).pictureInPictureEnabled;
   delete (document as unknown as { pictureInPictureElement?: unknown }).pictureInPictureElement;
@@ -137,6 +143,24 @@ describe("VideoPlayer shell", () => {
     const video = container.querySelector("video") as HTMLVideoElement;
     expect(screen.getByRole("button", { name: "Speed: 2×" })).toBeTruthy();
     expect(video.playbackRate).toBe(2);
+  });
+
+  it("starts at the signed-in user's default speed (PLAY-07) when no session pick exists", () => {
+    // The watch page hydrates the per-user settings; the shell reads default_speed
+    // through the speed store's fallback.
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, default_speed: 1.5 });
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    expect(screen.getByRole("button", { name: "Speed: 1.5×" })).toBeTruthy();
+    expect(video.playbackRate).toBe(1.5);
+  });
+
+  it("opens in theater by default (PLAY-07) when the user's theater_default is set", () => {
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, theater_default: true });
+    render(<Harness />);
+    expect(
+      screen.getByRole("button", { name: "Theater mode" }).getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("shows a Theater toggle on the watch variant whose aria-pressed follows the session store", () => {

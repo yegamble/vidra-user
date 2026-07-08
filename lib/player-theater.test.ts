@@ -8,9 +8,15 @@ import {
   subscribeTheater,
   toggleTheater,
 } from "./player-theater";
+import {
+  DEFAULT_PLAYER_SETTINGS,
+  hydratePlayerSettings,
+  resetPlayerSettings,
+} from "./player-settings";
 
 afterEach(() => {
   window.sessionStorage.clear();
+  resetPlayerSettings();
   vi.restoreAllMocks();
 });
 
@@ -41,6 +47,14 @@ describe("player-theater store", () => {
     window.sessionStorage.setItem("vidra.theater", "yes");
     expect(readStoredTheater()).toBe(false);
     window.sessionStorage.setItem("vidra.theater", "true");
+    expect(readStoredTheater()).toBe(false);
+  });
+
+  it("falls back to the hydrated per-user theater_default when no session value is stored", () => {
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, theater_default: true });
+    expect(readStoredTheater()).toBe(true);
+    // an explicit in-session choice still wins over the per-user default
+    setTheater(false);
     expect(readStoredTheater()).toBe(false);
   });
 

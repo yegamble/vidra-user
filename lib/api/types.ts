@@ -284,6 +284,10 @@ export type QuotaStatus = Schemas["QuotaStatus"];
 export type NotificationPrefsResponse = Schemas["NotificationPrefsResponse"];
 export type UpdateNotificationPrefsRequest = Schemas["UpdateNotificationPrefsRequest"];
 
+// --- Player settings (PLAY-07) ----------------------------------------------
+export type PlayerSettings = Schemas["PlayerSettings"];
+export type UpdatePlayerSettingsRequest = Schemas["UpdatePlayerSettingsRequest"];
+
 // --- Quarantine -------------------------------------------------------------
 export type QuarantinedVideo = Schemas["QuarantinedVideo"];
 export type QuarantinedVideoListResponse = Schemas["QuarantinedVideoListResponse"];

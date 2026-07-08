@@ -85,6 +85,8 @@ import type {
   CreatePlaylistRequest,
   NotificationListResponse,
   NotificationPrefsResponse,
+  PlayerSettings,
+  UpdatePlayerSettingsRequest,
   Playlist,
   QuarantinedVideoListResponse,
   RejectQuarantinedVideoRequest,
@@ -247,6 +249,28 @@ export const api = {
    */
   getMyQuota: (signal?: AbortSignal) =>
     apiRequest<QuotaStatus>("/api/v1/me/quota", { signal }),
+
+  /**
+   * GET /api/v1/me/player-settings — the caller's effective player defaults
+   * (PLAY-07, auth): autoplay_next, default_speed, default_quality,
+   * captions_default, theater_default. Always 200 with the full object (a user
+   * who never saved gets the built-in defaults). The bespoke player hydrates
+   * from this on the watch page; the settings surface edits it.
+   */
+  getPlayerSettings: (signal?: AbortSignal) =>
+    apiRequest<PlayerSettings>("/api/v1/me/player-settings", { signal }),
+
+  /**
+   * PUT /api/v1/me/player-settings — MERGE update (auth): send only the changed
+   * field(s); omitted fields keep their stored value. Returns the full effective
+   * object after the merge. 400 on an invalid default_speed (off the shared
+   * ladder) or default_quality (not "auto" / not a rendition height).
+   */
+  updatePlayerSettings: (patch: UpdatePlayerSettingsRequest) =>
+    apiRequest<PlayerSettings>("/api/v1/me/player-settings", {
+      method: "PUT",
+      body: patch,
+    }),
 
   // --- Donation addresses (P13, NON-CUSTODIAL display-only) ---------------
   // Vidra never holds funds, balances, or private keys and processes no

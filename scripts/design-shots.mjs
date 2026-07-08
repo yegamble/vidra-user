@@ -1479,6 +1479,27 @@ const AREAS = {
       );
     },
   },
+  // Player settings (W1.6 / PLAY-07): the design's grouped-rows card — Autoplay
+  // next / Default speed / Default quality / Captions / Theater — bound to
+  // GET/PUT /me/player-settings. Auth-gated; shows non-default values so the
+  // toggles + selects read as populated.
+  "settings-playback": {
+    path: "/settings/playback",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/player-settings$/, (route) =>
+        route.fulfill({
+          json: {
+            autoplay_next: true,
+            default_speed: 1.5,
+            default_quality: "1080p",
+            captions_default: false,
+            theater_default: true,
+          },
+        }),
+      );
+    },
+  },
   // Messaging thread (backport W0.10 / Messaging v2): the thread-view core —
   // grouped runs, day/gap separators, other-party run avatars, quiet "Seen".
   // Authed so the thread (not the sign-in prompt) renders.

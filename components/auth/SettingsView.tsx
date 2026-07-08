@@ -165,6 +165,12 @@ export function SettingsView() {
           full-row links, each a title + muted sub-line + trailing chevron. */}
       <SettingsGroup label="Account">
         <SettingsNavRow
+          href="/settings/playback"
+          action="Manage playback settings"
+          title="Playback"
+          desc="Autoplay, default speed and quality, captions and theater defaults."
+        />
+        <SettingsNavRow
           href="/settings/security"
           action="Manage security settings"
           title="Security"

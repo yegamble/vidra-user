@@ -631,6 +631,29 @@ export async function notificationPrefs(
   return ((await res.json()) as { prefs: Record<string, boolean> }).prefs;
 }
 
+/** playerSettings reads the caller's persisted player settings via the API. */
+export async function playerSettings(
+  request: APIRequestContext,
+  token: string,
+): Promise<{
+  autoplay_next: boolean;
+  default_speed: number;
+  default_quality: string;
+  captions_default: boolean;
+  theater_default: boolean;
+}> {
+  const res = await request.get(`${API_URL}/api/v1/me/player-settings`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (await res.json()) as {
+    autoplay_next: boolean;
+    default_speed: number;
+    default_quality: string;
+    captions_default: boolean;
+    theater_default: boolean;
+  };
+}
+
 /** videoRating reads a video's persisted like/dislike counts via the public API. */
 export async function videoRating(
   request: APIRequestContext,

@@ -8,9 +8,15 @@ import {
   subscribeAutoplay,
   toggleAutoplay,
 } from "./player-autoplay";
+import {
+  DEFAULT_PLAYER_SETTINGS,
+  hydratePlayerSettings,
+  resetPlayerSettings,
+} from "./player-settings";
 
 afterEach(() => {
   window.sessionStorage.clear();
+  resetPlayerSettings();
   vi.restoreAllMocks();
 });
 
@@ -43,6 +49,14 @@ describe("player-autoplay store", () => {
     window.sessionStorage.setItem("vidra.autoplay-next", "nope");
     expect(readStoredAutoplay()).toBe(true);
     window.sessionStorage.setItem("vidra.autoplay-next", "true");
+    expect(readStoredAutoplay()).toBe(true);
+  });
+
+  it("falls back to the hydrated per-user autoplay_next when no session value is stored", () => {
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, autoplay_next: false });
+    expect(readStoredAutoplay()).toBe(false);
+    // an explicit in-session choice still wins over the per-user default
+    setAutoplay(true);
     expect(readStoredAutoplay()).toBe(true);
   });
 
