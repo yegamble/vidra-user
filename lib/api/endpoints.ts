@@ -404,6 +404,20 @@ export const api = {
   },
 
   /**
+   * POST /api/v1/videos/{id}/thumbnail (application/json {at_seconds}) — pick the
+   * poster from an exact frame of the processed original, extracted server-side
+   * with ffmpeg (UPLOAD-04 frame-pick). Replaces any previous/auto poster and
+   * leaves the video's state unchanged. Typed failures the caller surfaces: 409
+   * while the video has no processed original yet, 422 when at_seconds is outside
+   * [0, duration), 503 when the instance has no ffmpeg frame extractor.
+   */
+  setVideoThumbnailFrame: (videoId: string, atSeconds: number) =>
+    apiRequest<VideoFile>(`/api/v1/videos/${encodeURIComponent(videoId)}/thumbnail`, {
+      method: "POST",
+      body: { at_seconds: atSeconds },
+    }),
+
+  /**
    * POST /api/v1/videos/{id}/import — enqueue an ASYNC URL import (auth, owner).
    * Returns 202 with the queued job; the backend fetches (SSRF-guarded) and runs
    * the pipeline in the background. Poll getVideoImport for progress.

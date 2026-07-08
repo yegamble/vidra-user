@@ -696,6 +696,18 @@ describe("api endpoints", () => {
     expect(init.headers["content-type"]).toBeUndefined();
   });
 
+  it("setVideoThumbnailFrame POSTs JSON {at_seconds} to the thumbnail endpoint", async () => {
+    await api.setVideoThumbnailFrame("v1", 12.5);
+    const [url, init] = fetchMock.mock.calls[0] as [
+      string,
+      RequestInit & { headers: Record<string, string> },
+    ];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/thumbnail");
+    expect(init.method).toBe("POST");
+    expect(init.headers["content-type"]).toBe("application/json");
+    expect(JSON.parse(init.body as string)).toEqual({ at_seconds: 12.5 });
+  });
+
   it("setMyAvatar POSTs multipart to the account avatar endpoint", async () => {
     const file = new File(["img"], "face.png", { type: "image/png" });
     await api.setMyAvatar(file);

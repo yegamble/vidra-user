@@ -832,12 +832,63 @@ the core commit + endpoint it binds to (W1-style):
       (W2.U1's 69 → 70), proving `e2e-backed/video-import-url.spec.ts` ran AND passed
       against a real vidra-core + Postgres, and the studio/captions backed-selector
       edits still pass too. **CLOSED.**
-- [ ] W2.U3 [UPLOAD-04 UI — UNBLOCKED: vidra-core W2.C5 landed (commit `3f3c6e6`;
+- [x] W2.U3 [UPLOAD-04 UI — UNBLOCKED: vidra-core W2.C5 landed (commit `3f3c6e6`;
       JSON `{at_seconds}` variant on `/videos/{id}/thumbnail` present in
-      `vidra-core/api/openapi.yaml`)] Thumbnail frame-pick: scrubber (storyboard
-      assets when present, muted `<video>` fallback) + "Use this frame" in
-      ThumbnailManager alongside custom upload; `e2e/upload-thumbnail.spec.ts` +
-      backend-backed poster-refetch proof.
+      `vidra-core/api/openapi.yaml`)] Thumbnail frame-pick. **DONE 2026-07-08.**
+      (a) **Endpoint:** new `api.setVideoThumbnailFrame(videoId, atSeconds)` POSTs
+      the JSON `{at_seconds}` variant of `POST /videos/{id}/thumbnail` (the sibling
+      of the existing multipart `setVideoThumbnail`; the apiRequest JSON path sets
+      `content-type: application/json`). (b) **Pure helper** `lib/frame-pick.ts`:
+      `canFramePick` (a known finite >0 duration — the proxy for "has a processed,
+      probed original", so the affordance never lies with a 409-only endpoint),
+      `clampFrameTime` (constrains the scrub to the half-open `[0, duration)` the
+      backend accepts — one `FRAME_PICK_EPSILON` keeps the last frame strictly below
+      duration so it never 422s; NaN/negative → 0), and `frameThumbnailError`
+      (maps the typed 409 = still-processing / 422 = out-of-range / 503 = no
+      server-side extractor to safe copy, else the shared formatter). (c)
+      **ThumbnailManager** now hosts two sibling actions in the one card (token
+      recipes only): the existing "Upload an image" custom upload, and — below a
+      hairline divider, only when `canFramePick` — "Pick from video", which opens an
+      inline `FramePicker` scrubber. The scrubber seeks the W1 storyboard sprite
+      (fetches `storyboard.vtt`, previews the `cueAt` tile from `storyboard.jpg`)
+      when `has_storyboard`, else a muted/`playsInline` `<video>` of the original
+      (`videoOriginalUrl`, seeks `currentTime` on scrub); a `[0, duration]` range
+      (aria-labelled "Frame position") drives the m:ss/`formatDuration` readout, and
+      "Use this frame" POSTs the clamped `at_seconds` → poster refetches into the
+      row thumb (cache-busted `?v=`). The preview is a best-effort aid — a private
+      video whose media a plain `<img>`/`<video>` cannot credential may show a blank
+      frame, but the authenticated POST still extracts the exact frame server-side.
+      `StudioView` passes `has_storyboard` + `duration_seconds` from `(detail ??
+      video)`. (d) **Tests:** unit `lib/frame-pick.test.ts` (13 — canFramePick
+      gating, clamp bounds incl. the half-open end + sub-epsilon duration, the
+      409/422/503 → copy map) + `endpoints.test.ts` (the frame variant POSTs JSON
+      `{at_seconds}` with `content-type: application/json`); mocked
+      `e2e/upload-thumbnail.spec.ts` (4 — storyboard-sprite pick POSTs the scrubbed
+      `at_seconds` + poster renders; muted-video fallback pick POSTs `at_seconds`;
+      a 503 surfaces the honest "not available on this instance" copy with no
+      poster; the affordance is hidden until the video has a known duration while
+      the custom upload stays). (e) **Backed DB-proof [~]:**
+      `e2e-backed/upload-thumbnail.spec.ts` publishes a real (tiny) video, waits for
+      the pipeline to process the original (`waitForHls`), then frame-picks through
+      the UI scrubber when the fixture reports a scrubbable duration (else drives the
+      SAME `{at_seconds:0}` contract via the API — always valid — for the sub-second
+      CI clip), asserts the studio shows the poster after refetch AND that the public
+      thumbnail endpoint serves it as `image/jpeg` (the ffmpeg frame-pick output).
+      No vidra-core API was reachable in-session (`:8080` refused; only
+      postgres/redis containers up — the `api` service is a from-source Go build;
+      `:8088` is an unrelated python `http.server`), so it did NOT run locally —
+      structured to run in the `frontend-e2e-backed` CI job (same posture as
+      W2.U1/U2's backed specs). (f) **Design:** before/after screenshots (light+dark
+      × mobile+desktop) in `.ralph/design-review/w2/studio-frame-pick/` via a new
+      `studio-frame-pick` shots area (opens the edit surface → Pick from video →
+      storyboard preview); tokens only, SVG only (VideoIcon), read + verified (the
+      "Pick a frame" scrubber matches the card vocabulary, the accent "Use this
+      frame" pill inverts correctly in dark, responsive with the bottom tab bar
+      intact). (g) **Gate:** full `npm run ci` green locally (typecheck, lint,
+      lint:icons, 756 unit incl. the 13 new, build, 449 e2e incl. the 4 new + axe);
+      `node scripts/check-contract.mjs` green (no contract change — the frame variant
+      reuses the in-spec `/videos/{id}/thumbnail` path). Branch CI recorded at
+      close-out.
 - [ ] W2.U4 [UPLOAD-10 UI — UNBLOCKED: vidra-core W2.C3 landed (commit `71d950b`;
       429 `too_many_active_uploads` present in `vidra-core/api/openapi.yaml`);
       degrade gracefully if the code is absent] Batch upload: `multiple` dropzone →

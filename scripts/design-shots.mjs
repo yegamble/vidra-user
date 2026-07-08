@@ -1611,6 +1611,71 @@ const AREAS = {
       await page.getByText("Imports are disabled on this instance").waitFor({ state: "visible" });
     },
   },
+  // Studio — thumbnail frame-pick scrubber (W2.U3 / UPLOAD-04): the per-video edit
+  // surface's Thumbnail card with "Pick from video" opened into the scrubber —
+  // the storyboard-sprite frame preview, the position range, the m:ss readout, and
+  // the "Use this frame" / Cancel actions alongside the custom-image upload.
+  "studio-frame-pick": {
+    path: "/studio",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/instance$/, (route) => route.fulfill({ json: sampleInstance() }));
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
+        route.fulfill({ json: { live_streams: [] } }),
+      );
+      // The edit surface fetches the video detail (which advertises the storyboard
+      // + duration that enable frame-pick) plus its captions/chapters.
+      await page.route(/\/api\/v1\/videos\/sv1$/, (route) =>
+        route.fulfill({
+          json: {
+            ...sampleVideo("sv1", "Late-night color grading session", { views: 1200, duration: 600, ageDays: 1 }),
+            state: "published",
+            privacy: "public",
+            has_thumbnail: false,
+            has_storyboard: true,
+            duration_seconds: 600,
+          },
+        }),
+      );
+      await page.route(/\/api\/v1\/videos\/sv1\/captions$/, (route) =>
+        route.fulfill({ json: { captions: [] } }),
+      );
+      await page.route(/\/api\/v1\/videos\/sv1\/chapters$/, (route) =>
+        route.fulfill({ json: { chapters: [] } }),
+      );
+      await page.route(/\/api\/v1\/videos\/sv1\/storyboard\.vtt$/, (route) =>
+        route.fulfill({ contentType: "text/vtt", body: SAMPLE_STORYBOARD_VTT }),
+      );
+      await page.route(/\/api\/v1\/videos\/sv1\/storyboard\.jpg$/, (route) =>
+        route.fulfill({ contentType: "image/png", body: storyboardSpritePng() }),
+      );
+    },
+    async act(page) {
+      const row = page.getByRole("listitem").filter({ hasText: "Late-night color grading session" });
+      await row.getByRole("button", { name: "Edit", exact: true }).click();
+      await page.getByRole("button", { name: "Pick from video" }).click();
+      const slider = page.getByLabel("Frame position");
+      await slider.waitFor({ state: "visible" });
+      await slider.scrollIntoViewIfNeeded();
+      // Park the scrub on the middle storyboard tile so the preview shows a frame.
+      await slider.evaluate((el) => {
+        const input = /** @type {HTMLInputElement} */ (el);
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+        setter.call(input, "300");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await page.getByRole("img", { name: "Frame preview" }).waitFor({ state: "visible" });
+    },
+  },
   // Go Live one-time key screen (DR9): fill the create form and reveal the
   // shown-once stream key — the warning card, mono RTMP + key fields with copy,
   // the Show/Hide blur toggle, and the "waiting for encoder" hint.

@@ -1687,7 +1687,12 @@ function VideoRow({
         ) : null}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {detail ? <StreamingStatus video={detail} /> : null}
-        <ThumbnailManager videoId={video.id} hasThumbnail={video.has_thumbnail ?? false} />
+        <ThumbnailManager
+          videoId={video.id}
+          hasThumbnail={video.has_thumbnail ?? false}
+          hasStoryboard={(detail ?? video).has_storyboard ?? false}
+          durationSeconds={(detail ?? video).duration_seconds ?? undefined}
+        />
         <CaptionsManager videoId={video.id} />
         <ChaptersManager
           videoId={video.id}
