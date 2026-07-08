@@ -96,6 +96,15 @@ if (backend.size === 0) {
 const refs = [];
 for (const f of readdirSync(API_DIR)) {
   if (!f.endsWith(".ts") || f.endsWith(".test.ts")) continue;
+  // generated.ts is machine-generated FROM the spec (scripts/codegen.mjs) and its
+  // freshness is proven byte-for-byte by the codegen step in contract-ci, so every
+  // path KEY in it exists in the spec by construction — scanning it adds no real
+  // coverage. It DOES yield false positives: an operation's @description prose can
+  // embed an inline /api/... reference (e.g. "…continue with PUT
+  // /api/v1/uploads/{upload_id}/chunks/{n}."), which the string scanner extracts
+  // with its trailing sentence punctuation and can't match. Skip it; the
+  // meaningful guard is over the hand-maintained client files.
+  if (f === "generated.ts") continue;
   refs.push(...frontendRefs(readFileSync(join(API_DIR, f), "utf8"), f));
 }
 

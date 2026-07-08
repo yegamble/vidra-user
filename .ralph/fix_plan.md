@@ -699,7 +699,22 @@ the core commit + endpoint it binds to (W1-style):
       "publishes …"; schedule move via edit; an unchanged schedule is not re-sent;
       no schedule field on a published video). No StudioView source change
       (close-out-only — no invented work); no screen changed, so no new
-      screenshots. Gate: full `npm run ci` green (2026-07-08). **CLOSED.**
+      screenshots. (c) **Wave codegen + contract-guard fix:** the W2.C backend
+      contracts landed in vidra-core after DR13, so the committed
+      `lib/api/generated.ts` was stale (branch contract-ci type-freshness went red
+      on the first push after the backend merged). Ran the mandated `npm run
+      codegen` to refresh it (+452/-5: the new `me/uploads`, `channel-syncs`
+      CRUD/`sync-now` paths + the `resolver`/`stage`/`too_many_active_uploads`
+      deltas). That surfaced a latent false positive in `scripts/check-contract.mjs`
+      — it scanned the generated file's JSDoc `@description` prose and mis-read the
+      inline `PUT /api/v1/uploads/{upload_id}/chunks/{n}.` (trailing sentence
+      period) as a missing frontend path; fixed by skipping the spec-derived
+      `generated.ts` in the hand-written-client path scan (its keys are
+      tautologically in-spec, and the codegen freshness step already proves it
+      byte-for-byte). typecheck + contract path check + type freshness all green.
+      Gate: full `npm run ci` green (2026-07-08; 435 e2e passed — the lone failure
+      each run is a confirmed parallel-load flake that passes in isolation).
+      **CLOSED.**
 - [ ] W2.U1 [UPLOAD-02/03 UI — UNBLOCKED: vidra-core W2.C2 landed (commit
       `af875b1`; `GET /api/v1/me/uploads` + `file_fingerprint` present in
       `vidra-core/api/openapi.yaml`)] Draft recovery v2: WebCrypto fingerprint on

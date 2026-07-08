@@ -1221,7 +1221,7 @@ export interface paths {
         put?: never;
         /**
          * Set a video's poster image
-         * @description Uploads a creator-supplied poster image (owner only) as a multipart form with a single "file" part, replacing any previous or auto-generated thumbnail. Accepted types are JPEG/PNG/WebP (by extension; otherwise 415); the served Content-Type is derived from the extension. Does not change the video's state. A non-owner or unknown id is 404. The upload is bounded by the global HTTP body limit.
+         * @description Sets a video's poster (owner only). Dispatches on Content-Type. With multipart/form-data it uploads a creator-supplied image as a single "file" part (accepted types JPEG/PNG/WebP by extension; otherwise 415; the served Content-Type is derived from the extension). With application/json body {at_seconds} it picks the poster from the exact frame at that timestamp of the video's processed original, extracted server-side with ffmpeg and stored as JPEG (UPLOAD-04 frame-pick). Either variant replaces any previous or auto-generated thumbnail and does not change the video's state. A non-owner or unknown id is 404. The multipart upload is bounded by the global HTTP body limit. Frame-pick specific: 409 while the video has no processed original yet, 422 when at_seconds is outside [0, duration), 503 when the server has no ffmpeg-backed frame extractor configured.
          */
         post: operations["setVideoThumbnail"];
         delete?: never;
@@ -1446,6 +1446,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's active resumable uploads (server-side resume)
+         * @description Lists the caller's ACTIVE (unfinished, unexpired) resumable upload sessions, each with its received-chunk count — the server-side resume contract (UPLOAD-03). A client that lost its localStorage (a refresh, or a different device) reconstructs its in-progress uploads from here, then continues each with PUT /api/v1/uploads/{upload_id}/chunks/{n}. The optional fingerprint query narrows the list to sessions whose file_fingerprint matches, so a client can ask "am I already uploading this exact file?". Only the caller's own sessions are ever returned.
+         */
+        get: operations["listMyUploads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/upload-session": {
         parameters: {
             query?: never;
@@ -1458,6 +1478,8 @@ export interface paths {
         /**
          * Open a resumable (chunked) upload session
          * @description Opens a chunked/resumable upload for a video's original file (owner only). The declared size, filename extension, and the caller's storage quota are validated UP FRONT: a non-video extension is 415, a size beyond UPLOAD_MAX_SIZE is 413, and a size that would exceed the caller's quota is 422 (code quota_exceeded). Returns the upload id, the fixed chunk size to send (every chunk but the last must be exactly this many bytes), the total number of chunks, and the 24h session expiry. Upload each chunk with PUT /api/v1/uploads/{upload_id}/chunks/{n}, then POST /api/v1/uploads/{upload_id}/complete to assemble and finalise the video through the same pipeline as a direct upload. Non-owner/unknown video → 404.
+         *
+         *     BATCH GUARD (UPLOAD-10): a caller may hold at most UPLOAD_MAX_ACTIVE_SESSIONS_PER_USER active (unfinished, unexpired) upload sessions at once (instance default 5; 0 disables the limit). Opening one past the cap is 429 with the stable code too_many_active_uploads — a batch-upload client should queue and retry once an in-flight session completes or is cancelled (either frees a slot). This is a fairness guard, not a security boundary; batching stays client-orchestrated over these per-video session endpoints (there is no /uploads/batch surface).
          */
         post: operations["createUploadSession"];
         delete?: never;
@@ -1545,9 +1567,77 @@ export interface paths {
         put?: never;
         /**
          * Enqueue a URL import of a video's original file
-         * @description Enqueues an ASYNCHRONOUS import of a remote media file by URL (owner only) and returns 202 with the queued job — it no longer blocks on the fetch. Ownership is checked before any job is created, so a non-owner or unknown video is 404 and nothing runs on their behalf. The URL is validated up front (http/https only, no literal non-public address); a missing/malformed/non-public URL is 422. A background worker then performs the SSRF-guarded fetch (loopback, private, link-local, CGNAT, and cloud-metadata addresses refused at connection time, so DNS rebinding and internal redirects are blocked too), enforces UPLOAD_MAX_SIZE and the caller's storage quota, and runs the bytes through the same AttachOriginal → Process pipeline as a direct upload (probe/scan/quarantine/transcode). Poll GET /api/v1/videos/{id}/import for progress. A single import runs per video at a time: while one is in flight, re-posting returns the same job.
+         * @description Enqueues an ASYNCHRONOUS import of a remote media file by URL (owner only) and returns 202 with the queued job — it no longer blocks on the fetch. Ownership is checked before any job is created, so a non-owner or unknown video is 404 and nothing runs on their behalf. The URL is validated up front (http/https only, no literal non-public address); a missing/malformed/non-public URL is 422. A background worker then performs the SSRF-guarded fetch (loopback, private, link-local, CGNAT, and cloud-metadata addresses refused at connection time, so DNS rebinding and internal redirects are blocked too), enforces UPLOAD_MAX_SIZE and the caller's storage quota, and runs the bytes through the same AttachOriginal → Process pipeline as a direct upload (probe/scan/quarantine/transcode). Poll GET /api/v1/videos/{id}/import for progress (resolver + stage). A single import runs per video at a time: while one is in flight, re-posting returns the same job.
+         *
+         *     The optional `resolver` selects the fetch mechanism (auto|direct|ytdlp). The yt-dlp platform extractor is sandboxed and OFF by default (YTDLP_IMPORT_ENABLED): an explicit resolver=ytdlp is refused with 503 when it is disabled; auto simply never falls back to it.
          */
         post: operations["importVideoFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channel-syncs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List your channel auto-syncs
+         * @description Returns the authenticated user's channel syncs (newest first), each with its state (waiting_first_run, syncing, idle, failed), last_sync_at, and a safe last_error.
+         */
+        get: operations["listChannelSyncs"];
+        put?: never;
+        /**
+         * Create a channel auto-sync
+         * @description Binds a LOCAL channel you own to an external platform channel URL so a periodic worker mirrors that channel's recent uploads into yours. Each not-yet-seen upload becomes a private draft video plus a sandboxed `ytdlp` URL import, so downloaded bytes land through the same AttachOriginal → Process (scan/probe/transcode) pipeline as any other ingest — nothing is servable before the ClamAV scan. Synced videos are created PRIVATE for you to review and publish; the instance never auto-publishes mirrored content.
+         *
+         *     OFF by default: the feature runs only when CHANNEL_SYNC_ENABLED and the yt-dlp import resolver (YTDLP_IMPORT_ENABLED) are both on — otherwise this endpoint returns 503. The external URL is SSRF-validated (http/https only, no literal non-public address). At most CHANNEL_SYNC_MAX_PER_USER syncs per user.
+         */
+        post: operations["createChannelSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channel-syncs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a channel auto-sync
+         * @description Removes a channel sync you own (its dedupe ledger cascades away). A sync you do not own, or an unknown id, is 404.
+         */
+        delete: operations["deleteChannelSync"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channel-syncs/{id}/sync-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger a channel auto-sync now
+         * @description Schedules an owned sync to run on the next worker tick (a manual refresh between cadence runs). 503 when the feature is disabled; 404 when the sync is unknown or not owned.
+         */
+        post: operations["syncChannelNow"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5830,10 +5920,16 @@ export interface components {
         ImportVideoRequest: {
             /**
              * Format: uri
-             * @description Public http/https URL of the media file to import. The server refuses non-http schemes and non-public addresses (SSRF-guarded).
+             * @description Public http/https URL of the media file (direct) or platform watch page (ytdlp) to import. The server refuses non-http schemes and non-public addresses (SSRF-guarded) before any fetch.
              * @example https://example.com/clip.mp4
              */
             url: string;
+            /**
+             * @description How to fetch the source. `auto` (default) tries a direct media fetch (by extension/Content-Type) and falls back to the sandboxed yt-dlp platform extractor when it is enabled. `direct` forces a plain HTTP(S) media fetch. `ytdlp` forces the platform extractor and is refused with 503 when YTDLP_IMPORT_ENABLED is off on this instance.
+             * @default auto
+             * @enum {string}
+             */
+            resolver: "auto" | "direct" | "ytdlp";
         };
         /** @description An asynchronous URL-import job for a video's original file. */
         ImportJob: {
@@ -5843,6 +5939,16 @@ export interface components {
             video_id: string;
             /** @enum {string} */
             state: "pending" | "running" | "done" | "failed";
+            /**
+             * @description The mechanism the worker used. `auto` is the transient requested value until the worker resolves it, then it is rewritten to the concrete `direct` or `ytdlp` that actually ran.
+             * @enum {string}
+             */
+            resolver: "auto" | "direct" | "ytdlp";
+            /**
+             * @description Coarse progress while state is running (omitted otherwise): resolving (picking the concrete resolver for an auto request), downloading (fetching the bytes), processing (scan/probe/transcode). Never carries a secret.
+             * @enum {string}
+             */
+            stage?: "resolving" | "downloading" | "processing";
             /** @description A safe, human-readable failure reason (present only when state is failed or a retry is pending). Never a raw internal error or the source URL. */
             error?: string;
             /** @description How many times the import has been attempted. */
@@ -5854,6 +5960,48 @@ export interface components {
         };
         ImportJobResponse: {
             import_job: components["schemas"]["ImportJob"];
+        };
+        CreateChannelSyncRequest: {
+            /**
+             * Format: uuid
+             * @description The LOCAL channel (owned by the caller) to mirror uploads into.
+             */
+            channel_id: string;
+            /**
+             * @description Public http/https URL of the external platform channel to mirror. SSRF-validated before use; a non-public address is refused.
+             * @example https://www.youtube.com/@example
+             */
+            external_channel_url: string;
+        };
+        /** @description A binding that mirrors an external channel's uploads into a local channel. */
+        ChannelSync: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            channel_id: string;
+            external_channel_url: string;
+            /**
+             * @description waiting_first_run (never synced), syncing (a run is in progress), idle (last run succeeded), failed (last run errored; see last_error).
+             * @enum {string}
+             */
+            state: "waiting_first_run" | "syncing" | "idle" | "failed";
+            /**
+             * Format: date-time
+             * @description When the last successful run completed (omitted until the first run).
+             */
+            last_sync_at?: string;
+            /** @description A safe, human-readable reason for the last failed run (omitted when empty). Never a raw internal error or credentials. */
+            last_error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ChannelSyncResponse: {
+            channel_sync: components["schemas"]["ChannelSync"];
+        };
+        ChannelSyncListResponse: {
+            channel_syncs: components["schemas"]["ChannelSync"][];
         };
         /** @description Optional body for an auto-caption request. When language is omitted the server uses WHISPER_DEFAULT_LANGUAGE. */
         AutoCaptionRequest: {
@@ -5897,6 +6045,11 @@ export interface components {
              * @example clip.mp4
              */
             filename: string;
+            /**
+             * @description Optional OPAQUE client identity for the file, used for cross-refresh / cross-device resume (see GET /api/v1/me/uploads). Recommended recipe: a SHA-256 hex digest over the file size concatenated with its first and last 1 MiB. Stored verbatim (<=128 chars) and never parsed by the server — only compared. Omit or leave empty to supply none.
+             * @example 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+             */
+            file_fingerprint?: string;
         };
         /** @description The opened resumable upload session. */
         UploadSessionResponse: {
@@ -5936,6 +6089,33 @@ export interface components {
              * @description The total bytes received across all landed chunks.
              */
             bytes_received: number;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        /** @description The caller's active resumable upload sessions (UPLOAD-03). */
+        ActiveUploadsResponse: {
+            uploads: components["schemas"]["ActiveUpload"][];
+        };
+        /** @description One of the caller's ACTIVE resumable upload sessions, with enough to reconstruct/continue it after a refresh or on another device. */
+        ActiveUpload: {
+            /** Format: uuid */
+            upload_id: string;
+            /** Format: uuid */
+            video_id: string;
+            filename: string;
+            /**
+             * Format: int64
+             * @description The declared total file size, in bytes.
+             */
+            size: number;
+            /** @description The fixed chunk size in bytes (every chunk but the last). */
+            chunk_size: number;
+            /** @description How many chunks the file is split into. */
+            total_chunks: number;
+            /** @description How many chunk indices have landed so far. */
+            received_chunks: number;
+            /** @description The opaque file identity supplied at create time (empty when none was provided). */
+            file_fingerprint: string;
             /** Format: date-time */
             expires_at: string;
         };
@@ -9172,6 +9352,13 @@ export interface operations {
                      */
                     file: string;
                 };
+                "application/json": {
+                    /**
+                     * Format: double
+                     * @description The timestamp (seconds, fractional allowed) of the frame to extract from the processed original. Must be in [0, duration).
+                     */
+                    at_seconds: number;
+                };
             };
         };
         responses: {
@@ -9184,7 +9371,7 @@ export interface operations {
                     "application/json": components["schemas"]["VideoFile"];
                 };
             };
-            /** @description The multipart "file" field is missing. */
+            /** @description The multipart "file" field is missing, or the JSON body is malformed / missing at_seconds. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9211,8 +9398,35 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Frame-pick requested before the video has a processed original. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description The file extension is not an accepted image type. */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description at_seconds is outside the video duration [0, duration). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server-side frame extraction is not available (no ffmpeg-backed extractor). */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9854,6 +10068,38 @@ export interface operations {
             };
         };
     };
+    listMyUploads: {
+        parameters: {
+            query?: {
+                /** @description Narrow the list to sessions with this exact file_fingerprint (the opaque identity supplied at create time). Omit to list all active sessions. */
+                fingerprint?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's active resumable uploads (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActiveUploadsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     createUploadSession: {
         parameters: {
             query?: never;
@@ -9916,6 +10162,15 @@ export interface operations {
             };
             /** @description The body is invalid (size must be > 0, filename required) or the file would exceed the caller's storage quota (code quota_exceeded). */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller already holds UPLOAD_MAX_ACTIVE_SESSIONS_PER_USER active upload sessions (code too_many_active_uploads). Queue and retry after an in-flight session completes or is cancelled. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10225,8 +10480,200 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The URL is missing, malformed, or not a public http(s) URL. */
+            /** @description The URL is missing, malformed, not a public http(s) URL, or the resolver is not one of auto|direct|ytdlp. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The requested resolver is disabled on this instance (e.g. resolver=ytdlp while YTDLP_IMPORT_ENABLED is off). Stable code service_unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listChannelSyncs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's channel syncs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelSyncListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createChannelSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateChannelSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description The channel sync was created (due to run on the next tick). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelSyncResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such channel, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description An identical (channel, external URL) sync already exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The external URL is missing, malformed, or not a public http(s) URL, or the caller is at the per-user channel-sync limit. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Channel auto-sync is disabled on this instance (CHANNEL_SYNC_ENABLED or YTDLP_IMPORT_ENABLED is off). Stable code service_unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteChannelSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel sync was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such channel sync, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    syncChannelNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sync was scheduled to run on the next tick. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such channel sync, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Channel auto-sync is disabled on this instance. Stable code service_unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
