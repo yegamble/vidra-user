@@ -898,8 +898,14 @@ the core commit + endpoint it binds to (W1-style):
       fixture) alongside the same chronic unrelated data-mutating failures
       (admin-users, mfa, messaging, playlists, donations, notifications, deactivate,
       instance-settings, profile-edit, playlist-thumbnail); the fixture fix
-      (`SAMPLE_MP4_4S_BASE64`) landed in the follow-up commit — backed re-run outcome
-      recorded there.
+      (`SAMPLE_MP4_4S_BASE64`) landed in follow-up commit `de53c8d`, whose
+      `frontend-e2e-backed` re-run CONFIRMS the fix: `upload-thumbnail` is no longer
+      among the failures (16 failed = only the SAME chronic unrelated data-mutating
+      specs: admin-users, deactivate, donations, instance-settings, messaging, mfa,
+      notifications, playlist-thumbnail, playlists, profile-edit) and the passed
+      count rose to 71 (W2.U2's 70 → 71) — i.e. this slice's backed frame-pick spec
+      RAN AND PASSED against a real vidra-core + Postgres + ffmpeg. `frontend-ci` +
+      `contract-ci` GREEN on `de53c8d` too. **CLOSED.**
 - [ ] W2.U4 [UPLOAD-10 UI — UNBLOCKED: vidra-core W2.C3 landed (commit `71d950b`;
       429 `too_many_active_uploads` present in `vidra-core/api/openapi.yaml`);
       degrade gracefully if the code is absent] Batch upload: `multiple` dropzone →
