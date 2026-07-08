@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { BatchUploadQueue } from "@/components/BatchUploadQueue";
 import { CaptionsManager } from "@/components/CaptionsManager";
+import { ChannelSyncSection } from "@/components/ChannelSyncSection";
 import { ChaptersManager } from "@/components/ChaptersManager";
 import { EmbedPrivacyManager } from "@/components/EmbedPrivacyManager";
 import { LiveStreamsSection } from "@/components/LiveStreamsSection";
@@ -161,6 +162,9 @@ function Studio() {
         onUpdated={(ch) => setChannels((list) => list.map((c) => (c.id === ch.id ? ch : c)))}
         onDeleted={(id) => setChannels((list) => list.filter((c) => c.id !== id))}
       />
+      {channels.length > 0 ? (
+        <ChannelSyncSection key={`sync-${channelsKey}`} channels={channels} />
+      ) : null}
       {channels.length > 0 ? (
         // #upload / #go-live anchors are the landing targets for the phone Create
         // sheet's rows; scroll-mt clears the sticky app header.

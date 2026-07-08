@@ -25,6 +25,9 @@ import type {
   CaptionListResponse,
   Channel,
   ChannelListResponse,
+  ChannelSyncListResponse,
+  ChannelSyncResponse,
+  CreateChannelSyncRequest,
   FollowedChannelsResponse,
   AddDonationAddressRequest,
   DonationAddress,
@@ -350,6 +353,43 @@ export const api = {
   /** DELETE /api/v1/channels/{handle} — delete a channel and its videos (auth, owner; 204). */
   deleteChannel: (handle: string) =>
     apiRequest<void>(`/api/v1/channels/${encodeURIComponent(handle)}`, { method: "DELETE" }),
+
+  /**
+   * GET /api/v1/channel-syncs — the caller's channel auto-syncs, newest first
+   * (UPLOAD-13, backport W2.U5). Each carries its state (waiting_first_run |
+   * syncing | idle | failed), last_sync_at, and a safe last_error. Always 200
+   * for an authed caller — the feature-off 503 lives on create/sync-now, so an
+   * existing sync stays visible for management even when the feature is toggled off.
+   */
+  listChannelSyncs: (signal?: AbortSignal) =>
+    apiRequest<ChannelSyncListResponse>("/api/v1/channel-syncs", { signal }),
+
+  /**
+   * POST /api/v1/channel-syncs — bind a LOCAL channel you own to an external
+   * platform channel URL so a periodic worker mirrors its recent uploads into
+   * yours as PRIVATE drafts (auth, owner). The external URL is SSRF-validated.
+   * Typed failures the caller surfaces: 422 (malformed/non-public URL, or the
+   * per-user sync cap), 409 (an identical (channel, URL) sync already exists),
+   * 404 (no such owned channel), 503 `service_unavailable` (auto-sync is off on
+   * this instance) → the honest disabled empty state.
+   */
+  createChannelSync: (body: CreateChannelSyncRequest) =>
+    apiRequest<ChannelSyncResponse>("/api/v1/channel-syncs", { method: "POST", body }),
+
+  /** DELETE /api/v1/channel-syncs/{id} — remove an owned channel sync (auth; 204). */
+  deleteChannelSync: (id: string) =>
+    apiRequest<void>(`/api/v1/channel-syncs/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/channel-syncs/{id}/sync-now — schedule an owned sync to run on
+   * the next worker tick, a manual refresh between cadence runs (auth; 202). It
+   * does NOT sync synchronously — the list refetch reflects the state change.
+   * 503 when the feature is off, 404 when the sync is unknown/not owned.
+   */
+  syncChannelNow: (id: string) =>
+    apiRequest<void>(`/api/v1/channel-syncs/${encodeURIComponent(id)}/sync-now`, {
+      method: "POST",
+    }),
 
   /** POST /api/v1/channels/{handle}/videos — create a draft video (auth, owner). */
   createVideoDraft: (handle: string, body: CreateVideoRequest) =>

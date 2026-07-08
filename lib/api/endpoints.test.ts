@@ -379,6 +379,43 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("listChannelSyncs GETs the caller's channel-syncs", async () => {
+    await api.listChannelSyncs();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channel-syncs");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  it("createChannelSync POSTs the channel id + external URL", async () => {
+    await api.createChannelSync({
+      channel_id: "c1",
+      external_channel_url: "https://www.youtube.com/@example",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channel-syncs");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      channel_id: "c1",
+      external_channel_url: "https://www.youtube.com/@example",
+    });
+  });
+
+  it("deleteChannelSync DELETEs the sync by id (encoded)", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await api.deleteChannelSync("s 1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channel-syncs/s%201");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("syncChannelNow POSTs to the sync's sync-now endpoint (202)", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 202 }));
+    await api.syncChannelNow("s1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channel-syncs/s1/sync-now");
+    expect(init.method).toBe("POST");
+  });
+
   it("listMyDonationAddresses targets the caller's donation-addresses endpoint", async () => {
     await api.listMyDonationAddresses();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/donation-addresses");

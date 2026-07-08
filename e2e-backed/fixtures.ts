@@ -846,6 +846,30 @@ export async function createChannel(
   });
 }
 
+/**
+ * channelSyncs reads the caller's channel auto-syncs via the API (UPLOAD-13) —
+ * the DB source of truth a backed test asserts on after a create/delete through
+ * the UI. Each row carries its state + external URL.
+ */
+export async function channelSyncs(
+  request: APIRequestContext,
+  token: string,
+): Promise<Array<{ id: string; channel_id: string; external_channel_url: string; state: string }>> {
+  const res = await request.get(`${API_URL}/api/v1/channel-syncs`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (
+    (await res.json()) as {
+      channel_syncs: Array<{
+        id: string;
+        channel_id: string;
+        external_channel_url: string;
+        state: string;
+      }>;
+    }
+  ).channel_syncs;
+}
+
 type DonationAddressRow = {
   id: string;
   network: string;

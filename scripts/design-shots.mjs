@@ -527,6 +527,51 @@ const SAMPLE_ACTIVE_UPLOADS = {
   ],
 };
 
+// The caller's channel auto-syncs (GET /channel-syncs) — cross-platform
+// auto-import (UPLOAD-13 / W2.U5). A spread of states so every status pill shows:
+// syncing (running), idle (last run OK), failed (safe last_error), and a fresh
+// waiting_first_run — each mirroring into the grade-house channel.
+const SAMPLE_CHANNEL_SYNCS = {
+  channel_syncs: [
+    {
+      id: "cs1",
+      channel_id: "c1",
+      external_channel_url: "https://www.youtube.com/@grade-house-archive",
+      state: "idle",
+      last_sync_at: new Date(Date.now() - 42 * 60_000).toISOString(),
+      created_at: new Date(Date.now() - 12 * 86_400_000).toISOString(),
+      updated_at: new Date(Date.now() - 42 * 60_000).toISOString(),
+    },
+    {
+      id: "cs2",
+      channel_id: "c1",
+      external_channel_url: "https://vids.example/c/monochrome-craft",
+      state: "syncing",
+      last_sync_at: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      created_at: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+      updated_at: new Date(Date.now() - 30_000).toISOString(),
+    },
+    {
+      id: "cs3",
+      channel_id: "c1",
+      external_channel_url: "https://www.youtube.com/@studio-b-roll",
+      state: "failed",
+      last_error: "the external channel could not be resolved",
+      last_sync_at: new Date(Date.now() - 26 * 3600 * 1000).toISOString(),
+      created_at: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+      updated_at: new Date(Date.now() - 26 * 3600 * 1000).toISOString(),
+    },
+    {
+      id: "cs4",
+      channel_id: "c1",
+      external_channel_url: "https://vids.example/c/darkroom-sessions",
+      state: "waiting_first_run",
+      created_at: new Date(Date.now() - 90_000).toISOString(),
+      updated_at: new Date(Date.now() - 90_000).toISOString(),
+    },
+  ],
+};
+
 // A 30-day daily-views series (oldest first) for the stats chart.
 function sampleDailyViews(peak) {
   const series = [];
@@ -1705,6 +1750,71 @@ const AREAS = {
         { name: "calibrated-oled-setup.mp4", mimeType: "video/mp4", buffer: Buffer.from("c".repeat(48)) },
       ]);
       await page.getByRole("list", { name: "Upload queue" }).waitFor({ state: "visible" });
+    },
+  },
+  // Studio — channel auto-sync management (W2.U5 / UPLOAD-13): the "Auto-import
+  // from another platform" section below the channel cards — the sync list with a
+  // state pill per row (Idle / Syncing / Failed + safe error / Waiting first run),
+  // last_sync_at, Sync now + Remove, and the connect form (URL field + Connect).
+  "studio-channel-sync": {
+    path: "/studio",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/instance$/, (route) => route.fulfill({ json: sampleInstance() }));
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/channel-syncs$/, (route) =>
+        route.fulfill({ json: SAMPLE_CHANNEL_SYNCS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
+        route.fulfill({ json: { live_streams: [] } }),
+      );
+    },
+    async act(page) {
+      await page
+        .getByRole("heading", { name: "Auto-import from another platform" })
+        .scrollIntoViewIfNeeded();
+      await page.getByText("the external channel could not be resolved").waitFor({ state: "visible" });
+    },
+  },
+  // Studio — channel auto-sync disabled (W2.U5): the feature is off on the
+  // instance, so a connect attempt 503s and the section shows the honest disabled
+  // empty state (existing syncs stay visible for Remove).
+  "studio-channel-sync-disabled": {
+    path: "/studio",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/instance$/, (route) => route.fulfill({ json: sampleInstance() }));
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/channel-syncs$/, (route) =>
+        route.request().method() === "POST"
+          ? route.fulfill({
+              status: 503,
+              json: { error: { code: "service_unavailable", message: "auto-sync is off" } },
+            })
+          : route.fulfill({ json: { channel_syncs: [] } }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
+        route.fulfill({ json: { live_streams: [] } }),
+      );
+    },
+    async act(page) {
+      await page.getByLabel("External channel URL").fill("https://www.youtube.com/@example");
+      await page.getByRole("button", { name: "Connect" }).click();
+      await page.getByText("Auto-import is disabled on this instance").waitFor({ state: "visible" });
     },
   },
   // Go Live one-time key screen (DR9): fill the create form and reveal the

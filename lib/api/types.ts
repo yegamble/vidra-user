@@ -135,6 +135,13 @@ export type ChannelListResponse = Schemas["ChannelListResponse"];
 export type FollowedChannel = Schemas["FollowedChannel"];
 export type FollowedChannelsResponse = Schemas["FollowedChannelsResponse"];
 
+// --- Channel auto-sync (UPLOAD-13, backport W2.U5) --------------------------
+export type ChannelSync = Schemas["ChannelSync"];
+export type ChannelSyncState = NonNullable<Schemas["ChannelSync"]["state"]>;
+export type ChannelSyncResponse = Schemas["ChannelSyncResponse"];
+export type ChannelSyncListResponse = Schemas["ChannelSyncListResponse"];
+export type CreateChannelSyncRequest = Schemas["CreateChannelSyncRequest"];
+
 // --- Donation addresses (simple NON-CUSTODIAL crypto donation display) ------
 export type DonationNetwork = NonNullable<Schemas["DonationAddress"]["network"]>;
 export type DonationAddress = Schemas["DonationAddress"];

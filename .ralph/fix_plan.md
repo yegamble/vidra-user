@@ -970,12 +970,90 @@ the core commit + endpoint it binds to (W1-style):
       count rose by exactly +1 (W2.U3's 71 → 72), proving
       `e2e-backed/upload-batch.spec.ts` RAN AND PASSED (all three batch videos
       persisted + read back) against a real vidra-core + Postgres. **CLOSED.**
-- [ ] W2.U5 [UPLOAD-13 UI — UNBLOCKED: vidra-core W2.C4 landed (commit `1a4ebc2`;
-      `/api/v1/channel-syncs` present in `vidra-core/api/openapi.yaml`)] Channel
-      auto-sync management: studio "Auto-import from another platform" section
-      (connect form, sync list with state pills, `last_sync_at`, safe error, Sync
-      now, Remove); honest disabled empty state; `e2e/channel-sync.spec.ts` (mock
-      CRUD) + backend-backed create/delete row proof.
+- [x] W2.U5 [UPLOAD-13 UI — UNBLOCKED: vidra-core W2.C4 landed (commit `1a4ebc2`;
+      `/api/v1/channel-syncs` CRUD + `/{id}/sync-now` present in
+      `vidra-core/api/openapi.yaml`)] Channel auto-sync management. **DONE
+      2026-07-08.** (a) **Endpoints:** four new `api.*` wrappers in
+      `lib/api/endpoints.ts` — `listChannelSyncs` (GET), `createChannelSync`
+      (POST `{channel_id, external_channel_url}`), `deleteChannelSync` (DELETE 204),
+      `syncChannelNow` (POST 202) — plus the `ChannelSync`/`ChannelSyncState`/
+      `ChannelSyncResponse`/`ChannelSyncListResponse`/`CreateChannelSyncRequest`
+      types re-exported from `types.ts`. No codegen needed — `lib/api/generated.ts`
+      already carried the whole W2.C wave (U0's codegen); `node
+      scripts/check-contract.mjs` green (the new hand-written paths resolve against
+      the contract). (b) **Pure helper** `lib/channel-sync.ts`:
+      `channelSyncStateLabel` (state → "Waiting first run"/"Syncing"/"Idle"/
+      "Failed"), `channelSyncStateClass` (state → the studio StateBadge token recipe
+      — waiting→`bg-surface-strong text-fg-muted`, syncing→`bg-warning/15
+      text-warning`, idle→`bg-success/15 text-success`, failed→`bg-danger-surface
+      text-danger`; failed deliberately uses the dedicated danger-surface, NOT the
+      generic Badge `danger` fill which fails AA contrast at the 10.5px pill size —
+      axe caught this), `validateChannelSyncUrl` (client-side http(s)-only guard —
+      the URL tab is http(s) only, no magnet/ftp; the backend SSRF check stays
+      authoritative), and `isChannelSyncDisabledError` (the stable 503
+      `service_unavailable`). (c) **Component**
+      `components/ChannelSyncSection.tsx`, wired into `StudioView` right below the
+      channel cards (gated on `channels.length > 0`, `key`ed on the channel set):
+      "Auto-import from another platform" — a connect form (target-channel `Select`,
+      shown only with >1 channel; external-URL `Input` with paste-detect + inline
+      field errors) and the caller's syncs, each a row with the external URL, a
+      state pill, `last_sync_at` ("Last synced 42m ago" via `relativeTime`, else
+      "Never synced") + which channel it mirrors into, the SAFE `last_error` verbatim
+      (danger text), and Sync now + Remove. Sync now is honest — it POSTs (202
+      = scheduled for the next tick, NOT a synchronous sync), shows "Sync scheduled —
+      it'll run on the next pass.", and refetches the list so any server-side state
+      change (→ syncing) shows without guessing. Remove DELETEs and drops the row
+      (a 404 drops it too). **Honest disabled state:** there is NO proactive GET flag
+      for this feature — `GET /channel-syncs` always 200s and `features.imports`
+      maps to a SEPARATE toggle (`FEATURE_IMPORTS_ENABLED`), while auto-sync gates on
+      `CHANNEL_SYNC_ENABLED && YTDLP_IMPORT_ENABLED` (verified in vidra-core
+      `channelsync.Service.Enabled`) — so the disabled empty state is driven
+      reactively by the stable 503 the create/sync-now endpoints return (the
+      reliable half of the U2 pattern; documented in the helper). When off, the
+      connect form gives way to "Auto-import is disabled on this instance" while
+      existing syncs stay visible for Remove. Tokens only, SVG icons only. (d)
+      **Tests:** unit `lib/channel-sync.test.ts` (10 — state label + class maps incl.
+      unknown-state fallback, URL validation incl. empty/unparseable/non-http(s),
+      503 disabled-error detection) + 4 new `endpoints.test.ts` cases (list GET,
+      create POST body, delete DELETE encoded, sync-now POST); mocked
+      `e2e/channel-sync.spec.ts` (6 — connect creates a Waiting-first-run row; Sync
+      now schedules + the refetch flips the pill to Syncing + the honest "Sync
+      scheduled" line; Remove DELETEs + drops the row; a failed sync shows its safe
+      last_error + Failed pill; the stable 503 renders the disabled empty state +
+      removes the dead form; a non-http(s) URL is rejected inline with zero network
+      calls); a new axe test in `e2e/a11y.spec.ts` renders the section with all four
+      state pills + the connect form and passes serious/critical-clean (this is what
+      surfaced the danger-fill contrast fix). (e) **Backed DB-proof [~]:**
+      `e2e-backed/channel-sync.spec.ts` signs up, creates a channel, connects a
+      public platform URL through the UI, asserts the row + Waiting-first-run pill,
+      reads it back via `GET /channel-syncs` (create DB-proof: state
+      `waiting_first_run`), fires Sync now (202), then Removes it through the UI and
+      re-reads the list to prove it is gone (delete DB-proof). Worker execution is
+      NOT required — vidra-core `urlsafety.ValidateURL` does not resolve DNS at create
+      time (the IP check runs at dial time), so a `youtube.com` URL is accepted
+      offline and the row sits in `waiting_first_run`; the 1h cadence never ticks in
+      the test window. It **skips honestly** (test.skip) if the create 503s — i.e.
+      the stack has auto-sync off. To make it actually RUN, the
+      `frontend-e2e-backed` workflow now starts vidra-core with
+      `YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true` (the config default
+      `YTDLP_PATH`/timeout/interval satisfy startup validation; create/delete/list
+      touch no subprocess so the yt-dlp binary need not be installed; a new
+      `channelSyncs` fixtures helper reads the DB list). No vidra-core API was
+      reachable in-session (`:8080` down — only postgres/redis containers, the `api`
+      service is a from-source Go build), so it did NOT run locally — same posture as
+      W2.U1–U4's backed specs; it runs in the `frontend-e2e-backed` CI job. (f)
+      **Design:** before/after screenshots (light+dark × mobile+desktop) in
+      `.ralph/design-review/w2/studio-channel-sync{,-disabled}/` via two new shots
+      areas (SAMPLE_CHANNEL_SYNCS spreads all four states so every pill renders);
+      tokens only, SVG only, read + verified — the section matches the studio card
+      vocabulary (IDLE/SYNCING/FAILED + safe error + Sync now/Remove), the honest
+      disabled empty state uses the dashed EmptyState, both themes, responsive with
+      the bottom tab bar intact. (g) **Gate:** full `npm run ci` green locally
+      (typecheck, lint, lint:icons, 797 unit incl. the 14 new, build, 460 e2e incl.
+      the 6 new + the new axe test); `node scripts/check-contract.mjs` green (no
+      codegen — the endpoints reuse the wave's already-generated types). Branch CI
+      to confirm on push (`frontend-ci`, `contract-ci`); `frontend-e2e-backed` runs
+      this slice's backed spec with the newly-enabled channel-sync env. **CLOSED.**
 - [~] W2 torrent/magnet import — **DEFERRED to W6** (user standing decision
       2026-07-08). Non-goal for W2: the URL tab accepts http(s) URLs only; no
       torrent/magnet input field is built here. When picked up in W6 it carries

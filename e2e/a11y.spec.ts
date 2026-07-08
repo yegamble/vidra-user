@@ -255,6 +255,103 @@ test("the studio page passes axe (signed in, channels + create form)", async ({ 
   await expectNoSevereViolations(page);
 });
 
+test("the studio channel auto-sync section passes axe (list + state pills + connect form)", async ({
+  page,
+}) => {
+  await signIn(page, "user");
+  await page.route(/\/api\/v1\/me\/channels$/, (route) =>
+    route.fulfill({
+      json: {
+        channels: [
+          {
+            id: "c1",
+            owner_id: "u1",
+            handle: "ada",
+            display_name: "Ada Makes",
+            description: "",
+            follower_count: 0,
+            created_at: new Date().toISOString(),
+          },
+        ],
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/videos\/config$/, (route) =>
+    route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
+  );
+  await page.route(/\/api\/v1\/instance$/, (route) =>
+    route.fulfill({
+      json: {
+        name: "Vidra",
+        description: "",
+        software: { name: "vidra", version: "0.1.0" },
+        registration_enabled: true,
+        registration_requires_approval: false,
+        oauth_providers: [],
+        federation_enabled: false,
+        terms_url: "",
+        privacy_url: "",
+        contact_email: "",
+        features: { uploads: true, imports: true, live: true, comments: true },
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada\/videos(\?|$)/, (route) =>
+    route.fulfill({ json: { videos: [] } }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada\/live$/, (route) =>
+    route.fulfill({ json: { live_streams: [] } }),
+  );
+  await page.route(/\/api\/v1\/channel-syncs$/, (route) =>
+    route.fulfill({
+      json: {
+        channel_syncs: [
+          {
+            id: "cs1",
+            channel_id: "c1",
+            external_channel_url: "https://www.youtube.com/@example",
+            state: "idle",
+            last_sync_at: new Date(Date.now() - 3_600_000).toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: "cs2",
+            channel_id: "c1",
+            external_channel_url: "https://vids.example/c/craft",
+            state: "failed",
+            last_error: "the external channel could not be resolved",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: "cs3",
+            channel_id: "c1",
+            external_channel_url: "https://vids.example/c/live-run",
+            state: "syncing",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: "cs4",
+            channel_id: "c1",
+            external_channel_url: "https://vids.example/c/queued",
+            state: "waiting_first_run",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      },
+    }),
+  );
+  await page.getByRole("link", { name: "Studio" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Auto-import from another platform" }),
+  ).toBeVisible();
+  await expect(page.getByText("the external channel could not be resolved")).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
 test("the channel page passes axe (visitor cluster + tabs)", async ({ page }) => {
   // A fresh page load re-boots the auth store, so land authed via
   // /auth/refresh → /auth/me (design-shots technique) instead of the login UI.

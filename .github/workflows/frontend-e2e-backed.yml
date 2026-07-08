@@ -42,9 +42,16 @@ jobs:
       # TRANSCODING_ENABLED=true turns on the async HLS transcode pipeline so
       # e2e-backed/hls-playback.spec.ts can prove publish → transcode → HLS
       # playback end to end (the compose api image ships ffmpeg/ffprobe).
+      # YTDLP_IMPORT_ENABLED=true + CHANNEL_SYNC_ENABLED=true turn on the yt-dlp
+      # import resolver and cross-platform channel auto-sync (UPLOAD-13 / W2.U5) so
+      # e2e-backed/channel-sync.spec.ts can create/sync-now/delete a real sync row
+      # (worker execution not needed — the SSRF guard validates the URL without
+      # resolving DNS at create time; the worker cadence is 1h). The yt-dlp binary
+      # need not be installed: create/delete/list touch no subprocess, and the
+      # config default YTDLP_PATH satisfies startup validation.
       - name: Start vidra-core stack
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true docker compose --profile core up -d --build
+        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true docker compose --profile core up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
