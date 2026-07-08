@@ -961,10 +961,15 @@ the core commit + endpoint it binds to (W1-style):
       failure was the confirmed `watch-player.spec.ts` `>`-speed parallel-load flake,
       which passes 14/14 in isolation, unrelated to this slice); `node
       scripts/check-contract.mjs` green (no contract change — batch reuses the in-spec
-      per-video session/draft/quota paths, so no codegen). Branch CI: to be confirmed
-      on push (`frontend-ci` + `contract-ci` expected green; `frontend-e2e-backed`
-      remains chronically red on the same unrelated data-mutating specs — this slice's
-      own backed batch spec runs there). **CLOSED.**
+      per-video session/draft/quota paths, so no codegen). Branch CI (commit
+      `6d5bb71`): `frontend-ci` GREEN, `contract-ci` GREEN. `frontend-e2e-backed` is
+      chronically red on the SAME unrelated data-mutating specs as every prior commit
+      (admin-users, deactivate, donations, instance-settings, messaging, mfa,
+      notifications, playlist-thumbnail, playlists, profile-edit — 16 failed / 72
+      passed); this slice's own backed spec is NOT among the failures — the passed
+      count rose by exactly +1 (W2.U3's 71 → 72), proving
+      `e2e-backed/upload-batch.spec.ts` RAN AND PASSED (all three batch videos
+      persisted + read back) against a real vidra-core + Postgres. **CLOSED.**
 - [ ] W2.U5 [UPLOAD-13 UI — UNBLOCKED: vidra-core W2.C4 landed (commit `1a4ebc2`;
       `/api/v1/channel-syncs` present in `vidra-core/api/openapi.yaml`)] Channel
       auto-sync management: studio "Auto-import from another platform" section
