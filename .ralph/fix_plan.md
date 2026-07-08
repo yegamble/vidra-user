@@ -1319,8 +1319,82 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
       Support/Watch); left in place for the DR13 dead-code sweep rather than deleted here.
 
 ## DR7 — Library / History / Playlists / Search
-- [ ] Library rails (white progress only if resume % is real — verify §5.6), playlist/saved
+- [x] Library rails (white progress only if resume % is real — verify §5.6), playlist/saved
       rows; Search field + filter chips + divider rows. CI + push.
+      **DONE 2026-07-08.** Rebuilt `/library` as the design's Library HUB and gave `/search`
+      the inline field it was missing on phones.
+      • **Library hub (new `components/LibraryView.tsx`, replaces the old saved-only view).**
+        The design's Library screen is a hub of three real endpoints, so `/library` now composes
+        them (the standalone `/history` + `/playlists` routes stay as the "See all" destinations,
+        unchanged): **History rail** — 170px cards, 96px thumb, a thin **WHITE resume-progress
+        bar** and a 2-line title, "See all" → `/history`; **Playlists list** — rows with an 84×48
+        cover (the filled `PlaylistIcon` glyph when coverless), title, "N videos · Privacy", and a
+        disclosure chevron, each → `/playlists/{id}`, under a header carrying the single
+        "Playlists" link (→ the full management page) + a "New" shortcut; **Saved list** — 112px
+        thumb, 2-line heading title, channel. `components/SavedVideosView.tsx` **DELETED** (its
+        sole consumer, `/library`, now renders `LibraryView`).
+      • **Resume % is REAL (verified §5.6 at execution time).** `vidra-core` `HistoryItem =
+        Video & { position_seconds, watched_at }` and `Video.duration_seconds` → the white bar is
+        `position/duration` (capped), rendered only when a saved position exists — never faked.
+        Matches `VideoCard`'s history progress exactly (bare white fill, no track, the sanctioned
+        media-overlay exception): reads on real/dark thumbnails; invisible only on the light
+        no-thumbnail fallback (same as VideoCard, acceptable — production frames are darker).
+      • **Contracts preserved (the tricky part).** Anonymous `/library` still shows **one**
+        "Playlists" link + "Sign in to see your library" (`sidebar.spec` runs this anonymously;
+        `save.spec` asserts the prompt); authed `/library` exposes **exactly one** "Playlists"
+        link (the section header) so `playlists.spec`'s `goToPlaylists` strict-mode click stays
+        unique, and saved titles render as **headings** (`save.spec` "lists saved videos"). Each
+        section fetches independently and degrades quietly (a failed history/playlists read on a
+        page that only mocked `/me/saved` renders nothing, never an error UI) — so `save.spec`
+        (saved-only mock) stays green.
+      • **Search inline field (new `components/SearchField.tsx`) — closes a real mobile gap.**
+        The header `SearchBox` is **desktop-only** (`hidden … sm:flex`), so on phones the Search
+        tab landed on `/search` with **no way to type a query**. The new field (surface-muted
+        `rounded-xl`, search glyph + clear ×, per the design SEARCH screen) is the page's primary
+        input on every width and the only one on phones. It is a labelled `role="search"`
+        landmark ("Search") so it stays **unique** vs the desktop header's search landmark;
+        submitting preserves the active category/language/tag filters (`searchHref`), and the ×
+        empties the field and drops the query. The visible page `<h1>` is now `sr-only` (the
+        design shows no title — the field is the focus), preserving the heading for a11y.
+      • **Search filters/rows restyle.** Category/Language selects → **rounded-full pill** chips
+        (kept as native `<select>`s — the form semantics `search.spec` pins via `selectOption`);
+        result-row thumb radius → `rounded-[10px]` (design). The active `?tag=` chip was already
+        the accent pill. **"This instance" federation-scope chip NOT added** — no search-scope
+        contract exists (search is title/tag only); recorded as a backend dependency, not stubbed.
+      • **Tests (unit + e2e, same slice).** New unit `components/LibraryView.test.tsx` (4: anon
+        prompt + single Playlists link, populated hub with progress/rows/one-Playlists-link,
+        empty hints + hidden History, bounded history preview + abort) and
+        `components/SearchField.test.tsx` (4: seeding + no-clear-when-empty, submit preserves
+        filters, clear empties+drops-query, labelled search landmark). New `e2e/library.spec.ts`
+        (2: hub shows history rail [progress bar 47.5% on the item with a saved position] +
+        playlist rows + saved rows; single Playlists link opens `/playlists`). `e2e/search.spec.ts`
+        +2 (inline field runs a new query — scoped to `<main>` so the desktop header box, same
+        name, is never matched; clearing returns to the prompt). `scripts/design-shots.mjs`
+        `library` area now mocks all three endpoints (+`SAMPLE_LIBRARY_PLAYLISTS`).
+      • **Evidence.** `.ralph/design-review/dr7/{before,after}/{library,search}` (light+dark ×
+        mobile+desktop; git-ignored; before via git-stash, after captured against
+        `E2E_PORT=3181 npm run dev -p 3181`, stale port killed before + server killed after).
+        Read the AFTER PNGs against `Vidra App.dc.html` (Library + Search screens): mobile Library
+        = 26px title + History rail (white progress) + Playlists rows (filled glyph, count·privacy,
+        chevron) + Saved rows; Search = surface-muted field w/ glyph + × + query, pill filter row,
+        148px-thumb rows w/ duration chip + hairline dividers; desktop renders the same hub/search
+        in the sidebar shell. Dark inverts via tokens; no 390px overflow.
+      • **Gate.** Full `CI=1 npm run ci` on the final tree — typecheck ✓ lint ✓ lint:icons ✓ unit
+        **+8 (LibraryView 4, SearchField 4)** ✓ `next build` ✓ mocked e2e **418 passed + 1 flaky**
+        (+4: library ×2, search ×2). The lone flake is `quarantine.spec.ts:255` (a
+        video_rejected notification-bell popover-footer link) — the **documented** parallel-load
+        flake from W0.13/DR2/DR4: it passes on retry AND flakes the same way **in isolation**
+        (`quarantine.spec` alone: 5 passed + 1 flaky, exit 0), and touches **no DR7 file**. Token
+        grep clean on changed files (semantic tokens only; the one non-token color is the
+        sanctioned `bg-white` history progress fill, identical to VideoCard).
+      • **Deviations / dependencies (honest).** (1) The design draws **no desktop** Library/
+        History/Search screen (only the mobile Library + Search); the desktop versions render the
+        same hub/search responsively in the design language. (2) `/history` and `/playlists` keep
+        their existing full-page treatments — the design shows them only as Library sub-sections
+        ("See all"/"New" destinations), so the hub previews them and links out. (3) "This instance"
+        search-scope chip = backend dependency (no search-scope contract). (4) History white
+        progress is invisible on the light no-thumbnail fallback (VideoCard-consistent; real/dark
+        thumbnails read it).
 
 ## DR8 — Inbox: notifications + messages + DM thread
 - [ ] SegmentedControl Notifications|Messages; typed notification icon circles; unread tint;

@@ -126,6 +126,42 @@ test("the header search box navigates to results", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Go Basics" })).toBeVisible();
 });
 
+test("the inline search field on the results page runs a new query", async ({ page }) => {
+  // The inline field is the page's own search input (and the only one on phones,
+  // where the header search box is hidden). Scope to <main> so the desktop
+  // header search box (same accessible name) is never matched.
+  await page.route(SEARCH, (route) => {
+    const url = new URL(route.request().url());
+    const q = url.searchParams.get("q") ?? "";
+    route.fulfill({
+      json: { query: q, videos: [video("v1", `Result for ${q}`)], limit: 20, offset: 0 },
+    });
+  });
+  await page.goto("/search?q=go");
+  const field = page.getByRole("main").getByLabel("Search videos");
+  await expect(field).toHaveValue("go");
+  await expect(page.getByRole("heading", { name: "Result for go" })).toBeVisible();
+
+  await field.fill("rust");
+  await field.press("Enter");
+  await expect(page).toHaveURL(/\/search\?q=rust/);
+  await expect(page.getByRole("heading", { name: "Result for rust" })).toBeVisible();
+});
+
+test("clearing the inline search field returns to the prompt", async ({ page }) => {
+  await page.route(SEARCH, (route) =>
+    route.fulfill({ json: { query: "go", videos: [video("v1", "Go Basics")], limit: 20, offset: 0 } }),
+  );
+  await page.goto("/search?q=go");
+  const field = page.getByRole("main").getByLabel("Search videos");
+  await expect(field).toHaveValue("go");
+
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await expect(page).toHaveURL(/\/search$/);
+  await expect(field).toHaveValue("");
+  await expect(page.getByText("Search for videos")).toBeVisible();
+});
+
 test("category/language filters narrow the search and land in the URL", async ({ page }) => {
   await mockConfig(page);
   const calls: Array<Record<string, string | null>> = [];

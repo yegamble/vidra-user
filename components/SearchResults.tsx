@@ -43,7 +43,7 @@ function SearchResultRow({ video }: { video: Video }) {
 
   return (
     <li className="group relative flex gap-3 border-b border-border-subtle py-3">
-      <div className="relative aspect-video w-[148px] flex-none overflow-hidden rounded-xl bg-surface-muted sm:w-[220px]">
+      <div className="relative aspect-video w-[148px] flex-none overflow-hidden rounded-[10px] bg-surface-muted sm:w-[220px]">
         {video.has_thumbnail ? (
           // Backend-served image; a plain <img> avoids next/image remote config.
           // eslint-disable-next-line @next/next/no-img-element

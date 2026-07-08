@@ -479,6 +479,15 @@ const SAMPLE_HISTORY = {
   offset: 0,
 };
 
+// A playlists payload (GET /me/playlists) for the Library hub's Playlists rows.
+const SAMPLE_LIBRARY_PLAYLISTS = {
+  playlists: [
+    { id: "pl1", title: "Watch later", description: "", visibility: "private", video_count: 6, has_thumbnail: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: "pl2", title: "Colour grading references", description: "", visibility: "unlisted", video_count: 14, has_thumbnail: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: "pl3", title: "Field recordings", description: "", visibility: "public", video_count: 3, has_thumbnail: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  ],
+};
+
 // A messaging thread (GET /conversations/{id}/messages) crafted to exercise the
 // v2 thread view: a yesterday run + a today run + a Seen watermark, so the day
 // header, the >60-min gap separator, other-party run avatars, and the quiet
@@ -1207,12 +1216,19 @@ const AREAS = {
       );
     },
   },
-  // Library / saved videos (backport W0.7): a home-consistent grid of saved
-  // cards under the Library title + Playlists link. Auth-gated.
+  // Library hub (design refresh DR7): History rail (real resume progress) +
+  // Playlists rows (filled glyph + count·privacy) + Saved rows. Auth-gated;
+  // mocks all three real endpoints (/me/history, /me/playlists, /me/saved).
   library: {
     path: "/library",
     async mock(page) {
       await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/history(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_HISTORY }),
+      );
+      await page.route(/\/api\/v1\/me\/playlists$/, (route) =>
+        route.fulfill({ json: SAMPLE_LIBRARY_PLAYLISTS }),
+      );
       await page.route(/\/api\/v1\/me\/saved(\?|$)/, (route) => route.fulfill({ json: SAMPLE_FEED }));
     },
   },

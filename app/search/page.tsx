@@ -1,3 +1,4 @@
+import { SearchField } from "@/components/SearchField";
 import { SearchFilters } from "@/components/SearchFilters";
 import { SearchResults } from "@/components/SearchResults";
 import { readSearchFilters } from "@/lib/search-url";
@@ -20,10 +21,14 @@ export default async function SearchPage({
   // max-w-4xl: search results are a dense list (thumbnail-left rows), so the
   // page keeps a comfortable reading measure instead of the grid pages' 7xl.
   return (
-    <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:py-8">
-      <h1 className="mb-4 text-2xl font-bold tracking-tight">
-        {query ? `Results for “${query}”` : "Search"}
-      </h1>
+    <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-4 sm:py-6">
+      {/* The inline search field is the page's primary control (and the only
+          search input on phones); the visible heading is redundant with it, so
+          the page title stays for the accessibility tree only. */}
+      <h1 className="sr-only">{query ? `Search results for “${query}”` : "Search"}</h1>
+      <div className="mb-3">
+        <SearchField query={query} filters={filters} />
+      </div>
       <div className="mb-3 sm:mb-4">
         <SearchFilters query={query} filters={filters} />
       </div>

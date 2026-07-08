@@ -45,8 +45,11 @@ export function SearchFilters({ query, filters }: { query: string; filters: Filt
     router.push(searchHref(query, { ...filters, ...next }));
   }
 
+  // Pill-shaped filter chips (design SEARCH filter row): rounded-full controls on
+  // a scrollable strip. Kept as native selects (the form semantics the tests pin)
+  // rather than bespoke chips.
   const selectClass =
-    "appearance-none rounded-xl border border-border bg-surface py-1.5 pl-3 pr-8 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted focus-ring disabled:opacity-50";
+    "appearance-none rounded-full border border-border bg-surface py-1.5 pl-3 pr-8 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted focus-ring disabled:opacity-50";
 
   return (
     <div
