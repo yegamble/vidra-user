@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { LockIcon } from "@/components/e2ee/LockIcon";
+import { LockIcon } from "@/components/icons";
 import { ReportButton } from "@/components/ReportButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { userAvatarUrl } from "@/lib/api";
@@ -57,7 +57,7 @@ export function ThreadHeader({
           </h1>
           {encrypted ? (
             <span className="shrink-0 text-fg-muted" aria-hidden>
-              <LockIcon className="h-3.5 w-3.5" />
+              <LockIcon size={14} />
             </span>
           ) : null}
         </div>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { LockIcon } from "@/components/e2ee/LockIcon";
+import { LockIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -175,7 +175,7 @@ function DeviceRow({
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-fg">
             <span className="text-success">
-              <LockIcon />
+              <LockIcon size={14} />
             </span>
             {device.device_name}
             {isCurrent ? (

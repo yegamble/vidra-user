@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DeviceSetup } from "@/components/e2ee/DeviceSetup";
-import { LockIcon } from "@/components/e2ee/LockIcon";
+import { LockIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
@@ -152,7 +152,7 @@ function LockHeader({ recipientId }: { recipientId?: string }) {
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-success/25 bg-success/10 p-4">
       <div className="flex items-center gap-2 text-success">
-        <LockIcon className="h-4 w-4" />
+        <LockIcon size={16} />
         <span className="text-sm font-semibold">End-to-end encrypted</span>
       </div>
       <p className="text-xs text-fg-muted">
@@ -264,7 +264,7 @@ function MessageList({ messages }: { messages: ShownMessage[] }) {
           >
             {m.text === null ? (
               <p className="flex items-center gap-1 italic">
-                <LockIcon className="h-3 w-3" />
+                <LockIcon size={12} />
                 Message can&rsquo;t be decrypted on this device
               </p>
             ) : (

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { LockIcon } from "@/components/e2ee/LockIcon";
+import { LockIcon } from "@/components/icons";
 import { NewMessageButton } from "@/components/NewMessageButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -220,7 +220,7 @@ function Rail({ heading }: { heading: React.ReactNode }) {
                             aria-label="Encrypted conversation"
                             title="Encrypted conversation"
                           >
-                            <LockIcon className="h-3 w-3" />
+                            <LockIcon size={12} />
                           </span>
                         ) : null}
                         <span className="ml-auto shrink-0 text-[11.5px] tabular-nums text-fg-muted">

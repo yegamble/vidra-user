@@ -69,6 +69,19 @@ describe("Modal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders the bottom-sheet skin as a labeled dialog with a grab handle", () => {
+    const { container } = render(
+      <Modal title="Create" onClose={() => {}} variant="sheet" hideClose>
+        <p>sheet body</p>
+      </Modal>,
+    );
+    // Same a11y contract regardless of skin.
+    const dialog = screen.getByRole("dialog", { name: "Create" });
+    expect(dialog.className).toContain("rounded-t-[22px]");
+    // A decorative grab handle sits at the top of the sheet.
+    expect(container.querySelector('[aria-hidden="true"].rounded-full')).toBeTruthy();
+  });
+
   it("traps Tab from the last focusable back to the first", () => {
     render(
       <Modal title="Edit" onClose={() => {}} hideClose>

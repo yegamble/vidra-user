@@ -786,6 +786,157 @@ CI, pushed, before the box ticks.
 
 ---
 
+# Design refresh (user-supplied "Vidra streaming platform design")
+
+Component restyle + new-surface wave adopting the user's design across vidra-user.
+Authoritative package: `.ralph/specs/design-refresh.md` (gap spec) + `.ralph/specs/design-refresh-icons.md`
+(41-icon path inventory) + `.ralph/design-templates/*.dc.html` (vendored design source).
+HARD RULES: **zero token-value changes** (the 4 light-mode deltas fail WCAG AA — current
+accessible values stay); SVG icons only, never emoji/glyphs; no `dark:` variants; no raw
+palette classes (black shadows/scrims are the sanctioned theme-invariant exception); axe
+gate stays green; aspirational items (spec §5.6) are listed, never stubbed. Every slice:
+before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, full
+`npm run ci` green, push.
+
+## DR1 — Foundation: primitives + icon set (no page-level visual churn)
+- [x] `components/icons/index.tsx` extended to the full 41-icon design set (paths verbatim
+      from the inventory), `strokeWidth` prop (default 1.8) + `size`, filled variants
+      (Play/Playlist/MoreHorizontal/library glyph), re-pathed existing icons (Flag/Bell/
+      Search/Check/chevrons/Info/Warning), `e2ee/LockIcon` folded in, IPFS cube, MIT header;
+      unit test render + a11y contract. **DONE 2026-07-07.** Set is now the single icon
+      source: added Home/PlusSquare/TrendingUp/Tv/Clock/Library/Video/MessageCircle/Lock/
+      File/ArrowUp/Captions/Upload/Download/Share/Heart/Playlist/MoreHorizontal/Play/Loader/
+      RotateCw/Copy/User/Shield/SlashCircle/Grid/Users/Server/Ipfs (+ re-pathed the 14
+      originals to design `d`s). Default stroke 1.8 (design standard). Filled glyphs set
+      `fill=currentColor stroke=none` per-path (Library keeps a stroked outer rect + filled
+      inner play). IPFS cube is the sole non-24 viewBox (12×14, sw1.4). `e2ee/LockIcon.tsx`
+      DELETED; its 6 consumers (DevicesView, StartEncryptedButton, DeviceSetup,
+      EncryptedThreadView, ConversationRail, ThreadHeader) re-import the shared `LockIcon`
+      with explicit `size` (preserves the 12/14/16px renders). MIT (Feather) attribution in
+      the header. `components/icons/index.test.tsx` (8 cases: decorative default, labeled →
+      role=img + `<title>`, stroke default+override, size, filled fill/stroke, currentColor,
+      folded Lock, IPFS 12×14 aspect).
+- [x] `ui/Button.tsx`: `tonal` (bg-surface-muted) + `danger-outline` (border-danger/45
+      text-danger) variants + tests. **DONE 2026-07-07.** `tonal` = borderless
+      `bg-surface-muted text-fg hover:bg-surface-strong` (the design's dominant secondary);
+      `danger-outline` = `border border-danger/45 bg-transparent text-danger hover:bg-danger/10`
+      (uses the AA-safe `danger` text token, not the solid fill). Existing 4 variants
+      unchanged. `Button.test.tsx` +2 cases.
+- [x] New `ui/SegmentedControl.tsx` (rounded-[10px] track, p-[3px], rounded-lg segments,
+      active bg-canvas + `0 1px 4px` shadow, optional count suffix); migrate `ThemeToggle`
+      + `FeedScopeToggle` to it (role="group"/aria-pressed contract preserved). **DONE
+      2026-07-07.** Generic `<SegmentedControl<T extends string>>` — `role="group"` of
+      `aria-pressed` toggle buttons (single-select; Tab + Enter/Space), named via `label`
+      (→aria-label) OR `labelledBy` (→aria-labelledby, for a visible heading); `size` sm/md,
+      `fullWidth` (flex-1 segments for later Inbox/Queues tabs), optional muted tabular-nums
+      `count`. Chosen model deliberately matches FeedScopeToggle's existing a11y (its
+      `remote-videos.spec.ts` asserts group name "Feed scope" + `aria-pressed` on "Local"/
+      "All" buttons — still green). ThemeToggle keeps its visible "Appearance" heading via
+      `labelledBy`; FeedScopeToggle navigates in `onChange` (guarded no-op on the active
+      segment). `SegmentedControl.test.tsx` (5 cases). Exported from the ui barrel. Verified
+      in after-shots: home Local/All and settings Light/System/Dark now render as rounded-rect
+      raised-active switchers (was pill), distinct from the sort chips.
+- [x] `ui/Toggle.tsx`: 46×28 sizing, 24px bg-canvas knob, travel 2→20px. **DONE 2026-07-07.**
+      `h-7 w-[46px]`, knob `h-6 w-6 bg-canvas shadow-[0_1px_3px_rgba(0,0,0,0.15)]`, off
+      `translate-x-0.5` (2px) → on `translate-x-5` (20px); on-track `bg-accent`, off-track
+      `bg-surface-strong`. `role="switch"`/aria-checked contract unchanged (player Autoplay
+      + studio replay e2e still green). New `Toggle.test.tsx` (4 cases; there was none).
+- [x] `ui/Badge.tsx`: uppercase micro `status` style + role pills (ADMIN inverse, MOD strong).
+      **DONE 2026-07-07.** `status` prop → `text-[10.5px] font-bold uppercase tracking-[0.04em]
+      px-2 py-[2.5px]` (design status pill, verbatim). Added `inverse` (`bg-fg text-canvas`,
+      ADMIN) + `strong` (`bg-surface-strong text-fg-muted`, MOD) variants. Default sentence-
+      case pill unchanged (22 existing consumers untouched). New `Badge.test.tsx` (4 cases).
+- [x] `ui/Modal.tsx`: desktop-dialog skin (max-w-md/rounded-[20px]/deep shadow/black-45 scrim)
+      + mobile bottom-sheet skin (rounded-t-[22px], grab handle, safe-area). **DONE
+      2026-07-07.** New `variant` prop, default `dialog`: centered, `max-w-md rounded-[20px]
+      bg-canvas p-6 shadow-[0_24px_60px_rgba(0,0,0,0.3)]`, borderless (deep shadow separates),
+      `bg-black/45` scrim (matches the design's `--bg` overlay panel). `sheet`: bottom-anchored
+      (`items-end`), `rounded-t-[22px] px-5 pt-3 pb-[max(env(safe-area-inset-bottom),2.75rem)]`
+      + a 36×4 decorative `bg-border` grab handle. **Kept `max-w-md`** (≈448px, within 8px of
+      the design's 440px) instead of `max-w-[440px]` so MessageLightbox's `max-w-3xl` override
+      keeps winning (no tailwind-merge on plain `cn`). Focus-trap/Escape/scrim/close a11y
+      unchanged. `Modal.test.tsx` +1 sheet case. **Deviation:** panel bg switched
+      `surface`→`canvas` to match the design source — a subtle dark-mode deepening on the 6
+      existing modal consumers (functional e2e green; contrast improves, not regresses).
+- [x] Bookkeeping: specs copied into `.ralph/specs/`, this section appended; harden
+      `playwright.config.ts` webServer against stale-server masking (CI-semantics-preserving).
+      **DONE 2026-07-07.** `design-refresh.md` + `design-refresh-icons.md` copied to
+      `.ralph/specs/`. playwright webServer `reuseExistingServer` → `false` unconditionally
+      (CI already ran false via `!process.env.CI`, so CI semantics unchanged; local runs now
+      always start a FRESH `next start` and can never silently reuse a stale/dev server on the
+      port — an occupied port fails loudly, use E2E_PORT).
+- [x] Evidence: component gallery / touched-surface screenshots; axe clean; `npm run ci`; push.
+      **DONE 2026-07-07.** Before/after `.ralph/design-review/dr1/{before,after,after-full}/`
+      (home + settings, light+dark, 390/1280; git-ignored). Read after-PNGs vs the design
+      source: segmented controls + shell/cards render correctly, no overflow. Full
+      `npm run ci` GREEN (typecheck, lint, 560 unit, build, 398 e2e incl. axe). Pushed.
+
+## DR2 — Icon sweep: kill all emoji/glyph icons (5 call sites)
+- [ ] `RatingControls` 👍/👎 → ThumbsUp/ThumbsDown; `ReportButton` ⚑ → FlagIcon; `SaveButton`
+      ★/☆ → StarIcon (revisit vs design plus+"Save" pill in DR5); `PlayerMenu` ✓ +
+      `AddToPlaylistButton` ✓ → CheckIcon. Do NOT convert `·`/`…`/`×`/`←→` keycaps/`—`/LIVE dot.
+- [ ] CI guard: grep/lint failing on emoji codepoints in `components/ app/` JSX.
+- [ ] Evidence + `npm run ci` + push.
+
+## DR3 — Shell: BottomTabBar + Header + Sidebar + Create sheet
+- [ ] Tab/sidebar/header icons → design paths; Create tab opens bottom sheet (Upload / Go
+      live / Open Studio); sidebar FOLLOWING pulsing live dot; row radius 9px.
+- [ ] Evidence + `npm run ci` + push.
+
+## DR4 — Home/feed + Live rail (mobile + desktop)
+- [ ] Mobile single-column cards (16px thumbs, IPFS cube chip top-left, duration chip, 36px
+      avatar rows); desktop 3-col grid (IPFS top-right); "Live now" rail (240px cards, LIVE
+      pill, NO watching-count — aspirational §5.6). Evidence + `npm run ci` + push.
+
+## DR5 — Watch page (mobile + desktop)
+- [ ] Player chrome (chip time/CC/quality, thin white progress, center play, mobile chevron
+      minimize); IPFS source bar + player fetching/error states, PEER-FREE copy (§5.1);
+      actions row (Support accent-first heart, Share/Download/Save tonal, Report tonal);
+      Support sheet/dialog (QR + mono address); channel row + Follow toggle; comments
+      collapsed "View N replies" + border-l rail + [deleted] tombstone (coordinate composer
+      with ../comment-reply-attribution/). Evidence (incl. IPFS ok/fetching/error) + CI + push.
+
+## DR6 — Channel page
+- [ ] Banner + overlapping avatar, action cluster, underline tabs, 2/4-col grids. CI + push.
+
+## DR7 — Library / History / Playlists / Search
+- [ ] Library rails (white progress only if resume % is real — verify §5.6), playlist/saved
+      rows; Search field + filter chips + divider rows. CI + push.
+
+## DR8 — Inbox: notifications + messages + DM thread
+- [ ] SegmentedControl Notifications|Messages; typed notification icon circles; unread tint;
+      thread E2EE header (NO "disappearing 7d" — aspirational), tailed bubbles, pill composer
+      + accent send. CI + push.
+
+## DR9 — Studio + Upload + Go Live
+- [ ] Studio storage card (`/me/quota`), video rows + status Badges; desktop stat cards
+      (Storage + Views·28d + Followers real via `/channels/{handle}/stats`, NO delta lines —
+      aspirational); Upload dropzone/progress/details (NO Bluesky toggle — aspirational);
+      Go Live one-time key screen (`POST /live/{id}/key`). CI + push.
+
+## DR10 — Settings + Donations + Auth
+- [ ] Grouped settings cards (omit Bluesky row — aspirational); donation network cards
+      (verified/unverified pills, ETH-only verify); auth login (SSO from `oauth_providers[]`),
+      TOTP 6-box (`/auth/mfa/challenge`), signup approval notice. CI + push.
+
+## DR11 — Admin mobile parity (app/admin + app/moderation)
+- [ ] Overview health/queues/audit (real rows only — NO S3/RTMP/Bluesky; stats only if real
+      counts, §5.4); Users + detail (role SegmentedControl, quota override); Queues (Reports/
+      Quarantine/Sign-ups); Content (Videos|Comments, block overlay); Instance toggles via
+      `/admin/instance-settings`. CI + push.
+
+## DR12 — Admin desktop console
+- [ ] 230px sidebar shell; 4-stat row (§5.4 caveat); two-col health/queues/audit; users TABLE;
+      user detail two-col; queue cards; instance two-col. CI + push.
+
+## DR13 — Sweep & guardrails closeout
+- [ ] Ad-hoc inline-SVG convergence audit (remaining components → `components/icons`); update
+      `.ralph/specs/design-system.md` (SegmentedControl shape, Button/Toggle/Badge additions,
+      icon set as single source, emoji-lint guard); full-app screenshot pass vs templates.
+      CI + push.
+
+---
+
 # Optional / Deferred / Non-Blocking
 
 These items do not block Ralph exit if configured as optional in `.ralphrc` and explicitly kept in this section.

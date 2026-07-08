@@ -20,6 +20,11 @@ export { LinkButton, type LinkButtonProps } from "./LinkButton";
 export { LoadMoreButton, PAGE_SIZE } from "./LoadMoreButton";
 export { Modal, type ModalProps } from "./Modal";
 export { Radio, type RadioProps } from "./Radio";
+export {
+  SegmentedControl,
+  type SegmentedControlProps,
+  type SegmentedOption,
+} from "./SegmentedControl";
 export { Select, type SelectProps } from "./Select";
 export { Skeleton, type SkeletonProps } from "./Skeleton";
 export { Spinner } from "./Spinner";

@@ -27,6 +27,21 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "Delete" }).className).toContain("bg-danger");
   });
 
+  it("applies the tonal variant (borderless muted fill)", () => {
+    render(<Button variant="tonal">Share</Button>);
+    const btn = screen.getByRole("button", { name: "Share" });
+    expect(btn.className).toContain("bg-surface-muted");
+    expect(btn.className).not.toContain("border");
+  });
+
+  it("applies the danger-outline variant (hairline outline + danger text)", () => {
+    render(<Button variant="danger-outline">Remove</Button>);
+    const btn = screen.getByRole("button", { name: "Remove" });
+    expect(btn.className).toContain("border-danger/45");
+    expect(btn.className).toContain("text-danger");
+    expect(btn.className).toContain("bg-transparent");
+  });
+
   it("fires onClick when enabled", () => {
     const onClick = vi.fn();
     render(<Button onClick={onClick}>Click</Button>);

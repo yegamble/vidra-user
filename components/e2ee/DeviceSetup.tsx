@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { LockIcon } from "@/components/e2ee/LockIcon";
+import { LockIcon } from "@/components/icons";
 import { ApiError, errorMessage } from "@/lib/api";
 import { getEngine, type LocalDevice } from "@/lib/e2ee/engine";
 
@@ -37,7 +37,7 @@ export function DeviceSetup({ onReady }: { onReady: (device: LocalDevice) => voi
   return (
     <section className="flex max-w-md flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex items-center gap-2 text-fg">
-        <LockIcon className="h-4 w-4" />
+        <LockIcon size={16} />
         <h2 className="text-[15px] font-bold tracking-tight">Set up encryption on this device</h2>
       </div>
       <p className="text-sm text-fg-muted">

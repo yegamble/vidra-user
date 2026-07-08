@@ -2,13 +2,27 @@ import type { ButtonHTMLAttributes } from "react";
 
 import { cn } from "@/lib/cn";
 
-export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "tonal"
+  | "danger"
+  | "danger-outline"
+  | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-accent text-accent-fg hover:bg-accent/90",
   secondary: "border border-border bg-surface text-fg hover:bg-surface-muted",
+  // The design's dominant secondary: a borderless muted-fill pill (watch actions,
+  // the IPFS source toggle, Share/Download/Save). Deepens one step on hover.
+  tonal: "bg-surface-muted text-fg hover:bg-surface-strong",
   danger: "bg-danger-solid text-danger-fg hover:bg-danger-solid/90",
+  // Low-emphasis destructive (Remove / Reject / Delete / Cancel upload): a hairline
+  // danger outline on a transparent fill, danger text. Uses the AA-safe `danger`
+  // text token (not the solid fill).
+  "danger-outline":
+    "border border-danger/45 bg-transparent text-danger hover:bg-danger/10",
   ghost: "text-fg hover:bg-surface-muted",
 };
 

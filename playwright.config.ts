@@ -54,7 +54,16 @@ export default defineConfig({
   webServer: {
     command: `npm run start -- -p ${PORT}`,
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    // Always start a FRESH `next start` against the just-built output and never
+    // adopt whatever already holds the port. CI already ran this way
+    // (`!process.env.CI` === false under CI), so this is CI-semantics-preserving;
+    // the change is purely local. The W1 audit flagged the old
+    // `reuseExistingServer: !process.env.CI` as a footgun: locally it would
+    // silently reuse a stale `next start` — or worse a `next dev` server — on the
+    // port, so `npm run ci`'s e2e/axe gate ran against stale (or unbuilt) code and
+    // masked real results. With reuse off, an occupied port fails the run loudly
+    // (set E2E_PORT to a free port — see AGENT.md) instead of quietly masking.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

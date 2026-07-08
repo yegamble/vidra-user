@@ -29,7 +29,7 @@ export function Toggle({ checked, onChange, label, disabled, className }: Toggle
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-ring disabled:pointer-events-none disabled:opacity-60",
+        "relative inline-flex h-7 w-[46px] shrink-0 items-center rounded-full transition-colors focus-ring disabled:pointer-events-none disabled:opacity-60",
         checked ? "bg-accent" : "bg-surface-strong",
         className,
       )}
@@ -37,7 +37,7 @@ export function Toggle({ checked, onChange, label, disabled, className }: Toggle
       <span
         aria-hidden="true"
         className={cn(
-          "inline-block h-5 w-5 transform rounded-full bg-surface shadow transition-transform",
+          "inline-block h-6 w-6 transform rounded-full bg-canvas shadow-[0_1px_3px_rgba(0,0,0,0.15)] transition-transform",
           checked ? "translate-x-5" : "translate-x-0.5",
         )}
       />

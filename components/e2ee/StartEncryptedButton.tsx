@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { LockIcon } from "@/components/e2ee/LockIcon";
+import { LockIcon } from "@/components/icons";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import { useE2EEAvailable } from "@/lib/e2ee/availability";
 
@@ -45,7 +45,7 @@ export function StartEncryptedButton({ recipientId }: { recipientId: string }) {
         onClick={() => void open()}
         className="focus-ring inline-flex items-center gap-1 rounded-full text-xs font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
       >
-        <LockIcon />
+        <LockIcon size={14} />
         {busy ? "Opening…" : "Encrypted message"}
       </button>
       {error ? <span className="text-xs text-danger">{error}</span> : null}
