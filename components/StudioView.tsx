@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { BatchUploadQueue } from "@/components/BatchUploadQueue";
 import { CaptionsManager } from "@/components/CaptionsManager";
 import { ChaptersManager } from "@/components/ChaptersManager";
 import { EmbedPrivacyManager } from "@/components/EmbedPrivacyManager";
@@ -164,7 +165,12 @@ function Studio() {
         // #upload / #go-live anchors are the landing targets for the phone Create
         // sheet's rows; scroll-mt clears the sticky app header.
         <div id="upload" className="scroll-mt-20">
-          <UploadSection key={`upload-${channelsKey}`} channels={channels} config={config} />
+          <UploadSection
+            key={`upload-${channelsKey}`}
+            channels={channels}
+            config={config}
+            onUploaded={() => setVideoReloadKey((k) => k + 1)}
+          />
         </div>
       ) : null}
       {channels.length > 0 ? (
@@ -603,7 +609,15 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-function UploadSection({ channels, config }: { channels: Channel[]; config: VideoConfigResponse | null }) {
+function UploadSection({
+  channels,
+  config,
+  onUploaded,
+}: {
+  channels: Channel[];
+  config: VideoConfigResponse | null;
+  onUploaded?: () => void;
+}) {
   const [handle, setHandle] = useState(channels[0]?.handle ?? "");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -643,6 +657,9 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   // A resumable session found for the currently-picked file (matched by
   // filename + size in localStorage) — offers "Resume upload" after a refresh.
   const [resumeCandidate, setResumeCandidate] = useState<StoredUploadSession | null>(null);
+  // When the creator picks more than one file at once, the single-file form gives
+  // way to the batch upload queue (UPLOAD-10). null = single-file mode.
+  const [batchFiles, setBatchFiles] = useState<File[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const publishRef = useRef<HTMLButtonElement>(null);
@@ -847,11 +864,23 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     if (state === "error" || state === "cancelled") setState("idle");
   }
 
-  // onFilePicked offers a resume when the re-picked file matches an unfinished
-  // session (same filename + size) left by an interrupted upload.
+  // onFilePicked routes the picked file(s). More than one file switches to the
+  // batch upload queue (UPLOAD-10); a single file keeps the rich single-file form
+  // and offers a resume when it matches an unfinished session (same filename +
+  // size) left by an interrupted upload.
   function onFilePicked() {
     setError(null);
-    const file = fileRef.current?.files?.[0];
+    const files = [...(fileRef.current?.files ?? [])];
+    if (files.length > 1) {
+      // Hand the files to the batch queue and reset the single-file input so the
+      // form returns clean when the batch is cleared.
+      setBatchFiles(files);
+      if (fileRef.current) fileRef.current.value = "";
+      setFileName(null);
+      setResumeCandidate(null);
+      return;
+    }
+    const file = files[0];
     setFileName(file ? file.name : null);
     setResumeCandidate(file ? findResumableUploadSession(file) : null);
   }
@@ -1001,6 +1030,17 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-[15px] font-bold tracking-tight">Upload a video</h2>
+      {batchFiles ? (
+        <BatchUploadQueue
+          initialFiles={batchFiles}
+          channels={channels}
+          defaultHandle={handle}
+          defaultPrivacy={privacy}
+          onUploaded={onUploaded}
+          onClearBatch={() => setBatchFiles(null)}
+        />
+      ) : (
+        <>
       <form
         onSubmit={(e) => void upload(e)}
         className="flex flex-col gap-4 rounded-2xl border border-border-subtle bg-surface p-4 sm:p-5"
@@ -1152,6 +1192,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
                 ref={fileRef}
                 type="file"
                 accept="video/*"
+                multiple
                 aria-label="Video file"
                 onChange={onFilePicked}
                 className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
@@ -1166,7 +1207,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
                 <span className="text-[13px] leading-relaxed text-fg-muted">
                   MP4, MOV, WebM, MKV · up to 8 GB
                   <br />
-                  Uploads are resumable — leave and come back anytime
+                  Resumable — leave and come back · pick several to upload a batch
                 </span>
               </div>
             </div>
@@ -1338,6 +1379,8 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           ) : null}
         </div>
       ) : null}
+        </>
+      )}
     </section>
   );
 }

@@ -906,13 +906,65 @@ the core commit + endpoint it binds to (W1-style):
       count rose to 71 (W2.U2's 70 → 71) — i.e. this slice's backed frame-pick spec
       RAN AND PASSED against a real vidra-core + Postgres + ffmpeg. `frontend-ci` +
       `contract-ci` GREEN on `de53c8d` too. **CLOSED.**
-- [ ] W2.U4 [UPLOAD-10 UI — UNBLOCKED: vidra-core W2.C3 landed (commit `71d950b`;
-      429 `too_many_active_uploads` present in `vidra-core/api/openapi.yaml`);
-      degrade gracefully if the code is absent] Batch upload: `multiple` dropzone →
-      per-file queued rows (title prefill, independent progress, cancel/retry),
-      max 2 concurrent sessions client-side, quota preflight against the storage
-      card; `e2e/upload-batch.spec.ts` + backend-backed 3-videos-after-refetch
-      proof.
+- [x] W2.U4 [UPLOAD-10 UI — UNBLOCKED: vidra-core W2.C3 landed (commit `71d950b`;
+      429 `too_many_active_uploads` present in `vidra-core/api/openapi.yaml`)] Batch
+      upload. **DONE 2026-07-08.** (a) **Pure queue core** — new `lib/upload-queue.ts`:
+      the `BatchItem` shape + `queueReducer` (enqueue/setTitle/start/progress/
+      succeed/fail/requeue/cancel/retry/remove/markOverQuota, each guarded so a
+      wrong-status action is a no-op) + the two policy selectors: `selectStartable`
+      (bounded parallelism — yields at most `MAX_CONCURRENT_UPLOADS`(=2) − active
+      queued ids, in order) and `overQuotaIds` (the quota preflight — greedily fits
+      the queued sizes against the caller's `QuotaStat` used/quota, returning the ids
+      that would cross it; unlimited/absent quota ⇒ [], server 422 stays the final
+      authority), plus `titleFromFilename`/`makeBatchItems`/`allSettled`. Framework-
+      free so parallelism/retry/limit-backoff/preflight are unit-testable.
+      (b) **Component** — new `components/BatchUploadQueue.tsx`: seeds rows from the
+      multi-pick, runs the preflight once quota loads, and orchestrates uploads via
+      the SAME per-video resumable protocol as a single upload (`createVideoDraft` →
+      `resumableUpload` → complete). A run-loop effect starts as many queued rows as
+      the cap allows (a `runningRef` guards against double-start); on the server's
+      per-user active-session cap (429 `too_many_active_uploads`/rate-limit) the row
+      RE-QUEUES and a 3s backoff pauses new starts (deleting the just-created draft so
+      the retry is clean) instead of failing; a cancel aborts the chunk transfer and
+      cleans up the session + orphaned draft; a `state="failed"` completion is the
+      honest false-success guard (never "Done"). Per-file editable title (prefilled
+      from filename), independent 5px byte-detail progress line, status pill
+      (Queued/Uploading/Done/Failed/Cancelled/Over quota), cancel/retry/remove per
+      row, shared channel+privacy selects (locked once uploading), and an "Upload N
+      videos" start button. DR9 vocabulary, tokens only, SVG icons only.
+      (c) **Wiring** — `components/StudioView.tsx`: the file `<input>` gains
+      `multiple`; `onFilePicked` routes a >1-file pick to the batch queue (resets the
+      single input) while a single file keeps the rich single-file form untouched;
+      the queue renders in place of the form and threads `onUploaded` → the studio
+      bumps `videoReloadKey` so Your videos refetches after the batch. Dropzone
+      caption now notes "pick several to upload a batch". (d) **Tests:** unit
+      `lib/upload-queue.test.ts` (27 — reducer transitions incl. the requeue/limit-
+      backoff and retry paths, `selectStartable` parallelism cap, `overQuotaIds`
+      greedy fit + skip-non-queued, `titleFromFilename`, `allSettled`); mocked
+      `e2e/upload-batch.spec.ts` (4 — a multi-pick switches to the queue with per-file
+      rows; 3 files all reach Done through the concurrency cap; an edited per-file
+      title + shared privacy ride the correct draft; over-quota files are pre-marked
+      and excluded from the "Upload N" count). (e) **Backed DB-proof [~]:**
+      `e2e-backed/upload-batch.spec.ts` signs up, creates a channel, picks THREE real
+      `TINY_MP4` files, uploads the batch, and reads all three published videos back
+      off the owner's channel via the API (the refetch proof). No backend stack was
+      reachable in-session (`:8080` refused; only postgres/redis containers, the
+      `api` service is a from-source Go build), so it did NOT run locally — structured
+      for the `frontend-e2e-backed` CI job (same posture as W2.U1–U3's backed specs).
+      (f) **Design:** before/after screenshots (light+dark × mobile+desktop) in
+      `.ralph/design-review/w2/studio-batch/` via a new `studio-batch` shots area
+      (picks 3 files → the queued batch surface); tokens only, SVG only, read +
+      verified (per-file title rows + QUEUED pills + shared privacy match the studio
+      card vocabulary in both themes; responsive with the bottom tab bar intact).
+      (g) **Gate:** full `npm run ci` green locally (typecheck, lint, lint:icons, 783
+      unit incl. the 27 new, build, 452/453 e2e incl. the 4 new + axe — the lone
+      failure was the confirmed `watch-player.spec.ts` `>`-speed parallel-load flake,
+      which passes 14/14 in isolation, unrelated to this slice); `node
+      scripts/check-contract.mjs` green (no contract change — batch reuses the in-spec
+      per-video session/draft/quota paths, so no codegen). Branch CI: to be confirmed
+      on push (`frontend-ci` + `contract-ci` expected green; `frontend-e2e-backed`
+      remains chronically red on the same unrelated data-mutating specs — this slice's
+      own backed batch spec runs there). **CLOSED.**
 - [ ] W2.U5 [UPLOAD-13 UI — UNBLOCKED: vidra-core W2.C4 landed (commit `1a4ebc2`;
       `/api/v1/channel-syncs` present in `vidra-core/api/openapi.yaml`)] Channel
       auto-sync management: studio "Auto-import from another platform" section

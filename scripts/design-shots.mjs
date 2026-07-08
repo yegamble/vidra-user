@@ -1676,6 +1676,37 @@ const AREAS = {
       await page.getByRole("img", { name: "Frame preview" }).waitFor({ state: "visible" });
     },
   },
+  // Studio — batch upload queue (W2.U4 / UPLOAD-10): picking several files at once
+  // switches the upload form to the batch queue — one row per file with a
+  // filename-derived title, a status pill, and per-row actions, plus the shared
+  // channel/privacy selects and the "Upload N videos" button. Captured in the
+  // pre-start (queued) state so every row + the vocabulary is visible.
+  "studio-batch": {
+    path: "/studio",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/instance$/, (route) => route.fulfill({ json: sampleInstance() }));
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
+        route.fulfill({ json: { live_streams: [] } }),
+      );
+    },
+    async act(page) {
+      await page.getByLabel("Video file").setInputFiles([
+        { name: "alps-field-diary.mov", mimeType: "video/mp4", buffer: Buffer.from("a".repeat(64)) },
+        { name: "silver-gelatin-darkroom.mp4", mimeType: "video/mp4", buffer: Buffer.from("b".repeat(32)) },
+        { name: "calibrated-oled-setup.mp4", mimeType: "video/mp4", buffer: Buffer.from("c".repeat(48)) },
+      ]);
+      await page.getByRole("list", { name: "Upload queue" }).waitFor({ state: "visible" });
+    },
+  },
   // Go Live one-time key screen (DR9): fill the create form and reveal the
   // shown-once stream key — the warning card, mono RTMP + key fields with copy,
   // the Show/Hide blur toggle, and the "waiting for encoder" hint.
