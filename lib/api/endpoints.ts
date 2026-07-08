@@ -110,6 +110,7 @@ import type {
   CreateUploadSessionRequest,
   UploadSessionResponse,
   UploadStatusResponse,
+  ActiveUploadsResponse,
   ImportJobResponse,
   VideoFile,
   VideoRating,
@@ -419,6 +420,20 @@ export const api = {
    */
   getVideoImport: (videoId: string, signal?: AbortSignal) =>
     apiRequest<ImportJobResponse>(`/api/v1/videos/${encodeURIComponent(videoId)}/import`, { signal }),
+
+  /**
+   * GET /api/v1/me/uploads — the caller's ACTIVE (unfinished, unexpired) resumable
+   * upload sessions (server-side draft recovery, UPLOAD-03). The server is the
+   * source of truth for in-progress uploads — a client that lost its localStorage
+   * (a refresh, or a different device) reconstructs its resume offers from here.
+   * Pass `fingerprint` to narrow to sessions for one exact file ("am I already
+   * uploading this?").
+   */
+  listMyUploads: (fingerprint?: string, signal?: AbortSignal) =>
+    apiRequest<ActiveUploadsResponse>(
+      `/api/v1/me/uploads${fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : ""}`,
+      { signal },
+    ),
 
   /**
    * POST /api/v1/videos/{id}/upload-session — open a resumable (chunked) upload

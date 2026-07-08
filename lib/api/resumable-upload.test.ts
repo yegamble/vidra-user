@@ -91,7 +91,12 @@ describe("resumableUpload", () => {
     const seen: number[] = [];
     const res = await resumableUpload("v1", makeFile(), { onProgress: (p) => seen.push(p.percent) });
 
-    expect(api.createUploadSession).toHaveBeenCalledWith("v1", { size: 10, filename: "clip.mp4" });
+    // The create carries the size, filename, AND the computed opaque fingerprint
+    // (SHA-256 hex over size + first/last 1 MiB) for cross-device resume.
+    expect(api.createUploadSession).toHaveBeenCalledWith(
+      "v1",
+      expect.objectContaining({ size: 10, filename: "clip.mp4", file_fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/) }),
+    );
     // Three chunk PUTs at indices 0,1,2 (octet-stream, PUT).
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const urls = fetchMock.mock.calls.map((c) => c[0] as string);

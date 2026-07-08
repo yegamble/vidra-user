@@ -33,6 +33,7 @@ export {
   resumableUpload,
 } from "./resumable-upload";
 export type { ResumableUploadOptions, StoredUploadSession } from "./resumable-upload";
+export { computeFileFingerprint, findUploadByFingerprint } from "./fingerprint";
 export type { FeedParams, SearchParams, SearchVideosParams } from "./endpoints";
 export { getVideoConfigCached, resolveOptionLabel } from "./video-config";
 export { authApi, oauthBeginUrl } from "./auth";

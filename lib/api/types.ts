@@ -179,6 +179,9 @@ export type CreateUploadSessionRequest = Schemas["CreateUploadSessionRequest"];
 export type UploadSessionResponse = Schemas["UploadSessionResponse"];
 export type UploadSessionState = NonNullable<Schemas["UploadStatusResponse"]["state"]>;
 export type UploadStatusResponse = Schemas["UploadStatusResponse"];
+/** GET /api/v1/me/uploads — one of the caller's active resumable sessions. */
+export type ActiveUpload = Schemas["ActiveUpload"];
+export type ActiveUploadsResponse = Schemas["ActiveUploadsResponse"];
 export type ImportJobState = NonNullable<Schemas["ImportJob"]["state"]>;
 export type ImportJob = Schemas["ImportJob"];
 export type ImportJobResponse = Schemas["ImportJobResponse"];

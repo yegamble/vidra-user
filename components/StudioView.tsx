@@ -13,6 +13,7 @@ import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { StudioStorageCard } from "@/components/StudioStorageCard";
 import { TagsInput } from "@/components/TagsInput";
 import { ThumbnailManager } from "@/components/ThumbnailManager";
+import { UploadRecoveryCard } from "@/components/UploadRecoveryCard";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronDownIcon, LoaderIcon, UploadIcon } from "@/components/icons";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -88,6 +89,9 @@ function Studio() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [config, setConfig] = useState<VideoConfigResponse | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Bumped when a draft-recovery resume finishes, to remount MyVideosSection so
+  // the just-published video appears without a manual Reload.
+  const [videoReloadKey, setVideoReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -141,6 +145,7 @@ function Studio() {
   return (
     <div className="flex flex-col gap-8">
       <StudioStorageCard />
+      <UploadRecoveryCard onResumed={() => setVideoReloadKey((k) => k + 1)} />
       <ChannelSection
         channels={channels}
         onCreated={(ch) => setChannels((list) => [ch, ...list])}
@@ -155,7 +160,11 @@ function Studio() {
         </div>
       ) : null}
       {channels.length > 0 ? (
-        <MyVideosSection key={`videos-${channelsKey}`} channels={channels} config={config} />
+        <MyVideosSection
+          key={`videos-${channelsKey}-${videoReloadKey}`}
+          channels={channels}
+          config={config}
+        />
       ) : null}
       {channels.length > 0 ? (
         <div id="go-live" className="scroll-mt-20">

@@ -489,6 +489,37 @@ const SAMPLE_STUDIO_VIDEOS = {
   ],
 };
 
+// The caller's ACTIVE resumable upload sessions (GET /me/uploads) — server-side
+// draft recovery (W2.U1). Two unfinished uploads with partial received-chunk
+// counts + 24h TTLs so the "Resume an upload" card shows real per-file progress
+// bars, byte detail, and expiry countdowns.
+const SAMPLE_ACTIVE_UPLOADS = {
+  uploads: [
+    {
+      upload_id: "up1",
+      video_id: "uv1",
+      filename: "alps-field-diary-master.mov",
+      size: 8 * 1024 ** 3,
+      chunk_size: 8 * 1024 ** 2,
+      total_chunks: 1024,
+      received_chunks: 410,
+      file_fingerprint: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      expires_at: new Date(Date.now() + 22 * 3600 * 1000).toISOString(),
+    },
+    {
+      upload_id: "up2",
+      video_id: "uv2",
+      filename: "silver-gelatin-darkroom.mp4",
+      size: Math.round(2.4 * 1024 ** 3),
+      chunk_size: 8 * 1024 ** 2,
+      total_chunks: 308,
+      received_chunks: 61,
+      file_fingerprint: "3bf4f1b2b0b822cd15d6c15b0f00a089f86d081884c7d659a2feaa0c55ad0150",
+      expires_at: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+    },
+  ],
+};
+
 // A 30-day daily-views series (oldest first) for the stats chart.
 function sampleDailyViews(peak) {
   const series = [];
@@ -1438,6 +1469,30 @@ const AREAS = {
       await mockAuthedShell(page);
       await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
       await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
+        route.fulfill({ json: { live_streams: [] } }),
+      );
+    },
+  },
+  // Studio — server-side draft recovery card (W2.U1 / UPLOAD-02/03): unfinished
+  // resumable uploads read from GET /me/uploads render a "Resume an upload" card
+  // above the channels, each with a 5px progress bar, byte detail, TTL countdown,
+  // and Resume/Discard actions. Reuses the studio mock plus the /me/uploads list.
+  "studio-recovery": {
+    path: "/studio",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
+      await page.route(/\/api\/v1\/me\/uploads(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_ACTIVE_UPLOADS }),
+      );
       await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
         route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
       );

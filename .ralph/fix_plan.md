@@ -715,13 +715,47 @@ the core commit + endpoint it binds to (W1-style):
       Gate: full `npm run ci` green (2026-07-08; 435 e2e passed — the lone failure
       each run is a confirmed parallel-load flake that passes in isolation).
       **CLOSED.**
-- [ ] W2.U1 [UPLOAD-02/03 UI — UNBLOCKED: vidra-core W2.C2 landed (commit
+- [x] W2.U1 [UPLOAD-02/03 UI — UNBLOCKED: vidra-core W2.C2 landed (commit
       `af875b1`; `GET /api/v1/me/uploads` + `file_fingerprint` present in
-      `vidra-core/api/openapi.yaml`)] Draft recovery v2: WebCrypto fingerprint on
-      session create; studio "Resume upload" recovery card (server-listed active
-      sessions, 5px progress bar, expiry, Resume/Discard); localStorage demoted to
-      cache; re-pick matches by fingerprint; `e2e/upload-draft-recovery.spec.ts` +
-      backend-backed resume proof.
+      `vidra-core/api/openapi.yaml`)] Draft recovery v2. **DONE 2026-07-08.**
+      (a) **WebCrypto fingerprint:** new `lib/api/fingerprint.ts` —
+      `computeFileFingerprint` hashes an 8-byte LE size header + the first & last
+      1 MiB (SHA-256 hex, the documented opaque recipe; never reads the whole
+      file), plus `findUploadByFingerprint`. `resumable-upload.ts` computes it and
+      sends `file_fingerprint` on session create AND caches it in the
+      `StoredUploadSession` (localStorage demoted to a cache — the server list is
+      now the recovery source of truth). (b) **Endpoint:** `api.listMyUploads(fingerprint?)`
+      → `ActiveUploadsResponse` (types re-exported). (c) **Recovery card:**
+      `components/UploadRecoveryCard.tsx`, rendered in `StudioView` right below the
+      storage card (same surface-muted vocabulary): reads `GET /api/v1/me/uploads`
+      on load and lists each unfinished session — filename, a 5px progress bar
+      (received-chunk count → bytes) + "X of Y" detail, a 24h expiry countdown, and
+      Resume/Discard. Resume re-picks the file (browsers can't reopen a handle
+      after reload — the card says so), VERIFIES identity by fingerprint (falls
+      back to name+size for pre-fingerprint sessions), then resumes via
+      `resumableUpload({resume})` with a live progress bar + Cancel, honestly
+      guarding a returned `state=failed` (never "Published!"); on finish it remounts
+      MyVideosSection so the video appears. Discard DELETEs the session + best-effort
+      deletes the orphaned draft. A load failure / empty list hides the card (never
+      a faked recovery surface). (d) **Tests:** unit `lib/api/fingerprint.test.ts`
+      (9 — determinism, size/head/tail sensitivity, empty file, matcher);
+      `resumable-upload.test.ts` updated (create now sends a 64-hex fingerprint);
+      mocked `e2e/upload-draft-recovery.spec.ts` (4 — card lists a server session;
+      re-pick resumes sending only the MISSING chunks + "Upload finished." link;
+      a different file rejected by identity before any chunk moves; Discard DELETEs
+      + drops the row). (e) **Backed DB-proof:** `e2e-backed/upload-draft-recovery.spec.ts`
+      WRITTEN — seeds a half-finished session via the API (bytes localStorage never
+      knew), HARD-RELOADs the studio (cookie refresh) so the card lists the
+      server-side session, resumes to completion, and reads the finalised video
+      back from Postgres via the owner channel list (the refetch proof). Marked
+      **[~] not run locally** — no backend stack available this session (`:8080`
+      refused, no compose containers up); runs with the `backend-backed` suite in CI.
+      (f) **Design:** before/after screenshots (light+dark × mobile+desktop) in
+      `.ralph/design-review/w2/studio-recovery/` — new `studio-recovery` design-shots
+      area; tokens only, SVG only, read + verified (card matches the storage-card
+      vocabulary in both themes, responsive). (g) **Gate:** full `npm run ci` green
+      (typecheck, lint, lint:icons, 737 unit, build, e2e incl. axe — the studio a11y
+      test is unaffected since the card hides without sessions).
 - [ ] W2.U2 [UPLOAD-09 UI — UNBLOCKED: vidra-core W2.C1 landed (commit `10d403d`;
       `resolver`/`stage` on `/videos/{id}/import` present in
       `vidra-core/api/openapi.yaml`)] Import-from-URL flow: two-tab source choice

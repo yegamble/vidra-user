@@ -15,6 +15,7 @@ import { logger } from "@/lib/logger";
 import { ApiError, apiErrorFromBody } from "./client";
 import { getAccessToken } from "./auth-store";
 import { api } from "./endpoints";
+import { computeFileFingerprint } from "./fingerprint";
 import type { UploadProgress } from "./upload";
 import { UPLOAD_CANCELLED_CODE } from "./upload";
 import type { UploadStatusResponse, UploadVideoResult } from "./types";
@@ -27,6 +28,12 @@ export interface StoredUploadSession {
   filename: string;
   /** The declared byte size, to match against a re-picked file. */
   size: number;
+  /**
+   * The opaque file fingerprint sent on session create (UPLOAD-02). Optional so
+   * legacy cache entries written before fingerprinting still load; the server's
+   * GET /api/v1/me/uploads is the source of truth for cross-device resume.
+   */
+  fileFingerprint?: string;
   /** ISO expiry — a session past this is dropped without offering a resume. */
   expiresAt: string;
 }
@@ -185,6 +192,13 @@ export interface ResumableUploadOptions {
    * a caller can DELETE the session if it later cancels.
    */
   onSessionOpened?: (uploadId: string) => void;
+  /**
+   * A precomputed file fingerprint to send on session create. When omitted it is
+   * computed from the file (SHA-256 over size + first/last 1 MiB). Ignored on a
+   * resume (no new session is opened). Lets a caller that already fingerprinted
+   * the file (e.g. to match it against GET /me/uploads) avoid recomputing it.
+   */
+  fingerprint?: string;
 }
 
 function emit(onProgress: ResumableUploadOptions["onProgress"], loaded: number, total: number): void {
@@ -249,7 +263,15 @@ export async function resumableUpload(
     received = new Set(opts.resume.received_chunks);
     bytesReceived = opts.resume.bytes_received;
   } else {
-    const session = await api.createUploadSession(videoId, { size: file.size, filename: file.name });
+    // The opaque fingerprint lets the server answer "am I already uploading this
+    // exact file?" for cross-refresh / cross-device resume (GET /me/uploads).
+    const fileFingerprint = opts.fingerprint ?? (await computeFileFingerprint(file));
+    if (opts.signal?.aborted) throw cancelledError();
+    const session = await api.createUploadSession(videoId, {
+      size: file.size,
+      filename: file.name,
+      file_fingerprint: fileFingerprint,
+    });
     uploadId = session.upload_id;
     chunkSize = session.chunk_size;
     totalChunks = session.total_chunks;
@@ -260,6 +282,7 @@ export async function resumableUpload(
       videoId,
       filename: file.name,
       size: file.size,
+      fileFingerprint,
       expiresAt: session.expires_at,
     });
   }
