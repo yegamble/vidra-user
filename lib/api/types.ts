@@ -44,6 +44,18 @@ export type SetVideoChaptersRequest = Schemas["SetVideoChaptersRequest"];
 // and at least one object is pinned). The card/feed IPFS badge reads the boolean
 // Video["ipfs_pinned"]; this object carries the gateway CIDs for detail consumers.
 export type VideoIPFS = Schemas["VideoIPFS"];
+// Password-protected videos + embed privacy (CORE-17). The unlock request/response
+// mint a short-lived, video-scoped playback token; the password projections expose
+// id + created_at only (the plaintext/hash are write-only). EmbedPrivacy is the
+// tier + (whitelist only) allow-listed hostnames.
+export type UnlockVideoRequest = Schemas["UnlockVideoRequest"];
+export type UnlockVideoResponse = Schemas["UnlockVideoResponse"];
+export type VideoPassword = Schemas["VideoPassword"];
+export type VideoPasswords = Schemas["VideoPasswords"];
+export type SetVideoPasswordRequest = Schemas["SetVideoPasswordRequest"];
+export type ReplaceVideoPasswordsRequest = Schemas["ReplaceVideoPasswordsRequest"];
+export type EmbedPrivacy = Schemas["EmbedPrivacy"];
+export type EmbedPrivacyStatus = EmbedPrivacy["status"];
 export type VideoConfigOption = Schemas["VideoConfigOption"];
 export type VideoConfigResponse = Schemas["VideoConfigResponse"];
 export type FeedSort = NonNullable<Schemas["VideoFeedResponse"]["sort"]>;

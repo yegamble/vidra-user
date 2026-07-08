@@ -1150,6 +1150,56 @@ const AREAS = {
       await page.route(/\/api\/v1\/videos\/v1\/hls\/\d+p\/seg_\d+\.ts$/, (route) => route.abort());
     },
   },
+  // Watch page — password unlock prompt (backport W1.7 / CORE-17): a
+  // password-protected video answers 401 password_required, so the token-styled
+  // unlock panel stands in for the player (lock circle, password field, Unlock).
+  "watch-password": {
+    path: "/videos/v1",
+    async mock(page) {
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1$/, (route) =>
+        route.fulfill({
+          status: 401,
+          json: {
+            error: { code: "password_required", message: "This video is password protected." },
+          },
+        }),
+      );
+    },
+  },
+  // Embed — embedding disabled (backport W1.7 / CORE-17): the embed page reads the
+  // embed-privacy policy first and, when "disabled", renders the blocked panel on
+  // the black frame instead of the player.
+  "embed-disabled": {
+    path: "/embed/v1",
+    async mock(page) {
+      await page.route(/\/api\/v1\/videos\/v1\/embed-privacy$/, (route) =>
+        route.fulfill({ json: { status: "disabled" } }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1$/, (route) => route.fulfill({ json: SAMPLE_DETAIL }));
+      await page.route(/\/api\/v1\/videos\/v1\/original/, (route) => route.abort());
+    },
+  },
+  // Embed — password prompt (backport W1.7 / CORE-17): embedding is enabled but
+  // the video is password-protected, so the compact unlock panel renders inside
+  // the iframe frame (white-on-black media-overlay treatment).
+  "embed-password": {
+    path: "/embed/v1",
+    async mock(page) {
+      await page.route(/\/api\/v1\/videos\/v1\/embed-privacy$/, (route) =>
+        route.fulfill({ json: { status: "enabled" } }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1$/, (route) =>
+        route.fulfill({
+          status: 401,
+          json: { error: { code: "password_required", message: "locked" } },
+        }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/original/, (route) => route.abort());
+    },
+  },
   // Watch page — speed menu open (backport W1.U2 / PLAY-03): the player's
   // settings-cluster Speed menu opened over the media surface, showing the full
   // 0.25×–4× rate ladder as menuitemradio entries with 1× (the button now reads

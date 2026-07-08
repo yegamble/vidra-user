@@ -123,6 +123,92 @@ describe("api endpoints", () => {
     );
   });
 
+  it("media URL helpers append a ?pt= playback token (CORE-17) when one is passed", () => {
+    // The token rides on the media reads a header cannot: progressive/native-HLS
+    // src, poster, captions, storyboard. It is URL-encoded and placed as a query.
+    expect(videoOriginalUrl("v1", "tok/1")).toBe(
+      "http://localhost:8080/api/v1/videos/v1/original?pt=tok%2F1",
+    );
+    expect(videoHlsMasterUrl("v1", "tok1")).toBe(
+      "http://localhost:8080/api/v1/videos/v1/hls/master.m3u8?pt=tok1",
+    );
+    expect(videoThumbnailUrl("v1", "tok1")).toBe(
+      "http://localhost:8080/api/v1/videos/v1/thumbnail?pt=tok1",
+    );
+    expect(videoCaptionUrl("v1", "en", "tok1")).toBe(
+      "http://localhost:8080/api/v1/videos/v1/captions/en?pt=tok1",
+    );
+    expect(videoStoryboardVttUrl("v1", "tok1")).toBe(
+      "http://localhost:8080/api/v1/videos/v1/storyboard.vtt?pt=tok1",
+    );
+    expect(videoStoryboardImageUrl("v1", "tok1")).toBe(
+      "http://localhost:8080/api/v1/videos/v1/storyboard.jpg?pt=tok1",
+    );
+  });
+
+  it("media URL helpers omit the query when the token is absent/empty/null", () => {
+    expect(videoOriginalUrl("v1")).toBe("http://localhost:8080/api/v1/videos/v1/original");
+    expect(videoOriginalUrl("v1", null)).toBe("http://localhost:8080/api/v1/videos/v1/original");
+    expect(videoOriginalUrl("v1", "")).toBe("http://localhost:8080/api/v1/videos/v1/original");
+  });
+
+  it("unlockVideo POSTs the password to the unlock endpoint", async () => {
+    await api.unlockVideo("v1", "hunter2");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/unlock");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ password: "hunter2" });
+  });
+
+  it("password management hits the owner endpoints (list/add/replace/delete)", async () => {
+    // Re-arm a FRESH Response per call (a single shared Response's body can only
+    // be read once — this test makes several calls).
+    fetchMock.mockImplementation(async () => okJson());
+
+    await api.listVideoPasswords("v1");
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
+      "http://localhost:8080/api/v1/videos/v1/passwords",
+    );
+
+    fetchMock.mockClear();
+    await api.addVideoPassword("v1", "secret9");
+    let init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ password: "secret9" });
+
+    fetchMock.mockClear();
+    await api.replaceVideoPasswords("v1", ["one-pass", "two-pass"]);
+    init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ passwords: ["one-pass", "two-pass"] });
+
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await api.deleteVideoPassword("v1", "pw1");
+    const [url, del] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/passwords/pw1");
+    expect(del.method).toBe("DELETE");
+  });
+
+  it("embed-privacy reads and writes the policy endpoint", async () => {
+    fetchMock.mockImplementation(async () => okJson());
+
+    await api.getVideoEmbedPrivacy("v1");
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(
+      "http://localhost:8080/api/v1/videos/v1/embed-privacy",
+    );
+
+    fetchMock.mockClear();
+    await api.setVideoEmbedPrivacy("v1", { status: "whitelist", allowed_domains: ["example.com"] });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/embed-privacy");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({
+      status: "whitelist",
+      allowed_domains: ["example.com"],
+    });
+  });
+
   it("ipfsHlsMasterUrl builds a content-addressed gateway URL, or null when unpinned", () => {
     expect(
       ipfsHlsMasterUrl({ gateway_url: "https://ipfs.example.org", hls_cid: "bafyCID" }),

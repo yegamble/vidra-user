@@ -35,6 +35,10 @@ export interface SeekStoryboard {
 export function useStoryboard(
   videoId: string,
   hasStoryboard: boolean | undefined,
+  // Optional video-scoped playback token for a password-protected video (CORE-17),
+  // appended as `?pt=` on the VTT + sprite URLs (both are token-gated reads that a
+  // plain fetch/background-image cannot credential with a header). A secret — never logged.
+  playbackToken?: string | null,
 ): SeekStoryboard | null {
   const [loaded, setLoaded] = useState<{ videoId: string; cues: StoryboardCue[] } | null>(null);
   // The videoId we've already kicked a fetch for (null = none yet); guards the
@@ -53,7 +57,7 @@ export function useStoryboard(
     const controller = new AbortController();
     abortRef.current = controller;
     const id = videoId;
-    fetch(videoStoryboardVttUrl(id), { signal: controller.signal })
+    fetch(videoStoryboardVttUrl(id, playbackToken), { signal: controller.signal })
       .then((res) => (res.ok ? res.text() : ""))
       .then((text) => {
         if (text !== "") setLoaded({ videoId: id, cues: parseStoryboardVtt(text) });
@@ -61,9 +65,9 @@ export function useStoryboard(
       .catch(() => {
         // No preview frames — the seek tooltip still shows the timestamp.
       });
-  }, [videoId, hasStoryboard]);
+  }, [videoId, hasStoryboard, playbackToken]);
 
-  const spriteUrl = videoStoryboardImageUrl(videoId);
+  const spriteUrl = videoStoryboardImageUrl(videoId, playbackToken);
   const lookup = useCallback(
     (time: number) => {
       if (!loaded || loaded.videoId !== videoId || loaded.cues.length === 0) return null;

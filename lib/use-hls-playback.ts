@@ -72,6 +72,12 @@ export function useHlsPlayback(
   // source; the progressive fallback stays the authoritative server /original,
   // so a mid-stream IPFS failure degrades to server playback, not a dead player.
   hlsMasterOverride?: string | null,
+  // Optional video-scoped playback token for a password-protected video (CORE-17).
+  // In hls.js/MSE mode it rides as `Authorization: Bearer <pt>` on every request
+  // (xhrSetup, so master + variants + segments are all credentialed); in
+  // native-HLS/progressive mode it is appended to the media src as `?pt=` (Safari
+  // cannot set a request header on the media element). A secret — never logged.
+  playbackToken?: string | null,
 ): HlsPlayback {
   const hasHls = Boolean(video.hls_url);
   // The id of a video whose hls.js pipeline fatally failed → play its original
@@ -110,7 +116,20 @@ export function useHlsPlayback(
           setFailedId(video.id);
           return;
         }
-        const hls = new HlsClass({ startPosition: startAt ?? -1 });
+        const hls = new HlsClass({
+          startPosition: startAt ?? -1,
+          // Credential a password-protected video's HLS requests with the Bearer
+          // playback token. Skipped when playing the IPFS gateway mirror (a public
+          // gateway needs no token and a non-simple Authorization header would trip
+          // its CORS preflight) — password videos are never IPFS-mirrored anyway.
+          ...(playbackToken && !hlsMasterOverride
+            ? {
+                xhrSetup: (xhr: XMLHttpRequest) => {
+                  xhr.setRequestHeader("Authorization", `Bearer ${playbackToken}`);
+                },
+              }
+            : {}),
+        });
         hlsRef.current = hls;
         let parsed = false;
         let recoveries = 0;
@@ -159,15 +178,18 @@ export function useHlsPlayback(
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [mode, video.id, videoRef, startAt, hlsMasterOverride]);
+  }, [mode, video.id, videoRef, startAt, hlsMasterOverride, playbackToken]);
 
   const fragment = startAt !== null ? `#t=${startAt}` : "";
+  // The `?pt=` token rides only on the SERVER media URLs (native-HLS master +
+  // progressive original); the IPFS gateway override needs no token. The token
+  // (a query param) is placed before the `#t=` media fragment.
   const src =
     mode === "hls-js"
       ? undefined
       : mode === "native-hls"
-        ? (hlsMasterOverride || videoHlsMasterUrl(video.id)) + fragment
-        : videoOriginalUrl(video.id) + fragment;
+        ? (hlsMasterOverride || videoHlsMasterUrl(video.id, playbackToken)) + fragment
+        : videoOriginalUrl(video.id, playbackToken) + fragment;
 
   return {
     mode,

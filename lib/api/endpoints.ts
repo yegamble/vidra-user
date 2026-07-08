@@ -77,6 +77,10 @@ import type {
   Video,
   VideoChapters,
   SetVideoChaptersRequest,
+  UnlockVideoResponse,
+  VideoPassword,
+  VideoPasswords,
+  EmbedPrivacy,
   VideoConfigResponse,
   VideoFeedResponse,
   VideoListResponse,
@@ -608,6 +612,87 @@ export const api = {
    */
   setVideoChapters: (videoId: string, body: SetVideoChaptersRequest) =>
     apiRequest<VideoChapters>(`/api/v1/videos/${encodeURIComponent(videoId)}/chapters`, {
+      method: "PUT",
+      body,
+    }),
+
+  // --- Password-protected videos + embed privacy (CORE-17 / W1.7) ----------
+
+  /**
+   * POST /api/v1/videos/{id}/unlock — verify a password against a
+   * password-protected video and mint a short-lived (6h), video-scoped playback
+   * token (CORE-17). Optional auth. 401 = incorrect password; 429 = rate limited
+   * (same strict budget as login); 404 = no such video or it is not password
+   * protected. The password and the returned token are NEVER logged (the token
+   * lives only in the in-memory playback-token store).
+   */
+  unlockVideo: (id: string, password: string) =>
+    apiRequest<UnlockVideoResponse>(`/api/v1/videos/${encodeURIComponent(id)}/unlock`, {
+      method: "POST",
+      body: { password },
+    }),
+
+  /**
+   * GET /api/v1/videos/{id}/passwords — list a video's passwords (id +
+   * created_at only; the plaintext/hash are write-only). Owner only; a
+   * non-owner/unknown id is 404.
+   */
+  listVideoPasswords: (id: string, signal?: AbortSignal) =>
+    apiRequest<VideoPasswords>(`/api/v1/videos/${encodeURIComponent(id)}/passwords`, { signal }),
+
+  /**
+   * POST /api/v1/videos/{id}/passwords — add one password to a video (owner).
+   * The password must be 6–100 characters (else 400). Returns the new row's id +
+   * created_at (never the plaintext).
+   */
+  addVideoPassword: (id: string, password: string) =>
+    apiRequest<VideoPassword>(`/api/v1/videos/${encodeURIComponent(id)}/passwords`, {
+      method: "POST",
+      body: { password },
+    }),
+
+  /**
+   * PUT /api/v1/videos/{id}/passwords — replace a video's whole password set
+   * (owner). 1–20 entries, each 6–100 characters (else 400). Returns the stored
+   * set (id + created_at).
+   */
+  replaceVideoPasswords: (id: string, passwords: string[]) =>
+    apiRequest<VideoPasswords>(`/api/v1/videos/${encodeURIComponent(id)}/passwords`, {
+      method: "PUT",
+      body: { passwords },
+    }),
+
+  /**
+   * DELETE /api/v1/videos/{id}/passwords/{passwordId} — remove one password
+   * (owner; 204). 409 when it is the LAST password of a privacy=password video
+   * (which would otherwise leave the video unlockable by no one).
+   */
+  deleteVideoPassword: (id: string, passwordId: string) =>
+    apiRequest<void>(
+      `/api/v1/videos/${encodeURIComponent(id)}/passwords/${encodeURIComponent(passwordId)}`,
+      { method: "DELETE" },
+    ),
+
+  /**
+   * GET /api/v1/videos/{id}/embed-privacy — a video's embed-privacy policy
+   * (CORE-17): the tier and, for "whitelist", the allow-listed hostnames.
+   * Readable pre-unlock (WITHOUT the password gate) so the embed page can decide
+   * before prompting. Optional `token` lets an owner read a private video's policy.
+   */
+  getVideoEmbedPrivacy: (id: string, token?: string, signal?: AbortSignal) =>
+    apiRequest<EmbedPrivacy>(`/api/v1/videos/${encodeURIComponent(id)}/embed-privacy`, {
+      token,
+      signal,
+    }),
+
+  /**
+   * PUT /api/v1/videos/{id}/embed-privacy — replace a video's embed-privacy
+   * policy (owner). 400 on an unknown status, a "whitelist" with an empty/invalid
+   * domain list (bare hostnames only — no scheme/port/path; ≤50), or
+   * allowed_domains supplied with a non-whitelist status.
+   */
+  setVideoEmbedPrivacy: (id: string, body: EmbedPrivacy) =>
+    apiRequest<EmbedPrivacy>(`/api/v1/videos/${encodeURIComponent(id)}/embed-privacy`, {
       method: "PUT",
       body,
     }),
@@ -1582,9 +1667,23 @@ export const api = {
     ),
 };
 
+/**
+ * Append a video-scoped playback token (CORE-17) as `?pt=<token>` — the
+ * header-less credential path for the media URLs a `<video src>`/`<img>`/`fetch`
+ * carries where an Authorization header cannot ride (Safari native-HLS,
+ * progressive playback, poster, storyboard, captions). No-op without a token, so
+ * every helper stays backward-compatible for a non-protected video. The token is
+ * a secret — callers already keep it out of logs.
+ */
+function withPlaybackToken(url: string, pt?: string | null): string {
+  if (!pt) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}pt=${encodeURIComponent(pt)}`;
+}
+
 /** Direct URL to a video's original stream (for a <video> src). Range-capable. */
-export function videoOriginalUrl(id: string): string {
-  return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/original`;
+export function videoOriginalUrl(id: string, pt?: string | null): string {
+  return withPlaybackToken(`${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/original`, pt);
 }
 
 /**
@@ -1593,8 +1692,11 @@ export function videoOriginalUrl(id: string): string {
  * transcoding completes). The path is deterministic per the contract, matching
  * the detail's hls_url value.
  */
-export function videoHlsMasterUrl(id: string): string {
-  return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/hls/master.m3u8`;
+export function videoHlsMasterUrl(id: string, pt?: string | null): string {
+  return withPlaybackToken(
+    `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/hls/master.m3u8`,
+    pt,
+  );
 }
 
 /**
@@ -1625,8 +1727,8 @@ export function liveHlsMasterUrl(id: string): string {
 }
 
 /** Direct URL to a video's poster image (for an <img> src). */
-export function videoThumbnailUrl(id: string): string {
-  return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/thumbnail`;
+export function videoThumbnailUrl(id: string, pt?: string | null): string {
+  return withPlaybackToken(`${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/thumbnail`, pt);
 }
 
 /**
@@ -1639,18 +1741,27 @@ export function remoteVideoThumbnailUrl(id: string): string {
 }
 
 /** Direct URL to a caption track's WebVTT body (text/vtt). */
-export function videoCaptionUrl(id: string, language: string): string {
-  return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/captions/${encodeURIComponent(language)}`;
+export function videoCaptionUrl(id: string, language: string, pt?: string | null): string {
+  return withPlaybackToken(
+    `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/captions/${encodeURIComponent(language)}`,
+    pt,
+  );
 }
 
 /** Direct URL to a video's storyboard WebVTT map (seek-preview cues). */
-export function videoStoryboardVttUrl(id: string): string {
-  return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/storyboard.vtt`;
+export function videoStoryboardVttUrl(id: string, pt?: string | null): string {
+  return withPlaybackToken(
+    `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/storyboard.vtt`,
+    pt,
+  );
 }
 
 /** Direct URL to a video's storyboard sprite sheet (for the seek-preview thumbnails). */
-export function videoStoryboardImageUrl(id: string): string {
-  return `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/storyboard.jpg`;
+export function videoStoryboardImageUrl(id: string, pt?: string | null): string {
+  return withPlaybackToken(
+    `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/storyboard.jpg`,
+    pt,
+  );
 }
 
 /** Direct URL to a playlist's cover image (for an <img> src; 404s when none set). */

@@ -81,6 +81,7 @@ export function VideoPlayer({
   poster,
   nextVideo = null,
   hlsMasterOverride = null,
+  playbackToken = null,
   overlay = null,
   onPlay,
   onTimeUpdate,
@@ -94,6 +95,13 @@ export function VideoPlayer({
   tracks?: CaptionTrack[];
   /** Explicit poster override; defaults to the video's own thumbnail when it has one. */
   poster?: string;
+  /**
+   * A video-scoped playback token for a password-protected video (CORE-17),
+   * threaded to the HLS pipeline (Bearer header in MSE mode, `?pt=` on native/
+   * progressive src), the storyboard, and the poster. null for a normal video.
+   * A secret — never logged.
+   */
+  playbackToken?: string | null;
   /**
    * Play the HLS ladder from this URL instead of the server one — the video's
    * IPFS gateway mirror (DR5). The progressive /original fallback stays the
@@ -117,14 +125,14 @@ export function VideoPlayer({
   /** Rendered inside the media container, over the video (e.g. the embed title link). */
   children?: ReactNode;
 }) {
-  const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride);
+  const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride, playbackToken);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Seek-preview storyboard (CORE-16): null when the detail has none, so the
   // seek bar's scrub bubble degrades to the timestamp alone. The VTT/sprite only
   // load once the bar first previews (it calls storyboard.activate() on hover /
   // focus) — no fetch for a viewer who never scrubs.
-  const storyboard = useStoryboard(video.id, video.has_storyboard);
+  const storyboard = useStoryboard(video.id, video.has_storyboard, playbackToken);
 
   // Seek-bar chapters (CORE-15): null when the detail advertises none. Fetched
   // eagerly (unlike the storyboard) so the tick markers and the current-chapter
@@ -536,7 +544,8 @@ export function VideoPlayer({
     setFocusWithin(false);
   }
 
-  const posterUrl = poster ?? (video.has_thumbnail ? videoThumbnailUrl(video.id) : undefined);
+  const posterUrl =
+    poster ?? (video.has_thumbnail ? videoThumbnailUrl(video.id, playbackToken) : undefined);
   // The chapter the playhead is currently inside (CORE-15) — shown, muted and
   // truncated, beside the time readout. Null before the first chapter / no chapters.
   const currentChapterTitle = chapters?.chapterAt(currentTime)?.title ?? null;

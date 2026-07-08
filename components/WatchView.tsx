@@ -27,11 +27,16 @@ import { ShareButton } from "@/components/ShareButton";
 import { SupportButton } from "@/components/SupportButton";
 import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
 import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar";
+import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, ipfsHlsMasterUrl, videoCaptionUrl } from "@/lib/api";
+import {
+  clearPlaybackToken,
+  setPlaybackToken as storePlaybackToken,
+} from "@/lib/api/playback-token-store";
 import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
 import type { Channel, Video, VideoConfigResponse } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -41,7 +46,7 @@ import { hydratePlayerSettings, resetPlayerSettings } from "@/lib/player-setting
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { parseStartTime } from "@/lib/start-time";
 
-type Status = "loading" | "error" | "notfound" | "ready";
+type Status = "loading" | "error" | "notfound" | "locked" | "ready";
 
 // How often, at most, playback progress is reported to the backend while watching.
 const PROGRESS_INTERVAL_MS = 10_000;
@@ -60,6 +65,12 @@ export function WatchView({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<Video | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // A minted, video-scoped playback token for a password-protected video
+  // (CORE-17). Held in memory only (the module playback-token store + this state
+  // for reactivity); NEVER persisted or logged. Threaded into the player so the
+  // HLS/native/poster/caption/storyboard reads carry it, and dropped when the
+  // viewer navigates away (the id-change reset + the unmount cleanup below).
+  const [playbackToken, setPlaybackToken] = useState<string | null>(null);
   // Theater mode (PLAY-04): a page-layout concern the player shell toggles. The
   // SSR snapshot is always off (serverTheater) so hydration matches; after
   // hydration the client restores the session's mode. Widens the stage to the
@@ -102,17 +113,46 @@ export function WatchView({ id }: { id: string }) {
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getVideo(id, undefined, controller.signal)
+      .getVideo(id, playbackToken ?? undefined, controller.signal)
       .then((v) => {
         setVideo(v);
         setStatus("ready");
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
-        setStatus(err instanceof ApiError && err.status === 404 ? "notfound" : "error");
+        // A password-protected video answers 401 password_required to a caller
+        // without a valid credential — render the unlock prompt, not the generic
+        // error state (a plain unknown id is still 404).
+        if (err instanceof ApiError && err.status === 401 && err.code === "password_required") {
+          setStatus("locked");
+        } else {
+          setStatus(err instanceof ApiError && err.status === 404 ? "notfound" : "error");
+        }
       });
     return () => controller.abort();
-  }, [id, reloadKey]);
+  }, [id, reloadKey, playbackToken]);
+
+  // On successful unlock: keep the token in the in-memory store + this state, and
+  // drop to the loading state so the token-change refetch (the effect above)
+  // repaints the player once the detail returns 200 with the token.
+  const handleUnlocked = useCallback(
+    (token: string) => {
+      storePlaybackToken(id, token);
+      setPlaybackToken(token);
+      setStatus("loading");
+    },
+    [id],
+  );
+
+  // Navigating to another video drops the previous one's token: reset the state
+  // (render-phase, so the refetch starts token-less) and clear the store entry
+  // (unmount / id-change cleanup). A shared tab never carries an unlocked video forward.
+  const [seenId, setSeenId] = useState(id);
+  if (seenId !== id) {
+    setSeenId(id);
+    if (playbackToken !== null) setPlaybackToken(null);
+  }
+  useEffect(() => () => clearPlaybackToken(id), [id]);
 
   // Hydrate the signed-in user's player settings (PLAY-07 / W1.6) so the bespoke
   // shell starts at their default speed, quality, captions and theater mode.
@@ -237,6 +277,15 @@ export function WatchView({ id }: { id: string }) {
       />
     );
   }
+  // Password-protected and not yet unlocked: the prompt stands in for the whole
+  // watch surface (the detail — title, actions, comments — is gated behind it).
+  if (status === "locked") {
+    return (
+      <div className="mx-auto w-full max-w-2xl">
+        <PasswordUnlockPanel videoId={id} onUnlocked={handleUnlocked} />
+      </div>
+    );
+  }
   if (status === "error" || video === null) {
     return <ErrorState message="Could not load this video." onRetry={retry} />;
   }
@@ -328,6 +377,7 @@ export function WatchView({ id }: { id: string }) {
             startAt={startAt}
             nextVideo={nextVideo}
             hlsMasterOverride={hlsMasterOverride}
+            playbackToken={playbackToken}
             overlay={playerOverlay}
           />
           {/* IPFS source bar — only when the video is gateway-mirrored. */}
@@ -442,6 +492,7 @@ function Player({
   startAt,
   nextVideo,
   hlsMasterOverride,
+  playbackToken,
   overlay,
 }: {
   video: Video;
@@ -449,6 +500,7 @@ function Player({
   startAt: number | null;
   nextVideo: Video | null;
   hlsMasterOverride: string | null;
+  playbackToken: string | null;
   overlay: ReactNode;
 }) {
   const { status: sessionStatus } = useSession();
@@ -507,7 +559,7 @@ function Player({
         const loaded: Array<{ language: string; label: string; url: string }> = [];
         for (const c of captions) {
           try {
-            const res = await fetch(videoCaptionUrl(video.id, c.language), {
+            const res = await fetch(videoCaptionUrl(video.id, c.language, playbackToken), {
               signal: controller.signal,
             });
             if (!res.ok) continue;
@@ -528,7 +580,7 @@ function Player({
       controller.abort();
       created.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [video.id]);
+  }, [video.id, playbackToken]);
 
   function resume() {
     const el = videoRef.current;
@@ -548,6 +600,7 @@ function Player({
         tracks={tracks}
         nextVideo={nextVideo}
         hlsMasterOverride={hlsMasterOverride}
+        playbackToken={playbackToken}
         overlay={overlay}
         onPlay={recordThrottled}
         onTimeUpdate={recordThrottled}

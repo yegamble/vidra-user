@@ -5,7 +5,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { CaptionsManager } from "@/components/CaptionsManager";
 import { ChaptersManager } from "@/components/ChaptersManager";
+import { EmbedPrivacyManager } from "@/components/EmbedPrivacyManager";
 import { LiveStreamsSection } from "@/components/LiveStreamsSection";
+import { PasswordManager } from "@/components/PasswordManager";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { StudioStorageCard } from "@/components/StudioStorageCard";
@@ -1297,6 +1299,10 @@ function VideoRow({
   // optional on the shared Video type only because federated remote cards omit
   // them, so coalesce to a safe default that never actually fires here.
   const [privacy, setPrivacy] = useState<VideoPrivacy>(video.privacy ?? "private");
+  // The number of stored passwords (CORE-17), reported up by PasswordManager
+  // while privacy is "password". null = not yet known; used to block a
+  // privacy=password save that has no passwords (which the server would 400).
+  const [passwordCount, setPasswordCount] = useState<number | null>(null);
   // The schedule as a datetime-local value; the owner list rows carry
   // publish_at once set (per the contract), the detail fetch refreshes it.
   const [publishAt, setPublishAt] = useState(toLocalInputValue(video.publish_at));
@@ -1315,6 +1321,13 @@ function VideoRow({
 
   async function save() {
     if (busy || title.trim() === "") return;
+    // A password-protected video must have at least one password (the server
+    // 400s otherwise, and would leave the video unwatchable). Block the save
+    // client-side with a clear message once the count is known to be zero.
+    if (privacy === "password" && passwordCount === 0) {
+      setError("Add at least one password below before saving a password-protected video.");
+      return;
+    }
     setBusy(true);
     setError(null);
     // Send publish_at only when the (non-published) schedule actually changed —
@@ -1443,7 +1456,13 @@ function VideoRow({
           <option value="public">Public</option>
           <option value="unlisted">Unlisted</option>
           <option value="private">Private</option>
+          <option value="password">Password-protected</option>
         </Select>
+        {/* Password management (CORE-17) appears when privacy is password; it
+            reports its count up so the Save guard can block an empty set. */}
+        {privacy === "password" ? (
+          <PasswordManager videoId={video.id} onCountChange={setPasswordCount} />
+        ) : null}
         {canSchedule ? (
           // Scheduling is only editable while the video has not published yet —
           // the backend rejects publish_at on a published video, and a schedule
@@ -1465,6 +1484,7 @@ function VideoRow({
           videoId={video.id}
           durationSeconds={(detail ?? video).duration_seconds ?? undefined}
         />
+        <EmbedPrivacyManager videoId={video.id} />
         <div className="flex gap-2">
           <Button size="sm" disabled={busy || title.trim() === ""} onClick={() => void save()}>
             Save
