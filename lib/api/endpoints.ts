@@ -79,6 +79,7 @@ import type {
   VideoFeedResponse,
   VideoListResponse,
   ChannelStatsResponse,
+  QuotaStatus,
   CreatePlaylistRequest,
   NotificationListResponse,
   NotificationPrefsResponse,
@@ -237,6 +238,13 @@ export const api = {
   /** GET /api/v1/me/channels — the caller's own channels (auth). */
   getMyChannels: (signal?: AbortSignal) =>
     apiRequest<ChannelListResponse>("/api/v1/me/channels", { signal }),
+
+  /**
+   * GET /api/v1/me/quota — the caller's storage usage + effective quota (auth):
+   * used_bytes and quota_bytes (null = unlimited). Drives the Studio storage card.
+   */
+  getMyQuota: (signal?: AbortSignal) =>
+    apiRequest<QuotaStatus>("/api/v1/me/quota", { signal }),
 
   // --- Donation addresses (P13, NON-CUSTODIAL display-only) ---------------
   // Vidra never holds funds, balances, or private keys and processes no

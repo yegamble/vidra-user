@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 
+import { CheckIcon, CopyIcon, WarningIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
+import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
 import type { Channel, CreateLiveStreamRequest, LiveStream } from "@/lib/api";
+import { cn } from "@/lib/cn";
 
 // Live streams accept only public/unlisted/private (the create contract has no
 // "password" mode, unlike VOD videos) — narrow to exactly what the endpoint takes.
@@ -170,32 +173,32 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
           <option value="unlisted">Unlisted</option>
           <option value="private">Private</option>
         </Select>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={permanent}
-            onChange={(e) => setPermanent(e.target.checked)}
-            aria-label="Permanent live stream"
-            className="h-4 w-4 rounded border-border accent-accent focus-ring"
-          />
-          Permanent (reuse this stream + key across sessions)
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="flex items-center gap-2">
-            <input
-              type="checkbox"
+        {/* The design's Go-live create form: Permanent + Save-replay as toggle
+            switches in an iOS-style divider list (no card border of their own). */}
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between gap-4 border-t border-border-subtle py-3.5">
+            <div className="min-w-0">
+              <p className="text-[14.5px] font-semibold text-fg">Permanent stream</p>
+              <p className="mt-0.5 text-[12.5px] text-fg-muted">
+                Reuse the same stream and key between sessions
+              </p>
+            </div>
+            <Toggle checked={permanent} onChange={setPermanent} label="Permanent stream" />
+          </div>
+          <div className="flex items-center justify-between gap-4 border-t border-border-subtle py-3.5">
+            <div className="min-w-0">
+              <p className="text-[14.5px] font-semibold text-fg">Save replay</p>
+              <p className="mt-0.5 text-[12.5px] text-fg-muted">
+                Publish the recording as a video (same privacy) after the stream ends
+              </p>
+            </div>
+            <Toggle
               checked={replayEnabled}
-              onChange={(e) => setReplayEnabled(e.target.checked)}
-              aria-label="Save replay as a video"
-              className="h-4 w-4 rounded border-border accent-accent focus-ring"
+              onChange={setReplayEnabled}
+              label="Save replay as a video"
             />
-            Save replay as a video
-          </span>
-          <span className="pl-6 text-xs text-fg-muted">
-            Records this stream and publishes it as a normal video (with the same
-            privacy) once the stream ends.
-          </span>
-        </label>
+          </div>
+        </div>
         <div>
           <Button type="submit" disabled={busy || title.trim() === ""}>
             {busy ? "Creating…" : "Create live stream"}
@@ -292,60 +295,102 @@ function LiveStateBadge({ state }: { state: LiveStream["state"] }) {
   );
 }
 
-function StreamKeyReveal({ revealed, onDismiss }: { revealed: RevealedKey; onDismiss: () => void }) {
+// CopyIconButton — a small icon-only copy affordance (design vocabulary) that
+// flips to a check with an SR-announced "Copied" for a moment. Copies the real
+// value regardless of the field's blur state.
+function CopyIconButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(revealed.key);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
     } catch {
-      // Clipboard may be unavailable; the key is selectable in the field regardless.
+      // Clipboard may be unavailable; the value is selectable in the field regardless.
     }
   }
 
   return (
-    <div
-      role="status"
-      className="flex flex-col gap-3 rounded-2xl bg-surface-muted p-4 text-sm"
+    <button
+      type="button"
+      aria-label={copied ? "Copied" : label}
+      onClick={() => void copy()}
+      className="focus-ring flex shrink-0 items-center text-fg-muted transition-colors hover:text-fg"
     >
-      <p className="flex items-start gap-2.5">
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          className="mt-0.5 h-4 w-4 flex-none text-warning"
-        >
-          <path d="M12 9v4M12 17h.01" />
-          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-        </svg>
-        <span className="font-semibold text-fg">
-          Copy your stream key now — it won&apos;t be shown again.
+      {copied ? <CheckIcon size={15} className="text-success" /> : <CopyIcon size={15} />}
+    </button>
+  );
+}
+
+// StreamKeyReveal is the design's Go-live one-time key screen. The key is shown
+// exactly once (server keeps only its hash), so this surface leads with the
+// warning, then the RTMP server + stream key as mono fields with copy buttons
+// and a Show/Hide blur toggle, and closes on an "encoder waiting" hint. Rotate /
+// Delete are the stream row's affordances (regenerate = POST /live/{id}/key);
+// this panel just Dismisses once the key is copied.
+function StreamKeyReveal({ revealed, onDismiss }: { revealed: RevealedKey; onDismiss: () => void }) {
+  // Default shown (keyShown in the design) — the whole point is "copy it now";
+  // Hide blurs it as a shoulder-surfing guard.
+  const [hidden, setHidden] = useState(false);
+
+  return (
+    <div role="status" className="flex flex-col gap-3.5">
+      <div className="flex items-start gap-2.5 rounded-2xl bg-surface-muted p-4 text-[13px] leading-relaxed text-fg-muted">
+        <WarningIcon size={15} className="mt-0.5 shrink-0 text-warning" />
+        <span>
+          <span className="font-semibold text-fg">Your stream key is shown only once.</span> Copy
+          it into your encoder now — you can rotate it later, but not view it again.
         </span>
-      </p>
-      <div className="flex items-center gap-2">
-        <input
-          readOnly
-          value={revealed.key}
-          aria-label="Stream key"
-          className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2 font-mono text-[13px] text-fg focus-ring"
-        />
-        <Button variant="secondary" size="sm" className="shrink-0" onClick={() => void copy()}>
-          {copied ? "Copied" : "Copy"}
-        </Button>
       </div>
+
       {revealed.rtmp ? (
-        <p className="text-[13px] text-fg-muted">
-          RTMP URL: <span className="font-mono text-fg">{revealed.rtmp}</span>
-        </p>
+        <div>
+          <p className="mb-1.5 text-[13px] font-semibold text-fg">RTMP server</p>
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5">
+            <span className="min-w-0 flex-1 truncate font-mono text-[13.5px] text-fg">
+              {revealed.rtmp}
+            </span>
+            <CopyIconButton value={revealed.rtmp} label="Copy RTMP server URL" />
+          </div>
+        </div>
       ) : null}
+
+      <div>
+        <p className="mb-1.5 text-[13px] font-semibold text-fg">Stream key</p>
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5">
+          <input
+            readOnly
+            value={revealed.key}
+            aria-label="Stream key"
+            className={cn(
+              "min-w-0 flex-1 bg-transparent font-mono text-[13.5px] text-fg focus-ring",
+              hidden && "select-none blur-[5px]",
+            )}
+          />
+          <button
+            type="button"
+            onClick={() => setHidden((h) => !h)}
+            aria-pressed={hidden}
+            className="focus-ring shrink-0 text-[12.5px] font-semibold text-fg-muted transition-colors hover:text-fg"
+          >
+            {hidden ? "Show" : "Hide"}
+          </button>
+          <CopyIconButton value={revealed.key} label="Copy key" />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2.5 rounded-2xl bg-surface-muted px-4 py-3.5">
+        <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-fg-subtle" />
+        <span className="text-[13.5px] text-fg-muted">
+          Waiting for encoder… start streaming to go live
+        </span>
+      </div>
+
       <button
         type="button"
         onClick={onDismiss}
-        className="self-start rounded-full text-xs font-semibold text-fg-muted underline transition-colors hover:text-fg hover:no-underline focus-ring"
+        className="focus-ring self-start rounded-full text-xs font-semibold text-fg-muted underline transition-colors hover:text-fg hover:no-underline"
       >
         Dismiss
       </button>

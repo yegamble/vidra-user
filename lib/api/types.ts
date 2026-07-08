@@ -272,6 +272,9 @@ export type DailyViews = Schemas["DailyViews"];
 export type VideoStatsResponse = Schemas["VideoStatsResponse"];
 export type ChannelStatsResponse = Schemas["ChannelStatsResponse"];
 
+// --- Storage quota ----------------------------------------------------------
+export type QuotaStatus = Schemas["QuotaStatus"];
+
 // --- Notification preferences -----------------------------------------------
 export type NotificationPrefsResponse = Schemas["NotificationPrefsResponse"];
 export type UpdateNotificationPrefsRequest = Schemas["UpdateNotificationPrefsRequest"];

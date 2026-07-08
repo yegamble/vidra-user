@@ -262,6 +262,11 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/channels");
   });
 
+  it("getMyQuota targets the quota endpoint", async () => {
+    await api.getMyQuota();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/quota");
+  });
+
   it("createChannel POSTs the body to /channels", async () => {
     await api.createChannel({ handle: "ada_makes", display_name: "Ada Makes" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

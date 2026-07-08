@@ -10,10 +10,23 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
-import type { Channel, ChannelStatsResponse, Video, VideoStatsResponse } from "@/lib/api";
+import type {
+  Channel,
+  ChannelStatsResponse,
+  DailyViews,
+  Video,
+  VideoStatsResponse,
+} from "@/lib/api";
 import { formatCount } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
+
+// views28dViews sums the last 28 entries of the (up to) 30-day daily-views series
+// — the design's "Views · 28 days" headline. Real data only; when fewer than 28
+// days exist it sums what there is (never pads or extrapolates).
+function views28dViews(daily: DailyViews[]): number {
+  return daily.slice(-28).reduce((sum, d) => sum + d.views, 0);
+}
 
 // StudioStatsView is the creator statistics page (/studio/stats): pick one of
 // your channels to see its aggregated totals + 30-day views chart, then drill
@@ -158,6 +171,12 @@ function ChannelStatsSection({ channels }: { channels: Channel[] }) {
         <section aria-label={`Stats for @${handle}`} className="flex flex-col gap-4">
           <TotalsGrid
             items={[
+              // "Views · 28 days" is the design's Studio headline stat, derived
+              // honestly from the real 30-entry daily_views series (last 28 days
+              // summed). No period-over-period delta line — the series carries no
+              // prior-period data, so a "↑ N% vs previous" would be invented
+              // (spec §5.3: backend-dependent, not stubbed).
+              { label: "Views · 28d", value: views28dViews(stats.daily_views) },
               { label: "Views", value: stats.views },
               { label: "Likes", value: stats.likes },
               { label: "Dislikes", value: stats.dislikes },

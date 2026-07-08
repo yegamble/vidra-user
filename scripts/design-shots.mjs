@@ -431,6 +431,14 @@ const SAMPLE_MY_CHANNELS = {
   ],
 };
 
+// The caller's storage picture (GET /me/quota) — ~4.2 GB used of a 20 GB quota
+// (1024-based, so formatBytes renders "4.2 GB of 20.0 GB"), for the DR9 Studio
+// storage card.
+const SAMPLE_QUOTA = {
+  used_bytes: Math.round(4.2 * 1024 ** 3),
+  quota_bytes: 20 * 1024 ** 3,
+};
+
 // The owner's video list (GET /channels/{handle}/videos) — a spread of states so
 // the studio "Your videos" table shows every StateBadge variant + privacy.
 const SAMPLE_STUDIO_VIDEOS = {
@@ -1249,6 +1257,7 @@ const AREAS = {
     async mock(page) {
       await mockAuthedShell(page);
       await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
       await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
         route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
       );
@@ -1258,6 +1267,51 @@ const AREAS = {
       await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
         route.fulfill({ json: { live_streams: [] } }),
       );
+    },
+  },
+  // Go Live one-time key screen (DR9): fill the create form and reveal the
+  // shown-once stream key — the warning card, mono RTMP + key fields with copy,
+  // the Show/Hide blur toggle, and the "waiting for encoder" hint.
+  "studio-golive": {
+    path: "/studio",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) => {
+        if (route.request().method() === "POST") {
+          return route.fulfill({
+            json: {
+              live_stream: {
+                id: "ls1",
+                channel_id: "c1",
+                title: "Late-night color grading session",
+                description: "",
+                privacy: "public",
+                state: "offline",
+                permanent: false,
+                replay_enabled: true,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+              stream_key: "vk_live_8f3a2b7c19d04e6f",
+              rtmp_url: "rtmp://vidra.example/live",
+            },
+          });
+        }
+        return route.fulfill({ json: { live_streams: [] } });
+      });
+    },
+    async act(page) {
+      await page.getByLabel("Live stream title").fill("Late-night color grading session");
+      await page.getByRole("button", { name: "Create live stream" }).click();
+      await page.getByLabel("Stream key").waitFor({ state: "visible" });
     },
   },
   // Creator stats (backport W0.8): the totals stat tiles + 30-day chart, and the

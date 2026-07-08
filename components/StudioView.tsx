@@ -7,10 +7,11 @@ import { CaptionsManager } from "@/components/CaptionsManager";
 import { LiveStreamsSection } from "@/components/LiveStreamsSection";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
+import { StudioStorageCard } from "@/components/StudioStorageCard";
 import { TagsInput } from "@/components/TagsInput";
 import { ThumbnailManager } from "@/components/ThumbnailManager";
 import { useSession } from "@/components/auth/AuthProvider";
-import { ChevronDownIcon } from "@/components/icons";
+import { ChevronDownIcon, LoaderIcon, UploadIcon } from "@/components/icons";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -28,6 +29,7 @@ import {
   forgetUploadSession,
   isUploadCancelled,
   resumableUpload,
+  videoThumbnailUrl,
 } from "@/lib/api";
 import type {
   Channel,
@@ -39,7 +41,7 @@ import type {
   VideoPrivacy,
   VideoState,
 } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatBytes, formatDateTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
@@ -50,8 +52,6 @@ const FIELD =
   "w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted focus-ring disabled:opacity-60";
 const SELECT_FIELD =
   "w-full appearance-none rounded-xl border border-border bg-surface px-3.5 py-2 pr-9 text-sm text-fg focus-ring disabled:opacity-60";
-const FILE_FIELD =
-  "text-sm focus-ring file:mr-3 file:rounded-full file:border-0 file:bg-surface-muted file:px-3.5 file:py-1.5 file:text-sm file:font-semibold file:text-fg";
 // Quiet pill treatment for inline row actions (Edit / Delete / Confirm / Cancel).
 const ROW_ACTION =
   "rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors focus-ring disabled:opacity-50";
@@ -137,6 +137,7 @@ function Studio() {
 
   return (
     <div className="flex flex-col gap-8">
+      <StudioStorageCard />
       <ChannelSection
         channels={channels}
         onCreated={(ch) => setChannels((list) => [ch, ...list])}
@@ -600,6 +601,11 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   // Chunk-accurate progress percent (0–100) for the in-flight file upload.
   const [progress, setProgress] = useState(0);
+  // Bytes transferred so far / total, for the "X of Y" detail under the bar
+  // (real loaded/total from the resumable-upload progress callback).
+  const [bytes, setBytes] = useState<{ loaded: number; total: number } | null>(null);
+  // The picked file's name, shown in the dropzone once a file is chosen.
+  const [fileName, setFileName] = useState<string | null>(null);
   // A resumable session found for the currently-picked file (matched by
   // filename + size in localStorage) — offers "Resume upload" after a refresh.
   const [resumeCandidate, setResumeCandidate] = useState<StoredUploadSession | null>(null);
@@ -643,6 +649,8 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     setPublishAt("");
     setVideoUrl("");
     setResumeCandidate(null);
+    setFileName(null);
+    setBytes(null);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -699,6 +707,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   function onFilePicked() {
     setError(null);
     const file = fileRef.current?.files?.[0];
+    setFileName(file ? file.name : null);
     setResumeCandidate(file ? findResumableUploadSession(file) : null);
   }
 
@@ -756,7 +765,10 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
       // File source: the resumable (chunked) protocol — create session → PUT
       // chunks sequentially (per-chunk retry) → complete.
       const res: UploadVideoResult = await resumableUpload(draft.id, file as File, {
-        onProgress: (p) => setProgress(p.percent),
+        onProgress: (p) => {
+          setProgress(p.percent);
+          setBytes({ loaded: p.loaded, total: p.total });
+        },
         signal: controller.signal,
         onSessionOpened: (id) => {
           sessionIdRef.current = id;
@@ -809,7 +821,10 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
       }
       const res = await resumableUpload(status.video_id, file, {
         resume: status,
-        onProgress: (p) => setProgress(p.percent),
+        onProgress: (p) => {
+          setProgress(p.percent);
+          setBytes({ loaded: p.loaded, total: p.total });
+        },
         signal: controller.signal,
         onSessionOpened: (id) => {
           sessionIdRef.current = id;
@@ -993,20 +1008,39 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           </div>
         </fieldset>
         {source === "file" ? (
-          <label className="flex flex-col gap-1 text-sm">
+          // Design's dashed dropzone: the file input is a full-bleed transparent
+          // overlay (still labelled "Video file" for pickers + tests + keyboard),
+          // with the visual chrome painted underneath and a keyboard focus ring
+          // driven off `peer-focus-visible`.
+          <div className="flex flex-col gap-2 text-sm">
             <span className="font-medium text-fg">Video file</span>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="video/*"
-              aria-label="Video file"
-              onChange={onFilePicked}
-              className={FILE_FIELD}
-            />
-            <span className="text-xs text-fg-muted">
-              Large files upload in chunks and can be resumed if interrupted.
+            <div className="relative">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="video/*"
+                aria-label="Video file"
+                onChange={onFilePicked}
+                className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+              />
+              <div className="pointer-events-none flex flex-col items-center gap-3 rounded-[18px] border-[1.5px] border-dashed border-border px-6 py-9 text-center transition-colors peer-hover:border-fg-muted peer-focus-visible:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--focus)]">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-muted">
+                  <UploadIcon size={24} className="text-fg" />
+                </span>
+                <span className="max-w-full truncate text-[15px] font-semibold text-fg">
+                  {fileName ?? "Choose a video"}
+                </span>
+                <span className="text-[13px] leading-relaxed text-fg-muted">
+                  MP4, MOV, WebM, MKV · up to 8 GB
+                  <br />
+                  Uploads are resumable — leave and come back anytime
+                </span>
+              </div>
+            </div>
+            <span className="text-center text-xs text-fg-muted">
+              New uploads are scanned and may be held briefly for review.
             </span>
-          </label>
+          </div>
         ) : (
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-fg">Video URL</span>
@@ -1093,6 +1127,14 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             </>
           ) : null}
         </div>
+        {state === "uploading" && source === "file" && bytes ? (
+          // Real byte-level detail (loaded/total from the resumable-upload
+          // progress callback) — the design's "X of Y" chunk line, peer-free.
+          <p className="text-[12.5px] tabular-nums text-fg-muted">
+            {formatBytes(bytes.loaded)} of {formatBytes(bytes.total)} · resumes from the last
+            completed chunk if interrupted
+          </p>
+        ) : null}
       </form>
       {state === "done" && result ? (
         result.state === "published" ? (
@@ -1432,6 +1474,19 @@ function VideoRow({
 
   return (
     <li className="flex items-center gap-3 px-4 py-3">
+      {/* Design row thumbnail: poster when ready, else a plain surface tile; a
+          spinner overlays while the backend is still transcoding. */}
+      <div className="relative aspect-video w-[92px] shrink-0 overflow-hidden rounded-lg bg-surface-strong sm:w-28">
+        {video.has_thumbnail ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={videoThumbnailUrl(video.id)} alt="" className="h-full w-full object-cover" />
+        ) : null}
+        {video.state === "processing" ? (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/45">
+            <LoaderIcon size={18} className="animate-spin text-white" />
+          </span>
+        ) : null}
+      </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">
           <Link href={`/videos/${video.id}`} className="hover:underline">

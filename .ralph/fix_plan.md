@@ -1463,10 +1463,91 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
         tokens only; no `dark:`/raw palette; no emoji.
 
 ## DR9 — Studio + Upload + Go Live
-- [ ] Studio storage card (`/me/quota`), video rows + status Badges; desktop stat cards
+- [x] Studio storage card (`/me/quota`), video rows + status Badges; desktop stat cards
       (Storage + Views·28d + Followers real via `/channels/{handle}/stats`, NO delta lines —
       aspirational); Upload dropzone/progress/details (NO Bluesky toggle — aspirational);
       Go Live one-time key screen (`POST /live/{id}/key`). CI + push.
+      **DONE 2026-07-08.** A restyle over the shipped creator surfaces (`StudioView` /
+      `LiveStreamsSection` / `StudioStatsView`) to the design's Studio vocabulary — every real
+      wiring (resumable chunked upload + resume, create-draft/import, per-field 422s, stream-key
+      one-time reveal, regenerate/delete, replay PATCH) preserved; the slice adds the storage
+      card, the design dropzone/rows/key-screen chrome, and one derived real stat.
+      • **Storage card — NEW real surface (`components/StudioStorageCard.tsx`).** Bound to the
+        real, contract-tested `GET /api/v1/me/quota → QuotaStatus { used_bytes, quota_bytes|null }`
+        (verified fresh in `vidra-core/api/openapi.yaml` §`/me/quota`). Added `api.getMyQuota` +
+        the `QuotaStatus` type (endpoints + endpoints.test + types). Renders the design's
+        borderless surface-muted card: **"Storage" + "X of Y"** + a 5px `bg-fg`-on-`surface-strong`
+        progress bar (`role="progressbar"`, clamped 0–100 so an over-quota account can't overrun
+        the track); the **unlimited** case (`quota_bytes: null`) drops the bar for "X used ·
+        Unlimited on this instance." Truthfulness: a quota-lookup failure renders the card as
+        `null` — never a faked/broken meter. 4 unit tests (used-of-quota + valuenow, clamp>100%,
+        unlimited-no-bar, error-hidden).
+      • **Video rows → design treatment.** Each "Your videos" row gained the design's 92/112px
+        16:9 poster (real `videoThumbnailUrl` when `has_thumbnail`, else a `surface-strong` tile)
+        with a **processing spinner overlay** (`LoaderIcon` on `black/45`) while the backend is
+        transcoding; the existing `StateBadge` (uppercase micro status pill — already
+        design-shaped) + inline Edit/Delete (kept over the mockup's `⋯`, more accessible +
+        test-covered) ride alongside.
+      • **Upload → dashed dropzone.** The bare `<input type="file">` became the design's
+        **1.5px-dashed rounded-[18px] dropzone** (56px surface-muted circle + `UploadIcon`,
+        "Choose a video" / the picked filename, "MP4, MOV, WebM, MKV · up to 8 GB · resumable"):
+        the input is a full-bleed transparent overlay (still `aria-label="Video file"` for
+        pickers/tests/keyboard) with a `peer-focus-visible` ring on the visual box. The in-flight
+        progress footer keeps its `role="progressbar"` "Upload progress" + percent + "Cancel
+        upload" (test-relied-upon) and gained a **real byte-detail line** ("X of Y · resumes from
+        the last completed chunk if interrupted") from the resumable-upload `loaded/total`
+        callback — peer-free, no fabricated chunk index. **NO "Cross-post to Bluesky" toggle** in
+        the details form (design §5.6 aspirational — no endpoint; not stubbed). The design's
+        Whisper "Auto-captions" upload toggle is likewise NOT added at draft time (auto-caption is
+        a post-publish action via the existing `CaptionsManager` on the edit surface; no
+        create-time contract exists — recorded, not stubbed).
+      • **Go Live one-time key screen (`StreamKeyReveal` rebuild).** The transient reveal became
+        the design's key screen: a **warning card** ("Your stream key is shown only once…"), the
+        **RTMP server** + **Stream key** as mono bordered fields each with an icon **copy button**
+        (flips to a success check with an SR-announced "Copied"), a **Show/Hide blur toggle** on
+        the key (`blur-[5px]`, default shown so copy-now works), and the **"Waiting for encoder…
+        start streaming to go live"** surface-muted hint with an `fg-subtle` dot. The key stays an
+        `<input aria-label="Stream key">` so the e2e `toHaveValue` reveal assertions hold; the
+        copy button is labelled **"Copy key"** (not "Copy stream key") so it doesn't collide with
+        the input under `getByLabel("Stream key")`. Rotate/Delete remain the stream row's
+        affordances ("Regenerate key" = real `POST /live/{id}/key`, verified fresh in openapi;
+        "Delete") — kept there because the row manages *any* stream (incl. ones from a prior
+        session), and the reveal is a one-shot panel; noted as the design-copy divergence
+        (design labels them "Rotate key"/"Delete stream" inside the screen).
+      • **Create-form toggles.** The Go-live create form's **Permanent stream** + **Save replay**
+        checkboxes became the shared 46×28 `Toggle` switches (design's iOS divider list). The one
+        e2e that drove the replay checkbox switched `.check()` → `.click()` (Playwright reserves
+        `.check()` for checkbox/radio; the codebase convention for `role="switch"` is click +
+        assert `aria-checked`, per admin-config); its `.toBeChecked()` assertions hold on the
+        switch.
+      • **Views · 28 days stat (real, no delta).** `StudioStatsView`'s channel totals gained a
+        leading **"Views · 28d"** card, summed honestly from the real 30-entry `daily_views`
+        series (last 28) — the design's Studio headline stat. **No "↑ N% vs previous" delta line**
+        (spec §5.3: the series has no prior-period data ⇒ period deltas are backend-dependent,
+        not stubbed). Followers/Views/etc. already render as design stat cards here. Placement
+        note: the design's single-channel desktop Studio stat ROW (Storage · Views·28d ·
+        Followers · Pending jobs) maps, in production's *multi-channel* Studio, to the user-level
+        Storage card on `/studio` + the channel-scoped Views·28d/Followers on `/studio/stats`
+        (which owns the channel selector + real channel-stats fetch). The design's **"Pending
+        jobs"** card is **not** built: no per-user jobs endpoint exists (admin-only `/admin/jobs`);
+        deferred rather than derived, to avoid a partial/misleading count (spec §5.3).
+      • **Tests (unit + e2e, same slice).** +5 unit (StudioStorageCard 4, endpoints getMyQuota 1)
+        = **621 passed**; studio e2e updated for the replay Toggle + the "Copy key" label; the
+        design-shots harness gained a `/me/quota` mock on the `studio` area + a new
+        **`studio-golive`** area (creates a stream → reveals the key screen) for evidence.
+      • **Evidence.** `.ralph/design-review/dr9/{before,after}/{studio,studio-golive,studio-stats}`
+        (light+dark × mobile+desktop, full-page; git-ignored; before via `git stash` of the three
+        component files against `next dev`, server killed after). Read the AFTER PNGs vs
+        `Vidra App.dc.html` (Studio / Upload / Go Live) + `Vidra Desktop.dc.html`: storage card
+        "4.2 GB of 20.0 GB" + bar; dashed dropzone; thumbnailed rows with PUBLISHED/PROCESSING(+
+        spinner)/DRAFT/SCHEDULED status pills; Permanent/Save-replay switches; and the key screen
+        (warning card → mono RTMP/key fields w/ copy → Hide → "Waiting for encoder…"). Dark
+        inverts via tokens; the BEFORE shots show the plain native file input, borderless-less
+        checkboxes, and old inline key panel.
+      • **Gate.** Full `CI=1 npm run ci` (E2E_PORT=3187) on the final tree — typecheck ✓ lint ✓
+        lint:icons ✓ unit **621 passed** ✓ clean `next build` ✓ mocked e2e **420 passed, 0 failed**
+        (incl. the axe serious/critical gate, landmarks, responsive-overflow). Semantic tokens
+        only; no `dark:`/raw palette; no emoji; zero token-value changes.
 
 ## DR10 — Settings + Donations + Auth
 - [ ] Grouped settings cards (omit Bluesky row — aspirational); donation network cards

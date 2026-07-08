@@ -1149,7 +1149,9 @@ test("a creator can enable 'save replay as a video' when creating a live stream"
 
   await page.getByRole("link", { name: "Studio" }).click();
   await page.getByLabel("Live stream title").fill("Replay Show");
-  await page.getByLabel("Save replay as a video").check();
+  // Save replay is now a Toggle (role=switch); click it on (not .check(), which
+  // Playwright reserves for checkbox/radio inputs).
+  await page.getByLabel("Save replay as a video").click();
 
   // The create POST carries replay_enabled: true.
   const createReq = page.waitForRequest(
