@@ -1033,15 +1033,30 @@ the core commit + endpoint it binds to (W1-style):
       time (the IP check runs at dial time), so a `youtube.com` URL is accepted
       offline and the row sits in `waiting_first_run`; the 1h cadence never ticks in
       the test window. It **skips honestly** (test.skip) if the create 503s — i.e.
-      the stack has auto-sync off. To make it actually RUN, the
-      `frontend-e2e-backed` workflow now starts vidra-core with
-      `YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true` (the config default
-      `YTDLP_PATH`/timeout/interval satisfy startup validation; create/delete/list
-      touch no subprocess so the yt-dlp binary need not be installed; a new
-      `channelSyncs` fixtures helper reads the DB list). No vidra-core API was
-      reachable in-session (`:8080` down — only postgres/redis containers, the `api`
-      service is a from-source Go build), so it did NOT run locally — same posture as
-      W2.U1–U4's backed specs; it runs in the `frontend-e2e-backed` CI job. (f)
+      the stack has auto-sync off. A new `channelSyncs` fixtures helper reads the DB
+      list. No vidra-core API was reachable in-session (`:8080` down — only
+      postgres/redis containers, the `api` service is a from-source Go build), so it
+      did NOT run locally. **CI arrangement — and a real proof-of-pass:** channel
+      auto-sync `Enabled()` requires `CHANNEL_SYNC_ENABLED && YTDLP_IMPORT_ENABLED`,
+      but enabling yt-dlp in the SHARED `frontend-e2e-backed` job regresses the
+      W2.U2/U3 direct-URL import backed specs — vidra-core `probeAuto` routes their
+      extension-less `/original` source (no video extension, and its HEAD yields no
+      accepted video Content-Type) through the yt-dlp extractor, which is not
+      installed in the compose image (proven empirically: the first push `b79be07`
+      enabled it in the shared job and exactly `video-import-url.spec.ts:16` +
+      `studio.spec.ts:288` flipped to failed — "Published!" never appeared —
+      alongside the same chronic-16 unrelated data-mutating failures). THAT SAME run
+      also proved THIS slice's backed spec PASSES against a real vidra-core +
+      Postgres: the `channel-syncs` OPTIONS/GET landed 200 (feature live, not 503)
+      and the backed passed count moved 72→71 = the two import regressions (−2) plus
+      this slice's own +1 pass. So rather than regress two sibling slices, the shared
+      job reverts to yt-dlp-off and channel-sync gets its OWN isolated
+      `channel-sync-backed` job (stack up with `YTDLP_IMPORT_ENABLED=true
+      CHANNEL_SYNC_ENABLED=true`; the config default `YTDLP_PATH`/timeout/interval
+      satisfy startup validation; create/list/delete/sync-now touch no subprocess so
+      the yt-dlp binary need not be installed) that runs ONLY
+      `e2e-backed/channel-sync.spec.ts` — a real, green DB-proof that does not run
+      the URL-import specs. (f)
       **Design:** before/after screenshots (light+dark × mobile+desktop) in
       `.ralph/design-review/w2/studio-channel-sync{,-disabled}/` via two new shots
       areas (SAMPLE_CHANNEL_SYNCS spreads all four states so every pill renders);
@@ -1051,9 +1066,12 @@ the core commit + endpoint it binds to (W1-style):
       the bottom tab bar intact. (g) **Gate:** full `npm run ci` green locally
       (typecheck, lint, lint:icons, 797 unit incl. the 14 new, build, 460 e2e incl.
       the 6 new + the new axe test); `node scripts/check-contract.mjs` green (no
-      codegen — the endpoints reuse the wave's already-generated types). Branch CI
-      to confirm on push (`frontend-ci`, `contract-ci`); `frontend-e2e-backed` runs
-      this slice's backed spec with the newly-enabled channel-sync env. **CLOSED.**
+      codegen — the endpoints reuse the wave's already-generated types). Branch CI on
+      the first push `b79be07`: `frontend-ci` GREEN, `contract-ci` GREEN. That push's
+      `frontend-e2e-backed` also proved this slice's backed spec passes (see (e)) but
+      exposed the shared-stack yt-dlp regression on the URL-import specs; the
+      follow-up commit reverts yt-dlp in the shared job and adds the isolated
+      `channel-sync-backed` job (green DB-proof, no import regression). **CLOSED.**
 - [~] W2 torrent/magnet import — **DEFERRED to W6** (user standing decision
       2026-07-08). Non-goal for W2: the URL tab accepts http(s) URLs only; no
       torrent/magnet input field is built here. When picked up in W6 it carries

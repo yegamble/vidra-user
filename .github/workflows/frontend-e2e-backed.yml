@@ -42,16 +42,15 @@ jobs:
       # TRANSCODING_ENABLED=true turns on the async HLS transcode pipeline so
       # e2e-backed/hls-playback.spec.ts can prove publish → transcode → HLS
       # playback end to end (the compose api image ships ffmpeg/ffprobe).
-      # YTDLP_IMPORT_ENABLED=true + CHANNEL_SYNC_ENABLED=true turn on the yt-dlp
-      # import resolver and cross-platform channel auto-sync (UPLOAD-13 / W2.U5) so
-      # e2e-backed/channel-sync.spec.ts can create/sync-now/delete a real sync row
-      # (worker execution not needed — the SSRF guard validates the URL without
-      # resolving DNS at create time; the worker cadence is 1h). The yt-dlp binary
-      # need not be installed: create/delete/list touch no subprocess, and the
-      # config default YTDLP_PATH satisfies startup validation.
+      # NOTE: YTDLP_IMPORT_ENABLED is deliberately LEFT OFF here — turning the
+      # yt-dlp resolver on makes the URL-import "auto" probe route the
+      # extension-less /original source (video-import-url / studio backed specs)
+      # to yt-dlp, which is not installed in this image, regressing those tests.
+      # Channel auto-sync (W2.U5) needs yt-dlp on, so it gets its OWN isolated job
+      # (channel-sync-backed, below) that does not run the URL-import specs.
       - name: Start vidra-core stack
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true docker compose --profile core up -d --build
+        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true docker compose --profile core up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
@@ -98,6 +97,77 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-backed-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  # Channel auto-sync (UPLOAD-13 / W2.U5) needs the yt-dlp import resolver on
+  # (its Enabled() = CHANNEL_SYNC_ENABLED && YTDLP_IMPORT_ENABLED). Enabling yt-dlp
+  # in the main job regresses the URL-import specs (their extension-less /original
+  # source would route through the uninstalled yt-dlp extractor), so channel-sync
+  # gets this ISOLATED stack + a single-spec run instead. Create/list/delete/
+  # sync-now touch no subprocess, and the SSRF guard validates the URL without
+  # resolving DNS at create time, so the yt-dlp binary need not be installed and
+  # the config default YTDLP_PATH satisfies startup validation.
+  channel-sync-backed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # vidra-user
+
+      - name: Check out vidra-core (public — no token needed)
+        uses: actions/checkout@v4
+        with:
+          repository: yegamble/vidra-core
+          path: .core
+
+      - name: Start vidra-core stack (yt-dlp + channel auto-sync enabled)
+        working-directory: .core
+        run: RATE_LIMIT_ENABLED=false HTTP_IMPORT_ALLOW_PRIVATE_URLS=true YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true docker compose --profile core up -d --build
+
+      - name: Wait for the API to be healthy
+        working-directory: .core
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then
+              echo "api healthy after ${i} tries"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::vidra-core API did not become healthy in time"
+          docker compose --profile core logs --no-color | tail -200
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build against the live backend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+        run: npm run build
+
+      - name: Run the channel-sync backed spec only
+        run: npm run e2e:backed -- e2e-backed/channel-sync.spec.ts
+
+      - name: Tail backend logs on failure
+        if: failure()
+        working-directory: .core
+        run: docker compose --profile core logs --no-color | tail -200
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-channel-sync-report
           path: |
             playwright-report/
             test-results/
