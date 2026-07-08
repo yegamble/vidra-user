@@ -649,6 +649,101 @@ CI, pushed, before the box ticks.
 
 ---
 
+# W2 — Upload & import (Backport Programme)
+
+Spec: `.ralph/specs/backport-w2-upload-import.md` — read it (and the core twin
+`vidra-core/.ralph/specs/backport-w2-upload-import.md`) before touching any of
+these. Built on the DR9 studio vocabulary (commit `69aeae5`: dashed dropzone,
+byte-detail progress line, status pills, storage card) — never from scratch.
+Every task: vertical slice; consumes only endpoints already merged in
+`vidra-core/api/openapi.yaml`; checkbox flips only with (a) unit tests, (b) a
+mocked Playwright e2e, (c) for data-mutating flows a backend-backed e2e
+(`e2e-backed/`, `npm run e2e:backed`) proving the DB/server state changed AND the
+UI shows it after refetch; design guardrail (tokens only, templates canonical,
+no emoji/`dark:`; before/after screenshots light+dark × mobile+desktop into
+`.ralph/design-review/w2/<area>/` for changed screens); `npm run codegen` after
+any contract change; `npm run ci` green locally AND on branch CI, pushed, before
+the box ticks.
+
+Backend status (grep-verified in `vidra-core/api/openapi.yaml` 2026-07-08): the
+whole W2.C backend wave has LANDED, so no UI slice below is BLOCKED — each records
+the core commit + endpoint it binds to (W1-style):
+- W2.C1 yt-dlp platform-URL import — `POST /api/v1/videos/{id}/import` gains
+  `resolver` (auto|direct|ytdlp) + `import_job.stage`; stable 503 code when the
+  resolver is disabled on the instance (commit `10d403d`).
+- W2.C2 server-side draft recovery — `GET /api/v1/me/uploads` + `file_fingerprint`
+  on the upload session (commit `af875b1`).
+- W2.C3 batch-upload guard — 429 `too_many_active_uploads` on the active-session
+  cap (commit `71d950b`).
+- W2.C4 channel auto-sync — `/api/v1/channel-syncs` CRUD + `/{id}/sync-now`
+  (commit `1a4ebc2`).
+- W2.C5 thumbnail frame-pick — JSON `{at_seconds}` variant on
+  `POST /api/v1/videos/{id}/thumbnail` (commit `3f3c6e6`).
+
+- [x] W2.U0 [UPLOAD-07 UI close-out] Opening slice — spec-in-repo + schedule
+      verify. **DONE 2026-07-08.** (a) **Bookkeeping:** copied the wave spec to
+      `.ralph/specs/backport-w2-upload-import.md` (later slices read this in-repo
+      copy) and added this W2 section (W2.U0–U5) in the fix_plan style; a fresh
+      grep of `vidra-core/api/openapi.yaml` shows the entire W2.C backend wave has
+      landed (see Backend status above), so U1–U5 are recorded **UNBLOCKED** with
+      their core commit refs — not BLOCKED. (b) **UPLOAD-07 close-out — schedule
+      flow was already SHIPPED and needed no new work:** the publish form's
+      `Schedule publish` datetime-local + honest scheduled outcome ("… is
+      scheduled — it will publish automatically …", never "Published!") live in
+      `components/StudioView.tsx`; the studio video rows ALREADY carry the
+      `Scheduled` status pill — `StateBadge` maps the `scheduled` state to its own
+      pill (`bg-surface-strong text-fg-muted`) plus a `publishes {publish_at}`
+      sublabel, so a scheduled video never reads as published.
+      `e2e/studio-schedule.spec.ts` (4 tests) is green and asserts exactly this
+      (scheduled outcome + zero "Published!"; row badge reads "scheduled" +
+      "publishes …"; schedule move via edit; an unchanged schedule is not re-sent;
+      no schedule field on a published video). No StudioView source change
+      (close-out-only — no invented work); no screen changed, so no new
+      screenshots. Gate: full `npm run ci` green (2026-07-08). **CLOSED.**
+- [ ] W2.U1 [UPLOAD-02/03 UI — UNBLOCKED: vidra-core W2.C2 landed (commit
+      `af875b1`; `GET /api/v1/me/uploads` + `file_fingerprint` present in
+      `vidra-core/api/openapi.yaml`)] Draft recovery v2: WebCrypto fingerprint on
+      session create; studio "Resume upload" recovery card (server-listed active
+      sessions, 5px progress bar, expiry, Resume/Discard); localStorage demoted to
+      cache; re-pick matches by fingerprint; `e2e/upload-draft-recovery.spec.ts` +
+      backend-backed resume proof.
+- [ ] W2.U2 [UPLOAD-09 UI — UNBLOCKED: vidra-core W2.C1 landed (commit `10d403d`;
+      `resolver`/`stage` on `/videos/{id}/import` present in
+      `vidra-core/api/openapi.yaml`)] Import-from-URL flow: two-tab source choice
+      (Upload file / Import from URL) on the upload section; stage rail
+      (queued → fetching metadata → downloading → scanning & processing) with
+      status pills; safe error + Retry; yt-dlp metadata prefill after resolving;
+      honest disabled empty state on the stable 503; `e2e/video-import-url.spec.ts`
+      (mock, all stages) + backend-backed e2e via a direct file URL (yt-dlp not
+      required in CI).
+- [ ] W2.U3 [UPLOAD-04 UI — UNBLOCKED: vidra-core W2.C5 landed (commit `3f3c6e6`;
+      JSON `{at_seconds}` variant on `/videos/{id}/thumbnail` present in
+      `vidra-core/api/openapi.yaml`)] Thumbnail frame-pick: scrubber (storyboard
+      assets when present, muted `<video>` fallback) + "Use this frame" in
+      ThumbnailManager alongside custom upload; `e2e/upload-thumbnail.spec.ts` +
+      backend-backed poster-refetch proof.
+- [ ] W2.U4 [UPLOAD-10 UI — UNBLOCKED: vidra-core W2.C3 landed (commit `71d950b`;
+      429 `too_many_active_uploads` present in `vidra-core/api/openapi.yaml`);
+      degrade gracefully if the code is absent] Batch upload: `multiple` dropzone →
+      per-file queued rows (title prefill, independent progress, cancel/retry),
+      max 2 concurrent sessions client-side, quota preflight against the storage
+      card; `e2e/upload-batch.spec.ts` + backend-backed 3-videos-after-refetch
+      proof.
+- [ ] W2.U5 [UPLOAD-13 UI — UNBLOCKED: vidra-core W2.C4 landed (commit `1a4ebc2`;
+      `/api/v1/channel-syncs` present in `vidra-core/api/openapi.yaml`)] Channel
+      auto-sync management: studio "Auto-import from another platform" section
+      (connect form, sync list with state pills, `last_sync_at`, safe error, Sync
+      now, Remove); honest disabled empty state; `e2e/channel-sync.spec.ts` (mock
+      CRUD) + backend-backed create/delete row proof.
+- [~] W2 torrent/magnet import — **DEFERRED to W6** (user standing decision
+      2026-07-08). Non-goal for W2: the URL tab accepts http(s) URLs only; no
+      torrent/magnet input field is built here. When picked up in W6 it carries
+      the core package's minimum-bar note (sandboxed client + egress control, and
+      bytes must enter storage ONLY via the existing AttachOriginal → Process path
+      so the fail-closed ClamAV scan gate fires before anything is servable).
+
+---
+
 # P-MSG2 — Messaging v2 (proper messenger)
 
 ## Operating notes
