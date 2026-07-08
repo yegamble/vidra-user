@@ -218,3 +218,86 @@ test("a message notification links to the conversation thread", async ({ page })
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("href", "/messages/c1");
 });
+
+// --- Design refresh (DR8): the phone-only Inbox segmented control switches
+// between the Notifications and Messages halves. Runs at a phone viewport (the
+// control is `sm:hidden`); Messages keeps its own route, so the segments
+// navigate client-side (the in-memory session survives).
+const CONVERSATIONS = /\/api\/v1\/me\/conversations(\?|$)/;
+
+// The shared signIn asserts the header "Sign out" button, which the phone shell
+// tucks behind the avatar menu — so a phone-viewport sign-in confirms the authed
+// landing via the bottom tab bar's Inbox link instead.
+async function signInMobile(page: Page) {
+  await page.route(LOGIN, (route) => route.fulfill({ json: session }));
+  await page.route(FEED, (route) =>
+    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+  );
+  await page.route(UNREAD, (route) => route.fulfill({ json: { unread_count: 0 } }));
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL("**/");
+  await expect(page.getByRole("link", { name: "Inbox" })).toBeVisible();
+}
+
+test.describe("mobile Inbox segmented control", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("switches between the Notifications and Messages halves of the Inbox", async ({ page }) => {
+    await signInMobile(page);
+    await page.route(LIST, (route) =>
+      route.fulfill({
+        json: {
+          notifications: [followNotif("n1", false)],
+          unread_count: 0,
+          limit: 20,
+          offset: 0,
+        },
+      }),
+    );
+    await page.route(CONVERSATIONS, (route) =>
+      route.fulfill({
+        json: {
+          conversations: [
+            {
+              id: "c1",
+              updated_at: new Date().toISOString(),
+              other_user_id: "u2",
+              other_username: "bob",
+              other_display_name: "Bob Builder",
+              last_message_body: "see you then",
+              last_message_at: new Date().toISOString(),
+            },
+          ],
+          limit: 20,
+          offset: 0,
+        },
+      }),
+    );
+
+    // Reach the Inbox landing via the phone bottom-tab (client-side nav).
+    await page.getByRole("link", { name: "Inbox" }).click();
+    await expect(page).toHaveURL(/\/notifications$/);
+    await expect(page.getByText("Bob started following Ada Makes")).toBeVisible();
+
+    // The segmented control's Messages half navigates to the messages route.
+    const tabs = page.getByRole("group", { name: "Inbox sections" });
+    await expect(tabs.getByRole("button", { name: "Notifications" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await tabs.getByRole("button", { name: "Messages" }).click();
+    await expect(page).toHaveURL(/\/messages$/);
+    await expect(page.getByText("Bob Builder")).toBeVisible();
+
+    // …and back to the Notifications half.
+    await page
+      .getByRole("group", { name: "Inbox sections" })
+      .getByRole("button", { name: "Notifications" })
+      .click();
+    await expect(page).toHaveURL(/\/notifications$/);
+    await expect(page.getByText("Bob started following Ada Makes")).toBeVisible();
+  });
+});

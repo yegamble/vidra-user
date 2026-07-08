@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 
-import { LockIcon } from "@/components/icons";
+import { ChevronLeftIcon, LockIcon } from "@/components/icons";
 import { ReportButton } from "@/components/ReportButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { userAvatarUrl } from "@/lib/api";
 
 // ThreadHeader anchors the thread's identity while the timeline scrolls: a back
-// chevron, the peer's avatar, name + @username (or an "Encrypted conversation"
-// line + lock on E2EE threads), and a Report affordance. It is sticky at the top
-// of the thread pane with the app-shell's hairline + translucent treatment.
+// chevron, the peer's avatar, name + @username (or, on E2EE threads, a lock + the
+// design's success-tinted "End-to-end encrypted" status line), and a Report
+// affordance. It is sticky at the top of the thread pane with the app-shell's
+// hairline + translucent treatment. (The design draws a "· disappearing 7d"
+// suffix on that line; no message-retention/TTL contract is surfaced, so per
+// spec §5.6 it is aspirational and omitted — we state only what is real.)
 export function ThreadHeader({
   name,
   username,
@@ -29,18 +32,7 @@ export function ThreadHeader({
         aria-label="Back to messages"
         className="focus-ring -ml-1.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
       >
-        <svg
-          aria-hidden
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-5 w-5"
-        >
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
+        <ChevronLeftIcon size={20} strokeWidth={2.2} />
       </Link>
 
       <Avatar
@@ -62,7 +54,9 @@ export function ThreadHeader({
           ) : null}
         </div>
         {encrypted ? (
-          <span className="truncate text-[12px] text-fg-muted">Encrypted conversation</span>
+          <span className="truncate text-[11.5px] font-medium text-success">
+            End-to-end encrypted
+          </span>
         ) : username ? (
           <span className="truncate text-[12px] text-fg-muted">@{username}</span>
         ) : null}

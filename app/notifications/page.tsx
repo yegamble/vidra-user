@@ -1,9 +1,15 @@
+import { InboxTabs } from "@/components/InboxTabs";
 import { NotificationsView } from "@/components/NotificationsView";
 
+// The Inbox landing (the mobile "Inbox" tab target). On phones the InboxTabs
+// segmented control switches to the Messages half; on desktop it is hidden and
+// this is simply the full notifications list (reached from the header bell's
+// "See all notifications").
 export default function NotificationsPage() {
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight">Notifications</h1>
+      <h1 className="mb-4 text-2xl font-bold tracking-tight sm:mb-6">Inbox</h1>
+      <InboxTabs active="notifications" className="mb-5" />
       <NotificationsView />
     </main>
   );

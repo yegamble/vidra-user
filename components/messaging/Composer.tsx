@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { ArrowUpIcon, CloseIcon, FileIcon, PlusIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { ApiError, api } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
@@ -250,9 +251,7 @@ export function Composer({
                   aria-hidden
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-strong text-fg-muted"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6" />
-                  </svg>
+                  <FileIcon size={20} strokeWidth={2} />
                 </span>
               )}
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -290,9 +289,7 @@ export function Composer({
                 aria-label={`Remove attachment ${p.filename}`}
                 className="focus-ring inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
+                <CloseIcon size={16} strokeWidth={2} />
               </button>
             </li>
           ))}
@@ -317,20 +314,9 @@ export function Composer({
           onClick={() => fileInputRef.current?.click()}
           disabled={pending.length >= MAX_ATTACHMENTS}
           aria-label="Attach a file"
-          className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-50"
+          className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-muted text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg disabled:opacity-50"
         >
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-5 w-5"
-          >
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-          </svg>
+          <PlusIcon size={20} strokeWidth={2} />
         </button>
         <textarea
           ref={textareaRef}
@@ -350,18 +336,7 @@ export function Composer({
           aria-keyshortcuts={enterSends && canSend ? "Enter" : undefined}
           className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-40"
         >
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-5 w-5"
-          >
-            <path d="M12 19V5M5 12l7-7 7 7" />
-          </svg>
+          <ArrowUpIcon size={20} strokeWidth={2.2} />
         </button>
       </div>
       {overCounter ? (

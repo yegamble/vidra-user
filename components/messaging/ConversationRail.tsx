@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { LockIcon } from "@/components/icons";
+import { InboxTabs } from "@/components/InboxTabs";
 import { NewMessageButton } from "@/components/NewMessageButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -48,6 +49,7 @@ export function ConversationRail({ titleAsH1 }: { titleAsH1: boolean }) {
   if (status !== "authed") {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-6">
+        {titleAsH1 ? <InboxTabs active="messages" /> : null}
         {heading}
         <EmptyState
           title="Sign in to see your messages"
@@ -67,10 +69,16 @@ export function ConversationRail({ titleAsH1 }: { titleAsH1: boolean }) {
     );
   }
 
-  return <Rail heading={heading} />;
+  return <Rail heading={heading} showInboxTabs={titleAsH1} />;
 }
 
-function Rail({ heading }: { heading: React.ReactNode }) {
+function Rail({
+  heading,
+  showInboxTabs,
+}: {
+  heading: React.ReactNode;
+  showInboxTabs: boolean;
+}) {
   const pathname = usePathname();
   const [status, setStatus] = useState<Status>("loading");
   const [items, setItems] = useState<ConversationSummary[]>([]);
@@ -139,6 +147,7 @@ function Rail({ heading }: { heading: React.ReactNode }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-col gap-3 px-4 pb-3 pt-6">
+        {showInboxTabs ? <InboxTabs active="messages" /> : null}
         <div className="flex items-center justify-between gap-2">
           {heading}
           <NewMessageButton />

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { MessageCircleIcon, ShieldIcon, UserIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -13,33 +14,22 @@ import { relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
-// A minified Feather-style glyph per notification type (24x24 stroke grid),
-// rendered inside the round leading icon chip. Purely decorative (aria-hidden).
-const TYPE_ICON: Record<string, string> = {
-  comment:
-    "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
-  message: "M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6",
-  video_rejected:
-    "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
-  report_resolved: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4",
-  follow: "M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 8v6M23 11h-6",
-};
-
+// NotificationTypeIcon maps each notification type to a design-set glyph, rendered
+// inside the round leading chip. The design's Inbox uses message-circle for
+// comment/reply and message events, a shield for moderation outcomes (held /
+// rejected / report resolved), and the user glyph for follows. Purely decorative
+// (the shared <Icon> is aria-hidden by default; the chip's <span> is too).
 export function NotificationTypeIcon({ type }: { type: string }) {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-    >
-      <path d={TYPE_ICON[type] ?? TYPE_ICON.follow} />
-    </svg>
-  );
+  switch (type) {
+    case "comment":
+    case "message":
+      return <MessageCircleIcon size={16} />;
+    case "video_rejected":
+    case "report_resolved":
+      return <ShieldIcon size={16} />;
+    default:
+      return <UserIcon size={16} />;
+  }
 }
 
 // describeNotification renders a notification as a human message plus the link

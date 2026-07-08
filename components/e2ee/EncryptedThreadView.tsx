@@ -149,11 +149,15 @@ export function EncryptedThreadView({
 
 function LockHeader({ recipientId }: { recipientId?: string }) {
   const [showSafety, setShowSafety] = useState(false);
+  // The sticky ThreadHeader now carries the "End-to-end encrypted" status line
+  // (design §3.7), so this in-body card leads with a plain-language restatement
+  // instead of repeating that exact label — it stays the detailed trust explainer
+  // (what E2EE does and doesn't protect) plus the safety-numbers affordance.
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-success/25 bg-success/10 p-4">
       <div className="flex items-center gap-2 text-success">
         <LockIcon size={16} />
-        <span className="text-sm font-semibold">End-to-end encrypted</span>
+        <span className="text-sm font-semibold">Only you two can read this</span>
       </div>
       <p className="text-xs text-fg-muted">
         Only you and the people in this conversation can read these messages. The server still sees

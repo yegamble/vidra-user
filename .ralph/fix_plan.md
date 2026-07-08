@@ -1397,9 +1397,70 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
         thumbnails read it).
 
 ## DR8 — Inbox: notifications + messages + DM thread
-- [ ] SegmentedControl Notifications|Messages; typed notification icon circles; unread tint;
+- [x] SegmentedControl Notifications|Messages; typed notification icon circles; unread tint;
       thread E2EE header (NO "disappearing 7d" — aspirational), tailed bubbles, pill composer
       + accent send. CI + push.
+      **DONE 2026-07-08.** A restyle over the shipped Messaging v2 build (vocabulary alignment,
+      not a rebuild): the bubbles/tails/grouping, media grids, read receipts and split-pane rail
+      were already design-correct — this slice adds the Inbox switcher, converges the messaging
+      icons onto the shared design set, and lands the E2EE header status line.
+      • **Inbox SegmentedControl (new `components/InboxTabs.tsx`).** The design frames the phone
+        Inbox as one screen with a rounded-rect segmented toggle [Notifications | Messages].
+        Production keeps the two on separate routes (Messages owns a persistent DESKTOP
+        split-pane rail), so `InboxTabs` uses the DR1 `SegmentedControl` primitive as
+        **cross-route navigation** — choosing the inactive half `router.push`es its route
+        (client-side, so the in-memory session survives). It is **phone-only** (`sm:hidden`,
+        exactly where the bottom tab bar lives): on desktop, Messages stays a sidebar
+        destination and notifications live in the header bell popover (verified in the
+        `messaging-inbox/desktop` shot — no segmented control, split-pane unchanged). Mounted on
+        `/notifications` (active=notifications, title → **"Inbox"** to match the design + the tab
+        label) and the mobile messages rail (active=messages, gated on `titleAsH1` so it never
+        renders in the desktop split rail).
+      • **Typed notification icon circles → shared design set.** `NotificationTypeIcon`
+        (shared by `NotificationsView` + the header `NotificationsBell`) dropped its ad-hoc inline
+        `TYPE_ICON` path map for the vendored icons: comment/message → `MessageCircleIcon`,
+        video_rejected/report_resolved → `ShieldIcon` (moderation), follow → `UserIcon` — the
+        design's Inbox glyph vocabulary (was envelope / user-plus / alert-triangle). Unread row
+        tint (`bg-surface-muted`) + 7px `bg-fg` dot were already design-correct; kept.
+      • **Thread E2EE header (`ThreadHeader`).** Added the design's success status line — a
+        `text-success` **"End-to-end encrypted"** under the peer name on encrypted threads —
+        and dropped the design's "· disappearing 7d" suffix (no message-TTL contract is
+        surfaced ⇒ **aspirational per §5.6, not stubbed**). Back affordance re-pathed to the
+        shared `ChevronLeftIcon` (design `M15 4l-8 8 8 8`). **Dedup:** the shipped E2EE trust
+        card (`EncryptedThreadView.LockHeader`) already rendered a bold "End-to-end encrypted";
+        with the header now authoritative, that card leads with the plain-language
+        **"Only you two can read this"** (keeping its §1-limitation copy + safety-numbers
+        toggle) so the label isn't duplicated — the four `getByText("End-to-end encrypted")`
+        E2EE assertions (mocked + backed) now match the persistent header line.
+      • **Composer + placeholder icon convergence.** The composer's attach affordance became the
+        design's **plus glyph in a surface-muted circle** (was a paperclip in a transparent
+        circle); file-chip / remove-× / send-arrow swapped to shared `FileIcon` / `CloseIcon` /
+        `ArrowUpIcon`; pill input + accent send circle already matched. The `/messages` empty
+        placeholder's inline message-circle → shared `MessageCircleIcon`. (Attach/send stay at
+        44px for the touch target — design draws 36px; AA target-size wins, noted.)
+      • **Tests (unit + e2e, same slice).** New unit `components/InboxTabs.test.tsx` (4: named
+        group + pressed state, both navigations, no-nav on active re-select) and
+        `components/messaging/ThreadHeader.test.tsx` (2: E2EE success line present + TTL copy
+        absent + back link; @handle on unencrypted + no E2EE line). New phone-viewport e2e in
+        `e2e/notifications.spec.ts` ("mobile Inbox segmented control") signs in via a
+        mobile-aware helper (the shared one asserts the header "Sign out" the phone shell tucks
+        behind the avatar menu) and drives Notifications↔Messages through the segmented control.
+      • **Evidence.** `.ralph/design-review/dr8/{before,after}/{messaging,messaging-inbox,
+        messaging-media,notifications,notifications-bell}` (light+dark × mobile+desktop;
+        git-ignored; before via `git stash` of the 7 tracked files, after against
+        `next dev -p 3181`, stale port killed before + server killed after). Read the AFTER PNGs
+        vs `Vidra App.dc.html` (Inbox + Conversation screens): mobile Inbox = 26px "Inbox" title
+        + rounded-rect segmented (raised active) + typed icon chips (message-circle/user/shield)
+        + unread tint/dot; Messages half = 44px avatars, lock glyph, `bg-fg` unread pill; thread
+        = chevron-left back + name/@handle + tailed bubbles (accent outgoing) + "Seen" + plus
+        attach circle / pill input / accent send circle. Dark inverts via tokens; desktop hides
+        the segmented control (split-pane intact).
+      • **Gate.** Full `CI=1 npm run ci` (E2E_PORT=3190) on the final tree — typecheck ✓ lint ✓
+        lint:icons ✓ unit **+6 (InboxTabs 4, ThreadHeader 2) = 616 passed** ✓ `next build` ✓
+        mocked e2e **420 passed** (+1 mobile Inbox switch), **0 failed** on the final full-parallel
+        run. (A first full run flaked `watch-player.spec.ts:94` "toggle mute" — a player test in
+        no DR8 file; it passed in isolation AND the final full run went 420/420 clean.) Semantic
+        tokens only; no `dark:`/raw palette; no emoji.
 
 ## DR9 — Studio + Upload + Go Live
 - [ ] Studio storage card (`/me/quota`), video rows + status Badges; desktop stat cards
