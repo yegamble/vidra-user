@@ -867,18 +867,23 @@ the core commit + endpoint it binds to (W1-style):
       `at_seconds` + poster renders; muted-video fallback pick POSTs `at_seconds`;
       a 503 surfaces the honest "not available on this instance" copy with no
       poster; the affordance is hidden until the video has a known duration while
-      the custom upload stays). (e) **Backed DB-proof [~]:**
-      `e2e-backed/upload-thumbnail.spec.ts` publishes a real (tiny) video, waits for
-      the pipeline to process the original (`waitForHls`), then frame-picks through
-      the UI scrubber when the fixture reports a scrubbable duration (else drives the
-      SAME `{at_seconds:0}` contract via the API — always valid — for the sub-second
-      CI clip), asserts the studio shows the poster after refetch AND that the public
-      thumbnail endpoint serves it as `image/jpeg` (the ffmpeg frame-pick output).
-      No vidra-core API was reachable in-session (`:8080` refused; only
-      postgres/redis containers up — the `api` service is a from-source Go build;
-      `:8088` is an unrelated python `http.server`), so it did NOT run locally —
-      structured to run in the `frontend-e2e-backed` CI job (same posture as
-      W2.U1/U2's backed specs). (f) **Design:** before/after screenshots (light+dark
+      the custom upload stays). (e) **Backed DB-proof:**
+      `e2e-backed/upload-thumbnail.spec.ts` publishes a real video, waits for the
+      pipeline to process the original (`waitForHls`), drives the frame-pick scrubber
+      through the UI (scrubbing to a mid-video moment so the POST carries a real
+      `at_seconds`), and asserts the studio shows the poster after refetch AND that
+      the public thumbnail endpoint serves it as `image/jpeg` (the ffmpeg frame-pick
+      output). **Real precondition found the honest way:** the FIRST push's backed
+      spec (reusing the shared ~0.1s `TINY_MP4_BASE64`) went RED with a **409** —
+      frame-pick requires a stored original AND a probed **positive** duration
+      (`vidra-core` `SetThumbnailFromFrame`; `DurationSeconds` is `*int32`, so a
+      sub-second clip truncates to 0, which 409s AND hides the UI affordance via
+      `canFramePick`). Fixed by adding a 4-second `SAMPLE_MP4_4S_BASE64` fixture
+      (synthetic 16×16 gray clip, ~2 KB, probes to a positive duration) so the
+      scrubber is genuinely drivable in CI. No vidra-core API was reachable
+      in-session (`:8080` refused; only postgres/redis up — the `api` service is a
+      from-source Go build; `:8088` is an unrelated python `http.server`), so it did
+      NOT run locally; it runs in the `frontend-e2e-backed` CI job. (f) **Design:** before/after screenshots (light+dark
       × mobile+desktop) in `.ralph/design-review/w2/studio-frame-pick/` via a new
       `studio-frame-pick` shots area (opens the edit surface → Pick from video →
       storyboard preview); tokens only, SVG only (VideoIcon), read + verified (the
@@ -887,8 +892,14 @@ the core commit + endpoint it binds to (W1-style):
       intact). (g) **Gate:** full `npm run ci` green locally (typecheck, lint,
       lint:icons, 756 unit incl. the 13 new, build, 449 e2e incl. the 4 new + axe);
       `node scripts/check-contract.mjs` green (no contract change — the frame variant
-      reuses the in-spec `/videos/{id}/thumbnail` path). Branch CI recorded at
-      close-out.
+      reuses the in-spec `/videos/{id}/thumbnail` path). Branch CI (commit `8eeadf0`):
+      `frontend-ci` GREEN, `contract-ci` GREEN. `frontend-e2e-backed` on that first
+      push surfaced the 409 above for THIS slice's backed spec (the shared sub-second
+      fixture) alongside the same chronic unrelated data-mutating failures
+      (admin-users, mfa, messaging, playlists, donations, notifications, deactivate,
+      instance-settings, profile-edit, playlist-thumbnail); the fixture fix
+      (`SAMPLE_MP4_4S_BASE64`) landed in the follow-up commit — backed re-run outcome
+      recorded there.
 - [ ] W2.U4 [UPLOAD-10 UI — UNBLOCKED: vidra-core W2.C3 landed (commit `71d950b`;
       429 `too_many_active_uploads` present in `vidra-core/api/openapi.yaml`);
       degrade gracefully if the code is absent] Batch upload: `multiple` dropzone →

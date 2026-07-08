@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { API_URL, TINY_MP4_BASE64, channelVideos, loginToken, uniqueId, waitForHls } from "./fixtures";
+import { API_URL, SAMPLE_MP4_4S_BASE64, channelVideos, loginToken, uniqueId, waitForHls } from "./fixtures";
 
 // Proves the thumbnail FRAME-PICK (UPLOAD-04 / vidra-core W2.C5) end to end against
 // a real vidra-core + PostgreSQL + ffmpeg: a creator publishes a real (tiny) video,
@@ -39,12 +39,14 @@ test("a creator sets the poster from a video frame (frame-pick)", async ({ page,
   await page.getByRole("button", { name: "Create channel" }).click();
   await channelCreated;
 
-  // Publish a real (tiny) video via the chunked upload; ffprobe accepts it.
+  // Publish a real (4s) video via the chunked upload; ffprobe accepts it and
+  // records a positive duration — the frame-pick precondition (a sub-second clip
+  // truncates to 0 and would 409).
   await page.getByLabel("Video title").fill(videoTitle);
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
-    buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+    buffer: Buffer.from(SAMPLE_MP4_4S_BASE64, "base64"),
   });
   const uploaded = page.waitForResponse(
     (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
@@ -66,11 +68,30 @@ test("a creator sets the poster from a video frame (frame-pick)", async ({ page,
   const row = page.getByRole("listitem").filter({ hasText: videoTitle });
   await row.getByRole("button", { name: "Edit", exact: true }).click();
 
+  // The detail fetch drives the (duration-gated) frame-pick affordance; wait for
+  // it rather than racing the async render before deciding the path.
   const pick = page.getByRole("button", { name: "Pick from video" });
-  if ((await pick.count()) > 0) {
-    // Scrubbable duration: drive the frame-pick scrubber through the UI.
+  let canUsePicker = false;
+  try {
+    await pick.waitFor({ state: "visible", timeout: 15_000 });
+    canUsePicker = true;
+  } catch {
+    canUsePicker = false;
+  }
+
+  if (canUsePicker) {
+    // Positive duration: drive the frame-pick scrubber through the UI, scrubbing
+    // to a mid-video moment so the POST carries a real (non-zero) at_seconds.
     await pick.click();
-    await expect(page.getByLabel("Frame position")).toBeVisible();
+    const slider = page.getByLabel("Frame position");
+    await expect(slider).toBeVisible();
+    await slider.evaluate((el) => {
+      const input = el as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(input, "2");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     const posted = page.waitForResponse(
       (r) =>
         /\/videos\/[^/]+\/thumbnail$/.test(r.url()) &&
