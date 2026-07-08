@@ -42,7 +42,7 @@ afterEach(() => {
 
 describe("SupportButton", () => {
   it("renders nothing when the entity exposes no public address", async () => {
-    mockChannel.mockResolvedValue({ addresses: [], limit: 20, offset: 0 });
+    mockChannel.mockResolvedValue({ addresses: [] });
     const { container } = render(
       <SupportButton sources={[{ kind: "channel", handle: "grade-house" }]} name="Grade House" />,
     );
@@ -51,7 +51,7 @@ describe("SupportButton", () => {
   });
 
   it("shows an accent Support pill and opens a dialog with QR, address, and a verified pill", async () => {
-    mockChannel.mockResolvedValue({ addresses: [addr()], limit: 20, offset: 0 });
+    mockChannel.mockResolvedValue({ addresses: [addr()] });
     render(
       <SupportButton sources={[{ kind: "channel", handle: "grade-house" }]} name="Grade House" />,
     );
@@ -73,7 +73,7 @@ describe("SupportButton", () => {
   });
 
   it("copies the address and confirms with 'Copied'", async () => {
-    mockChannel.mockResolvedValue({ addresses: [addr()], limit: 20, offset: 0 });
+    mockChannel.mockResolvedValue({ addresses: [addr()] });
     render(
       <SupportButton sources={[{ kind: "channel", handle: "grade-house" }]} name="Grade House" />,
     );
@@ -92,8 +92,6 @@ describe("SupportButton", () => {
   it("marks an unverified address as Unverified", async () => {
     mockChannel.mockResolvedValue({
       addresses: [addr({ network: "bitcoin", address: "bc1qxyz", verified: false })],
-      limit: 20,
-      offset: 0,
     });
     render(
       <SupportButton sources={[{ kind: "channel", handle: "grade-house" }]} name="Grade House" />,

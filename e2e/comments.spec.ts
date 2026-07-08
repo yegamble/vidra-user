@@ -409,6 +409,79 @@ test("an authenticated viewer can reply, and the POST carries the parent_id", as
   await expect(replies.getByText("well put")).toBeVisible();
 });
 
+test("the reply composer names the comment being replied to", async ({ page }) => {
+  await page.route(LOGIN, (route) => route.fulfill({ json: session }));
+  await page.route(FEED, (route) =>
+    route.fulfill({ json: { videos: [detail], sort: "recent", limit: 20, offset: 0 } }),
+  );
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) =>
+    route.fulfill({
+      json: { comments: [comment("c1", "parent comment", "bob", "Bob Jones")], limit: 20, offset: 0 },
+    }),
+  );
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+  await page.route(/\/api\/v1\/me\/saved(\?|$)/, (route) =>
+    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+  );
+
+  await page.getByRole("heading", { name: "Watch Me" }).click();
+  await expect(page.getByText("parent comment")).toBeVisible();
+
+  const commentsRegion = page.getByRole("region", { name: "Comments" });
+  const parentRow = commentsRegion.locator("li", { hasText: "parent comment" }).first();
+  await parentRow.getByRole("button", { name: "Reply", exact: true }).click();
+
+  // A visible chip names the replied-to author, and the textarea's accessible
+  // name carries the same target (announced without a live region).
+  await expect(commentsRegion.getByText("Replying to @bob")).toBeVisible();
+  const textarea = page.getByLabel("Write a reply to @bob");
+  await expect(textarea).toBeVisible();
+  // The handle is a chip, never prefilled into the body the user would delete.
+  await expect(textarea).toHaveValue("");
+});
+
+test("a reply-to-reply leads with an @mention of the reply it answers", async ({ page }) => {
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) =>
+    route.fulfill({
+      json: {
+        comments: [
+          comment("c1", "parent comment", "bob", "Bob Jones"),
+          // r1 replies to the top-level comment; r2 replies to r1 (a reply).
+          { ...comment("r1", "first reply", "ada", "Ada Lovelace"), parent_id: "c1" },
+          { ...comment("r2", "nested reply", "cat", "Cat Grant"), parent_id: "r1" },
+        ],
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+
+  await page.goto("/videos/v1");
+  const commentsRegion = page.getByRole("region", { name: "Comments" });
+  // Both replies flatten under the top-level comment (one visual level).
+  await commentsRegion.getByRole("button", { name: "View 2 replies" }).click();
+  const replies = commentsRegion.getByRole("list", { name: "Replies" });
+
+  // r2 answers r1, so it leads with "@ada" (r1's author) before its body.
+  const nested = replies.locator("li", { hasText: "nested reply" });
+  await expect(nested).toContainText("@ada");
+  await expect(nested).toContainText("nested reply");
+  // r1 answers the top-level comment directly → no mention (would be redundant).
+  const direct = replies.locator("li", { hasText: "first reply" });
+  await expect(direct).not.toContainText("@ada");
+});
+
 test("an anonymous viewer is prompted to sign in when replying", async ({ page }) => {
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());

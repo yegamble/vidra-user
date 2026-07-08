@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronDownIcon } from "@/components/icons";
@@ -16,7 +16,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { api, errorMessage, userAvatarUrl } from "@/lib/api";
 import type { Comment } from "@/lib/api";
-import { buildCommentTree } from "@/lib/comments";
+import { buildCommentTree, replyMention } from "@/lib/comments";
 import { relativeTime } from "@/lib/format";
 
 const MAX_COMMENT_LEN = 2000;
@@ -74,6 +74,10 @@ export function CommentsSection({ videoId }: { videoId: string }) {
     setComments((prev) => prev.filter((x) => x.author_domain !== domain));
 
   const threads = buildCommentTree(comments);
+  // The same flat list keyed by id: `CommentItem` resolves each reply's target
+  // handle from it (via `replyMention`) so the replied-to author is derived, not
+  // fetched — no backend field, no fabrication when the parent isn't loaded.
+  const byId = new Map(comments.map((c) => [c.id, c] as const));
 
   return (
     <section aria-label="Comments" className="flex flex-col gap-4">
@@ -100,6 +104,7 @@ export function CommentsSection({ videoId }: { videoId: string }) {
               key={root.id}
               comment={root}
               replies={replies}
+              byId={byId}
               videoId={videoId}
               onReplied={onReplied}
               onDeleted={onDeleted}
@@ -186,21 +191,32 @@ function CommentForm({
 
 // ReplyComposer posts a reply to `parentId` on the same video. It only renders
 // for an authenticated viewer (the Reply control shows a sign-in prompt to
-// anonymous viewers instead), so it always sends a `parent_id`.
+// anonymous viewers instead), so it always sends a `parent_id`. A visible,
+// non-editable "Replying to @username" chip names the target (never prefilled
+// into the textarea the user would have to delete); the textarea's accessible
+// name carries the same target so the change is announced without a live region.
 function ReplyComposer({
   videoId,
   parentId,
+  parentUsername,
   onReplied,
   onCancel,
 }: {
   videoId: string;
   parentId: string;
+  parentUsername?: string;
   onReplied: (c: Comment) => void;
   onCancel: () => void;
 }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const chipId = useId();
+  // A tombstoned/absent parent has no handle to show — the composer names it
+  // neutrally rather than rendering a broken "@". (In practice the Reply control
+  // is absent on a tombstone, so this is a defensive fallback.)
+  const target = parentUsername ? `@${parentUsername}` : "a deleted comment";
+  const replyLabel = `Write a reply to ${target}`;
 
   async function submit() {
     const trimmed = body.trim();
@@ -227,8 +243,21 @@ function ReplyComposer({
         void submit();
       }}
     >
+      <span
+        id={chipId}
+        className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted"
+      >
+        {parentUsername ? (
+          <>
+            Replying to <span className="font-semibold text-fg">@{parentUsername}</span>
+          </>
+        ) : (
+          "Replying to a deleted comment"
+        )}
+      </span>
       <Textarea
-        aria-label="Write a reply"
+        aria-label={replyLabel}
+        aria-describedby={chipId}
         placeholder="Write a reply…"
         rows={2}
         maxLength={MAX_COMMENT_LEN}
@@ -258,6 +287,8 @@ function ReplyComposer({
 function CommentItem({
   comment,
   replies,
+  byId,
+  mentionUsername,
   videoId,
   onReplied,
   onDeleted,
@@ -267,6 +298,12 @@ function CommentItem({
 }: {
   comment: Comment;
   replies: Comment[];
+  // The whole loaded list keyed by id, so this item can resolve each of its
+  // replies' target handles (via `replyMention`) as it renders them.
+  byId: Map<string, Comment>;
+  // The "@username" this comment (a reply) answers, when it targets another
+  // reply — plain leading text; unset for a top-level comment or a direct reply.
+  mentionUsername?: string;
   videoId: string;
   onReplied: (c: Comment) => void;
   onDeleted: (id: string) => void;
@@ -408,6 +445,8 @@ function CommentItem({
                 key={r.id}
                 comment={r}
                 replies={[]}
+                byId={byId}
+                mentionUsername={replyMention(r, byId)?.username}
                 videoId={videoId}
                 onReplied={handleReplied}
                 onDeleted={onDeleted}
@@ -590,6 +629,13 @@ function CommentItem({
             </form>
           ) : (
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">
+              {mentionUsername ? (
+                // Leading "@username" naming the replied-to author (YouTube
+                // parity) — plain non-link text in the same <p>, so it is part
+                // of the reply's accessible content. It has no profile route
+                // (username ≠ channel handle), matching the non-link author name.
+                <span className="font-semibold text-fg">@{mentionUsername} </span>
+              ) : null}
               {comment.body}
             </p>
           )}
@@ -603,6 +649,7 @@ function CommentItem({
             <ReplyComposer
               videoId={videoId}
               parentId={comment.id}
+              parentUsername={comment.author_username}
               onReplied={handleReplied}
               onCancel={() => setReplying(false)}
             />

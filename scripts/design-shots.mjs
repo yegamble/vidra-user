@@ -925,6 +925,71 @@ const AREAS = {
       );
     },
   },
+  // Watch page — comment reply attribution (DR5b): a reply-to-reply carries a
+  // leading "@username" mention naming the reply it answers (YouTube parity),
+  // and opening the composer shows the "Replying to @username" chip. Reuses the
+  // watch mock, overriding only the comments list, then drives the thread open.
+  "watch-reply": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+      // Last-registered route wins: replace the comments list with a threaded
+      // conversation (rc1 → rc2 → rc3) so the mention + chip both render.
+      await page.route(/\/api\/v1\/videos\/v1\/comments/, (route) =>
+        route.fulfill({
+          json: {
+            comments: [
+              {
+                id: "rc1",
+                video_id: "v1",
+                author_id: "a1",
+                author_username: "aurora",
+                author_display_name: "Aurora Lab",
+                body: "The roll-off on the highlights here is gorgeous — what are you starting from before the split-tone?",
+                created_at: new Date(Date.now() - 3_600_000).toISOString(),
+              },
+              {
+                id: "rc2",
+                video_id: "v1",
+                author_id: "a2",
+                parent_id: "rc1",
+                author_username: "northloop",
+                author_display_name: "North Loop",
+                body: "Start from a flat log profile, then split-tone on top — much easier to hold the shadows.",
+                created_at: new Date(Date.now() - 3_000_000).toISOString(),
+              },
+              {
+                id: "rc3",
+                video_id: "v1",
+                author_id: "a1",
+                parent_id: "rc2",
+                author_username: "aurora",
+                author_display_name: "Aurora Lab",
+                body: "That's exactly it — flat first, tone second. The shadow roll-off comes for free.",
+                created_at: new Date(Date.now() - 2_400_000).toISOString(),
+              },
+            ],
+            limit: 100,
+            offset: 0,
+          },
+        }),
+      );
+    },
+    async act(page) {
+      // Reveal the flattened replies, then open the composer on the middle reply
+      // so BOTH new affordances show at once: the leading "@northloop" mention on
+      // the reply-to-reply and the "Replying to @northloop" composer chip.
+      const region = page.getByRole("region", { name: "Comments" });
+      await region.getByRole("button", { name: "View 2 replies" }).click();
+      const replies = region.getByRole("list", { name: "Replies" });
+      await replies
+        .locator("li", { hasText: "flat log profile" })
+        .first()
+        .getByRole("button", { name: "Reply", exact: true })
+        .click();
+      await page.getByLabel("Write a reply to @northloop").waitFor();
+    },
+  },
   // Watch page — IPFS playing from the mirror (DR5): opt into IPFS, the gateway
   // master answers, the source bar settles on "IPFS · pinned". Reuses the watch
   // mock; the gateway master is served (probe + hls.js), variants/segs abort.

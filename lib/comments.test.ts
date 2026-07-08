@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { Comment } from "@/lib/api";
 
-import { buildCommentTree } from "./comments";
+import { buildCommentTree, replyMention } from "./comments";
+
+function byIdOf(comments: Comment[]): Map<string, Comment> {
+  return new Map(comments.map((c) => [c.id, c] as const));
+}
 
 function mk(id: string, overrides: Partial<Comment> = {}): Comment {
   return {
@@ -76,5 +80,65 @@ describe("buildCommentTree", () => {
     const seen = threads.flatMap((t) => [t.root.id, ...t.replies.map((r) => r.id)]);
     expect(seen).toContain("a");
     expect(seen).toContain("b");
+  });
+});
+
+describe("replyMention", () => {
+  it("returns the parent author's handle for a reply-to-reply", () => {
+    const root = mk("c1", { author_username: "bob" });
+    const r1 = mk("r1", { parent_id: "c1", author_username: "ada" });
+    const r2 = mk("r2", { parent_id: "r1", author_username: "cat" });
+    const byId = byIdOf([root, r1, r2]);
+    // r2 answers r1 (itself a reply), so it should mention r1's author.
+    expect(replyMention(r2, byId)).toEqual({ username: "ada" });
+  });
+
+  it("returns null for a direct reply to the top-level comment (redundant)", () => {
+    const root = mk("c1", { author_username: "bob" });
+    const r1 = mk("r1", { parent_id: "c1", author_username: "ada" });
+    const byId = byIdOf([root, r1]);
+    expect(replyMention(r1, byId)).toBeNull();
+  });
+
+  it("returns null for a top-level comment (no parent)", () => {
+    const root = mk("c1");
+    expect(replyMention(root, byIdOf([root]))).toBeNull();
+  });
+
+  it("returns null when the parent is not in the loaded window", () => {
+    // r2's immediate parent "r1" scrolled past the page: buildCommentTree
+    // promotes r2 to its own thread, so it is not a flattened-ambiguous reply.
+    const r2 = mk("r2", { parent_id: "r1", author_username: "cat" });
+    expect(replyMention(r2, byIdOf([r2]))).toBeNull();
+  });
+
+  it("returns null when the parent reply is tombstoned (no broken @)", () => {
+    const root = mk("c1", { author_username: "bob" });
+    const r1 = mk("r1", { parent_id: "c1", author_username: "ada", deleted: true, body: "[deleted]" });
+    const r2 = mk("r2", { parent_id: "r1", author_username: "cat" });
+    const byId = byIdOf([root, r1, r2]);
+    expect(replyMention(r2, byId)).toBeNull();
+  });
+
+  it("returns null when the parent reply is an orphan promoted to its own root", () => {
+    // r1's own parent isn't loaded → r1 heads its own thread; a reply to r1 is a
+    // direct-reply-to-root of that promoted thread, so no mention.
+    const r1 = mk("r1", { parent_id: "missing", author_username: "ada" });
+    const r2 = mk("r2", { parent_id: "r1", author_username: "cat" });
+    expect(replyMention(r2, byIdOf([r1, r2]))).toBeNull();
+  });
+
+  it("mentions a remote parent by its author-name snapshot", () => {
+    const root = mk("c1", { author_username: "bob" });
+    const remote = mk("rm1", {
+      parent_id: "c1",
+      remote: true,
+      author_id: null,
+      author_username: "remote-rene",
+      author_domain: "videos.example",
+    });
+    const r2 = mk("r2", { parent_id: "rm1", author_username: "cat" });
+    const byId = byIdOf([root, remote, r2]);
+    expect(replyMention(r2, byId)).toEqual({ username: "remote-rene" });
   });
 });

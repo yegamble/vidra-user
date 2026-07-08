@@ -1172,6 +1172,93 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
         info is present, position differs. (4) Support mobile-sheet vs desktop-dialog chosen by
         `matchMedia` (guarded for the test env).
 
+## DR5b — Comment reply attribution ("Reply to @username")
+> Slice package: `comment-reply-attribution/` (spec + AUDIT + CR-USER/CR-CORE tasks).
+> **Backend contract delta = ZERO** — the replied-to author's handle is fully
+> client-derivable from the already-shipped flat list (`parent_id` +
+> `author_username` in the loaded `byId` map). The additive server `reply_to`
+> field was considered and REJECTED (redundant; a mute/block leak — a
+> server-populated handle would re-surface a muted/blocked parent author on the
+> surviving reply, whereas client derivation naturally omits it since the hidden
+> parent isn't in `byId`; larger blast radius). vidra-core owes nothing for this
+> feature; CR-CORE-2 (notify the replied-to author) stays OUT of scope, gated on
+> explicit user approval — not required by the ask.
+
+### CR-USER-1 — Pure helper `replyMention(reply, byId)`
+- [x] Extracted `rootIdOf(c, byId)` to module scope in `lib/comments.ts` (shared by
+      `buildCommentTree` + the new helper, so "top of this thread" is defined once,
+      incl. the orphan-promotion case) and added `replyMention(reply, byId)` →
+      `{ username } | null`: parent author's handle **iff** the reply targets another
+      reply (`parent_id` present, in `byId`, and `!== rootIdOf(reply)`), else `null` for
+      top-level / direct-reply-to-root / absent parent / tombstoned parent.
+- [x] Unit: `lib/comments.test.ts` +7 cases (reply-to-reply → handle; direct → null;
+      top-level → null; parent absent → null; parent `deleted` → null; orphan-promoted
+      parent → null; remote parent → snapshot username). **DONE 2026-07-07** — vitest green.
+
+### CR-USER-2 — Composer chip "Replying to @username"
+- [x] `ReplyComposer` takes `parentUsername`; renders a visible, non-editable chip ABOVE
+      the textarea (never prefilled): `inline-flex w-fit … rounded-full bg-surface-muted
+      px-2 py-0.5 text-[11px] font-medium text-fg-muted`, handle `font-semibold text-fg`,
+      copy `Replying to @{username}` (text-only, no glyph — quiet luxury). Absent handle →
+      `Replying to a deleted comment` (defensive; the Reply control is absent on a
+      tombstone). Call site passes `comment.author_username`.
+- [x] A11y: chip gets a `useId`; the textarea's `aria-label` becomes `Write a reply to
+      @{username}` (announced via label update, no extra live region) and
+      `aria-describedby={chipId}`. **Fixed `components/ui/Textarea.tsx`** to MERGE a
+      caller `aria-describedby` with its own error/hint ids (it previously let a spread
+      prop clobber the error wiring) — additive, no-op for existing callers.
+- [x] Component test (RTL) `components/CommentsSection.test.tsx` (new): clicking Reply shows
+      the chip + `getByLabelText("Write a reply to @bob")` + describedby wiring.
+
+### CR-USER-3 — Posted reply: leading "@username" mention
+- [x] `CommentsSection` builds `byId` once and passes it to root `CommentItem`s; each root
+      item resolves `replyMention(r, byId)?.username` for its flattened replies and passes
+      it down as `mentionUsername`. The reply renders a leading `@{username}` `font-semibold
+      text-fg` inside the SAME `<p>` as the body (part of the accessible content), as PLAIN
+      non-link text (username has no profile route; matches the non-link author name).
+- [x] Rule enforced via the helper: mention renders ONLY for a reply-to-reply; a direct
+      reply to the top-level comment and a tombstoned/unloaded parent show none.
+- [x] Component test (RTL): reply-to-reply shows leading `@ada`; direct-reply-to-root shows
+      none; tombstoned parent shows no broken `@`. **DONE 2026-07-07** — vitest green (3 cases).
+
+### CR-USER-4 — Mocked Playwright flow
+- [x] `e2e/comments.spec.ts` +2: (a) authed viewer clicks Reply on Bob's comment → chip
+      `Replying to @bob` + textarea labelled `Write a reply to @bob` + value stays empty (chip,
+      not prefill); (b) `c1`(bob) + `r1`(parent c1, ada) + `r2`(parent r1, cat) → leading
+      `@ada` on `r2`, NONE on `r1`. **DONE 2026-07-07** — part of `npm run e2e` (411 passed).
+
+### CR-USER-5 — Backend-backed DB-proof flow (Critical Verification Rule)
+- [~] `e2e-backed/comment-replies.spec.ts` +1: THREE isolated sessions (separate browser
+      contexts) — A posts top-level, B replies to A, C replies to **B's reply**. Asserts C's
+      composer shows `Replying to @{B}`, C's posted reply leads with `@{B}`, then proves
+      persistence via a fresh `videoComments(request, videoId)` read: `HasLength 3`, the A ← B
+      ← C `parent_id` chain, and each `author_username`. **WRITTEN + compiles + discovered by
+      the `backend-backed` project (verified via `playwright test --project=backend-backed
+      --list`).** NOT executed locally this loop — no vidra-core+Postgres stack was up
+      (`:8080` down); it runs in CI's `frontend-e2e-backed.yml` (`npm run e2e:backed`) like the
+      other backed specs. The sibling create-path test in the same file is already in the CI
+      backed run. Honest status: WRITTEN, CI-executed — mark VERIFIED once the backed job runs.
+
+### CR-USER-6 — Gates
+- [x] **`npm run ci` GREEN on the final tree**: typecheck ✓ lint ✓ lint:icons ✓ unit
+      **597/597** (56 files; +7 `replyMention`, +3 `CommentsSection` RTL) ✓ `next build` ✓
+      mocked Playwright **411/411** (0 failed, no flakes on the first full run; +2 comments).
+- [x] **Inherited-red fix (disclosed):** the base tree (74d15b6) already failed `tsc` on
+      `components/SupportButton.test.tsx` (4 donation-address mocks passed `limit`/`offset`,
+      which the `DonationAddressListResponse` type — `{ addresses }` only — rejects). Removed
+      the stray fields (the component reads only `.addresses`); no behavior change. This was a
+      pre-existing DR5 breakage, unblocked here so the shared gate is green. Confirmed via a
+      stash + `tsc` on the base.
+- [x] Design-system: semantic tokens only (chip `rounded-full bg-surface-muted`, mention
+      `font-semibold text-fg`); no `dark:`/hex/zinc added; no new axe surface (mention is plain
+      `<p>` content, chip announced via label update). Evidence: `npm run design:shots -- watch-reply`
+      → `.ralph/design-review/dr5b/watch-reply/{mobile,desktop}-{light,dark}.png` (git-ignored;
+      captured against `PORT=3181 npm run dev`, stale port killed before, server killed after).
+      READ vs the App design source: the "Replying to @northloop" chip renders above the reply
+      composer and the reply-to-reply body leads with a semibold `@northloop`, while North Loop's
+      DIRECT reply to the top-level comment shows no mention — both light + dark, tokens flip, no
+      390px overflow.
+
 ## DR6 — Channel page
 - [ ] Banner + overlapping avatar, action cluster, underline tabs, 2/4-col grids. CI + push.
 

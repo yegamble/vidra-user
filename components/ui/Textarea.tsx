@@ -14,12 +14,23 @@ export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
  * Textarea — the multi-line sibling of `<Input>`, same label/hint/error wiring
  * and token styling.
  */
-export function Textarea({ label, hint, error, id, className, ...props }: TextareaProps) {
+export function Textarea({
+  label,
+  hint,
+  error,
+  id,
+  className,
+  "aria-describedby": ariaDescribedBy,
+  ...props
+}: TextareaProps) {
   const reactId = useId();
   const fieldId = id ?? reactId;
   const errorId = `${fieldId}-error`;
   const hintId = `${fieldId}-hint`;
-  const describedBy = cn(error ? errorId : undefined, hint ? hintId : undefined) || undefined;
+  // Merge any caller-supplied describedby (e.g. a "Replying to @user" chip) with
+  // the field's own error/hint ids so neither clobbers the other.
+  const describedBy =
+    cn(ariaDescribedBy, error ? errorId : undefined, hint ? hintId : undefined) || undefined;
 
   return (
     <div className="flex flex-col gap-1">
