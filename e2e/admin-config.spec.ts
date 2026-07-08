@@ -65,7 +65,8 @@ async function signIn(page: Page, role: Role) {
 async function openConfig(page: Page) {
   await page.route(USERS, (route) => route.fulfill({ json: { users: [], limit: 100, offset: 0 } }));
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Config" }).click();
+  // The desktop console (DR12) labels this destination "Instance".
+  await page.getByRole("link", { name: "Instance" }).click();
 }
 
 test("anonymous viewers are gated out of instance configuration", async ({ page }) => {

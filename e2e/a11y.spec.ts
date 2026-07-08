@@ -420,6 +420,10 @@ test("the admin users page passes axe (admin, list rendered)", async ({ page }) 
     }),
   );
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await expect(page.getByText("alice@example.test")).toBeVisible();
+  // The email renders in both the desktop table and the (display:none) mobile
+  // card, so scope to the visible desktop console surface (DR12).
+  await expect(
+    page.getByTestId("admin-users-desktop").getByText("alice@example.test"),
+  ).toBeVisible();
   await expectNoSevereViolations(page);
 });

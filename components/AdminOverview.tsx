@@ -185,9 +185,18 @@ function Dashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <HealthCard status={status} system={system} onRetry={retry} />
-      <QueuesCard status={jobsStatus} jobs={jobs} onRetry={retry} />
-      <AuditCard status={auditStatus} entries={audit} onRetry={retry} />
+      {/* Desktop console (DR12): the design's two-column overview — Health + Job
+          queues stacked on the left, the recent audit log on the right. Below
+          `lg` it collapses to the DR11 single-column stack (same source order). */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-6">
+        <div className="flex flex-col gap-6">
+          <HealthCard status={status} system={system} onRetry={retry} />
+          <QueuesCard status={jobsStatus} jobs={jobs} onRetry={retry} />
+        </div>
+        <div className="flex flex-col gap-6">
+          <AuditCard status={auditStatus} entries={audit} onRetry={retry} />
+        </div>
+      </div>
       <ReportsCallout
         status={reportsStatus}
         openReports={openReports}

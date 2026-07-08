@@ -1713,8 +1713,79 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
         zero token-value changes.
 
 ## DR12 — Admin desktop console
-- [ ] 230px sidebar shell; 4-stat row (§5.4 caveat); two-col health/queues/audit; users TABLE;
+- [x] 230px sidebar shell; 4-stat row (§5.4 caveat); two-col health/queues/audit; users TABLE;
       user detail two-col; queue cards; instance two-col. CI + push.
+      **DONE 2026-07-08.** Gave the `/admin/*` routes the design's standalone desktop console
+      (2b) at `lg`+, reusing the DR11 data layer verbatim (every read/mutation still binds only to
+      contracts present in `vidra-core/api/openapi.yaml` — re-read fresh: no aggregate-counts or
+      user-detail endpoint has landed).
+      • **Console shell (new `AdminConsole` + `app/admin/layout.tsx`).** A 230px sticky left rail —
+        "Vidra ADMIN" wordmark, the design's five primary destinations (Overview / Users / Queues /
+        Content / Instance) with 16px feather glyphs (`GridIcon`/`UsersIcon`/`ShieldIcon`/
+        `VideoIcon`/`ServerIcon`), a **live red count badge on Queues** (real
+        `GET /admin/reports?status=open` length, "99+" cap, best-effort — a failed read just omits
+        it), a quiet "MORE" group so no admin sub-route is stranded (Registration / Jobs / Import /
+        Media storage / Audit log / System — there is no admin bottom-tab bar), and the signed-in
+        admin's **identity card pinned bottom** (avatar + name + "Administrator"). Desktop-only
+        (`lg:flex`); below that the horizontal `AdminTabs` (now `lg:hidden`) stay the section nav.
+        The global app `Sidebar` steps aside on `/admin/*` for admins so the console is the single
+        left rail (non-admins never reach it — the page's "Administrators only" gate fires first).
+      • **Overview two-column (`AdminOverview`).** The DR11 stacked cards regroup at `lg` into the
+        design's grid — **Health + Job queues on the left, Recent audit log on the right** — over the
+        same independent reads (one `AbortController`; a broken read degrades to its own inline
+        retry). Below `lg` it collapses back to the DR11 single column (identical source order).
+        **Still NO 4-stat row (Users / Published videos / Media stored / Federated peers): no
+        aggregate-counts endpoint exists (verified fresh — no `/admin/stats`; the backend wave's
+        stats tasks have not landed), so it stays DEFERRED, not faked (spec §5.4).**
+      • **Users TABLE → user DETAIL (`AdminUsersView`).** At `lg` the per-user cards become the
+        design's account **table** — a `1.4fr 1fr 110px 130px 120px 90px` grid, uppercase 11.5px
+        column headers (User / Email / Role / Storage / Joined / Status), avatar+name+@handle cell,
+        `RolePill` (ADMIN filled / MOD subtle / USER outlined), tabular storage, `formatMonthYear`
+        joined, Active/Deactivated status — each row a real `<button>` (keyboard + SR reachable)
+        opening the **two-column user detail**: a 64px identity header (name + role pill, @handle ·
+        email · verified · joined) with **Deactivate (tonal) + Delete account (danger-outline)**
+        top-right, then left = Role `SegmentedControl` card + `QuotaCard` (progress bar on a finite
+        override + Change/Reset) + deletion caveat + the type-the-username double-confirm, right =
+        a **real-facts list** (Role / Status / Email / Joined / Storage used / Storage quota /
+        New-upload quarantine). The design's Videos / Channels / Live-streams / Reports-against /
+        Sessions / last-active facts are **NOT fabricated** — the `AdminUser` contract does not
+        expose them (spec §5.6); the two mutation hooks (`useUserActions`) and `QuotaCard` are shared
+        with the mobile card so both drive the identical real PATCH/DELETE. The design's 0.55-opacity
+        deactivated row would drop below the AA gate, so deactivated rows de-emphasise via a muted
+        name + explicit "Deactivated" status instead (spec §2 — AA wins over the mockup opacity).
+        Master-detail state (`selectedId`) is desktop-only; mobile keeps its inline-control cards.
+      • **Instance two-column (`AdminInstanceConfigView`).** The setting groups render through one
+        extracted `renderGroup`; at `lg` they split into the design's two columns — **Features
+        (the largest toggle group) on the right, identity/registration/moderation on the left** —
+        collapsing to the DR11 single stack below. Group labels/toggles/`Overridden · Reset`
+        affordances unchanged from DR11.
+      • **Content / Queues.** Reached via the console's Content → `/moderation/videos` and Queues →
+        `/moderation` (which keep their own moderator nav); their card/pill vocabulary already
+        landed in DR11/W0.11, so DR12 only wires the console entry points (no new moderation
+        surface work, matching the "restyle not re-architect" rule).
+      • **Tests (unit + e2e, same slice).** No new unit surface (the console is layout over the DR11
+        data layer) — unit **628 passed**. E2E rewired for the console: `admin-users` now drives the
+        desktop TABLE → DETAIL (open a row, assert the role group / self-guard / quota / delete flow
+        inside the `admin-users-desktop` region, Back to table) and mocks the Queues-badge
+        `/admin/reports` read on every admin page; `sidebar` asserts the app sidebar yields to the
+        `Admin console` nav on `/admin/*` (Users lit `aria-current`, Primary nav gone); `a11y`,
+        `admin-overview` (badge count scoped to the console nav), `admin-config` ("Instance" label),
+        `admin-media` ("Media storage" label) updated for the console labels/regions. Harness
+        (`design-shots.mjs`): new `admin-user-detail` (opens the first non-self row) + `admin-config`
+        (real instance-settings overlay) areas; `admin-users` mocks reports + the fuller user set.
+      • **Evidence.** `.ralph/design-review/dr12/after/{admin-overview,admin-users,admin-user-detail,
+        admin-config}` (light+dark × mobile+desktop, full-page; git-ignored; built on :3181, server
+        killed after). Read the AFTER PNGs vs `Vidra Desktop Admin.dc.html` + DESIGN-NOTES §"Desktop
+        Admin (2b)": desktop = 230px console rail (Queues "3" badge, Mara/Administrator card) + Users
+        table (uppercase headers, role pills, "you" marker) → two-column detail (segmented role,
+        quota progress+Reset, facts list, Deactivate/Delete-account) + two-column Instance (Features
+        right) + two-column Overview (Health/Job-queues left, audit right, no stat row). Mobile
+        unchanged: DR11 cards + horizontal AdminTabs + bottom tab bar, console rail absent. Dark
+        inverts via tokens.
+      • **Gate.** Full `npm run ci` on the final tree — typecheck ✓ lint ✓ lint:icons ✓ unit
+        **628 passed** ✓ clean `next build` ✓ mocked e2e **421 passed** (0 failures, incl. the axe
+        serious/critical gate, landmarks/names/focus, responsive-overflow). Semantic tokens only; no
+        `dark:`/raw palette; no emoji; zero token-value changes.
 
 ## DR13 — Sweep & guardrails closeout
 - [ ] Ad-hoc inline-SVG convergence audit (remaining components → `components/icons`); update

@@ -170,7 +170,7 @@ test("moderators see the Moderation entry but not Admin", async ({ page }) => {
   await expect(nav.getByRole("link", { name: "Admin" })).toHaveCount(0);
 });
 
-test("admins see Moderation and Admin entries, and Admin lights up across /admin/*", async ({
+test("admins reach the standalone admin console, which steps in for the app sidebar on /admin/*", async ({
   page,
 }) => {
   await signIn(page, "admin");
@@ -181,7 +181,21 @@ test("admins see Moderation and Admin entries, and Admin lights up across /admin
   await page.route(/\/api\/v1\/admin\/users(\?|$)/, (route) =>
     route.fulfill({ json: { users: [], limit: 100, offset: 0 } }),
   );
+  // The console's Queues badge reads the open-reports count on mount — keep it
+  // hermetic (empty) so nothing depends on a real backend.
+  await page.route(/\/api\/v1\/admin\/reports(\?|$)/, (route) =>
+    route.fulfill({ json: { reports: [], limit: 100, offset: 0 } }),
+  );
   await admin.click();
   await expect(page).toHaveURL(/\/admin\/users$/);
-  await expect(admin).toHaveAttribute("aria-current", "page");
+  // DR12: on /admin the global app sidebar steps aside for the dedicated desktop
+  // admin console rail, which lights its Users destination as the current page.
+  const consoleRail = page.getByRole("navigation", { name: "Admin console" });
+  await expect(consoleRail).toBeVisible();
+  await expect(consoleRail.getByRole("link", { name: "Users" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  // The primary app sidebar is no longer the admin's left rail here.
+  await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
 });

@@ -1,12 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // Mocked admin users coverage (a real backend is not running in `npm run ci`; the
-// persistence round-trip is proven in e2e-backed/admin-users.spec.ts).
+// persistence round-trip is proven in e2e-backed/admin-users.spec.ts). The suite
+// runs at the desktop viewport, where the design's admin console (DR12) renders
+// the users TABLE → user DETAIL master-detail; the mobile inline-control cards
+// (DR11) live in a `lg:hidden` subtree and are covered by the responsive shell.
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const USERS = /\/api\/v1\/admin\/users(\?|$)/;
 const UPDATE = /\/api\/v1\/admin\/users\/[^/]+$/;
+const REPORTS = /\/api\/v1\/admin\/reports(\?|$)/;
 
 type Role = "user" | "moderator" | "admin";
 
@@ -43,6 +47,7 @@ function adminUser(
     role,
     is_active,
     email_verified,
+    bypass_quarantine: false,
     display_name: username,
     storage_used_bytes: 2 * 1024 ** 3,
     storage_quota_bytes: null,
@@ -56,11 +61,25 @@ async function signIn(page: Page, role: Role) {
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
   );
   await page.route(UNREAD, (route) => route.fulfill({ json: { unread_count: 0 } }));
+  // The desktop console's Queues badge reads the open-reports count on every
+  // admin page — keep it hermetic (empty) so it never hits a real backend.
+  await page.route(REPORTS, (route) =>
+    route.fulfill({ json: { reports: [], limit: 100, offset: 0 } }),
+  );
   await page.goto("/login");
   await page.getByLabel("Email").fill("boss@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+}
+
+// Reach /admin/users via the console entry point (client-side nav keeps the
+// in-memory session) and return the desktop table/detail region locator.
+async function openUsers(page: Page) {
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  const desktop = page.getByTestId("admin-users-desktop");
+  await expect(desktop).toBeVisible();
+  return desktop;
 }
 
 test("anonymous viewers are gated out of admin users", async ({ page }) => {
@@ -97,7 +116,9 @@ test("moderators see Moderation but not the Admin nav entry", async ({ page }) =
   await expect(page.getByRole("link", { name: "Admin", exact: true })).toHaveCount(0);
 });
 
-test("an admin sees the users list with a self badge", async ({ page }) => {
+test("an admin sees the users table with a self marker and a self-guarded detail", async ({
+  page,
+}) => {
   await signIn(page, "admin");
   await page.route(USERS, (route) =>
     route.fulfill({
@@ -113,18 +134,24 @@ test("an admin sees the users list with a self badge", async ({ page }) => {
     }),
   );
 
-  await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await expect(page.getByText("alice@example.test")).toBeVisible();
-  await expect(page.getByText("bob@example.test")).toBeVisible();
-  await expect(page.getByText("you", { exact: true })).toBeVisible();
-  // The admin's own row is display-only for role (no editable segmented control —
-  // the backend forbids self-demote) and its status/delete controls are disabled.
+  const desktop = await openUsers(page);
+  await expect(desktop.getByText("alice@example.test")).toBeVisible();
+  await expect(desktop.getByText("bob@example.test")).toBeVisible();
+  await expect(desktop.getByText("you", { exact: true })).toBeVisible();
+
+  // The admin's own detail is display-only for role (no editable segmented
+  // control — the backend forbids self-demote) and its status/delete are disabled.
+  await desktop.getByRole("button", { name: "Open boss" }).click();
   await expect(page.getByRole("group", { name: "Role for boss" })).toHaveCount(0);
   await expect(
-    page.getByText("You can't change your own role or status, or delete your own account."),
+    desktop.getByText("You can't change your own role or status, or delete your own account."),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Deactivate boss" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Delete boss permanently" })).toBeDisabled();
+
+  // Back returns to the table.
+  await page.getByRole("button", { name: "All users" }).click();
+  await expect(desktop.getByText("alice@example.test")).toBeVisible();
 });
 
 test("the search box filters by query", async ({ page }) => {
@@ -137,18 +164,20 @@ test("the search box filters by query", async ({ page }) => {
     return route.fulfill({ json: { users, limit: 100, offset: 0 } });
   });
 
-  await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await expect(page.getByText("alice@example.test")).toBeVisible();
+  const desktop = await openUsers(page);
+  await expect(desktop.getByText("alice@example.test")).toBeVisible();
 
   const searched = page.waitForResponse((r) => USERS.test(r.url()) && r.url().includes("q=alice"));
   await page.getByRole("searchbox", { name: "Search users" }).fill("alice");
   await page.getByRole("button", { name: "Search" }).click();
   await searched;
-  await expect(page.getByText("boss@example.test")).toHaveCount(0);
-  await expect(page.getByText("alice@example.test")).toBeVisible();
+  await expect(desktop.getByText("boss@example.test")).toHaveCount(0);
+  await expect(desktop.getByText("alice@example.test")).toBeVisible();
 });
 
-test("an admin can change a user's role via the segmented control", async ({ page }) => {
+test("an admin can change a user's role via the segmented control in the detail", async ({
+  page,
+}) => {
   await signIn(page, "admin");
   await page.route(USERS, (route) =>
     route.fulfill({
@@ -159,7 +188,9 @@ test("an admin can change a user's role via the segmented control", async ({ pag
     route.fulfill({ json: adminUser("u2", "alice", "moderator") }),
   );
 
-  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  const desktop = await openUsers(page);
+  await desktop.getByRole("button", { name: "Open alice" }).click();
+
   const role = page.getByRole("group", { name: "Role for alice" });
   await expect(role.getByRole("button", { name: "User" })).toHaveAttribute("aria-pressed", "true");
 
@@ -190,7 +221,8 @@ test("an admin can set and reset a user's storage quota override", async ({ page
     return route.fulfill({ json: overridden });
   });
 
-  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  const desktop = await openUsers(page);
+  await desktop.getByRole("button", { name: "Open alice" }).click();
 
   // Alice starts on the instance default (no override) → only "Change quota".
   await expect(page.getByRole("button", { name: "Change storage quota for alice" })).toBeVisible();
@@ -228,7 +260,9 @@ test("an admin can deactivate a user", async ({ page }) => {
     route.fulfill({ json: adminUser("u2", "alice", "user", false) }),
   );
 
-  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  const desktop = await openUsers(page);
+  await desktop.getByRole("button", { name: "Open alice" }).click();
+
   const updated = page.waitForResponse(
     (r) => UPDATE.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
   );
@@ -251,10 +285,10 @@ test("an admin can permanently delete a user after the double confirm", async ({
     return route.fulfill({ status: 204, body: "" });
   });
 
-  await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await expect(page.getByText("alice@example.test")).toBeVisible();
+  const desktop = await openUsers(page);
+  await desktop.getByRole("button", { name: "Open alice" }).click();
 
-  // Step 1: arm the delete for alice's row.
+  // Step 1: arm the delete for alice.
   await page.getByRole("button", { name: "Delete alice permanently" }).click();
   const confirm = page.getByRole("button", { name: "Confirm permanent deletion of alice" });
   await expect(confirm).toBeDisabled(); // nothing typed yet
@@ -266,9 +300,9 @@ test("an admin can permanently delete a user after the double confirm", async ({
   await expect(confirm).toBeEnabled();
   await confirm.click();
 
-  // The row is gone; the other rows stay.
-  await expect(page.getByText("alice@example.test")).toHaveCount(0);
-  await expect(page.getByText("boss@example.test")).toBeVisible();
+  // The detail closes back to the table; alice is gone, the others stay.
+  await expect(desktop.getByText("alice@example.test")).toHaveCount(0);
+  await expect(desktop.getByText("boss@example.test")).toBeVisible();
   expect(deletedUrl).toContain("/api/v1/admin/users/u2");
 });
 
@@ -286,12 +320,13 @@ test("cancelling the admin delete keeps the user", async ({ page }) => {
     return route.fulfill({ status: 204, body: "" });
   });
 
-  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  const desktop = await openUsers(page);
+  await desktop.getByRole("button", { name: "Open alice" }).click();
   await page.getByRole("button", { name: "Delete alice permanently" }).click();
   await page.getByLabel("Type alice to confirm deletion").fill("alice");
   await page.getByRole("button", { name: "Cancel" }).click();
 
   await expect(page.getByLabel("Type alice to confirm deletion")).toHaveCount(0);
-  await expect(page.getByText("alice@example.test")).toBeVisible();
+  await expect(desktop.getByText("alice@example.test")).toBeVisible();
   expect(deleted).toBe(false);
 });

@@ -26,7 +26,10 @@ export function AdminTabs() {
   if (user?.role !== "admin") return null;
 
   return (
-    <nav className="-mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0" aria-label="Admin sections">
+    <nav
+      className="-mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0 lg:hidden"
+      aria-label="Admin sections"
+    >
       <div className="flex min-w-max items-center gap-1 border-b border-border-subtle">
         {TABS.map((tab) => {
           const active = pathname === tab.href;

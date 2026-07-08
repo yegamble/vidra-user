@@ -227,6 +227,45 @@ function ConfigForm() {
 
   const byKey = new Map(settings.map((s) => [s.key, s]));
 
+  const renderGroup = (group: (typeof GROUPS)[number]) => {
+    const keys = settings.filter((s) => groupOf(s.key) === group.id).map((s) => s.key);
+    if (keys.length === 0) return null;
+    return (
+      <section key={group.id} aria-label={group.title} className="flex flex-col gap-2.5">
+        <div className="px-0.5">
+          <h2 className="text-[12px] font-bold uppercase tracking-[0.06em] text-fg-subtle">
+            {group.title}
+          </h2>
+          <p className="mt-1 text-[13px] text-fg-muted">{group.description}</p>
+        </div>
+        <div className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
+          {keys.map((key) => {
+            const setting = byKey.get(key);
+            if (!setting) return null;
+            return (
+              <SettingRow
+                key={key}
+                setting={setting}
+                draftValue={draft[key]}
+                error={fieldErrors[key]}
+                resetting={resetting === key}
+                disabled={saving}
+                onChange={(v) => setValue(key, v)}
+                onReset={() => void resetToDefault(key)}
+              />
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
+  // Desktop console (DR12): the design's two-column instance layout — Features
+  // (the largest toggle group) sits on the right, everything else on the left.
+  // Below `lg` the columns collapse back to the single DR11 stack.
+  const leftGroups = GROUPS.filter((g) => g.id !== "features");
+  const rightGroups = GROUPS.filter((g) => g.id === "features");
+
   return (
     <form
       className="flex flex-col gap-8"
@@ -235,38 +274,10 @@ function ConfigForm() {
         void save();
       }}
     >
-      {GROUPS.map((group) => {
-        const keys = settings.filter((s) => groupOf(s.key) === group.id).map((s) => s.key);
-        if (keys.length === 0) return null;
-        return (
-          <section key={group.id} aria-label={group.title} className="flex flex-col gap-2.5">
-            <div className="px-0.5">
-              <h2 className="text-[12px] font-bold uppercase tracking-[0.06em] text-fg-subtle">
-                {group.title}
-              </h2>
-              <p className="mt-1 text-[13px] text-fg-muted">{group.description}</p>
-            </div>
-            <div className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
-              {keys.map((key) => {
-                const setting = byKey.get(key);
-                if (!setting) return null;
-                return (
-                  <SettingRow
-                    key={key}
-                    setting={setting}
-                    draftValue={draft[key]}
-                    error={fieldErrors[key]}
-                    resetting={resetting === key}
-                    disabled={saving}
-                    onChange={(v) => setValue(key, v)}
-                    onReset={() => void resetToDefault(key)}
-                  />
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
+      <div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-6">
+        <div className="flex flex-col gap-8">{leftGroups.map(renderGroup)}</div>
+        <div className="flex flex-col gap-8">{rightGroups.map(renderGroup)}</div>
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={!dirty || saving}>

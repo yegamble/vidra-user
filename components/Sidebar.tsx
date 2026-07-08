@@ -68,6 +68,14 @@ export function Sidebar() {
     return null;
   }
 
+  // On the admin routes an admin gets the dedicated desktop console rail
+  // (app/admin/layout.tsx → AdminConsole) as the single left nav, so the global
+  // app sidebar steps aside there. Non-admins keep it (they only ever see the
+  // page's "Administrators only" gate on /admin, not the console).
+  if (pathname?.startsWith("/admin") && user?.role === "admin") {
+    return null;
+  }
+
   const links: NavLinkDef[] = [...NAV_LINKS];
   if (user?.role === "admin" || user?.role === "moderator") links.push(MODERATION_LINK);
   if (user?.role === "admin") links.push(ADMIN_LINK);

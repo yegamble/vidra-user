@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdminSearch, RolePill } from "@/components/admin/AdminControls";
 import { useSession } from "@/components/auth/AuthProvider";
+import { ChevronLeftIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -14,7 +15,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminUser, UserRole } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { formatBytes, relativeTime } from "@/lib/format";
+import { formatBytes, formatMonthYear, relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
@@ -30,6 +31,50 @@ const ROLE_OPTIONS: readonly { value: UserRole; label: string }[] = [
 const GIB = 1024 ** 3;
 
 type QuotaFilter = "all" | "staff" | "deactivated";
+
+type QuotaPatch = { role?: UserRole; is_active?: boolean; storage_quota_bytes?: number | null };
+
+// useUserActions centralises the per-user mutations (role / active / quota PATCH,
+// and the hard DELETE) so the mobile card and the desktop detail drive the exact
+// same real endpoints without duplicating the request/error handling.
+function useUserActions(
+  user: AdminUser,
+  onUpdated: (updated: AdminUser) => void,
+  onDeleted: (id: string) => void,
+) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useCallback(
+    async (patch: QuotaPatch) => {
+      setSaving(true);
+      setError(null);
+      try {
+        onUpdated(await api.updateAdminUser(user.id, patch));
+      } catch (err) {
+        setError(errorMessage(err, "Could not update this user."));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [user.id, onUpdated],
+  );
+
+  const doDelete = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await api.deleteAdminUser(user.id);
+      onDeleted(user.id);
+      // Success unmounts the row/detail — leave `saving` set so nothing flashes.
+    } catch (err) {
+      setError(errorMessage(err, "Could not delete this user."));
+      setSaving(false);
+    }
+  }, [user.id, onDeleted]);
+
+  return { saving, error, setError, save, doDelete };
+}
 
 // AdminUsersView is the admin-only account management surface, role-gated by
 // RoleGate (an under-privileged/anonymous viewer sees the shared permission
@@ -51,6 +96,10 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
   const [input, setInput] = useState("");
   const [filter, setFilter] = useState<QuotaFilter>("all");
   const [reloadKey, setReloadKey] = useState(0);
+  // Desktop console (DR12): the users table is a master → detail. `selectedId`
+  // is only ever set from the desktop table; mobile keeps its inline-control
+  // cards, so it stays null there.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -79,6 +128,7 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
     (next: string) => {
       if (next === query) return;
       setStatus("loading");
+      setSelectedId(null);
       setQuery(next);
     },
     [query],
@@ -89,9 +139,10 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
   }, []);
 
-  // A hard-deleted account is gone for good — drop its row.
+  // A hard-deleted account is gone for good — drop its row and close its detail.
   const onDeleted = useCallback((id: string) => {
     setUsers((prev) => prev.filter((u) => u.id !== id));
+    setSelectedId((cur) => (cur === id ? null : cur));
   }, []);
 
   // Client-side facet counts over the loaded page (the list endpoint has no
@@ -111,31 +162,37 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
     return users;
   }, [users, filter]);
 
+  const selected = selectedId ? users.find((u) => u.id === selectedId) ?? null : null;
+
   return (
     <div className="flex flex-col gap-4">
-      <AdminSearch
-        label="Search users"
-        placeholder="Search by username or email"
-        value={input}
-        onChange={setInput}
-        onSubmit={() => submitSearch(input.trim())}
-        onClear={() => {
-          setInput("");
-          submitSearch("");
-        }}
-        hasQuery={Boolean(query)}
-      />
+      {/* Toolbar: always on mobile; on desktop it hides while a user detail is
+          open (the detail is its own full screen in the design). */}
+      <div className={cn("flex flex-col gap-4", selected && "lg:hidden")}>
+        <AdminSearch
+          label="Search users"
+          placeholder="Search by username or email"
+          value={input}
+          onChange={setInput}
+          onSubmit={() => submitSearch(input.trim())}
+          onClear={() => {
+            setInput("");
+            submitSearch("");
+          }}
+          hasQuery={Boolean(query)}
+        />
 
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter users">
-        <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-          All <span className="tabular-nums">· {counts.all}</span>
-        </FilterChip>
-        <FilterChip active={filter === "staff"} onClick={() => setFilter("staff")}>
-          Staff <span className="tabular-nums">· {counts.staff}</span>
-        </FilterChip>
-        <FilterChip active={filter === "deactivated"} onClick={() => setFilter("deactivated")}>
-          Deactivated <span className="tabular-nums">· {counts.deactivated}</span>
-        </FilterChip>
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter users">
+          <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+            All <span className="tabular-nums">· {counts.all}</span>
+          </FilterChip>
+          <FilterChip active={filter === "staff"} onClick={() => setFilter("staff")}>
+            Staff <span className="tabular-nums">· {counts.staff}</span>
+          </FilterChip>
+          <FilterChip active={filter === "deactivated"} onClick={() => setFilter("deactivated")}>
+            Deactivated <span className="tabular-nums">· {counts.deactivated}</span>
+          </FilterChip>
+        </div>
       </div>
 
       {status === "loading" ? (
@@ -149,24 +206,51 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
           title={query ? "No matching users" : "No users yet"}
           message={query ? "Try a different search term." : "Accounts will appear here as people sign up."}
         />
-      ) : visible.length === 0 ? (
-        <EmptyState
-          title="No users in this view"
-          message="No accounts match this filter. Try another facet."
-        />
       ) : (
-        <ul className="flex flex-col gap-3">
-          {visible.map((u) => (
-            <li key={u.id}>
-              <UserRow
-                user={u}
-                isSelf={u.id === currentUserId}
+        <>
+          {/* Mobile: the DR11 per-user cards with inline controls. */}
+          <ul className="flex flex-col gap-3 lg:hidden">
+            {visible.length === 0 ? (
+              <li>
+                <EmptyState
+                  title="No users in this view"
+                  message="No accounts match this filter. Try another facet."
+                />
+              </li>
+            ) : (
+              visible.map((u) => (
+                <li key={u.id}>
+                  <UserRow
+                    user={u}
+                    isSelf={u.id === currentUserId}
+                    onUpdated={onUpdated}
+                    onDeleted={onDeleted}
+                  />
+                </li>
+              ))
+            )}
+          </ul>
+
+          {/* Desktop console: the design's users table → user detail. */}
+          <div className="hidden lg:block" data-testid="admin-users-desktop">
+            {selected ? (
+              <UserDetail
+                user={selected}
+                isSelf={selected.id === currentUserId}
+                onBack={() => setSelectedId(null)}
                 onUpdated={onUpdated}
                 onDeleted={onDeleted}
               />
-            </li>
-          ))}
-        </ul>
+            ) : visible.length === 0 ? (
+              <EmptyState
+                title="No users in this view"
+                message="No accounts match this filter. Try another facet."
+              />
+            ) : (
+              <UsersTable users={visible} currentUserId={currentUserId} onOpen={setSelectedId} />
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -200,7 +284,305 @@ function FilterChip({
   );
 }
 
-type RowState = "idle" | "saving";
+// SelfPill — the "you" marker on the current admin's own row.
+function SelfPill() {
+  return (
+    <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-accent-fg">
+      you
+    </span>
+  );
+}
+
+/* ── Desktop table ─────────────────────────────────────────────────────────── */
+
+const TABLE_GRID = "grid-cols-[1.4fr_1fr_110px_130px_120px_90px]";
+
+// UsersTable — the design's account table: a 6-column grid (User / Email / Role
+// / Storage / Joined / Status) with uppercase column headers and 0.55-opacity
+// deactivated rows. Each row is a button that opens the user detail. Keyboard-
+// and screen-reader-reachable (a real button per row).
+function UsersTable({
+  users,
+  currentUserId,
+  onOpen,
+}: {
+  users: AdminUser[];
+  currentUserId: string;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div>
+      <div
+        className={cn(
+          "grid gap-3 border-b border-border-subtle px-3.5 pb-2.5 text-[11.5px] font-bold uppercase tracking-[0.05em] text-fg-muted",
+          TABLE_GRID,
+        )}
+      >
+        <span>User</span>
+        <span>Email</span>
+        <span>Role</span>
+        <span>Storage</span>
+        <span>Joined</span>
+        <span>Status</span>
+      </div>
+      <ul>
+        {users.map((u) => {
+          const isSelf = u.id === currentUserId;
+          return (
+            <li key={u.id}>
+              <button
+                type="button"
+                onClick={() => onOpen(u.id)}
+                aria-label={`Open ${u.username}`}
+                className={cn(
+                  "focus-ring grid w-full items-center gap-3 border-b border-border-subtle px-3.5 py-3 text-left transition-colors hover:bg-surface-muted",
+                  TABLE_GRID,
+                )}
+              >
+                {/* The design fades deactivated rows to 0.55 opacity; that drops
+                    even fg-muted below the AA contrast gate, so we de-emphasise
+                    with a muted name + the explicit "Deactivated" status instead
+                    (spec §2/§4 — the AA gate wins over the mockup opacity). */}
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <Avatar src={null} name={u.username} className="h-8 w-8 text-[12.5px]" />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "truncate text-[13.5px] font-semibold",
+                          u.is_active ? "text-fg" : "text-fg-muted",
+                        )}
+                      >
+                        {u.username}
+                      </span>
+                      {isSelf ? <SelfPill /> : null}
+                    </span>
+                    <span className="block truncate text-[11.5px] text-fg-muted">@{u.username}</span>
+                  </span>
+                </span>
+                <span className="truncate text-[12.5px] text-fg-muted">{u.email}</span>
+                <span>
+                  <RolePill role={u.role} />
+                </span>
+                <span className="text-[12.5px] tabular-nums text-fg-muted">
+                  {formatBytes(u.storage_used_bytes ?? 0)}
+                </span>
+                <span className="text-[12.5px] text-fg-muted">{formatMonthYear(u.created_at)}</span>
+                <span
+                  className={cn(
+                    "text-[12px] font-semibold",
+                    u.is_active ? "text-success" : "text-fg-muted",
+                  )}
+                >
+                  {u.is_active ? "Active" : "Deactivated"}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/* ── Desktop user detail ───────────────────────────────────────────────────── */
+
+// UserDetail — the design's two-column user detail: a 64px identity header with
+// the Deactivate / Delete actions top-right, then a Role card + Storage-quota
+// card + deletion caveat on the left, and a real-facts list on the right. Every
+// fact is drawn straight from the AdminUser contract (no fabricated per-user
+// video/report/session counts, which the contract does not expose — spec §5.6).
+function UserDetail({
+  user,
+  isSelf,
+  onBack,
+  onUpdated,
+  onDeleted,
+}: {
+  user: AdminUser;
+  isSelf: boolean;
+  onBack: () => void;
+  onUpdated: (updated: AdminUser) => void;
+  onDeleted: (id: string) => void;
+}) {
+  const { saving, error, setError, save, doDelete } = useUserActions(user, onUpdated, onDeleted);
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [confirmName, setConfirmName] = useState("");
+
+  const used = user.storage_used_bytes ?? 0;
+  const quota = user.storage_quota_bytes ?? null;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <button
+        type="button"
+        onClick={onBack}
+        className="focus-ring -ml-1 inline-flex w-fit items-center gap-1.5 rounded px-1 py-0.5 text-[13px] font-semibold text-fg-muted transition-colors hover:text-fg"
+      >
+        <ChevronLeftIcon size={15} strokeWidth={2.2} />
+        All users
+      </button>
+
+      <div className="flex flex-wrap items-start gap-4">
+        <Avatar src={null} name={user.username} className="h-16 w-16 text-xl" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-fg">{user.display_name || user.username}</h2>
+            {isSelf ? <SelfPill /> : null}
+            <RolePill role={user.role} />
+          </div>
+          <p className="mt-1 text-[13px] text-fg-muted">
+            @{user.username}
+            <span aria-hidden> · </span>
+            <span className="break-all">{user.email}</span>
+            <span aria-hidden> · </span>
+            {user.email_verified ? (
+              <span className="text-success">verified</span>
+            ) : (
+              <span>unverified</span>
+            )}
+            <span aria-hidden> · </span>
+            joined {formatMonthYear(user.created_at)}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="tonal"
+            size="sm"
+            aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
+            disabled={isSelf || saving}
+            onClick={() => void save({ is_active: !user.is_active })}
+          >
+            {user.is_active ? "Deactivate" : "Reactivate"}
+          </Button>
+          {!deleteArmed ? (
+            <Button
+              variant="danger-outline"
+              size="sm"
+              aria-label={`Delete ${user.username} permanently`}
+              disabled={isSelf || saving}
+              onClick={() => setDeleteArmed(true)}
+            >
+              Delete account
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        {/* Left column: role + quota + caveat. */}
+        <div className="flex flex-col gap-3.5">
+          <div className="rounded-2xl bg-surface-muted p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-[13.5px] font-semibold text-fg">Role</span>
+              {isSelf ? (
+                <RolePill role={user.role} />
+              ) : (
+                <SegmentedControl
+                  size="sm"
+                  label={`Role for ${user.username}`}
+                  options={ROLE_OPTIONS}
+                  value={user.role}
+                  disabled={saving}
+                  onChange={(role) => void save({ role })}
+                />
+              )}
+            </div>
+          </div>
+
+          <QuotaCard user={user} used={used} quota={quota} saving={saving} onSave={save} boxed />
+
+          <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
+            {isSelf
+              ? "You can't change your own role or status, or delete your own account."
+              : "Deletion is permanent and audited. Deactivating is the reversible alternative — it revokes the account's sessions and hides its content without destroying it."}
+          </p>
+
+          {deleteArmed ? (
+            <div className="flex flex-col gap-2 rounded-2xl border border-danger-border p-3">
+              <p className="text-sm text-fg-muted">
+                This permanently deletes{" "}
+                <span className="font-semibold text-fg">{user.username}</span>&apos;s account:
+                their channels and videos are removed for good, their comments become
+                &ldquo;[deleted]&rdquo; tombstones, and this cannot be undone.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  autoComplete="off"
+                  aria-label={`Type ${user.username} to confirm deletion`}
+                  placeholder={`Type ${user.username} to confirm`}
+                  value={confirmName}
+                  onChange={(e) => setConfirmName(e.target.value)}
+                  className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
+                />
+                <Button
+                  variant="danger"
+                  size="sm"
+                  aria-label={`Confirm permanent deletion of ${user.username}`}
+                  disabled={saving || confirmName !== user.username}
+                  onClick={() => void doDelete()}
+                >
+                  {saving ? "Deleting…" : "Confirm permanent delete"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => {
+                    setDeleteArmed(false);
+                    setConfirmName("");
+                    setError(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {error ? <p className="px-1 text-sm text-danger">{error}</p> : null}
+        </div>
+
+        {/* Right column: real facts only. */}
+        <dl className="divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
+          <Fact k="Role" v={<RolePill role={user.role} />} />
+          <Fact
+            k="Status"
+            v={
+              <span className={user.is_active ? "text-success" : "text-fg-muted"}>
+                {user.is_active ? "Active" : "Deactivated"}
+              </span>
+            }
+          />
+          <Fact k="Email" v={user.email_verified ? "Verified" : "Unverified"} />
+          <Fact k="Joined" v={relativeTime(user.created_at)} />
+          <Fact k="Storage used" v={<span className="tabular-nums">{formatBytes(used)}</span>} />
+          <Fact
+            k="Storage quota"
+            v={
+              <span className="tabular-nums">
+                {quota === null ? "Instance default" : quota === 0 ? "Unlimited" : formatBytes(quota)}
+              </span>
+            }
+          />
+          <Fact k="New-upload quarantine" v={user.bypass_quarantine ? "Exempt" : "Standard"} />
+        </dl>
+      </div>
+    </div>
+  );
+}
+
+function Fact({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3 text-[13.5px] first:pt-3">
+      <dt className="text-fg-muted">{k}</dt>
+      <dd className="font-semibold text-fg">{v}</dd>
+    </div>
+  );
+}
+
+/* ── Mobile card (DR11) ────────────────────────────────────────────────────── */
 
 function UserRow({
   user,
@@ -213,42 +595,12 @@ function UserRow({
   onUpdated: (updated: AdminUser) => void;
   onDeleted: (id: string) => void;
 }) {
-  const [rowState, setRowState] = useState<RowState>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const { saving, error, setError, save, doDelete } = useUserActions(user, onUpdated, onDeleted);
   // Two-step permanent delete: an explicit arm click, then a type-the-username
   // confirmation (the same double-confirm as the self-serve delete).
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
-  const save = useCallback(
-    async (patch: { role?: UserRole; is_active?: boolean; storage_quota_bytes?: number | null }) => {
-      setRowState("saving");
-      setError(null);
-      try {
-        const updated = await api.updateAdminUser(user.id, patch);
-        onUpdated(updated);
-      } catch (err) {
-        setError(errorMessage(err, "Could not update this user."));
-      } finally {
-        setRowState("idle");
-      }
-    },
-    [user.id, onUpdated],
-  );
-
-  const doDelete = useCallback(async () => {
-    setRowState("saving");
-    setError(null);
-    try {
-      await api.deleteAdminUser(user.id);
-      onDeleted(user.id);
-    } catch (err) {
-      setError(errorMessage(err, "Could not delete this user."));
-      setRowState("idle");
-    }
-  }, [user.id, onDeleted]);
-
-  const saving = rowState === "saving";
   // storage_used_bytes/storage_quota_bytes are required in the contract; guard
   // for lean fixtures so a partial mock never crashes the row.
   const used = user.storage_used_bytes ?? 0;
@@ -261,14 +613,10 @@ function UserRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-semibold tracking-tight text-fg">{user.username}</span>
-            {isSelf ? (
-              <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] text-accent-fg uppercase">
-                you
-              </span>
-            ) : null}
+            {isSelf ? <SelfPill /> : null}
             <RolePill role={user.role} />
             {user.is_active ? null : (
-              <span className="inline-flex items-center rounded-full bg-danger-surface px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] text-danger uppercase">
+              <span className="inline-flex items-center rounded-full bg-danger-surface px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-danger">
                 deactivated
               </span>
             )}
@@ -384,19 +732,23 @@ function UserRow({
 // QuotaCard — the design's storage-quota override: usage line, a progress bar
 // (only when a finite override is set), and Change / Reset controls wired to the
 // tri-state PATCH storage_quota_bytes (a byte count = per-user override, 0 =
-// unlimited, null = reset to the instance default).
+// unlimited, null = reset to the instance default). `boxed` gives it the
+// standalone card fill used on the desktop detail (vs the inset border on the
+// mobile card, where it already sits inside a surface-muted card).
 function QuotaCard({
   user,
   used,
   quota,
   saving,
   onSave,
+  boxed = false,
 }: {
   user: AdminUser;
   used: number;
   quota: number | null;
   saving: boolean;
   onSave: (patch: { storage_quota_bytes: number | null }) => Promise<void>;
+  boxed?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [gb, setGb] = useState("");
@@ -421,12 +773,18 @@ function QuotaCard({
   }, [gb, onSave]);
 
   return (
-    <div className="mt-3 rounded-xl border border-border-subtle p-3">
+    <div
+      className={cn(
+        boxed
+          ? "rounded-2xl bg-surface-muted p-4"
+          : "mt-3 rounded-xl border border-border-subtle p-3",
+      )}
+    >
       <div className="flex items-center justify-between gap-3 text-[13px]">
         <span className="font-semibold text-fg">Storage quota</span>
-        <span className="text-fg-muted tabular-nums">
+        <span className="tabular-nums text-fg-muted">
           {rightLabel}
-          {overridden ? <span className="text-fg-subtle"> · override</span> : null}
+          {overridden ? <span className="text-fg-muted"> · override</span> : null}
         </span>
       </div>
       {finite ? (
@@ -445,7 +803,7 @@ function QuotaCard({
               aria-label={`Storage quota in GB for ${user.username}`}
               value={gb}
               onChange={(e) => setGb(e.target.value)}
-              className="focus-ring w-24 rounded-lg border border-border bg-surface px-2.5 py-1 text-sm text-fg tabular-nums"
+              className="focus-ring w-24 rounded-lg border border-border bg-surface px-2.5 py-1 text-sm tabular-nums text-fg"
             />
             GB
           </label>

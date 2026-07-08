@@ -173,8 +173,11 @@ test("an admin sees the health, queues, audit, open-reports, and section cards",
   await expect(audit.getByText("mira")).toBeVisible();
   await expect(audit.getByText("admin.registration.approve")).toBeVisible();
 
-  // Open-reports lead-in from GET /admin/reports?status=open.
-  await expect(page.getByText("3", { exact: true })).toBeVisible();
+  // Open-reports lead-in from GET /admin/reports?status=open. It surfaces both in
+  // the desktop console's Queues badge and the overview callout link.
+  await expect(
+    page.getByRole("navigation", { name: "Admin console" }).getByText("3"),
+  ).toBeVisible();
   await expect(page.getByText("open reports")).toBeVisible();
   await expect(page.getByRole("link", { name: "Moderation queue" })).toBeVisible();
 

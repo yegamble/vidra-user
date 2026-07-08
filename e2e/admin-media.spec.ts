@@ -47,7 +47,8 @@ async function signIn(page: Page, role: Role) {
 async function openMedia(page: Page) {
   await page.route(USERS, (route) => route.fulfill({ json: { users: [], limit: 100, offset: 0 } }));
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Media", exact: true }).click();
+  // The desktop console (DR12) labels this destination "Media storage".
+  await page.getByRole("link", { name: "Media storage" }).click();
 }
 
 test("anonymous viewers are gated out of media GC", async ({ page }) => {

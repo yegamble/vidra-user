@@ -862,6 +862,26 @@ const SAMPLE_ADMIN_COMMENTS = {
   offset: 0,
 };
 
+// GET /admin/instance-settings overlay (DR12 instance two-column). A mix of
+// string identity keys and the feature/registration/moderation toggles, one
+// overridden to exercise the "Overridden · Reset" affordance.
+const SAMPLE_INSTANCE_SETTINGS = {
+  settings: [
+    { key: "instance_name", type: "string", value: "Vidra Example", default: "Vidra", overridden: true },
+    { key: "instance_description", type: "string", value: "A federated video home.", default: "", overridden: true },
+    { key: "contact_email", type: "string", value: "admin@vidra.example", default: "", overridden: true },
+    { key: "terms_url", type: "string", value: "https://vidra.example/terms", default: "", overridden: true },
+    { key: "privacy_url", type: "string", value: "https://vidra.example/privacy", default: "", overridden: true },
+    { key: "registration_enabled", type: "bool", value: true, default: true, overridden: false },
+    { key: "registration_require_approval", type: "bool", value: true, default: false, overridden: true },
+    { key: "uploads_enabled", type: "bool", value: true, default: true, overridden: false },
+    { key: "imports_enabled", type: "bool", value: true, default: true, overridden: false },
+    { key: "live_enabled", type: "bool", value: true, default: true, overridden: false },
+    { key: "comments_enabled", type: "bool", value: true, default: true, overridden: false },
+    { key: "quarantine_new_uploads", type: "bool", value: true, default: false, overridden: true },
+  ],
+};
+
 // ---- area registry -----------------------------------------------------------
 
 /** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void>, act?: (page: import("@playwright/test").Page) => Promise<void> }>} */
@@ -1602,7 +1622,39 @@ const AREAS = {
     path: "/admin/users",
     async mock(page) {
       await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/reports(\?|$)/, (route) => route.fulfill({ json: SAMPLE_REPORTS }));
       await page.route(/\/api\/v1\/admin\/users(\?|$)/, (route) => route.fulfill({ json: SAMPLE_ADMIN_USERS }));
+    },
+  },
+  // Admin — user detail (DR12): the desktop console's users TABLE → user DETAIL
+  // master-detail. Opens the first non-self row so the two-column role/quota/
+  // facts panel is captured (the mobile viewport has no table, so the click is
+  // guarded — it only fires where the desktop table is on screen).
+  "admin-user-detail": {
+    path: "/admin/users",
+    async mock(page) {
+      await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/reports(\?|$)/, (route) => route.fulfill({ json: SAMPLE_REPORTS }));
+      await page.route(/\/api\/v1\/admin\/users(\?|$)/, (route) => route.fulfill({ json: SAMPLE_ADMIN_USERS }));
+    },
+    async act(page) {
+      const row = page.getByRole("button", { name: "Open northloop" });
+      if (await row.isVisible().catch(() => false)) {
+        await row.click().catch(() => {});
+      }
+    },
+  },
+  // Admin — instance settings (DR12): the design's two-column instance layout
+  // (Features on the right, everything else on the left) over the real
+  // GET /admin/instance-settings overlay.
+  "admin-config": {
+    path: "/admin/config",
+    async mock(page) {
+      await mockAdminShell(page);
+      await page.route(/\/api\/v1\/admin\/reports(\?|$)/, (route) => route.fulfill({ json: SAMPLE_REPORTS }));
+      await page.route(/\/api\/v1\/admin\/instance-settings$/, (route) =>
+        route.fulfill({ json: SAMPLE_INSTANCE_SETTINGS }),
+      );
     },
   },
   // Moderation — report queue (backport W0.11): filter chips + report panels with
