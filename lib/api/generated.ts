@@ -1635,7 +1635,7 @@ export interface paths {
         put?: never;
         /**
          * Trigger a channel auto-sync now
-         * @description Schedules an owned sync to run on the next worker tick (a manual refresh between cadence runs). 503 when the feature is disabled; 404 when the sync is unknown or not owned.
+         * @description Schedules an owned sync to run on the next worker tick (a manual refresh between cadence runs). A server-side cooldown (CHANNEL_SYNC_COOLDOWN, measured from the last completed run) throttles repeat triggers: a request inside the window is rejected 429 with a Retry-After header. 503 when the feature is disabled; 404 when the sync is unknown or not owned.
          */
         post: operations["syncChannelNow"];
         delete?: never;
@@ -10665,6 +10665,15 @@ export interface operations {
             };
             /** @description No such channel sync, or not owned by the caller. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The sync ran too recently — the server-side cooldown has not elapsed. Stable code rate_limited; carries a Retry-After header. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
