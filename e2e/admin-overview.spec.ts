@@ -1,14 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // Mocked admin overview coverage (a real backend is not running in `npm run ci`).
-// The overview is read-only composition over two already backed-verified reads
-// (GET /admin/system, GET /admin/reports), so mocked coverage is sufficient here.
+// The overview is read-only composition over four already backed-verified reads
+// (GET /admin/system, /admin/jobs, /admin/audit-log, /admin/reports), so mocked
+// coverage is sufficient here.
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const USERS = /\/api\/v1\/admin\/users(\?|$)/;
 const SYSTEM = /\/api\/v1\/admin\/system$/;
 const REPORTS = /\/api\/v1\/admin\/reports(\?|$)/;
+const JOBS = /\/api\/v1\/admin\/jobs$/;
+const AUDIT = /\/api\/v1\/admin\/audit-log(\?|$)/;
 
 type Role = "user" | "moderator" | "admin";
 
@@ -43,6 +46,42 @@ const systemStatus = {
   environment: "production",
   uptime_seconds: 90061, // 1d 1h 1m
   components: { postgres: { status: "ok" }, redis: { status: "ok" } },
+};
+
+const jobsOverview = {
+  queues: [
+    {
+      queue: "transcode_jobs",
+      pending: 3,
+      running: 1,
+      done: 42,
+      failed: 0,
+      oldest_pending_age_seconds: 120,
+    },
+    {
+      queue: "caption_jobs",
+      pending: 0,
+      running: 0,
+      done: 10,
+      failed: 2,
+      oldest_pending_age_seconds: 0,
+    },
+  ],
+  recent_failures: [],
+};
+
+const auditLog = {
+  entries: [
+    {
+      id: "a1",
+      action: "admin.registration.approve",
+      result: "success",
+      actor_username: "mira",
+      occurred_at: new Date().toISOString(),
+    },
+  ],
+  limit: 6,
+  offset: 0,
 };
 
 function report(id: string) {
@@ -93,34 +132,48 @@ async function openOverview(page: Page) {
 
 test("anonymous viewers are gated out of the admin overview", async ({ page }) => {
   let fetched = false;
-  await page.route(SYSTEM, (route) => {
-    fetched = true;
-    return route.fulfill({ json: systemStatus });
-  });
-  await page.route(REPORTS, (route) => {
-    fetched = true;
-    return route.fulfill({ json: reports(0) });
-  });
+  for (const rx of [SYSTEM, REPORTS, JOBS, AUDIT]) {
+    await page.route(rx, (route) => {
+      fetched = true;
+      return route.fulfill({ json: {} });
+    });
+  }
   await page.goto("/admin");
   await expect(page.getByText("Administrators only")).toBeVisible();
   expect(fetched).toBe(false);
 });
 
-test("an admin sees the system summary, open-reports count, and section cards", async ({
+test("an admin sees the health, queues, audit, open-reports, and section cards", async ({
   page,
 }) => {
   await signIn(page, "admin");
   await page.route(SYSTEM, (route) => route.fulfill({ json: systemStatus }));
   await page.route(REPORTS, (route) => route.fulfill({ json: reports(3) }));
+  await page.route(JOBS, (route) => route.fulfill({ json: jobsOverview }));
+  await page.route(AUDIT, (route) => route.fulfill({ json: auditLog }));
 
   await openOverview(page);
 
-  // Live system summary reusing GET /admin/system.
-  await expect(page.getByText("Healthy")).toBeVisible();
-  await expect(page.getByText("vidra 0.1.0")).toBeVisible();
-  await expect(page.getByText("up 1d 1h 1m")).toBeVisible();
+  // Health card — reuses GET /admin/system (overall flag + dependency rows).
+  const health = page.getByRole("region", { name: "Health" });
+  await expect(health.getByText("Healthy")).toBeVisible();
+  await expect(health.getByText("vidra 0.1.0")).toBeVisible();
+  await expect(health.getByText("up 1d 1h 1m")).toBeVisible();
+  await expect(health.getByText("Postgres")).toBeVisible();
+  await expect(health.getByText("Redis")).toBeVisible();
 
-  // Open-reports count from GET /admin/reports?status=open.
+  // Job queues card — GET /admin/jobs.
+  const queues = page.getByRole("region", { name: "Job queues" });
+  await expect(queues.getByText("Transcode jobs")).toBeVisible();
+  await expect(queues.getByText("3 pending · oldest 2m")).toBeVisible();
+  await expect(queues.getByText("2 failed")).toBeVisible();
+
+  // Recent audit log card — GET /admin/audit-log.
+  const audit = page.getByRole("region", { name: "Recent audit log" });
+  await expect(audit.getByText("mira")).toBeVisible();
+  await expect(audit.getByText("admin.registration.approve")).toBeVisible();
+
+  // Open-reports lead-in from GET /admin/reports?status=open.
   await expect(page.getByText("3", { exact: true })).toBeVisible();
   await expect(page.getByText("open reports")).toBeVisible();
   await expect(page.getByRole("link", { name: "Moderation queue" })).toBeVisible();
@@ -130,8 +183,6 @@ test("an admin sees the system summary, open-reports count, and section cards", 
   for (const label of ["Users", "Registration", "Audit log", "System"]) {
     await expect(cards.getByText(label, { exact: true })).toBeVisible();
   }
-
-  // A card navigates to its section.
   await cards.getByRole("link", { name: /Search accounts/ }).click();
   await expect(page).toHaveURL(/\/admin\/users$/);
   await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
@@ -140,6 +191,8 @@ test("an admin sees the system summary, open-reports count, and section cards", 
 test("a full first page of open reports renders as 100+", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(SYSTEM, (route) => route.fulfill({ json: systemStatus }));
+  await page.route(JOBS, (route) => route.fulfill({ json: jobsOverview }));
+  await page.route(AUDIT, (route) => route.fulfill({ json: auditLog }));
   // The list carries no total, so a full page is shown as a lower bound.
   await page.route(REPORTS, (route) => route.fulfill({ json: reports(100) }));
 
@@ -148,7 +201,7 @@ test("a full first page of open reports renders as 100+", async ({ page }) => {
   await expect(page.getByText("100+", { exact: true })).toBeVisible();
 });
 
-test("a failed system read shows a retryable error without hiding the reports count", async ({
+test("a failed health read shows a retryable error without hiding the reports count", async ({
   page,
 }) => {
   await signIn(page, "admin");
@@ -164,10 +217,12 @@ test("a failed system read shows a retryable error without hiding the reports co
     return route.fulfill({ json: systemStatus });
   });
   await page.route(REPORTS, (route) => route.fulfill({ json: reports(0) }));
+  await page.route(JOBS, (route) => route.fulfill({ json: jobsOverview }));
+  await page.route(AUDIT, (route) => route.fulfill({ json: auditLog }));
 
   await openOverview(page);
 
-  await expect(page.getByText("Could not load the system summary.")).toBeVisible();
+  await expect(page.getByText("Could not load the system health.")).toBeVisible();
   await expect(page.getByText("No open reports.")).toBeVisible();
 
   await page.getByRole("button", { name: "Try again" }).click();

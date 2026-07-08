@@ -40,6 +40,23 @@ describe("SegmentedControl", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("disables every segment and suppresses onChange when disabled", () => {
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl
+        options={options}
+        value="local"
+        onChange={onChange}
+        label="Feed scope"
+        disabled
+      />,
+    );
+    const inactive = screen.getByRole("button", { name: "All" });
+    expect((inactive as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(inactive);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("names the group via labelledBy when given (aria-labelledby, no aria-label)", () => {
     render(
       <>

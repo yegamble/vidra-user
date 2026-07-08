@@ -30,7 +30,8 @@ const GROUPS: { id: GroupId; title: string; description: string }[] = [
   {
     id: "features",
     title: "Features",
-    description: "Turn instance capabilities on or off. A disabled feature is refused server-side.",
+    description:
+      "Turning a feature off returns “feature disabled” from its endpoints immediately — no restart needed.",
   },
   {
     id: "moderation",
@@ -238,10 +239,12 @@ function ConfigForm() {
         const keys = settings.filter((s) => groupOf(s.key) === group.id).map((s) => s.key);
         if (keys.length === 0) return null;
         return (
-          <section key={group.id} aria-label={group.title} className="flex flex-col gap-3">
-            <div>
-              <h2 className="text-[15px] font-bold tracking-tight text-fg">{group.title}</h2>
-              <p className="text-[13px] text-fg-muted">{group.description}</p>
+          <section key={group.id} aria-label={group.title} className="flex flex-col gap-2.5">
+            <div className="px-0.5">
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.06em] text-fg-subtle">
+                {group.title}
+              </h2>
+              <p className="mt-1 text-[13px] text-fg-muted">{group.description}</p>
             </div>
             <div className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
               {keys.map((key) => {

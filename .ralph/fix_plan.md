@@ -1635,10 +1635,82 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
         emoji; zero token-value changes.
 
 ## DR11 — Admin mobile parity (app/admin + app/moderation)
-- [ ] Overview health/queues/audit (real rows only — NO S3/RTMP/Bluesky; stats only if real
+- [x] Overview health/queues/audit (real rows only — NO S3/RTMP/Bluesky; stats only if real
       counts, §5.4); Users + detail (role SegmentedControl, quota override); Queues (Reports/
       Quarantine/Sign-ups); Content (Videos|Comments, block overlay); Instance toggles via
       `/admin/instance-settings`. CI + push.
+      **DONE 2026-07-08.** Brought the admin/moderation surfaces (already at "template language"
+      from backport W0.11) to the design-refresh vocabulary, binding only to contracts that exist
+      in `vidra-core/api/openapi.yaml` AT EXECUTION TIME (re-read fresh).
+      • **Overview → the design's operations dashboard (`AdminOverview`).** Replaced the nav-hub +
+        summary with the design's stacked cards over the real admin reads, each loading
+        independently (one `AbortController`) so a single broken read degrades to its own inline
+        retry: a **Health card** (overall Healthy/Degraded pill + `name version` + `up …`, then a
+        dot-row per dependency `/admin/system` reports — postgres/redis/object_storage — status
+        right-aligned; **renders EXACTLY the components the backend exposes, no fabricated
+        S3/RTMP/IPFS rows**); a **Job queues card** (`/admin/jobs` — queue name + a meta line
+        "N pending · oldest …" / "N running" / "N failed"(danger) / "idle"); a **Recent audit log
+        card** (`/admin/audit-log?limit=6` — mono `relativeTime` + bold actor + "ran/failed to run"
+        + mono action code); the **open-reports callout** (`/admin/reports?status=open`, "100+"
+        lower-bound preserved) → Moderation queue; then the section list under an uppercase-micro
+        "MANAGE" label (kept for navigation — the app has no admin bottom-tab bar). **NO 4 stat
+        cards (Users/Published videos/Media stored/Federated peers): no aggregate-counts endpoint
+        exists (verified fresh — no `/admin/stats`), so they are DEFERRED, not faked — dependency
+        recorded in a code comment (spec §5.4).** **IPFS-gateway health row DEFERRED too:
+        `GET /ipfs/status` answers 501 not_implemented until P19.2 (verified fresh), so the Health
+        card never adds a fabricated IPFS row.**
+      • **Users → per-user management cards (`AdminUsersView`).** The design's list→detail folded
+        into inline per-user `surface-muted` cards (no user-detail route exists): identity
+        (avatar + name + role/`you`/`deactivated` pills + email · joined · **storage used** ·
+        verified), a **Role `SegmentedControl`** (User/Moderator/Admin) wired to the real
+        `PATCH /admin/users/{id}` — self is display-only (a static `RolePill`, since the backend
+        forbids self-demote), and a **Storage-quota override card** (usage line, a progress bar
+        when a finite override is set, **Change quota** → GB number input → `storage_quota_bytes`
+        byte count, **Reset to default** → `null`) exercising the real tri-state PATCH
+        (omit=unchanged / null=instance default / N=override / 0=unlimited — verified fresh in the
+        `UpdateUserRequest` contract). Added the design's **facet chips** (All / Staff /
+        Deactivated with live counts, client-side over the loaded page — the list endpoint has no
+        role/active filter param). Deactivate→`tonal`, Delete→`danger-outline` with the existing
+        type-the-username double-confirm preserved.
+      • **Shared primitive.** `SegmentedControl` gained an additive **`disabled`** prop (disables
+        every segment + suppresses `onChange`; used while a role change is in flight) + 1 unit test.
+      • **Content (`AdminVideosView`).** Block/Unblock converged onto the shared `Button`
+        (`danger-outline` / `tonal`); the blocked pill gained the design's **slash-circle** glyph
+        (`SlashCircleIcon`). (AdminVideo carries no thumbnail field, so the design's 104px
+        thumb-with-slash overlay is not buildable — the pill glyph conveys blocked state honestly.)
+      • **Instance (`AdminInstanceConfigView`).** Group labels restyled to the design's 12px
+        uppercase-micro `fg-subtle` labels (kept as `<h2>` so the a11y headings + the
+        `admin-config` e2e stay green) and the Features caption sharpened to the design's
+        live-mutation copy. Toggles already ran through `/admin/instance-settings` with the
+        design-sized `Toggle` (W0.11) — unchanged.
+      • **Queues (Reports/Quarantine/Sign-ups) unified segmented — DEFERRED (recorded).** These
+        three live on separate routes today (`/moderation`, `/moderation/quarantine`,
+        `/admin/registration-requests`, the last outside the moderation area). A single mobile
+        "Queues" tab with a counts SegmentedControl is a navigation-architecture change, not a
+        surface restyle, so it is deferred rather than half-built; each queue already speaks the
+        card/pill/`danger-outline` vocabulary. Report/quarantine/registration action rows unchanged
+        (real endpoints, W0.11).
+      • **Tests (unit + e2e, same slice).** +1 unit (`SegmentedControl` disabled) = **628 passed**.
+        `admin-users` e2e rewritten for the segmented role control (click the "Moderator" segment
+        in the row's `Role for {user}` group) + a new quota set/reset test asserting the real PATCH
+        body (`50 GB` → bytes, Reset → null) + the self-row now asserts a static role (no editable
+        group) with the self-guard note. `admin-overview` e2e rewritten for the four dashboard
+        regions (Health / Job queues / Recent audit log / open-reports + Manage), mocking
+        `/admin/jobs` + `/admin/audit-log`. Harness (`design-shots.mjs`): the `admin-overview` area
+        mocks jobs + audit-log; `sampleAdminUser` gained `storage_used_bytes`/`storage_quota_bytes`
+        (northloop carries a 50 GB override to exercise the progress bar + Reset).
+      • **Evidence.** `.ralph/design-review/dr11/after/{admin-overview,admin-users,moderation-videos}`
+        (light+dark × mobile+desktop, full-page; git-ignored; built app on :3181, server killed
+        after). Read the AFTER PNGs vs `Vidra Admin.dc.html`: Overview = Health/Job-queues/Recent-
+        audit-log cards + Manage list ("1 failed" in danger); Users = All/Staff/Deactivated chips,
+        role segmented, quota card with progress + Reset (override row), self static pill; Content =
+        danger-outline Block / tonal Unblock + slash-circle BLOCKED pill. Dark inverts via tokens.
+      • **Gate.** Full `CI=1 npm run ci` on the final tree — typecheck ✓ lint ✓ lint:icons ✓ unit
+        **628 passed** ✓ clean `next build` ✓ mocked e2e **420 passed** + **1 flaky passed on
+        retry** (`watch-player` keyboard mute/start — the same pre-existing player-wave timing
+        flake noted in DR10, unrelated to DR11; 0 failures, incl. the axe serious/critical gate,
+        landmarks, responsive-overflow). Semantic tokens only; no `dark:`/raw palette; no emoji;
+        zero token-value changes.
 
 ## DR12 — Admin desktop console
 - [ ] 230px sidebar shell; 4-stat row (§5.4 caveat); two-col health/queues/audit; users TABLE;

@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminSearch } from "@/components/admin/AdminControls";
+import { SlashCircleIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -177,23 +179,21 @@ function VideoRow({
             </span>
             {video.blocked ? (
               <span className={`${PILL} bg-danger-surface text-danger`}>
+                <SlashCircleIcon size={11} strokeWidth={2.4} aria-hidden />
                 blocked
               </span>
             ) : null}
           </div>
         </div>
-        <button
-          type="button"
+        <Button
+          variant={video.blocked ? "tonal" : "danger-outline"}
+          size="sm"
+          className="shrink-0"
           disabled={busy}
           onClick={() => void toggleBlock()}
-          className={
-            video.blocked
-              ? "focus-ring inline-flex shrink-0 items-center justify-center rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-60"
-              : "focus-ring inline-flex shrink-0 items-center justify-center rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger/10 disabled:pointer-events-none disabled:opacity-60"
-          }
         >
           {video.blocked ? "Unblock" : "Block"}
-        </button>
+        </Button>
       </div>
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
     </article>

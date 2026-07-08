@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdminSearch, RolePill } from "@/components/admin/AdminControls";
 import { useSession } from "@/components/auth/AuthProvider";
@@ -9,14 +9,27 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminUser, UserRole } from "@/lib/api";
-import { relativeTime } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { formatBytes, relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
-const ROLES: UserRole[] = ["user", "moderator", "admin"];
+// The design's role control is a three-way segmented switch (was a <select>).
+const ROLE_OPTIONS: readonly { value: UserRole; label: string }[] = [
+  { value: "user", label: "User" },
+  { value: "moderator", label: "Moderator" },
+  { value: "admin", label: "Admin" },
+];
+
+// One GiB in bytes — the quota override is entered in GB (base-2, matching
+// formatBytes' "GB" unit) and stored as an exact byte count.
+const GIB = 1024 ** 3;
+
+type QuotaFilter = "all" | "staff" | "deactivated";
 
 // AdminUsersView is the admin-only account management surface, role-gated by
 // RoleGate (an under-privileged/anonymous viewer sees the shared permission
@@ -36,6 +49,7 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [query, setQuery] = useState("");
   const [input, setInput] = useState("");
+  const [filter, setFilter] = useState<QuotaFilter>("all");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -80,6 +94,23 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
     setUsers((prev) => prev.filter((u) => u.id !== id));
   }, []);
 
+  // Client-side facet counts over the loaded page (the list endpoint has no
+  // role/status filter param — these narrow the current results honestly).
+  const counts = useMemo(
+    () => ({
+      all: users.length,
+      staff: users.filter((u) => u.role !== "user").length,
+      deactivated: users.filter((u) => u.is_active === false).length,
+    }),
+    [users],
+  );
+
+  const visible = useMemo(() => {
+    if (filter === "staff") return users.filter((u) => u.role !== "user");
+    if (filter === "deactivated") return users.filter((u) => u.is_active === false);
+    return users;
+  }, [users, filter]);
+
   return (
     <div className="flex flex-col gap-4">
       <AdminSearch
@@ -95,6 +126,18 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
         hasQuery={Boolean(query)}
       />
 
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter users">
+        <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+          All <span className="tabular-nums">· {counts.all}</span>
+        </FilterChip>
+        <FilterChip active={filter === "staff"} onClick={() => setFilter("staff")}>
+          Staff <span className="tabular-nums">· {counts.staff}</span>
+        </FilterChip>
+        <FilterChip active={filter === "deactivated"} onClick={() => setFilter("deactivated")}>
+          Deactivated <span className="tabular-nums">· {counts.deactivated}</span>
+        </FilterChip>
+      </div>
+
       {status === "loading" ? (
         <div className="flex justify-center py-24">
           <Spinner label="Loading users" />
@@ -106,9 +149,14 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
           title={query ? "No matching users" : "No users yet"}
           message={query ? "Try a different search term." : "Accounts will appear here as people sign up."}
         />
+      ) : visible.length === 0 ? (
+        <EmptyState
+          title="No users in this view"
+          message="No accounts match this filter. Try another facet."
+        />
       ) : (
-        <ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
-          {users.map((u) => (
+        <ul className="flex flex-col gap-3">
+          {visible.map((u) => (
             <li key={u.id}>
               <UserRow
                 user={u}
@@ -121,6 +169,34 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
         </ul>
       )}
     </div>
+  );
+}
+
+// FilterChip — the design's Users facet pill (active = accent-filled, inactive =
+// outlined). Single-select; `aria-pressed` carries the state to assistive tech.
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "focus-ring rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
+        active
+          ? "bg-accent text-accent-fg"
+          : "border border-border text-fg-muted hover:bg-surface-muted hover:text-fg",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -145,7 +221,7 @@ function UserRow({
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
   const save = useCallback(
-    async (patch: { role?: UserRole; is_active?: boolean }) => {
+    async (patch: { role?: UserRole; is_active?: boolean; storage_quota_bytes?: number | null }) => {
       setRowState("saving");
       setError(null);
       try {
@@ -172,10 +248,16 @@ function UserRow({
     }
   }, [user.id, onDeleted]);
 
+  const saving = rowState === "saving";
+  // storage_used_bytes/storage_quota_bytes are required in the contract; guard
+  // for lean fixtures so a partial mock never crashes the row.
+  const used = user.storage_used_bytes ?? 0;
+  const quota = user.storage_quota_bytes ?? null;
+
   return (
-    <div className="p-4">
+    <article className="rounded-2xl bg-surface-muted p-4">
       <div className="flex items-start gap-3">
-        <Avatar src={null} name={user.username} className="h-10 w-10 text-sm" />
+        <Avatar src={null} name={user.username} className="h-11 w-11 text-sm" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-semibold tracking-tight text-fg">{user.username}</span>
@@ -185,63 +267,64 @@ function UserRow({
               </span>
             ) : null}
             <RolePill role={user.role} />
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${
-                user.is_active
-                  ? "bg-success/15 text-success"
-                  : "bg-danger-surface text-danger"
-              }`}
-            >
-              {user.is_active ? "active" : "deactivated"}
-            </span>
+            {user.is_active ? null : (
+              <span className="inline-flex items-center rounded-full bg-danger-surface px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] text-danger uppercase">
+                deactivated
+              </span>
+            )}
           </div>
-          <div className="mt-0.5 text-[13px] text-fg-muted">
+          <div className="mt-1 text-[12.5px] text-fg-muted">
             <span className="break-all">{user.email}</span>
             <span aria-hidden> · </span>
             <span>joined {relativeTime(user.created_at)}</span>
+            <span aria-hidden> · </span>
+            <span className="tabular-nums">{formatBytes(used)}</span>
             <span aria-hidden> · </span>
             <span>{user.email_verified ? "verified" : "unverified"}</span>
           </div>
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 sm:pl-[3.25rem]">
-        <label className="flex items-center gap-1.5 text-sm">
-          <span className="text-[13px] font-medium text-fg-muted">Role</span>
-          <select
-            aria-label={`Role for ${user.username}`}
+      {/* Role — the design's three-way segmented switch. Self is display-only
+          (the backend forbids self-demote), so the own row shows a static pill. */}
+      <div className="mt-3.5 flex items-center justify-between gap-3">
+        <span className="text-[13px] font-semibold text-fg">Role</span>
+        {isSelf ? (
+          <RolePill role={user.role} />
+        ) : (
+          <SegmentedControl
+            size="sm"
+            label={`Role for ${user.username}`}
+            options={ROLE_OPTIONS}
             value={user.role}
-            disabled={isSelf || rowState === "saving"}
-            onChange={(e) => void save({ role: e.target.value as UserRole })}
-            className="focus-ring rounded-xl border border-border bg-surface px-2.5 py-1.5 text-sm text-fg disabled:opacity-60"
-          >
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </label>
+            disabled={saving}
+            onChange={(role) => void save({ role })}
+          />
+        )}
+      </div>
 
+      <QuotaCard user={user} used={used} quota={quota} saving={saving} onSave={save} />
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
-          variant="secondary"
+          variant="tonal"
           size="sm"
           aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
-          disabled={isSelf || rowState === "saving"}
+          disabled={isSelf || saving}
           onClick={() => void save({ is_active: !user.is_active })}
         >
           {user.is_active ? "Deactivate" : "Reactivate"}
         </Button>
         {!deleteArmed ? (
-          <button
-            type="button"
+          <Button
+            variant="danger-outline"
+            size="sm"
             aria-label={`Delete ${user.username} permanently`}
-            disabled={isSelf || rowState === "saving"}
+            disabled={isSelf || saving}
             onClick={() => setDeleteArmed(true)}
-            className="focus-ring inline-flex items-center justify-center rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger/10 disabled:pointer-events-none disabled:opacity-60"
           >
             Delete permanently
-          </button>
+          </Button>
         ) : null}
         {isSelf ? (
           <span className="text-xs text-fg-muted">
@@ -272,15 +355,15 @@ function UserRow({
               variant="danger"
               size="sm"
               aria-label={`Confirm permanent deletion of ${user.username}`}
-              disabled={rowState === "saving" || deleteConfirmName !== user.username}
+              disabled={saving || deleteConfirmName !== user.username}
               onClick={() => void doDelete()}
             >
-              {rowState === "saving" ? "Deleting…" : "Confirm permanent delete"}
+              {saving ? "Deleting…" : "Confirm permanent delete"}
             </Button>
             <Button
               variant="secondary"
               size="sm"
-              disabled={rowState === "saving"}
+              disabled={saving}
               onClick={() => {
                 setDeleteArmed(false);
                 setDeleteConfirmName("");
@@ -294,6 +377,126 @@ function UserRow({
       ) : null}
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+    </article>
+  );
+}
+
+// QuotaCard — the design's storage-quota override: usage line, a progress bar
+// (only when a finite override is set), and Change / Reset controls wired to the
+// tri-state PATCH storage_quota_bytes (a byte count = per-user override, 0 =
+// unlimited, null = reset to the instance default).
+function QuotaCard({
+  user,
+  used,
+  quota,
+  saving,
+  onSave,
+}: {
+  user: AdminUser;
+  used: number;
+  quota: number | null;
+  saving: boolean;
+  onSave: (patch: { storage_quota_bytes: number | null }) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [gb, setGb] = useState("");
+
+  const overridden = quota !== null;
+  const unlimited = quota === 0;
+  const finite = quota !== null && quota > 0;
+  const pct = finite ? Math.min(100, Math.round((used / quota) * 100)) : 0;
+
+  const rightLabel = !overridden
+    ? `${formatBytes(used)} · instance default`
+    : unlimited
+      ? `${formatBytes(used)} · unlimited`
+      : `${formatBytes(used)} of ${formatBytes(quota)}`;
+
+  const submit = useCallback(async () => {
+    const value = Number(gb);
+    if (!Number.isFinite(value) || value < 0) return;
+    await onSave({ storage_quota_bytes: Math.round(value * GIB) });
+    setEditing(false);
+    setGb("");
+  }, [gb, onSave]);
+
+  return (
+    <div className="mt-3 rounded-xl border border-border-subtle p-3">
+      <div className="flex items-center justify-between gap-3 text-[13px]">
+        <span className="font-semibold text-fg">Storage quota</span>
+        <span className="text-fg-muted tabular-nums">
+          {rightLabel}
+          {overridden ? <span className="text-fg-subtle"> · override</span> : null}
+        </span>
+      </div>
+      {finite ? (
+        <div className="mt-2.5 h-[5px] overflow-hidden rounded-full bg-surface-strong">
+          <div className="h-full rounded-full bg-fg" style={{ width: `${pct}%` }} />
+        </div>
+      ) : null}
+      {editing ? (
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[13px] text-fg-muted">
+            <input
+              type="number"
+              min={0}
+              step="0.1"
+              inputMode="decimal"
+              aria-label={`Storage quota in GB for ${user.username}`}
+              value={gb}
+              onChange={(e) => setGb(e.target.value)}
+              className="focus-ring w-24 rounded-lg border border-border bg-surface px-2.5 py-1 text-sm text-fg tabular-nums"
+            />
+            GB
+          </label>
+          <Button
+            variant="primary"
+            size="sm"
+            aria-label={`Save storage quota for ${user.username}`}
+            disabled={saving || gb.trim() === ""}
+            onClick={() => void submit()}
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={saving}
+            onClick={() => {
+              setEditing(false);
+              setGb("");
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <Button
+            variant="tonal"
+            size="sm"
+            aria-label={`Change storage quota for ${user.username}`}
+            disabled={saving}
+            onClick={() => {
+              setEditing(true);
+              setGb(finite ? String(Math.round((quota / GIB) * 10) / 10) : "");
+            }}
+          >
+            Change quota
+          </Button>
+          {overridden ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={`Reset ${user.username} to the instance default quota`}
+              disabled={saving}
+              onClick={() => void onSave({ storage_quota_bytes: null })}
+            >
+              Reset to default
+            </Button>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

@@ -24,6 +24,8 @@ export type SegmentedControlProps<T extends string> = {
   size?: "sm" | "md";
   /** Stretch to fill the row with equal-width segments (e.g. Inbox tabs). */
   fullWidth?: boolean;
+  /** Disable every segment (e.g. while a role change is saving). */
+  disabled?: boolean;
   className?: string;
 };
 
@@ -52,6 +54,7 @@ export function SegmentedControl<T extends string>({
   labelledBy,
   size = "md",
   fullWidth = false,
+  disabled = false,
   className,
 }: SegmentedControlProps<T>) {
   return (
@@ -72,11 +75,12 @@ export function SegmentedControl<T extends string>({
             key={option.value}
             type="button"
             aria-pressed={active}
+            disabled={disabled}
             onClick={() => {
               if (option.value !== value) onChange(option.value);
             }}
             className={cn(
-              "focus-ring inline-flex items-center justify-center rounded-lg font-medium transition-colors",
+              "focus-ring inline-flex items-center justify-center rounded-lg font-medium transition-colors disabled:pointer-events-none disabled:opacity-60",
               SEGMENT_SIZE[size],
               fullWidth && "flex-1",
               active

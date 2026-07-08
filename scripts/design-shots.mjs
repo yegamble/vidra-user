@@ -750,6 +750,27 @@ const SAMPLE_SYSTEM_STATUS = {
   },
 };
 
+const SAMPLE_JOBS_OVERVIEW = {
+  queues: [
+    { queue: "transcode_jobs", pending: 3, running: 1, done: 1_240, failed: 0, oldest_pending_age_seconds: 120 },
+    { queue: "federation_deliveries", pending: 0, running: 0, done: 8_900, failed: 0, oldest_pending_age_seconds: 0 },
+    { queue: "caption_jobs", pending: 0, running: 1, done: 210, failed: 0, oldest_pending_age_seconds: 0 },
+    { queue: "import_jobs", pending: 0, running: 2, done: 4_120, failed: 1, oldest_pending_age_seconds: 0 },
+  ],
+  recent_failures: [],
+};
+
+const SAMPLE_AUDIT_LOG = {
+  entries: [
+    { id: "a1", action: "admin.registration.approve", result: "success", actor_username: "mira", occurred_at: new Date(Date.now() - 20 * 60_000).toISOString() },
+    { id: "a2", action: "moderation.comment.remove", result: "success", actor_username: "noel", occurred_at: new Date(Date.now() - 49 * 60_000).toISOString() },
+    { id: "a3", action: "admin.media.gc", result: "success", actor_username: "system", occurred_at: new Date(Date.now() - 65 * 60_000).toISOString() },
+    { id: "a4", action: "admin.user.quota", result: "success", actor_username: "mira", occurred_at: new Date(Date.now() - 91 * 60_000).toISOString() },
+  ],
+  limit: 6,
+  offset: 0,
+};
+
 function sampleAdminUser(id, username, role, opts = {}) {
   return {
     id,
@@ -759,6 +780,8 @@ function sampleAdminUser(id, username, role, opts = {}) {
     is_active: opts.active ?? true,
     email_verified: opts.verified ?? true,
     display_name: opts.display ?? username,
+    storage_used_bytes: opts.usedBytes ?? 4 * 1024 ** 3,
+    storage_quota_bytes: opts.quotaBytes ?? null,
     created_at: new Date(Date.now() - (opts.ageDays ?? 120) * 86_400_000).toISOString(),
   };
 }
@@ -766,8 +789,8 @@ function sampleAdminUser(id, username, role, opts = {}) {
 const SAMPLE_ADMIN_USERS = {
   users: [
     sampleAdminUser("u1", "boss", "admin", { display: "Mara", ageDays: 180 }),
-    sampleAdminUser("u2", "northloop", "moderator", { email: "noel@example.net", display: "North Loop", ageDays: 120 }),
-    sampleAdminUser("u3", "gradehouse", "user", { email: "studio@gradehouse.tv", display: "Grade House", ageDays: 150 }),
+    sampleAdminUser("u2", "northloop", "moderator", { email: "noel@example.net", display: "North Loop", ageDays: 120, usedBytes: 11.7 * 1024 ** 3, quotaBytes: 50 * 1024 ** 3 }),
+    sampleAdminUser("u3", "gradehouse", "user", { email: "studio@gradehouse.tv", display: "Grade House", ageDays: 150, usedBytes: 96 * 1024 ** 3 }),
     sampleAdminUser("u4", "fieldnotes", "user", { email: "ed@fieldnotes.blog", display: "Field Notes", ageDays: 60 }),
     sampleAdminUser("u5", "spam_account_291", "user", { email: "x91@tempmail.cc", active: false, verified: false, ageDays: 1 }),
   ],
@@ -1557,14 +1580,17 @@ const AREAS = {
       );
     },
   },
-  // Admin — overview (backport W0.11): the /admin index — system summary, the
-  // open-reports count, and the section list. Admin-shell so RoleGate passes.
+  // Admin — overview (DR11): the /admin index — the design's operations dashboard
+  // (health / job queues / recent audit log cards + open-reports callout) over the
+  // real admin read endpoints, then the section list. Admin-shell so RoleGate passes.
   "admin-overview": {
     path: "/admin",
     async mock(page) {
       await mockAdminShell(page);
       await page.route(/\/api\/v1\/admin\/system$/, (route) => route.fulfill({ json: SAMPLE_SYSTEM_STATUS }));
       await page.route(/\/api\/v1\/admin\/reports(\?|$)/, (route) => route.fulfill({ json: SAMPLE_REPORTS }));
+      await page.route(/\/api\/v1\/admin\/jobs$/, (route) => route.fulfill({ json: SAMPLE_JOBS_OVERVIEW }));
+      await page.route(/\/api\/v1\/admin\/audit-log(\?|$)/, (route) => route.fulfill({ json: SAMPLE_AUDIT_LOG }));
       await page.route(/\/api\/v1\/admin\/users(\?|$)/, (route) =>
         route.fulfill({ json: { users: [], limit: 100, offset: 0 } }),
       );

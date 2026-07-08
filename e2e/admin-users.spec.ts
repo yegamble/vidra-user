@@ -44,6 +44,8 @@ function adminUser(
     is_active,
     email_verified,
     display_name: username,
+    storage_used_bytes: 2 * 1024 ** 3,
+    storage_quota_bytes: null,
     created_at: new Date().toISOString(),
   };
 }
@@ -115,9 +117,12 @@ test("an admin sees the users list with a self badge", async ({ page }) => {
   await expect(page.getByText("alice@example.test")).toBeVisible();
   await expect(page.getByText("bob@example.test")).toBeVisible();
   await expect(page.getByText("you", { exact: true })).toBeVisible();
-  // The admin's own row controls are disabled (backend forbids self-demote/
-  // deactivate/hard-delete).
-  await expect(page.getByLabel("Role for boss")).toBeDisabled();
+  // The admin's own row is display-only for role (no editable segmented control —
+  // the backend forbids self-demote) and its status/delete controls are disabled.
+  await expect(page.getByRole("group", { name: "Role for boss" })).toHaveCount(0);
+  await expect(
+    page.getByText("You can't change your own role or status, or delete your own account."),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Deactivate boss" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Delete boss permanently" })).toBeDisabled();
 });
@@ -143,7 +148,7 @@ test("the search box filters by query", async ({ page }) => {
   await expect(page.getByText("alice@example.test")).toBeVisible();
 });
 
-test("an admin can change a user's role", async ({ page }) => {
+test("an admin can change a user's role via the segmented control", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(USERS, (route) =>
     route.fulfill({
@@ -155,12 +160,61 @@ test("an admin can change a user's role", async ({ page }) => {
   );
 
   await page.getByRole("link", { name: "Admin", exact: true }).click();
+  const role = page.getByRole("group", { name: "Role for alice" });
+  await expect(role.getByRole("button", { name: "User" })).toHaveAttribute("aria-pressed", "true");
+
   const updated = page.waitForResponse(
     (r) => UPDATE.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
   );
-  await page.getByLabel("Role for alice").selectOption("moderator");
+  await role.getByRole("button", { name: "Moderator" }).click();
   await updated;
-  await expect(page.getByLabel("Role for alice")).toHaveValue("moderator");
+  await expect(role.getByRole("button", { name: "Moderator" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
+test("an admin can set and reset a user's storage quota override", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.route(USERS, (route) =>
+    route.fulfill({
+      json: { users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")], limit: 100, offset: 0 },
+    }),
+  );
+  let lastQuota: number | null | undefined;
+  await page.route(UPDATE, (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    const body = route.request().postDataJSON() as { storage_quota_bytes?: number | null };
+    lastQuota = body.storage_quota_bytes;
+    const overridden = { ...adminUser("u2", "alice", "user"), storage_quota_bytes: body.storage_quota_bytes ?? null };
+    return route.fulfill({ json: overridden });
+  });
+
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+
+  // Alice starts on the instance default (no override) → only "Change quota".
+  await expect(page.getByRole("button", { name: "Change storage quota for alice" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Reset alice to the instance default quota" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Change storage quota for alice" }).click();
+  await page.getByRole("spinbutton", { name: "Storage quota in GB for alice" }).fill("50");
+  const saved = page.waitForResponse(
+    (r) => UPDATE.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Save storage quota for alice" }).click();
+  await saved;
+  expect(lastQuota).toBe(50 * 1024 ** 3);
+
+  // The override now shows a Reset control; resetting sends null.
+  const reset = page.getByRole("button", { name: "Reset alice to the instance default quota" });
+  await expect(reset).toBeVisible();
+  const wasReset = page.waitForResponse(
+    (r) => UPDATE.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
+  );
+  await reset.click();
+  await wasReset;
+  expect(lastQuota).toBeNull();
 });
 
 test("an admin can deactivate a user", async ({ page }) => {
