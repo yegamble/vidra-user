@@ -7,12 +7,14 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
   type RefObject,
 } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
 import { CommentsSection } from "@/components/CommentsSection";
+import type { DonateSource } from "@/components/DonateButton";
 import { DownloadButton } from "@/components/DownloadButton";
 import { KeyboardShortcutsHelp } from "@/components/KeyboardShortcutsHelp";
 import { VideoPlayer, type CaptionTrack } from "@/components/player/VideoPlayer";
@@ -22,13 +24,16 @@ import { RelatedVideos } from "@/components/RelatedVideos";
 import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
-import { Avatar } from "@/components/ui/Avatar";
+import { SupportButton } from "@/components/SupportButton";
+import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
+import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar";
+import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, channelAvatarUrl, videoCaptionUrl } from "@/lib/api";
+import { ApiError, api, ipfsHlsMasterUrl, videoCaptionUrl } from "@/lib/api";
 import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
-import type { Video, VideoConfigResponse } from "@/lib/api";
+import type { Channel, Video, VideoConfigResponse } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
@@ -74,6 +79,23 @@ export function WatchView({ id }: { id: string }) {
   // (cached, once per page load) only when the video carries any of them.
   const [config, setConfig] = useState<VideoConfigResponse | null>(null);
   const [configFailed, setConfigFailed] = useState(false);
+  // The owning channel's detail — fetched lazily to fill the channel row's
+  // follower count and the Support sources' account scope (owner id). Absent
+  // fields (a failed/pending read, or a remote video with no local channel)
+  // degrade gracefully: the row omits the count, Support falls back to the
+  // channel-scoped read alone. Never fabricated.
+  const [channel, setChannel] = useState<Channel | null>(null);
+  // IPFS playback surface (DR5): the video streams from the authoritative server
+  // by default; a viewer can opt into the IPFS gateway mirror. "fetching" probes
+  // the gateway HLS master; "ipfs" plays from it; "error" fell back to server.
+  const [ipfsState, setIpfsState] = useState<IpfsSource>("server");
+  const ipfsProbeRef = useRef<AbortController | null>(null);
+
+  // Content-addressed IPFS HLS master, present only when the detail carries a
+  // pinned HLS CID + gateway AND the video has a transcoded ladder (IPFS
+  // playback is HLS). Drives whether the source bar is offered at all.
+  const ipfsMasterUrl = ipfsHlsMasterUrl(video?.ipfs);
+  const ipfsAvailable = Boolean(video?.ipfs_pinned && ipfsMasterUrl && video?.hls_url);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,6 +129,71 @@ export function WatchView({ id }: { id: string }) {
     };
   }, [hasTaxonomy]);
 
+  // Load the owning channel (for the follower count + Support account scope) once
+  // the video resolves and carries a local channel handle. Fails silently.
+  const channelHandleForFetch = video?.channel_handle ?? null;
+  useEffect(() => {
+    if (!channelHandleForFetch) return;
+    const controller = new AbortController();
+    api
+      .getChannel(channelHandleForFetch, controller.signal)
+      .then((c) => setChannel(c))
+      .catch(() => {
+        /* No follower count / account-scope source if the read fails. */
+      });
+    return () => controller.abort();
+  }, [channelHandleForFetch]);
+
+  // Reset the IPFS source + channel when navigating to another video (React's
+  // "adjust state on prop change" render-phase pattern — the same component stays
+  // mounted across /videos/[id] param changes, so an effect-time reset would lag a
+  // frame). Tracked via state (not a ref) to satisfy the render-purity rules.
+  const currentVideoId = video?.id ?? null;
+  const [seenVideoId, setSeenVideoId] = useState(currentVideoId);
+  if (seenVideoId !== currentVideoId) {
+    setSeenVideoId(currentVideoId);
+    setIpfsState("server");
+    setChannel(null);
+  }
+
+  // Abort any in-flight IPFS probe when the video changes or the page unmounts.
+  useEffect(
+    () => () => {
+      ipfsProbeRef.current?.abort();
+      ipfsProbeRef.current = null;
+    },
+    [currentVideoId],
+  );
+
+  // Opt into IPFS: probe the gateway HLS master. A real fetch outcome — ok →
+  // play from IPFS, not-ok/network error → the error state (peer-free copy).
+  const tryIpfs = useCallback(() => {
+    if (!ipfsMasterUrl) return;
+    ipfsProbeRef.current?.abort();
+    const controller = new AbortController();
+    ipfsProbeRef.current = controller;
+    setIpfsState("fetching");
+    fetch(ipfsMasterUrl, { signal: controller.signal })
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        setIpfsState(res.ok ? "ipfs" : "error");
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setIpfsState("error");
+      });
+  }, [ipfsMasterUrl]);
+
+  const switchToServer = useCallback(() => {
+    ipfsProbeRef.current?.abort();
+    ipfsProbeRef.current = null;
+    setIpfsState("server");
+  }, []);
+
+  const toggleSource = useCallback(() => {
+    if (ipfsState === "ipfs" || ipfsState === "fetching") switchToServer();
+    else tryIpfs();
+  }, [ipfsState, switchToServer, tryIpfs]);
+
   function retry() {
     setStatus("loading");
     setReloadKey((k) => k + 1);
@@ -138,9 +225,33 @@ export function WatchView({ id }: { id: string }) {
 
   // The detail response carries the owning channel's handle/display name (Wave A
   // contract) when it is a local video; a remote card has neither. Rendered as a
-  // real affordance to /channels/{handle} rather than muted grey text.
+  // real channel row (avatar + name + followers + Follow) rather than muted text.
   const channelHandle = video.channel_handle ?? null;
   const channelName = video.channel_display_name || channelHandle || "";
+
+  // Support (crypto donations) reads both the channel-scoped and, once the
+  // channel detail resolves, the account-scoped public addresses — matching the
+  // channel page's sources. The button self-hides when neither exposes any.
+  const supportSources: DonateSource[] = channelHandle
+    ? channel?.owner_id
+      ? [
+          { kind: "channel", handle: channelHandle },
+          { kind: "user", userId: channel.owner_id },
+        ]
+      : [{ kind: "channel", handle: channelHandle }]
+    : [];
+
+  // Only stream from IPFS while it is the confirmed source; the server ladder
+  // stays the fallback inside the player. Fetching/error paint the overlay.
+  const hlsMasterOverride = ipfsState === "ipfs" ? ipfsMasterUrl : null;
+  const playerOverlay =
+    ipfsState === "fetching" || ipfsState === "error" ? (
+      <IpfsPlayerOverlay
+        state={ipfsState}
+        onRefetch={tryIpfs}
+        onUseServer={switchToServer}
+      />
+    ) : null;
 
   const chips: Array<{ key: string; label: string; sr?: string }> = [];
   if (typeof video.duration_seconds === "number") {
@@ -187,39 +298,67 @@ export function WatchView({ id }: { id: string }) {
     >
       <div className="flex min-w-0 flex-1 flex-col gap-8">
       <article className="flex flex-col gap-4">
-        <Player video={video} videoRef={playerRef} startAt={startAt} nextVideo={nextVideo} />
+        <div className="flex flex-col">
+          <Player
+            video={video}
+            videoRef={playerRef}
+            startAt={startAt}
+            nextVideo={nextVideo}
+            hlsMasterOverride={hlsMasterOverride}
+            overlay={playerOverlay}
+          />
+          {/* IPFS source bar — only when the video is gateway-mirrored. */}
+          {ipfsAvailable ? (
+            <IpfsSourceBar
+              state={ipfsState}
+              onToggle={toggleSource}
+              onRefetch={tryIpfs}
+            />
+          ) : null}
+        </div>
 
         <div className="flex flex-col gap-3">
           <h1 className="text-lg font-bold leading-snug tracking-tight sm:text-xl">
             {video.title}
           </h1>
-          {/* Title-first metadata block: channel identity (avatar + name) leads,
-              then a muted `views · age` remainder — reading `channel · views ·
-              age` in the template's card language, sized up for the watch page. */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            {channelHandle ? (
-              <Link
-                href={`/channels/${channelHandle}`}
-                className="focus-ring group -mx-1 inline-flex items-center gap-2.5 rounded-full px-1"
-              >
-                <Avatar
-                  src={channelAvatarUrl(channelHandle)}
-                  name={channelName}
-                  className="h-9 w-9 text-[13px]"
-                />
-                <span className="text-sm font-semibold text-fg transition-colors group-hover:text-fg-muted">
-                  {channelName}
-                </span>
-              </Link>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-muted">
-              {/* Owner-facing badge: a private video only ever loads for its
-                  owner; an unlisted one tells anyone with the link how it is
-                  shared. Public renders nothing. */}
-              <PrivacyBadge privacy={video.privacy ?? "public"} />
-              {meta.length > 0 ? <span className="tabular-nums">{meta.join(" · ")}</span> : null}
-            </div>
+          {/* views · age (+ owner-facing privacy badge). */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-muted">
+            {/* Owner-facing badge: a private video only ever loads for its
+                owner; an unlisted one tells anyone with the link how it is
+                shared. Public renders nothing. */}
+            <PrivacyBadge privacy={video.privacy ?? "public"} />
+            {meta.length > 0 ? <span className="tabular-nums">{meta.join(" · ")}</span> : null}
           </div>
+          {/* Action row — Support (accent) leads, then the tonal pills; scrolls
+              horizontally on a phone (design), wraps on desktop. */}
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto border-t border-border-subtle pt-4 lg:flex-wrap lg:overflow-x-visible">
+            {channelHandle ? (
+              <SupportButton sources={supportSources} name={channelName || "this creator"} />
+            ) : null}
+            <RatingControls videoId={video.id} />
+            <SaveButton videoId={video.id} />
+            <AddToPlaylistButton videoId={video.id} />
+            <ShareButton
+              videoId={video.id}
+              title={video.title}
+              getCurrentTime={() => playerRef.current?.currentTime ?? 0}
+            />
+            <DownloadButton videoId={video.id} />
+            <ReportButton kind="video" targetId={video.id} />
+          </div>
+          {/* Channel row: avatar + name (link) + followers + Follow toggle. */}
+          {channelHandle ? (
+            <WatchChannelCard
+              handle={channelHandle}
+              name={channelName}
+              followerCount={channel?.follower_count ?? null}
+              onDelta={(d) =>
+                setChannel((c) =>
+                  c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c,
+                )
+              }
+            />
+          ) : null}
           {/* Secondary technical/taxonomy chips (duration, dimensions,
               category/language/license) on their own quiet row. */}
           {chips.length > 0 ? (
@@ -235,18 +374,6 @@ export function WatchView({ id }: { id: string }) {
               ))}
             </div>
           ) : null}
-          <div className="flex flex-wrap items-center gap-2 border-t border-border-subtle pt-4">
-            <RatingControls videoId={video.id} />
-            <SaveButton videoId={video.id} />
-            <AddToPlaylistButton videoId={video.id} />
-            <ShareButton
-              videoId={video.id}
-              title={video.title}
-              getCurrentTime={() => playerRef.current?.currentTime ?? 0}
-            />
-            <DownloadButton videoId={video.id} />
-            <ReportButton kind="video" targetId={video.id} />
-          </div>
           {video.tags && video.tags.length > 0 ? (
             <ul aria-label="Tags" className="flex flex-wrap items-center gap-1.5">
               {video.tags.map((tag) => (
@@ -291,11 +418,15 @@ function Player({
   videoRef,
   startAt,
   nextVideo,
+  hlsMasterOverride,
+  overlay,
 }: {
   video: Video;
   videoRef: RefObject<HTMLVideoElement | null>;
   startAt: number | null;
   nextVideo: Video | null;
+  hlsMasterOverride: string | null;
+  overlay: ReactNode;
 }) {
   const { status: sessionStatus } = useSession();
   const authed = sessionStatus === "authed";
@@ -393,6 +524,8 @@ function Player({
         startAt={startAt}
         tracks={tracks}
         nextVideo={nextVideo}
+        hlsMasterOverride={hlsMasterOverride}
+        overlay={overlay}
         onPlay={recordThrottled}
         onTimeUpdate={recordThrottled}
         onPause={record}

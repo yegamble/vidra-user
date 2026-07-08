@@ -1080,12 +1080,97 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
         deltas and get their own verification in DR6/DR7.
 
 ## DR5 — Watch page (mobile + desktop)
-- [ ] Player chrome (chip time/CC/quality, thin white progress, center play, mobile chevron
+- [x] Player chrome (chip time/CC/quality, thin white progress, center play, mobile chevron
       minimize); IPFS source bar + player fetching/error states, PEER-FREE copy (§5.1);
       actions row (Support accent-first heart, Share/Download/Save tonal, Report tonal);
       Support sheet/dialog (QR + mono address); channel row + Follow toggle; comments
       collapsed "View N replies" + border-l rail + [deleted] tombstone (coordinate composer
       with ../comment-reply-attribution/). Evidence (incl. IPFS ok/fetching/error) + CI + push.
+      **DONE 2026-07-07.** The watch page adopts the design over the W1 bespoke player —
+      chrome restyled, playback logic untouched — with the new IPFS, Support, channel, and
+      comment surfaces bound to real contracts.
+      • **IPFS source bar + player states (the signature DR5 surface, real).** Verified the
+        contract FRESH in `vidra-core/api/openapi.yaml`: `Video.ipfs_pinned` + detail
+        `Video.ipfs { original_cid, hls_cid, gateway_url }` (P19). New `ipfsHlsMasterUrl(ipfs)`
+        (`lib/api/endpoints.ts` + test) builds the content-addressed `{gateway}/ipfs/{hls_cid}/
+        master.m3u8`, or null when unpinned. New `components/watch/IpfsSourceBar.tsx` (dot +
+        peer-free label + rotate-cw re-fetch + tonal Use server/Use IPFS toggle) renders only
+        when `ipfs_pinned && hls_cid && gateway_url && hls_url`. Playback defaults to the
+        AUTHORITATIVE SERVER; opting into IPFS runs a REAL probe (`fetch` of the gateway
+        master) → ok switches the player source via a minimal `useHlsPlayback` **extension**
+        (`hlsMasterOverride`, additive — the /original fallback stays the server, so a
+        mid-stream IPFS failure degrades to server, not a dead player) → error paints the
+        `IpfsPlayerOverlay` (VideoPlayer's new `overlay` slot). **Peer-free copy per §5.1:**
+        "Playing from server (HLS)" / "IPFS · pinned" / "IPFS · fetching…" / "IPFS ·
+        unavailable — playing from server"; overlay "Fetching from IPFS…" and "Couldn't
+        retrieve this video from IPFS" + "The IPFS gateway couldn't return this video right
+        now." + Re-fetch / Play from server. **No peer counts anywhere** (asserted in e2e).
+      • **Support dialog on the shipped donations API (real).** New `components/SupportButton.tsx`
+        — accent-filled heart pill (FIRST action), self-hides unless the channel/owner exposes a
+        public address (`GET /channels/{handle}/donation-addresses` + `/users/{id}/…`). Dialog:
+        per-network cards with a QR tile (client-generated from the address via the existing
+        `QrCode`), mono address, Copy w/ "Copied" feedback, **VERIFIED = success TINT pill**
+        (`Badge variant=success status` — the AA-safe pattern, NOT the design's failing
+        white-on-green solid, per §2) / UNVERIFIED = strong pill, status caption, non-custodial
+        disclaimers. Responsive bottom-sheet (mobile) / centered dialog (desktop) via the shared
+        `Modal` variants.
+      • **Action row.** Support (accent) leads, then the existing tonal pills — Rating / Save /
+        Add-to-playlist / Share / Download / Report; horizontally scrollable on a phone (design),
+        wraps on desktop. Report muted to `text-fg-muted` (design). Rating + playlist KEPT (real
+        features the mockup omits — additive, not stubbed/removed).
+      • **Channel row (real).** New `components/watch/WatchChannelCard.tsx` — surface-muted
+        rounded-[14px] card: avatar + name (link to `/channels/{handle}`) + "N followers" (from
+        a lazy `getChannel` read — omitted when pending/failed, never fabricated) + Follow toggle.
+        Extracted the shared `components/FollowButton.tsx` (ChannelView's private copy folded into
+        it — one source now, DR6 reuses it). Support sources also pick up the owner id from that
+        read (account-scope addresses), matching the channel page.
+      • **Comments (design thread treatment; composer left for ../comment-reply-attribution/).**
+        `CommentsSection`: reply threads now **collapsed by default** behind a "View N replies" /
+        "Hide replies" toggle (chevron rotates 180°) over the existing `border-l-2` rail; posting
+        a reply auto-expands its thread. **[deleted] tombstone**: a `deleted:true` comment (real
+        backend tombstone — `Comment.deleted`, body "[deleted]", thread preserved) renders as a
+        de-emphasised placeholder (·-avatar + italic **fg-muted** — NOT fg-subtle, keeping it
+        AA-legible per the repo rule) with NO controls and its replies intact. Coordinated with
+        the parallel attribution package (its spec present, not yet landed): this slice owns only
+        the visual thread/tombstone treatment; the @-mention composer affordance stays that
+        package's — no composer restyle here (whichever lands second rebases).
+      • **Player chrome.** The W1 bespoke player already renders the design's language (rounded-2xl
+        media, 64px black/45 center-play circle, dark scrim, white glyph controls, thin progress).
+        Its interactive bar (volume, CC toggle, speed, quality, theater, PiP, fullscreen) is a
+        deliberate **superset** of the mockup's static CC/quality chips — NOT stripped to match a
+        picture (would regress shipped features). The mockup's "chevron-down minimize" maps to no
+        route-based watch page (there is no overlay to minimize) — recorded, not invented.
+      • **Tests (unit + e2e, same slice).** New unit: `IpfsSourceBar` (4), `IpfsPlayerOverlay` (2),
+        `SupportButton` (4), `FollowButton` (2), `WatchChannelCard` (2), `ipfsHlsMasterUrl`
+        (endpoints). New e2e: `watch-ipfs.spec.ts` (3 — server default, opt-in→pinned, gateway
+        fail→error→recover; each asserts ZERO "peer" text), `watch-support.spec.ts` (3 — channel
+        row + follower count + Follow; Support dialog QR/address/verified; no-address→no button).
+        Updated `comments.spec.ts` (collapsed-reply toggle) + a new tombstone test.
+      • **Evidence.** `npm run design:shots` → `.ralph/design-review/dr5/after/{watch,watch-ipfs,
+        watch-ipfs-error,watch-support}` (light+dark × mobile+desktop; git-ignored), captured
+        against `PORT=3181 npm run dev` (stale port killed before, server killed after). Read the
+        after-PNGs vs the design source: mobile watch = source bar ("Playing from server (HLS)" +
+        Use IPFS), Support-first accent action row, surface-muted channel card w/ "48.2K
+        followers" + Follow, chips/tags/description; IPFS-ok = green dot "IPFS · pinned" + Use
+        server (no peer count); IPFS-error = black-scrim overlay w/ peer-free copy + Re-fetch/Play
+        from server + red-dot bar; Support dialog = 440px w/ Bitcoin(UNVERIFIED) + Ethereum(green
+        VERIFIED tint) QR cards, mono addresses, disclaimer. Dark inverts via tokens; no 390px
+        overflow.
+      • **Gate.** Full `npm run ci` GREEN on the final tree — typecheck ✓ lint ✓ lint:icons ✓ unit
+        **587/587** (55 files, +14 DR5) ✓ `next build` ✓ mocked e2e **409/409 (0 failed, no
+        flakes)** on the first full run (+6 watch-ipfs/support, +1 comments tombstone). Token grep
+        clean on changed files: semantic tokens only + the sanctioned media-overlay `bg-black/*`
+        + `text-white`/`bg-white` on the IPFS player states (theme-invariant, like the LIVE/IPFS
+        chips).
+      • **Deviations / dependencies (honest).** (1) IPFS gateway HLS layout `{gateway}/ipfs/
+        {hls_cid}/master.m3u8` is inferred from §5.1 ("HLS via {gateway_url}/ipfs/{hls_cid}") —
+        the exact in-CID path is an assumption; a wrong path fails the probe → the error state +
+        server fallback handle it gracefully (no dead player). (2) Per-video peer counts + true
+        client-side P2P fetch remain **aspirational** (§5.1) — no backend field/endpoint; not
+        stubbed. (3) Desktop "views·age bold prefix inside the description card" (design) is
+        rendered near the title instead (kept watch.spec + avoids duplicating the meta) — the
+        info is present, position differs. (4) Support mobile-sheet vs desktop-dialog chosen by
+        `matchMedia` (guarded for the test env).
 
 ## DR6 — Channel page
 - [ ] Banner + overlapping avatar, action cluster, underline tabs, 2/4-col grids. CI + push.

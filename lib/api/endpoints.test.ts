@@ -4,6 +4,7 @@ import {
   api,
   channelAvatarUrl,
   channelBannerUrl,
+  ipfsHlsMasterUrl,
   remoteVideoThumbnailUrl,
   userAvatarUrl,
   userBannerUrl,
@@ -120,6 +121,20 @@ describe("api endpoints", () => {
     expect(videoHlsMasterUrl("a/b")).toBe(
       "http://localhost:8080/api/v1/videos/a%2Fb/hls/master.m3u8",
     );
+  });
+
+  it("ipfsHlsMasterUrl builds a content-addressed gateway URL, or null when unpinned", () => {
+    expect(
+      ipfsHlsMasterUrl({ gateway_url: "https://ipfs.example.org", hls_cid: "bafyCID" }),
+    ).toBe("https://ipfs.example.org/ipfs/bafyCID/master.m3u8");
+    // Trailing slashes on the gateway are trimmed (no double slash).
+    expect(
+      ipfsHlsMasterUrl({ gateway_url: "https://ipfs.example.org/", hls_cid: "bafyCID" }),
+    ).toBe("https://ipfs.example.org/ipfs/bafyCID/master.m3u8");
+    // Either field missing (HLS tree not pinned / IPFS off) ⇒ no IPFS source.
+    expect(ipfsHlsMasterUrl({ gateway_url: "https://ipfs.example.org" })).toBeNull();
+    expect(ipfsHlsMasterUrl({ hls_cid: "bafyCID" })).toBeNull();
+    expect(ipfsHlsMasterUrl(undefined)).toBeNull();
   });
 
   it("liveHlsMasterUrl builds the live master-playlist URL with the id encoded", () => {

@@ -310,14 +310,52 @@ test("renders a reply nested one level under its parent comment", async ({ page 
   await expect(page.getByText("parent comment")).toBeVisible();
 
   const commentsRegion = page.getByRole("region", { name: "Comments" });
-  // The reply lives inside the parent's "Replies" list (indented one level),
-  // not as a sibling top-level comment.
+  // Replies are collapsed by default behind a "View N replies" toggle (design).
+  const toggle = commentsRegion.getByRole("button", { name: "View 1 reply" });
+  await expect(toggle).toBeVisible();
+  await expect(commentsRegion.getByRole("list", { name: "Replies" })).toHaveCount(0);
+  await toggle.click();
+
+  // Expanded: the reply lives inside the parent's "Replies" list (indented one
+  // level), not as a sibling top-level comment; the toggle flips to "Hide replies".
   const replies = commentsRegion.getByRole("list", { name: "Replies" });
   await expect(replies).toHaveCount(1);
   await expect(replies.getByText("child reply")).toBeVisible();
-  await expect(commentsRegion.getByText("1 reply")).toBeVisible();
+  await expect(commentsRegion.getByRole("button", { name: "Hide replies" })).toBeVisible();
   // The heading counts every comment (flat), parent + reply.
   await expect(page.getByRole("heading", { name: "Comments (2)" })).toBeVisible();
+});
+
+test("a tombstoned comment renders as [deleted] with its reply thread preserved", async ({
+  page,
+}) => {
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) =>
+    route.fulfill({
+      json: {
+        comments: [
+          // A tombstone: the author's account was deleted; the body is erased to
+          // "[deleted]" and the thread stays intact (backend `deleted: true`).
+          { ...comment("c1", "[deleted]"), deleted: true },
+          { ...comment("c2", "still here"), parent_id: "c1" },
+        ],
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+
+  await page.goto("/videos/v1");
+  const commentsRegion = page.getByRole("region", { name: "Comments" });
+  // The tombstone shows "[deleted]" and offers no controls (no Reply on it).
+  await expect(commentsRegion.getByText("[deleted]")).toBeVisible();
+  // The preserved reply is reachable via the thread toggle.
+  await commentsRegion.getByRole("button", { name: "View 1 reply" }).click();
+  await expect(
+    commentsRegion.getByRole("list", { name: "Replies" }).getByText("still here"),
+  ).toBeVisible();
 });
 
 test("an authenticated viewer can reply, and the POST carries the parent_id", async ({ page }) => {

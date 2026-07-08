@@ -77,6 +77,8 @@ export function VideoPlayer({
   tracks = [],
   poster,
   nextVideo = null,
+  hlsMasterOverride = null,
+  overlay = null,
   onPlay,
   onTimeUpdate,
   onPause,
@@ -90,6 +92,17 @@ export function VideoPlayer({
   /** Explicit poster override; defaults to the video's own thumbnail when it has one. */
   poster?: string;
   /**
+   * Play the HLS ladder from this URL instead of the server one — the video's
+   * IPFS gateway mirror (DR5). The progressive /original fallback stays the
+   * authoritative server source, so a mid-stream IPFS failure degrades to it.
+   */
+  hlsMasterOverride?: string | null;
+  /**
+   * A layer painted over the whole media surface (above the controls) — the
+   * IPFS fetching/error states WatchView drives. Covers the video while active.
+   */
+  overlay?: ReactNode;
+  /**
    * The video to queue on the end card (PLAY-08) — the first related entry,
    * supplied by WatchView. null (embed, or nothing related) ⇒ the end card shows
    * a plain replay affordance with no countdown.
@@ -101,7 +114,7 @@ export function VideoPlayer({
   /** Rendered inside the media container, over the video (e.g. the embed title link). */
   children?: ReactNode;
 }) {
-  const playback = useHlsPlayback(videoRef, video, startAt);
+  const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Seek-preview storyboard (CORE-16): null when the detail has none, so the
@@ -660,6 +673,10 @@ export function VideoPlayer({
           onDismiss={dismissEndCard}
         />
       ) : null}
+
+      {/* IPFS fetching/error surface (DR5) — the topmost layer, over the video
+          and controls. Content is owned by WatchView (peer-free copy). */}
+      {overlay}
     </div>
   );
 }

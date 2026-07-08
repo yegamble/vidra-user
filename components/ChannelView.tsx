@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
 import { DonateButton } from "@/components/DonateButton";
+import { FollowButton } from "@/components/FollowButton";
 import { Avatar } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { LinkButton } from "@/components/ui/LinkButton";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
@@ -184,57 +182,6 @@ function ChannelBanner({ handle }: { handle: string }) {
       onError={() => setBroken(true)}
       className="h-full w-full object-cover"
     />
-  );
-}
-
-// FollowButton toggles a follow on the channel for the signed-in user, in the
-// template's follow affordance: an accent-filled "Follow" when not following,
-// an outlined "Following" once followed (design-system channel-header pattern,
-// matching the app's FOLLOWING vocabulary and the follow/unfollow API). The
-// public channel endpoint carries no "is following" flag, so the button starts
-// at "Follow" and tracks state locally (follow/unfollow are idempotent
-// server-side); onDelta nudges the displayed follower count optimistically.
-// Anonymous visitors get a sign-in link instead.
-function FollowButton({ handle, onDelta }: { handle: string; onDelta: (d: number) => void }) {
-  const { status } = useSession();
-  const [following, setFollowing] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  if (status !== "authed") {
-    return (
-      <LinkButton href="/login" variant="secondary" className="px-5">
-        Sign in to follow
-      </LinkButton>
-    );
-  }
-
-  async function toggle() {
-    setBusy(true);
-    const next = !following;
-    try {
-      if (next) {
-        await api.followChannel(handle);
-      } else {
-        await api.unfollowChannel(handle);
-      }
-      setFollowing(next);
-      onDelta(next ? 1 : -1);
-    } catch {
-      // Leave the button state unchanged on failure.
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Button
-      variant={following ? "secondary" : "primary"}
-      disabled={busy}
-      onClick={() => void toggle()}
-      className="px-5"
-    >
-      {following ? "Following" : "Follow"}
-    </Button>
   );
 }
 

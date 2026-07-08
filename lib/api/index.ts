@@ -13,6 +13,7 @@ export {
   api,
   channelAvatarUrl,
   channelBannerUrl,
+  ipfsHlsMasterUrl,
   liveHlsMasterUrl,
   playlistThumbnailUrl,
   remoteVideoThumbnailUrl,

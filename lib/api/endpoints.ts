@@ -1541,6 +1541,23 @@ export function videoHlsMasterUrl(id: string): string {
 }
 
 /**
+ * Content-addressed URL to a video's IPFS-mirrored HLS master playlist, built
+ * from the detail's `ipfs` object ({ gateway_url, hls_cid }). Returns null when
+ * either field is absent (the video's HLS tree is not pinned / IPFS is off), so
+ * a caller only offers IPFS playback when a real gateway CID exists — never a
+ * fabricated one. The master lives at the root of the pinned HLS wrap-directory
+ * CID; a client fetches it as plain HTTP from the public gateway.
+ */
+export function ipfsHlsMasterUrl(ipfs?: {
+  gateway_url?: string;
+  hls_cid?: string;
+}): string | null {
+  if (!ipfs?.gateway_url || !ipfs.hls_cid) return null;
+  const base = ipfs.gateway_url.replace(/\/+$/, "");
+  return `${base}/ipfs/${encodeURIComponent(ipfs.hls_cid)}/master.m3u8`;
+}
+
+/**
  * Direct URL to a live stream's HLS master playlist. Only meaningful while the
  * stream is live and a media server is serving it (the get response's `hls_url`
  * is the readiness signal — the playlist 404s otherwise). The path is

@@ -67,6 +67,11 @@ export function useHlsPlayback(
   videoRef: RefObject<HTMLVideoElement | null>,
   video: { id: string; hls_url?: string },
   startAt: number | null,
+  // Optional HLS master URL to stream from INSTEAD of the server one — used to
+  // play a video from its IPFS gateway mirror (DR5). It only overrides the HLS
+  // source; the progressive fallback stays the authoritative server /original,
+  // so a mid-stream IPFS failure degrades to server playback, not a dead player.
+  hlsMasterOverride?: string | null,
 ): HlsPlayback {
   const hasHls = Boolean(video.hls_url);
   // The id of a video whose hls.js pipeline fatally failed → play its original
@@ -143,7 +148,7 @@ export function useHlsPlayback(
             setFailedId(video.id);
           }
         });
-        hls.loadSource(videoHlsMasterUrl(video.id));
+        hls.loadSource(hlsMasterOverride || videoHlsMasterUrl(video.id));
         hls.attachMedia(el);
       })
       .catch(() => {
@@ -154,14 +159,14 @@ export function useHlsPlayback(
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [mode, video.id, videoRef, startAt]);
+  }, [mode, video.id, videoRef, startAt, hlsMasterOverride]);
 
   const fragment = startAt !== null ? `#t=${startAt}` : "";
   const src =
     mode === "hls-js"
       ? undefined
       : mode === "native-hls"
-        ? videoHlsMasterUrl(video.id) + fragment
+        ? (hlsMasterOverride || videoHlsMasterUrl(video.id)) + fragment
         : videoOriginalUrl(video.id) + fragment;
 
   return {

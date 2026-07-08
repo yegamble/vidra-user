@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ChevronDownIcon } from "@/components/icons";
 import { StartEncryptedButton } from "@/components/e2ee/StartEncryptedButton";
 import { MessageButton } from "@/components/MessageButton";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
@@ -283,6 +284,10 @@ function CommentItem({
   const [draft, setDraft] = useState(comment.body);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // Reply threads are collapsed by default (design): a "View N replies" toggle
+  // reveals them. Posting a reply from this thread auto-expands it so the new
+  // reply is visible.
+  const [repliesOpen, setRepliesOpen] = useState(false);
   const isRemote = comment.remote === true;
   // The local author's account id; null on federated comments (no local account).
   const authorId = !isRemote && comment.author_id ? comment.author_id : null;
@@ -360,6 +365,80 @@ function CommentItem({
     } finally {
       setBlocking(false);
     }
+  }
+
+  // Posting a reply from within this thread reveals it (so the new reply is
+  // seen) and appends to the shared flat list.
+  function handleReplied(c: Comment) {
+    onReplied(c);
+    setRepliesOpen(true);
+  }
+
+  // Collapsed-by-default reply thread (design): a "View N replies" / "Hide
+  // replies" toggle with a chevron that rotates when open, over the border-l
+  // rail. Shared by the normal and tombstone renderings (replies survive a
+  // tombstoned parent).
+  const repliesBlock =
+    replies.length > 0 ? (
+      <div className="ml-[46px] flex flex-col gap-3">
+        <button
+          type="button"
+          aria-expanded={repliesOpen}
+          onClick={() => setRepliesOpen((v) => !v)}
+          className="focus-ring flex w-fit items-center gap-1.5 rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg"
+        >
+          <ChevronDownIcon
+            size={14}
+            strokeWidth={2.4}
+            className={repliesOpen ? "rotate-180 transition-transform" : "transition-transform"}
+          />
+          {repliesOpen
+            ? "Hide replies"
+            : replies.length === 1
+              ? "View 1 reply"
+              : `View ${replies.length} replies`}
+        </button>
+        {repliesOpen ? (
+          <ul
+            aria-label="Replies"
+            className="flex flex-col gap-4 border-l-2 border-border-subtle pl-4"
+          >
+            {replies.map((r) => (
+              <CommentItem
+                key={r.id}
+                comment={r}
+                replies={[]}
+                videoId={videoId}
+                onReplied={handleReplied}
+                onDeleted={onDeleted}
+                onEdited={onEdited}
+                onMutedAuthor={onMutedAuthor}
+                onMutedInstance={onMutedInstance}
+              />
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    ) : null;
+
+  // Tombstone (design): a comment whose author's account was permanently deleted
+  // renders as a de-emphasised "[deleted]" placeholder — no controls — with its
+  // reply thread preserved. fg-muted (not fg-subtle) keeps it AA-legible.
+  if (comment.deleted) {
+    return (
+      <li className="flex flex-col gap-3">
+        <div className="flex gap-3">
+          <span
+            aria-hidden="true"
+            className="mt-0.5 flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-surface-muted text-fg-subtle"
+          >
+            ·
+          </span>
+          <p className="pt-1 text-sm italic text-fg-muted">[deleted]</p>
+        </div>
+        {repliesBlock}
+      </li>
+    );
   }
 
   return (
@@ -524,7 +603,7 @@ function CommentItem({
             <ReplyComposer
               videoId={videoId}
               parentId={comment.id}
-              onReplied={onReplied}
+              onReplied={handleReplied}
               onCancel={() => setReplying(false)}
             />
           ) : (
@@ -541,32 +620,9 @@ function CommentItem({
         </div>
       ) : null}
 
-      {/* Flattened replies (one visual level, PeerTube-style). */}
-      {replies.length > 0 ? (
-        <div className="ml-[46px] flex flex-col gap-3">
-          <p className="text-xs font-semibold text-fg-muted">
-            {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
-          </p>
-          <ul
-            aria-label="Replies"
-            className="flex flex-col gap-4 border-l-2 border-border-subtle pl-4"
-          >
-            {replies.map((r) => (
-              <CommentItem
-                key={r.id}
-                comment={r}
-                replies={[]}
-                videoId={videoId}
-                onReplied={onReplied}
-                onDeleted={onDeleted}
-                onEdited={onEdited}
-                onMutedAuthor={onMutedAuthor}
-                onMutedInstance={onMutedInstance}
-              />
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      {/* Flattened replies (one visual level, PeerTube-style), collapsed behind
+          the "View N replies" toggle. */}
+      {repliesBlock}
     </li>
   );
 }

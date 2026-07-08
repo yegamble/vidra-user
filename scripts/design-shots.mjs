@@ -208,6 +208,37 @@ const SAMPLE_DETAIL = {
     { height: 720, width: 1280 },
     { height: 480, width: 854 },
   ],
+  // IPFS mirror (DR5) so the watch capture shows the source bar. The gateway is a
+  // synthetic host; the harness mocks its master playlist for the ok/error shots.
+  ipfs_pinned: true,
+  ipfs: { hls_cid: "bafyHLScid", gateway_url: "https://ipfs.example.test" },
+};
+
+// Public donation addresses so the watch/channel Support affordance renders (an
+// ETH address verified via signed message + an unverified BTC one).
+const SAMPLE_DONATIONS = {
+  addresses: [
+    {
+      id: "da-eth",
+      owner_id: "u9",
+      network: "ethereum",
+      address: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
+      label: "Main",
+      verified: true,
+      created_at: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+    },
+    {
+      id: "da-btc",
+      owner_id: "u9",
+      network: "bitcoin",
+      address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+      label: "",
+      verified: false,
+      created_at: new Date(Date.now() - 60 * 86_400_000).toISOString(),
+    },
+  ],
+  limit: 20,
+  offset: 0,
 };
 
 // A synthetic 3-rung master playlist so hls.js parses a real ladder and the
@@ -881,6 +912,61 @@ const AREAS = {
       await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
         route.fulfill({ json: SAMPLE_CHANNEL_VIDEOS }),
       );
+      // Channel detail (follower count + owner id) + public donation addresses
+      // so the watch channel row + Support affordance render (DR5).
+      await page.route(/\/api\/v1\/channels\/grade-house$/, (route) =>
+        route.fulfill({ json: SAMPLE_CHANNEL }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/donation-addresses/, (route) =>
+        route.fulfill({ json: SAMPLE_DONATIONS }),
+      );
+      await page.route(/\/api\/v1\/users\/u9\/donation-addresses/, (route) =>
+        route.fulfill({ json: { addresses: [], limit: 20, offset: 0 } }),
+      );
+    },
+  },
+  // Watch page — IPFS playing from the mirror (DR5): opt into IPFS, the gateway
+  // master answers, the source bar settles on "IPFS · pinned". Reuses the watch
+  // mock; the gateway master is served (probe + hls.js), variants/segs abort.
+  "watch-ipfs": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+      await page.route(/bafyHLScid\/[^/]+\/.+/, (route) => route.abort());
+      await page.route(/bafyHLScid\/master\.m3u8$/, (route) =>
+        route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: SAMPLE_HLS_MASTER }),
+      );
+    },
+    async act(page) {
+      await page.getByRole("button", { name: "Use IPFS" }).click();
+      await page.getByText("IPFS · pinned").waitFor({ state: "visible" });
+    },
+  },
+  // Watch page — IPFS error state (DR5): the gateway is unreachable, so the probe
+  // fails and the player paints the peer-free error overlay with a server fallback.
+  "watch-ipfs-error": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+      await page.route(/ipfs\.example\.test\/ipfs\/bafyHLScid\/master\.m3u8/, (route) =>
+        route.abort(),
+      );
+    },
+    async act(page) {
+      await page.getByRole("button", { name: "Use IPFS" }).click();
+      await page.getByText("Couldn't retrieve this video from IPFS").waitFor({ state: "visible" });
+    },
+  },
+  // Watch page — Support dialog (DR5): the accent Support action opened to the
+  // crypto-donation dialog (QR tile + mono address + verified/unverified pills).
+  "watch-support": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+    },
+    async act(page) {
+      await page.getByRole("button", { name: "Support" }).click();
+      await page.getByRole("dialog", { name: /Support/ }).waitFor({ state: "visible" });
     },
   },
   // Embed player (backport W1.U1): the bespoke shell sized to fill the iframe
