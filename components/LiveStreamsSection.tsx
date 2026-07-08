@@ -8,7 +8,11 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
-import type { Channel, LiveStream, VideoPrivacy } from "@/lib/api";
+import type { Channel, CreateLiveStreamRequest, LiveStream } from "@/lib/api";
+
+// Live streams accept only public/unlisted/private (the create contract has no
+// "password" mode, unlike VOD videos) — narrow to exactly what the endpoint takes.
+type LivePrivacy = NonNullable<CreateLiveStreamRequest["privacy"]>;
 
 type Status = "loading" | "error" | "ready";
 
@@ -27,7 +31,7 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
   const [reloadKey, setReloadKey] = useState(0);
 
   const [title, setTitle] = useState("");
-  const [privacy, setPrivacy] = useState<VideoPrivacy>("public");
+  const [privacy, setPrivacy] = useState<LivePrivacy>("public");
   const [permanent, setPermanent] = useState(false);
   const [replayEnabled, setReplayEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -159,7 +163,7 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
         <Select
           label="Privacy"
           value={privacy}
-          onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
+          onChange={(e) => setPrivacy(e.target.value as LivePrivacy)}
           aria-label="Live privacy"
         >
           <option value="public">Public</option>

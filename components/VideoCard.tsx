@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { IpfsIcon } from "@/components/icons";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { channelAvatarUrl, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
@@ -9,11 +10,13 @@ import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 // Grid video card in the template's language (specs/design/{app,desktop}-template):
 // a borderless rounded-2xl thumbnail on the page background, then a row with the
 // channel avatar on the left and a title-first block on the right whose second,
-// muted line reads `channel · views · age`. The IPFS thumbnail badge (top-left,
-// per the templates) reflects the REAL `ipfs_pinned` field the feed/card contract
-// now carries (vidra-core P19) — shown only when true (public+published videos the
-// IPFS mirror has pinned; absent ⇒ treated as false, never stubbed). LIVE badges
-// stay omitted until the feed contract carries a live/state field for cards.
+// muted line reads `channel · views · age`. The IPFS thumbnail badge (top-left on
+// mobile with the cube glyph, top-right on desktop) reflects the REAL `ipfs_pinned`
+// field the feed/card contract carries (vidra-core P19) — shown only when true
+// (public+published videos the IPFS mirror has pinned; absent ⇒ treated as false,
+// never stubbed). LIVE badges stay omitted here: live streams are a table disjoint
+// from videos (the feed Video carries no live/state field), so live discovery is
+// the separate "Live now" rail (LiveNowRail, GET /api/v1/live), not a card badge.
 export function VideoCard({
   video,
   progressFraction,
@@ -77,28 +80,19 @@ export function VideoCard({
           )}
           {/* IPFS mirror badge (media-overlay exception: theme-invariant dark pill
               on the thumbnail, per design-system §Documented exceptions). Shown
-              only when the real pin state is true. The wrapping link is labelled
+              only when the real pin state is true. Per the design templates it
+              sits top-LEFT on mobile (with the 10×11 cube glyph) and top-RIGHT on
+              desktop (text-only, the corner the phone reserves for it is free on
+              the wider grid). Converged onto the shared IpfsIcon (design-refresh
+              icon set) — no more ad-hoc inline SVG. The wrapping link is labelled
               by the title, so this "IPFS" text does not affect its accessible
               name; the title attribute supplies the tooltip explanation. */}
           {video.ipfs_pinned === true ? (
             <span
-              className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold leading-none text-white backdrop-blur"
+              className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-[3px] text-[10.5px] font-semibold leading-none tracking-[0.03em] text-white/90 backdrop-blur lg:left-auto lg:right-2"
               title="Mirrored to IPFS"
             >
-              <svg
-                aria-hidden
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-3 w-3 shrink-0"
-              >
-                {/* Hexagon-cube glyph (IPFS-style): outer hex + top vertex spokes. */}
-                <path d="M12 2l8.66 5v10L12 22l-8.66-5V7z" />
-                <path d="M12 2v6M12 8l5.2-3M12 8L6.8 5" />
-              </svg>
+              <IpfsIcon size={11} className="shrink-0 lg:hidden" />
               IPFS
             </span>
           ) : null}
@@ -128,7 +122,7 @@ export function VideoCard({
           />
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h3 className="text-sm font-semibold leading-snug tracking-[-0.01em]">
+          <h3 className="text-[15.5px] font-semibold leading-snug tracking-[-0.01em] lg:text-sm">
             {/* line-clamp lives on the Link so the anchor fills the title block
                 (its own width, not just the text run): the whole two-line title
                 is the click/tap target, matching the card thumbnail link. */}

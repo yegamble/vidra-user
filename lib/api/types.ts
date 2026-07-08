@@ -174,6 +174,11 @@ export type UpdateLiveStreamRequest = Schemas["UpdateLiveStreamRequest"];
 export type CreateLiveStreamResponse = Schemas["CreateLiveStreamResponse"];
 export type LiveStreamListResponse = Schemas["LiveStreamListResponse"];
 export type LiveStreamKey = Schemas["LiveStreamKey"];
+// The public "Live now" listing card — a minimal, truthful projection of a
+// currently-live PUBLIC stream (no viewer count, no thumbnail: neither exists
+// server-side yet). Distinct from LiveStream (the owner/watch metadata).
+export type LiveStreamCard = Schemas["LiveStreamCard"];
+export type LivePublicListResponse = Schemas["LivePublicListResponse"];
 
 // --- Comments ---------------------------------------------------------------
 export type Comment = Schemas["Comment"];

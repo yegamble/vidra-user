@@ -755,6 +755,32 @@ const SAMPLE_ADMIN_COMMENTS = {
 // ---- area registry -----------------------------------------------------------
 
 /** @type {Record<string, { path: string, mock?: (page: import("@playwright/test").Page) => Promise<void>, act?: (page: import("@playwright/test").Page) => Promise<void> }>} */
+// Design-refresh DR4 "Live now" rail: GET /api/v1/live (public live listing).
+// No viewer count and no thumbnail exist in the contract (W4 dependencies), so
+// the sample carries neither — the rail renders LIVE-badged tiles only.
+const SAMPLE_LIVE = {
+  live_streams: [
+    {
+      id: "11111111-1111-1111-1111-111111111111",
+      title: "Late-night color grading session",
+      channel_handle: "gradehouse",
+      channel_display_name: "Grade House",
+      is_live: true,
+      started_at: new Date(Date.now() - 42 * 60_000).toISOString(),
+    },
+    {
+      id: "22222222-2222-2222-2222-222222222222",
+      title: "Shooting the Alps — live field diary",
+      channel_handle: "auroralab",
+      channel_display_name: "Aurora Lab",
+      is_live: true,
+      started_at: new Date(Date.now() - 9 * 60_000).toISOString(),
+    },
+  ],
+  limit: 20,
+  offset: 0,
+};
+
 const AREAS = {
   home: {
     path: "/",
@@ -764,6 +790,8 @@ const AREAS = {
       await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
         route.fulfill({ json: SAMPLE_VIDEO_CONFIG }),
       );
+      // /api/v1/live but NOT /api/v1/live/{id} — the "Live now" rail (DR4).
+      await page.route(/\/api\/v1\/live(\?|$)/, (route) => route.fulfill({ json: SAMPLE_LIVE }));
     },
   },
   // /trending shares the home feed's chip-led layout (backport W0.4): same
@@ -775,6 +803,7 @@ const AREAS = {
       await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
         route.fulfill({ json: SAMPLE_VIDEO_CONFIG }),
       );
+      await page.route(/\/api\/v1\/live(\?|$)/, (route) => route.fulfill({ json: SAMPLE_LIVE }));
     },
   },
   // Create bottom sheet (design refresh DR3): the phone Create tab opens a sheet

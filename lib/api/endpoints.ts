@@ -52,6 +52,7 @@ import type {
   LiveStream,
   LiveStreamListResponse,
   LiveStreamKey,
+  LivePublicListResponse,
   UpdateLiveStreamRequest,
   MessageListResponse,
   Message,
@@ -491,6 +492,22 @@ export const api = {
   /** GET /api/v1/channels/{handle}/live — the channel's live streams (auth, owner; no keys). */
   getLiveStreams: (handle: string, signal?: AbortSignal) =>
     apiRequest<LiveStreamListResponse>(`/api/v1/channels/${encodeURIComponent(handle)}/live`, { signal }),
+
+  /**
+   * GET /api/v1/live — the public "Live now" listing: currently-live PUBLIC
+   * streams across all channels, most-recent session first, for the home
+   * discovery rail. Auth is optional. Each card links to /live/{id}. The
+   * contract deliberately carries NO viewer/concurrent count and NO thumbnail
+   * (neither exists server-side yet — W4 dependencies), so neither is surfaced.
+   */
+  listLivePublicStreams: (
+    params: { limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<LivePublicListResponse>("/api/v1/live", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
 
   /**
    * GET /api/v1/live/{id} — a single live stream's public metadata (the watch

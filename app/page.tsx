@@ -1,6 +1,7 @@
 import { FeedFilters } from "@/components/FeedFilters";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
+import { LiveNowRail } from "@/components/LiveNowRail";
 import { VideoFeed } from "@/components/VideoFeed";
 import type { FeedSort } from "@/lib/api";
 import { readFeedFilters } from "@/lib/feed-url";
@@ -61,6 +62,10 @@ export default async function Home({
         <FeedScopeToggle active={scope} sort={active} filters={filters} />
         <FeedFilters sort={active} filters={filters} />
       </div>
+      {/* "Live now" discovery rail — currently-live public streams (GET /live).
+          Self-contained: renders nothing when nothing is live or the read fails,
+          so it never reserves space or shows an error on the public feed. */}
+      <LiveNowRail />
       <VideoFeed key={feedKey} sort={active} filters={filters} />
     </main>
   );

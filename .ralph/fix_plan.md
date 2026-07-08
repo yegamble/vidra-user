@@ -995,9 +995,89 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
       black/45). Pushed.
 
 ## DR4 — Home/feed + Live rail (mobile + desktop)
-- [ ] Mobile single-column cards (16px thumbs, IPFS cube chip top-left, duration chip, 36px
+- [x] Mobile single-column cards (16px thumbs, IPFS cube chip top-left, duration chip, 36px
       avatar rows); desktop 3-col grid (IPFS top-right); "Live now" rail (240px cards, LIVE
       pill, NO watching-count — aspirational §5.6). Evidence + `npm run ci` + push.
+      **DONE 2026-07-07.** Built the "Live now" rail — the W0 audit's one remaining major —
+      bound to the REAL public live-listing contract, plus the card-level home/feed deltas.
+      • **The contract now EXISTS (checked fresh).** vidra-core's working tree carries the
+        W1.C4 public live listing: `GET /api/v1/live → LivePublicListResponse { live_streams:
+        LiveStreamCard[], limit, offset }`, `LiveStreamCard = { id, title, description?,
+        channel_handle, channel_display_name, started_at?, is_live, hls_url? }`. Deliberately
+        NO viewer/concurrent count and NO thumbnail (the spec says both are W4 dependencies,
+        omitted not faked) — which lines up exactly with the aspirational-omissions list (§5.6):
+        the design's "N watching" chip and any live poster are NOT rendered.
+      • **Types regenerated the repo's way.** `npm run codegen` (openapi-typescript over
+        `../vidra-core/api/openapi.yaml`) refreshed `lib/api/generated.ts` — this also caught up
+        accumulated backend drift the frontend hadn't regenerated for (W1.C1 chapters, **W1.C2
+        video passwords**, W1.C3 player settings). Added `LiveStreamCard`/`LivePublicListResponse`
+        aliases to `lib/api/types.ts` and an `api.listLivePublicStreams({limit,offset}, signal)`
+        wrapper to `endpoints.ts`. **Incidental drift fixed (2 sites, from the mandated regen,
+        NOT new feature work):** the new `privacy: "password"` enum made two components
+        non-exhaustive — `PrivacyBadge.tsx` (added the "password" case: warning-tinted lock +
+        "Anyone with the password can watch this") and `LiveStreamsSection.tsx` (narrowed the
+        live-create privacy state to `NonNullable<CreateLiveStreamRequest["privacy"]>` =
+        public/unlisted/private, since live streams have no password mode).
+      • **New `components/LiveNowRail.tsx`** — client component fetching `GET /api/v1/live` on
+        mount; renders NOTHING while loading, on error, or when nothing is live (a quiet
+        progressive-enhancement surface, exactly like `ChannelLiveBadge`/`SidebarFollowing` —
+        never reserves space, never shows an error UI on a public feed). A named `<section
+        aria-label="Live now">` region with an `<h2>` + pluralized "N stream(s)" count; a
+        horizontal `overflow-x-auto` rail of 240px `<li>` cards, each a single `<Link>` to
+        `/live/{id}` with a clean aria-label. Card = `aspect-video rounded-[14px]
+        bg-surface-muted` tile carrying the media-overlay LIVE pill (dark black/55 blur pill +
+        pulsing `bg-live` dot, the theme-invariant sanctioned exception; pulse globally
+        neutralized under prefers-reduced-motion) + a faint decorative `PlayIcon` in
+        `text-fg-subtle` (poster-less live streams have no server thumbnail — an honest "watchable
+        video" affordance, never a fabricated image), then title (14px) + channel (12.5px muted).
+        Mounted on BOTH `app/page.tsx` and `app/trending/page.tsx` (the design's single feed
+        screen keeps the rail across the Recent/Popular/Trending re-sorts; our split routes each
+        get it for consistency).
+      • **VideoCard deltas (§3.3).** (1) IPFS chip repositioned responsively — **top-left on
+        mobile, top-right on desktop** (`left-2 top-2 lg:left-auto lg:right-2`), per the app-vs-
+        desktop templates; (2) **converged the ad-hoc inline hexagon SVG onto the shared
+        `IpfsIcon`** cube (DR1's single icon source; the design's 10×11 cube), shown on mobile,
+        `lg:hidden` on desktop (desktop chip is text-only, per the desktop template), design
+        opacity/tracking (`bg-black/50 text-white/90 text-[10.5px] tracking-[0.03em]`); (3) title
+        bumped to the design's **15.5px on mobile**, kept 14px on desktop (`text-[15.5px]
+        lg:text-sm`) — both breakpoints now match. Meta (13px) + 36px avatar already matched.
+        The `title="Mirrored to IPFS"` hook is unchanged (home.spec IPFS assertion stays green).
+        **LIVE-on-feed-cards stays omitted** (live streams are a table disjoint from videos — the
+        feed `Video` carries no live/state field; live discovery is the rail, not a card badge).
+      • **Tests (unit + e2e, same slice).** New `components/LiveNowRail.test.tsx` (4: renders
+        nothing when nothing's live; renders nothing on a failed read; a card per stream with the
+        right `/live/{id}` hrefs + channel + aria-label; singular label + bounded-page fetch with
+        abort signal). New `e2e/live-rail.spec.ts` (3: home rail with 2 cards + region/heading/
+        count + hrefs + LIVE badge + **asserts zero "watching" text**; no rail when empty; the
+        rail also rides `/trending`). Existing home/trending specs stay green — they don't mock
+        `/api/v1/live`, so the rail's read fails to :8080 and the component renders null (no extra
+        links, no error). Extended `scripts/design-shots.mjs` (home+trending mock `/api/v1/live`
+        with a 2-stream `SAMPLE_LIVE`).
+      • **Evidence.** Before (`.ralph/design-review/dr4/before/home/*`, via git-stash of this
+        slice's changes) + after (`dr4/after/{home,trending}/*`), light+dark × mobile+desktop,
+        git-ignored. Read the after-PNGs against the App + Desktop design sources: the rail
+        matches ("Live now" + "N streams", 240px LIVE-badged tiles with pulse dot, no watching
+        chip, horizontal scroll); the desktop IPFS chip is top-right text-only, mobile top-left
+        with the cube; feed titles read 15.5/14; dark inverts via tokens with the LIVE/IPFS
+        media pills correctly theme-invariant. No horizontal overflow at 390.
+      • **Gate.** Full `CI=1 npm run ci` GREEN on the final tree — typecheck ✓ lint ✓ lint:icons ✓
+        unit **572/572** (50 files, +4 LiveNowRail) ✓ `next build` ✓ mocked e2e **402/402
+        (0 failed, no flakes)** on the first full run (+3 live-rail). Token grep clean on changed
+        files: only semantic tokens (`bg-surface-muted`/`bg-live`/`text-fg`/`text-fg-muted`/
+        `text-fg-subtle`/`text-warning`) + the sanctioned media-overlay `bg-black/*` + `text-white`
+        on the LIVE/IPFS pills; no raw palette/hex/`dark:`.
+      • **Cross-repo dependency (recorded, honest).** The `/api/v1/live` listing is in vidra-core's
+        WORKING TREE but not yet committed/pushed (its HEAD is W1.C3). This is the expected
+        "backend wave landing" state — DR4 built against the fresh working-tree spec per the
+        truthfulness rule. `npm run ci` (this repo's canonical gate) does NOT run the cross-repo
+        contract-ci / codegen-freshness job, so it is unaffected; but that separate CI job will
+        only match the committed `generated.ts` once vidra-core commits+pushes W1.C4. No action on
+        the frontend — coordination is by design (the two waves land together).
+      • **Deviations / dependencies.** (1) "N watching" chip NOT built (no viewer counter —
+        §5.6 aspirational). (2) No live thumbnail (none server-side) — faint play glyph instead,
+        never a fake image. (3) Rail is home+trending only (the design's feed screen); other
+        VideoGrid surfaces (channel/library/search) inherit the shared VideoCard title/IPFS
+        deltas and get their own verification in DR6/DR7.
 
 ## DR5 — Watch page (mobile + desktop)
 - [ ] Player chrome (chip time/CC/quality, thin white progress, center play, mobile chevron

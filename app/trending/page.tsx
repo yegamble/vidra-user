@@ -1,5 +1,6 @@
 import { FeedFilters } from "@/components/FeedFilters";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
+import { LiveNowRail } from "@/components/LiveNowRail";
 import { VideoFeed } from "@/components/VideoFeed";
 import { readFeedFilters } from "@/lib/feed-url";
 
@@ -37,6 +38,10 @@ export default async function TrendingPage({
       <div className="mb-7 flex flex-wrap items-center gap-x-3 gap-y-2">
         <FeedFilters sort="trending" filters={filters} />
       </div>
+      {/* "Live now" rail — persists across the shared sort chips (matches the
+          design's single feed screen, where Recent/Popular/Trending are re-sorts
+          of one surface that keeps the rail). Renders nothing when nothing's live. */}
+      <LiveNowRail />
       <VideoFeed key={feedKey} sort="trending" filters={filters} />
     </main>
   );

@@ -3,6 +3,7 @@ import type { VideoPrivacy } from "@/lib/api";
 const DESCRIPTIONS: Record<Exclude<VideoPrivacy, "public">, string> = {
   private: "Only you can see this",
   unlisted: "Anyone with the link can see this; it is hidden from feeds and search",
+  password: "Anyone with the password can watch this",
 };
 
 // PrivacyBadge marks non-public content (videos, playlists) with an
@@ -11,8 +12,10 @@ const DESCRIPTIONS: Record<Exclude<VideoPrivacy, "public">, string> = {
 // screen-reader users hear it too.
 export function PrivacyBadge({ privacy }: { privacy: VideoPrivacy }) {
   if (privacy === "public") return null;
-  const styles =
-    privacy === "private" ? "bg-warning/15 text-warning" : "bg-surface-muted text-fg-muted";
+  // Gated modes (private, password) read as a warning-tinted lock; unlisted is a
+  // quieter muted link (discoverable by anyone with the URL).
+  const gated = privacy === "private" || privacy === "password";
+  const styles = gated ? "bg-warning/15 text-warning" : "bg-surface-muted text-fg-muted";
   return (
     <span
       title={DESCRIPTIONS[privacy]}
@@ -29,10 +32,10 @@ export function PrivacyBadge({ privacy }: { privacy: VideoPrivacy }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        {privacy === "private" ? (
-          <path d="M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4" />
-        ) : (
+        {privacy === "unlisted" ? (
           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        ) : (
+          <path d="M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4" />
         )}
       </svg>
       <span className="capitalize">{privacy}</span>

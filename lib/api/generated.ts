@@ -1067,7 +1067,7 @@ export interface paths {
         };
         /**
          * Get a video by id
-         * @description Public and unlisted videos are returned to anyone with the id. A private video is returned only to its owner (with a bearer token); to everyone else it is reported as 404 so its existence is not revealed. The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
+         * @description Public and unlisted videos are returned to anyone with the id. A private video is returned only to its owner (with a bearer token); to everyone else it is reported as 404 so its existence is not revealed. A password-protected video (privacy=password, CORE-17) returns 401 with error code "password_required" to a caller who is neither the owner/a moderator nor presenting a valid playback token (a plain unknown id is still 404); the caller then unlocks via POST /videos/{id}/unlock and retries with the token (Bearer or ?pt=). The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
          */
         get: operations["getVideo"];
         put?: never;
@@ -1263,6 +1263,122 @@ export interface paths {
          */
         get: operations["getVideoStoryboardVtt"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/chapters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a video's chapters
+         * @description Returns the video's seek-bar chapters in playback order (ascending start_seconds), or an empty array when there are none. Same visibility as the detail endpoint (private → owner only, blocked → moderators only, else 404). The detail response's has_chapters flag tells clients whether any exist before fetching.
+         */
+        get: operations["getVideoChapters"];
+        /**
+         * Replace a video's chapters
+         * @description Replaces the video's whole chapter set atomically (owner only); an empty array clears all chapters. There is no per-row endpoint. A non-owner or unknown id is 404 so a private video's existence is not leaked. The set is validated in full before any write, so a rejected request leaves the stored chapters untouched. Validation (400): start_seconds must be >= 0 and strictly increasing (so unique); each start_seconds must be less than the probed duration when one was recorded; each title is 1–120 characters after trimming; at most 100 chapters.
+         */
+        put: operations["setVideoChapters"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unlock a password-protected video
+         * @description Verifies a submitted password against a password-protected video's stored passwords (CORE-17) and, on success, mints a short-lived, video-scoped playback token. The token carries no account identity, is valid for 6 hours, and unlocks ONLY this video's read endpoints, presented either as `Authorization: Bearer <playback_token>` or as a `?pt=<playback_token>` query parameter (the header-less path for Safari native-HLS and progressive playback). Optional auth. Rate-limited under the same strict budget as login. The password and the token are never logged.
+         */
+        post: operations["unlockVideo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/passwords": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a video's passwords
+         * @description Lists a video's passwords (id + created_at only — the plaintext and hash are write-only and never returned). Owner only; a non-owner or unknown id is 404.
+         */
+        get: operations["listVideoPasswords"];
+        /**
+         * Replace a video's passwords
+         * @description Replaces a video's whole password set (owner only). The set must be 1–20 entries, each 6–100 characters (else 400). Returns the stored set (id + created_at).
+         */
+        put: operations["replaceVideoPasswords"];
+        /**
+         * Add a password to a video
+         * @description Stores one new password for a video (bcrypt-hashed; the plaintext is never stored, logged, or returned). Owner only. The password must be 6–100 characters (else 400). Returns the new row's id + created_at.
+         */
+        post: operations["addVideoPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/passwords/{passwordId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a video password
+         * @description Removes one password from a video (owner only). 204 on success; 404 for an unknown passwordId; 409 when it is the last password of a privacy=password video (which would otherwise leave the video unlockable by no one).
+         */
+        delete: operations["deleteVideoPassword"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/embed-privacy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a video's embed-privacy policy
+         * @description Returns a video's embed-privacy policy (CORE-17): the status tier and, for the "whitelist" tier, the allow-listed hostnames. Same BASE visibility as the detail (private → owner only, blocked → moderators, else 404) but WITHOUT the password gate, so the embed page can read the policy pre-unlock for a password-protected video. Enforcement is at the embed page (referrer / ancestor-origin check); the server only stores and serves the policy.
+         */
+        get: operations["getVideoEmbedPrivacy"];
+        /**
+         * Set a video's embed-privacy policy
+         * @description Replaces a video's embed-privacy policy (owner only; a non-owner or unknown id is 404). 400 on an unknown status, a "whitelist" with an empty/invalid domain list (bare hostnames only — no scheme, port, or path; at most 50), or allowed_domains supplied with a non-whitelist status.
+         */
+        put: operations["setVideoEmbedPrivacy"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1800,6 +1916,30 @@ export interface paths {
          * @description Applies a partial preference update: only the types present in the body are changed. Disabling a type suppresses new notifications of that type at creation time (existing notifications are unaffected). An unknown type is 422 and nothing is written. Returns the full updated map.
          */
         patch: operations["updateNotificationPrefs"];
+        trace?: never;
+    };
+    "/api/v1/me/player-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the caller's player settings
+         * @description Returns the signed-in user's effective player defaults (PLAY-07): whether the next video autoplays, the default playback speed, the default quality, and whether captions / theater mode start on. Always 200 with the full object — a user who never saved gets the built-in defaults (no 404). The custom player hydrates from this on load, replacing its interim local storage.
+         */
+        get: operations["getPlayerSettings"];
+        /**
+         * Update the caller's player settings
+         * @description Merge-update the signed-in user's player defaults. Every field is optional; an omitted field keeps its stored value (or the default, for a user who never saved), and a supplied field replaces it. The first update creates the row. Returns the full effective object. Validation is 400: default_speed must be one of the shared playback rates (0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4) and default_quality must be "auto" or a rendition height like "720p".
+         */
+        put: operations["updatePlayerSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/playlists": {
@@ -2640,6 +2780,26 @@ export interface paths {
          * @description Creates a live stream for a channel the caller owns and returns it plus the stream key (shown ONCE — only its hash is stored) and the RTMP ingest URL. Behind auth; a non-owner is 403, an unknown channel 404. RTMP ingestion / HLS output is a later integration boundary — the stream starts in state "offline".
          */
         post: operations["createLiveStream"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public "Live now" listing
+         * @description Lists the currently-live PUBLIC streams across all channels for a home "Live now" rail, most-recently-started first. Only streams that are both state=live AND privacy=public appear — unlisted/private and offline/ended streams are never listed. Each card carries id, title, channel identity, started_at (the current session's start), an is_live flag (always true here — this is the card contract that can cheaply and truthfully carry it; the video feed card intentionally does not, since live streams are a table disjoint from videos), and, when a media server is configured, the live HLS playlist path. Stream keys are never returned. There is deliberately NO viewer/concurrent-viewer count: no server-side counter exists yet (a live-completion dependency, wave W4), and the field is omitted rather than faked. A thumbnail/preview is likewise omitted — live streams have no server-generated poster yet. This is a public read and, like GET /live/{id}, is not gated on the live feature toggle (that guards creation/ingest). Paginated with limit (1–100, default 30) and offset (>= 0).
+         */
+        get: operations["listLivePublicStreams"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3692,7 +3852,7 @@ export interface components {
              * @description Present on every local video; omitted on remote cards.
              * @enum {string}
              */
-            privacy?: "public" | "unlisted" | "private";
+            privacy?: "public" | "unlisted" | "private" | "password";
             /**
              * @description Publish lifecycle. "scheduled" means the upload finished processing but publish_at lies in the future; public surfaces (feed, search, channel lists) only show "published", while direct links behave like any non-published video. "quarantined" means the instance holds new uploads for moderator review (QUARANTINE_NEW_UPLOADS): only the owner (studio badge) and moderators can see the video until it is approved (published) or rejected (failed). Present on every local video; omitted on remote cards.
              * @enum {string}
@@ -3724,6 +3884,8 @@ export interface components {
             has_thumbnail?: boolean;
             /** @description Whether a seek-preview storyboard is available at GET /videos/{id}/storyboard.jpg (+ the .vtt map). Present on the detail endpoint; omitted on list/feed views. */
             has_storyboard?: boolean;
+            /** @description Whether the video has seek-bar chapters at GET /videos/{id}/chapters. Present on the detail endpoint; omitted on list/feed views. Lets the player fetch chapters only when they exist. */
+            has_chapters?: boolean;
             /**
              * Format: int64
              * @description Recorded view count. Present on the detail endpoint; omitted on list/feed views.
@@ -3770,6 +3932,68 @@ export interface components {
             height: number;
             /** @example 1280 */
             width: number;
+        };
+        /** @description One seek-bar chapter of a video (CORE-15). */
+        VideoChapter: {
+            /**
+             * @description Whole-second offset from the video start where the chapter begins.
+             * @example 90
+             */
+            start_seconds: number;
+            /**
+             * @description Short chapter title (1–120 characters after trimming).
+             * @example Introduction
+             */
+            title: string;
+        };
+        /** @description A video's chapters in playback order (ascending start_seconds); the array is empty when the video has none. */
+        VideoChapters: {
+            chapters: components["schemas"]["VideoChapter"][];
+        };
+        /** @description The whole chapter set to store (replaces any existing set). An empty array clears all chapters. start_seconds must be >= 0 and strictly increasing; titles are 1–120 characters after trimming; at most 100 chapters; each start must be less than the probed duration when known. */
+        SetVideoChaptersRequest: {
+            chapters: components["schemas"]["VideoChapter"][];
+        };
+        /** @description A password to unlock a password-protected video (CORE-17). */
+        UnlockVideoRequest: {
+            /** @description The video's password (write-only; never logged or returned). */
+            password: string;
+        };
+        /** @description A minted playback token for a password-protected video. The token is video-scoped, carries no account identity, and is valid for expires_in seconds. Present it as `Authorization: Bearer <playback_token>` or as a `?pt=<playback_token>` query parameter on the video's read endpoints. */
+        UnlockVideoResponse: {
+            /** @description The opaque, video-scoped playback token (a secret — do not log). */
+            playback_token: string;
+            /**
+             * @description The token lifetime in seconds (21600 = 6 hours).
+             * @example 21600
+             */
+            expires_in: number;
+        };
+        /** @description One video password's public projection. The plaintext and the bcrypt hash are write-only and never appear in any response. */
+        VideoPassword: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description A video's passwords (id + created_at only). */
+        VideoPasswords: {
+            passwords: components["schemas"]["VideoPassword"][];
+        };
+        /** @description One password to add to a video (6–100 characters). */
+        SetVideoPasswordRequest: {
+            password: string;
+        };
+        /** @description The whole password set to store (replaces any existing set). 1–20 entries, each 6–100 characters. */
+        ReplaceVideoPasswordsRequest: {
+            passwords: string[];
+        };
+        /** @description A video's embed-privacy policy (CORE-17). status is the tier; allowed_domains lists the permitted hostnames and is present/required only for the "whitelist" tier (bare hostnames — no scheme, port, or path; at most 50). Enforcement is at the embed page, not the server. */
+        EmbedPrivacy: {
+            /** @enum {string} */
+            status: "enabled" | "disabled" | "whitelist";
+            /** @description Allow-listed hostnames; present only for the "whitelist" status. */
+            allowed_domains?: string[];
         };
         /** @description One day of a stats series (UTC calendar day). */
         DailyViews: {
@@ -3848,7 +4072,7 @@ export interface components {
              * @description Defaults to "private" when omitted.
              * @enum {string}
              */
-            privacy?: "public" | "unlisted" | "private";
+            privacy?: "public" | "unlisted" | "private" | "password";
             /** @description Optional subject-category id (see GET /videos/config). Unknown value -> 422. */
             category?: string;
             /** @description Optional content language code (see GET /videos/config). Unknown value -> 422. */
@@ -3868,7 +4092,7 @@ export interface components {
             title?: string;
             description?: string;
             /** @enum {string} */
-            privacy?: "public" | "unlisted" | "private";
+            privacy?: "public" | "unlisted" | "private" | "password";
             /** @description Set the subject-category id (see GET /videos/config). Unknown/empty value -> 422. */
             category?: string;
             /** @description Set the content language code (see GET /videos/config). Unknown/empty value -> 422. */
@@ -4299,6 +4523,53 @@ export interface components {
                 [key: string]: boolean;
             };
         };
+        /** @description A signed-in user's effective player defaults (PLAY-07). Every field is always present; a user who never saved gets these built-in defaults. */
+        PlayerSettings: {
+            /**
+             * @description Whether the next video autoplays when the current one ends.
+             * @example true
+             */
+            autoplay_next: boolean;
+            /**
+             * @description Default playback speed. One of the shared playback rates: 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4.
+             * @example 1
+             */
+            default_speed: number;
+            /**
+             * @description Default quality: "auto" (adaptive) or a rendition height like "720p" (^[0-9]{2,4}p$, same shape as the HLS rendition path segment).
+             * @example auto
+             */
+            default_quality: string;
+            /**
+             * @description Whether captions are on by default when a track exists.
+             * @example false
+             */
+            captions_default: boolean;
+            /**
+             * @description Whether the player opens in theater mode by default.
+             * @example false
+             */
+            theater_default: boolean;
+        };
+        /** @description Merge-update body: every field is optional. An omitted field keeps its stored value (or the default, for a user who never saved); a supplied field replaces it. At least one field is normally sent, but an empty body is accepted as a no-op that returns the current effective settings. */
+        UpdatePlayerSettingsRequest: {
+            /** @example false */
+            autoplay_next?: boolean;
+            /**
+             * @description One of the shared playback rates (0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4); any other value is 400.
+             * @example 1.5
+             */
+            default_speed?: number;
+            /**
+             * @description "auto" or a rendition height like "720p"; any other value is 400.
+             * @example 1080p
+             */
+            default_quality?: string;
+            /** @example true */
+            captions_default?: boolean;
+            /** @example true */
+            theater_default?: boolean;
+        };
         Playlist: {
             /** Format: uuid */
             id: string;
@@ -4369,7 +4640,7 @@ export interface components {
             id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private";
+            privacy: "public" | "unlisted" | "private" | "password";
             /** @enum {string} */
             state: "quarantined";
             channel_handle: string;
@@ -4456,7 +4727,7 @@ export interface components {
             video_id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private";
+            privacy: "public" | "unlisted" | "private" | "password";
             /** @enum {string} */
             state: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
             channel_handle: string;
@@ -4508,7 +4779,7 @@ export interface components {
             id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private";
+            privacy: "public" | "unlisted" | "private" | "password";
             /** @enum {string} */
             state: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
             channel_handle: string;
@@ -4818,6 +5089,11 @@ export interface components {
             permanent: boolean;
             /** @description When true, the media server records each session and the api republishes the recording as a normal on-demand video on ingest-stop (privacy inherited). Default false. */
             replay_enabled?: boolean;
+            /**
+             * Format: date-time
+             * @description When the current live session began (stamped on the transition into "live", cleared when it ends). Present only while the stream is live.
+             */
+            started_at?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -4866,6 +5142,29 @@ export interface components {
         };
         LiveStreamListResponse: {
             live_streams: components["schemas"]["LiveStream"][];
+        };
+        /** @description One entry of the public "Live now" listing — the minimal, truthful projection of a currently-live PUBLIC stream. Omits fields a discovery rail cannot honestly use: no privacy/state (every entry is public+live), no stream key, no viewer/concurrent count (no server-side counter yet — W4 dependency), no thumbnail (live streams have no server-generated poster yet). */
+        LiveStreamCard: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            description?: string;
+            channel_handle: string;
+            channel_display_name: string;
+            /**
+             * Format: date-time
+             * @description When the current live session began (omitted only for pre-tracking streams).
+             */
+            started_at?: string;
+            /** @description Always true for a listing entry (discriminator for a shared card renderer). */
+            is_live: boolean;
+            /** @description Live HLS playlist path, present only when a media server (LIVE_HLS_ROOT) is configured to serve it. */
+            hls_url?: string;
+        };
+        LivePublicListResponse: {
+            live_streams: components["schemas"]["LiveStreamCard"][];
+            limit: number;
+            offset: number;
         };
         LiveStreamKey: {
             /** @description The new stream key, shown ONCE. */
@@ -8423,6 +8722,15 @@ export interface operations {
                     "application/json": components["schemas"]["Video"];
                 };
             };
+            /** @description The video is password protected and the caller presented no valid credential (owner/moderator token or playback token). Error code "password_required". */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No video with that id (or it is private and not yours). */
             404: {
                 headers: {
@@ -8897,6 +9205,421 @@ export interface operations {
                 };
             };
             /** @description No such video (or not visible), or no storyboard. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getVideoChapters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The video's chapters (ascending; empty when none). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoChapters"];
+                };
+            };
+            /** @description No such video, or it is not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setVideoChapters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetVideoChaptersRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored chapters (ascending). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoChapters"];
+                };
+            };
+            /** @description A malformed body, or a chapters-validation violation (bad ordering, an out-of-bounds start, a bad title length, or more than 100 chapters). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unlockVideo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnlockVideoRequest"];
+            };
+        };
+        responses: {
+            /** @description The password was correct; a playback token is returned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnlockVideoResponse"];
+                };
+            };
+            /** @description Incorrect password. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or the video is not password protected. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many unlock attempts (rate limited). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listVideoPasswords: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The video's passwords (id + created_at). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoPasswords"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    replaceVideoPasswords: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceVideoPasswordsRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored passwords (id + created_at). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoPasswords"];
+                };
+            };
+            /** @description The set is empty, has more than 20 entries, or an entry is not 6–100 characters. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    addVideoPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetVideoPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored password's id + created_at. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoPassword"];
+                };
+            };
+            /** @description The password is not 6–100 characters. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteVideoPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                passwordId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The password was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video/password, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description It is the last password of a password-protected video. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getVideoEmbedPrivacy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The embed-privacy policy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbedPrivacy"];
+                };
+            };
+            /** @description No such video, or it is not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setVideoEmbedPrivacy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmbedPrivacy"];
+            };
+        };
+        responses: {
+            /** @description The stored embed-privacy policy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbedPrivacy"];
+                };
+            };
+            /** @description An unknown status, an invalid whitelist, or domains with a non-whitelist status. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or not owned by the caller. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -10533,6 +11256,77 @@ export interface operations {
             };
             /** @description Empty update or unknown notification type. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getPlayerSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's effective player settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerSettings"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updatePlayerSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePlayerSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description The full effective player settings after the merge. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerSettings"];
+                };
+            };
+            /** @description Malformed body, or an invalid default_speed / default_quality. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12973,6 +13767,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listLivePublicStreams: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The currently-live public streams (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LivePublicListResponse"];
                 };
             };
         };
