@@ -744,18 +744,28 @@ the core commit + endpoint it binds to (W1-style):
       re-pick resumes sending only the MISSING chunks + "Upload finished." link;
       a different file rejected by identity before any chunk moves; Discard DELETEs
       + drops the row). (e) **Backed DB-proof:** `e2e-backed/upload-draft-recovery.spec.ts`
-      WRITTEN — seeds a half-finished session via the API (bytes localStorage never
-      knew), HARD-RELOADs the studio (cookie refresh) so the card lists the
-      server-side session, resumes to completion, and reads the finalised video
-      back from Postgres via the owner channel list (the refetch proof). Marked
-      **[~] not run locally** — no backend stack available this session (`:8080`
-      refused, no compose containers up); runs with the `backend-backed` suite in CI.
-      (f) **Design:** before/after screenshots (light+dark × mobile+desktop) in
+      seeds a half-finished session via the API (bytes localStorage never knew),
+      HARD-RELOADs the studio (cookie refresh) so the card lists the server-side
+      session, resumes to completion, and reads the finalised video back from
+      Postgres via the owner channel list (the refetch proof). No backend stack was
+      available in-session (`:8080` refused, no compose containers), so it did not
+      run locally — but it RAN AND PASSED in the `frontend-e2e-backed` CI job against
+      a real vidra-core + Postgres (not among that job's failures; see (g)). (f)
+      **Design:** before/after screenshots (light+dark × mobile+desktop) in
       `.ralph/design-review/w2/studio-recovery/` — new `studio-recovery` design-shots
       area; tokens only, SVG only, read + verified (card matches the storage-card
       vocabulary in both themes, responsive). (g) **Gate:** full `npm run ci` green
-      (typecheck, lint, lint:icons, 737 unit, build, e2e incl. axe — the studio a11y
-      test is unaffected since the card hides without sessions).
+      locally (typecheck, lint, lint:icons, 737 unit, build, 440 e2e incl. axe — the
+      studio a11y test is unaffected since the card hides without sessions). On
+      branch CI: `frontend-ci` GREEN. A first push tripped `contract-ci`'s static
+      path scanner on the `listMyUploads` query template literal — fixed by moving
+      the query to the `apiRequest` `query:` option (clean `/api/v1/me/uploads`
+      literal); `node scripts/check-contract.mjs` now passes. `frontend-e2e-backed`
+      is chronically red in this CI env on unrelated data-mutating specs (admin-users,
+      mfa, messaging, playlists, donations, profile, notifications, deactivate,
+      instance-settings — 16 failed / 69 passed; the SAME suite was `failure` on
+      every prior commit W2.U0/DR13/DR12/W1.7, so pre-existing infra flakiness, not
+      this slice) — this slice's own backed spec is in the 69 passed.
 - [ ] W2.U2 [UPLOAD-09 UI — UNBLOCKED: vidra-core W2.C1 landed (commit `10d403d`;
       `resolver`/`stage` on `/videos/{id}/import` present in
       `vidra-core/api/openapi.yaml`)] Import-from-URL flow: two-tab source choice

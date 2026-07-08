@@ -430,10 +430,10 @@ export const api = {
    * uploading this?").
    */
   listMyUploads: (fingerprint?: string, signal?: AbortSignal) =>
-    apiRequest<ActiveUploadsResponse>(
-      `/api/v1/me/uploads${fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : ""}`,
-      { signal },
-    ),
+    apiRequest<ActiveUploadsResponse>("/api/v1/me/uploads", {
+      query: { fingerprint: fingerprint || undefined },
+      signal,
+    }),
 
   /**
    * POST /api/v1/videos/{id}/upload-session — open a resumable (chunked) upload
