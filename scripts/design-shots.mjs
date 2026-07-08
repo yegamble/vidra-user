@@ -410,6 +410,13 @@ function sampleInstance(opts = {}) {
     terms_url: "",
     privacy_url: "",
     contact_email: "",
+    // Effective feature toggles (the studio's Import-from-URL tab reads `imports`).
+    features: {
+      uploads: true,
+      imports: opts.importsEnabled ?? true,
+      live: true,
+      comments: true,
+    },
   };
 }
 
@@ -1502,6 +1509,106 @@ const AREAS = {
       await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
         route.fulfill({ json: { live_streams: [] } }),
       );
+    },
+  },
+  // Studio — Import from URL tab (W2.U2 / UPLOAD-09): the two-tab source segmented
+  // control switched to "Import from URL", showing the URL field + helper copy.
+  "studio-import": {
+    path: "/studio",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/instance$/, (route) => route.fulfill({ json: sampleInstance() }));
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
+        route.fulfill({ json: { live_streams: [] } }),
+      );
+    },
+    async act(page) {
+      await page.getByRole("button", { name: "Import from URL" }).click();
+      await page.getByLabel("Video URL").waitFor({ state: "visible" });
+      await page
+        .getByLabel("Video URL")
+        .fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    },
+  },
+  // Studio — Import from URL running (W2.U2): the async stage rail (queued →
+  // fetching metadata → downloading → scanning & processing). The mocked job holds
+  // at "downloading" so the rail shows a completed step, the active spinner step,
+  // and pending steps at once.
+  "studio-import-progress": {
+    path: "/studio",
+    async mock(page) {
+      await AREAS["studio-import"].mock(page);
+      const job = (state, stage) => ({
+        id: "job1",
+        video_id: "iv1",
+        state,
+        resolver: stage ? "ytdlp" : "auto",
+        ...(stage ? { stage } : {}),
+        attempts: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      // The draft the create POST returns, then the import enqueue + poll (held at
+      // downloading), then the draft refetch for metadata prefill.
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos$/, (route) => {
+        if (route.request().method() === "POST") {
+          return route.fulfill({
+            json: { id: "iv1", channel_id: "c1", title: "Grade House field diary", description: "", privacy: "public", state: "draft", created_at: new Date().toISOString() },
+          });
+        }
+        return route.fulfill({ json: SAMPLE_STUDIO_VIDEOS });
+      });
+      await page.route(/\/api\/v1\/videos\/iv1\/import$/, (route) =>
+        route.request().method() === "POST"
+          ? route.fulfill({ status: 202, json: { import_job: job("running", "downloading") } })
+          : route.fulfill({ json: { import_job: job("running", "downloading") } }),
+      );
+      await page.route(/\/api\/v1\/videos\/iv1$/, (route) =>
+        route.fulfill({
+          json: { id: "iv1", channel_id: "c1", title: "Grade House field diary", description: "", privacy: "public", state: "processing", created_at: new Date().toISOString() },
+        }),
+      );
+    },
+    async act(page) {
+      await page.getByLabel("Video title").fill("Grade House field diary");
+      await page.getByRole("button", { name: "Import from URL" }).click();
+      await page.getByLabel("Video URL").fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+      await page.getByRole("button", { name: "Publish" }).click();
+      await page.getByRole("list", { name: "Import progress" }).waitFor({ state: "visible" });
+    },
+  },
+  // Studio — Import from URL disabled (W2.U2): imports off on the instance, so the
+  // URL tab renders the honest empty state instead of a dead form.
+  "studio-import-disabled": {
+    path: "/studio",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/instance$/, (route) =>
+        route.fulfill({ json: sampleInstance({ importsEnabled: false }) }),
+      );
+      await page.route(/\/api\/v1\/me\/channels$/, (route) => route.fulfill({ json: SAMPLE_MY_CHANNELS }));
+      await page.route(/\/api\/v1\/me\/quota$/, (route) => route.fulfill({ json: SAMPLE_QUOTA }));
+      await page.route(/\/api\/v1\/videos\/config(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_VIDEO_CONFIG_FULL }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/videos(\?|$)/, (route) =>
+        route.fulfill({ json: SAMPLE_STUDIO_VIDEOS }),
+      );
+      await page.route(/\/api\/v1\/channels\/grade-house\/live$/, (route) =>
+        route.fulfill({ json: { live_streams: [] } }),
+      );
+    },
+    async act(page) {
+      await page.getByRole("button", { name: "Import from URL" }).click();
+      await page.getByText("Imports are disabled on this instance").waitFor({ state: "visible" });
     },
   },
   // Go Live one-time key screen (DR9): fill the create form and reveal the

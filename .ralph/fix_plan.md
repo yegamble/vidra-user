@@ -766,15 +766,64 @@ the core commit + endpoint it binds to (W1-style):
       instance-settings — 16 failed / 69 passed; the SAME suite was `failure` on
       every prior commit W2.U0/DR13/DR12/W1.7, so pre-existing infra flakiness, not
       this slice) — this slice's own backed spec is in the 69 passed.
-- [ ] W2.U2 [UPLOAD-09 UI — UNBLOCKED: vidra-core W2.C1 landed (commit `10d403d`;
+- [x] W2.U2 [UPLOAD-09 UI — UNBLOCKED: vidra-core W2.C1 landed (commit `10d403d`;
       `resolver`/`stage` on `/videos/{id}/import` present in
-      `vidra-core/api/openapi.yaml`)] Import-from-URL flow: two-tab source choice
-      (Upload file / Import from URL) on the upload section; stage rail
-      (queued → fetching metadata → downloading → scanning & processing) with
-      status pills; safe error + Retry; yt-dlp metadata prefill after resolving;
-      honest disabled empty state on the stable 503; `e2e/video-import-url.spec.ts`
-      (mock, all stages) + backend-backed e2e via a direct file URL (yt-dlp not
-      required in CI).
+      `vidra-core/api/openapi.yaml`)] Import-from-URL flow. **DONE 2026-07-08.**
+      (a) **Two-tab source choice:** the former Upload/URL radio pair in
+      `components/StudioView.tsx` is now the design's `SegmentedControl`
+      (Upload file | Import from URL, `fullWidth`) — the DR8 segmented vocabulary,
+      keyboard + `aria-pressed`, disabled mid-upload; `changeSource` clears the
+      other tab's transient outcome. (b) **resolver "auto":**
+      `api.importVideoFile(videoId, url, resolver="auto")` now sends
+      `{url, resolver:"auto"}` (new `ImportResolver` type) — the UI never guesses
+      direct vs platform; the backend probes and falls back to yt-dlp when enabled.
+      (c) **Stage rail:** new pure `lib/import-status.ts` (`IMPORT_STAGES`,
+      `importActiveStage`, `importResolved`, `isImportsDisabledError`) maps
+      `import_job.state`+`stage` onto the four-step rail (queued → fetching metadata
+      → downloading → scanning & processing); `ImportStageRail` renders it with the
+      studio's spinner+check+pill vocabulary (active step `aria-current="step"`),
+      fed by an `onJob` callback threaded through the poll loop. (d) **Safe error +
+      Retry:** a failed job shows the backend's SAFE `error` verbatim (never
+      "Published!") with a "Retry import" button that re-enqueues against the SAME
+      draft via the same endpoint (`runImport`/`retryImport` share the path; the
+      draft survives a failed import). (e) **Metadata prefill:** once resolving
+      passes (`importResolved`), a one-shot draft refetch prefills title/description
+      — but ONLY empty fields (user edits win). Poster is deliberately not shown:
+      per the core twin spec the resolver fetches no poster (Process derives it from
+      the downloaded original). (f) **Honest disabled state:** the URL tab reads
+      `GET /instance` `features.imports`; when off it renders an `EmptyState`
+      "Imports are disabled on this instance" and disables Publish — never a dead
+      form; the stable 503 `service_unavailable` at submit is the defensive fallback
+      to the same state. The URL field also gains paste-detect (a pasted http(s)
+      URL is trimmed). (g) **Tests:** unit `lib/import-status.test.ts` (14 — stage
+      map, resolved detection, disabled-error) + updated `endpoints.test.ts` (import
+      body now `{url, resolver:"auto"}`); mocked `e2e/video-import-url.spec.ts` (5 —
+      rail advances all four stages → published; safe-error + Retry re-enqueues +
+      succeeds; disabled empty state + disabled Publish; resolved metadata prefills
+      an empty field but not the creator's edit; paste-detect trims). Segmenting the
+      source renamed the "Upload file" radio to a button, colliding with the caption
+      "Upload" substring selector — fixed by making the caption selectors `exact`
+      (`e2e/studio.spec.ts` + `e2e-backed/captions.spec.ts`); the studio.spec /
+      e2e-backed/studio import selectors switched radio→button and the shared
+      `importJob` fixture gained the required `resolver`. (h) **Backed DB-proof
+      [~]:** `e2e-backed/video-import-url.spec.ts` imports a DIRECT file URL (the
+      compose `api:8080/.../original`; yt-dlp not needed — resolver "auto" falls
+      back to a plain fetch), asserts the stage rail renders, then reads back via
+      the API that the import_jobs row transitioned to `done` (resolver rewritten
+      auto→direct) AND the published video appears on the owner's channel after
+      refetch. No vidra-core API was reachable in-session (:8080 refused; only
+      postgres/redis containers up, the `api` service is a from-source Go build), so
+      it did NOT run locally — structured to run in the `frontend-e2e-backed` CI job
+      (same posture as W2.U1's backed spec). `e2e-backed/studio.spec.ts`'s existing
+      URL-import test was updated to the new button selector too. (i) **Design:**
+      before/after screenshots (light+dark × mobile+desktop) in
+      `.ralph/design-review/w2/studio-import{,-progress,-disabled}/` — tokens only,
+      SVG only, read + verified (segmented control matches the inbox vocabulary; the
+      rail shows check/spinner/pending steps; honest disabled empty state;
+      responsive with the bottom tab bar intact). (j) **Gate:** full `npm run ci`
+      green locally twice (typecheck, lint, lint:icons, 742 unit incl. the 14 new,
+      build, 445 e2e incl. the 5 new + axe); `node scripts/check-contract.mjs`
+      green. **CLOSED.**
 - [ ] W2.U3 [UPLOAD-04 UI — UNBLOCKED: vidra-core W2.C5 landed (commit `3f3c6e6`;
       JSON `{at_seconds}` variant on `/videos/{id}/thumbnail` present in
       `vidra-core/api/openapi.yaml`)] Thumbnail frame-pick: scrubber (storyboard

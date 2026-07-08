@@ -58,7 +58,7 @@ test("a creator uploads and removes a caption in the studio", async ({ page, req
   const capUploaded = page.waitForResponse(
     (r) => /\/videos\/[^/]+\/captions$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.getByRole("button", { name: "Upload" }).click();
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
   await capUploaded;
   // The uploaded track appears in the list — assert its Remove control rather
   // than the "English" label, which now also matches the edit form's language

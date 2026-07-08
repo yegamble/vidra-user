@@ -185,6 +185,7 @@ export type ActiveUploadsResponse = Schemas["ActiveUploadsResponse"];
 export type ImportJobState = NonNullable<Schemas["ImportJob"]["state"]>;
 export type ImportJob = Schemas["ImportJob"];
 export type ImportJobResponse = Schemas["ImportJobResponse"];
+export type ImportResolver = NonNullable<Schemas["ImportVideoRequest"]["resolver"]>;
 export type VideoFile = Schemas["VideoFile"];
 
 // --- Live streaming ---------------------------------------------------------

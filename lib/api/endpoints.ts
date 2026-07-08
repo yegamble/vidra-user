@@ -112,6 +112,7 @@ import type {
   UploadStatusResponse,
   ActiveUploadsResponse,
   ImportJobResponse,
+  ImportResolver,
   VideoFile,
   VideoRating,
   VideoStatsResponse,
@@ -406,11 +407,16 @@ export const api = {
    * POST /api/v1/videos/{id}/import — enqueue an ASYNC URL import (auth, owner).
    * Returns 202 with the queued job; the backend fetches (SSRF-guarded) and runs
    * the pipeline in the background. Poll getVideoImport for progress.
+   *
+   * `resolver` selects the fetch mechanism (auto|direct|ytdlp). The UI always
+   * sends "auto" — it never guesses whether a URL is a direct file or a platform
+   * watch page; the backend probes and, when enabled, falls back to the sandboxed
+   * yt-dlp extractor. An explicit disabled resolver answers 503.
    */
-  importVideoFile: (videoId: string, url: string) =>
+  importVideoFile: (videoId: string, url: string, resolver: ImportResolver = "auto") =>
     apiRequest<ImportJobResponse>(`/api/v1/videos/${encodeURIComponent(videoId)}/import`, {
       method: "POST",
-      body: { url },
+      body: { url, resolver },
     }),
 
   /**

@@ -80,6 +80,9 @@ function importJob(state: string, overrides: Record<string, unknown> = {}) {
     id: "job1",
     video_id: "v1",
     state,
+    // resolver is required on the ImportJob contract; starts "auto" until the
+    // worker rewrites it to the concrete mechanism it ran.
+    resolver: "auto",
     attempts: 1,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -468,7 +471,7 @@ test("a failed URL import is reported as a processing failure, not Published!", 
 
   await page.getByRole("link", { name: "Studio" }).click();
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByRole("button", { name: "Import from URL" }).click();
   await page.getByLabel("Video URL").fill("https://example.com/clip.mp4");
   await page.getByRole("button", { name: "Publish" }).click();
 
@@ -502,7 +505,7 @@ test("a failed URL import surfaces the job's error reason", async ({ page }) => 
 
   await page.getByRole("link", { name: "Studio" }).click();
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByRole("button", { name: "Import from URL" }).click();
   await page.getByLabel("Video URL").fill("https://example.com/missing.mp4");
   await page.getByRole("button", { name: "Publish" }).click();
 
@@ -778,7 +781,7 @@ test("a 422 url field error from the import renders inline on the URL field", as
 
   await page.getByRole("link", { name: "Studio" }).click();
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByRole("button", { name: "Import from URL" }).click();
   await page.getByLabel("Video URL").fill("https://example.com/clip.mp4");
   await page.getByRole("button", { name: "Publish" }).click();
 
@@ -815,13 +818,13 @@ test("a creator can publish a video by importing from a URL", async ({ page }) =
   await page.getByRole("link", { name: "Studio" }).click();
   await page.getByLabel("Video title").fill("My clip");
   // Switch the source to URL and provide a link.
-  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByRole("button", { name: "Import from URL" }).click();
   await page.getByLabel("Video URL").fill("https://example.com/clip.mp4");
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("Published!")).toBeVisible();
   await expect(page.getByRole("link", { name: /View .*My clip/ })).toBeVisible();
-  expect(importBody).toEqual({ url: "https://example.com/clip.mp4" });
+  expect(importBody).toEqual({ url: "https://example.com/clip.mp4", resolver: "auto" });
 });
 
 test("a creator can edit a video's title and privacy", async ({ page }) => {
@@ -967,7 +970,7 @@ test("a creator can add and remove a caption from a video's edit surface", async
   const uploaded = page.waitForResponse(
     (r) => CAPTIONS.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.getByRole("button", { name: "Upload" }).click();
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
   await uploaded;
 
   await expect(page.getByText("No captions yet.")).toHaveCount(0);

@@ -313,7 +313,7 @@ test("a creator can publish a video by importing from a URL (async job)", async 
   // Import the source's own /original via the compose service name (reachable
   // inside the docker network; the frontend only submits the URL as a string).
   await page.getByLabel("Video title").fill(videoTitle);
-  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByRole("button", { name: "Import from URL" }).click();
   await page.getByLabel("Video URL").fill(`http://api:8080/api/v1/videos/${src.videoId}/original`);
   // The POST enqueues the job (202); the studio then polls until it is done.
   const enqueued = page.waitForResponse(
@@ -405,7 +405,7 @@ test("a non-http import URL shows an inline url field error", async ({ page }) =
   await channelCreated;
 
   await page.getByLabel("Video title").fill(`Bad import ${id}`);
-  await page.getByRole("radio", { name: "Import from URL" }).check();
+  await page.getByRole("button", { name: "Import from URL" }).click();
   await page.getByLabel("Video URL").fill("ftp://example.com/clip.mp4");
   const attempted = page.waitForResponse(
     (r) =>

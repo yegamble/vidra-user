@@ -622,12 +622,16 @@ describe("api endpoints", () => {
     });
   });
 
-  it("importVideoFile POSTs the url to the import endpoint (async job)", async () => {
+  it("importVideoFile POSTs the url + default resolver to the import endpoint (async job)", async () => {
     await api.importVideoFile("v1", "https://example.com/clip.mp4");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/videos/v1/import");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ url: "https://example.com/clip.mp4" });
+    // The UI never guesses the fetch mechanism — it always sends resolver "auto".
+    expect(JSON.parse(init.body as string)).toEqual({
+      url: "https://example.com/clip.mp4",
+      resolver: "auto",
+    });
   });
 
   it("getVideoImport GETs the import status endpoint", async () => {

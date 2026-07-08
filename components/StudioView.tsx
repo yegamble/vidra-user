@@ -15,11 +15,12 @@ import { TagsInput } from "@/components/TagsInput";
 import { ThumbnailManager } from "@/components/ThumbnailManager";
 import { UploadRecoveryCard } from "@/components/UploadRecoveryCard";
 import { useSession } from "@/components/auth/AuthProvider";
-import { ChevronDownIcon, LoaderIcon, UploadIcon } from "@/components/icons";
+import { CheckIcon, ChevronDownIcon, LoaderIcon, UploadIcon } from "@/components/icons";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
@@ -37,6 +38,7 @@ import {
 } from "@/lib/api";
 import type {
   Channel,
+  ImportJob,
   StoredUploadSession,
   UploadVideoResult,
   Video,
@@ -46,6 +48,12 @@ import type {
   VideoState,
 } from "@/lib/api";
 import { formatBytes, formatDateTime } from "@/lib/format";
+import {
+  IMPORT_STAGES,
+  importActiveStage,
+  importResolved,
+  isImportsDisabledError,
+} from "@/lib/import-status";
 
 type Status = "loading" | "error" | "ready";
 
@@ -611,6 +619,20 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   const [result, setResult] = useState<Video | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Whether URL import is accepted on this instance (GET /instance features).
+  // null = unknown/not-yet-loaded → the form stays enabled (fail open); false →
+  // the URL tab renders the honest disabled state instead of a dead form.
+  const [importsEnabled, setImportsEnabled] = useState<boolean | null>(null);
+  // The in-flight URL-import job, refreshed on every poll tick so the stage rail
+  // (queued → fetching metadata → downloading → scanning & processing) tracks the
+  // backend's `import_job.stage`. Cleared between attempts.
+  const [importJob, setImportJob] = useState<ImportJob | null>(null);
+  // The videoId+url of the last failed import, so Retry can re-enqueue against
+  // the same draft (the draft survives a failed import) via the same endpoint.
+  const [retryCtx, setRetryCtx] = useState<{ videoId: string; url: string } | null>(null);
+  // Guards the one-shot metadata prefill so it fires once per import, right after
+  // the resolving stage, and never clobbers a field the user has since edited.
+  const prefillDoneRef = useRef(false);
   // Chunk-accurate progress percent (0–100) for the in-flight file upload.
   const [progress, setProgress] = useState(0);
   // Bytes transferred so far / total, for the "X of Y" detail under the bar
@@ -633,6 +655,19 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
   useEffect(() => {
     if (state === "cancelled") publishRef.current?.focus();
   }, [state]);
+
+  // Read the instance's effective feature toggles so the "Import from URL" tab
+  // reflects whether imports are accepted here (lock-step with the backend's
+  // enforcement). A failed/blocked fetch leaves it null → the form stays enabled
+  // and a stray 503 at submit is the defensive fallback.
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .getInstance(controller.signal)
+      .then((res) => setImportsEnabled(res.features.imports))
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   // Cancel the in-flight upload: aborts the chunk transfer (the upload promise
   // rejects as a cancellation, handled in the catch blocks below).
@@ -663,6 +698,8 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     setResumeCandidate(null);
     setFileName(null);
     setBytes(null);
+    setImportJob(null);
+    setRetryCtx(null);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -691,18 +728,23 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     void api.deleteVideo(s.videoId).catch(() => {});
   }
 
-  // importAndPoll enqueues the async URL import (202) then polls the job until it
-  // is done or failed. On done it reads the finalised video; on failed it returns
-  // the surfaced, safe error message.
+  // importAndPoll enqueues the async URL import (202, always resolver "auto" — the
+  // UI never guesses direct vs platform) then polls the job until it is done or
+  // failed, calling onJob after each response so the caller can drive the stage
+  // rail + metadata prefill. On done it reads the finalised video; on failed it
+  // returns the surfaced, safe error message.
   async function importAndPoll(
     videoId: string,
     url: string,
     signal: AbortSignal,
+    onJob: (job: ImportJob) => void,
   ): Promise<{ ok: true; video: Video } | { ok: false; error: string }> {
-    let job = (await api.importVideoFile(videoId, url)).import_job;
+    let job = (await api.importVideoFile(videoId, url, "auto")).import_job;
+    onJob(job);
     while (job.state === "pending" || job.state === "running") {
       await sleep(IMPORT_POLL_INTERVAL_MS, signal);
       job = (await api.getVideoImport(videoId, signal)).import_job;
+      onJob(job);
     }
     if (job.state === "failed") {
       return {
@@ -712,6 +754,97 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     }
     const video = await api.getVideo(videoId, undefined, signal);
     return { ok: true, video };
+  }
+
+  // maybePrefill fires once per import, right after the resolving stage, refetching
+  // the draft so any yt-dlp-resolved title/description the worker applied to it
+  // shows in the form. User edits win: a field the creator has already typed into
+  // is never overwritten (only an empty field is filled). Poster is intentionally
+  // not shown — the backend derives it from the downloaded original during
+  // processing, not from the resolver.
+  function maybePrefill(videoId: string, job: ImportJob, signal: AbortSignal) {
+    if (prefillDoneRef.current || !importResolved(job)) return;
+    prefillDoneRef.current = true;
+    void api
+      .getVideo(videoId, undefined, signal)
+      .then((v) => {
+        setTitle((t) => (t.trim() === "" ? v.title : t));
+        setDescription((d) => (d.trim() === "" ? v.description : d));
+      })
+      .catch(() => {});
+  }
+
+  // runImport enqueues + polls an import for an EXISTING draft video, driving the
+  // stage rail, the one-shot metadata prefill, and the honest terminal outcome.
+  // Shared by the initial URL publish and the Retry affordance (both target the
+  // same draft — it survives a failed import). The caller owns the AbortController
+  // (and clears abortRef in its finally).
+  async function runImport(videoId: string, url: string, controller: AbortController) {
+    prefillDoneRef.current = false;
+    setImportJob(null);
+    try {
+      const outcome = await importAndPoll(videoId, url, controller.signal, (job) => {
+        setImportJob(job);
+        maybePrefill(videoId, job, controller.signal);
+      });
+      if (!outcome.ok) {
+        setError(outcome.error);
+        setRetryCtx({ videoId, url });
+        setState("error");
+        return;
+      }
+      finishWithVideo(outcome.video, "url");
+    } catch (err) {
+      if (isUploadCancelled(err)) {
+        setState("cancelled");
+        return;
+      }
+      // Imports turned off after the tab rendered (or an explicitly-disabled
+      // resolver): drop to the honest disabled state, never a stuck spinner.
+      if (isImportsDisabledError(err)) {
+        setImportsEnabled(false);
+        setImportJob(null);
+        setState("idle");
+        return;
+      }
+      // A 422 with a url field error renders inline on the URL input (not a retry).
+      if (applyFieldErrors(err)) return;
+      setError(importOrUploadError(err, "url"));
+      setRetryCtx({ videoId, url });
+      setState("error");
+    }
+  }
+
+  // retryImport re-enqueues the last failed import against the same draft via the
+  // same endpoint (the backend returns/replaces the job for that video).
+  async function retryImport() {
+    const ctx = retryCtx;
+    if (!ctx || state === "uploading") return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setState("uploading");
+    setError(null);
+    setFieldErrors({});
+    setResult(null);
+    setRetryCtx(null);
+    try {
+      await runImport(ctx.videoId, ctx.url, controller);
+    } finally {
+      abortRef.current = null;
+    }
+  }
+
+  // changeSource switches the upload/import tab, clearing any transient outcome
+  // of the other source (a stray URL-import error must not linger on the file tab,
+  // and vice versa). No-op mid-upload (the control is disabled then anyway).
+  function changeSource(next: "file" | "url") {
+    if (next === source || state === "uploading") return;
+    setSource(next);
+    setError(null);
+    setFieldErrors({});
+    setRetryCtx(null);
+    setImportJob(null);
+    if (state === "error" || state === "cancelled") setState("idle");
   }
 
   // onFilePicked offers a resume when the re-picked file matches an unfinished
@@ -738,6 +871,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
     setError(null);
     setFieldErrors({});
     setResult(null);
+    setRetryCtx(null);
     let draftId: string | null = null;
     try {
       // A fresh publish for a file that still has a lingering resumable session
@@ -765,13 +899,9 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
         return;
       }
       if (source === "url") {
-        const imported = await importAndPoll(draft.id, url, controller.signal);
-        if (!imported.ok) {
-          setError(imported.error);
-          setState("error");
-          return;
-        }
-        finishWithVideo(imported.video, "url");
+        // runImport owns the URL outcome (rail, prefill, retry, disabled) and its
+        // own error handling, so it never falls through to the file-upload catch.
+        await runImport(draft.id, url, controller);
         return;
       }
       // File source: the resumable (chunked) protocol — create session → PUT
@@ -994,31 +1124,22 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             hidden from public surfaces until this time (must be in the future).
           </span>
         </label>
-        <fieldset className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-fg">Source</span>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-1.5">
-              <input
-                type="radio"
-                name="video-source"
-                checked={source === "file"}
-                onChange={() => setSource("file")}
-                className="h-4 w-4 accent-accent focus-ring"
-              />
-              Upload file
-            </label>
-            <label className="flex items-center gap-1.5">
-              <input
-                type="radio"
-                name="video-source"
-                checked={source === "url"}
-                onChange={() => setSource("url")}
-                className="h-4 w-4 accent-accent focus-ring"
-              />
-              Import from URL
-            </label>
-          </div>
-        </fieldset>
+        <div className="flex flex-col gap-1.5 text-sm">
+          <span id="video-source-label" className="font-medium text-fg">
+            Source
+          </span>
+          <SegmentedControl
+            value={source}
+            onChange={changeSource}
+            labelledBy="video-source-label"
+            disabled={state === "uploading"}
+            fullWidth
+            options={[
+              { value: "file", label: "Upload file" },
+              { value: "url", label: "Import from URL" },
+            ]}
+          />
+        </div>
         {source === "file" ? (
           // Design's dashed dropzone: the file input is a full-bleed transparent
           // overlay (still labelled "Video file" for pickers + tests + keyboard),
@@ -1053,12 +1174,28 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
               New uploads are scanned and may be held briefly for review.
             </span>
           </div>
+        ) : importsEnabled === false ? (
+          // Imports are turned off on this instance — an honest empty state, never
+          // a dead form the creator can submit into a 503.
+          <EmptyState
+            title="Imports are disabled on this instance"
+            message="The operator has turned off URL video import here. Upload a file instead, or check back later."
+          />
         ) : (
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-fg">Video URL</span>
             <input
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
+              onPaste={(e) => {
+                // Paste-detect: a pasted http(s) URL is trimmed of the stray
+                // whitespace/newlines that ride along when copying a link.
+                const text = e.clipboardData.getData("text").trim();
+                if (text !== "" && /^https?:\/\//i.test(text)) {
+                  e.preventDefault();
+                  setVideoUrl(text);
+                }
+              }}
               type="url"
               placeholder="https://example.com/clip.mp4"
               aria-label="Video URL"
@@ -1068,10 +1205,14 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
             />
             <FieldErrorText id="publish-url-error" message={fieldErrors.url} />
             <span className="text-xs text-fg-muted">
-              A public direct link to a video file. We fetch and publish it.
+              A public link to a video file or a supported platform watch page. We fetch, scan,
+              and publish it.
             </span>
           </label>
         )}
+        {source === "url" && state === "uploading" ? (
+          <ImportStageRail job={importJob} />
+        ) : null}
         {source === "file" && resumeCandidate && state !== "uploading" ? (
           // A resumable session was left by an interrupted upload of this exact
           // file — offer to resume from the chunks that already landed.
@@ -1104,7 +1245,7 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
           <button
             ref={publishRef}
             type="submit"
-            disabled={state === "uploading"}
+            disabled={state === "uploading" || (source === "url" && importsEnabled === false)}
             className={buttonClasses("primary", "md")}
           >
             {state === "uploading" ? (source === "url" ? "Importing…" : "Uploading…") : "Publish"}
@@ -1184,11 +1325,70 @@ function UploadSection({ channels, config }: { channels: Channel[]; config: Vide
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
+        <div className="flex flex-col items-start gap-2">
+          <p role="alert" className="text-sm text-danger">
+            {error}
+          </p>
+          {retryCtx ? (
+            // A failed URL import keeps its draft, so Retry re-enqueues against the
+            // same video via the same endpoint — no re-entry of the form.
+            <Button variant="secondary" size="sm" onClick={() => void retryImport()}>
+              Retry import
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </section>
+  );
+}
+
+// ImportStageRail renders the URL-import progress rail (UPLOAD-09): the four
+// coarse stages the backend reports on `import_job` (queued → fetching metadata →
+// downloading → scanning & processing). The active stage spins, completed stages
+// check off, and later stages sit muted — the same spinner + pill vocabulary the
+// studio uses elsewhere. `job` is null for the brief window before the enqueue
+// POST returns; the rail then reads as "Queued".
+function ImportStageRail({ job }: { job: ImportJob | null }) {
+  const active = job ? importActiveStage(job) : 0;
+  return (
+    <ol
+      aria-label="Import progress"
+      className="flex flex-col gap-2 rounded-2xl bg-surface-muted p-4"
+    >
+      {IMPORT_STAGES.map((stage, i) => {
+        const done = active < 0 || i < active;
+        const current = i === active;
+        return (
+          <li
+            key={stage.key}
+            aria-current={current ? "step" : undefined}
+            className="flex items-center gap-2.5 text-sm"
+          >
+            <span
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+                done
+                  ? "bg-success/15 text-success"
+                  : current
+                    ? "text-accent"
+                    : "bg-surface-strong text-fg-muted"
+              }`}
+            >
+              {done ? (
+                <CheckIcon size={13} aria-hidden="true" />
+              ) : current ? (
+                <LoaderIcon size={15} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-fg-muted" aria-hidden="true" />
+              )}
+            </span>
+            <span className={current ? "font-semibold text-fg" : "text-fg-muted"}>
+              {stage.label}
+            </span>
+            {current ? <span className="sr-only">— in progress</span> : null}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
