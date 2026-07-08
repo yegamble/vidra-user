@@ -9,6 +9,7 @@ const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const USERS = /\/api\/v1\/admin\/users(\?|$)/;
 const SYSTEM = /\/api\/v1\/admin\/system$/;
+const STATS = /\/api\/v1\/admin\/stats$/;
 const REPORTS = /\/api\/v1\/admin\/reports(\?|$)/;
 const JOBS = /\/api\/v1\/admin\/jobs$/;
 const AUDIT = /\/api\/v1\/admin\/audit-log(\?|$)/;
@@ -46,6 +47,16 @@ const systemStatus = {
   environment: "production",
   uptime_seconds: 90061, // 1d 1h 1m
   components: { postgres: { status: "ok" }, redis: { status: "ok" } },
+};
+
+// GET /admin/stats — the design's four aggregate stat cards. Real live counts;
+// the extra `comments` field is intentionally not rendered as a card.
+const adminStats = {
+  users: 2847,
+  published_videos: 1240,
+  media_stored_bytes: 512 * 1024 ** 3, // 512.0 GB
+  federated_peers: 37,
+  comments: 15803,
 };
 
 const jobsOverview = {
@@ -132,7 +143,7 @@ async function openOverview(page: Page) {
 
 test("anonymous viewers are gated out of the admin overview", async ({ page }) => {
   let fetched = false;
-  for (const rx of [SYSTEM, REPORTS, JOBS, AUDIT]) {
+  for (const rx of [SYSTEM, STATS, REPORTS, JOBS, AUDIT]) {
     await page.route(rx, (route) => {
       fetched = true;
       return route.fulfill({ json: {} });
@@ -148,11 +159,23 @@ test("an admin sees the health, queues, audit, open-reports, and section cards",
 }) => {
   await signIn(page, "admin");
   await page.route(SYSTEM, (route) => route.fulfill({ json: systemStatus }));
+  await page.route(STATS, (route) => route.fulfill({ json: adminStats }));
   await page.route(REPORTS, (route) => route.fulfill({ json: reports(3) }));
   await page.route(JOBS, (route) => route.fulfill({ json: jobsOverview }));
   await page.route(AUDIT, (route) => route.fulfill({ json: auditLog }));
 
   await openOverview(page);
+
+  // Instance overview stat cards — GET /admin/stats (real counts, no deltas).
+  const overview = page.getByRole("region", { name: "Instance overview" });
+  await expect(overview.getByText("Users", { exact: true })).toBeVisible();
+  await expect(overview.getByText("2.8K")).toBeVisible();
+  await expect(overview.getByText("Published videos")).toBeVisible();
+  await expect(overview.getByText("1.2K")).toBeVisible();
+  await expect(overview.getByText("Media stored")).toBeVisible();
+  await expect(overview.getByText("512.0 GB")).toBeVisible();
+  await expect(overview.getByText("Federated peers")).toBeVisible();
+  await expect(overview.getByText("37", { exact: true })).toBeVisible();
 
   // Health card — reuses GET /admin/system (overall flag + dependency rows).
   const health = page.getByRole("region", { name: "Health" });
@@ -194,6 +217,7 @@ test("an admin sees the health, queues, audit, open-reports, and section cards",
 test("a full first page of open reports renders as 100+", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(SYSTEM, (route) => route.fulfill({ json: systemStatus }));
+  await page.route(STATS, (route) => route.fulfill({ json: adminStats }));
   await page.route(JOBS, (route) => route.fulfill({ json: jobsOverview }));
   await page.route(AUDIT, (route) => route.fulfill({ json: auditLog }));
   // The list carries no total, so a full page is shown as a lower bound.
@@ -219,6 +243,7 @@ test("a failed health read shows a retryable error without hiding the reports co
     }
     return route.fulfill({ json: systemStatus });
   });
+  await page.route(STATS, (route) => route.fulfill({ json: adminStats }));
   await page.route(REPORTS, (route) => route.fulfill({ json: reports(0) }));
   await page.route(JOBS, (route) => route.fulfill({ json: jobsOverview }));
   await page.route(AUDIT, (route) => route.fulfill({ json: auditLog }));

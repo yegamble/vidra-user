@@ -787,6 +787,11 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ status: "accepted", note: "spam" });
   });
 
+  it("getAdminStats targets the instance-overview stats endpoint", async () => {
+    await api.getAdminStats();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/stats");
+  });
+
   it("getAdminUsers targets the admin users endpoint with the q filter", async () => {
     await api.getAdminUsers({ q: "ada", limit: 100 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/users?q=ada&limit=100");

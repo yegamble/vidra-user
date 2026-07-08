@@ -1734,9 +1734,21 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
         design's grid — **Health + Job queues on the left, Recent audit log on the right** — over the
         same independent reads (one `AbortController`; a broken read degrades to its own inline
         retry). Below `lg` it collapses back to the DR11 single column (identical source order).
-        **Still NO 4-stat row (Users / Published videos / Media stored / Federated peers): no
-        aggregate-counts endpoint exists (verified fresh — no `/admin/stats`; the backend wave's
-        stats tasks have not landed), so it stays DEFERRED, not faked (spec §5.4).**
+        **4-stat row FOLLOW-UP 2026-07-08 — now SHIPPED.** On a fresh re-read of
+        `vidra-core/api/openapi.yaml` the backend wave has since landed `GET /api/v1/admin/stats`
+        (`AdminStats { users, published_videos, media_stored_bytes, federated_peers, comments }` —
+        every field a live COUNT/SUM, deliberately no period-over-period deltas). The design's four
+        aggregate cards (Users / Published videos / Media stored / Federated peers) now bind to those
+        real counts via a new `api.getAdminStats` read + a `StatsRow` at the top of the Overview
+        (2-up on mobile, the design's 4-in-a-row at `lg`; `formatCount` for the three counts,
+        `formatBytes` for stored media; own load/error state with inline retry; the extra `comments`
+        field is intentionally not shown as a card — the design's row is these four). Nothing is
+        faked and no delta lines are invented (the contract carries none — spec §5.4). Covered by a
+        `getAdminStats` endpoints unit test + `admin-overview.spec.ts` (region-scoped card
+        assertions + the gate now proving `/admin/stats` is NOT fetched for a non-admin);
+        `design-shots.mjs` admin-overview area mocks `/admin/stats`. Full `npm run ci` re-run green
+        on the final tree (unit **719**, e2e **436**). Everything else in DR12 below shipped
+        2026-07-08 as first described.
       • **Users TABLE → user DETAIL (`AdminUsersView`).** At `lg` the per-user cards become the
         design's account **table** — a `1.4fr 1fr 110px 130px 120px 90px` grid, uppercase 11.5px
         column headers (User / Email / Role / Storage / Joined / Status), avatar+name+@handle cell,

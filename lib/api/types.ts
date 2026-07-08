@@ -72,6 +72,7 @@ export type AuditLogEntry = Schemas["AuditLogEntry"];
 export type AuditLogListResponse = Schemas["AuditLogListResponse"];
 export type SystemStatusComponent = Schemas["ComponentStatus"];
 export type SystemStatus = Schemas["SystemStatus"];
+export type AdminStats = Schemas["AdminStats"];
 export type UpdateUserRequest = Schemas["UpdateUserRequest"];
 
 // --- Admin: instance settings / jobs / media GB (slice user-admin-config) ----

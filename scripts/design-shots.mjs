@@ -750,6 +750,16 @@ const SAMPLE_SYSTEM_STATUS = {
   },
 };
 
+// GET /admin/stats — the design's four aggregate overview cards (DR12). Real
+// live counts (no deltas); demo figures echo the design's "2,847 accounts".
+const SAMPLE_ADMIN_STATS = {
+  users: 2_847,
+  published_videos: 1_284,
+  media_stored_bytes: Math.round(1.9 * 1024 ** 4), // ~1.9 TB
+  federated_peers: 42,
+  comments: 15_803,
+};
+
 const SAMPLE_JOBS_OVERVIEW = {
   queues: [
     { queue: "transcode_jobs", pending: 3, running: 1, done: 1_240, failed: 0, oldest_pending_age_seconds: 120 },
@@ -1717,6 +1727,7 @@ const AREAS = {
     async mock(page) {
       await mockAdminShell(page);
       await page.route(/\/api\/v1\/admin\/system$/, (route) => route.fulfill({ json: SAMPLE_SYSTEM_STATUS }));
+      await page.route(/\/api\/v1\/admin\/stats$/, (route) => route.fulfill({ json: SAMPLE_ADMIN_STATS }));
       await page.route(/\/api\/v1\/admin\/reports(\?|$)/, (route) => route.fulfill({ json: SAMPLE_REPORTS }));
       await page.route(/\/api\/v1\/admin\/jobs$/, (route) => route.fulfill({ json: SAMPLE_JOBS_OVERVIEW }));
       await page.route(/\/api\/v1\/admin\/audit-log(\?|$)/, (route) => route.fulfill({ json: SAMPLE_AUDIT_LOG }));

@@ -5,6 +5,7 @@ import { ApiError, apiRequest } from "./client";
 import { uploadWithProgress, type UploadProgress } from "./upload";
 import type {
   AdminCommentListResponse,
+  AdminStats,
   AdminUser,
   AdminUserListResponse,
   AuditLogListResponse,
@@ -1442,6 +1443,14 @@ export const api = {
   /** GET /api/v1/admin/system — operational status snapshot (admin). */
   getSystemStatus: (signal?: AbortSignal) =>
     apiRequest<SystemStatus>("/api/v1/admin/system", { signal }),
+
+  /**
+   * GET /api/v1/admin/stats — instance-wide overview counts for the admin
+   * dashboard's stat cards (admin only). Every field is a live COUNT/SUM; the
+   * contract carries no period-over-period deltas.
+   */
+  getAdminStats: (signal?: AbortSignal) =>
+    apiRequest<AdminStats>("/api/v1/admin/stats", { signal }),
 
   /**
    * GET /api/v1/admin/videos/blocked — currently-blocked videos, newest block

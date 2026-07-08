@@ -9,8 +9,8 @@ import { Badge } from "@/components/ui/Badge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
-import type { AuditLogEntry, JobsOverview, SystemStatus } from "@/lib/api";
-import { formatUptime, relativeTime } from "@/lib/format";
+import type { AdminStats, AuditLogEntry, JobsOverview, SystemStatus } from "@/lib/api";
+import { formatBytes, formatCount, formatUptime, relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
@@ -20,15 +20,18 @@ const REPORTS_PAGE = 100;
 // The overview shows a short recent-audit tail; the full trail lives at /admin/audit-log.
 const AUDIT_PREVIEW = 6;
 
-// NOTE (design refresh DR11 / spec §5.4): the design's Overview leads with four
+// NOTE (design refresh DR12 / spec §5.4): the design's Overview leads with four
 // aggregate stat cards (Users / Published videos / Media stored / Federated
-// peers). No aggregate-counts endpoint exists in the contract at execution time
-// (verified fresh in vidra-core/api/openapi.yaml — no /admin/stats), so those
-// cards are deferred rather than faked. The dashboard binds only to what is real:
-// GET /admin/system (health), /admin/jobs (queues), /admin/audit-log (trail),
-// /admin/reports (open count). IPFS-gateway health is likewise deferred — its
-// /ipfs/status endpoint 501s until P19.2, so the Health card reflects exactly the
-// dependencies /admin/system reports, never a fabricated S3/RTMP/IPFS row.
+// peers). GET /api/v1/admin/stats has since landed in vidra-core (re-verified
+// fresh: AdminStats { users, published_videos, media_stored_bytes,
+// federated_peers, comments } — every field a live COUNT/SUM, deliberately no
+// deltas), so the row now binds to those real counts. Nothing is faked; the
+// contract carries no period-over-period figures, so the design's delta lines
+// stay absent (spec §5.4). The remaining reads are unchanged: GET /admin/system
+// (health), /admin/jobs (queues), /admin/audit-log (trail), /admin/reports (open
+// count). IPFS-gateway health is still deferred — its /ipfs/status endpoint 501s
+// until P19.2, so the Health card reflects exactly the dependencies /admin/system
+// reports, never a fabricated S3/RTMP/IPFS row.
 
 const SECTIONS = [
   {
@@ -117,6 +120,9 @@ function Dashboard() {
   const [status, setStatus] = useState<Status>("loading");
   const [system, setSystem] = useState<SystemStatus | null>(null);
 
+  const [statsStatus, setStatsStatus] = useState<Status>("loading");
+  const [stats, setStats] = useState<AdminStats | null>(null);
+
   const [reportsStatus, setReportsStatus] = useState<Status>("loading");
   const [openReports, setOpenReports] = useState(0);
   const [openReportsFullPage, setOpenReportsFullPage] = useState(false);
@@ -142,6 +148,15 @@ function Dashboard() {
       })
       .catch(() => {
         if (!aborted()) setStatus("error");
+      });
+    api
+      .getAdminStats(signal)
+      .then((res) => {
+        setStats(res);
+        setStatsStatus("ready");
+      })
+      .catch(() => {
+        if (!aborted()) setStatsStatus("error");
       });
     api
       .getReports({ openOnly: true, limit: REPORTS_PAGE }, signal)
@@ -177,6 +192,7 @@ function Dashboard() {
 
   const retry = useCallback(() => {
     setStatus("loading");
+    setStatsStatus("loading");
     setReportsStatus("loading");
     setJobsStatus("loading");
     setAuditStatus("loading");
@@ -185,6 +201,10 @@ function Dashboard() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Design stat row (DR12 / spec §5.4): the four aggregate counts from
+          GET /admin/stats — 2-up on mobile, the design's 4-in-a-row at `lg`.
+          Real live counts only; no delta lines (the contract has none). */}
+      <StatsRow status={statsStatus} stats={stats} onRetry={retry} />
       {/* Desktop console (DR12): the design's two-column overview — Health + Job
           queues stacked on the left, the recent audit log on the right. Below
           `lg` it collapses to the DR11 single-column stack (same source order). */}
@@ -212,6 +232,70 @@ function CardShell({ title, children }: { title: string; children: React.ReactNo
     <section aria-label={title}>
       <h2 className="px-0.5 pb-2 text-[15px] font-bold tracking-tight text-fg">{title}</h2>
       {children}
+    </section>
+  );
+}
+
+// StatsRow is the design's four aggregate stat cards over GET /admin/stats:
+// Users / Published videos / Media stored / Federated peers. 2-up on mobile, the
+// design's 4-in-a-row at `lg`. Values are live COUNT/SUMs (the contract has no
+// deltas, so none are shown). The `comments` field the contract also returns is
+// left off — the design's row is these four cards (spec §5.4).
+function StatsRow({
+  status,
+  stats,
+  onRetry,
+}: {
+  status: Status;
+  stats: AdminStats | null;
+  onRetry: () => void;
+}) {
+  if (status === "error" || (status === "ready" && stats === null)) {
+    return (
+      <section aria-label="Instance overview">
+        <ErrorState message="Could not load the instance overview." onRetry={onRetry} />
+      </section>
+    );
+  }
+  const loading = status === "loading" || stats === null;
+  const cards: Array<{ label: string; value: string; title?: string }> = stats
+    ? [
+        { label: "Users", value: formatCount(stats.users), title: String(stats.users) },
+        {
+          label: "Published videos",
+          value: formatCount(stats.published_videos),
+          title: String(stats.published_videos),
+        },
+        { label: "Media stored", value: formatBytes(stats.media_stored_bytes) },
+        {
+          label: "Federated peers",
+          value: formatCount(stats.federated_peers),
+          title: String(stats.federated_peers),
+        },
+      ]
+    : [
+        { label: "Users", value: "—" },
+        { label: "Published videos", value: "—" },
+        { label: "Media stored", value: "—" },
+        { label: "Federated peers", value: "—" },
+      ];
+  return (
+    <section aria-label="Instance overview">
+      <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy={loading || undefined}>
+        {cards.map((c) => (
+          <div key={c.label} className="flex flex-col gap-1.5 rounded-2xl bg-surface-muted p-4">
+            <dt className="text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
+              {c.label}
+            </dt>
+            <dd
+              className={`text-2xl font-bold tracking-tight tabular-nums ${loading ? "text-fg-subtle" : "text-fg"}`}
+              title={c.title}
+            >
+              {c.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
