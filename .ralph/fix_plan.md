@@ -823,7 +823,15 @@ the core commit + endpoint it binds to (W1-style):
       responsive with the bottom tab bar intact). (j) **Gate:** full `npm run ci`
       green locally twice (typecheck, lint, lint:icons, 742 unit incl. the 14 new,
       build, 445 e2e incl. the 5 new + axe); `node scripts/check-contract.mjs`
-      green. **CLOSED.**
+      green. On branch CI (commit `060735f`): `frontend-ci` GREEN, `contract-ci`
+      GREEN. `frontend-e2e-backed` is chronically red in this CI env on the same
+      unrelated data-mutating specs as every prior commit (admin-users, mfa,
+      messaging, playlists, donations, notifications, deactivate, instance-settings,
+      profile-edit, playlist-thumbnail — 16 failed / 70 passed); this slice's own
+      backed spec is NOT among the failures — the passing count rose by exactly +1
+      (W2.U1's 69 → 70), proving `e2e-backed/video-import-url.spec.ts` ran AND passed
+      against a real vidra-core + Postgres, and the studio/captions backed-selector
+      edits still pass too. **CLOSED.**
 - [ ] W2.U3 [UPLOAD-04 UI — UNBLOCKED: vidra-core W2.C5 landed (commit `3f3c6e6`;
       JSON `{at_seconds}` variant on `/videos/{id}/thumbnail` present in
       `vidra-core/api/openapi.yaml`)] Thumbnail frame-pick: scrubber (storyboard
