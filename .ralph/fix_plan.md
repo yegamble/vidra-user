@@ -1070,8 +1070,18 @@ the core commit + endpoint it binds to (W1-style):
       the first push `b79be07`: `frontend-ci` GREEN, `contract-ci` GREEN. That push's
       `frontend-e2e-backed` also proved this slice's backed spec passes (see (e)) but
       exposed the shared-stack yt-dlp regression on the URL-import specs; the
-      follow-up commit reverts yt-dlp in the shared job and adds the isolated
-      `channel-sync-backed` job (green DB-proof, no import regression). **CLOSED.**
+      follow-up commit `caba8c1` reverts yt-dlp in the shared job and adds the
+      isolated `channel-sync-backed` job. **Confirmed on `caba8c1`:** `frontend-ci`
+      GREEN, `contract-ci` GREEN, `ci-guard` GREEN; the new `channel-sync-backed` job
+      GREEN — "2 passed" (backed-setup + this slice's create→list→sync-now→delete
+      backed spec RAN AND PASSED against a real vidra-core + Postgres, not skipped).
+      The shared `e2e-backed` job is back to its pre-existing chronic baseline (15
+      failed / 73 passed — only the same unrelated data-mutating specs: admin-users,
+      deactivate, donations, instance-settings, messaging, mfa, notifications,
+      playlist-thumbnail, playlists, profile-edit); `video-import-url.spec.ts:16` and
+      `studio.spec.ts:288` are NO LONGER failing (the yt-dlp regression is gone, the
+      backed passed count rose 71→73), proving this slice regresses nothing.
+      **CLOSED.**
 - [~] W2 torrent/magnet import — **DEFERRED to W6** (user standing decision
       2026-07-08). Non-goal for W2: the URL tab accepts http(s) URLs only; no
       torrent/magnet input field is built here. When picked up in W6 it carries
