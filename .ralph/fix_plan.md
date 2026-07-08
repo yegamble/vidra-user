@@ -872,11 +872,55 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
       `npm run ci` GREEN (typecheck, lint, 560 unit, build, 398 e2e incl. axe). Pushed.
 
 ## DR2 — Icon sweep: kill all emoji/glyph icons (5 call sites)
-- [ ] `RatingControls` 👍/👎 → ThumbsUp/ThumbsDown; `ReportButton` ⚑ → FlagIcon; `SaveButton`
-      ★/☆ → StarIcon (revisit vs design plus+"Save" pill in DR5); `PlayerMenu` ✓ +
-      `AddToPlaylistButton` ✓ → CheckIcon. Do NOT convert `·`/`…`/`×`/`←→` keycaps/`—`/LIVE dot.
-- [ ] CI guard: grep/lint failing on emoji codepoints in `components/ app/` JSX.
-- [ ] Evidence + `npm run ci` + push.
+- [x] `RatingControls` 👍/👎 → ThumbsUp/ThumbsDown; `ReportButton` ⚑ → FlagIcon; `SaveButton`
+      ★/☆ → the design's plus+"Save" pill; `PlayerMenu` ✓ + `AddToPlaylistButton` ✓ → CheckIcon.
+      Do NOT convert `·`/`…`/`×`/`←→` keycaps/`—`/LIVE dot. **DONE 2026-07-07.** A tree-wide
+      codepoint scan (components/ app/ e2e/ lib/) found the documented 5 sites PLUS one the
+      spec's audit missed: a stray fullwidth plus `＋` (U+FF0B) at `AddToPlaylistButton.tsx:93`
+      — killed too (→ `PlusIcon`). Six sites, all now SVG:
+      • `RatingControls.tsx` 👍/👎 → `ThumbsUpIcon`/`ThumbsDownIcon`. The design source has NO
+        like/dislike surface (its watch actions are Support/Share/Download/Save/Report), so these
+        two icons are vendored from **Feather (MIT, already credited in the icon header)** rather
+        than the design files — feather-style single-path draws, set's 1.8 stroke, round joins.
+      • `ReportButton.tsx` ⚑ → `FlagIcon` (the pennant re-pathed in DR1).
+      • `SaveButton.tsx` ★/☆ → **the design's plus+"Save" pill** (settled decision; supersedes the
+        old "→ StarIcon, revisit in DR5" note — no StarIcon created). The pill was already tonal
+        rounded-full (matches the design's `--sm` 99px Save pill); only the glyph changed:
+        `PlusIcon` unsaved / `CheckIcon` saved (accent-filled + aria-pressed still carry state).
+      • `PlayerMenu.tsx` ✓ → `CheckIcon` in a `flex w-4 justify-center` slot — covers Speed AND
+        Quality menus (both delegate to PlayerMenu).
+      • `AddToPlaylistButton.tsx` ＋ (:93) → `PlusIcon`; ✓ (:114) → `CheckIcon`.
+      Every icon stays decorative (`aria-hidden`, no `label`) — the buttons already own the
+      accessible name (`aria-label`/text), so e2e selectors ("Like"/"Dislike"/"Save"/"Saved") are
+      unchanged and green. Cleaned a now-vestigial `.replace("✓","")` in
+      `VideoPlayer.test.tsx:119` (the selected speed's check is an SVG → no text content).
+      **Scope (spec §7.2):** the ~45 ad-hoc inline `<svg>` components (ShareButton, DownloadButton,
+      DonateButton, …) are already SVG, not emoji — they converge onto the shared set
+      *per-surface* in their restyle slices (DR5 watch-actions, …) and the DR13 audit, NOT a
+      big-bang here. DR2 = emoji/glyph kill + regression guard only.
+      Icon set: added `ThumbsUpIcon`/`ThumbsDownIcon` to `components/icons` (+2 unit cases).
+- [x] CI guard: grep/lint failing on emoji codepoints in `components/ app/` JSX. **DONE
+      2026-07-07.** New `scripts/check-no-emoji.mjs` (importable `findEmojiViolations()` + CLI,
+      styled on `check-contract.mjs`) scans components/ and app/ for banned codepoint RANGES —
+      Misc Symbols U+2600–26FF (★☆⚑), Dingbats U+2700–27BF (✓), Misc Symbols & Arrows U+2B00–2BFF,
+      the emoji planes U+1F000–1FAFF (👍👎), variation selectors U+FE00–0F, ZWJ, and fullwidth
+      ASCII forms U+FF01–5E (＋). Deliberately does NOT ban the design's text typography (· … ×
+      ← → — – curly quotes all fall outside those ranges). Wired into `npm run ci` as
+      `lint:icons` (new script) before the unit run, AND mirrored as a vitest unit test
+      (`components/icons/no-emoji.test.tsx`): asserts the source is clean, that the detector
+      actually catches a planted emoji/dingbat/star/fullwidth (built via `String.fromCodePoint`
+      so the test file itself stays glyph-free — the guard scans tests too), and that the allowed
+      typography is not flagged.
+- [x] Evidence + `npm run ci` + push. **DONE 2026-07-07.** Before/after `watch` + `watch-speed`
+      (light+dark, 390/1280) in `.ralph/design-review/dr2/{before,after}/` (git-ignored). Read
+      after-PNGs vs the design: the watch action row now reads as clean monochrome feather glyphs
+      (thumbs-up/down, `+ Save`, `+ Save to playlist`, pennant Report) inheriting `currentColor` —
+      before it was colored emoji (yellow 👍👎) clashing with the monochrome system; the speed
+      menu's selected `1×` shows a feather check (was `✓`). Full `npm run ci` GREEN: typecheck,
+      lint, lint:icons, 564 unit (48 files), build, e2e 397/398 — the 1 failure
+      (`quarantine.spec.ts:255`, a video_rejected notification bell flow, touches none of the
+      swapped components) is a full-parallel flake: passes in isolation and on a scoped re-run
+      with rating/save specs (11/11). Pushed.
 
 ## DR3 — Shell: BottomTabBar + Header + Sidebar + Create sheet
 - [ ] Tab/sidebar/header icons → design paths; Create tab opens bottom sheet (Upload / Go

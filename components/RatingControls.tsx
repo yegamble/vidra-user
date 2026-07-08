@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ThumbsDownIcon, ThumbsUpIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { RatingValue, VideoRating } from "@/lib/api";
 import { formatCount } from "@/lib/format";
@@ -102,7 +103,7 @@ function RatingButton({
           : "bg-surface-muted text-fg hover:bg-surface-strong")
       }
     >
-      <span aria-hidden>{label === "Like" ? "👍" : "👎"}</span>
+      {label === "Like" ? <ThumbsUpIcon size={16} /> : <ThumbsDownIcon size={16} />}
       <span className="tabular-nums">{formatCount(count)}</span>
     </button>
   );

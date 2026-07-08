@@ -114,9 +114,11 @@ describe("VideoPlayer shell", () => {
     const video = container.querySelector("video") as HTMLVideoElement;
     fireEvent.click(screen.getByRole("button", { name: "Speed: 1×" }));
     const menu = screen.getByRole("menu", { name: "Playback speed" });
-    // Full mined ladder, ascending, normal reads "1×" (not "Normal").
+    // Full mined ladder, ascending, normal reads "1×" (not "Normal"). The
+    // selected item's check is a decorative <svg> (no text), so textContent is
+    // just the rate label.
     const items = within(menu).getAllByRole("menuitemradio");
-    expect(items.map((i) => i.textContent?.replace("✓", "").trim())).toEqual([
+    expect(items.map((i) => i.textContent?.trim())).toEqual([
       "0.25×", "0.5×", "0.75×", "1×", "1.25×", "1.5×", "1.75×", "2×", "2.5×", "3×", "3.5×", "4×",
     ]);
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: "4×" }));

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { FlagIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
@@ -67,7 +68,7 @@ export function ReportButton({
             : "focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-danger"
         }
       >
-        {variant === "pill" ? <span aria-hidden>⚑</span> : null}
+        {variant === "pill" ? <FlagIcon size={16} /> : null}
         <span>{kind === "account" ? "Report user" : "Report"}</span>
       </button>
       {open ? (

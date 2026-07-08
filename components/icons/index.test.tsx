@@ -9,6 +9,8 @@ import {
   LockIcon,
   PlayIcon,
   SearchIcon,
+  ThumbsDownIcon,
+  ThumbsUpIcon,
 } from "./index";
 
 afterEach(cleanup);
@@ -70,6 +72,18 @@ describe("icon set", () => {
     const svg = container.querySelector("svg")!;
     expect(svg.getAttribute("viewBox")).toBe("0 0 24 24");
     expect(svg.getAttribute("width")).toBe("14");
+  });
+
+  it("ThumbsUp/ThumbsDown render as decorative outline icons (rating control)", () => {
+    for (const Icon of [ThumbsUpIcon, ThumbsDownIcon]) {
+      const { container } = render(<Icon size={16} />);
+      const svg = container.querySelector("svg")!;
+      expect(svg.getAttribute("viewBox")).toBe("0 0 24 24");
+      expect(svg.getAttribute("width")).toBe("16");
+      expect(svg.getAttribute("aria-hidden")).toBe("true");
+      expect(svg.getAttribute("stroke")).toBe("currentColor");
+      expect(svg.getAttribute("fill")).toBe("none");
+    }
   });
 
   it("IpfsIcon keeps its bespoke 12×14 viewBox and aspect", () => {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { CheckIcon, PlusIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { Playlist } from "@/lib/api";
 
@@ -90,7 +91,7 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
         onClick={() => void toggle()}
         className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
-        <span aria-hidden>＋</span>
+        <PlusIcon size={16} />
         <span>Save to playlist</span>
       </button>
       {open ? (
@@ -110,8 +111,8 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
                     aria-pressed={added.has(pl.id)}
                     className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
                   >
-                    <span aria-hidden className="w-4">
-                      {added.has(pl.id) ? "✓" : ""}
+                    <span aria-hidden className="flex w-4 justify-center">
+                      {added.has(pl.id) ? <CheckIcon size={16} /> : null}
                     </span>
                     <span className="min-w-0 flex-1 truncate">{pl.title}</span>
                   </button>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { CheckIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 
 export interface PlayerMenuItem<T extends string | number> {
@@ -145,8 +146,8 @@ export function PlayerMenu<T extends string | number>({
               }}
               className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-muted"
             >
-              <span aria-hidden="true" className="w-4">
-                {item.value === current ? "✓" : ""}
+              <span aria-hidden="true" className="flex w-4 justify-center">
+                {item.value === current ? <CheckIcon size={16} /> : null}
               </span>
               <span>{item.label}</span>
             </button>

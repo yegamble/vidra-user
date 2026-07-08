@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { CheckIcon, PlusIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 
 // SaveButton toggles a video in the signed-in viewer's library ("watch later").
@@ -68,7 +69,7 @@ export function SaveButton({ videoId }: { videoId: string }) {
           : "bg-surface-muted text-fg hover:bg-surface-strong")
       }
     >
-      <span aria-hidden>{saved ? "★" : "☆"}</span>
+      {saved ? <CheckIcon size={16} /> : <PlusIcon size={16} />}
       <span>{saved ? "Saved" : "Save"}</span>
     </button>
   );

@@ -8,13 +8,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:icons": "node scripts/check-no-emoji.mjs",
     "typecheck": "tsc --noEmit",
     "codegen": "node scripts/codegen.mjs",
     "design:shots": "node scripts/design-shots.mjs",
     "test": "vitest run",
     "e2e": "playwright test --project=chromium",
     "e2e:backed": "playwright test --project=backend-backed",
-    "ci": "npm run typecheck && npm run lint && npm run test && npm run build && npm run e2e"
+    "ci": "npm run typecheck && npm run lint && npm run lint:icons && npm run test && npm run build && npm run e2e"
   },
   "dependencies": {
     "@matrix-org/olm": "^3.2.15",
