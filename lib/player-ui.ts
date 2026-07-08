@@ -76,12 +76,15 @@ export function readBuffered(buffered: TimeRanges | null | undefined): Array<[nu
 
 /**
  * seekValueText renders the seek slider's aria-valuetext as "1:23 of 12:40"
- * (elapsed of total). An unknown duration collapses to just the elapsed time.
+ * (elapsed of total). An unknown duration collapses to just the elapsed time. A
+ * chapter title, when the playhead is inside a chapter, is appended after an
+ * em dash — "3:12 of 12:40 — Intro" — so a screen-reader user hears the section.
  */
-export function seekValueText(current: number, duration: number): string {
+export function seekValueText(current: number, duration: number, chapterTitle?: string | null): string {
   const now = formatDuration(current);
-  if (!Number.isFinite(duration) || duration <= 0) return now;
-  return `${now} of ${formatDuration(duration)}`;
+  const base = !Number.isFinite(duration) || duration <= 0 ? now : `${now} of ${formatDuration(duration)}`;
+  const title = chapterTitle?.trim();
+  return title ? `${base} — ${title}` : base;
 }
 
 /**

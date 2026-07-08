@@ -185,7 +185,7 @@ test("a scheduled row shows the badge + publish time, and the edit form can move
   const field = page.getByLabel("Edit scheduled publish");
   await expect(field).toHaveValue(localInputValue(scheduledIso));
   await field.fill("2030-06-01T09:00");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 
   await expect(row.getByRole("button", { name: "Edit" })).toBeVisible();
   expect(patchBody).toMatchObject({ publish_at: isoOf("2030-06-01T09:00") });
@@ -217,7 +217,7 @@ test("an unchanged schedule is not re-sent on save", async ({ page }) => {
   const row = page.getByRole("listitem").filter({ hasText: "My clip" });
   await row.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Edit title").fill("Renamed");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 
   await expect(page.getByRole("listitem").filter({ hasText: "Renamed" })).toBeVisible();
   // Re-sending the untouched schedule would 422 once it lies in the past.

@@ -57,7 +57,7 @@ test("a creator sets and edits a video's category/language/license", async ({ pa
   const patched = page.waitForResponse(
     (r) => /\/videos\/[^/]+$/.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
   );
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await patched;
 
   // Persisted: the edit is reflected; the untouched license is preserved.

@@ -7,8 +7,10 @@ import {
   liveIngest,
   liveStreams,
   loginToken,
+  publishViaStudioUI,
   seedPublishedChannel,
   uniqueId,
+  videoChapters,
 } from "./fixtures";
 
 // Proves the CHUNKED (resumable) publish round trip against a real vidra-core +
@@ -115,7 +117,7 @@ test("a creator can edit and delete their video", async ({ page, request }) => {
   const patched = page.waitForResponse(
     (r) => /\/videos\/[^/]+$/.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
   );
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await patched;
   const updatedRow = page.getByRole("listitem").filter({ hasText: newTitle });
   await expect(updatedRow.getByRole("link", { name: newTitle })).toBeVisible();
@@ -137,6 +139,75 @@ test("a creator can edit and delete their video", async ({ page, request }) => {
   // Persisted: the public channel list no longer contains the video.
   const afterDelete = await channelVideos(request, handle);
   expect(afterDelete.map((v) => v.title)).not.toContain(newTitle);
+});
+
+// Proves the chapters round trip against a real vidra-core + PostgreSQL (CORE-15):
+// a creator adds a chapter in the studio edit surface, the whole-set PUT persists
+// it, the API re-GET confirms the stored row (DB evidence), and a fresh load of the
+// watch page shows the chapter (the current-chapter readout — duration-independent,
+// unlike the >0s tick markers the sub-second CI fixture clip cannot position).
+test("a creator can add chapters that persist and show on the watch page", async ({
+  page,
+  request,
+}) => {
+  const id = uniqueId();
+  const handle = `ch${id}`;
+  const channelName = `Channel ${id}`;
+  const videoTitle = `Chaptered clip ${id}`;
+
+  await page.goto("/signup");
+  await page.getByLabel("Username").fill(`fan${id}`);
+  await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
+  await page.getByLabel("Password").fill("supersecret-e2e");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByLabel("Channel handle").fill(handle);
+  await page.getByLabel("Channel display name").fill(channelName);
+  const channelCreated = page.waitForResponse(
+    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create channel" }).click();
+  await channelCreated;
+
+  await page.getByLabel("Video title").fill(videoTitle);
+  await page.getByLabel("Video file").setInputFiles({
+    name: "clip.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+  });
+  await publishViaStudioUI(page);
+  await expect(page.getByText("Published!")).toBeVisible();
+
+  // Open the edit surface for the just-published video and add a chapter at 0:00
+  // (always valid regardless of the probed duration).
+  await page.getByRole("button", { name: "Refresh" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: videoTitle });
+  await row.getByRole("button", { name: "Edit", exact: true }).click();
+
+  await expect(page.getByText("No chapters yet.")).toBeVisible();
+  await page.getByRole("button", { name: "Add chapter" }).click();
+  await page.getByLabel("Chapter 1 start").fill("0:00");
+  await page.getByLabel("Chapter 1 title").fill("Intro");
+  const saved = page.waitForResponse(
+    (r) => /\/videos\/[^/]+\/chapters$/.test(r.url()) && r.request().method() === "PUT" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Save chapters" }).click();
+  await saved;
+  await expect(page.getByText("Chapters saved.")).toBeVisible();
+
+  // DB evidence: the chapter row persisted — read it straight back through the API.
+  const vid = (await channelVideos(request, handle)).find((v) => v.title === videoTitle);
+  expect(vid).toBeTruthy();
+  const stored = await videoChapters(request, vid!.id);
+  expect(stored).toEqual([{ start_seconds: 0, title: "Intro" }]);
+
+  // A fresh load of the watch page refetches the chapters (has_chapters flipped
+  // true) and renders the current-chapter title beside the time readout.
+  await page.goto(`/videos/${vid!.id}`);
+  await expect(page.getByRole("heading", { name: videoTitle })).toBeVisible();
+  await expect(page.getByTestId("video-player").getByText("Intro")).toBeVisible();
 });
 
 // Proves custom-thumbnail upload against a real vidra-core + PostgreSQL: a creator

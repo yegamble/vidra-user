@@ -19,6 +19,7 @@ const VIDEO = /\/api\/v1\/videos\/v1$/;
 const CAPTIONS = /\/api\/v1\/videos\/v1\/captions$/;
 const CAPTION_LANG = /\/api\/v1\/videos\/v1\/captions\/[^/]+$/;
 const AUTO_CAPTION = /\/api\/v1\/videos\/v1\/captions\/auto$/;
+const CHAPTERS = /\/api\/v1\/videos\/v1\/chapters$/;
 const THUMBNAIL = /\/api\/v1\/videos\/v1\/thumbnail(\?|$)/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 const CHANNEL_LIVE = /\/api\/v1\/channels\/ada_makes\/live$/;
@@ -218,7 +219,7 @@ test("a creator can edit a channel's name and description", async ({ page }) => 
   await page.getByRole("button", { name: "Edit ada_makes" }).click();
   await page.getByLabel("Edit channel name").fill("Ada Builds");
   await page.getByLabel("Edit channel description").fill("Now with more.");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 
   await expect(page.getByRole("link", { name: "Ada Builds" })).toBeVisible();
   expect(patchBody).toMatchObject({ display_name: "Ada Builds", description: "Now with more." });
@@ -405,7 +406,7 @@ test("editing tags sends the replaced set on the PATCH", async ({ page }) => {
   const tagsField = page.getByLabel("Edit tags");
   await tagsField.fill("fresh");
   await tagsField.press("Enter");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 
   await expect(row.getByRole("button", { name: "Edit" })).toBeVisible();
   expect(patchBody).toMatchObject({ tags: ["retro", "fresh"] });
@@ -856,7 +857,7 @@ test("a creator can edit a video's title and privacy", async ({ page }) => {
   await page.getByLabel("Edit category").selectOption("1");
   await page.getByLabel("Edit language").selectOption("fr");
   await page.getByLabel("Edit privacy").selectOption("unlisted");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 
   const updatedRow = page.getByRole("listitem").filter({ hasText: "New title" });
   await expect(updatedRow.getByRole("link", { name: "New title" })).toBeVisible();
@@ -981,6 +982,72 @@ test("a creator can add and remove a caption from a video's edit surface", async
   await page.getByRole("button", { name: "Remove en caption" }).click();
   await removed;
   await expect(page.getByText("No captions yet.")).toBeVisible();
+});
+
+test("a creator can add, validate, and save chapters from the edit surface", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) =>
+    route.fulfill({ json: { videos: [video({ title: "Chaptered clip", duration_seconds: 600 })] } }),
+  );
+  // The edit form fetches the detail (carries duration_seconds → the "before the
+  // end" check) and the taxonomy config.
+  await page.route(VIDEO, (route) =>
+    route.fulfill({ json: video({ title: "Chaptered clip", duration_seconds: 600 }) }),
+  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  // Chapters start empty; the PUT echoes back the stored set.
+  let putBody: unknown;
+  await page.route(CHAPTERS, (route) => {
+    if (route.request().method() === "PUT") {
+      putBody = route.request().postDataJSON();
+      return route.fulfill({
+        json: {
+          chapters: [
+            { start_seconds: 0, title: "Intro" },
+            { start_seconds: 90, title: "Deep dive" },
+          ],
+        },
+      });
+    }
+    return route.fulfill({ json: { chapters: [] } });
+  });
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: "Chaptered clip" });
+  await row.getByRole("button", { name: "Edit", exact: true }).click();
+
+  // The chapters editor mounts, empty.
+  await expect(page.getByText("No chapters yet.")).toBeVisible();
+
+  // A bad time + a blank title block the save with inline errors (no PUT).
+  await page.getByRole("button", { name: "Add chapter" }).click();
+  await page.getByLabel("Chapter 1 start").fill("oops");
+  await page.getByRole("button", { name: "Save chapters" }).click();
+  await expect(page.getByText("Enter a time like 1:30.")).toBeVisible();
+  await expect(page.getByText("Add a chapter title.")).toBeVisible();
+
+  // Fix row 1, add row 2, then save → the PUT carries the parsed, whole set.
+  await page.getByLabel("Chapter 1 start").fill("0:00");
+  await page.getByLabel("Chapter 1 title").fill("Intro");
+  await page.getByRole("button", { name: "Add chapter" }).click();
+  await page.getByLabel("Chapter 2 start").fill("1:30");
+  await page.getByLabel("Chapter 2 title").fill("Deep dive");
+  const saved = page.waitForResponse(
+    (r) => CHAPTERS.test(r.url()) && r.request().method() === "PUT" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Save chapters" }).click();
+  await saved;
+
+  await expect(page.getByText("Chapters saved.")).toBeVisible();
+  expect(putBody).toEqual({
+    chapters: [
+      { start_seconds: 0, title: "Intro" },
+      { start_seconds: 90, title: "Deep dive" },
+    ],
+  });
 });
 
 test("a creator can replace a video's thumbnail from the edit surface", async ({ page }) => {

@@ -330,6 +330,79 @@ test("the seek bar shows no storyboard frame when the video has none", async ({ 
   await expect(page.getByRole("slider", { name: "Seek preview" })).toHaveCount(0);
 });
 
+test("the seek bar shows chapter ticks, the current-chapter readout, and chapter titles in the bubble", async ({
+  page,
+}) => {
+  // A published video that advertises chapters (has_chapters on the detail).
+  await page.route(DETAIL, (route) =>
+    route.fulfill({
+      json: {
+        ...video("v1", "Watch Me"),
+        has_chapters: true,
+        duration_seconds: 200,
+      },
+    }),
+  );
+  await page.route(ORIGINAL, (route) =>
+    route.fulfill({ contentType: "video/mp4", body: Buffer.from(TINY_MP4_BASE64, "base64") }),
+  );
+  await page.route(CAPTIONS, (route) => route.fulfill({ json: { captions: [] } }));
+  await page.route(COMMENTS, (route) => route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }));
+  await page.route(RATING, (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+  let chapterRequests = 0;
+  await page.route(/\/api\/v1\/videos\/v1\/chapters$/, (route) => {
+    chapterRequests += 1;
+    return route.fulfill({
+      json: {
+        chapters: [
+          { start_seconds: 0, title: "Intro" },
+          { start_seconds: 60, title: "The Build" },
+          { start_seconds: 120, title: "Wrap up" },
+        ],
+      },
+    });
+  });
+
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+
+  const seek = page.getByRole("slider", { name: "Seek" });
+  await expect(seek).toBeVisible();
+  // The chapters are fetched because has_chapters is set.
+  await expect.poll(() => chapterRequests).toBe(1);
+
+  // Give the shell a real duration (the fixture clip is sub-second) so the tick
+  // positions and aria-valuemax are meaningful — the same technique the unit test
+  // uses to exercise duration-dependent geometry.
+  await page.evaluate(() => {
+    const v = document.querySelector("video");
+    if (!v) return;
+    Object.defineProperty(v, "duration", { configurable: true, get: () => 200 });
+    v.dispatchEvent(new Event("durationchange"));
+  });
+  await expect(seek).toHaveAttribute("aria-valuemax", "200");
+
+  // Two boundary ticks (60s + 120s of 200s; the 0s tick is skipped).
+  await expect(seek.getByTestId("chapter-tick")).toHaveCount(2);
+  // The playhead sits at 0 → the first chapter is announced through aria-valuetext.
+  await expect(seek).toHaveAttribute("aria-valuetext", /— Intro$/);
+  // The current chapter title renders beside the time readout.
+  await expect(page.getByTestId("video-player").getByText("Intro")).toBeVisible();
+
+  // Hovering the middle of the bar previews the chapter under the pointer.
+  await seek.hover();
+  await expect(seek.getByText("The Build")).toBeVisible();
+});
+
+test("the seek bar shows no chapter ticks when the video has none", async ({ page }) => {
+  await mockWatchPage(page);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Seek" }).getByTestId("chapter-tick")).toHaveCount(0);
+});
+
 test("the related rail lists same-channel videos first, then same-category", async ({ page }) => {
   // The current video: channel c1, category "7".
   await page.route(DETAIL, (route) => route.fulfill({ json: video("v1", "Watch Me", "c1", "7") }));

@@ -135,7 +135,7 @@ test("moving a schedule from the edit surface persists the new publish_at", asyn
   const patched = page.waitForResponse(
     (r) => /\/videos\/[^/]+$/.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
   );
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await patched;
 
   // Persisted: the owner detail read carries the moved instant.

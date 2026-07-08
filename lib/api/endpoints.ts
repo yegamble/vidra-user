@@ -75,6 +75,8 @@ import type {
   InstanceResponse,
   RatingValue,
   Video,
+  VideoChapters,
+  SetVideoChaptersRequest,
   VideoConfigResponse,
   VideoFeedResponse,
   VideoListResponse,
@@ -562,6 +564,29 @@ export const api = {
       `/api/v1/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(language)}`,
       { method: "DELETE" },
     ),
+
+  /**
+   * GET /api/v1/videos/{id}/chapters — a video's seek-bar chapters (CORE-15),
+   * ascending by start_seconds, empty when none. Same visibility as the detail
+   * endpoint (private → owner only); the detail's has_chapters flag gates the
+   * fetch. Optional token so an owner's private-video studio editor can read them.
+   */
+  getVideoChapters: (videoId: string, token?: string, signal?: AbortSignal) =>
+    apiRequest<VideoChapters>(`/api/v1/videos/${encodeURIComponent(videoId)}/chapters`, {
+      token,
+      signal,
+    }),
+
+  /**
+   * PUT /api/v1/videos/{id}/chapters — replace a video's whole chapter set atomically
+   * (owner). An empty array clears all chapters. 400 on a validation violation
+   * (bad ordering, out-of-bounds start, bad title length, or >100 chapters).
+   */
+  setVideoChapters: (videoId: string, body: SetVideoChaptersRequest) =>
+    apiRequest<VideoChapters>(`/api/v1/videos/${encodeURIComponent(videoId)}/chapters`, {
+      method: "PUT",
+      body,
+    }),
 
   /**
    * POST /api/v1/videos/{id}/captions/auto — enqueue a Whisper auto-caption job

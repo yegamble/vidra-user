@@ -70,7 +70,7 @@ test("a creator sets and edits a video's tags, and the tag filter finds it", asy
   const patched = page.waitForResponse(
     (r) => /\/videos\/[^/]+$/.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
   );
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await patched;
 
   const afterEdit = await videoDetail(request, videoId);

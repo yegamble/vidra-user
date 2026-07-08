@@ -91,6 +91,44 @@ describe("SeekBar", () => {
     expect(activate).toHaveBeenCalled();
   });
 
+  it("paints a chapter boundary tick per chapter (skipping 0s and out-of-range starts)", () => {
+    const chapters = {
+      chapters: [
+        { start_seconds: 0, title: "Intro" },
+        { start_seconds: 60, title: "Middle" },
+        { start_seconds: 120, title: "End" },
+        { start_seconds: 999, title: "Past the end" },
+      ],
+      chapterAt: () => null,
+    };
+    render(
+      <SeekBar currentTime={0} duration={200} buffered={[]} onSeek={() => {}} chapters={chapters} />,
+    );
+    // 0s (left edge) and the 999s (past the 200s duration) ticks are skipped → 2.
+    expect(screen.getAllByTestId("chapter-tick")).toHaveLength(2);
+  });
+
+  it("renders no ticks when the video has no chapters", () => {
+    render(<SeekBar currentTime={0} duration={200} buffered={[]} onSeek={() => {}} />);
+    expect(screen.queryAllByTestId("chapter-tick")).toHaveLength(0);
+  });
+
+  it("shows the chapter title in the scrub bubble and in the playhead aria-valuetext", () => {
+    const chapters = {
+      chapters: [{ start_seconds: 0, title: "Cold Open" }],
+      chapterAt: () => ({ start_seconds: 0, title: "Cold Open" }),
+    };
+    render(
+      <SeekBar currentTime={30} duration={120} buffered={[]} onSeek={() => {}} chapters={chapters} />,
+    );
+    const slider = screen.getByRole("slider", { name: "Seek" });
+    // The playhead's chapter is announced through aria-valuetext.
+    expect(slider.getAttribute("aria-valuetext")).toBe("0:30 of 2:00 — Cold Open");
+    // Focusing shows the scrub bubble, which carries the chapter title.
+    fireEvent.focus(slider);
+    expect(screen.getByText("Cold Open")).toBeTruthy();
+  });
+
   it("degrades to a time-only bubble when the storyboard has no cue for the position", () => {
     const storyboard = {
       cueAt: () => null,

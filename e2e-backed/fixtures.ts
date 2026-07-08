@@ -304,6 +304,20 @@ export async function captions(
   return ((await res.json()) as { captions: Array<{ language: string; label: string }> }).captions;
 }
 
+/** videoChapters reads a video's persisted seek-bar chapters via the API (CORE-15). */
+export async function videoChapters(
+  request: APIRequestContext,
+  videoId: string,
+  token?: string,
+): Promise<Array<{ start_seconds: number; title: string }>> {
+  const res = await request.get(`${API_URL}/api/v1/videos/${videoId}/chapters`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  return (
+    (await res.json()) as { chapters: Array<{ start_seconds: number; title: string }> }
+  ).chapters;
+}
+
 /** seedCaption uploads a WebVTT caption track to a video as its owner (multipart). */
 export async function seedCaption(
   request: APIRequestContext,

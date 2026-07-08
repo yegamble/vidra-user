@@ -87,6 +87,15 @@ describe("seekValueText", () => {
     expect(seekValueText(83, 0)).toBe("1:23");
     expect(seekValueText(83, Number.NaN)).toBe("1:23");
   });
+
+  it("appends the chapter title after an em dash when the playhead is in a chapter", () => {
+    expect(seekValueText(192, 760, "Intro")).toBe("3:12 of 12:40 — Intro");
+    // A blank/absent title is ignored — no trailing dash.
+    expect(seekValueText(192, 760, null)).toBe("3:12 of 12:40");
+    expect(seekValueText(192, 760, "  ")).toBe("3:12 of 12:40");
+    // Works with an unknown duration too.
+    expect(seekValueText(83, 0, "Setup")).toBe("1:23 — Setup");
+  });
 });
 
 describe("stepVolume", () => {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { CaptionsManager } from "@/components/CaptionsManager";
+import { ChaptersManager } from "@/components/ChaptersManager";
 import { LiveStreamsSection } from "@/components/LiveStreamsSection";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
@@ -1460,6 +1461,10 @@ function VideoRow({
         {detail ? <StreamingStatus video={detail} /> : null}
         <ThumbnailManager videoId={video.id} hasThumbnail={video.has_thumbnail ?? false} />
         <CaptionsManager videoId={video.id} />
+        <ChaptersManager
+          videoId={video.id}
+          durationSeconds={(detail ?? video).duration_seconds ?? undefined}
+        />
         <div className="flex gap-2">
           <Button size="sm" disabled={busy || title.trim() === ""} onClick={() => void save()}>
             Save

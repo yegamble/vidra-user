@@ -3266,6 +3266,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Instance-wide overview counts (admin)
+         * @description Returns the instance-wide overview the admin dashboard renders as cards: total accounts, public+published videos, total stored media bytes, distinct federated peer instances, and total local comments. Every field is a live, trivially-real COUNT/SUM over a committed column. There are deliberately NO period-over-period deltas — no time-series store exists to compute them (a future analytics dependency). Reports only aggregate counts — no secrets or PII. Restricted to admins.
+         */
+        get: operations["adminStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/system": {
         parameters: {
             query?: never;
@@ -5498,6 +5518,34 @@ export interface components {
             /** @description Number of orphans actually deleted (0 on a dry run). */
             deleted: number;
         };
+        /** @description Instance-wide overview counts for the admin dashboard cards. Every field is a live COUNT/SUM; no deltas, no secrets/PII. */
+        AdminStats: {
+            /**
+             * Format: int64
+             * @description Total number of accounts (active or not).
+             */
+            users: number;
+            /**
+             * Format: int64
+             * @description Public, published videos (the local-posts total NodeInfo advertises).
+             */
+            published_videos: number;
+            /**
+             * Format: int64
+             * @description Total stored bytes of every video file across all accounts.
+             */
+            media_stored_bytes: number;
+            /**
+             * Format: int64
+             * @description Distinct remote instances we have cached actors from.
+             */
+            federated_peers: number;
+            /**
+             * Format: int64
+             * @description Total number of local comments.
+             */
+            comments: number;
+        };
         /** @description Operational snapshot for the admin dashboard. No secrets/PII. */
         SystemStatus: {
             /** @enum {string} */
@@ -5662,6 +5710,27 @@ export interface components {
             cluster_reachable: boolean;
             pins: components["schemas"]["IPFSPinCounts"];
             /** @description Pin counts broken down per media class. */
+            by_class: components["schemas"]["IPFSClassPinCounts"][];
+            /** @description Per-swarm split of the mirror status (fix_plan P19.P2): the public mirror and the separate private replication swarm each with their own enabled flag, node reachability, and pin counts. The top-level pins/by_class/ node_reachable fold across both for back-compat. Additive — private-tier fields are inert (enabled=false, zero counts) unless IPFS_MIRROR_PRIVATE is configured. Never carries a CID or gateway URL for the private swarm (it is replication, not distribution). */
+            networks: components["schemas"]["IPFSNetworks"];
+        };
+        /** @description The public + private swarm status blocks (fix_plan P19.P2). */
+        IPFSNetworks: {
+            public: components["schemas"]["IPFSNetworkStatus"];
+            private: components["schemas"]["IPFSNetworkStatus"];
+        };
+        /** @description One swarm's mirror status: whether that tier is enabled on this instance, its node's reachability, its optional replication-cluster health, and its pin counts overall and per media class. Carries no gateway URL and no CIDs. */
+        IPFSNetworkStatus: {
+            /** @description Whether this swarm's tier is configured (public = IPFS_ENABLED, private = IPFS_MIRROR_PRIVATE). */
+            enabled: boolean;
+            /** @description Whether this swarm's Kubo node answered its health probe. */
+            node_reachable: boolean;
+            /** @description Whether an IPFS Cluster REST API is configured for THIS swarm's replication (public = IPFS_CLUSTER_API_URL, private = IPFS_PRIVATE_CLUSTER_API_URL). The private cluster is a fully separate cluster on the private swarm (fix_plan P19.P3). */
+            cluster_enabled: boolean;
+            /** @description Whether this swarm's IPFS Cluster REST API answered its /id health probe. Always false when cluster_enabled is false. */
+            cluster_reachable: boolean;
+            pins: components["schemas"]["IPFSPinCounts"];
+            /** @description This swarm's pin counts broken down per media class. */
             by_class: components["schemas"]["IPFSClassPinCounts"][];
         };
         /** @description Pin counts by ledger state. */
@@ -15014,6 +15083,44 @@ export interface operations {
             };
         };
     };
+    adminStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current instance-wide overview counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStats"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     systemStatus: {
         parameters: {
             query?: never;
@@ -15402,7 +15509,10 @@ export interface operations {
     };
     reconcileIPFS: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional swarm filter (fix_plan P19.P2): scope the backfill seeding to the public or private mirror only. Omit to reconcile both. An object is seeded on its own eligible swarm regardless; this only restricts which swarm's objects are considered. */
+                network?: "public" | "private";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -15416,6 +15526,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IPFSReconcileResult"];
+                };
+            };
+            /** @description The network filter is neither 'public' nor 'private'. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Missing, invalid, or expired token. */

@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VideoPlayer, type CaptionTrack } from "./VideoPlayer";
-import type { Video } from "@/lib/api";
+import { api, type Video } from "@/lib/api";
 
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -32,15 +32,17 @@ function Harness({
   tracks = [] as CaptionTrack[],
   variant = "watch" as "watch" | "embed",
   nextVideo = null as Video | null,
+  video = VIDEO,
 }: {
   tracks?: CaptionTrack[];
   variant?: "watch" | "embed";
   nextVideo?: Video | null;
+  video?: Video;
 }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   return (
     <VideoPlayer
-      video={VIDEO}
+      video={video}
       videoRef={ref}
       startAt={null}
       tracks={tracks}
@@ -257,6 +259,24 @@ describe("VideoPlayer shell", () => {
     // Playback restarting (e.g. Replay, or a new source's loadstart) clears it.
     act(() => void fireEvent(video, new Event("play")));
     expect(screen.queryByTestId("player-end-card")).toBeNull();
+  });
+
+  it("shows the current chapter title beside the time readout and updates it as playback advances", async () => {
+    vi.spyOn(api, "getVideoChapters").mockResolvedValue({
+      chapters: [
+        { start_seconds: 0, title: "Intro" },
+        { start_seconds: 60, title: "The Build" },
+      ],
+    });
+    const { container } = render(<Harness video={{ ...VIDEO, has_chapters: true } as Video} />);
+    // currentTime starts at 0 → the first chapter's title appears once they load.
+    expect(await screen.findByText("Intro")).toBeTruthy();
+    // Advancing the media clock into the next chapter updates the readout.
+    const el = container.querySelector("video") as HTMLVideoElement;
+    Object.defineProperty(el, "currentTime", { configurable: true, get: () => 75, set: () => {} });
+    act(() => void fireEvent(el, new Event("timeupdate")));
+    expect(screen.getByText("The Build")).toBeTruthy();
+    expect(screen.queryByText("Intro")).toBeNull();
   });
 
   it("shows a replay-only end card (no next) when there is nothing queued", () => {

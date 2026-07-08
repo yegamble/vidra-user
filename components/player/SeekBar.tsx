@@ -11,6 +11,7 @@ import {
   seekValueText,
   timeAtFraction,
 } from "@/lib/player-ui";
+import type { SeekChapters } from "@/lib/use-chapters";
 import type { SeekStoryboard } from "@/lib/use-storyboard";
 
 // SeekBar is the player's scrub control: a single track painting buffered ranges
@@ -36,6 +37,7 @@ export function SeekBar({
   buffered,
   onSeek,
   storyboard,
+  chapters,
 }: {
   currentTime: number;
   duration: number;
@@ -43,6 +45,8 @@ export function SeekBar({
   onSeek: (time: number) => void;
   /** The video's seek-preview storyboard, when it has one (CORE-16). */
   storyboard?: SeekStoryboard | null;
+  /** The video's seek-bar chapters, when it has any (CORE-15). */
+  chapters?: SeekChapters | null;
 }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [scrubFrac, setScrubFrac] = useState<number | null>(null);
@@ -63,9 +67,15 @@ export function SeekBar({
   // The storyboard frame under the bubble position (null until cues load / no
   // storyboard) — the bubble still shows the timestamp either way.
   const cue = tooltipFrac === null ? null : (storyboard?.cueAt(tooltipTime) ?? null);
+  // The chapter under the bubble position (CORE-15): its title joins the bubble;
+  // the chapter at the PLAYHEAD drives the aria-valuetext so a keyboard user hears
+  // the section they are seeking within.
+  const bubbleChapter = tooltipFrac === null ? null : (chapters?.chapterAt(tooltipTime) ?? null);
+  const playheadChapter = chapters?.chapterAt(playedTime) ?? null;
   // Keep the bubble fully inside the media container (its overflow clips): a
-  // sprite frame is ~160px wide, so near the ends it must shift off-centre.
-  const bubbleWidth = cue ? cue.w + 8 : 56;
+  // sprite frame is ~160px wide, so near the ends it must shift off-centre. A
+  // chapter title (no frame) widens the time-only chip too.
+  const bubbleWidth = cue ? cue.w + 8 : bubbleChapter ? 160 : 56;
   const bubbleLeftPx = clampBubbleLeft(tooltipFrac ?? 0, trackWidth, bubbleWidth);
 
   // Measure the track so the bubble can be edge-clamped in pixels; ResizeObserver
@@ -159,7 +169,7 @@ export function SeekBar({
       aria-valuemin={0}
       aria-valuemax={hasDuration ? Math.round(duration) : 0}
       aria-valuenow={Math.round(playedTime)}
-      aria-valuetext={seekValueText(playedTime, duration)}
+      aria-valuetext={seekValueText(playedTime, duration, playheadChapter?.title)}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -192,6 +202,24 @@ export function SeekBar({
           style={{ width: `${playedFrac * 100}%` }}
         />
       </div>
+      {/* Chapter boundary ticks (CORE-15): a thin white notch with a subtle dark
+          ring so it reads over both the played (white) fill and any video frame.
+          Rendered outside the clipped track so it can poke past the thin line; the
+          whole 44pt-tall bar is the pointer target, so the small visual is enough.
+          The tick at 0s (left edge) and any past the duration are skipped. */}
+      {chapters && hasDuration
+        ? chapters.chapters
+            .filter((c) => c.start_seconds > 0 && c.start_seconds < duration)
+            .map((c) => (
+              <div
+                key={c.start_seconds}
+                data-testid="chapter-tick"
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 h-2.5 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/85 ring-1 ring-black/30"
+                style={{ left: `${(c.start_seconds / duration) * 100}%` }}
+              />
+            ))
+        : null}
       {/* Playhead knob. */}
       <div
         aria-hidden="true"
@@ -218,6 +246,11 @@ export function SeekBar({
                 backgroundPosition: `-${cue.x}px -${cue.y}px`,
               }}
             />
+          ) : null}
+          {bubbleChapter ? (
+            <span className="max-w-[10rem] truncate px-1 text-[11px] font-medium text-white/90">
+              {bubbleChapter.title}
+            </span>
           ) : null}
           <span className="px-1 text-[11px] font-medium tabular-nums text-white">
             {formatDuration(tooltipTime)}

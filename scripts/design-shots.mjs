@@ -1226,6 +1226,44 @@ const AREAS = {
       await seek.locator('div[style*="storyboard.jpg"]').first().waitFor({ state: "visible" });
     },
   },
+  // Watch page — chapters (backport W1 / CORE-15): the seek bar carries a boundary
+  // tick per chapter, the current-chapter title renders beside the time readout,
+  // and the scrub bubble shows the chapter under the pointer. The media element is
+  // given a real duration (the harness aborts the stream) so the tick positions are
+  // meaningful — the same technique the unit + mocked e2e use.
+  "watch-chapters": {
+    path: "/videos/v1",
+    async mock(page) {
+      await AREAS.watch.mock(page);
+      await page.route(/\/api\/v1\/videos\/v1$/, (route) =>
+        route.fulfill({ json: { ...SAMPLE_DETAIL, has_chapters: true, duration_seconds: 600 } }),
+      );
+      await page.route(/\/api\/v1\/videos\/v1\/chapters$/, (route) =>
+        route.fulfill({
+          json: {
+            chapters: [
+              { start_seconds: 0, title: "Cold open" },
+              { start_seconds: 90, title: "Grading the footage" },
+              { start_seconds: 240, title: "Final look" },
+              { start_seconds: 420, title: "Wrap up" },
+            ],
+          },
+        }),
+      );
+    },
+    async act(page) {
+      const seek = page.getByRole("slider", { name: "Seek" });
+      await seek.waitFor({ state: "visible" });
+      await page.evaluate(() => {
+        const v = document.querySelector("video");
+        if (!v) return;
+        Object.defineProperty(v, "duration", { configurable: true, get: () => 600 });
+        v.dispatchEvent(new Event("durationchange"));
+      });
+      await seek.getByTestId("chapter-tick").first().waitFor({ state: "visible" });
+      await seek.hover();
+    },
+  },
   // Watch page — autoplay end card (backport W1 / PLAY-08): the end-of-playback
   // overlay shown when the media fires `ended` — the next video (first related
   // entry) with an 8s countdown, Play now / Cancel, and the "Autoplay next"

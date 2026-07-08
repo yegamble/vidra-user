@@ -45,6 +45,7 @@ import {
   seekTargetForFraction,
   shortcutForKey,
 } from "@/lib/player-shortcuts";
+import { useChapters } from "@/lib/use-chapters";
 import { useHlsPlayback } from "@/lib/use-hls-playback";
 import { useStoryboard } from "@/lib/use-storyboard";
 
@@ -122,6 +123,11 @@ export function VideoPlayer({
   // load once the bar first previews (it calls storyboard.activate() on hover /
   // focus) — no fetch for a viewer who never scrubs.
   const storyboard = useStoryboard(video.id, video.has_storyboard);
+
+  // Seek-bar chapters (CORE-15): null when the detail advertises none. Fetched
+  // eagerly (unlike the storyboard) so the tick markers and the current-chapter
+  // readout appear without any interaction; degrades to no ticks on a fetch miss.
+  const chapters = useChapters(video.id, video.has_chapters);
 
   // The chosen playback rate is remembered for the browsing session (a stop-gap
   // until W1.U6's per-user default_speed). Read through useSyncExternalStore so
@@ -490,6 +496,9 @@ export function VideoPlayer({
   }
 
   const posterUrl = poster ?? (video.has_thumbnail ? videoThumbnailUrl(video.id) : undefined);
+  // The chapter the playhead is currently inside (CORE-15) — shown, muted and
+  // truncated, beside the time readout. Null before the first chapter / no chapters.
+  const currentChapterTitle = chapters?.chapterAt(currentTime)?.title ?? null;
 
   return (
     <div
@@ -552,6 +561,7 @@ export function VideoPlayer({
           buffered={buffered}
           onSeek={seekTo}
           storyboard={storyboard}
+          chapters={chapters}
         />
         <div className="flex items-center gap-0.5 sm:gap-1">
           <OverlayButton label={paused ? "Play" : "Pause"} onClick={togglePlay}>
@@ -578,6 +588,14 @@ export function VideoPlayer({
             <span className="text-white/50">/</span>
             {formatDuration(duration)}
           </span>
+
+          {/* Current chapter title (CORE-15): muted + truncated, held off the
+              narrowest phone bar (< sm) so it never crowds the core controls. */}
+          {currentChapterTitle ? (
+            <span className="hidden min-w-0 max-w-[8rem] truncate px-0.5 text-[11px] text-white/70 sm:inline-block md:max-w-[14rem]">
+              {currentChapterTitle}
+            </span>
+          ) : null}
 
           <div className="flex-1" />
 

@@ -35,6 +35,11 @@ export type VideoPrivacy = NonNullable<Schemas["Video"]["privacy"]>;
 export type VideoState = NonNullable<Schemas["Video"]["state"]>;
 export type Video = Schemas["Video"];
 export type VideoRendition = Schemas["VideoRendition"];
+// Seek-bar chapters (CORE-15): a video's chapter list (GET, ascending) and the
+// whole-set replace request (PUT). One chapter = { start_seconds, title }.
+export type VideoChapter = Schemas["VideoChapter"];
+export type VideoChapters = Schemas["VideoChapters"];
+export type SetVideoChaptersRequest = Schemas["SetVideoChaptersRequest"];
 // IPFS mirror CIDs on the public video detail (present only when public+published
 // and at least one object is pinned). The card/feed IPFS badge reads the boolean
 // Video["ipfs_pinned"]; this object carries the gateway CIDs for detail consumers.
