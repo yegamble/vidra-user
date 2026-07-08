@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
+import { LockIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { OtpInput } from "@/components/ui/OtpInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 
@@ -42,6 +44,11 @@ export function LoginForm({
   // Set once login answers mfa_required: the form swaps to the code entry.
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  // The TOTP path shows the 6-digit box grid; the recovery path swaps to a
+  // single free-text field (recovery codes are hyphenated, not 6 digits). The
+  // key remounts the OTP grid so switching back starts from empty boxes.
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [otpKey, setOtpKey] = useState(0);
   // Sticky OAuth-landing marker: initialised from the one-shot ?oauth=1 prop
   // so it survives the URL cleanup below. While the boot silent-refresh is
   // still deciding, the landing shows a spinner; a settled "anon" means the
@@ -153,45 +160,67 @@ export function LoginForm({
         }}
         className="flex flex-col gap-4"
       >
-        <div className="mb-2 flex flex-col gap-1.5 text-center">
+        <div className="mb-2 flex flex-col items-center gap-1.5 text-center">
           <div
             aria-hidden
-            className="mb-2 flex h-13 w-13 items-center justify-center self-center rounded-full bg-surface-muted"
+            className="mb-2 flex h-13 w-13 items-center justify-center rounded-full bg-surface-muted"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              className="h-5.5 w-5.5 text-fg"
-            >
-              <rect x="4" y="11" width="16" height="10" rx="2" />
-              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-            </svg>
+            <LockIcon size={22} className="text-fg" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Two-factor authentication</h1>
           <p className="text-sm text-fg-muted">
-            Enter the 6-digit code from your authenticator app, or one of your recovery codes.
+            {recoveryMode
+              ? "Enter one of your recovery codes."
+              : "Enter the 6-digit code from your authenticator app."}
           </p>
         </div>
 
         {errorBanner}
 
-        <Input
-          id="mfa-code"
-          name="mfa-code"
-          type="text"
-          label="Authentication code"
-          autoComplete="one-time-code"
-          autoFocus
-          required
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-        />
+        {recoveryMode ? (
+          <Input
+            id="mfa-code"
+            name="mfa-code"
+            type="text"
+            label="Recovery code"
+            autoComplete="one-time-code"
+            autoFocus
+            required
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+        ) : (
+          <OtpInput
+            key={otpKey}
+            label="Authentication code"
+            autoFocus
+            onChange={setCode}
+          />
+        )}
 
-        <Button type="submit" size="lg" className="w-full" disabled={submitting || code.trim() === ""}>
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          disabled={submitting || (recoveryMode ? code.trim() === "" : code.length < 6)}
+        >
           {submitting ? "Verifying…" : "Verify code"}
         </Button>
+
+        <button
+          type="button"
+          onClick={() => {
+            // Swap between the authenticator (6 boxes) and recovery (free text)
+            // paths, clearing whatever was half-entered on the other one.
+            setRecoveryMode((on) => !on);
+            setCode("");
+            setError(null);
+            setOtpKey((k) => k + 1);
+          }}
+          className="focus-ring self-center rounded-sm text-sm font-semibold text-fg-muted hover:text-fg"
+        >
+          {recoveryMode ? "Enter a code from your app instead" : "Use a recovery code instead"}
+        </button>
 
         <button
           type="button"
@@ -200,6 +229,7 @@ export function LoginForm({
             // returns to a clean credentials form.
             setMfaToken(null);
             setCode("");
+            setRecoveryMode(false);
             setError(null);
           }}
           className="focus-ring self-center rounded-sm text-sm font-semibold text-fg hover:underline"
@@ -219,8 +249,8 @@ export function LoginForm({
       }}
       className="flex flex-col gap-4"
     >
-      <div className="mb-2 flex flex-col gap-1.5 text-center">
-        <h1 className="text-2xl font-bold tracking-tight">Sign in</h1>
+      <div className="mb-4 flex flex-col gap-1.5 text-center">
+        <h1 className="text-[34px] font-bold leading-none tracking-[-0.05em] text-fg">Vidra</h1>
         <p className="text-sm text-fg-muted">The quiet home for independent video</p>
       </div>
 

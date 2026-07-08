@@ -103,10 +103,12 @@ test("adding an address makes it appear with an unverified badge", async ({ page
 
   await openDonations(page);
 
+  // The add form is collapsed behind the dashed "+ Add address" affordance.
+  await page.getByRole("button", { name: "Add address" }).click();
   await page.getByLabel("Network").selectOption("bitcoin");
   await page.getByLabel("Wallet address").fill(BTC);
   await page.getByLabel(/^Label/).fill("Tips");
-  await page.getByRole("button", { name: "Add address" }).click();
+  await page.getByRole("button", { name: "Save address" }).click();
 
   // The new row shows the address and an Unverified badge.
   await expect(page.getByText(BTC)).toBeVisible();
@@ -126,9 +128,10 @@ test("a per-network validation error is surfaced before any request", async ({ p
   await openDonations(page);
 
   // A bitcoin address entered while Ethereum is selected must not be sent.
+  await page.getByRole("button", { name: "Add address" }).click();
   await page.getByLabel("Network").selectOption("ethereum");
   await page.getByLabel("Wallet address").fill(BTC);
-  await page.getByRole("button", { name: "Add address" }).click();
+  await page.getByRole("button", { name: "Save address" }).click();
 
   await expect(page.getByText(/does not look like a valid Ethereum/i)).toBeVisible();
   expect(posted).toBe(false);

@@ -431,6 +431,45 @@ const SAMPLE_MY_CHANNELS = {
   ],
 };
 
+// The caller's own donation addresses (GET /me/donation-addresses) for the
+// /settings/donations capture: a verified account-level ETH (success caption),
+// a channel-scoped unverified BTC (honest "not available" note), and an
+// unverified ETH (the "Verify ownership" affordance). owner_id matches SAMPLE_USER.
+const SAMPLE_MY_DONATIONS = {
+  addresses: [
+    {
+      id: "own-eth",
+      owner_id: "u1",
+      network: "ethereum",
+      address: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
+      label: "Tips",
+      verified: true,
+      created_at: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+    },
+    {
+      id: "own-eth2",
+      owner_id: "u1",
+      network: "ethereum",
+      address: "0x52908400098527886E0F7030069857D2E4169EE7",
+      label: "",
+      verified: false,
+      created_at: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+    },
+    {
+      id: "own-btc",
+      owner_id: "u1",
+      channel_id: "c1",
+      network: "bitcoin",
+      address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+      label: "",
+      verified: false,
+      created_at: new Date(Date.now() - 60 * 86_400_000).toISOString(),
+    },
+  ],
+  limit: 20,
+  offset: 0,
+};
+
 // The caller's storage picture (GET /me/quota) — ~4.2 GB used of a 20 GB quota
 // (1024-based, so formatBytes renders "4.2 GB of 20.0 GB"), for the DR9 Studio
 // storage card.
@@ -1341,6 +1380,21 @@ const AREAS = {
       // 404 → the export card shows its idle "Request export" state.
       await page.route(/\/api\/v1\/me\/export$/, (route) =>
         route.fulfill({ status: 404, json: { error: { code: "not_found", message: "none" } } }),
+      );
+    },
+  },
+  // Donation settings (DR10): the design's per-network cards (verified success
+  // pill / unverified strong pill, mono address, scope label, verify affordance)
+  // + the dashed "+ Add address" affordance. Auth-gated.
+  "settings-donations": {
+    path: "/settings/donations",
+    async mock(page) {
+      await mockAuthedShell(page);
+      await page.route(/\/api\/v1\/me\/channels$/, (route) =>
+        route.fulfill({ json: SAMPLE_MY_CHANNELS }),
+      );
+      await page.route(/\/api\/v1\/me\/donation-addresses$/, (route) =>
+        route.fulfill({ json: SAMPLE_MY_DONATIONS }),
       );
     },
   },

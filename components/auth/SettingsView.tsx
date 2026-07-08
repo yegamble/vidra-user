@@ -9,6 +9,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { ConnectedLogins } from "@/components/auth/ConnectedLogins";
 import { ChevronRightIcon } from "@/components/icons";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
+import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, authApi, errorMessage, userAvatarUrl, userBannerUrl } from "@/lib/api";
@@ -122,11 +123,29 @@ export function SettingsView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1 border-b border-border-subtle pb-4">
+      {/* Profile header — the design's account identity row: a 56px avatar
+          (real image, else initial fallback) beside the display name and the
+          "@handle · email · verified" identity line (verified in success). */}
+      <header className="flex flex-col gap-4 border-b border-border-subtle pb-5">
         <h1 className="text-2xl font-bold tracking-tight">Account settings</h1>
-        <p className="text-[13px] text-fg-muted">
-          Signed in as @{user.username}
-        </p>
+        <div className="flex items-center gap-3.5">
+          <Avatar
+            src={userAvatarUrl(user.id)}
+            name={user.display_name || user.username}
+            className="h-14 w-14 text-xl"
+          />
+          <div className="min-w-0">
+            <p className="truncate text-[17px] font-bold text-fg">
+              {user.display_name || user.username}
+            </p>
+            <p className="truncate text-[13px] text-fg-muted">
+              @{user.username} · {user.email}
+              {user.email_verified ? (
+                <span className="font-medium text-success"> · verified</span>
+              ) : null}
+            </p>
+          </div>
+        </div>
       </header>
       {user.email_verified ? null : <EmailVerificationSection email={user.email} />}
       <ProfileForm
@@ -193,25 +212,18 @@ export function SettingsView() {
       <ConnectedLogins />
       <AccountDataSection />
       {/* Header sign-out is hidden on phones (the avatar is the only account
-          control there), so settings must offer it. Named distinctly from the
-          header's "Sign out" so the two never collide in the a11y tree. */}
-      <section className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-fg">Session</h2>
-          <p className="text-sm text-fg-muted">
-            Sign out of Vidra on this device.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            void logout();
-          }}
-          className="focus-ring shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
-        >
-          Sign out of this device
-        </button>
-      </section>
+          control there), so settings must offer it — the design's full-width
+          outline "Sign out". Its accessible name carries " of this device"
+          (sr-only) so it never collides with the header's exact "Sign out". */}
+      <button
+        type="button"
+        onClick={() => {
+          void logout();
+        }}
+        className="focus-ring w-full rounded-xl border border-border bg-transparent py-3 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted"
+      >
+        Sign out<span className="sr-only"> of this device</span>
+      </button>
       {/* Danger zone — the reversible + irreversible account destructions
           grouped under one header for a consistent, hard-to-mistake block. */}
       <section className="flex flex-col gap-3">

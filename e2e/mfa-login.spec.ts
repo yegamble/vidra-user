@@ -16,6 +16,14 @@ const user = {
 };
 const session = { token: "acc", token_type: "Bearer", expires_in: 900, user };
 
+// The two-factor screen enters a TOTP code across six single-digit boxes; fill
+// them by their positional accessible name so the combined value builds up.
+async function fillTotp(page: Page, code: string) {
+  for (let i = 0; i < code.length; i++) {
+    await page.getByLabel(`Authentication code digit ${i + 1}`, { exact: true }).fill(code[i]);
+  }
+}
+
 async function loginToChallenge(page: Page) {
   await page.route(LOGIN, (route) =>
     route.fulfill({ json: { mfa_required: true, mfa_token: "mfa-tok-1" } }),
@@ -35,8 +43,10 @@ test("an MFA-enabled login swaps to the code entry — no session yet", async ({
 
   // No session was issued by the credentials alone.
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
-  await expect(page.getByLabel("Authentication code")).toBeVisible();
-  await expect(page.getByText(/authenticator app, or one of your recovery codes/)).toBeVisible();
+  // The six-digit box grid (a named group) is the default entry.
+  await expect(page.getByRole("group", { name: "Authentication code" })).toBeVisible();
+  await expect(page.getByText(/6-digit code from your authenticator app/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use a recovery code instead" })).toBeVisible();
   // The credential fields are gone while the challenge is active.
   await expect(page.getByLabel("Email")).toHaveCount(0);
 });
@@ -49,7 +59,7 @@ test("a TOTP code completes the challenge into a cookie-mode session", async ({ 
     await route.fulfill({ json: session });
   });
 
-  await page.getByLabel("Authentication code").fill("123456");
+  await fillTotp(page, "123456");
   await page.getByRole("button", { name: "Verify code" }).click();
 
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
@@ -65,7 +75,10 @@ test("a recovery code goes through the same challenge", async ({ page }) => {
     await route.fulfill({ json: session });
   });
 
-  await page.getByLabel("Authentication code").fill("a1b2c-3d4e5");
+  // Recovery codes are hyphenated, not 6 digits: the "use a recovery code"
+  // path swaps to a single free-text field.
+  await page.getByRole("button", { name: "Use a recovery code instead" }).click();
+  await page.getByLabel("Recovery code").fill("a1b2c-3d4e5");
   await page.getByRole("button", { name: "Verify code" }).click();
 
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
@@ -81,11 +94,11 @@ test("a wrong or expired code is an honest 401, and the challenge stays", async 
     }),
   );
 
-  await page.getByLabel("Authentication code").fill("000000");
+  await fillTotp(page, "000000");
   await page.getByRole("button", { name: "Verify code" }).click();
 
   await expect(page.getByText(/That code didn't work, or this sign-in attempt has expired/)).toBeVisible();
-  await expect(page.getByLabel("Authentication code")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Authentication code" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });
 
@@ -98,7 +111,7 @@ test("rate limiting on the challenge is reported honestly", async ({ page }) => 
     }),
   );
 
-  await page.getByLabel("Authentication code").fill("123456");
+  await fillTotp(page, "123456");
   await page.getByRole("button", { name: "Verify code" }).click();
 
   await expect(page.getByText("Too many attempts — wait a moment and try again.")).toBeVisible();
@@ -110,5 +123,5 @@ test("back to sign in abandons the challenge and returns to credentials", async 
   await page.getByRole("button", { name: "Back to sign in" }).click();
 
   await expect(page.getByLabel("Email")).toBeVisible();
-  await expect(page.getByLabel("Authentication code")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Authentication code" })).toHaveCount(0);
 });

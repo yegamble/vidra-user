@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { DonationBadge } from "@/components/DonationBadge";
+import { PlusIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -99,52 +100,83 @@ function Donations() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <p className="rounded-xl bg-surface-muted px-3.5 py-3 text-[13px] leading-relaxed text-fg-muted">
-        Vidra only displays the addresses you add here — it never holds funds, balances, or your
-        private keys, and processes no payments. Viewers send crypto to you directly, entirely
-        outside Vidra.
-      </p>
+    <div className="flex max-w-xl flex-col gap-4">
+      {addresses.length === 0 ? (
+        <EmptyState
+          title="No donation addresses yet"
+          message="Add an address below to display it on your profile or a channel."
+        />
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {addresses.map((addr) => (
+            <li key={addr.id}>
+              <AddressRow
+                address={addr}
+                channels={channels}
+                onDeleted={(id) => setAddresses((prev) => prev.filter((a) => a.id !== id))}
+                onVerified={(updated) =>
+                  setAddresses((prev) => prev.map((a) => (a.id === updated.id ? updated : a)))
+                }
+              />
+            </li>
+          ))}
+        </ul>
+      )}
 
-      <AddAddressForm
+      <AddAddress
         channels={channels}
         onAdded={(created) => setAddresses((prev) => [created, ...prev])}
       />
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold tracking-tight text-fg">Your addresses</h2>
-        {addresses.length === 0 ? (
-          <EmptyState
-            title="No donation addresses yet"
-            message="Add an address above to display it on your profile or a channel."
-          />
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {addresses.map((addr) => (
-              <li key={addr.id}>
-                <AddressRow
-                  address={addr}
-                  channels={channels}
-                  onDeleted={(id) => setAddresses((prev) => prev.filter((a) => a.id !== id))}
-                  onVerified={(updated) =>
-                    setAddresses((prev) => prev.map((a) => (a.id === updated.id ? updated : a)))
-                  }
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
+  );
+}
+
+// AddAddress is the design's dashed "+ Add address" affordance: collapsed to a
+// single dashed button until opened, then the full add form. Keeping it
+// collapsed by default matches the mockup (a quiet call-to-action beneath the
+// list) and keeps the surface calm when the user is just reviewing addresses.
+function AddAddress({
+  channels,
+  onAdded,
+}: {
+  channels: Channel[];
+  onAdded: (created: DonationAddress) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-xl border-[1.5px] border-dashed border-border bg-transparent py-3 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted"
+      >
+        <PlusIcon size={17} strokeWidth={2.2} />
+        Add address
+      </button>
+    );
+  }
+
+  return (
+    <AddAddressForm
+      channels={channels}
+      onAdded={(created) => {
+        onAdded(created);
+        setOpen(false);
+      }}
+      onCancel={() => setOpen(false)}
+    />
   );
 }
 
 function AddAddressForm({
   channels,
   onAdded,
+  onCancel,
 }: {
   channels: Channel[];
   onAdded: (created: DonationAddress) => void;
+  onCancel: () => void;
 }) {
   const [network, setNetwork] = useState<DonationNetwork>("bitcoin");
   const [address, setAddress] = useState("");
@@ -198,7 +230,7 @@ function AddAddressForm({
         e.preventDefault();
         void submit();
       }}
-      className="flex max-w-xl flex-col gap-4"
+      className="flex flex-col gap-4 rounded-2xl bg-surface-muted p-4"
       aria-label="Add a donation address"
     >
       <h2 className="text-base font-semibold tracking-tight text-fg">Add an address</h2>
@@ -294,9 +326,14 @@ function AddAddressForm({
         </select>
       </div>
 
-      <button type="submit" disabled={submitting} className={PRIMARY_BTN}>
-        {submitting ? "Adding…" : "Add address"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={submitting} className={PRIMARY_BTN}>
+          {submitting ? "Adding…" : "Save address"}
+        </button>
+        <button type="button" onClick={onCancel} disabled={submitting} className={SECONDARY_BTN}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }
@@ -336,40 +373,41 @@ function AddressRow({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-surface-muted p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-surface-strong px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted">
-              {meta.ticker}
-            </span>
-            {address.label ? (
-              <span className="text-sm font-semibold text-fg">
-                {address.label}
-              </span>
-            ) : null}
-            <span className="text-xs text-fg-muted">
-              · {scopeLabel(address, channels)}
-            </span>
-            <DonationBadge verified={address.verified} />
-          </div>
-          <p className="break-all font-mono text-xs text-fg-muted" title={address.address}>
-            {address.address}
-          </p>
-          {error ? <p className="text-xs text-danger">{error}</p> : null}
-        </div>
+    <div className="flex flex-col gap-2.5 rounded-2xl bg-surface-muted p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[14.5px] font-bold text-fg">{meta.label}</span>
+        <DonationBadge verified={address.verified} />
+        {address.label ? (
+          <span className="text-xs text-fg-muted">· {address.label}</span>
+        ) : null}
+        <span className="ml-auto shrink-0 text-xs text-fg-muted">
+          {scopeLabel(address, channels)}
+        </span>
+      </div>
+
+      <p className="break-all font-mono text-[12.5px] text-fg-muted" title={address.address}>
+        {address.address}
+      </p>
+
+      {address.verified ? (
+        <p className="text-xs font-medium text-success">Ownership proven by a signed message</p>
+      ) : (
+        <VerifyArea address={address} onVerified={onVerified} />
+      )}
+
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
+
+      <div className="flex">
         <button
           type="button"
           disabled={deleting}
           onClick={() => void remove()}
           aria-label={`Delete ${meta.label} address`}
-          className={`shrink-0 ${SECONDARY_BTN}`}
+          className="focus-ring self-start rounded-full border border-danger/45 bg-transparent px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger/10 disabled:opacity-60"
         >
           {deleting ? "Deleting…" : "Delete"}
         </button>
       </div>
-
-      {address.verified ? null : <VerifyArea address={address} onVerified={onVerified} />}
     </div>
   );
 }
@@ -388,9 +426,9 @@ function VerifyArea({
 
   if (!meta.verificationSupported) {
     return (
-      <p className="rounded-xl bg-surface-strong/60 px-3.5 py-2.5 text-xs leading-relaxed text-fg-muted">
-        Ownership verification is not available for {meta.label} — it will show as unverified. That
-        is normal; only some networks support message signing.
+      <p className="text-xs leading-relaxed text-fg-muted">
+        Signature verification is not available for {meta.label} yet — it will show as unverified.
+        That is normal; only some networks support message signing.
       </p>
     );
   }

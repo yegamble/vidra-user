@@ -1550,9 +1550,89 @@ before/after screenshots (light+dark, 390px+1280px) via `npm run design:shots`, 
         only; no `dark:`/raw palette; no emoji; zero token-value changes.
 
 ## DR10 — Settings + Donations + Auth
-- [ ] Grouped settings cards (omit Bluesky row — aspirational); donation network cards
+- [x] Grouped settings cards (omit Bluesky row — aspirational); donation network cards
       (verified/unverified pills, ETH-only verify); auth login (SSO from `oauth_providers[]`),
       TOTP 6-box (`/auth/mfa/challenge`), signup approval notice. CI + push.
+      **DONE 2026-07-08.** A restyle over the already-shipped settings/donation/auth surfaces to
+      the design's vocabulary — every real wiring (cookie-mode login, MFA challenge, OAuth SSO,
+      registration-approval, non-custodial donation CRUD + EIP-191 verify, profile edit +
+      deactivate/delete) preserved; the slice adds the design chrome + one new primitive.
+      • **NEW `components/ui/OtpInput.tsx` primitive (+ 6 unit tests).** The design's segmented
+        one-time-code entry: `length` single-digit boxes (44×52, rounded-[11px], filled →
+        `border-fg` / empty → `border-border`) that auto-advance on type, backspace to the
+        previous box, accept a pasted/filled multi-digit value (spread across boxes), and combine
+        into one numeric string via `onChange`. Accessible as a `role="group"` named by `label`
+        with each box `aria-label="<label> digit N"` (screen-reader position + test targetability).
+        Exported from the `ui` barrel.
+      • **Auth — login wordmark + 6-box two-factor (`LoginForm`).** The credentials screen leads
+        with the design's **34px "Vidra" wordmark** (-0.05em) + tagline instead of a plain "Sign
+        in" heading; the email/password form, per-provider SSO buttons (real
+        `instance.oauth_providers[]`), and links are unchanged. The **two-factor screen** became
+        the design's: a 52px `surface-muted` lock circle (`LockIcon`), heading, "Enter the 6-digit
+        code from your authenticator app.", the **`OtpInput` 6-box grid** for the TOTP code, a
+        **"Use a recovery code instead"** toggle that swaps to a single free-text **"Recovery
+        code"** field (recovery codes are hyphenated, not 6 digits — so they can't share the digit
+        grid), then Verify code + Back to sign in. Both paths post to the real
+        `POST /api/v1/auth/mfa/challenge` (verified fresh in `vidra-core/api/openapi.yaml`) with
+        `{mfa_token, code, cookie_mode:true}`; Verify is disabled until the TOTP reaches 6 digits
+        (or the recovery field is non-empty). Kept the heading "Two-factor authentication"
+        (matches `SecuritySettingsView`; design's "Two-factor code" is the only copy divergence).
+      • **Auth — signup.** The page heading bumped to the design's 26px/-0.04em "Create your
+        account"; the inline per-field 422 errors + the **approval-notice info card** (rendered
+        from the real `instance.registration_requires_approval`, with the optional message-to-admin
+        field) were already shipped and match the design — kept.
+      • **Settings profile header + full-width Sign out (`SettingsView`).** Added the design's
+        identity row under the "Account settings" heading: a **56px `Avatar`** (real avatar, else
+        initial fallback) beside the display name and the **"@handle · email · verified"** line
+        (verified in `text-success`). The per-device sign-out became the design's **full-width
+        outline "Sign out"** button; its accessible name carries a sr-only " of this device" so it
+        never collides with the header's exact "Sign out" (the settings e2e asserts exactly one).
+        The grouped iOS-style cards, danger zone, and rows were already design-shaped (backport
+        W0.9) — untouched. **The "Connected accounts" (Bluesky cross-posting) row is KEPT, not
+        omitted:** the spec §5.6 flagged it aspirational, but at execution time the backend HAS
+        landed it — `POST /api/v1/me/atproto` (linkATProtoAccount, "Link a Bluesky account for
+        cross-posting", P10.2) is in openapi and the real `ConnectionsView`/`/settings/connections`
+        route binds to it. Per the truthfulness rule (bind to contracts that exist AT EXECUTION
+        TIME — the backend wave lands new ones), a real, contract-backed, already-shipped feature
+        stays. (The *per-upload* Bluesky toggle stays out — DR9 — as cross-posting is account-level
+        + automatic-on-publish, with no create-time toggle contract.)
+      • **Donation settings → design cards (`DonationSettingsView` + `DonationBadge`).** Each
+        address is now the design's borderless `surface-muted` card: **network name bold + a
+        verified/unverified pill + optional label + scope right-aligned ("Profile" / "Channel
+        @handle")**, the **mono address** (break-all), then a status line — verified → "Ownership
+        proven by a signed message" (`text-success`); unverified + unsigned-network (BTC/LTC/XMR) →
+        the honest "Signature verification is not available for {network} yet …" caption;
+        unverified + ETH → the real **"Verify ownership"** EIP-191 challenge/sign/verify flow
+        (`/me/donation-addresses/{id}/challenge`+`/verify`, ETH-only, others 501 — verified fresh);
+        a `danger-outline` Delete. The badge adopted the design's **uppercase micro status style**
+        (`Badge status`; verified = success-tint per spec §2 AA rule — NOT the design's solid-green
+        white pill; unverified = `strong` sm2). The add form collapses behind the design's **dashed
+        "+ Add address"** button (`PlusIcon`), opening to the (restyled, surface-muted) form whose
+        submit is "Save address" + Cancel. The redundant component intro was dropped (the
+        `/settings/donations` page wrapper already carries the display-only/non-custodial
+        disclaimer). Public reads + the watch/channel Support dialog (DR5) unaffected.
+      • **Tests (unit + e2e, same slice).** +6 unit (`OtpInput`) = **627 passed**. `mfa-login`
+        e2e rewritten for the 6-box grid (fill boxes by positional `aria-label`) + the recovery
+        toggle path; `donations` e2e opens the collapsed "Add address" form then submits via "Save
+        address". Harness (`design-shots.mjs`) gained a **`settings-donations`** area (verified
+        ETH / unverified ETH-with-verify / channel-scoped unverified BTC) + `SAMPLE_MY_DONATIONS`;
+        the `auth-mfa` area's act hook still reaches the (unchanged) "Two-factor authentication"
+        heading.
+      • **Evidence.** `.ralph/design-review/dr10/{before,after}/{auth-login,auth-mfa,auth-signup,
+        settings,settings-donations}` (light+dark × mobile+desktop, full-page; git-ignored; before
+        via `git stash` of the six view files against `next dev` on :3181, server killed after).
+        Read the AFTER PNGs vs `Vidra App.dc.html` (Settings / Donation settings / Auth
+        login+MFA+signup): 34px Vidra wordmark; lock-circle + 6 code boxes + recovery link; profile
+        avatar row + "verified"; ETH VERIFIED (green tint) / UNVERIFIED (sm2) cards with mono
+        addresses + scope + dashed "+ Add address"; approval-notice card. Dark inverts via tokens;
+        BEFORE shows the plain "Sign in" heading, single MFA text input, heading-only settings, and
+        the always-open donation form.
+      • **Gate.** Full `CI=1 npm run ci` (E2E_PORT=3190) on the final tree — typecheck ✓ lint ✓
+        lint:icons ✓ unit **627 passed** ✓ clean `next build` ✓ mocked e2e **419 passed** + **1
+        flaky passed on retry** (`watch-player` playback-speed keyboard shortcut — a pre-existing
+        player-wave timing flake, unrelated to DR10; 0 failures, incl. the axe serious/critical
+        gate, landmarks, responsive-overflow). Semantic tokens only; no `dark:`/raw palette; no
+        emoji; zero token-value changes.
 
 ## DR11 — Admin mobile parity (app/admin + app/moderation)
 - [ ] Overview health/queues/audit (real rows only — NO S3/RTMP/Bluesky; stats only if real

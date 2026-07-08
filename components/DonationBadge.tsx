@@ -26,6 +26,7 @@ export function DonationBadge({ verified }: { verified: boolean }) {
     return (
       <Badge
         variant="success"
+        status
         title="The owner proved control of this address by signing a challenge."
       >
         <CheckIcon />
@@ -35,7 +36,11 @@ export function DonationBadge({ verified }: { verified: boolean }) {
     );
   }
   return (
-    <Badge title="Ownership of this address has not been cryptographically proven.">
+    <Badge
+      variant="strong"
+      status
+      title="Ownership of this address has not been cryptographically proven."
+    >
       Unverified
     </Badge>
   );
