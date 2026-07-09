@@ -1,11 +1,20 @@
+"use client";
+
 import Link from "next/link";
 
 import { IpfsIcon } from "@/components/icons";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { Avatar } from "@/components/ui/Avatar";
-import { channelAvatarUrl, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
+import {
+  channelAvatarUrl,
+  isSensitiveVideo,
+  remoteVideoThumbnailUrl,
+  videoThumbnailUrl,
+} from "@/lib/api";
 import type { Video } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 
 // Grid video card in the template's language (specs/design/{app,desktop}-template):
 // a borderless rounded-2xl thumbnail on the page background, then a row with the
@@ -35,6 +44,14 @@ export function VideoCard({
   // no local avatar URL (the Avatar falls back to the display-name initial).
   const isRemote = video.remote === true;
   const watchHref = isRemote ? `/remote/${video.id}` : `/videos/${video.id}`;
+  // Sensitive-content presentation (spec: instance-platform-info.md): under the
+  // instance `blur` policy a sensitive video's thumbnail is blurred and badged;
+  // under `warn` it is badged only; `display` (and `hide`, which is enforced
+  // server-side, or an unknown policy) applies no client treatment.
+  const policy = useSensitiveContentPolicy();
+  const sensitive = isSensitiveVideo(video);
+  const blurSensitive = sensitive && policy === "blur";
+  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
   const channelName = video.channel_display_name || video.channel_handle || "";
   const avatarSrc =
     !isRemote && video.channel_handle ? channelAvatarUrl(video.channel_handle) : null;
@@ -71,7 +88,12 @@ export function VideoCard({
               src={isRemote ? remoteVideoThumbnailUrl(video.id) : videoThumbnailUrl(video.id)}
               alt=""
               loading="lazy"
-              className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+              className={cn(
+                "h-full w-full object-cover transition-transform group-hover:scale-[1.02]",
+                // Blur policy: scale hides the blur's soft edges inside the
+                // already-clipping rounded container.
+                blurSensitive && "scale-110 blur-2xl",
+              )}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-xs text-fg-muted">
@@ -94,6 +116,14 @@ export function VideoCard({
             >
               <IpfsIcon size={11} className="shrink-0 lg:hidden" />
               IPFS
+            </span>
+          ) : null}
+          {/* Sensitive badge (media-overlay exception: theme-invariant dark
+              pill on the thumbnail). Bottom-LEFT so it never collides with the
+              IPFS pill (top corners) or the duration (bottom-right). */}
+          {markSensitive ? (
+            <span className="absolute bottom-2 left-2 inline-flex items-center rounded-full bg-black/55 px-2.5 py-[3px] text-[10.5px] font-semibold leading-none tracking-[0.03em] text-white/90 backdrop-blur">
+              Sensitive
             </span>
           ) : null}
           {duration !== null ? (

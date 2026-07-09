@@ -26,6 +26,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
+import { Toggle } from "@/components/ui/Toggle";
 import {
   ApiError,
   api,
@@ -34,6 +35,7 @@ import {
   errorMessage,
   findResumableUploadSession,
   forgetUploadSession,
+  isSensitiveVideo,
   isUploadCancelled,
   resumableUpload,
   videoThumbnailUrl,
@@ -630,6 +632,10 @@ function UploadSection({
   const [license, setLicense] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [privacy, setPrivacy] = useState<VideoPrivacy>("public");
+  // Sensitive-content flag (spec: instance-platform-info.md): travels as
+  // is_sensitive on the create-draft body so the instance policy (hide/warn/
+  // blur/display) can apply to the published video.
+  const [sensitive, setSensitive] = useState(false);
   const [publishAt, setPublishAt] = useState("");
   const [source, setSource] = useState<"file" | "url">("file");
   const [videoUrl, setVideoUrl] = useState("");
@@ -922,6 +928,7 @@ function UploadSection({
         ...taxonomyFields(category, language, license),
         ...(tags.length > 0 ? { tags } : {}),
         ...(scheduleIso ? { publish_at: scheduleIso } : {}),
+        ...(sensitive ? { is_sensitive: true } : {}),
       });
       draftId = draft.id;
       // Cancel clicked while the draft POST was still in flight: stop before the
@@ -1151,6 +1158,20 @@ function UploadSection({
           </span>
           <FieldErrorText id="publish-privacy-error" message={fieldErrors.privacy} />
         </label>
+        <div className="flex items-center justify-between gap-4 text-sm">
+          <div className="min-w-0">
+            <span className="block font-medium text-fg">Contains sensitive content</span>
+            <span className="block text-xs text-fg-muted">
+              Some instances hide, blur, or warn before playing sensitive videos.
+            </span>
+          </div>
+          <Toggle
+            checked={sensitive}
+            onChange={setSensitive}
+            label="Contains sensitive content"
+            disabled={state === "uploading"}
+          />
+        </div>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-fg">Schedule publish (optional)</span>
           <input
@@ -1555,6 +1576,9 @@ function VideoRow({
   // optional on the shared Video type only because federated remote cards omit
   // them, so coalesce to a safe default that never actually fires here.
   const [privacy, setPrivacy] = useState<VideoPrivacy>(video.privacy ?? "private");
+  // Sensitive-content flag; the authoritative value arrives with the detail
+  // fetch (list rows omit it), mirroring how tags are handled.
+  const [sensitive, setSensitive] = useState(isSensitiveVideo(video));
   // The number of stored passwords (CORE-17), reported up by PasswordManager
   // while privacy is "password". null = not yet known; used to block a
   // privacy=password save that has no passwords (which the server would 400).
@@ -1602,6 +1626,9 @@ function VideoRow({
         // the detail fetch supplied the real current set to edit from — never
         // from list-row data, which omits tags entirely.
         ...(detail ? { tags } : {}),
+        // Same rule for the sensitive flag: only sent once the detail supplied
+        // the real current value (list rows omit it).
+        ...(detail ? { is_sensitive: sensitive } : {}),
         ...(scheduleChanged ? { publish_at: scheduleIso } : {}),
       });
       onUpdated(updated);
@@ -1622,6 +1649,7 @@ function VideoRow({
     setLicense(video.license ?? "");
     setTags(detail?.tags ?? video.tags ?? []);
     setPrivacy(video.privacy ?? "private");
+    setSensitive(isSensitiveVideo(detail ?? video));
     setPublishAt(toLocalInputValue((detail ?? video).publish_at));
     setError(null);
   }
@@ -1641,6 +1669,7 @@ function VideoRow({
       setLicense(full.license ?? "");
       setTags(full.tags ?? []);
       setPrivacy(full.privacy ?? "private");
+      setSensitive(isSensitiveVideo(full));
       setPublishAt(toLocalInputValue(full.publish_at));
     } catch {
       // Keep the list-derived defaults already in state (and claim nothing
@@ -1718,6 +1747,19 @@ function VideoRow({
             reports its count up so the Save guard can block an empty set. */}
         {privacy === "password" ? (
           <PasswordManager videoId={video.id} onCountChange={setPasswordCount} />
+        ) : null}
+        {/* Sensitive flag is editable only once the detail supplied the real
+            current value (see save()) — a list row would show a false "off". */}
+        {detail ? (
+          <div className="flex items-center justify-between gap-4 text-sm">
+            <span className="font-medium text-fg">Contains sensitive content</span>
+            <Toggle
+              checked={sensitive}
+              onChange={setSensitive}
+              label="Edit contains sensitive content"
+              disabled={busy}
+            />
+          </div>
         ) : null}
         {canSchedule ? (
           // Scheduling is only editable while the video has not published yet —

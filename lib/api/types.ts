@@ -29,11 +29,15 @@ export type FieldError = NonNullable<Schemas["ErrorResponse"]["error"]["fields"]
 
 // --- Instance ---------------------------------------------------------------
 export type InstanceResponse = Schemas["InstanceResponse"];
+export type InstanceAboutResponse = Schemas["InstanceAboutResponse"];
+export type InstanceContactRequest = Schemas["InstanceContactRequest"];
+export type SensitiveContentPolicy = NonNullable<InstanceResponse["sensitive_content_policy"]>;
 
 // --- Video ------------------------------------------------------------------
 export type VideoPrivacy = NonNullable<Schemas["Video"]["privacy"]>;
 export type VideoState = NonNullable<Schemas["Video"]["state"]>;
 export type Video = Schemas["Video"];
+export type SensitiveVideoFields = Pick<Video, "is_sensitive">;
 export type VideoRendition = Schemas["VideoRendition"];
 // Seek-bar chapters (CORE-15): a video's chapter list (GET, ascending) and the
 // whole-set replace request (PUT). One chapter = { start_seconds, title }.

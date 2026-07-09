@@ -36,6 +36,22 @@ export type { ResumableUploadOptions, StoredUploadSession } from "./resumable-up
 export { computeFileFingerprint, findUploadByFingerprint } from "./fingerprint";
 export type { FeedParams, SearchParams, SearchVideosParams } from "./endpoints";
 export { getVideoConfigCached, resolveOptionLabel } from "./video-config";
+export {
+  EMPTY_INSTANCE_ABOUT,
+  contactInstance,
+  getInstanceAbout,
+  getInstanceCached,
+  isSensitiveVideo,
+  resetInstanceCacheForTests,
+} from "./instance-platform";
+export type {
+  ContactInstanceRequest,
+  ExtendedInstanceResponse,
+  InstanceAboutResponse,
+  InstancePlatformExtras,
+  SensitiveContentPolicy,
+  SensitiveVideoFields,
+} from "./instance-platform";
 export { authApi, oauthBeginUrl } from "./auth";
 export { getAccessToken, setAccessToken, setSessionExpiredHandler } from "./auth-store";
 export type * from "./types";

@@ -72,6 +72,31 @@ failed)**. Only test files under `e2e-backed/` changed; **no `vidra-core` change
 - **deactivate.spec / profile-edit.spec** — the settings page now also has a
   `Sign out of this device` button; the header control is matched with `exact: true`.
 
+## ✅ Instance platform information frontend slice (2026-07-09)
+
+Completed the frontend half of root spec `.ralph/specs/instance-platform-info.md`, against the
+landed `vidra-core` OpenAPI contract:
+
+- **OpenAPI/codegen** refreshed `lib/api/generated.ts`; instance platform fields, `GET
+  /instance/about`, `POST /instance/contact`, and `Video.is_sensitive` now flow through generated
+  aliases and typed `api` methods.
+- **Admin config redesign** expanded `/admin/config` to the PeerTube-style Platform Information
+  structure: Administrators, Platform, Social, Moderation & sensitive content, You and your
+  platform, Other information, Registration, and Features. Enum/list kinds render as the policy
+  segmented control and taxonomy checkbox lists; overridden badges now appear only for overridden
+  keys; markdown fields share one preview modal.
+- **Public About page** now reads `GET /instance` + `GET /instance/about`, renders markdown safely
+  via the new `Markdown` wrapper (`react-markdown` + `remark-gfm`, no raw HTML), resolves taxonomy
+  badges, shows social links via shared icons, opens Support/Contact modals, and hides empty
+  sections.
+- **Sensitive content UI** renders blur/warn treatment on cards/watch pages and sends
+  `is_sensitive` from studio create/edit flows.
+- **Evidence**: `npm run ci` PASSING (typecheck, lint, lint:icons, 810 unit/component tests,
+  production build, 469 mocked Playwright specs). Focused coverage added/updated in
+  `e2e/about.spec.ts`, `e2e/admin-config.spec.ts`, `e2e/sensitive-content.spec.ts`, and
+  `e2e/studio.spec.ts`. Real DB-effect proof for admin setting mutations remains the backed suite
+  item; this loop did not run `npm run e2e:backed`.
+
 ## 🔴 Critical Verification Rule: Real Database Effects
 
 A frontend feature that talks to the backend is **NOT done** until Ralph has proven

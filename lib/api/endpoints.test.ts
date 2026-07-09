@@ -99,6 +99,30 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/config");
   });
 
+  it("getInstanceAbout targets the instance about endpoint", async () => {
+    await api.getInstanceAbout();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/instance/about");
+  });
+
+  it("contactInstance posts the visitor message", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 202 }));
+    await api.contactInstance({
+      from_name: "Ada",
+      from_email: "ada@example.test",
+      subject: "Hello",
+      body: "This is a thoughtful message.",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/instance/contact");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      from_name: "Ada",
+      from_email: "ada@example.test",
+      subject: "Hello",
+      body: "This is a thoughtful message.",
+    });
+  });
+
   it("media URL helpers build direct stream/poster/caption URLs", () => {
     expect(videoOriginalUrl("v1")).toBe("http://localhost:8080/api/v1/videos/v1/original");
     expect(videoThumbnailUrl("v1")).toBe("http://localhost:8080/api/v1/videos/v1/thumbnail");

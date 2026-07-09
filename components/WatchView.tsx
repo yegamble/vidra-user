@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { WarningIcon } from "@/components/icons";
 import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
 import { CommentsSection } from "@/components/CommentsSection";
 import type { DonateSource } from "@/components/SupportButton";
@@ -32,7 +33,7 @@ import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, api, ipfsHlsMasterUrl, videoCaptionUrl } from "@/lib/api";
+import { ApiError, api, ipfsHlsMasterUrl, isSensitiveVideo, videoCaptionUrl } from "@/lib/api";
 import {
   clearPlaybackToken,
   setPlaybackToken as storePlaybackToken,
@@ -45,6 +46,7 @@ import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { hydratePlayerSettings, resetPlayerSettings } from "@/lib/player-settings";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { parseStartTime } from "@/lib/start-time";
+import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 
 type Status = "loading" | "error" | "notfound" | "locked" | "ready";
 
@@ -98,6 +100,12 @@ export function WatchView({ id }: { id: string }) {
   // degrade gracefully: the row omits the count, Support falls back to the
   // channel-scoped read alone. Never fabricated.
   const [channel, setChannel] = useState<Channel | null>(null);
+  // Sensitive-content gate (spec: instance-platform-info.md): under the
+  // instance blur/warn policy a sensitive video's playback is held behind a
+  // confirmation scrim until the viewer explicitly proceeds. `display` (or an
+  // absent policy — `hide` is enforced server-side) plays normally.
+  const sensitivePolicy = useSensitiveContentPolicy();
+  const [sensitiveAccepted, setSensitiveAccepted] = useState(false);
   // IPFS playback surface (DR5): the video streams from the authoritative server
   // by default; a viewer can opt into the IPFS gateway mirror. "fetching" probes
   // the gateway HLS master; "ipfs" plays from it; "error" fell back to server.
@@ -151,6 +159,8 @@ export function WatchView({ id }: { id: string }) {
   if (seenId !== id) {
     setSeenId(id);
     if (playbackToken !== null) setPlaybackToken(null);
+    // A sensitive-content confirmation never carries over to another video.
+    if (sensitiveAccepted) setSensitiveAccepted(false);
   }
   useEffect(() => () => clearPlaybackToken(id), [id]);
 
@@ -371,23 +381,49 @@ export function WatchView({ id }: { id: string }) {
       <div className="flex min-w-0 flex-1 flex-col gap-8">
       <article className="flex flex-col gap-4">
         <div className="flex flex-col">
-          <Player
-            video={video}
-            videoRef={playerRef}
-            startAt={startAt}
-            nextVideo={nextVideo}
-            hlsMasterOverride={hlsMasterOverride}
-            playbackToken={playbackToken}
-            overlay={playerOverlay}
-          />
-          {/* IPFS source bar — only when the video is gateway-mirrored. */}
-          {ipfsAvailable ? (
-            <IpfsSourceBar
-              state={ipfsState}
-              onToggle={toggleSource}
-              onRefetch={tryIpfs}
-            />
-          ) : null}
+          {isSensitiveVideo(video) &&
+          !sensitiveAccepted &&
+          (sensitivePolicy === "blur" || sensitivePolicy === "warn") ? (
+            // Confirmation scrim (media-overlay exception: theme-invariant dark
+            // stage in the player's slot) — playback only starts after an
+            // explicit choice.
+            <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl bg-black px-6 text-center">
+              <WarningIcon size={28} className="text-white/80" />
+              <p className="text-sm font-semibold text-white">
+                This video contains sensitive content
+              </p>
+              <p className="max-w-md text-[13px] text-white/70">
+                The administrators of this instance flag such videos before playback.
+              </p>
+              <button
+                type="button"
+                onClick={() => setSensitiveAccepted(true)}
+                className="focus-ring mt-1 inline-flex items-center rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-black transition-opacity hover:opacity-90"
+              >
+                Watch anyway
+              </button>
+            </div>
+          ) : (
+            <>
+              <Player
+                video={video}
+                videoRef={playerRef}
+                startAt={startAt}
+                nextVideo={nextVideo}
+                hlsMasterOverride={hlsMasterOverride}
+                playbackToken={playbackToken}
+                overlay={playerOverlay}
+              />
+              {/* IPFS source bar — only when the video is gateway-mirrored. */}
+              {ipfsAvailable ? (
+                <IpfsSourceBar
+                  state={ipfsState}
+                  onToggle={toggleSource}
+                  onRefetch={tryIpfs}
+                />
+              ) : null}
+            </>
+          )}
         </div>
 
         <div className="flex flex-col gap-3">

@@ -67,7 +67,17 @@ describe("resumableUpload", () => {
     vi.stubGlobal("fetch", fetchMock);
     vi.spyOn(api, "createUploadSession").mockResolvedValue(session());
     vi.spyOn(api, "completeUploadSession").mockResolvedValue({
-      video: { id: "v1", remote: false, channel_id: "c1", title: "clip", description: "", privacy: "public", state: "published", created_at: FUTURE },
+      video: {
+        id: "v1",
+        remote: false,
+        channel_id: "c1",
+        title: "clip",
+        description: "",
+        privacy: "public",
+        state: "published",
+        created_at: FUTURE,
+        is_sensitive: false,
+      },
       file: { id: "f1", kind: "original", content_type: "video/mp4", original_name: "clip.mp4", size_bytes: 1024, created_at: FUTURE },
     });
   });

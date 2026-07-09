@@ -66,9 +66,11 @@ function video(overrides: Record<string, unknown> = {}) {
     channel_id: "c1",
     title: "My clip",
     description: "",
+    remote: false,
     privacy: "public",
     state: "published",
     created_at: new Date().toISOString(),
+    is_sensitive: false,
     ...overrides,
   };
 }
@@ -275,6 +277,7 @@ test("a creator can upload and publish a video", async ({ page }) => {
   await page.getByLabel("Video category").selectOption("7");
   await page.getByLabel("Video language").selectOption("en");
   await page.getByLabel("Video license").selectOption("1");
+  await page.getByRole("switch", { name: "Contains sensitive content" }).click();
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
@@ -290,6 +293,7 @@ test("a creator can upload and publish a video", async ({ page }) => {
     category: "7",
     language: "en",
     license: "1",
+    is_sensitive: true,
   });
 });
 
@@ -409,10 +413,11 @@ test("editing tags sends the replaced set on the PATCH", async ({ page }) => {
   const tagsField = page.getByLabel("Edit tags");
   await tagsField.fill("fresh");
   await tagsField.press("Enter");
+  await page.getByRole("switch", { name: "Edit contains sensitive content" }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
 
   await expect(row.getByRole("button", { name: "Edit" })).toBeVisible();
-  expect(patchBody).toMatchObject({ tags: ["retro", "fresh"] });
+  expect(patchBody).toMatchObject({ tags: ["retro", "fresh"], is_sensitive: true });
 });
 
 // The false-success regression: the upload HTTP call succeeds (201) but the

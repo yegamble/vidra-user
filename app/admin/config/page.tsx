@@ -7,7 +7,8 @@ export default function AdminConfigPage() {
       <AdminTabs />
       <h1 className="mb-1 text-2xl font-bold tracking-tight">Instance configuration</h1>
       <p className="mb-6 text-[13px] text-fg-muted">
-        Instance identity, registration, feature toggles, and moderation gates.
+        Platform information, registration, feature toggles, moderation gates, and the public
+        About page content.
       </p>
       <AdminInstanceConfigView />
     </main>

@@ -104,6 +104,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instance/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public instance about-page document
+         * @description The operator-authored long-form texts behind the /about page: the instance description plus the terms, code of conduct, moderation and administrator information, the PeerTube-style "you and your platform" answers, hardware info, and the support text. Every field is RAW markdown ("" when unset); rendering/sanitisation is the client's job. Public, unauthenticated.
+         */
+        get: operations["getInstanceAbout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instance/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a contact-form message to the instance operator
+         * @description Delivers a visitor message to the instance's effective contact email. Public, unauthenticated, and throttled hard: a dedicated fixed-window limiter allows 1 request per IP per hour (independent of the general API budget). Available only while the EFFECTIVE contact_form_enabled (see GET /api/v1/instance) is true — the admin toggle is on, a contact email is configured, and the deployment has an outbound mail path; otherwise the endpoint answers 409 contact_form_disabled. The message and the addresses are never logged.
+         */
+        post: operations["contactInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/register": {
         parameters: {
             query?: never;
@@ -3425,7 +3465,7 @@ export interface paths {
         };
         /**
          * Get effective instance settings (admin)
-         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Restricted to admins.
+         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the PeerTube platform-information fields (links, markdown bodies, default language, categories, moderator languages, sensitive-content policy), the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Restricted to admins.
          */
         get: operations["getInstanceSettings"];
         put?: never;
@@ -3435,7 +3475,7 @@ export interface paths {
         head?: never;
         /**
          * Update instance settings (admin)
-         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled) and a string for the text keys (instance_name, instance_description, terms_url, privacy_url, contact_email). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance and the upload/import/live/comment/registration gates reflect them.
+         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, contact_form_enabled, instance_is_sensitive), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/registration gates reflect them.
          */
         patch: operations["updateInstanceSettings"];
         trace?: never;
@@ -3720,8 +3760,37 @@ export interface components {
         InstanceResponse: {
             /** @example Vidra */
             name: string;
-            /** @description Operator-provided short description; may be empty. */
+            /** @description Operator-provided long description (raw markdown); may be empty. */
             description: string;
+            /** @description Operator-provided short plain-text description; may be empty. */
+            short_description: string;
+            /**
+             * @description The instance's default content language — a taxonomy language id from GET /videos/config. Defaults to "en".
+             * @example en
+             */
+            default_language: string;
+            /** @description The operator-selected main instance categories (taxonomy category ids from GET /videos/config). Empty when unset. */
+            categories: string[];
+            /** @description Languages the operator/moderators speak (taxonomy language ids from GET /videos/config). Empty when unset. */
+            moderator_languages: string[];
+            /** @description Free-text server country name; may be empty. */
+            server_country: string;
+            /** @description Whether this instance is dedicated to sensitive content. */
+            is_sensitive: boolean;
+            /**
+             * @description The instance policy for videos flagged sensitive. "hide" is enforced server-side (flagged videos are excluded from the public feed and search); warn/blur/display are presentation-only hints the frontend applies.
+             * @enum {string}
+             */
+            sensitive_content_policy: "hide" | "warn" | "blur" | "display";
+            /** @description EFFECTIVE contact-form availability: the admin toggle is on AND an effective contact email is set AND the deployment has an outbound mail path. POST /api/v1/instance/contact answers 409 whenever this is false. */
+            contact_form_enabled: boolean;
+            /** @description Operator social/link row; each value is "" when unset. */
+            social_links: {
+                website: string;
+                mastodon: string;
+                x: string;
+                bluesky: string;
+            };
             software: {
                 /** @example vidra */
                 name: string;
@@ -3758,6 +3827,33 @@ export interface components {
                 /** @description Whether posting comments is allowed. */
                 comments: boolean;
             };
+        };
+        /** @description The operator-authored about-page texts (spec instance-platform-info). Every field is RAW markdown, "" when unset. */
+        InstanceAboutResponse: {
+            /** @description The long instance description (same value as GET /instance). */
+            description: string;
+            /** @description Terms markdown body (distinct from the terms_url link). */
+            terms: string;
+            code_of_conduct: string;
+            moderation_info: string;
+            /** @description Who is behind the instance? */
+            administrator_info: string;
+            /** @description Why did you create this instance? */
+            creation_reason: string;
+            /** @description How long do you plan to maintain it? */
+            maintenance_lifetime: string;
+            /** @description How will you finance the server? */
+            business_model: string;
+            hardware_info: string;
+            support_text: string;
+        };
+        InstanceContactRequest: {
+            /** @description The visitor's name. */
+            from_name: string;
+            /** @description The visitor's reply address (set as Reply-To on the delivered mail; never the envelope sender). */
+            from_email: string;
+            subject: string;
+            body: string;
         };
         OAuthIdentity: {
             /**
@@ -3968,6 +4064,8 @@ export interface components {
              * @enum {string}
              */
             state?: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
+            /** @description Whether the owner flagged the video as sensitive content. Always present; false on remote cards (no local flag exists for them). When the instance sensitive_content_policy is "hide", flagged videos are excluded from the public feed and search server-side; under warn/blur the frontend applies the matching presentation. */
+            is_sensitive: boolean;
             /**
              * Format: date-time
              * @description Creation time. On a remote card this is the origin's published time (falling back to when the video was fetched).
@@ -4196,6 +4294,8 @@ export interface components {
              * @description Schedule the publish: after processing, the video parks in the "scheduled" state until this time, then publishes automatically. Must lie in the future -> 422 otherwise.
              */
             publish_at?: string;
+            /** @description Mark the video as sensitive content (defaults to false). See the Video schema for how the instance policy treats flagged videos. */
+            is_sensitive?: boolean;
         };
         /** @description Partial update; provide at least one field. */
         UpdateVideoRequest: {
@@ -4216,6 +4316,8 @@ export interface components {
              * @description Set (or move) the scheduled publish time. Only accepted while the video is not yet published, and must lie in the future -> 422 otherwise.
              */
             publish_at?: string;
+            /** @description Set or clear the sensitive-content flag (omit to leave unchanged). */
+            is_sensitive?: boolean;
         };
         /** @description A WebVTT caption track's metadata (the file is fetched separately). */
         Caption: {
@@ -5708,7 +5810,7 @@ export interface components {
             /** Format: date-time */
             failed_at: string;
         };
-        /** @description One runtime-mutable instance setting's effective state: its type, the effective value (a string for text keys, a boolean for toggle keys), the config default, and whether the database currently overrides it. */
+        /** @description One runtime-mutable instance setting's effective state: its type, the effective value (a string for text/enum keys, a boolean for toggle keys, an array of strings for list keys), the default, and whether the database currently overrides it. Enum-typed settings also list their allowed options. */
         InstanceSetting: {
             /**
              * @description The stable setting key.
@@ -5716,13 +5818,15 @@ export interface components {
              */
             key: string;
             /** @enum {string} */
-            type: "string" | "bool";
-            /** @description The effective value (string or boolean, per type). */
-            value: string | boolean;
-            /** @description The config default (string or boolean, per type). */
-            default: string | boolean;
+            type: "string" | "bool" | "enum" | "list";
+            /** @description The effective value (string, boolean, or string array per type). */
+            value: string | boolean | string[];
+            /** @description The default (string, boolean, or string array per type). */
+            default: string | boolean | string[];
             /** @description Whether a database override is currently set for this key. */
             overridden: boolean;
+            /** @description For type=enum only: the allowed values, in display order. Absent for other types. */
+            options?: string[];
         };
         /** @description Launch parameters for a PeerTube import run. The source connection is NOT here — it comes from server config only. */
         PeerTubeImportLaunchRequest: {
@@ -5863,15 +5967,20 @@ export interface components {
             settings: components["schemas"]["InstanceSetting"][];
         };
         /**
-         * @description A flat object of setting key → new value. Toggle keys take a boolean; text keys take a string. A null value clears the override (reset to the config default). Only the keys present are changed. At least one key is required.
+         * @description A flat object of setting key → new value. Toggle keys take a boolean; text/markdown/link and enum keys take a string; list keys take an array of strings. A null value clears the override (reset to the config default). Only the keys present are changed. At least one key is required.
          * @example {
          *       "instance_name": "My Vidra",
          *       "uploads_enabled": false,
+         *       "sensitive_content_policy": "blur",
+         *       "instance_categories": [
+         *         "1",
+         *         "7"
+         *       ],
          *       "terms_url": null
          *     }
          */
         UpdateInstanceSettingsRequest: {
-            [key: string]: unknown;
+            [key: string]: string | boolean | string[] | null;
         };
         /** @description Partial update; provide at least one field. */
         UpdateUserRequest: {
@@ -6356,6 +6465,84 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InstanceResponse"];
+                };
+            };
+        };
+    };
+    getInstanceAbout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The about-page document. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceAboutResponse"];
+                };
+            };
+        };
+    };
+    contactInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstanceContactRequest"];
+            };
+        };
+        responses: {
+            /** @description Message accepted for delivery to the operator. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed request body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The contact form is not available (code contact_form_disabled): the toggle is off, no contact email is set, or mail is not configured on this deployment. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (field errors on from_name/from_email/subject/body). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Contact budget exhausted (1 request per IP per hour); Retry-After is set. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

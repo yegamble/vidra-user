@@ -11,6 +11,8 @@ import type {
   AuditLogListResponse,
   InstanceSettingsResponse,
   UpdateInstanceSettingsRequest,
+  InstanceAboutResponse,
+  InstanceContactRequest,
   JobsOverview,
   MediaGCResponse,
   PeerTubeImportLaunchRequest,
@@ -166,6 +168,14 @@ export const api = {
   /** GET /api/v1/instance — public instance about/config. */
   getInstance: (signal?: AbortSignal) =>
     apiRequest<InstanceResponse>("/api/v1/instance", { signal }),
+
+  /** GET /api/v1/instance/about — public raw-markdown instance information. */
+  getInstanceAbout: (signal?: AbortSignal) =>
+    apiRequest<InstanceAboutResponse>("/api/v1/instance/about", { signal }),
+
+  /** POST /api/v1/instance/contact — public visitor message to the administrators. */
+  contactInstance: (body: InstanceContactRequest) =>
+    apiRequest<void>("/api/v1/instance/contact", { method: "POST", body }),
 
   /**
    * GET /api/v1/videos — public feed, ordered by sort, with view/thumbnail
