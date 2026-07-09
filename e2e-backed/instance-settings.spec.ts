@@ -31,7 +31,7 @@ async function loginAsAdmin(page: Page) {
   // the hidden AdminTabs at this viewport, so click the rail's "Instance" link.
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   await page.getByRole("link", { name: "Instance", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Instance identity" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Platform", exact: true })).toBeVisible();
 }
 
 test("editing the instance name persists to the DB and shows on the public instance endpoint", async ({
@@ -41,7 +41,7 @@ test("editing the instance name persists to the DB and shows on the public insta
   const name = `Vidra ${uniqueId()}`;
   await loginAsAdmin(page);
 
-  const nameInput = page.getByLabel("Instance name");
+  const nameInput = page.getByLabel("Name", { exact: true });
   await nameInput.fill(name);
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Settings saved.")).toBeVisible();
@@ -64,8 +64,8 @@ test("editing the instance name persists to the DB and shows on the public insta
   // fires a deferred post-login router.push("/") that races these assertions and can
   // navigate away from the config page before the field is read.
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Instance identity" })).toBeVisible();
-  await expect(page.getByLabel("Instance name")).toHaveValue(name);
+  await expect(page.getByRole("heading", { name: "Platform", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue(name);
 });
 
 test("toggling a feature off then on round-trips through the DB overlay", async ({ page, request }) => {
