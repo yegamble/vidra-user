@@ -1,7 +1,8 @@
 name: contract-ci
 
 # Frontend <-> backend contract guard. Two checks against vidra-core's OpenAPI spec
-# (fetched from the public repo, so no token is needed):
+# (checked out through GitHub Actions instead of anonymous raw.githubusercontent.com,
+# so the job does not flake on raw CDN rate limits):
 #   1. path check   — every /api/ path the client (lib/api/*.ts) calls exists in the
 #      spec (structural, name-agnostic, not flaky).
 #   2. type freshness — regenerates lib/api/generated.ts from the spec and fails if
@@ -33,20 +34,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Fetch backend OpenAPI contract from vidra-core (public)
-        run: |
-          mkdir -p .contract
-          curl -fsSL https://raw.githubusercontent.com/yegamble/vidra-core/main/api/openapi.yaml \
-            -o .contract/openapi.yaml
+      - name: Checkout backend OpenAPI contract from vidra-core
+        uses: actions/checkout@v4
+        with:
+          repository: yegamble/vidra-core
+          ref: main
+          path: .contract/vidra-core
 
       - name: Check frontend<->backend path contract
         env:
-          OPENAPI_PATH: .contract/openapi.yaml
+          OPENAPI_PATH: .contract/vidra-core/api/openapi.yaml
         run: node scripts/check-contract.mjs
 
       - name: Verify generated API types are up to date with the spec
         env:
-          OPENAPI_PATH: .contract/openapi.yaml
+          OPENAPI_PATH: .contract/vidra-core/api/openapi.yaml
         run: |
           npm run codegen
           if ! git diff --quiet -- lib/api/generated.ts; then
