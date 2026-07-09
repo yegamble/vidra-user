@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { ReactNode } from "react";
@@ -65,6 +66,19 @@ interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
+// Refresh access tokens before they expire so an idle signed-in browser session
+// stays warm even while the user is only browsing public pages.
+const ACCESS_REFRESH_LEAD_MS = 2 * 60 * 1000;
+const MIN_ACCESS_REFRESH_DELAY_MS = 1000;
+const PROACTIVE_REFRESH_RETRY_MS = 30 * 1000;
+
+function proactiveRefreshDelayMs(expiresInSeconds: number): number | null {
+  if (!Number.isFinite(expiresInSeconds) || expiresInSeconds <= 0) return null;
+  const ttlMs = expiresInSeconds * 1000;
+  const leadMs = Math.min(ACCESS_REFRESH_LEAD_MS, Math.max(5000, ttlMs / 5));
+  return Math.max(MIN_ACCESS_REFRESH_DELAY_MS, Math.floor(ttlMs - leadMs));
+}
+
 // AuthProvider holds the session client-side: the access token lives in the
 // in-memory auth-store (auto-attached by the API client) and the user in React
 // state. The refresh token is an httpOnly cookie the JS never sees, so a hard
@@ -73,17 +87,80 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [restored, setRestored] = useState(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionGenerationRef = useRef(0);
+  const sessionActiveRef = useRef(false);
+  const scheduleRefreshRef = useRef<(expiresInSeconds: number, generation?: number) => void>(
+    () => {},
+  );
+
+  const clearRefreshTimer = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleRefresh = useCallback(
+    (expiresInSeconds: number, generation = sessionGenerationRef.current) => {
+      clearRefreshTimer();
+      const delay = proactiveRefreshDelayMs(expiresInSeconds);
+      if (delay === null) return;
+
+      const runRefresh = async () => {
+        const res = await restoreSession();
+        if (generation !== sessionGenerationRef.current) return;
+        if (!sessionActiveRef.current) {
+          setAccessToken(null);
+          return;
+        }
+        if (res) {
+          scheduleRefreshRef.current(res.expires_in, generation);
+          return;
+        }
+
+        // A transient network miss should not immediately sign the user out.
+        // Keep the stale token in place; the existing 401 retry path remains
+        // the final authority if the refresh cookie is truly gone.
+        refreshTimerRef.current = setTimeout(() => {
+          refreshTimerRef.current = null;
+          void runRefresh();
+        }, PROACTIVE_REFRESH_RETRY_MS);
+      };
+
+      refreshTimerRef.current = setTimeout(() => {
+        refreshTimerRef.current = null;
+        void runRefresh();
+      }, delay);
+    },
+    [clearRefreshTimer],
+  );
+
+  useEffect(() => {
+    scheduleRefreshRef.current = scheduleRefresh;
+  }, [scheduleRefresh]);
+
+  const clearLocalSession = useCallback(() => {
+    sessionGenerationRef.current += 1;
+    sessionActiveRef.current = false;
+    clearRefreshTimer();
+    setAccessToken(null);
+    setUser(null);
+  }, [clearRefreshTimer]);
 
   useEffect(() => {
     let cancelled = false;
     // An unrecoverable 401 mid-session (refresh failed, or a retried request
     // was still unauthorized) drops the UI to signed-out everywhere.
-    setSessionExpiredHandler(() => setUser(null));
+    setSessionExpiredHandler(clearLocalSession);
 
     void (async () => {
       const res = await restoreSession();
       if (cancelled) return;
       if (res) {
+        sessionGenerationRef.current += 1;
+        sessionActiveRef.current = true;
+        scheduleRefresh(res.expires_in, sessionGenerationRef.current);
         // Prefer a fresh /auth/me read (role/verification may have changed
         // since the token was minted); fall back to the refresh payload's
         // user so a transient /me failure doesn't drop a valid session.
@@ -99,17 +176,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      sessionGenerationRef.current += 1;
+      sessionActiveRef.current = false;
+      clearRefreshTimer();
       setSessionExpiredHandler(null);
     };
-  }, []);
+  }, [clearLocalSession, clearRefreshTimer, scheduleRefresh]);
 
   const apply = useCallback((res: AuthResponse) => {
     // Cookie mode: the response body has no refresh_token — the httpOnly
     // cookie set by the backend is the sole carrier. Only the short-lived
     // access token is kept, in memory.
+    sessionGenerationRef.current += 1;
+    sessionActiveRef.current = true;
     setAccessToken(res.token);
     setUser(res.user);
-  }, []);
+    scheduleRefresh(res.expires_in, sessionGenerationRef.current);
+  }, [scheduleRefresh]);
 
   const login = useCallback(
     async (credentials: Omit<LoginRequest, "cookie_mode">): Promise<LoginOutcome> => {
@@ -155,29 +238,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const deactivate = useCallback(async (password: string) => {
     await authApi.deactivate(password);
     // The backend already revoked every session; drop the local one too.
-    setAccessToken(null);
-    setUser(null);
-  }, []);
+    clearLocalSession();
+  }, [clearLocalSession]);
 
   const deleteAccount = useCallback(async (password: string) => {
     await authApi.deleteAccount(password);
     // The account is gone and every session revoked server-side; drop the
     // local session so the UI lands signed out immediately.
-    setAccessToken(null);
-    setUser(null);
-  }, []);
+    clearLocalSession();
+  }, [clearLocalSession]);
 
   const logout = useCallback(async () => {
-    setAccessToken(null);
-    setUser(null);
+    clearLocalSession();
     try {
       // Cookie-mode revoke: the request carries the httpOnly cookie (no body
       // token) and the 204 clears it, so a reload stays signed out.
       await authApi.logout();
     } catch {
       // Best-effort revoke; logout is idempotent server-side.
+    } finally {
+      setAccessToken(null);
     }
-  }, []);
+  }, [clearLocalSession]);
 
   const value = useMemo<SessionContextValue>(
     () => ({

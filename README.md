@@ -49,11 +49,15 @@ Range-capable `<video>` and shows its metadata, with loading / not-found / error
 
 Auth is wired client-side: `components/auth/AuthProvider.tsx` (`useSession`) holds the
 session, the access token lives in-memory (`lib/api/auth-store.ts`, auto-attached by the API
-client, never persisted to `localStorage`), and the login/signup pages (`app/login`,
-`app/signup`) sign in / register via `lib/api/auth.ts` (signup maps 422 field errors inline
-and shows a registration-closed notice from the instance config). The header `AccountMenu`
-shows Sign in / username + Sign out. Note: auth flows are mock-tested only — proving they
-persist requires the backend-backed e2e (later slice).
+client, never persisted to `localStorage`), and the refresh token lives only in the
+backend-set httpOnly `vidra_refresh` cookie. Login/signup/MFA completion use cookie mode via
+`lib/api/auth.ts`; on boot the provider silently restores from the cookie, and while signed
+in it schedules a cookie-mode `/api/v1/auth/refresh` before the access token expires so idle
+browsing does not leave the UI holding a stale bearer token. The API client still performs a
+single silent refresh + retry after an authenticated request returns 401. The header
+`AccountMenu` shows Sign in / username + Sign out. These flows are covered by API/client unit
+tests, an `AuthProvider` timer test, and mocked Playwright session specs; proving real cookie
+persistence still requires the backend-backed e2e profile.
 
 Search: the header `SearchBox` navigates to `/search?q=` (`app/search` →
 `components/SearchResults.tsx`), a client title search reusing the video card and

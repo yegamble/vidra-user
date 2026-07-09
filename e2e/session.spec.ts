@@ -25,8 +25,8 @@ const user = {
 };
 
 // Cookie-mode AuthResponse: the body carries NO refresh_token.
-function session(token: string) {
-  return { token, token_type: "Bearer", expires_in: 900, user };
+function session(token: string, expiresIn = 900) {
+  return { token, token_type: "Bearer", expires_in: expiresIn, user };
 }
 
 function unauthorized(message = "unauthorized") {
@@ -135,6 +135,53 @@ test("an expired access token triggers one silent refresh and a retry", async ({
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
   expect(refreshesWhileSignedIn).toBe(1);
   expect(patchAuths).toEqual(["Bearer acc1", "Bearer acc2"]);
+});
+
+test("an idle signed-in session refreshes before access token expiry", async ({ page }) => {
+  let cookieSet = false;
+  let refreshesWhileSignedIn = 0;
+  const patchAuths: Array<string | undefined> = [];
+
+  await page.route(REFRESH, async (route) => {
+    if (cookieSet) {
+      refreshesWhileSignedIn += 1;
+      await route.fulfill({ json: session("acc2") });
+    } else {
+      await route.fulfill(unauthorized("no session"));
+    }
+  });
+  await page.route(LOGIN, async (route) => {
+    cookieSet = true;
+    await route.fulfill({ json: session("acc1", 2) });
+  });
+  await page.route(ME, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.fulfill({ json: user });
+      return;
+    }
+    const auth = route.request().headers()["authorization"];
+    patchAuths.push(auth);
+    if (auth === "Bearer acc2") {
+      await route.fulfill({ json: { ...user, display_name: "Ada Lovelace" } });
+    } else {
+      await route.fulfill(unauthorized("token expired"));
+    }
+  });
+  await mockFeed(page);
+
+  await signInViaForm(page);
+
+  // The short-lived acc1 token should be rotated by the proactive timer before
+  // the user performs the next protected action.
+  await expect.poll(() => refreshesWhileSignedIn, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+
+  await page.getByRole("link", { name: "ada" }).click();
+  await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
+  await page.getByLabel("Display name").fill("Ada Lovelace");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(page.getByText("Profile saved.")).toBeVisible();
+  expect(patchAuths).toEqual(["Bearer acc2"]);
 });
 
 test("a second 401 after the silent refresh signs you out", async ({ page }) => {
