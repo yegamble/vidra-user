@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { IpfsIcon } from "@/components/icons";
+import { IpfsIcon, PlayIcon } from "@/components/icons";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import {
@@ -73,11 +73,11 @@ export function VideoCard({
       : null;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="group/card flex flex-col gap-3">
       <Link
         href={watchHref}
         aria-label={video.title}
-        className="focus-ring group block overflow-hidden rounded-2xl"
+        className="focus-ring group block overflow-hidden rounded-2xl transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-px hover:shadow-[0_10px_24px_rgba(0,0,0,0.10)] active:translate-y-0 active:scale-[0.995]"
       >
         <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-surface-muted">
           {video.has_thumbnail ? (
@@ -89,15 +89,18 @@ export function VideoCard({
               alt=""
               loading="lazy"
               className={cn(
-                "h-full w-full object-cover transition-transform group-hover:scale-[1.02]",
+                "h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]",
                 // Blur policy: scale hides the blur's soft edges inside the
                 // already-clipping rounded container.
                 blurSensitive && "scale-110 blur-2xl",
               )}
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-fg-muted">
-              No preview
+            <div className="media-placeholder flex h-full w-full items-center justify-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full border border-border-subtle bg-canvas/75 text-fg-muted shadow-[0_5px_18px_rgba(0,0,0,0.10)] backdrop-blur-sm transition-transform duration-200 group-hover:scale-105">
+                <PlayIcon size={19} className="translate-x-px" />
+              </span>
+              <span className="sr-only">No preview</span>
             </div>
           )}
           {/* IPFS mirror badge (media-overlay exception: theme-invariant dark pill

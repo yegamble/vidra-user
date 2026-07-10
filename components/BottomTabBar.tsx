@@ -96,13 +96,15 @@ export function BottomTabBar() {
     <>
       <nav
         aria-label="Primary"
-        className="sticky bottom-0 z-10 border-t border-border-subtle bg-canvas/90 backdrop-blur pb-[max(env(safe-area-inset-bottom),0.25rem)] sm:hidden"
+        className="sticky bottom-0 z-30 bg-gradient-to-t from-canvas via-canvas/95 to-transparent px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2 sm:hidden"
       >
-        <ul className="flex items-stretch justify-around">
+        <ul className="glass-chrome flex items-stretch justify-around rounded-[24px] p-1">
           {TABS.map((tab) => {
             const active = isTabActive(tab, pathname);
-            const cellClass = `focus-ring relative mx-auto flex h-14 w-full max-w-20 flex-col items-center justify-center gap-1 rounded-xl ${
-              active ? "text-fg" : "text-fg-muted"
+            const cellClass = `focus-ring relative mx-auto flex h-14 w-full max-w-20 flex-col items-center justify-center gap-1 rounded-[18px] transition-[background-color,color,box-shadow] ${
+              active
+                ? "bg-surface-raised text-fg shadow-[0_1px_5px_rgba(0,0,0,0.10)]"
+                : "text-fg-muted hover:bg-surface-muted/70 hover:text-fg"
             }`;
 
             if (tab.isCreate) {

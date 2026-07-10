@@ -23,7 +23,7 @@ export function SearchBox() {
       }}
       className="w-full max-w-md"
     >
-      <div className="flex items-center gap-2.5 rounded-full bg-surface-muted px-4 py-2 transition-colors focus-within:bg-surface-strong/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
+      <div className="flex min-h-11 items-center gap-2.5 rounded-full bg-surface-muted px-4 py-2 transition-colors focus-within:bg-surface-strong/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus">
         <SearchIcon size={16} strokeWidth={2} className="shrink-0 text-fg-muted" />
         <input
           type="search"

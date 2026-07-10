@@ -17,7 +17,7 @@ export function PlaylistCard({ playlist }: { playlist: Playlist }) {
         href={`/playlists/${playlist.id}`}
         className="focus-ring group flex flex-col gap-2 rounded-xl"
       >
-        <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl bg-surface-muted">
+        <div className="media-placeholder relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl">
           {playlist.has_thumbnail ? (
             // eslint-disable-next-line @next/next/no-img-element -- backend-served cover, not a static asset
             <img

@@ -140,7 +140,7 @@ function RelatedRow({ video }: { video: Video }) {
         href={href}
         tabIndex={-1}
         aria-hidden="true"
-        className="relative block aspect-video w-[150px] shrink-0 overflow-hidden rounded-lg bg-surface-muted"
+        className="media-placeholder relative block aspect-video w-[150px] shrink-0 overflow-hidden rounded-lg"
       >
         {video.has_thumbnail ? (
           // Backend-served image; a plain <img> avoids next/image remote config.

@@ -142,7 +142,7 @@ export function NotificationsBell() {
           setOpenedPath(pathname);
           setOpen(true);
         }}
-        className="focus-ring relative inline-flex h-9 w-9 items-center justify-center rounded-full text-fg transition-colors hover:bg-surface-muted"
+        className="focus-ring relative inline-flex h-11 w-11 items-center justify-center rounded-full text-fg transition-colors hover:bg-surface-muted"
       >
         <BellIcon size={20} strokeWidth={2} />
         {count > 0 ? (

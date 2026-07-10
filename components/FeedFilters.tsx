@@ -40,11 +40,11 @@ export function FeedFilters({ sort, filters }: { sort: FeedSort; filters: Filter
   }
 
   const selectClass =
-    "focus-ring rounded-xl border border-border bg-surface px-3 py-1.5 text-[13px] font-semibold text-fg disabled:opacity-60";
+    "focus-ring min-h-11 min-w-24 rounded-xl border border-border bg-surface-raised px-3 py-1.5 text-[13px] font-semibold text-fg disabled:opacity-60 sm:min-h-9";
 
   return (
-    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter videos">
-      <label className="flex items-center gap-1.5 text-[13px] text-fg-muted">
+    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto" role="group" aria-label="Filter videos">
+      <label className="flex w-full items-center justify-between gap-2 px-1 text-[13px] text-fg-muted sm:w-auto sm:justify-start sm:px-0">
         <span>Category</span>
         <select
           value={filters.category ?? ""}
@@ -61,7 +61,7 @@ export function FeedFilters({ sort, filters }: { sort: FeedSort; filters: Filter
           ))}
         </select>
       </label>
-      <label className="flex items-center gap-1.5 text-[13px] text-fg-muted">
+      <label className="flex w-full items-center justify-between gap-2 px-1 text-[13px] text-fg-muted sm:w-auto sm:justify-start sm:px-0">
         <span>Language</span>
         <select
           value={filters.language ?? ""}
@@ -79,12 +79,12 @@ export function FeedFilters({ sort, filters }: { sort: FeedSort; filters: Filter
         </select>
       </label>
       {filters.tag ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted py-1 pl-3 pr-1 text-[13px] font-semibold text-fg">
+        <span className="inline-flex min-h-11 items-center gap-1 rounded-full bg-surface-raised py-1 pl-3 pr-1 text-[13px] font-semibold text-fg sm:min-h-9">
           <span className="sr-only">Filtered by tag </span>#{filters.tag}
           <Link
             href={feedHref(sort, { ...filters, tag: undefined })}
             aria-label={`Remove tag filter ${filters.tag}`}
-            className="focus-ring flex h-6 w-6 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
+            className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg sm:h-7 sm:w-7"
           >
             <CloseIcon size={14} strokeWidth={2} />
           </Link>

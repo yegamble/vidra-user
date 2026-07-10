@@ -29,7 +29,11 @@ export function FeedSortTabs({
 }) {
   const router = useRouter();
   return (
-    <div role="group" aria-label="Sort videos" className="inline-flex items-center gap-2">
+    <div
+      role="group"
+      aria-label="Sort videos"
+      className="grid w-full grid-cols-3 items-center gap-2 sm:inline-flex sm:w-auto"
+    >
       {OPTIONS.map(({ sort, label }) => (
         <button
           key={sort}
@@ -40,8 +44,8 @@ export function FeedSortTabs({
           }}
           className={
             active === sort
-              ? "focus-ring rounded-full border border-accent bg-accent px-4 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors"
-              : "focus-ring rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted"
+              ? "focus-ring min-h-11 rounded-full border border-accent bg-accent px-3 py-1.5 text-[13px] font-semibold text-accent-fg shadow-[0_2px_10px_rgba(0,0,0,0.14)] transition-[background-color,color,box-shadow] sm:min-h-9 sm:px-4"
+              : "focus-ring min-h-11 rounded-full border border-border bg-canvas/65 px-3 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg sm:min-h-9 sm:px-4"
           }
         >
           {label}

@@ -60,7 +60,7 @@ export function SidebarFollowing({ collapsed }: { collapsed: boolean }) {
             <Link
               href={`/channels/${encodeURIComponent(channel.handle)}`}
               title={collapsed ? channel.display_name : undefined}
-              className={`focus-ring flex items-center gap-3 rounded-[9px] py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg ${
+              className={`focus-ring flex min-h-11 items-center gap-3 rounded-[12px] py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg ${
                 collapsed ? "justify-center px-1.5" : "px-3"
               }`}
             >

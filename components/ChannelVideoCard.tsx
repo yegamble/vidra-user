@@ -30,7 +30,7 @@ export function ChannelVideoCard({ video }: { video: Video }) {
         aria-label={video.title}
         className="focus-ring group block overflow-hidden rounded-[11px]"
       >
-        <div className="relative aspect-video w-full overflow-hidden rounded-[11px] bg-surface-muted">
+        <div className="media-placeholder relative aspect-video w-full overflow-hidden rounded-[11px]">
           {video.has_thumbnail ? (
             // Backend-served image; a plain <img> avoids next/image remote config.
             // alt="" — the wrapping link is already labelled by the title.

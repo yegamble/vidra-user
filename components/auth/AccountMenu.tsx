@@ -33,7 +33,7 @@ export function AccountMenu() {
       <div className="flex items-center gap-3 text-sm">
         <Link
           href="/settings"
-          className="focus-ring flex items-center gap-2 rounded-full font-medium text-fg"
+          className="focus-ring flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full font-medium text-fg sm:justify-start"
         >
           <Avatar
             src={user.has_avatar ? userAvatarUrl(user.id) : null}
@@ -47,7 +47,7 @@ export function AccountMenu() {
           onClick={() => {
             void logout();
           }}
-          className="focus-ring hidden rounded-full border border-border px-3 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg sm:inline-flex"
+          className="focus-ring hidden min-h-9 rounded-full border border-border px-3 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg sm:inline-flex"
         >
           Sign out
         </button>
@@ -58,7 +58,7 @@ export function AccountMenu() {
   return (
     <Link
       href="/login"
-      className="focus-ring rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
+      className="focus-ring inline-flex min-h-11 items-center rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted sm:min-h-9"
     >
       Sign in
     </Link>

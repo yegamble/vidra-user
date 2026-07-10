@@ -39,6 +39,8 @@ export function FeedScopeToggle({
       }
       label="Feed scope"
       size="sm"
+      fullWidth
+      className="w-full sm:w-auto"
     />
   );
 }

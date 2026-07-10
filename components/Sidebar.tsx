@@ -83,8 +83,8 @@ export function Sidebar() {
   return (
     <nav
       aria-label="Primary"
-      className={`sticky top-14 hidden max-h-[calc(100vh-3.5rem)] shrink-0 flex-col justify-between gap-2 self-start overflow-y-auto border-r border-border-subtle px-2.5 py-3 transition-[width] duration-200 motion-reduce:transition-none sm:flex ${
-        collapsed ? "w-14" : "w-56"
+      className={`glass-chrome sticky top-[4.75rem] mb-3 ml-3 mt-3 hidden max-h-[calc(100vh-5.5rem)] shrink-0 flex-col justify-between gap-2 self-start overflow-y-auto rounded-[22px] p-2 transition-[width] duration-200 motion-reduce:transition-none sm:flex ${
+        collapsed ? "w-16" : "w-56"
       }`}
     >
       <div className="flex flex-col gap-4">
@@ -112,7 +112,7 @@ export function Sidebar() {
           onClick={toggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!collapsed}
-          className="focus-ring flex items-center gap-3 rounded-[9px] px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+          className="focus-ring flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
         >
           <svg
             aria-hidden
@@ -148,9 +148,9 @@ function SidebarLink({
       href={item.href}
       aria-current={active ? "page" : undefined}
       title={collapsed ? item.label : undefined}
-      className={`focus-ring flex items-center gap-3 rounded-[9px] px-3 py-2 text-sm transition-colors ${
+      className={`focus-ring flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2 text-sm transition-[background-color,color,box-shadow] ${
         active
-          ? "bg-surface-muted font-semibold text-fg"
+          ? "bg-surface-raised font-semibold text-fg shadow-[0_1px_5px_rgba(0,0,0,0.10)]"
           : "font-medium text-fg-muted hover:bg-surface-muted hover:text-fg"
       }`}
     >

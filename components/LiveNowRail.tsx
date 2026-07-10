@@ -39,30 +39,32 @@ export function LiveNowRail() {
   if (streams.length === 0) return null;
 
   return (
-    <section aria-label="Live now" className="mb-8">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-[15px] font-bold tracking-[-0.01em]">Live now</h2>
+    <section aria-label="Live now" className="mb-10">
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-bold tracking-[-0.025em]">Live now</h2>
         <span className="shrink-0 text-[13px] tabular-nums text-fg-muted">
           {streams.length} {streams.length === 1 ? "stream" : "streams"}
         </span>
       </div>
       {/* Horizontal scroll rail: 240px cards, hidden scrollbar (the row scrolls
           on touch / trackpad; focus order still reaches each card). */}
-      <ul className="flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {streams.map((stream) => {
           const channel = stream.channel_display_name || stream.channel_handle;
           return (
-            <li key={stream.id} className="w-60 flex-none">
+            <li key={stream.id} className="w-[min(82vw,20rem)] flex-none snap-start sm:w-72 lg:w-64 xl:w-72">
               <Link
                 href={`/live/${encodeURIComponent(stream.id)}`}
                 aria-label={`${stream.title}, live now — ${channel}`}
-                className="focus-ring group block rounded-[14px]"
+                className="focus-ring group block rounded-2xl transition-transform duration-200 ease-out hover:-translate-y-px active:translate-y-0 active:scale-[0.995]"
               >
-                <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-[14px] bg-surface-muted">
+                <div className="media-placeholder relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl transition-shadow duration-200 group-hover:shadow-[0_10px_24px_rgba(0,0,0,0.10)]">
                   {/* No server poster for live streams yet: a faint decorative
                       play glyph signals a watchable stream (fg-subtle is the
                       decorative-only token) — never a fabricated thumbnail. */}
-                  <PlayIcon size={30} className="text-fg-subtle" />
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full border border-border-subtle bg-canvas/75 text-fg-muted shadow-[0_5px_18px_rgba(0,0,0,0.10)] backdrop-blur-sm transition-transform duration-200 group-hover:scale-105">
+                    <PlayIcon size={19} className="translate-x-px" />
+                  </span>
                   {/* Media-overlay LIVE badge — the sanctioned theme-invariant
                       dark pill on media, with the pulsing live dot (globally
                       neutralized under prefers-reduced-motion). */}

@@ -1,4 +1,5 @@
 import { FeedFilters } from "@/components/FeedFilters";
+import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
 import { LiveNowRail } from "@/components/LiveNowRail";
 import { VideoFeed } from "@/components/VideoFeed";
@@ -16,8 +17,7 @@ export default async function TrendingPage({
 }) {
   const sp = await searchParams;
   const filters = readFeedFilters(sp);
-  // The Local/All scope toggle renders on the home feed only, but an explicit
-  // ?scope=all deep link (or one carried over by a sort switch) is honoured.
+  const scope = filters.scope ?? "local";
   const feedKey = [
     "trending",
     filters.scope ?? "local",
@@ -26,16 +26,29 @@ export default async function TrendingPage({
     filters.tag ?? "",
   ].join("|");
   return (
-    <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
-      {/* Heading kept for the page's programmatic heading (a11y / e2e) but
-          visually hidden — the template leads with the chips, not a title. */}
-      <h1 className="sr-only">Trending videos</h1>
-      {/* Primary: shared sort chips lead (Recent/Popular link back to home). */}
-      <div className="mb-4">
+    <main className="mx-auto w-full max-w-[1480px] flex-1 px-4 pb-12 pt-7 sm:px-6 sm:pb-16 sm:pt-10 lg:px-8">
+      <section
+        aria-labelledby="trending-feed-heading"
+        className="mb-6 flex flex-col gap-5 lg:mb-8 lg:flex-row lg:items-end lg:justify-between"
+      >
+        <div className="max-w-xl">
+          <p className="mb-1 text-xs font-bold uppercase tracking-[0.09em] text-fg-muted">
+            Explore
+          </p>
+          <h1
+            id="trending-feed-heading"
+            className="text-[28px] font-bold leading-tight tracking-[-0.035em] text-fg sm:text-[32px]"
+          >
+            Trending videos
+          </h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-fg-muted">
+            What viewers are discovering right now.
+          </p>
+        </div>
         <FeedSortTabs active="trending" filters={filters} />
-      </div>
-      {/* Secondary taxonomy filters — demoted below the chips (see home page). */}
-      <div className="mb-7 flex flex-wrap items-center gap-x-3 gap-y-2">
+      </section>
+      <div className="mb-9 flex flex-col gap-3 rounded-[20px] border border-border-subtle bg-surface-muted/65 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
+        <FeedScopeToggle active={scope} sort="trending" filters={filters} />
         <FeedFilters sort="trending" filters={filters} />
       </div>
       {/* "Live now" rail — persists across the shared sort chips (matches the

@@ -169,6 +169,15 @@ Fast and quiet: `transition-colors` on interactive fills (~150ms default),
 bounce, nothing longer than ~200ms. `prefers-reduced-motion` is neutralized
 globally in `globals.css` — components never branch on it.
 
+## Navigation material
+
+The app shell uses one shared `.glass-chrome` functional layer for the header,
+desktop sidebar, and phone tab bar. It is a translucent, blurred monochrome
+material when `backdrop-filter` is supported, with a solid `surface-raised`
+fallback. `prefers-reduced-transparency`, `prefers-contrast: more`, and forced
+colors all use the solid treatment. Keep this material on navigation and
+transient controls; content cards remain on standard canvas/surface materials.
+
 ## Component primitives (`components/ui/`)
 
 Import from the barrel `@/components/ui`. All primitives are token-driven and
@@ -223,12 +232,13 @@ never substitute a library's variant when the design's path differs. Typed
 
 - `Header` — brand, centered pill `SearchBox` (hidden < `sm`; Search is a tab
   there), pill Create → `/studio` (hidden < `sm`), `NotificationsBell`,
-  `AccountMenu`. Sticky, `bg-canvas/80 backdrop-blur`, hairline bottom border.
+  `AccountMenu`. Sticky and inset in a rounded `.glass-chrome` toolbar.
 - `Sidebar` (≥ `sm`) — every primary destination + role-gated
-  Moderation/Admin, `aria-current="page"`, collapsible icon rail (persisted).
+  Moderation/Admin, `aria-current="page"`, collapsible icon rail (persisted),
+  floating in a rounded `.glass-chrome` panel rather than anchoring to an edge.
 - `BottomTabBar` (< `sm`) — Home / Search / Create / Inbox / Library, sticky
-  bottom, in-flow (never overlaps content), unread dot on Inbox,
-  `aria-current` on the active tab, safe-area padded.
+  bottom in a rounded `.glass-chrome` panel, in-flow (never overlaps content),
+  unread dot on Inbox, `aria-current` on the active tab, safe-area padded.
 - Both navs return `null` on `/embed/*` (bare iframe player).
 - Every page renders exactly ONE `<main>` (landmarks are gated by
   `e2e/a11y-landmarks.spec.ts`).
@@ -253,7 +263,9 @@ never substitute a library's variant when the design's path differs. Typed
 - RTL component-unit tests for primitives (vitest + jsdom).
 - Mocked Playwright is the integration layer; `e2e/mobile-nav.spec.ts` pins
   the bottom-tab contract, `e2e/sidebar.spec.ts` the sidebar, and
-  `e2e/responsive.spec.ts` the no-overflow rule.
+  `e2e/responsive.spec.ts` the no-overflow rule. `e2e/apple-ux.spec.ts` verifies
+  visible feed hierarchy, the navigation material, narrow-width reflow, and
+  the 44px phone target floor.
 
 ## i18n readiness (`lib/i18n`)
 

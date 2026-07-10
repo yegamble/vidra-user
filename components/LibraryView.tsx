@@ -146,7 +146,7 @@ function HistoryRailCard({ item }: { item: HistoryItem }) {
 
   return (
     <Link href={href} aria-label={item.title} className="focus-ring group block rounded-xl">
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-surface-muted">
+      <div className="media-placeholder relative aspect-video w-full overflow-hidden rounded-xl">
         {item.has_thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element -- backend-served thumbnail
           <img
@@ -260,7 +260,7 @@ function PlaylistRow({ playlist }: { playlist: Playlist }) {
       href={`/playlists/${playlist.id}`}
       className="focus-ring group flex items-center gap-3.5 rounded-[10px] py-2.5 transition-colors hover:bg-surface-muted sm:px-2"
     >
-      <div className="relative flex h-12 w-[84px] flex-none items-center justify-center overflow-hidden rounded-[9px] bg-surface-muted">
+      <div className="media-placeholder relative flex h-12 w-[84px] flex-none items-center justify-center overflow-hidden rounded-[9px]">
         {playlist.has_thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element -- backend-served cover
           <img
@@ -348,7 +348,7 @@ function SavedRow({ video }: { video: Video }) {
   const channelName = video.channel_display_name || video.channel_handle || "";
   return (
     <div className="group relative flex items-center gap-3 py-2.5">
-      <div className="relative aspect-video w-[112px] flex-none overflow-hidden rounded-[9px] bg-surface-muted">
+      <div className="media-placeholder relative aspect-video w-[112px] flex-none overflow-hidden rounded-[9px]">
         {video.has_thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element -- backend-served thumbnail
           <img

@@ -30,8 +30,8 @@ export type SegmentedControlProps<T extends string> = {
 };
 
 const SEGMENT_SIZE = {
-  sm: "px-3.5 py-1 text-[13px]",
-  md: "px-4 py-1.5 text-[13px]",
+  sm: "min-h-11 px-3.5 py-1 text-[13px] sm:min-h-8",
+  md: "min-h-11 px-4 py-1.5 text-[13px] sm:min-h-9",
 } as const;
 
 /**
@@ -80,7 +80,7 @@ export function SegmentedControl<T extends string>({
               if (option.value !== value) onChange(option.value);
             }}
             className={cn(
-              "focus-ring inline-flex items-center justify-center rounded-lg font-medium transition-colors disabled:pointer-events-none disabled:opacity-60",
+              "focus-ring inline-flex min-w-11 items-center justify-center rounded-lg font-medium transition-colors disabled:pointer-events-none disabled:opacity-60 sm:min-w-0",
               SEGMENT_SIZE[size],
               fullWidth && "flex-1",
               active

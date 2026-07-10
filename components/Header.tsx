@@ -25,11 +25,11 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-10 border-b border-border-subtle bg-canvas/80 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full items-center gap-3 px-4 sm:h-14 sm:gap-5 sm:px-6">
+    <header className="sticky top-0 z-30 px-2 pt-2 sm:px-3 sm:pt-3">
+      <div className="glass-chrome mx-auto flex h-16 w-full items-center gap-3 rounded-[22px] px-4 sm:h-14 sm:gap-5 sm:px-5">
         <Link
           href="/"
-          className="focus-ring rounded-lg text-2xl font-bold tracking-tight text-fg sm:text-xl sm:tracking-[-0.045em]"
+          className="focus-ring flex min-h-11 items-center rounded-lg text-2xl font-bold tracking-tight text-fg sm:text-xl sm:tracking-[-0.045em]"
         >
           Vidra
         </Link>
@@ -39,7 +39,7 @@ export function Header() {
         <div className="flex-1 sm:hidden" />
         <Link
           href="/studio"
-          className="focus-ring hidden items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted sm:flex"
+          className="focus-ring hidden min-h-10 items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-raised/80 sm:flex"
         >
           <PlusIcon size={14} strokeWidth={2.2} />
           Create

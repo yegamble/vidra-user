@@ -5,8 +5,8 @@ import { cn } from "@/lib/cn";
 export type IconButtonSize = "sm" | "md";
 
 const SIZE: Record<IconButtonSize, string> = {
-  sm: "p-1.5",
-  md: "p-2",
+  sm: "min-h-11 min-w-11 p-1.5 sm:min-h-9 sm:min-w-9",
+  md: "min-h-11 min-w-11 p-2",
 };
 
 export type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label"> & {
