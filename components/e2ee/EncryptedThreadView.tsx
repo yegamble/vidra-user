@@ -19,6 +19,7 @@ import {
   expiresInSeconds,
   formatSafetyNumber,
 } from "@/lib/e2ee/envelope";
+import { discardEncryptedDraft, readEncryptedDraft } from "@/lib/e2ee/drafts";
 import { relativeTime } from "@/lib/format";
 
 const MAX_MESSAGE_LEN = 5000;
@@ -302,10 +303,17 @@ function Composer({
   myUserId: string;
   onSent: (text: string, expiresAt?: string) => void;
 }) {
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(() => readEncryptedDraft(conversationId) ?? "");
   const [timer, setTimer] = useState<DisappearingOption>("off");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // This composer mounts only after the local E2EE device is ready. Its state
+  // initializer reads the process-memory draft; discard it only after React has
+  // committed the composer so a render retry cannot lose the handoff.
+  useEffect(() => {
+    discardEncryptedDraft(conversationId);
+  }, [conversationId]);
 
   if (!recipientId) {
     return (

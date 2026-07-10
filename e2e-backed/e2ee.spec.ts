@@ -7,8 +7,6 @@ import {
   myE2EEDevices,
   postEncryptedEnvelope,
   registerUser,
-  seedComment,
-  seedPublishedChannel,
   uniqueId,
 } from "./fixtures";
 
@@ -41,36 +39,45 @@ test("two real Olm devices exchange an encrypted DM; the server holds only ciphe
 }) => {
   test.setTimeout(120_000);
 
-  // Seed a published video + a comment by B so A can start an encrypted thread
-  // from B's comment. Register B, and a third uninvolved account C.
-  const { videoId, videoTitle } = await seedPublishedChannel(request);
+  // Register both participants and a third uninvolved account C.
   const b = await registerUser(request, "bob");
   const a = await registerUser(request, "ada");
   const c = await registerUser(request, "carol");
-  const bComment = `enc-me-${uniqueId()}`;
-  await seedComment(request, videoId, b.token, bComment);
+  const plaintext = `secret-${uniqueId()}`;
 
   const ctxA = await browser.newContext();
   const ctxB = await browser.newContext();
   const pageA = await ctxA.newPage();
   const pageB = await ctxB.newPage();
 
-  // --- A: sign in, start an ENCRYPTED conversation with B from B's comment, set
-  // up A's device (first encrypted use).
+  // --- A: sign in, start an ENCRYPTED conversation with B by username from the
+  // inbox composer, and set up A's device (first encrypted use).
   await login(pageA, a.email);
-  await pageA.getByRole("heading", { name: videoTitle }).click();
-  await expect(pageA.getByText(bComment)).toBeVisible();
-  await pageA
-    .locator("li", { hasText: bComment })
-    .getByRole("button", { name: "Encrypted message" })
-    .click();
+  await pageA.getByRole("link", { name: "Messages" }).first().click();
+  await pageA.getByRole("button", { name: "New message" }).click();
+  const dialog = pageA.getByRole("dialog", { name: "New message" });
+  await dialog.getByLabel("Username").fill(b.username);
+  await dialog.getByLabel("Message").fill(plaintext);
+  await dialog.getByLabel("End-to-end encrypted", { exact: true }).check();
+  const started = pageA.waitForResponse(
+    (r) =>
+      /\/api\/v1\/conversations$/.test(r.url()) &&
+      r.request().method() === "POST" &&
+      r.ok(),
+  );
+  await dialog.getByRole("button", { name: "Continue" }).click();
+  const startResponse = await started;
+  expect(startResponse.request().postDataJSON()).toEqual({
+    recipient_username: b.username,
+    encrypted: true,
+  });
   await expect(pageA).toHaveURL(/\/messages\/[0-9a-f-]+\?to=/);
   const conversationId = pageA.url().match(/\/messages\/([0-9a-f-]+)/)![1];
 
   await expect(pageA.getByText("End-to-end encrypted")).toBeVisible();
   await pageA.getByLabel("Device name").fill("Ada laptop");
   await pageA.getByRole("button", { name: "Set up this device" }).click();
-  await expect(pageA.getByLabel("Write an encrypted message")).toBeVisible();
+  await expect(pageA.getByLabel("Write an encrypted message")).toHaveValue(plaintext);
 
   // --- B: sign in, open the conversation from the inbox, set up B's device so A
   // can claim one of B's one-time keys.
@@ -84,14 +91,12 @@ test("two real Olm devices exchange an encrypted DM; the server holds only ciphe
   await expect(pageB.getByLabel("Write an encrypted message")).toBeVisible();
 
   // --- A: send an encrypted message (claims B's OTK, fans out).
-  const plaintext = `secret-${uniqueId()}`;
   const sent = pageA.waitForResponse(
     (r) =>
       /\/api\/v1\/conversations\/[^/]+\/messages$/.test(r.url()) &&
       r.request().method() === "POST" &&
       r.ok(),
   );
-  await pageA.getByLabel("Write an encrypted message").fill(plaintext);
   await pageA.getByRole("button", { name: "Send" }).click();
   await sent;
 

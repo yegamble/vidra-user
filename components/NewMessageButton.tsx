@@ -4,10 +4,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
 import { ApiError, api, errorMessage } from "@/lib/api";
+import { useE2EEAvailable } from "@/lib/e2ee/availability";
+import { stashEncryptedDraft } from "@/lib/e2ee/drafts";
 
 // The backend caps a message body at 5000 chars (SendMessageRequest.body).
 const MAX_MESSAGE_LEN = 5000;
@@ -52,8 +55,10 @@ export function NewMessageButton() {
 
 function ComposeDialog({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  const e2eeAvailable = useE2EEAvailable(true);
   const [username, setUsername] = useState("");
   const [body, setBody] = useState("");
+  const [encrypted, setEncrypted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,10 +69,24 @@ function ComposeDialog({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      // Start (or reopen) the 1:1 conversation by username, post the first
-      // message, then route to the thread with a client-side nav so the
-      // in-memory session survives (a hard load lands signed out).
-      const conv = await api.startConversation({ recipientUsername: username.trim() });
+      // Start (or reopen) the 1:1 conversation by username. Plaintext mode
+      // posts the first message here; encrypted mode hands the draft to the
+      // encrypted thread, which must perform device setup + encryption first.
+      const conv = await api.startConversation({
+        recipientUsername: username.trim(),
+        ...(encrypted ? { encrypted: true } : {}),
+      });
+      if (encrypted) {
+        // The encrypted thread owns device setup and encryption. Carry the
+        // plaintext only through process memory, never through the URL or
+        // browser storage, then let its composer consume it after setup.
+        stashEncryptedDraft(conv.id, body);
+        onClose();
+        router.push(
+          `/messages/${conv.id}?to=${encodeURIComponent(conv.other_user_id)}`,
+        );
+        return;
+      }
       await api.sendMessage(conv.id, body.trim());
       // Close before navigating: the dialog lives in the persistent conversation
       // rail (it does not unmount on route change), so it must dismiss itself.
@@ -120,12 +139,28 @@ function ComposeDialog({ onClose }: { onClose: () => void }) {
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
+        {e2eeAvailable === true ? (
+          <div className="rounded-xl border border-border bg-surface-muted px-3 py-2.5">
+            <Checkbox
+              label="End-to-end encrypted"
+              checked={encrypted}
+              disabled={busy}
+              onChange={(e) => setEncrypted(e.target.checked)}
+            />
+            {encrypted ? (
+              <p className="mt-1 pl-6 text-xs text-fg-muted">
+                You&rsquo;ll review and send this message from the encrypted conversation after it
+                opens.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={onClose}>
             Cancel
           </Button>
           <Button type="submit" size="sm" disabled={!canSend}>
-            {busy ? "Sending…" : "Send"}
+            {busy ? (encrypted ? "Opening…" : "Sending…") : encrypted ? "Continue" : "Send"}
           </Button>
         </div>
       </form>

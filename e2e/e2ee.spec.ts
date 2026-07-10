@@ -9,6 +9,7 @@ import { expect, test, type Page } from "@playwright/test";
 const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const CONVERSATIONS = /\/api\/v1\/me\/conversations(\?|$)/;
+const START_CONVERSATION = /\/api\/v1\/conversations$/;
 const ENC_MESSAGES = /\/api\/v1\/conversations\/enc1\/messages(\?|$)/;
 const DEVICES = /\/api\/v1\/e2ee\/devices$/;
 const DEVICE_DELETE = /\/api\/v1\/e2ee\/devices\/[^/]+$/;
@@ -187,7 +188,11 @@ async function signInToWatch(page: Page, devices: "advertised" | "absent") {
         }),
   );
 
+  const e2eeProbe = page.waitForResponse(
+    (res) => DEVICES.test(res.url()) && res.request().method() === "GET",
+  );
   await page.goto("/videos/v1");
+  await e2eeProbe;
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   await expect(page.getByText("nice video")).toBeVisible();
 }
@@ -206,6 +211,84 @@ test("the encrypted affordance is hidden when the backend does not advertise E2E
   await signInToWatch(page, "absent");
   await expect(page.getByRole("button", { name: "Message" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Encrypted message" })).toHaveCount(0);
+
+  // The same contract gate applies to the inbox composer: an older backend must
+  // not get an encrypted-mode option that it cannot honor.
+  await page.route(CONVERSATIONS, (route) =>
+    route.fulfill({ json: { conversations: [], limit: 20, offset: 0 } }),
+  );
+  await page.getByRole("link", { name: "Messages" }).first().click();
+  await page.getByRole("button", { name: "New message" }).click();
+  const dialog = page.getByRole("dialog", { name: "New message" });
+  await expect(dialog.getByLabel("End-to-end encrypted", { exact: true })).toHaveCount(0);
+});
+
+test("New message can start an encrypted thread without posting the draft as plaintext", async ({
+  page,
+}) => {
+  await bootSignedIn(page);
+  await routeDeviceEndpoints(page);
+  await page.route(CONVERSATIONS, (route) =>
+    route.fulfill({ json: { conversations: [], limit: 20, offset: 0 } }),
+  );
+
+  let startBody: unknown = null;
+  await page.route(START_CONVERSATION, (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    startBody = route.request().postDataJSON();
+    return route.fulfill({
+      json: {
+        id: "enc1",
+        encrypted: true,
+        other_user_id: "u2",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    });
+  });
+
+  // Loading the encrypted thread is a GET. No POST to its messages endpoint may
+  // happen until the user explicitly presses Send in that thread.
+  let messagePosts = 0;
+  await page.route(ENC_MESSAGES, (route) => {
+    if (route.request().method() === "POST") {
+      messagePosts += 1;
+      return route.fulfill({
+        json: {
+          conversation_id: "enc1",
+          envelope_count: 1,
+          created_at: new Date().toISOString(),
+        },
+      });
+    }
+    return route.fulfill({ json: { envelopes: [], limit: 20, offset: 0 } });
+  });
+
+  await page.goto("/messages");
+  await page.getByRole("button", { name: "New message" }).click();
+  const dialog = page.getByRole("dialog", { name: "New message" });
+  const encrypted = dialog.getByLabel("End-to-end encrypted", { exact: true });
+  await expect(encrypted).toBeVisible();
+
+  await dialog.getByLabel("Username").fill("bob");
+  await dialog.getByLabel("Message").fill("meet at the west gate");
+  await encrypted.check();
+  await expect(dialog.getByRole("button", { name: "Continue" })).toBeEnabled();
+
+  await dialog.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(/\/messages\/enc1\?to=u2$/);
+  expect(startBody).toEqual({ recipient_username: "bob", encrypted: true });
+  expect(messagePosts).toBe(0);
+
+  // First encrypted use still performs device setup. The modal draft remains
+  // client-side throughout and is handed to the encrypted composer afterward.
+  await expect(page.getByRole("heading", { name: "Set up encryption on this device" })).toBeVisible();
+  await page.getByLabel("Device name").fill("This browser");
+  await page.getByRole("button", { name: "Set up this device" }).click();
+  await expect(page.getByLabel("Write an encrypted message")).toHaveValue(
+    "meet at the west gate",
+  );
+  expect(messagePosts).toBe(0);
 });
 
 test("the inbox flags an encrypted conversation with a lock and no preview", async ({ page }) => {

@@ -5405,6 +5405,11 @@ export interface components {
         Conversation: {
             /** Format: uuid */
             id: string;
+            /**
+             * Format: uuid
+             * @description The other participant's user id from the authenticated caller's perspective.
+             */
+            other_user_id: string;
             /** @description Immutable conversation type, chosen at creation. */
             encrypted: boolean;
             /** Format: date-time */
