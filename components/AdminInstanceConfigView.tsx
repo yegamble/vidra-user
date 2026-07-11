@@ -16,6 +16,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { Toggle } from "@/components/ui/Toggle";
 import { ApiError, api, errorMessage, getVideoConfigCached } from "@/lib/api";
+import { formatBytes } from "@/lib/format";
 import type {
   InstanceSetting,
   InstanceSettingsResponse,
@@ -27,8 +28,8 @@ import { COUNTRIES } from "@/lib/countries";
 
 type Status = "loading" | "error" | "ready";
 
-/** A setting's editable value: string, bool, or (list kinds) a string array. */
-type SettingValue = string | boolean | string[];
+/** A setting's editable value: string, bool, integer (limit kinds), or (list kinds) a string array. */
+type SettingValue = string | boolean | string[] | number;
 
 type AdminInstanceSetting = InstanceSetting;
 
@@ -41,6 +42,7 @@ type GroupId =
   | "other-info"
   | "registration"
   | "features"
+  | "limits"
   | "other";
 
 const GROUPS: { id: GroupId; title: string; description: string }[] = [
@@ -85,6 +87,12 @@ const GROUPS: { id: GroupId; title: string; description: string }[] = [
     description:
       "Turning a feature off returns “feature disabled” from its endpoints immediately — no restart needed.",
   },
+  {
+    id: "limits",
+    title: "Limits",
+    description:
+      "Operational caps enforced on uploads and imports. 0 means unlimited; changes apply on the next request or job — no restart.",
+  },
   { id: "other", title: "Other settings", description: "Additional runtime settings." },
 ];
 
@@ -99,7 +107,9 @@ type ControlKind =
   | "country-select"
   | "category-multi"
   | "language-multi"
-  | "policy-segmented";
+  | "policy-segmented"
+  | "number" // bounded integer input (limit keys)
+  | "bytes"; // like number, with a human-readable size hint
 
 // Per-key presentation metadata, in DISPLAY ORDER within each group. Any key
 // the backend returns that is not listed here still renders (in the "Other"
@@ -299,6 +309,31 @@ const META: Record<
     group: "features",
     control: "toggle",
   },
+  // 9. LIMITS (operational caps; 0 = unlimited / no cap)
+  default_user_quota_bytes: {
+    label: "Default storage quota per user",
+    help: "Bytes each account may store. Per-user overrides still win. 0 = unlimited.",
+    group: "limits",
+    control: "bytes",
+  },
+  upload_max_size_bytes: {
+    label: "Maximum upload size",
+    help: "Largest single video file an upload or URL import may be. 0 = no cap; otherwise at least 1 MiB.",
+    group: "limits",
+    control: "bytes",
+  },
+  upload_max_active_sessions_per_user: {
+    label: "Max concurrent uploads per user",
+    help: "Resumable upload sessions one user may hold open at once. 0 = unlimited.",
+    group: "limits",
+    control: "number",
+  },
+  import_max_height: {
+    label: "Import resolution cap",
+    help: "Highest resolution URL imports fetch. 0 = no cap; otherwise 144–4320.",
+    group: "limits",
+    control: "number",
+  },
 };
 
 const POLICY_OPTIONS = [
@@ -312,6 +347,7 @@ const POLICY_OPTIONS = [
 function emptyValueFor(control: ControlKind): SettingValue {
   if (control === "toggle") return false;
   if (control === "category-multi" || control === "language-multi") return [];
+  if (control === "number" || control === "bytes") return 0;
   return "";
 }
 
@@ -322,6 +358,7 @@ function controlFor(key: string, setting: AdminInstanceSetting | undefined): Con
   // unknown enum/list kind falls back to a plain text row (it stays visible;
   // proper editing arrives with its META entry).
   if (setting?.type === "bool") return "toggle";
+  if (setting?.type === "int") return "number";
   return "text";
 }
 
@@ -353,7 +390,10 @@ export function AdminInstanceConfigView() {
   );
 }
 
-function ConfigForm() {
+// Exported for unit tests (rendered directly, bypassing the RoleGate wrapper —
+// the same pattern AdminJobRunsView uses). Production always enters via
+// AdminInstanceConfigView so the admin gate applies.
+export function ConfigForm() {
   const [status, setStatus] = useState<Status>("loading");
   const [settings, setSettings] = useState<AdminInstanceSetting[]>([]);
   // The editable working copy, keyed by setting key. Reseeded from the server
@@ -546,7 +586,7 @@ function ConfigForm() {
   // Desktop console (DR12): two columns at lg — the long editorial groups on
   // the left, the compact toggle groups on the right. Below lg it collapses to
   // the single mobile stack in GROUPS order.
-  const rightIds: GroupId[] = ["registration", "features", "other-info", "other"];
+  const rightIds: GroupId[] = ["registration", "features", "limits", "other-info", "other"];
   const leftGroups = GROUPS.filter((g) => !rightIds.includes(g.id));
   const rightGroups = GROUPS.filter((g) => rightIds.includes(g.id));
 
@@ -636,6 +676,7 @@ function SettingRow({
   const value = draftValue ?? emptyValueFor(control);
   const text = typeof value === "string" ? value : "";
   const list = Array.isArray(value) ? value : [];
+  const num = typeof value === "number" ? value : 0;
 
   const isMarkdown = control === "markdown";
   const isToggle = control === "toggle";
@@ -699,6 +740,31 @@ function SettingRow({
           error={error}
           disabled={inactive}
         />
+      ) : null}
+
+      {control === "number" || control === "bytes" ? (
+        <div className="flex flex-col gap-1">
+          <Input
+            aria-label={label}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            value={String(num)}
+            onChange={(e) => {
+              const n = Math.trunc(Number(e.target.value));
+              onChange(Number.isFinite(n) && n > 0 ? n : 0);
+            }}
+            placeholder={meta?.placeholder}
+            error={error}
+            disabled={inactive}
+          />
+          {control === "bytes" ? (
+            <span className="text-xs text-fg-muted">
+              {num > 0 ? `= ${formatBytes(num)}` : "Unlimited"}
+            </span>
+          ) : null}
+        </div>
       ) : null}
 
       {control === "textarea" || isMarkdown ? (

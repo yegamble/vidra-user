@@ -6029,7 +6029,7 @@ export interface components {
             /** Format: date-time */
             failed_at: string;
         };
-        /** @description One runtime-mutable instance setting's effective state: its type, the effective value (a string for text/enum keys, a boolean for toggle keys, an array of strings for list keys), the default, and whether the database currently overrides it. Enum-typed settings also list their allowed options. */
+        /** @description One runtime-mutable instance setting's effective state: its type, the effective value (a string for text/enum keys, a boolean for toggle keys, an integer for limit keys, an array of strings for list keys), the default, and whether the database currently overrides it. Enum-typed settings also list their allowed options. */
         InstanceSetting: {
             /**
              * @description The stable setting key.
@@ -6037,11 +6037,11 @@ export interface components {
              */
             key: string;
             /** @enum {string} */
-            type: "string" | "bool" | "enum" | "list";
-            /** @description The effective value (string, boolean, or string array per type). */
-            value: string | boolean | string[];
-            /** @description The default (string, boolean, or string array per type). */
-            default: string | boolean | string[];
+            type: "string" | "bool" | "enum" | "list" | "int";
+            /** @description The effective value (string, boolean, integer, or string array per type). */
+            value: string | boolean | number | string[];
+            /** @description The default (string, boolean, integer, or string array per type). */
+            default: string | boolean | number | string[];
             /** @description Whether a database override is currently set for this key. */
             overridden: boolean;
             /** @description For type=enum only: the allowed values, in display order. Absent for other types. */
@@ -6186,7 +6186,7 @@ export interface components {
             settings: components["schemas"]["InstanceSetting"][];
         };
         /**
-         * @description A flat object of setting key → new value. Toggle keys take a boolean; text/markdown/link and enum keys take a string; list keys take an array of strings. A null value clears the override (reset to the config default). Only the keys present are changed. At least one key is required.
+         * @description A flat object of setting key → new value. Toggle keys take a boolean; text/markdown/link and enum keys take a string; limit keys (quota, upload size/sessions, import resolution) take an integer; list keys take an array of strings. A null value clears the override (reset to the config default). Only the keys present are changed. At least one key is required. Limit changes take effect on the next request/job (no restart).
          * @example {
          *       "instance_name": "My Vidra",
          *       "uploads_enabled": false,
@@ -6195,11 +6195,12 @@ export interface components {
          *         "1",
          *         "7"
          *       ],
+         *       "upload_max_size_bytes": 2147483648,
          *       "terms_url": null
          *     }
          */
         UpdateInstanceSettingsRequest: {
-            [key: string]: string | boolean | string[] | null;
+            [key: string]: string | boolean | number | string[] | null;
         };
         /** @description Partial update; provide at least one field. */
         UpdateUserRequest: {
