@@ -7,6 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronRightIcon, PlayIcon, PlaylistIcon, PlusIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
+import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import {
   api,
   playlistThumbnailUrl,
@@ -126,7 +127,10 @@ function HistorySection() {
       <ul className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
         {items.map((item) => (
           <li key={item.id} className="w-[170px] flex-none">
-            <HistoryRailCard item={item} />
+            <HistoryRailCard
+              item={item}
+              onDeleted={() => setItems((current) => current.filter((entry) => entry.id !== item.id))}
+            />
           </li>
         ))}
       </ul>
@@ -134,7 +138,7 @@ function HistorySection() {
   );
 }
 
-function HistoryRailCard({ item }: { item: HistoryItem }) {
+function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: () => void }) {
   const isRemote = item.remote === true;
   const href = isRemote ? `/remote/${item.id}` : `/videos/${item.id}`;
   const progressPct =
@@ -145,38 +149,43 @@ function HistoryRailCard({ item }: { item: HistoryItem }) {
       : null;
 
   return (
-    <Link href={href} aria-label={item.title} className="focus-ring group block rounded-xl">
-      <div className="media-placeholder relative aspect-video w-full overflow-hidden rounded-xl">
-        {item.has_thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element -- backend-served thumbnail
-          <img
-            src={isRemote ? remoteVideoThumbnailUrl(item.id) : videoThumbnailUrl(item.id)}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-fg-subtle">
-            <PlayIcon size={22} />
-          </div>
-        )}
-        {progressPct !== null ? (
-          // Thin WHITE resume bar directly on the thumbnail (design) — matching
-          // VideoCard's history progress: no track, so on a real (darker) frame
-          // the fill reads and the unfilled remainder is just the thumbnail.
-          <div aria-hidden className="absolute inset-x-0 bottom-0 h-[3px]">
-            <div
-              data-resume-progress={String(progressPct)}
-              style={{ width: `${progressPct}%` }}
-              className="h-full bg-white"
+    <div className="group relative">
+      <Link href={href} aria-label={item.title} className="focus-ring block rounded-xl">
+        <div className="media-placeholder relative aspect-video w-full overflow-hidden rounded-xl">
+          {item.has_thumbnail ? (
+            // eslint-disable-next-line @next/next/no-img-element -- backend-served thumbnail
+            <img
+              src={isRemote ? remoteVideoThumbnailUrl(item.id) : videoThumbnailUrl(item.id)}
+              alt=""
+              loading="lazy"
+              className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
             />
-          </div>
-        ) : null}
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-fg-subtle">
+              <PlayIcon size={22} />
+            </div>
+          )}
+          {progressPct !== null ? (
+            // Thin WHITE resume bar directly on the thumbnail (design) — matching
+            // VideoCard's history progress: no track, so on a real (darker) frame
+            // the fill reads and the unfilled remainder is just the thumbnail.
+            <div aria-hidden className="absolute inset-x-0 bottom-0 h-[3px]">
+              <div
+                data-resume-progress={String(progressPct)}
+                style={{ width: `${progressPct}%` }}
+                className="h-full bg-white"
+              />
+            </div>
+          ) : null}
+        </div>
+        <p className="mt-2 line-clamp-2 pr-8 text-[13px] font-semibold leading-snug text-fg transition-colors group-hover:text-fg-muted">
+          {item.title}
+        </p>
+      </Link>
+      <div className="absolute bottom-0 right-0 z-10">
+        <VideoActionsMenu video={item} compact onDeleted={onDeleted} />
       </div>
-      <p className="mt-2 line-clamp-2 text-[13px] font-semibold leading-snug text-fg transition-colors group-hover:text-fg-muted">
-        {item.title}
-      </p>
-    </Link>
+    </div>
   );
 }
 
@@ -333,7 +342,12 @@ function SavedSection() {
         <ul className="flex flex-col">
           {videos.map((video) => (
             <li key={video.id}>
-              <SavedRow video={video} />
+              <SavedRow
+                video={video}
+                onDeleted={() =>
+                  setVideos((current) => current.filter((item) => item.id !== video.id))
+                }
+              />
             </li>
           ))}
         </ul>
@@ -342,7 +356,7 @@ function SavedSection() {
   );
 }
 
-function SavedRow({ video }: { video: Video }) {
+function SavedRow({ video, onDeleted }: { video: Video; onDeleted: () => void }) {
   const isRemote = video.remote === true;
   const href = isRemote ? `/remote/${video.id}` : `/videos/${video.id}`;
   const channelName = video.channel_display_name || video.channel_handle || "";
@@ -384,6 +398,9 @@ function SavedRow({ video }: { video: Video }) {
             </Link>
           )
         ) : null}
+      </div>
+      <div className="relative z-20 -mr-1 shrink-0 self-end">
+        <VideoActionsMenu video={video} compact onDeleted={onDeleted} />
       </div>
     </div>
   );

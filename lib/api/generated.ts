@@ -1107,21 +1107,21 @@ export interface paths {
         };
         /**
          * Get a video by id
-         * @description Public and unlisted videos are returned to anyone with the id. A private video is returned only to its owner (with a bearer token); to everyone else it is reported as 404 so its existence is not revealed. A password-protected video (privacy=password, CORE-17) returns 401 with error code "password_required" to a caller who is neither the owner/a moderator nor presenting a valid playback token (a plain unknown id is still 404); the caller then unlocks via POST /videos/{id}/unlock and retries with the token (Bearer or ?pt=). The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
+         * @description Public and unlisted videos are returned to anyone with the id. A private or non-public-state local video is returned to its owner and to an authenticated moderator/admin, allowing the Manage view to load metadata for private, scheduled, quarantined, and blocked videos; to ordinary non-owners it is reported as 404 so its existence is not revealed. This moderator/admin exception applies only to this metadata detail endpoint and does not widen media or playback routes. A password-protected video (privacy=password, CORE-17) returns 401 with error code "password_required" to a caller who is neither the owner nor a moderator/admin and is not presenting a valid playback token (a plain unknown id is still 404); the caller then unlocks via POST /videos/{id}/unlock and retries with the token (Bearer or ?pt=). The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
          */
         get: operations["getVideo"];
         put?: never;
         post?: never;
         /**
          * Delete a video
-         * @description Deletes a video (owner only). Non-owner/unknown → 404.
+         * @description Deletes a local video. The owner may delete their own video; moderators and admins may delete any local video. An ordinary non-owner or unknown id is reported as 404. The destructive audit event records the authenticated caller as its actor, including for managed deletes.
          */
         delete: operations["deleteVideo"];
         options?: never;
         head?: never;
         /**
          * Update a video
-         * @description Partial update of a video's metadata (title, description, privacy), owner only. A non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The handle is immutable.
+         * @description Partial update of a video's metadata (title, description, privacy and the other fields in UpdateVideoRequest). The owner may update their own video; moderators and admins may manage any local video. An ordinary non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The handle is immutable.
          */
         patch: operations["updateVideo"];
         trace?: never;
@@ -1195,9 +1195,109 @@ export interface paths {
         };
         /**
          * List a video's downloadable files
-         * @description Returns download metadata for a video: the stored original (with its size, content type and probed dimensions when known) plus any ready HLS renditions (variant playlist URLs; segmented, so no single size). Visibility mirrors the detail endpoint: public/unlisted to anyone, private only to its owner; otherwise 404. A visible video with no stored files yet (e.g. a draft) returns an empty list.
+         * @description Returns metadata for actual single-file downloads: the stored original, an optional progressive VP9/WebM alternate, progressive MP4 remuxes for each ready HLS rung (muxed video+audio plus an optional video-only URL), an audio-only M4A when the source has audio, and WebVTT subtitles. Regular/anonymous callers require the effective downloads_enabled setting and ordinary video visibility. Moderators/admins bypass that setting and may download any local video for moderation. A visible video with no stored files yet returns an empty list.
          */
         get: operations["getVideoDownloads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/download/original": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the original video file
+         * @description Serves the stored upload with Content-Disposition: attachment and Range support. Uses the same download toggle/visibility policy as the download metadata endpoint; moderators/admins bypass the toggle and privacy gate.
+         */
+        get: operations["downloadVideoOriginal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/download/webm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the progressive VP9/WebM alternate
+         * @description Serves the optional VP9/WebM transcode as an attachment with the official download policy.
+         */
+        get: operations["downloadVideoWebM"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/download/hls/{height}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download one HLS quality as a progressive MP4
+         * @description Serves one transcoded HLS rung remuxed into a single MP4 file. Audio is included in the same file by default; audio=false selects the matching video-only MP4. No video re-encoding occurs during the download.
+         */
+        get: operations["downloadVideoHLSRendition"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/download/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download audio only
+         * @description Serves the HLS transcode's audio stream as a single M4A attachment when one exists.
+         */
+        get: operations["downloadVideoAudio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/download/subtitles/{lang}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a subtitle track
+         * @description Serves one WebVTT caption track as an attachment under the official download policy.
+         */
+        get: operations["downloadVideoSubtitle"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3522,7 +3622,7 @@ export interface paths {
         };
         /**
          * Get effective instance settings (admin)
-         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the PeerTube platform-information fields (links, markdown bodies, default language, categories, moderator languages, sensitive-content policy), the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Restricted to admins.
+         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the PeerTube platform-information fields (links, markdown bodies, default language, categories, moderator languages, sensitive-content policy), the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled). Downloads default to enabled and are controlled only by this runtime setting (there is no env/config counterpart). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Restricted to admins.
          */
         get: operations["getInstanceSettings"];
         put?: never;
@@ -3532,7 +3632,7 @@ export interface paths {
         head?: never;
         /**
          * Update instance settings (admin)
-         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, contact_form_enabled, instance_is_sensitive), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/registration gates reflect them.
+         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
          */
         patch: operations["updateInstanceSettings"];
         trace?: never;
@@ -3883,6 +3983,8 @@ export interface components {
                 live: boolean;
                 /** @description Whether posting comments is allowed. */
                 comments: boolean;
+                /** @description Whether regular users may download video media. Moderators and admins retain download access when this operator toggle is off. */
+                downloads: boolean;
             };
         };
         /** @description The operator-authored about-page texts (spec instance-platform-info). Every field is RAW markdown, "" when unset. */
@@ -4301,17 +4403,21 @@ export interface components {
             /** @description Dense 30-day series aggregated across the channel's videos. */
             daily_views: components["schemas"]["DailyViews"][];
         };
-        /** @description One downloadable representation of a video: the stored original, a progressive VP9/WebM alternate, or an HLS rendition's variant playlist. */
+        /** @description One downloadable single-file representation: original, progressive VP9/WebM, packaged HLS-quality MP4, audio-only M4A, or WebVTT subtitle. */
         VideoDownloadFile: {
             /** @enum {string} */
-            kind: "original" | "webm" | "hls";
-            /** @description API path serving this file, e.g. the video original, its webm alternate, or an HLS rendition variant playlist. */
+            kind: "original" | "webm" | "hls" | "audio" | "subtitle";
+            /** @description API path serving this attachment. */
             url: string;
+            /** @description HLS rows only; matching quality without the audio stream. */
+            video_only_url?: string;
+            /** @description Safe suggested filename for the browser download. */
+            filename: string;
             /** @example video/mp4 */
             content_type: string;
             /**
              * Format: int64
-             * @description Stored size in bytes. Omitted when unknown (HLS renditions are segmented, so no single size applies).
+             * @description Stored size in bytes, omitted when the backend cannot determine it.
              */
             size_bytes?: number;
             /** @description The upload's original filename (original entries only). */
@@ -4326,6 +4432,16 @@ export interface components {
              * @example 1280
              */
             width?: number;
+            /**
+             * @description BCP-47-ish language tag for subtitle rows.
+             * @example en
+             */
+            language?: string;
+            /**
+             * @description Human label for subtitle rows.
+             * @example English
+             */
+            label?: string;
         };
         VideoDownloadResponse: {
             files: components["schemas"]["VideoDownloadFile"][];
@@ -6190,6 +6306,7 @@ export interface components {
          * @example {
          *       "instance_name": "My Vidra",
          *       "uploads_enabled": false,
+         *       "downloads_enabled": false,
          *       "sensitive_content_policy": "blur",
          *       "instance_categories": [
          *         "1",
@@ -9378,7 +9495,7 @@ export interface operations {
                     "application/json": components["schemas"]["Video"];
                 };
             };
-            /** @description The video is password protected and the caller presented no valid credential (owner/moderator token or playback token). Error code "password_required". */
+            /** @description The video is password protected and the caller presented no valid credential (owner/moderator/admin token or playback token). Error code "password_required". */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9387,7 +9504,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No video with that id (or it is private and not yours). */
+            /** @description No video with that id, or it is not visible to this ordinary non-owner caller. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9425,7 +9542,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No such video, or not owned by the caller. */
+            /** @description No such video, or the caller is neither its owner nor a moderator/admin. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9469,7 +9586,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No such video, or not owned by the caller. */
+            /** @description No such video, or the caller is neither its owner nor a moderator/admin. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9632,7 +9749,311 @@ export interface operations {
                     "application/json": components["schemas"]["VideoDownloadResponse"];
                 };
             };
+            /** @description A password-protected video requires a valid playback token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Downloads are disabled for this non-privileged caller. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such video (or private and not yours). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    downloadVideoOriginal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The original attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description A byte range of the original attachment. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description A password-protected video requires a valid playback token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Downloads are disabled for this non-privileged caller. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No visible video or stored original. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    downloadVideoWebM: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The WebM attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/webm": string;
+                };
+            };
+            /** @description A byte range of the WebM attachment. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/webm": string;
+                };
+            };
+            /** @description A password-protected video requires a valid playback token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Downloads are disabled for this non-privileged caller. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No visible video or WebM alternate. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    downloadVideoHLSRendition: {
+        parameters: {
+            query?: {
+                /** @description Include the rendition's audio stream (default true). */
+                audio?: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+                height: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The progressive MP4 attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                };
+            };
+            /** @description A byte range of the progressive MP4 attachment. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                };
+            };
+            /** @description A password-protected video requires a valid playback token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Downloads are disabled for this non-privileged caller. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No visible video or matching packaged rendition. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    downloadVideoAudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The audio-only attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/mp4": string;
+                };
+            };
+            /** @description A byte range of the audio-only attachment. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/mp4": string;
+                };
+            };
+            /** @description A password-protected video requires a valid playback token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Downloads are disabled for this non-privileged caller. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No visible video or audio-only asset. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    downloadVideoSubtitle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                lang: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The WebVTT subtitle attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/vtt": string;
+                };
+            };
+            /** @description A password-protected video requires a valid playback token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Downloads are disabled for this non-privileged caller. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No visible video or subtitle in that language. */
             404: {
                 headers: {
                     [name: string]: unknown;

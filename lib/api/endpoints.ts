@@ -93,6 +93,7 @@ import type {
   VideoConfigResponse,
   VideoFeedResponse,
   VideoListResponse,
+  VideoDownloadResponse,
   ChannelStatsResponse,
   QuotaStatus,
   CreatePlaylistRequest,
@@ -221,6 +222,51 @@ export const api = {
   /** GET /api/v1/videos/{id} — video detail (private → owner only, else 404). */
   getVideo: (id: string, token?: string, signal?: AbortSignal) =>
     apiRequest<Video>(`/api/v1/videos/${encodeURIComponent(id)}`, { token, signal }),
+
+  /**
+   * GET /api/v1/videos/{id}/download — the currently available downloadable
+   * originals, progressive transcodes, HLS-quality MP4s, audio and subtitles.
+   * The server applies the instance download policy and role bypass rules.
+   */
+  getVideoDownloads: (id: string, token?: string, signal?: AbortSignal) =>
+    apiRequest<VideoDownloadResponse>(
+      `/api/v1/videos/${encodeURIComponent(id)}/download`,
+      { token, signal },
+    ),
+
+  /**
+   * Fetch one attachment URL returned by getVideoDownloads. The strict prefix
+   * check keeps a compromised response from turning this helper into an
+   * authenticated cross-endpoint request.
+   */
+  fetchVideoDownload: async (
+    id: string,
+    path: string,
+    token?: string,
+    signal?: AbortSignal,
+  ): Promise<Blob> => {
+    const prefix = `/api/v1/videos/${encodeURIComponent(id)}/download/`;
+    if (!path.startsWith(prefix) || path.includes("..")) {
+      throw new ApiError({
+        status: 0,
+        code: "invalid_download_url",
+        message: "the server returned an invalid download URL",
+      });
+    }
+    const bearer = token ?? getAccessToken();
+    const res = await fetch(`${apiBaseUrl}${path}`, {
+      headers: bearer ? { authorization: `Bearer ${bearer}` } : {},
+      signal,
+    });
+    if (!res.ok) {
+      throw new ApiError({
+        status: res.status,
+        code: "download_unavailable",
+        message: "this download is no longer available",
+      });
+    }
+    return res.blob();
+  },
 
   /**
    * GET /api/v1/videos/search?q= — public title/tag search. Optional taxonomy/tag

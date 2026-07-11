@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { api, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -88,6 +89,12 @@ export function RelatedVideos({
 
   if (!related || related.length === 0) return null;
 
+  function removeRelated(deleted: Video) {
+    const next = related?.filter((item) => item.id !== deleted.id) ?? [];
+    setRelated(next);
+    onFirstRelated?.(next[0] ?? null);
+  }
+
   return (
     <aside
       aria-label="Related videos"
@@ -105,7 +112,7 @@ export function RelatedVideos({
       >
         {related.map((v) => (
           <li key={v.id}>
-            <RelatedRow video={v} />
+            <RelatedRow video={v} onDeleted={() => removeRelated(v)} />
           </li>
         ))}
       </ul>
@@ -118,7 +125,7 @@ export function RelatedVideos({
 // the feed's VideoCard: one link named by the video title (heading), plus a
 // separate channel link — the thumbnail's link is a pointer-only duplicate
 // (aria-hidden, out of the tab order) so the accessibility tree is unchanged.
-function RelatedRow({ video }: { video: Video }) {
+function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void }) {
   const isRemote = video.remote === true;
   const href = isRemote ? `/remote/${video.id}` : `/videos/${video.id}`;
 
@@ -186,6 +193,9 @@ function RelatedRow({ video }: { video: Video }) {
         {meta.length > 0 ? (
           <p className="text-xs tabular-nums text-fg-muted">{meta.join(" · ")}</p>
         ) : null}
+      </div>
+      <div className="-mr-1 shrink-0 self-end">
+        <VideoActionsMenu video={video} compact onDeleted={onDeleted} />
       </div>
     </div>
   );

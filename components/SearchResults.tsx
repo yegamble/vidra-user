@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
+import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { api, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
@@ -23,7 +24,7 @@ type MoreStatus = "idle" | "loading" | "error";
 // title (the stretched title link — its decorative before:inset-0 overlay
 // makes the whole row clickable, thumbnail included); the channel link is
 // layered above the overlay so it stays independently clickable.
-function SearchResultRow({ video }: { video: Video }) {
+function SearchResultRow({ video, onDeleted }: { video: Video; onDeleted: () => void }) {
   // A federated remote row: links to the remote watch surface, shows its
   // origin-domain badge, and uses the locally cached remote thumbnail. Its
   // channel_handle is a "name@domain" identity, not a local route.
@@ -114,6 +115,9 @@ function SearchResultRow({ video }: { video: Video }) {
           )
         ) : null}
         {meta.length > 0 ? <p className="text-xs text-fg-muted">{meta.join(" · ")}</p> : null}
+      </div>
+      <div className="relative z-20 -mr-1 shrink-0 self-end">
+        <VideoActionsMenu video={video} compact onDeleted={onDeleted} />
       </div>
     </li>
   );
@@ -209,7 +213,11 @@ export function SearchResults({
     <div className="flex flex-col gap-6">
       <ul className="flex flex-col">
         {videos.map((video) => (
-          <SearchResultRow key={video.id} video={video} />
+          <SearchResultRow
+            key={video.id}
+            video={video}
+            onDeleted={() => setVideos((current) => current.filter((item) => item.id !== video.id))}
+          />
         ))}
       </ul>
       {hasMore ? (

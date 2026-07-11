@@ -68,16 +68,22 @@ export function ShareButton({
   );
 }
 
-function ShareDialog({
+export function ShareDialog({
   videoId,
   title,
   atSeconds,
   onClose,
+  watchPath,
+  allowEmbed = true,
 }: {
   videoId: string;
   title: string;
   atSeconds: number;
   onClose: () => void;
+  /** Override for federated cards, whose local detail route is /remote/:id. */
+  watchPath?: string;
+  /** Remote videos do not have a local embeddable player. */
+  allowEmbed?: boolean;
 }) {
   const [startAtChecked, setStartAtChecked] = useState(false);
   const [copied, setCopied] = useState<"link" | "embed" | null>(null);
@@ -86,7 +92,7 @@ function ShareDialog({
   // The dialog only mounts client-side (after a click), so window is available.
   const origin = window.location.origin;
   const startQuery = startAtChecked && atSeconds > 0 ? `?t=${atSeconds}` : "";
-  const watchUrl = `${origin}/videos/${videoId}${startQuery}`;
+  const watchUrl = `${origin}${watchPath ?? `/videos/${videoId}`}${startQuery}`;
   const embedSnippet = `<iframe src="${origin}/embed/${videoId}${startQuery}" width="560" height="315" frameborder="0" allowfullscreen title="${escapeAttr(title)}"></iframe>`;
 
   async function copy(target: "link" | "embed", text: string) {
@@ -138,26 +144,28 @@ function ShareDialog({
           </label>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-fg">Embed</span>
-          <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={embedSnippet}
-              aria-label="Embed code"
-              onFocus={(e) => e.currentTarget.select()}
-              className={FIELD}
-            />
-            <button
-              type="button"
-              aria-label="Copy embed code"
-              onClick={() => void copy("embed", embedSnippet)}
-              className={COPY_BUTTON}
-            >
-              {copied === "embed" ? "Copied" : "Copy"}
-            </button>
+        {allowEmbed ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-fg">Embed</span>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={embedSnippet}
+                aria-label="Embed code"
+                onFocus={(e) => e.currentTarget.select()}
+                className={FIELD}
+              />
+              <button
+                type="button"
+                aria-label="Copy embed code"
+                onClick={() => void copy("embed", embedSnippet)}
+                className={COPY_BUTTON}
+              >
+                {copied === "embed" ? "Copied" : "Copy"}
+              </button>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {copyFailed ? (
           <p className="text-sm text-danger">

@@ -81,7 +81,7 @@ export function ReportButton({
 
 type DialogState = "idle" | "submitting" | "done";
 
-function ReportDialog({
+export function ReportDialog({
   kind,
   targetId,
   onClose,

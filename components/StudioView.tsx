@@ -58,6 +58,7 @@ import {
   importResolved,
   isImportsDisabledError,
 } from "@/lib/import-status";
+import { invalidateVideoActionPermissionCache } from "@/lib/use-video-action-permissions";
 
 type Status = "loading" | "error" | "ready";
 
@@ -74,8 +75,8 @@ const ROW_ACTION =
 
 // StudioView is the creator surface: create a channel, then upload a video to it.
 // The session lives in memory, so a hard reload lands here signed out.
-export function StudioView() {
-  const { status } = useSession();
+export function StudioView({ managedVideoId }: { managedVideoId?: string }) {
+  const { status, user } = useSession();
 
   if (status !== "authed") {
     return (
@@ -93,7 +94,97 @@ export function StudioView() {
     );
   }
 
+  if (managedVideoId) {
+    return (
+      <ManagedVideoView
+        videoId={managedVideoId}
+        privileged={user?.role === "admin" || user?.role === "moderator"}
+      />
+    );
+  }
+
   return <Studio />;
+}
+
+function ManagedVideoView({ videoId, privileged }: { videoId: string; privileged: boolean }) {
+  const [status, setStatus] = useState<Status>("loading");
+  const [video, setVideo] = useState<Video | null>(null);
+  const [config, setConfig] = useState<VideoConfigResponse | null>(null);
+  const [basicOnly, setBasicOnly] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      api.getVideo(videoId, undefined, controller.signal),
+      api.getVideoConfig(controller.signal).catch(() => null),
+      api.getMyChannels(controller.signal).catch((err: unknown) => {
+        if (privileged) return { channels: [] };
+        throw err;
+      }),
+    ])
+      .then(([detail, videoConfig, channels]) => {
+        const owned = channels.channels.some((channel) => channel.id === detail.channel_id);
+        if (!owned && !privileged) {
+          setStatus("error");
+          return;
+        }
+        setVideo(detail);
+        setConfig(videoConfig);
+        setBasicOnly(privileged && !owned);
+        setStatus("ready");
+      })
+      .catch((err: unknown) => {
+        void err;
+        if (!controller.signal.aborted) setStatus("error");
+      });
+    return () => controller.abort();
+  }, [privileged, videoId]);
+
+  if (status === "loading") {
+    return (
+      <div className="flex justify-center py-24">
+        <Spinner label="Loading video management" />
+      </div>
+    );
+  }
+  if (deleted) {
+    return (
+      <EmptyState
+        title="Video deleted"
+        message={<Link href="/studio" className="font-semibold underline underline-offset-2">Return to the studio</Link>}
+      />
+    );
+  }
+  if (status === "error" || !video) {
+    return <ErrorState message="This video is unavailable or you cannot manage it." />;
+  }
+
+  return (
+    <section className="flex flex-col gap-4" aria-labelledby="manage-video-title">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="manage-video-title" className="text-[15px] font-bold tracking-tight">
+            Manage video
+          </h2>
+          <p className="mt-1 text-sm text-fg-muted">Edit metadata or permanently delete this video.</p>
+        </div>
+        <Link href="/studio" className="focus-ring rounded-full px-3 py-2 text-sm font-semibold text-fg-muted hover:bg-surface-muted hover:text-fg">
+          Full studio
+        </Link>
+      </div>
+      <ul className="overflow-hidden rounded-2xl bg-surface-muted">
+        <VideoRow
+          video={video}
+          config={config}
+          initiallyEditing
+          basicOnly={basicOnly}
+          onUpdated={setVideo}
+          onDeleted={() => setDeleted(true)}
+        />
+      </ul>
+    </section>
+  );
 }
 
 function Studio() {
@@ -218,6 +309,7 @@ function ChannelSection({
     setError(null);
     try {
       const ch = await api.createChannel({ handle: handle.trim(), display_name: displayName.trim() });
+      invalidateVideoActionPermissionCache();
       onCreated(ch);
       setHandle("");
       setDisplayName("");
@@ -1559,13 +1651,18 @@ function VideoRow({
   config,
   onUpdated,
   onDeleted,
+  initiallyEditing = false,
+  basicOnly = false,
 }: {
   video: Video;
   config: VideoConfigResponse | null;
   onUpdated: (v: Video) => void;
   onDeleted: () => void;
+  initiallyEditing?: boolean;
+  /** Privileged management edits metadata only; owner-only media tools stay hidden. */
+  basicOnly?: boolean;
 }) {
-  const [mode, setMode] = useState<RowMode>("view");
+  const [mode, setMode] = useState<RowMode>(initiallyEditing ? "edit" : "view");
   const [title, setTitle] = useState(video.title);
   const [description, setDescription] = useState(video.description);
   const [category, setCategory] = useState(video.category ?? "");
@@ -1591,7 +1688,7 @@ function VideoRow({
   // The full detail fetched when Edit opens — the only view carrying hls_url/
   // renditions (list rows omit them per the contract), so the streaming-status
   // note can be honest. null until (unless) the detail fetch succeeds.
-  const [detail, setDetail] = useState<Video | null>(null);
+  const [detail, setDetail] = useState<Video | null>(initiallyEditing ? video : null);
 
   // The schedule field only exists while the video is not yet published (the
   // backend rejects publish_at on a published video); the detail state wins
@@ -1741,11 +1838,13 @@ function VideoRow({
           <option value="public">Public</option>
           <option value="unlisted">Unlisted</option>
           <option value="private">Private</option>
-          <option value="password">Password-protected</option>
+          <option value="password" disabled={basicOnly && video.privacy !== "password"}>
+            Password-protected
+          </option>
         </Select>
         {/* Password management (CORE-17) appears when privacy is password; it
             reports its count up so the Save guard can block an empty set. */}
-        {privacy === "password" ? (
+        {!basicOnly && privacy === "password" ? (
           <PasswordManager videoId={video.id} onCountChange={setPasswordCount} />
         ) : null}
         {/* Sensitive flag is editable only once the detail supplied the real
@@ -1776,18 +1875,22 @@ function VideoRow({
         ) : null}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {detail ? <StreamingStatus video={detail} /> : null}
-        <ThumbnailManager
-          videoId={video.id}
-          hasThumbnail={video.has_thumbnail ?? false}
-          hasStoryboard={(detail ?? video).has_storyboard ?? false}
-          durationSeconds={(detail ?? video).duration_seconds ?? undefined}
-        />
-        <CaptionsManager videoId={video.id} />
-        <ChaptersManager
-          videoId={video.id}
-          durationSeconds={(detail ?? video).duration_seconds ?? undefined}
-        />
-        <EmbedPrivacyManager videoId={video.id} />
+        {!basicOnly ? (
+          <>
+            <ThumbnailManager
+              videoId={video.id}
+              hasThumbnail={video.has_thumbnail ?? false}
+              hasStoryboard={(detail ?? video).has_storyboard ?? false}
+              durationSeconds={(detail ?? video).duration_seconds ?? undefined}
+            />
+            <CaptionsManager videoId={video.id} />
+            <ChaptersManager
+              videoId={video.id}
+              durationSeconds={(detail ?? video).duration_seconds ?? undefined}
+            />
+            <EmbedPrivacyManager videoId={video.id} />
+          </>
+        ) : null}
         <div className="flex gap-2">
           <Button size="sm" disabled={busy || title.trim() === ""} onClick={() => void save()}>
             Save

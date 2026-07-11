@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import { IpfsIcon, PlayIcon } from "@/components/icons";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { Avatar } from "@/components/ui/Avatar";
+import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import {
   channelAvatarUrl,
   isSensitiveVideo,
@@ -38,6 +40,7 @@ export function VideoCard({
    */
   progressFraction?: number;
 }) {
+  const [removed, setRemoved] = useState(false);
   // A federated remote card: links to the remote watch surface, shows its
   // origin-domain badge, and uses the locally cached remote thumbnail. Its
   // channel_handle is a "name@domain" identity, not a local route, and it has
@@ -49,6 +52,7 @@ export function VideoCard({
   // under `warn` it is badged only; `display` (and `hide`, which is enforced
   // server-side, or an unknown policy) applies no client treatment.
   const policy = useSensitiveContentPolicy();
+  if (removed) return null;
   const sensitive = isSensitiveVideo(video);
   const blurSensitive = sensitive && policy === "blur";
   const markSensitive = sensitive && (policy === "blur" || policy === "warn");
@@ -209,6 +213,9 @@ export function VideoCard({
               <ProtocolBadge protocol="activitypub" />
             </span>
           ) : null}
+        </div>
+        <div className="-mr-1 shrink-0">
+          <VideoActionsMenu video={video} onDeleted={() => setRemoved(true)} />
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ExternalLinkIcon, InfoIcon } from "@/components/icons";
@@ -11,6 +12,7 @@ import { ApiError, api, errorMessage, remoteVideoThumbnailUrl } from "@/lib/api"
 import type { RemoteVideo } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
 import { useRemotePlayback } from "@/lib/use-remote-playback";
+import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
 
 type Status = "loading" | "error" | "notfound" | "ready";
 
@@ -23,9 +25,24 @@ type Status = "loading" | "error" | "notfound" | "ready";
 // viewer can report the remote video to the LOCAL moderators (target_type
 // remote_video) and mute the whole origin instance.
 export function RemoteWatchView({ id }: { id: string }) {
+  const router = useRouter();
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<RemoteVideo | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const playbackQueue = useVideoQueue();
+
+  useEffect(() => {
+    if (video) dequeueVideo(video.id, true);
+  }, [video]);
+
+  const queuedNext = playbackQueue.find(
+    (item) => item.id !== id || item.remote !== true,
+  );
+
+  function playQueuedNext() {
+    if (!queuedNext) return;
+    router.push(queuedNext.remote === true ? `/remote/${queuedNext.id}` : `/videos/${queuedNext.id}`);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -74,7 +91,7 @@ export function RemoteWatchView({ id }: { id: string }) {
 
   return (
     <article className="flex flex-col gap-4">
-      <RemotePlayer video={video} />
+      <RemotePlayer video={video} onEnded={queuedNext ? playQueuedNext : undefined} />
 
       <div className="flex flex-col gap-2">
         <h1 className="text-[17px] font-bold leading-snug tracking-[-0.015em] sm:text-[19px]">
@@ -118,6 +135,11 @@ export function RemoteWatchView({ id }: { id: string }) {
           </a>
           <ReportButton kind="remote_video" targetId={video.id} />
           <MuteInstanceControl domain={video.domain} />
+          {queuedNext ? (
+            <Button variant="tonal" size="sm" onClick={playQueuedNext}>
+              Play next: {queuedNext.title}
+            </Button>
+          ) : null}
         </div>
         <div className="flex items-start gap-2.5 rounded-2xl bg-surface-muted p-4 text-[13px] leading-relaxed text-fg-muted">
           <InfoIcon size={14} strokeWidth={2} className="mt-0.5 flex-none" />
@@ -139,7 +161,7 @@ export function RemoteWatchView({ id }: { id: string }) {
 // RemotePlayer streams the origin's stream_url when the browser can play it;
 // otherwise it shows the cached poster (when available) with an honest
 // "watch it on the origin" panel instead of a dead player.
-function RemotePlayer({ video }: { video: RemoteVideo }) {
+function RemotePlayer({ video, onEnded }: { video: RemoteVideo; onEnded?: () => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playback = useRemotePlayback(videoRef, video);
 
@@ -173,6 +195,7 @@ function RemotePlayer({ video }: { video: RemoteVideo }) {
       className="aspect-video w-full rounded-2xl bg-black"
       src={playback.src}
       poster={video.has_thumbnail ? remoteVideoThumbnailUrl(video.id) : undefined}
+      onEnded={onEnded}
     >
       Your browser does not support the video tag.
     </video>

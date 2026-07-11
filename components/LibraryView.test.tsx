@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -17,6 +17,20 @@ vi.mock("next/link", () => ({
 let sessionStatus = "authed";
 vi.mock("@/components/auth/AuthProvider", () => ({
   useSession: () => ({ status: sessionStatus }),
+}));
+
+vi.mock("@/components/VideoActionsMenu", () => ({
+  VideoActionsMenu: ({
+    video,
+    onDeleted,
+  }: {
+    video: { title: string };
+    onDeleted?: () => void;
+  }) => (
+    <button type="button" aria-label={`Actions for ${video.title}`} onClick={onDeleted}>
+      Actions
+    </button>
+  ),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -143,6 +157,8 @@ describe("LibraryView", () => {
     expect(screen.getByRole("link", { name: "Saved clip" }).getAttribute("href")).toBe(
       "/videos/s1",
     );
+    expect(screen.getByRole("button", { name: "Actions for Saved clip" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Actions for Grading session" })).toBeTruthy();
 
     // Exactly one link is named "Playlists" (the section header → /playlists).
     const playlistsLinks = screen.getAllByRole("link", { name: "Playlists" });
@@ -174,5 +190,30 @@ describe("LibraryView", () => {
     render(<LibraryView />);
     await waitFor(() => expect(mockHistory).toHaveBeenCalled());
     expect(mockHistory).toHaveBeenCalledWith({ limit: 12 }, expect.any(AbortSignal));
+  });
+
+  it("removes deleted history and saved entries from their owning lists", async () => {
+    mockHistory.mockResolvedValue({
+      videos: [historyItem("h1", "History deletion", 12, 100)],
+      limit: 12,
+      offset: 0,
+    });
+    mockPlaylists.mockResolvedValue({ playlists: [] });
+    mockSaved.mockResolvedValue({
+      videos: [video("s1", "Saved deletion")],
+      sort: "recent",
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<LibraryView />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Actions for History deletion" }));
+    expect(screen.queryByRole("link", { name: "History deletion" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "History" })).toBeNull();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Actions for Saved deletion" }));
+    expect(screen.queryByRole("heading", { name: "Saved deletion" })).toBeNull();
+    expect(screen.getByText("Your library is empty")).toBeTruthy();
   });
 });

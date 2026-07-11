@@ -14,6 +14,12 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+// This card suite covers card layout/content. The action-menu behavior has its
+// own focused suite and otherwise requires router/auth/toast providers here.
+vi.mock("@/components/VideoActionsMenu", () => ({
+  VideoActionsMenu: () => null,
+}));
+
 import { ChannelVideoCard } from "./ChannelVideoCard";
 import type { Video } from "@/lib/api";
 

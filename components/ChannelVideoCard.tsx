@@ -1,5 +1,9 @@
-import Link from "next/link";
+"use client";
 
+import Link from "next/link";
+import { useState } from "react";
+
+import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
@@ -12,7 +16,10 @@ import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 // only ever carries this channel's own (local) videos, so there is no remote /
 // federated branch here.
 export function ChannelVideoCard({ video }: { video: Video }) {
+  const [removed, setRemoved] = useState(false);
   const watchHref = `/videos/${video.id}`;
+
+  if (removed) return null;
 
   // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge is
   // noise rather than information.
@@ -53,19 +60,22 @@ export function ChannelVideoCard({ video }: { video: Video }) {
           ) : null}
         </div>
       </Link>
-      <div className="flex min-w-0 flex-col gap-0.5 px-0.5">
-        <h3 className="text-[13px] font-semibold leading-snug tracking-[-0.01em] text-fg">
-          {/* line-clamp on the Link so the whole two-line title is the tap target. */}
-          <Link href={watchHref} className="focus-ring line-clamp-2 rounded-sm">
-            {video.title}
-          </Link>
-        </h3>
-        {views ? (
-          <p className="text-[11.5px] leading-snug tabular-nums text-fg-muted">
-            {views}
-            {age ? <span className="hidden lg:inline"> · {age}</span> : null}
-          </p>
-        ) : null}
+      <div className="flex min-w-0 items-start gap-1 px-0.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <h3 className="text-[13px] font-semibold leading-snug tracking-[-0.01em] text-fg">
+            {/* line-clamp on the Link so the whole two-line title is the tap target. */}
+            <Link href={watchHref} className="focus-ring line-clamp-2 rounded-sm">
+              {video.title}
+            </Link>
+          </h3>
+          {views ? (
+            <p className="text-[11.5px] leading-snug tabular-nums text-fg-muted">
+              {views}
+              {age ? <span className="hidden lg:inline"> · {age}</span> : null}
+            </p>
+          ) : null}
+        </div>
+        <VideoActionsMenu video={video} compact onDeleted={() => setRemoved(true)} />
       </div>
     </div>
   );

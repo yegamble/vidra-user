@@ -47,6 +47,7 @@ import { hydratePlayerSettings, resetPlayerSettings } from "@/lib/player-setting
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { parseStartTime } from "@/lib/start-time";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
 
 type Status = "loading" | "error" | "notfound" | "locked" | "ready";
 
@@ -81,7 +82,8 @@ export function WatchView({ id }: { id: string }) {
   // The "next" video for the player's autoplay end card (PLAY-08): the first
   // related entry, reported up by RelatedVideos so the end card reuses that fetch
   // (no second request). null until the rail resolves, or when nothing relates.
-  const [nextVideo, setNextVideo] = useState<Video | null>(null);
+  const [relatedNextVideo, setRelatedNextVideo] = useState<Video | null>(null);
+  const playbackQueue = useVideoQueue();
   // The player element, owned here so the Share dialog can read currentTime.
   const playerRef = useRef<HTMLVideoElement | null>(null);
   // An explicit ?t=<seconds> start position from the URL, parsed once. The
@@ -111,6 +113,18 @@ export function WatchView({ id }: { id: string }) {
   // the gateway HLS master; "ipfs" plays from it; "error" fell back to server.
   const [ipfsState, setIpfsState] = useState<IpfsSource>("server");
   const ipfsProbeRef = useRef<AbortController | null>(null);
+
+  // A viewer-selected queue takes precedence over the automatic related pick.
+  // Once a queued item becomes the current video it is consumed, preserving a
+  // FIFO "play next" sequence across watch-page navigation and reloads.
+  useEffect(() => {
+    if (!video) return;
+    dequeueVideo(video.id, video.remote === true);
+  }, [video]);
+  const queuedNextVideo = playbackQueue.find(
+    (item) => !video || item.id !== video.id || Boolean(item.remote) !== Boolean(video.remote),
+  );
+  const nextVideo = queuedNextVideo ?? relatedNextVideo;
 
   // Content-addressed IPFS HLS master, present only when the detail carries a
   // pinned HLS CID + gateway AND the video has a transcoded ladder (IPFS
@@ -452,7 +466,7 @@ export function WatchView({ id }: { id: string }) {
               title={video.title}
               getCurrentTime={() => playerRef.current?.currentTime ?? 0}
             />
-            <DownloadButton videoId={video.id} />
+            <DownloadButton video={video} playbackToken={playbackToken} />
             <ReportButton kind="video" targetId={video.id} />
           </div>
           {/* Channel row: avatar + name (link) + followers + Follow toggle. */}
@@ -509,7 +523,7 @@ export function WatchView({ id }: { id: string }) {
       <CommentsSection videoId={video.id} />
       </div>
 
-      <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setNextVideo} />
+      <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setRelatedNextVideo} />
     </div>
   );
 }

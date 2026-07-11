@@ -1,7 +1,13 @@
 import { StudioView } from "@/components/StudioView";
 import { LinkButton } from "@/components/ui/LinkButton";
 
-export default function StudioPage() {
+export default async function StudioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ video?: string | string[] }>;
+}) {
+  const requested = (await searchParams).video;
+  const managedVideoId = typeof requested === "string" && requested !== "" ? requested : undefined;
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 overflow-x-clip px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-3">
@@ -10,7 +16,7 @@ export default function StudioPage() {
           Creator stats
         </LinkButton>
       </div>
-      <StudioView />
+      <StudioView managedVideoId={managedVideoId} />
     </main>
   );
 }
