@@ -1529,6 +1529,39 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/jobs");
   });
 
+  it("getJobRuns sends the server-backed operations filters and pagination", async () => {
+    await api.getJobRuns({
+      state: "failed",
+      type: "video.transcode",
+      queue: "transcode",
+      resourceType: "video",
+      resourceId: "video/one",
+      workerId: "worker one",
+      failure: true,
+      createdAfter: "2026-07-01T00:00:00.000Z",
+      createdBefore: "2026-07-12T00:00:00.000Z",
+      limit: 25,
+      offset: 50,
+    });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/jobs/runs?state=failed&type=video.transcode&queue=transcode&resource_type=video&resource_id=video%2Fone&worker_id=worker+one&failure=true&created_after=2026-07-01T00%3A00%3A00.000Z&created_before=2026-07-12T00%3A00%3A00.000Z&limit=25&offset=50",
+    );
+  });
+
+  it("getJobRuns omits unset filters", async () => {
+    await api.getJobRuns({ limit: 25, offset: 0 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/jobs/runs?limit=25&offset=0",
+    );
+  });
+
+  it("getJobRun encodes the id and sends event pagination", async () => {
+    await api.getJobRun("run/one", { eventsLimit: 50, eventsOffset: 100 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/jobs/runs/run%2Fone?events_limit=50&events_offset=100",
+    );
+  });
+
   it("runMediaGC POSTs a dry run by default (dry_run=true)", async () => {
     await api.runMediaGC(true);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

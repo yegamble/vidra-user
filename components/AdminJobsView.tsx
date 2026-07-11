@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { AdminJobRunsView } from "@/components/AdminJobRunsView";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -52,9 +53,12 @@ function JobsPanel() {
   }, [reloadKey]);
 
   const refresh = useCallback(() => {
-    setStatus("loading");
+    // Keep the current snapshot (and the execution browser's filter/detail
+    // state) mounted during an ordinary refresh. Initial/error retries still
+    // use the full loading state because there is no usable snapshot yet.
+    if (data === null) setStatus("loading");
     setReloadKey((k) => k + 1);
-  }, []);
+  }, [data]);
 
   if (status === "loading") {
     return (
@@ -116,6 +120,8 @@ function JobsPanel() {
           })}
         </ul>
       )}
+
+      <AdminJobRunsView refreshKey={reloadKey} />
 
       <section aria-label="Recent failures">
         <h2 className="mb-2 text-[15px] font-bold tracking-tight">Recent failures</h2>

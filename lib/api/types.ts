@@ -87,6 +87,12 @@ export type UpdateInstanceSettingsRequest = Schemas["UpdateInstanceSettingsReque
 export type JobsOverview = Schemas["JobsOverview"];
 export type QueueStatus = Schemas["QueueStatus"];
 export type JobFailure = Schemas["JobFailure"];
+export type JobRunState = Schemas["JobRunState"];
+export type JobMetadata = Schemas["JobMetadata"];
+export type JobRun = Schemas["JobRun"];
+export type JobEvent = Schemas["JobEvent"];
+export type JobRunsResponse = Schemas["JobRunsResponse"];
+export type JobRunDetailResponse = Schemas["JobRunDetailResponse"];
 export type MediaGCResponse = Schemas["MediaGCResponse"];
 
 // --- Admin: PeerTube import / migration (P10 UI over P18 backend) ------------

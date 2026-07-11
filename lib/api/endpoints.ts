@@ -14,6 +14,9 @@ import type {
   InstanceAboutResponse,
   InstanceContactRequest,
   JobsOverview,
+  JobRunDetailResponse,
+  JobRunsResponse,
+  JobRunState,
   MediaGCResponse,
   PeerTubeImportLaunchRequest,
   PeerTubeImportRun,
@@ -161,6 +164,21 @@ export interface SearchVideosParams extends SearchParams {
   tag?: string;
   category?: string;
   language?: string;
+}
+
+export interface JobRunListParams {
+  state?: JobRunState;
+  type?: string;
+  queue?: string;
+  resourceType?: string;
+  resourceId?: string;
+  workerId?: string;
+  /** true = failed/dead-lettered only; omitted = any outcome. */
+  failure?: true;
+  createdAfter?: string;
+  createdBefore?: string;
+  limit?: number;
+  offset?: number;
 }
 
 /** Typed wrappers for the public vidra-core read endpoints. */
@@ -1714,6 +1732,46 @@ export const api = {
    * still-pending item's age, plus a merged recent-failures list. No secrets/URLs.
    */
   getJobs: (signal?: AbortSignal) => apiRequest<JobsOverview>("/api/v1/admin/jobs", { signal }),
+
+  /**
+   * GET /api/v1/admin/jobs/runs — individual unified executions, newest first.
+   * Every filter is server-backed; metadata/error fields are already bounded and
+   * sanitized by the backend before they reach this operator surface.
+   */
+  getJobRuns: (params: JobRunListParams = {}, signal?: AbortSignal) =>
+    apiRequest<JobRunsResponse>("/api/v1/admin/jobs/runs", {
+      query: {
+        state: params.state,
+        type: params.type,
+        queue: params.queue,
+        resource_type: params.resourceType,
+        resource_id: params.resourceId,
+        worker_id: params.workerId,
+        failure: params.failure,
+        created_after: params.createdAfter,
+        created_before: params.createdBefore,
+        limit: params.limit,
+        offset: params.offset,
+      },
+      signal,
+    }),
+
+  /** GET /api/v1/admin/jobs/runs/{id} — one run plus paginated execution events. */
+  getJobRun: (
+    id: string,
+    params: { eventsLimit?: number; eventsOffset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<JobRunDetailResponse>(
+      `/api/v1/admin/jobs/runs/${encodeURIComponent(id)}`,
+      {
+        query: {
+          events_limit: params.eventsLimit,
+          events_offset: params.eventsOffset,
+        },
+        signal,
+      },
+    ),
 
   /**
    * POST /api/v1/admin/media/gc — sweep stored media objects with no database

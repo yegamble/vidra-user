@@ -34,7 +34,18 @@ export {
 } from "./resumable-upload";
 export type { ResumableUploadOptions, StoredUploadSession } from "./resumable-upload";
 export { computeFileFingerprint, findUploadByFingerprint } from "./fingerprint";
-export type { FeedParams, SearchParams, SearchVideosParams } from "./endpoints";
+export type { FeedParams, JobRunListParams, SearchParams, SearchVideosParams } from "./endpoints";
+export {
+  openAuthenticatedEventStream,
+  parseEventStream,
+  subscribeEventStream,
+} from "./sse";
+export type {
+  EventStreamOptions,
+  EventStreamState,
+  EventStreamSubscription,
+  ServerSentEvent,
+} from "./sse";
 export { getVideoConfigCached, resolveOptionLabel } from "./video-config";
 export {
   EMPTY_INSTANCE_ABOUT,

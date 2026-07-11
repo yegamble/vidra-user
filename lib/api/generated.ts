@@ -3385,7 +3385,7 @@ export interface paths {
         };
         /**
          * List the security audit log
-         * @description Returns the durable audit trail of security-sensitive actions (auth, moderation, admin, registration), newest first. Restricted to admins. Optional action filters by a specific action id. Paginated via limit (1–100, default 20) and offset. Rows never contain secrets/PII.
+         * @description Returns the durable audit trail of security-sensitive actions (auth, moderation, admin, registration), newest first. Restricted to admins. Optional action filters by a specific action id. Paginated via limit (1–100, default 20) and offset. Rows never contain secrets, raw content, email/IP data, URLs, headers, cookies, credentials, or process output.
          */
         get: operations["listAuditLog"];
         put?: never;
@@ -3448,6 +3448,63 @@ export interface paths {
          * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
          */
         get: operations["listJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/jobs/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List individual operational job runs (admin)
+         * @description Returns the sanitized, paginated execution projection for the durable UUID-backed queues integrated in Phase 1. Source queue rows remain the execution authority. Metadata is allowlisted and bounded; source/inbox URLs, payloads, storage keys, credentials, raw process output, and legacy free-form errors are never copied into this projection. event_cursor is an opaque decimal string captured before the snapshot and can seed the resumable SSE stream without a REST-to-stream race.
+         */
+        get: operations["listJobRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/jobs/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one operational job run and event history (admin) */
+        get: operations["getJobRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/jobs/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resumable operational job-event stream (admin)
+         * @description Streams durable JobEvent objects oldest-first. The SSE id is the same opaque decimal string as JobEvent.cursor. Last-Event-ID takes precedence over the after query parameter. Connections are short-lived and capped by the access-token expiry so clients reconnect and re-authenticate. The server emits heartbeat comments and event name `job-event`; clients must retain the cursor verbatim rather than converting it to a JavaScript number.
+         */
+        get: operations["streamJobEvents"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5667,29 +5724,67 @@ export interface components {
             /** @example 0 */
             offset: number;
         };
-        /** @description A durable security-audit record. Never contains secrets/PII. */
+        /** @description A durable, low-volume security-audit envelope. Metadata and changes are allowlisted and bounded; raw payloads, content, email/IP data, signed URLs, headers, cookies, credentials, and process output are forbidden. Routine high-volume content activity and job execution events use separate streams. */
         AuditLogEntry: {
             /** Format: uuid */
             id: string;
+            /** @description Audit-envelope schema version (2 for newly written typed events). */
+            schema_version: number;
+            /** @description Stable action domain, such as auth, moderation, admin, or content. */
+            domain: string;
             /**
              * @description Stable dot-namespaced action id (e.g. auth.login).
              * @example auth.login
              */
             action: string;
-            /** @enum {string} */
+            /**
+             * @description The outcome of the attempted action.
+             * @enum {string}
+             */
             result: "success" | "failure";
             /**
              * Format: uuid
              * @description The acting account's id; omitted for unauthenticated events.
              */
             actor_id?: string;
-            /** @description Resolved best-effort; omitted if the account is deleted/unknown. */
+            /**
+             * @description Safe actor snapshot kind at event time.
+             * @enum {string}
+             */
+            actor_kind: "anonymous" | "user" | "system" | "service";
+            /**
+             * @description Safe authorization-role snapshot; present only for a known user actor.
+             * @enum {string}
+             */
+            actor_role?: "user" | "moderator" | "admin";
+            /** @description Current username resolved best-effort at read time; not part of the durable actor snapshot. */
             actor_username?: string;
-            /** @description Safe, non-sensitive classification (e.g. invalid_credentials). */
+            /** @description Safe, bounded classification (e.g. invalid_credentials), never moderator/user prose. */
             reason?: string;
             request_id?: string;
+            correlation_id?: string;
+            trace_id?: string;
+            /** Format: uuid */
+            pipeline_run_id?: string;
+            /** Format: uuid */
+            job_id?: string;
+            resource_type?: string;
+            /** @description Bounded opaque identifier; URLs are forbidden. */
+            resource_id?: string;
+            /** @description Allowlisted bounded scalar classifications only. */
+            metadata?: {
+                [key: string]: string;
+            };
+            /** @description Allowlisted safe before/after scalar differences; content fields are forbidden. */
+            changes?: components["schemas"]["AuditLogChange"][];
             /** Format: date-time */
             occurred_at: string;
+        };
+        AuditLogChange: {
+            /** @description Allowlisted low-sensitivity state/config field. */
+            field: string;
+            before?: string;
+            after?: string;
         };
         AuditLogListResponse: {
             entries: components["schemas"]["AuditLogEntry"][];
@@ -5780,6 +5875,125 @@ export interface components {
                  */
                 window_seconds: number;
             };
+        };
+        /**
+         * @description Stable state vocabulary for the unified operational projection.
+         * @enum {string}
+         */
+        JobRunState: "queued" | "claimed" | "running" | "retry_scheduled" | "succeeded" | "failed" | "dead_lettered" | "cancel_requested" | "cancelled";
+        /** @description Bounded, allowlisted operational metadata. Values are short scalar booleans/numbers/enum-like tokens only; URLs, credentials, emails, nested payloads, process output, and arbitrary source data are rejected. */
+        JobMetadata: {
+            mode?: string;
+            resolver?: string;
+            language?: string;
+            media_class?: string;
+            network?: string;
+            dry_run?: boolean;
+            conflict_policy?: string;
+            source_version?: number;
+            planned?: number;
+            imported?: number;
+            skipped?: number;
+            failed?: number;
+            unsupported?: number;
+            width?: number;
+            height?: number;
+            duration_seconds?: number;
+            bytes?: number;
+            items?: number;
+            reason_code?: string;
+        };
+        /** @description One sanitized execution projection. Source queue identifiers, lease tokens, idempotency keys, raw inputs, and unrestricted errors are not exposed. */
+        JobRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            pipeline_run_id?: string;
+            /** Format: uuid */
+            parent_job_id?: string;
+            type: string;
+            queue: string;
+            state: components["schemas"]["JobRunState"];
+            stage?: string;
+            progress_percent?: number;
+            /** Format: int32 */
+            priority: number;
+            /** Format: int32 */
+            attempt: number;
+            /** Format: int32 */
+            max_attempts?: number;
+            /** Format: uuid */
+            actor_id?: string;
+            resource_type?: string;
+            resource_id?: string;
+            request_id?: string;
+            correlation_id?: string;
+            trace_id?: string;
+            worker_id?: string;
+            /** Format: date-time */
+            lease_expires_at?: string;
+            /** Format: date-time */
+            heartbeat_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            claimed_at?: string;
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            finished_at?: string;
+            input_metadata: components["schemas"]["JobMetadata"];
+            output_metadata: components["schemas"]["JobMetadata"];
+            error_class?: string;
+            error_code?: string;
+            /** @description Bounded redacted detail; never raw subprocess/network output. */
+            error_detail?: string;
+            error_retryable?: boolean;
+        };
+        /** @description One durable sanitized execution transition. */
+        JobEvent: {
+            /** Format: uuid */
+            id: string;
+            /** @description Opaque BIGINT replay cursor serialized as a decimal string. */
+            cursor: string;
+            /** Format: uuid */
+            job_id: string;
+            /** Format: uuid */
+            pipeline_run_id?: string;
+            kind: string;
+            state: components["schemas"]["JobRunState"];
+            stage?: string;
+            progress_percent?: number;
+            /** Format: int32 */
+            attempt: number;
+            worker_id?: string;
+            message?: string;
+            metadata: components["schemas"]["JobMetadata"];
+            request_id?: string;
+            correlation_id?: string;
+            trace_id?: string;
+            /** Format: date-time */
+            occurred_at: string;
+        };
+        JobRunsResponse: {
+            runs: components["schemas"]["JobRun"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            offset: number;
+            event_cursor: string;
+        };
+        JobRunDetailResponse: {
+            run: components["schemas"]["JobRun"];
+            /** @description Newest-first event page through event_cursor. */
+            events: components["schemas"]["JobEvent"][];
+            /** Format: int64 */
+            events_total: number;
+            events_limit: number;
+            events_offset: number;
+            event_cursor: string;
         };
         /** @description Durable job-queue operations snapshot (admin jobs page). No secrets/PII. */
         JobsOverview: {
@@ -15823,6 +16037,188 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobsOverview"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listJobRuns: {
+        parameters: {
+            query?: {
+                state?: components["schemas"]["JobRunState"];
+                type?: string;
+                queue?: string;
+                resource_type?: string;
+                resource_id?: string;
+                worker_id?: string;
+                /** @description true selects failed/dead-lettered runs; false excludes them. */
+                failure?: boolean;
+                created_after?: string;
+                created_before?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A filtered page of individual job runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRunsResponse"];
+                };
+            };
+            /** @description Invalid filter or timestamp. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getJobRun: {
+        parameters: {
+            query?: {
+                events_limit?: number;
+                events_offset?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run and a newest-first page of durable events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRunDetailResponse"];
+                };
+            };
+            /** @description Invalid run id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Run not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    streamJobEvents: {
+        parameters: {
+            query?: {
+                after?: string;
+                job_id?: string;
+                state?: components["schemas"]["JobRunState"];
+                type?: string;
+                queue?: string;
+                resource_type?: string;
+                resource_id?: string;
+                worker_id?: string;
+                failure?: boolean;
+                created_after?: string;
+                created_before?: string;
+            };
+            header?: {
+                "Last-Event-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A text/event-stream of `job-event` events whose data is JobEvent JSON. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Invalid filter or event cursor. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Missing, invalid, or expired token. */

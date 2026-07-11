@@ -7,7 +7,7 @@ export default function AdminJobsPage() {
       <AdminTabs />
       <h1 className="mb-1 text-2xl font-bold tracking-tight">Jobs</h1>
       <p className="mb-6 text-[13px] text-fg-muted">
-        Background-work queue depth, stuck-worker signals, and recent failures.
+        Queue health plus individual, correlated background-work execution history.
       </p>
       <AdminJobsView />
     </main>
