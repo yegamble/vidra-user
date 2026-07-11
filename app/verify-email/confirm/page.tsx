@@ -1,3 +1,4 @@
+import { AuthPage, AuthPageHeading } from "@/components/auth/AuthPage";
 import { VerifyEmailConfirmForm } from "@/components/auth/VerifyEmailConfirmForm";
 
 export default async function VerifyEmailConfirmPage({
@@ -7,9 +8,9 @@ export default async function VerifyEmailConfirmPage({
 }) {
   const { token } = await searchParams;
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 py-12">
-      <h1 className="mb-8 text-center text-2xl font-bold tracking-tight">Verify your email</h1>
+    <AuthPage>
+      <AuthPageHeading title="Verify your email" />
       <VerifyEmailConfirmForm token={(token ?? "").trim()} />
-    </main>
+    </AuthPage>
   );
 }

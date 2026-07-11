@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { AuthBrandLink } from "@/components/auth/AuthPage";
 import { useSession } from "@/components/auth/AuthProvider";
 import { OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
 import { LockIcon } from "@/components/icons";
@@ -250,7 +251,9 @@ export function LoginForm({
       className="flex flex-col gap-4"
     >
       <div className="mb-4 flex flex-col gap-1.5 text-center">
-        <h1 className="text-[34px] font-bold leading-none tracking-[-0.05em] text-fg">Vidra</h1>
+        <h1>
+          <AuthBrandLink className="text-[34px]" />
+        </h1>
         <p className="text-sm text-fg-muted">The quiet home for independent video</p>
       </div>
 

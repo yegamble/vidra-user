@@ -14,6 +14,7 @@ import {
   type NavLinkDef,
 } from "@/components/nav-links";
 import { SidebarFollowing } from "@/components/SidebarFollowing";
+import { isStandaloneRoute } from "@/lib/app-shell";
 
 // The collapse preference is a harmless UI setting (never a secret/token), so
 // localStorage is the right place for it to survive reloads. It is read through
@@ -54,7 +55,7 @@ function writeCollapsed(next: boolean): void {
 // route with aria-current, and is collapsible to an icon rail (labels stay in
 // the accessibility tree via sr-only; the collapsed state persists). Hidden
 // below `sm` (the BottomTabBar is the phone-width primary navigation) and on
-// the chrome-less /embed/* routes.
+// focused standalone routes (embeds and account entry).
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useSession();
@@ -64,7 +65,7 @@ export function Sidebar() {
     writeCollapsed(!collapsed);
   }
 
-  if (pathname?.startsWith("/embed")) {
+  if (isStandaloneRoute(pathname)) {
     return null;
   }
 

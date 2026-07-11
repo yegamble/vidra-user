@@ -4,6 +4,15 @@ const FEED = /\/api\/v1\/videos(\?|$)/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config(\?|$)/;
 const LIVE = /\/api\/v1\/live(\?|$)/;
 const REFRESH = /\/api\/v1\/auth\/refresh$/;
+const INSTANCE = /\/api\/v1\/instance$/;
+
+const standaloneAuthRoutes = [
+  { path: "/login", heading: "Vidra" },
+  { path: "/signup", heading: "Create your account" },
+  { path: "/reset-password", heading: "Reset your password" },
+  { path: "/reset-password/confirm", heading: "Choose a new password" },
+  { path: "/verify-email/confirm", heading: "Verify your email" },
+] as const;
 
 const sampleVideo = {
   id: "v1",
@@ -20,6 +29,12 @@ const sampleVideo = {
   channel_display_name: "Studio",
 };
 
+const sampleVideos = Array.from({ length: 12 }, (_, index) => ({
+  ...sampleVideo,
+  id: `v${index + 1}`,
+  title: index === 0 ? sampleVideo.title : `A considered frame ${index + 1}`,
+}));
+
 async function mockHome(page: Page) {
   await page.route(REFRESH, (route) =>
     route.fulfill({
@@ -29,7 +44,7 @@ async function mockHome(page: Page) {
   );
   await page.route(FEED, (route) =>
     route.fulfill({
-      json: { videos: [sampleVideo], sort: "recent", limit: 20, offset: 0 },
+      json: { videos: sampleVideos, sort: "recent", limit: 20, offset: 0 },
     }),
   );
   await page.route(VIDEO_CONFIG, (route) =>
@@ -57,6 +72,26 @@ async function expectMinimumTargetSize(targets: Locator, expectedCount: number) 
     expect(size.width).toBeGreaterThanOrEqual(44);
     expect(size.height).toBeGreaterThanOrEqual(44);
   }
+}
+
+async function mockSignedOut(page: Page) {
+  await page.route(REFRESH, (route) =>
+    route.fulfill({
+      status: 401,
+      json: { error: { code: "unauthenticated", message: "signed out" } },
+    }),
+  );
+  await page.route(INSTANCE, (route) =>
+    route.fulfill({
+      json: {
+        name: "Vidra",
+        description: "",
+        software: { name: "vidra", version: "0.1.0" },
+        registration_enabled: true,
+        oauth_providers: [],
+      },
+    }),
+  );
 }
 
 test.describe("Apple HIG polish at phone width", () => {
@@ -97,6 +132,24 @@ test.describe("Apple HIG polish at phone width", () => {
     await page.setViewportSize({ width: 320, height: 720 });
     await expectNoHorizontalScroll(page);
   });
+
+  test("keeps the final feed card above the floating tab bar", async ({ page }) => {
+    await mockHome(page);
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: sampleVideos.at(-1)!.title })).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+
+    const lastHeading = page.getByRole("heading", { name: sampleVideos.at(-1)!.title });
+    const lastCard = page.getByRole("main").locator("li").filter({ has: lastHeading });
+    const tabBar = page.getByRole("navigation", { name: "Primary" });
+    await expect(lastCard).toHaveCount(1);
+
+    const [cardBox, tabBox] = await Promise.all([lastCard.boundingBox(), tabBar.boundingBox()]);
+    expect(cardBox).not.toBeNull();
+    expect(tabBox).not.toBeNull();
+    expect(cardBox!.y + cardBox!.height).toBeLessThanOrEqual(tabBox!.y + 1);
+  });
 });
 
 test.describe("Apple HIG polish at desktop width", () => {
@@ -125,4 +178,58 @@ test.describe("Apple HIG polish at desktop width", () => {
     await expect(page.getByRole("heading", { name: sampleVideo.title })).toBeVisible();
     await expectNoHorizontalScroll(page);
   });
+
+  test("keeps sticky chrome separated and the collapsed rail free of overflow", async ({
+    page,
+  }) => {
+    await mockHome(page);
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: sampleVideos.at(-1)!.title })).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, 600));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+    const banner = page.getByRole("banner");
+    const sidebar = page.getByRole("navigation", { name: "Primary" });
+    const [bannerBox, sidebarBox] = await Promise.all([banner.boundingBox(), sidebar.boundingBox()]);
+    expect(bannerBox).not.toBeNull();
+    expect(sidebarBox).not.toBeNull();
+    expect(bannerBox!.y).toBeGreaterThanOrEqual(0);
+    expect(bannerBox!.y).toBeLessThanOrEqual(1);
+    expect(sidebarBox!.y).toBeGreaterThanOrEqual(bannerBox!.y + bannerBox!.height + 4);
+
+    await page.getByRole("button", { name: "Collapse sidebar" }).click();
+    await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+    await expect(sidebar).toHaveCSS("width", "64px");
+    const overflow = await sidebar.evaluate(
+      (element) => element.scrollWidth - element.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+  });
 });
+
+for (const viewport of [
+  { name: "phone", width: 390, height: 844 },
+  { name: "desktop", width: 1440, height: 900 },
+] as const) {
+  test(`presents auth as focused standalone flows at ${viewport.name} width`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await mockSignedOut(page);
+
+    for (const route of standaloneAuthRoutes) {
+      await page.goto(route.path);
+
+      await expect(page.getByRole("heading", { name: route.heading })).toBeVisible();
+      await expect(page.getByRole("banner")).toHaveCount(0);
+      await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
+      const homeLink = page
+        .getByRole("main")
+        .getByRole("link", { name: "Vidra", exact: true });
+      await expect(homeLink).toHaveAttribute("href", "/");
+      await expectMinimumTargetSize(homeLink, 1);
+      await expectNoHorizontalScroll(page);
+    }
+  });
+}

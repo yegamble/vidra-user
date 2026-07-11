@@ -7,6 +7,7 @@ import { AccountMenu } from "@/components/auth/AccountMenu";
 import { PlusIcon } from "@/components/icons";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchBox } from "@/components/SearchBox";
+import { isStandaloneRoute } from "@/lib/app-shell";
 
 // App shell header (design templates "Vidra App" + "Vidra Desktop"): the brand
 // wordmark, centered pill search, Create, notifications, account. Primary
@@ -16,11 +17,11 @@ import { SearchBox } from "@/components/SearchBox";
 // (text-2xl large-title feel) in a compact top row with just the bell + avatar;
 // the search box and Create collapse away there (Search and Create are bottom
 // tabs). At sm+ it settles into the smaller desktop wordmark beside the centered
-// search. Hidden on the embeddable player routes (/embed/*), iframed bare.
+// search. Hidden on focused standalone routes (embeds and account entry).
 export function Header() {
   const pathname = usePathname();
 
-  if (pathname?.startsWith("/embed")) {
+  if (isStandaloneRoute(pathname)) {
     return null;
   }
 

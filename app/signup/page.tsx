@@ -1,3 +1,4 @@
+import { AuthPage, AuthPageHeading } from "@/components/auth/AuthPage";
 import { SignupForm } from "@/components/auth/SignupForm";
 
 // The OAuth callback redirects back here carrying one-shot markers (?oauth=1 /
@@ -10,9 +11,9 @@ export default async function SignupPage({
 }) {
   const sp = await searchParams;
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 py-12">
-      <h1 className="mb-8 text-center text-[26px] font-bold tracking-[-0.04em]">Create your account</h1>
+    <AuthPage>
+      <AuthPageHeading title="Create your account" />
       <SignupForm oauthPending={sp.oauth === "1"} oauthError={sp.oauth_error ?? ""} />
-    </main>
+    </AuthPage>
   );
 }

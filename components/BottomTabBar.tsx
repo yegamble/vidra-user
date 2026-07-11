@@ -14,6 +14,7 @@ import {
   SearchIcon,
 } from "@/components/icons";
 import { api } from "@/lib/api";
+import { isStandaloneRoute } from "@/lib/app-shell";
 
 // The five mobile destinations (design "Vidra App": Home, Search, Create, Inbox,
 // Library). Create is not a route — it opens the Create bottom sheet (Upload /
@@ -63,7 +64,7 @@ function isTabActive(tab: TabDef, pathname: string | null): boolean {
  * BottomTabBar — the phone-width primary navigation (design-system.md: mobile
  * bottom tabs; desktop/tablet sidebar; no hamburger). Sticky at the viewport
  * bottom, in-flow (so it never overlaps content), hidden at `sm` and up and on
- * the chrome-less /embed/* routes. The Inbox tab carries the unread dot the
+ * focused standalone routes (embeds and account entry). The Inbox tab carries the unread dot the
  * same way the header bell does; active tabs are marked with aria-current. The
  * Create tab opens the Create bottom sheet (a dialog) rather than navigating.
  * Each target is a full-height flex cell (≥44pt touch target, Apple HIG).
@@ -88,7 +89,7 @@ export function BottomTabBar() {
     return () => controller.abort();
   }, [status, pathname]);
 
-  if (pathname?.startsWith("/embed")) {
+  if (isStandaloneRoute(pathname)) {
     return null;
   }
 
