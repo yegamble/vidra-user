@@ -99,7 +99,10 @@ function BroadcastBanner({
     window.dispatchEvent(new Event(BROADCAST_DISMISS_EVENT));
   }, [hash]);
 
-  if (dismissed) return null;
+  // A stored dismissal only applies while the banner is still dismissable: if
+  // the admin turns dismissable off without editing the message, it must
+  // reappear for everyone.
+  if (dismissed && dismissable) return null;
   const styles = LEVEL_STYLES[level];
   const Icon = level === "info" ? InfoIcon : WarningIcon;
   return (
