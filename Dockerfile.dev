@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1
+#
+# DEV-ONLY image: runs `next dev` (HMR) against the bind-mounted source tree.
+# Never used by production builds (those use ./Dockerfile / standalone output).
+# node_modules is baked here ONLY to seed the compose named volume that shadows
+# the host's (macOS-arch) node_modules; scripts/dev-entrypoint.sh re-runs
+# `npm ci` inside the container whenever package-lock.json changes.
+FROM node:22-alpine
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+ENV NODE_ENV=development \
+    NEXT_TELEMETRY_DISABLED=1
+
+# Swallow the build arg merged in from the base compose frontend service so
+# BuildKit doesn't warn; it is intentionally NOT baked into anything here —
+# dev reads NEXT_PUBLIC_API_BASE_URL at runtime from the environment.
+ARG NEXT_PUBLIC_API_BASE_URL
+
+COPY package.json package-lock.json ./
+RUN npm ci \
+  && md5sum package-lock.json | cut -d' ' -f1 > node_modules/.package-lock.hash
+
+# Source (including scripts/dev-entrypoint.sh) arrives via bind mount at runtime.
+EXPOSE 3000
+CMD ["sh", "scripts/dev-entrypoint.sh"]

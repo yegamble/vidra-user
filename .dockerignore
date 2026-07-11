@@ -25,4 +25,5 @@ e2e-backed
 # OS / misc
 .DS_Store
 Dockerfile
+Dockerfile.dev
 .dockerignore
