@@ -28,8 +28,13 @@ import { formatBytes } from "@/lib/format";
 /** A setting's editable value: string, bool, integer (limit kinds), or (list kinds) a string array. */
 export type SettingValue = string | boolean | string[] | number;
 
-/** An instance-settings row plus the optional W1 placement metadata. */
-export type PlacedInstanceSetting = InstanceSetting & {
+/**
+ * An instance-settings row plus the W1 placement metadata, kept OPTIONAL here
+ * regardless of the generated API type: the placement logic must tolerate a
+ * pre-W1 backend (rows without page/section), so the fields are re-declared
+ * as optional strings over whatever the codegen says.
+ */
+export type PlacedInstanceSetting = Omit<InstanceSetting, "page" | "section"> & {
   page?: string;
   section?: string;
 };
@@ -280,6 +285,7 @@ export type ControlKind =
   | "category-multi"
   | "language-multi"
   | "policy-segmented"
+  | "level-segmented" // SegmentedControl over info|warning|error (broadcast)
   | "number" // bounded integer input (limit keys)
   | "bytes"; // like number, with a human-readable size hint
 
@@ -414,6 +420,39 @@ export const META: Record<string, SettingMeta> = {
     control: "text",
     page: "general",
     section: "identity",
+  },
+  // GENERAL / Broadcast message (config-parity W3): message/level/dismissable
+  // are progressively disclosed under the master toggle.
+  broadcast_enabled: {
+    label: "Display a message on every page",
+    help: "Shows an announcement banner at the top of every page, to every visitor.",
+    control: "toggle",
+    page: "general",
+    section: "broadcast",
+  },
+  broadcast_message: {
+    label: "Message",
+    help: "The announcement itself. Markdown is supported.",
+    control: "markdown",
+    page: "general",
+    section: "broadcast",
+    parent: "broadcast_enabled",
+  },
+  broadcast_level: {
+    label: "Style",
+    help: "How urgently the banner reads: a quiet notice, a warning, or an error.",
+    control: "level-segmented",
+    page: "general",
+    section: "broadcast",
+    parent: "broadcast_enabled",
+  },
+  broadcast_dismissable: {
+    label: "Viewers can dismiss the message",
+    help: "Dismissal is remembered per browser. Editing the message shows it to everyone again.",
+    control: "toggle",
+    page: "general",
+    section: "broadcast",
+    parent: "broadcast_enabled",
   },
   // GENERAL / Social
   support_text: {
@@ -739,7 +778,10 @@ export function controlFor(key: string, setting: InstanceSetting | undefined): C
  * A short human description of a setting's config DEFAULT, shown next to the
  * "Overridden" badge so the effective-vs-default comparison is explicit.
  */
-export function describeSettingDefault(setting: InstanceSetting, control: ControlKind): string {
+export function describeSettingDefault(
+  setting: PlacedInstanceSetting,
+  control: ControlKind,
+): string {
   const value = setting.default;
   if (typeof value === "boolean") return value ? "on" : "off";
   if (typeof value === "number") {

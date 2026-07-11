@@ -128,6 +128,87 @@ describe("AdminInstanceConfigView limits (VOD page)", () => {
   });
 });
 
+describe("broadcast section (General page, config-parity W3)", () => {
+  const broadcastDoc = {
+    settings: [
+      ...doc.settings,
+      { key: "broadcast_enabled", type: "bool", value: false, default: false, overridden: false },
+      { key: "broadcast_message", type: "string", value: "", default: "", overridden: false },
+      {
+        key: "broadcast_level",
+        type: "enum",
+        value: "info",
+        default: "info",
+        overridden: false,
+        options: ["info", "warning", "error"],
+      },
+      { key: "broadcast_dismissable", type: "bool", value: false, default: false, overridden: false },
+    ],
+  };
+
+  beforeEach(() => {
+    mocks.getInstanceSettings.mockResolvedValue(broadcastDoc);
+    mocks.updateInstanceSettings.mockResolvedValue(broadcastDoc);
+  });
+
+  it("discloses message, level, and dismissable only once the master toggle is on", async () => {
+    render(<ConfigForm page="general" />);
+    const master = await screen.findByRole("switch", {
+      name: "Display a message on every page",
+    });
+    // Children hidden while broadcast_enabled is off…
+    expect(screen.queryByLabelText("Message", { exact: true })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Style" })).toBeNull();
+    expect(
+      screen.queryByRole("switch", { name: "Viewers can dismiss the message" }),
+    ).toBeNull();
+
+    // …and appear (message textarea, level picker, dismissable toggle) once on.
+    fireEvent.click(master);
+    expect(await screen.findByLabelText("Message", { exact: true })).toBeTruthy();
+    const style = screen.getByRole("group", { name: "Style" });
+    expect(style.querySelectorAll("button").length).toBe(3);
+    expect(
+      screen.getByRole("button", { name: "Info" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("switch", { name: "Viewers can dismiss the message" }),
+    ).toBeTruthy();
+  });
+
+  it("saves the broadcast slice as one patch: bool + markdown string + level enum", async () => {
+    render(<ConfigForm page="general" />);
+    fireEvent.click(
+      await screen.findByRole("switch", { name: "Display a message on every page" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Message", { exact: true }), {
+      target: { value: "Maintenance **tonight**." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Warning" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mocks.updateInstanceSettings).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceSettings).toHaveBeenCalledWith({
+      broadcast_enabled: true,
+      broadcast_message: "Maintenance **tonight**.",
+      broadcast_level: "warning",
+    });
+  });
+
+  it("previews the broadcast message through the shared markdown modal", async () => {
+    render(<ConfigForm page="general" />);
+    fireEvent.click(
+      await screen.findByRole("switch", { name: "Display a message on every page" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Message", { exact: true }), {
+      target: { value: "## Heads up\n\nBe **ready**." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview Message" }));
+    expect(await screen.findByRole("heading", { name: "Heads up", level: 2 })).toBeTruthy();
+    expect(screen.getByText("ready").tagName).toBe("STRONG");
+  });
+});
+
 describe("page placement and progressive disclosure", () => {
   it("renders only this page's keys (instance_name is General, not VOD)", async () => {
     render(<ConfigForm page="vod" />);

@@ -58,6 +58,13 @@ const POLICY_OPTIONS = [
   { value: "display", label: "Display" },
 ] as const;
 
+// The broadcast banner's level enum (config-parity W3), as a picker.
+const LEVEL_OPTIONS = [
+  { value: "info", label: "Info" },
+  { value: "warning", label: "Warning" },
+  { value: "error", label: "Error" },
+] as const;
+
 function sameValue(a: SettingValue | undefined, b: SettingValue): boolean {
   if (Array.isArray(a) || Array.isArray(b)) {
     return (
@@ -690,6 +697,20 @@ function SettingRow({
           <SegmentedControl
             options={POLICY_OPTIONS}
             value={(text || "hide") as (typeof POLICY_OPTIONS)[number]["value"]}
+            onChange={(next) => onChange(next)}
+            label={label}
+            size="sm"
+            disabled={inactive}
+          />
+          {error ? <p className="text-xs text-danger">{error}</p> : null}
+        </div>
+      ) : null}
+
+      {control === "level-segmented" ? (
+        <div className="flex flex-col gap-1">
+          <SegmentedControl
+            options={LEVEL_OPTIONS}
+            value={(text || "info") as (typeof LEVEL_OPTIONS)[number]["value"]}
             onChange={(next) => onChange(next)}
             label={label}
             size="sm"

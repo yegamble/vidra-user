@@ -62,6 +62,23 @@ describe("placementFor", () => {
     expect(placementFor("live_enabled")).toEqual({ page: "live", section: "live" });
   });
 
+  it("places the broadcast slice on general/broadcast, disclosed under its master toggle", () => {
+    for (const key of [
+      "broadcast_enabled",
+      "broadcast_message",
+      "broadcast_level",
+      "broadcast_dismissable",
+    ]) {
+      expect(placementFor(key), key).toEqual({ page: "general", section: "broadcast" });
+    }
+    expect(META.broadcast_enabled.parent).toBeUndefined();
+    expect(META.broadcast_message.parent).toBe("broadcast_enabled");
+    expect(META.broadcast_level.parent).toBe("broadcast_enabled");
+    expect(META.broadcast_dismissable.parent).toBe("broadcast_enabled");
+    expect(META.broadcast_message.control).toBe("markdown");
+    expect(META.broadcast_level.control).toBe("level-segmented");
+  });
+
   it("server page/section metadata wins over the client map", () => {
     expect(
       placementFor("uploads_enabled", { page: "general", section: "identity" }),

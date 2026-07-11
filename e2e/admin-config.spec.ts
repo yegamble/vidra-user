@@ -84,6 +84,17 @@ const settings = {
     str("server_country"),
     str("terms_url", "https://terms.example", true),
     str("privacy_url"),
+    bool("broadcast_enabled"),
+    str("broadcast_message"),
+    {
+      key: "broadcast_level",
+      type: "enum",
+      value: "info",
+      default: "info",
+      overridden: false,
+      options: ["info", "warning", "error"],
+    },
+    bool("broadcast_dismissable"),
     str("support_text"),
     str("website_link"),
     str("mastodon_link"),
@@ -212,6 +223,7 @@ test("the general page renders its sections with badge-only-when-overridden", as
   for (const title of [
     "Administrators",
     "Platform",
+    "Broadcast message",
     "Social",
     "Moderation & sensitive content",
     "You and your platform",
@@ -490,6 +502,75 @@ test("segmented policy + multi-select changes patch as enum string and JSON arra
   await expect(page.getByText("Settings saved.")).toBeVisible();
   // Enum travels as a JSON string, the list as a JSON array.
   expect(patchBody).toEqual({ sensitive_content_policy: "blur", instance_categories: ["7"] });
+});
+
+test("broadcast: progressive disclosure, markdown preview, level picker, one patch", async ({
+  page,
+}) => {
+  await signIn(page, "admin");
+  await page.route(SETTINGS, (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: settings });
+    return route.fallback();
+  });
+  await openConfig(page);
+
+  // Message/level/dismissable stay hidden while the master toggle is off.
+  const master = page.getByRole("switch", { name: "Display a message on every page" });
+  await expect(master).toBeVisible();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Style" })).toHaveCount(0);
+  await expect(
+    page.getByRole("switch", { name: "Viewers can dismiss the message" }),
+  ).toHaveCount(0);
+
+  // Progressive disclosure: turning it on reveals the children.
+  await master.click();
+  const message = page.getByLabel("Message", { exact: true });
+  await expect(message).toBeVisible();
+  await expect(
+    page.getByRole("switch", { name: "Viewers can dismiss the message" }),
+  ).toBeVisible();
+
+  // The message is a markdown textarea with the shared preview affordance.
+  await message.fill("Maintenance **tonight** at 22:00 UTC.");
+  await page.getByRole("button", { name: "Preview Message", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("tonight")).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // The level renders as a segmented picker at its effective value.
+  const style = page.getByRole("group", { name: "Style" });
+  await expect(style.getByRole("button", { name: "Info" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await style.getByRole("button", { name: "Warning" }).click();
+
+  // The whole slice travels as one PATCH: bool + markdown string + level enum.
+  let patchBody: unknown = null;
+  await page.route(SETTINGS, (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    patchBody = route.request().postDataJSON();
+    const updated = {
+      settings: settings.settings.map((s) => {
+        if (s.key === "broadcast_enabled") return { ...s, value: true, overridden: true };
+        if (s.key === "broadcast_message")
+          return { ...s, value: "Maintenance **tonight** at 22:00 UTC.", overridden: true };
+        if (s.key === "broadcast_level") return { ...s, value: "warning", overridden: true };
+        return s;
+      }),
+    };
+    return route.fulfill({ json: updated });
+  });
+  await page.getByRole("button", { name: "Save Broadcast message" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  expect(patchBody).toEqual({
+    broadcast_enabled: true,
+    broadcast_message: "Maintenance **tonight** at 22:00 UTC.",
+    broadcast_level: "warning",
+  });
 });
 
 test("the markdown Preview button opens the shared rendered-preview modal", async ({ page }) => {
