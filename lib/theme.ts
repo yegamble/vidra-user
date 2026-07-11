@@ -2,6 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 
+import { THEME_STORAGE_KEY } from "@/lib/theme-bootstrap";
+
 /*
  * Theme preference store. The preference is a harmless UI setting (never a
  * secret), so localStorage is the right home for it — same pattern as the
@@ -20,7 +22,9 @@ import { useSyncExternalStore } from "react";
 
 export type ThemePreference = "light" | "dark" | "system";
 
-const THEME_KEY = "vidra.theme";
+// The storage key lives in lib/theme-bootstrap.ts (a server-safe module) so
+// the SSR layout's inline bootstrap script and this store can never drift.
+const THEME_KEY = THEME_STORAGE_KEY;
 const THEME_EVENT = "vidra:theme";
 
 export function readThemePreference(): ThemePreference {
@@ -75,11 +79,6 @@ export function useThemePreference(): ThemePreference {
   return useSyncExternalStore(subscribeThemePreference, readThemePreference, () => "system");
 }
 
-/**
- * The no-flash bootstrap applied before first paint. Kept here (exported as a
- * string) so the storage key and the attribute logic can never drift from the
- * store above; app/layout.tsx inlines it into a <script> tag.
- */
-export const THEME_BOOTSTRAP_SCRIPT = `try{var t=localStorage.getItem(${JSON.stringify(
-  THEME_KEY,
-)});if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+// The no-flash bootstrap script itself moved to lib/theme-bootstrap.ts
+// (buildThemeBootstrapScript), which app/layout.tsx inlines with the SSR
+// instance snapshot's default theme.

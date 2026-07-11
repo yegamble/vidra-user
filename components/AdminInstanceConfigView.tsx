@@ -7,6 +7,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -15,8 +16,27 @@ import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { Toggle } from "@/components/ui/Toggle";
-import { ApiError, api, errorMessage, getVideoConfigCached } from "@/lib/api";
-import { formatBytes } from "@/lib/format";
+import {
+  META,
+  bootDepNote,
+  buildPageModel,
+  configPage,
+  controlFor,
+  describeSettingDefault,
+  emptyValueFor,
+  type ConfigPageId,
+  type InstanceBootInfo,
+  type PageSection,
+  type PlacedInstanceSetting,
+  type SettingValue,
+} from "@/lib/admin-config-ia";
+import {
+  ApiError,
+  api,
+  errorMessage,
+  getInstanceCached,
+  getVideoConfigCached,
+} from "@/lib/api";
 import type {
   InstanceSetting,
   InstanceSettingsResponse,
@@ -25,316 +45,11 @@ import type {
   VideoConfigResponse,
 } from "@/lib/api";
 import { COUNTRIES } from "@/lib/countries";
+import { formatBytes } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
-/** A setting's editable value: string, bool, integer (limit kinds), or (list kinds) a string array. */
-type SettingValue = string | boolean | string[] | number;
-
 type AdminInstanceSetting = InstanceSetting;
-
-type GroupId =
-  | "administrators"
-  | "platform"
-  | "social"
-  | "moderation"
-  | "you"
-  | "other-info"
-  | "registration"
-  | "features"
-  | "limits"
-  | "other";
-
-const GROUPS: { id: GroupId; title: string; description: string }[] = [
-  {
-    id: "administrators",
-    title: "Administrators",
-    description: "Who runs this instance and how visitors can reach them.",
-  },
-  {
-    id: "platform",
-    title: "Platform",
-    description: "The public identity of this instance: name, descriptions, and classification.",
-  },
-  {
-    id: "social",
-    title: "Social",
-    description: "How people can support and follow the instance elsewhere.",
-  },
-  {
-    id: "moderation",
-    title: "Moderation & sensitive content",
-    description: "Rules of the house and how sensitive videos are treated.",
-  },
-  {
-    id: "you",
-    title: "You and your platform",
-    description: "The questions every visitor deserves an answer to, shown on the About page.",
-  },
-  {
-    id: "other-info",
-    title: "Other information",
-    description: "Technical background about this deployment.",
-  },
-  {
-    id: "registration",
-    title: "Registration",
-    description: "Whether people can sign up, and whether new signups need admin approval.",
-  },
-  {
-    id: "features",
-    title: "Features",
-    description:
-      "Turning a feature off returns “feature disabled” from its endpoints immediately — no restart needed.",
-  },
-  {
-    id: "limits",
-    title: "Limits",
-    description:
-      "Operational caps enforced on uploads and imports. 0 means unlimited; changes apply on the next request or job — no restart.",
-  },
-  { id: "other", title: "Other settings", description: "Additional runtime settings." },
-];
-
-// How a setting is edited. Drives the control rendered per row; the server's
-// `type` stays the validation truth (Phase B), presentation lives here.
-type ControlKind =
-  | "text"
-  | "textarea"
-  | "markdown" // Textarea + markdown Preview modal
-  | "toggle"
-  | "language-select"
-  | "country-select"
-  | "category-multi"
-  | "language-multi"
-  | "policy-segmented"
-  | "number" // bounded integer input (limit keys)
-  | "bytes"; // like number, with a human-readable size hint
-
-// Per-key presentation metadata, in DISPLAY ORDER within each group. Any key
-// the backend returns that is not listed here still renders (in the "Other"
-// group, by its server type) so a new setting is never hidden. Conversely,
-// every key here renders even while the backend does not return it yet — the
-// row is simply disabled until the server supports the setting.
-const META: Record<
-  string,
-  { label: string; help?: string; group: GroupId; placeholder?: string; control: ControlKind }
-> = {
-  // 1. ADMINISTRATORS
-  contact_email: {
-    label: "Admin email",
-    help: "Shown on the About page and used as the contact-form recipient.",
-    group: "administrators",
-    placeholder: "admin@example.org",
-    control: "text",
-  },
-  contact_form_enabled: {
-    label: "Enable contact form",
-    help: "Lets visitors write to you from the About page (needs an admin email and mail delivery).",
-    group: "administrators",
-    control: "toggle",
-  },
-  // 2. PLATFORM
-  instance_name: { label: "Name", group: "platform", placeholder: "Vidra", control: "text" },
-  instance_short_description: {
-    label: "Short description",
-    help: "One or two sentences shown under the name (250 characters max).",
-    group: "platform",
-    control: "textarea",
-  },
-  instance_description: {
-    label: "Description",
-    help: "The long description on the About page. Markdown is supported.",
-    group: "platform",
-    control: "markdown",
-  },
-  default_language: {
-    label: "Default language",
-    help: "The main language of this instance.",
-    group: "platform",
-    control: "language-select",
-  },
-  instance_categories: {
-    label: "Main instance categories",
-    help: "What this instance is mostly about.",
-    group: "platform",
-    control: "category-multi",
-  },
-  moderator_languages: {
-    label: "Main languages you/your moderators speak",
-    group: "platform",
-    control: "language-multi",
-  },
-  server_country: {
-    label: "Server country",
-    help: "Where this server is hosted.",
-    group: "platform",
-    control: "country-select",
-  },
-  terms_url: {
-    label: "Terms of service URL",
-    group: "platform",
-    placeholder: "https://…",
-    control: "text",
-  },
-  privacy_url: {
-    label: "Privacy policy URL",
-    group: "platform",
-    placeholder: "https://…",
-    control: "text",
-  },
-  // 3. SOCIAL
-  support_text: {
-    label: "Support text",
-    help: "How people can support the instance (donations, contributions). Markdown is supported.",
-    group: "social",
-    control: "markdown",
-  },
-  website_link: {
-    label: "External link",
-    group: "social",
-    placeholder: "https://…",
-    control: "text",
-  },
-  mastodon_link: {
-    label: "Mastodon link",
-    group: "social",
-    placeholder: "https://…",
-    control: "text",
-  },
-  x_link: { label: "X link", group: "social", placeholder: "https://…", control: "text" },
-  bluesky_link: {
-    label: "Bluesky link",
-    group: "social",
-    placeholder: "https://…",
-    control: "text",
-  },
-  // 4. MODERATION & SENSITIVE CONTENT
-  instance_is_sensitive: {
-    label: "This instance is dedicated to sensitive content",
-    group: "moderation",
-    control: "toggle",
-  },
-  sensitive_content_policy: {
-    label: "Policy on videos containing sensitive content",
-    help: "Hide removes them from public browse and search; Warn and Blur gate playback behind a notice; Display shows them normally.",
-    group: "moderation",
-    control: "policy-segmented",
-  },
-  terms: {
-    label: "Terms",
-    help: "The instance terms, shown on the About page. Markdown is supported.",
-    group: "moderation",
-    control: "markdown",
-  },
-  code_of_conduct: {
-    label: "Code of conduct",
-    group: "moderation",
-    control: "markdown",
-  },
-  moderation_info: {
-    label: "Moderation information",
-    help: "Who moderates, what gets removed, how reports are handled. Markdown is supported.",
-    group: "moderation",
-    control: "markdown",
-  },
-  quarantine_new_uploads: {
-    label: "Quarantine new uploads",
-    help: "Hold new uploads for moderator review before they publish.",
-    group: "moderation",
-    control: "toggle",
-  },
-  // 5. YOU AND YOUR PLATFORM
-  administrator_info: {
-    label: "Who is behind the instance?",
-    group: "you",
-    control: "markdown",
-  },
-  creation_reason: {
-    label: "Why did you create this instance?",
-    group: "you",
-    control: "markdown",
-  },
-  maintenance_lifetime: {
-    label: "How long do you plan to maintain it?",
-    group: "you",
-    control: "markdown",
-  },
-  business_model: {
-    label: "How will you finance the server?",
-    group: "you",
-    control: "markdown",
-  },
-  // 6. OTHER INFORMATION
-  hardware_info: {
-    label: "What server/hardware does the instance run on?",
-    group: "other-info",
-    control: "markdown",
-  },
-  // 7. REGISTRATION
-  registration_enabled: {
-    label: "Allow new registrations",
-    help: "When off, the signup page is closed.",
-    group: "registration",
-    control: "toggle",
-  },
-  registration_require_approval: {
-    label: "Require approval for new accounts",
-    help: "New signups file a pending request an admin must approve.",
-    group: "registration",
-    control: "toggle",
-  },
-  // 8. FEATURES
-  uploads_enabled: {
-    label: "Video uploads",
-    help: "Allow creators to upload video files.",
-    group: "features",
-    control: "toggle",
-  },
-  imports_enabled: {
-    label: "URL imports",
-    help: "Allow creators to import a video from a URL.",
-    group: "features",
-    control: "toggle",
-  },
-  live_enabled: {
-    label: "Live streaming",
-    help: "Allow creators to run live streams.",
-    group: "features",
-    control: "toggle",
-  },
-  comments_enabled: {
-    label: "Comments",
-    help: "Allow viewers to comment on videos.",
-    group: "features",
-    control: "toggle",
-  },
-  // 9. LIMITS (operational caps; 0 = unlimited / no cap)
-  default_user_quota_bytes: {
-    label: "Default storage quota per user",
-    help: "Bytes each account may store. Per-user overrides still win. 0 = unlimited.",
-    group: "limits",
-    control: "bytes",
-  },
-  upload_max_size_bytes: {
-    label: "Maximum upload size",
-    help: "Largest single video file an upload or URL import may be. 0 = no cap; otherwise at least 1 MiB.",
-    group: "limits",
-    control: "bytes",
-  },
-  upload_max_active_sessions_per_user: {
-    label: "Max concurrent uploads per user",
-    help: "Resumable upload sessions one user may hold open at once. 0 = unlimited.",
-    group: "limits",
-    control: "number",
-  },
-  import_max_height: {
-    label: "Import resolution cap",
-    help: "Highest resolution URL imports fetch. 0 = no cap; otherwise 144–4320.",
-    group: "limits",
-    control: "number",
-  },
-};
 
 const POLICY_OPTIONS = [
   { value: "hide", label: "Hide" },
@@ -342,25 +57,6 @@ const POLICY_OPTIONS = [
   { value: "blur", label: "Blur" },
   { value: "display", label: "Display" },
 ] as const;
-
-/** The empty/default draft value for a control kind (missing-key rows). */
-function emptyValueFor(control: ControlKind): SettingValue {
-  if (control === "toggle") return false;
-  if (control === "category-multi" || control === "language-multi") return [];
-  if (control === "number" || control === "bytes") return 0;
-  return "";
-}
-
-function controlFor(key: string, setting: AdminInstanceSetting | undefined): ControlKind {
-  const meta = META[key];
-  if (meta) return meta.control;
-  // Unknown server key ("Other settings"): render by server type. A future
-  // unknown enum/list kind falls back to a plain text row (it stays visible;
-  // proper editing arrives with its META entry).
-  if (setting?.type === "bool") return "toggle";
-  if (setting?.type === "int") return "number";
-  return "text";
-}
 
 function sameValue(a: SettingValue | undefined, b: SettingValue): boolean {
   if (Array.isArray(a) || Array.isArray(b)) {
@@ -374,18 +70,26 @@ function sameValue(a: SettingValue | undefined, b: SettingValue): boolean {
   return a === b;
 }
 
-// AdminInstanceConfigView is the admin-only instance configuration page
-// (redesigned per .ralph/specs/instance-platform-info.md). It loads the
-// effective settings overlay (GET /admin/instance-settings), renders the FULL
-// grouped form from META — a key the backend does not return yet renders
-// disabled instead of vanishing — and persists a partial PATCH of only the
-// changed keys on save. Overridden keys get an accent badge + a
+function sectionAnchorId(sectionId: string): string {
+  return `config-section-${sectionId}`;
+}
+
+// AdminInstanceConfigView is one PAGE of the admin instance configuration
+// (config-parity W2 IA: general | vod | live | federation | customization |
+// homepage | advanced — see lib/admin-config-ia.ts). It loads the effective
+// settings overlay (GET /admin/instance-settings), renders THIS page's grouped
+// inset sections from the placement registry — server page/section metadata
+// wins when present, unknown keys auto-render so a new setting is never
+// hidden, and a key the backend does not return yet renders disabled instead
+// of vanishing — and persists a partial PATCH of only the changed keys on
+// save (whole page via the sticky save bar, or one section at a time).
+// Overridden keys get an accent badge, their config default, and a
 // reset-to-default action ({key: null}); a key at its config default shows no
 // badge at all. Role-gated by RoleGate.
-export function AdminInstanceConfigView() {
+export function AdminInstanceConfigView({ page }: { page: ConfigPageId }) {
   return (
     <RoleGate minRole="admin" action="configure the instance">
-      <ConfigForm />
+      <ConfigForm page={page} />
     </RoleGate>
   );
 }
@@ -393,13 +97,16 @@ export function AdminInstanceConfigView() {
 // Exported for unit tests (rendered directly, bypassing the RoleGate wrapper —
 // the same pattern AdminJobRunsView uses). Production always enters via
 // AdminInstanceConfigView so the admin gate applies.
-export function ConfigForm() {
+export function ConfigForm({ page }: { page: ConfigPageId }) {
   const [status, setStatus] = useState<Status>("loading");
   const [settings, setSettings] = useState<AdminInstanceSetting[]>([]);
   // The editable working copy, keyed by setting key. Reseeded from the server
   // truth on every successful load/save (so the UI reflects effective values).
   const [draft, setDraft] = useState<Record<string, SettingValue>>({});
+  // Server-side rejections (422 field errors) and immediate client-side
+  // validation, merged per row; a client error blocks saving that key.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -412,6 +119,10 @@ export function ConfigForm() {
   // fetch leaves the selects with their current value and the multi-selects
   // showing an honest "options unavailable" note).
   const [config, setConfig] = useState<VideoConfigResponse | null>(null);
+  // The public /instance snapshot, used for boot-dependency notes (a setting
+  // whose boot-env backing is absent renders disabled with an explanation, and
+  // some pages carry a page-wide note). Best-effort: null just means no notes.
+  const [instance, setInstance] = useState<InstanceBootInfo | null>(null);
 
   const seed = useCallback((list: AdminInstanceSetting[]) => {
     setSettings(list);
@@ -422,6 +133,7 @@ export function ConfigForm() {
       next[s.key] = s.type === "list" && !Array.isArray(s.value) ? [] : s.value;
     }
     setDraft(next);
+    setClientErrors({});
   }, []);
 
   useEffect(() => {
@@ -449,6 +161,13 @@ export function ConfigForm() {
       .catch(() => {
         // Selects fall back to raw values; multi-selects show "unavailable".
       });
+    getInstanceCached()
+      .then((doc) => {
+        if (!cancelled) setInstance(doc as InstanceBootInfo);
+      })
+      .catch(() => {
+        // No boot-dependency notes; rows render normally.
+      });
     return () => {
       cancelled = true;
     };
@@ -460,10 +179,23 @@ export function ConfigForm() {
     [settings, draft],
   );
   const dirty = changedKeys.length > 0;
+  const invalid = changedKeys.some((key) => clientErrors[key] !== undefined);
 
   const setValue = useCallback((key: string, value: SettingValue) => {
     setSaved(false);
     setDraft((prev) => ({ ...prev, [key]: value }));
+    // Immediate inline validation (HIG): the row tells you right away.
+    const validate = META[key]?.validate;
+    setClientErrors((prev) => {
+      const message = validate ? validate(value) : null;
+      if (message === null) {
+        if (prev[key] === undefined) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: message };
+    });
   }, []);
 
   const applyResult = useCallback(
@@ -486,25 +218,52 @@ export function ConfigForm() {
     setSaveError(errorMessage(err, "Could not save the settings."));
   }, []);
 
-  const save = useCallback(async () => {
-    if (!dirty || saving) return;
-    setSaving(true);
-    setSaved(false);
-    setSaveError(null);
+  // Persist a partial PATCH of the changed keys — all of them (the sticky save
+  // bar) or one section's slice (per-section save).
+  const save = useCallback(
+    async (keys?: string[]) => {
+      const toSave = (keys ?? changedKeys).filter((key) => changedKeys.includes(key));
+      if (toSave.length === 0 || saving) return;
+      if (toSave.some((key) => clientErrors[key] !== undefined)) return;
+      setSaving(true);
+      setSaved(false);
+      setSaveError(null);
+      setFieldErrors({});
+      // Partial update: only the changed keys travel. List values are JSON arrays.
+      const patch: UpdateInstanceSettingsRequest = {};
+      for (const key of toSave) patch[key] = draft[key];
+      // A section save must not clobber edits elsewhere: reseeding from the
+      // response resets every draft, so re-apply the kept dirty keys onto the
+      // fresh truth afterwards.
+      const kept: Record<string, SettingValue> = {};
+      for (const key of changedKeys) {
+        if (toSave.includes(key)) continue;
+        const value = draft[key];
+        if (value !== undefined) kept[key] = value;
+      }
+      try {
+        const res = await api.updateInstanceSettings(patch);
+        applyResult(res);
+        if (Object.keys(kept).length > 0) {
+          setDraft((prev) => ({ ...prev, ...kept }));
+        }
+        setSaved(true);
+      } catch (err) {
+        onError(err);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [changedKeys, saving, clientErrors, draft, applyResult, onError],
+  );
+
+  // Throw away every unsaved edit, back to the server truth.
+  const discard = useCallback(() => {
+    seed(settings);
     setFieldErrors({});
-    // Partial update: only the changed keys travel. List values are JSON arrays.
-    const patch: UpdateInstanceSettingsRequest = {};
-    for (const key of changedKeys) patch[key] = draft[key];
-    try {
-      const res = await api.updateInstanceSettings(patch);
-      applyResult(res);
-      setSaved(true);
-    } catch (err) {
-      onError(err);
-    } finally {
-      setSaving(false);
-    }
-  }, [dirty, saving, changedKeys, draft, applyResult, onError]);
+    setSaveError(null);
+    setSaved(false);
+  }, [seed, settings]);
 
   // Clear a key's database override, resetting it to the config default. Sends an
   // immediate PATCH { key: null } and reseeds from the returned effective doc.
@@ -523,6 +282,12 @@ export function ConfigForm() {
       }
     },
     [applyResult, onError],
+  );
+
+  const pageDef = configPage(page);
+  const model = useMemo(
+    () => buildPageModel(page, settings as PlacedInstanceSetting[]),
+    [page, settings],
   );
 
   if (status === "loading") {
@@ -545,32 +310,64 @@ export function ConfigForm() {
   }
 
   const byKey = new Map(settings.map((s) => [s.key, s]));
+  const pageBootNote = instance && pageDef.bootNote ? pageDef.bootNote(instance) : null;
 
-  const renderGroup = (group: (typeof GROUPS)[number]) => {
-    // Meta-defined keys render in META order — INCLUDING keys the backend does
-    // not return yet (they render disabled). Unknown server keys land in "other".
-    const keys =
-      group.id === "other"
-        ? settings.filter((s) => !META[s.key]).map((s) => s.key)
-        : Object.keys(META).filter((key) => META[key].group === group.id);
-    if (keys.length === 0) return null;
+  // Progressive disclosure: a child row stays hidden while its parent toggle
+  // is off. A parent the server does not return cannot vouch either way, so
+  // the child stays visible (it renders disabled on its own merits anyway).
+  const isVisible = (key: string): boolean => {
+    const parent = META[key]?.parent;
+    if (!parent || byKey.get(parent) === undefined) return true;
+    return draft[parent] === true;
+  };
+
+  const renderSection = ({ section, keys }: PageSection) => {
+    const visibleKeys = keys.filter(isVisible);
+    if (visibleKeys.length === 0) return null;
+    const sectionChanged = keys.filter((key) => changedKeys.includes(key));
+    const sectionInvalid = sectionChanged.some((key) => clientErrors[key] !== undefined);
+    const headingId = sectionAnchorId(section.id);
     return (
-      <section key={group.id} aria-label={group.title} className="flex min-w-0 flex-col gap-2.5">
-        <div className="px-0.5">
-          <h2 className="text-[12px] font-bold uppercase tracking-[0.06em] text-fg-subtle">
-            {group.title}
-          </h2>
-          <p className="mt-1 text-[13px] text-fg-muted">{group.description}</p>
+      <section
+        key={section.id}
+        aria-label={section.title}
+        id={headingId}
+        className="flex min-w-0 scroll-mt-24 flex-col gap-2.5"
+      >
+        <div className="flex items-end justify-between gap-3 px-0.5">
+          <div className="min-w-0">
+            <h2 className="text-[12px] font-bold uppercase tracking-[0.06em] text-fg-subtle">
+              {section.title}
+            </h2>
+            {section.description ? (
+              <p className="mt-1 text-[13px] text-fg-muted">{section.description}</p>
+            ) : null}
+          </div>
+          {sectionChanged.length > 0 ? (
+            <Button
+              type="button"
+              variant="tonal"
+              size="sm"
+              className="shrink-0"
+              disabled={saving || sectionInvalid}
+              onClick={() => void save(sectionChanged)}
+              aria-label={`Save ${section.title}`}
+            >
+              Save section
+            </Button>
+          ) : null}
         </div>
         <div className="flex min-w-0 flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted p-4">
-          {keys.map((key) => (
+          {visibleKeys.map((key) => (
             <SettingRow
               key={key}
               settingKey={key}
               setting={byKey.get(key)}
               config={config}
               draftValue={draft[key]}
-              error={fieldErrors[key]}
+              error={fieldErrors[key] ?? clientErrors[key]}
+              bootNote={bootDepNote(META[key], instance)}
+              child={META[key]?.parent !== undefined}
               resetting={resetting === key}
               disabled={saving}
               onChange={(v) => setValue(key, v)}
@@ -583,62 +380,109 @@ export function ConfigForm() {
     );
   };
 
-  // Desktop console (DR12): two columns at lg — the long editorial groups on
-  // the left, the compact toggle groups on the right. Below lg it collapses to
-  // the single mobile stack in GROUPS order.
-  const rightIds: GroupId[] = ["registration", "features", "limits", "other-info", "other"];
-  const leftGroups = GROUPS.filter((g) => !rightIds.includes(g.id));
-  const rightGroups = GROUPS.filter((g) => rightIds.includes(g.id));
-
   return (
-    <form
-      className="flex flex-col gap-8"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void save();
-      }}
-    >
-      <div className="flex min-w-0 flex-col gap-8 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-6">
-        <div className="flex min-w-0 flex-col gap-8">{leftGroups.map(renderGroup)}</div>
-        <div className="flex min-w-0 flex-col gap-8">{rightGroups.map(renderGroup)}</div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={!dirty || saving}>
-          {saving ? "Saving…" : "Save changes"}
-        </Button>
-        {dirty ? (
-          <span className="text-sm text-fg-muted">
-            {changedKeys.length} unsaved {changedKeys.length === 1 ? "change" : "changes"}
-          </span>
-        ) : saved ? (
-          <span role="status" className="text-sm text-success">
-            Settings saved.
-          </span>
+    <div className="flex min-w-0 items-start gap-8">
+      <form
+        className="flex min-w-0 max-w-3xl flex-1 flex-col gap-8"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        {pageBootNote ? (
+          <p
+            role="note"
+            className="rounded-xl border border-border bg-surface-muted px-4 py-3 text-[13px] text-fg-muted"
+          >
+            {pageBootNote}
+          </p>
         ) : null}
-        {saveError ? (
-          <span role="alert" className="text-sm text-danger">
-            {saveError}
-          </span>
-        ) : null}
-      </div>
 
-      {preview ? (
-        <Modal
-          title={`Preview: ${preview.label}`}
-          onClose={() => setPreview(null)}
-          className="max-w-2xl"
+        {model.length === 0 ? (
+          <EmptyState
+            title="Nothing to configure here yet"
+            message="Settings for this page arrive with a later server update — they will appear here automatically."
+          />
+        ) : (
+          <>
+            {model.map(renderSection)}
+
+            {/* Sticky save bar (HIG): the dirty-diff count and the whole-page
+                save stay in reach however long the page is. In-flow on the
+                smallest screens so it never fights the bottom tab bar. */}
+            <div className="z-10 flex flex-wrap items-center gap-3 border-t border-border-subtle bg-canvas py-3 sm:sticky sm:bottom-0">
+              <Button type="submit" disabled={!dirty || saving || invalid}>
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+              {dirty ? (
+                <>
+                  <Button type="button" variant="ghost" size="sm" onClick={discard}>
+                    Discard
+                  </Button>
+                  <span className="text-sm text-fg-muted">
+                    {changedKeys.length} unsaved {changedKeys.length === 1 ? "change" : "changes"}
+                  </span>
+                </>
+              ) : null}
+              {/* Independent of dirtiness: a per-section save succeeds while
+                  other sections still hold pending edits. */}
+              {saved ? (
+                <span role="status" className="text-sm text-success">
+                  Settings saved.
+                </span>
+              ) : null}
+              {invalid ? (
+                <span role="alert" className="text-sm text-danger">
+                  Fix the highlighted fields to save.
+                </span>
+              ) : saveError ? (
+                <span role="alert" className="text-sm text-danger">
+                  {saveError}
+                </span>
+              ) : null}
+            </div>
+          </>
+        )}
+
+        {preview ? (
+          <Modal
+            title={`Preview: ${preview.label}`}
+            onClose={() => setPreview(null)}
+            className="max-w-2xl"
+          >
+            <div className="max-h-[70vh] overflow-y-auto">
+              {preview.text.trim() === "" ? (
+                <p className="text-sm text-fg-muted">Nothing to preview yet.</p>
+              ) : (
+                <Markdown>{preview.text}</Markdown>
+              )}
+            </div>
+          </Modal>
+        ) : null}
+      </form>
+
+      {/* The in-page anchor rail: PeerTube-style side-labels for this page's
+          sections (desktop only; the sections themselves carry the headers). */}
+      {model.length > 1 ? (
+        <nav
+          aria-label="On this page"
+          className="sticky top-24 hidden w-44 shrink-0 flex-col gap-0.5 xl:flex"
         >
-          <div className="max-h-[70vh] overflow-y-auto">
-            {preview.text.trim() === "" ? (
-              <p className="text-sm text-fg-muted">Nothing to preview yet.</p>
-            ) : (
-              <Markdown>{preview.text}</Markdown>
-            )}
-          </div>
-        </Modal>
+          <span className="px-2 pb-1 text-[11px] font-bold uppercase tracking-[0.06em] text-fg-muted">
+            On this page
+          </span>
+          {model.map(({ section }) => (
+            <a
+              key={section.id}
+              href={`#${sectionAnchorId(section.id)}`}
+              className="focus-ring rounded-lg px-2 py-1 text-[13px] font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+            >
+              {section.title}
+            </a>
+          ))}
+        </nav>
       ) : null}
-    </form>
+    </div>
   );
 }
 
@@ -648,6 +492,8 @@ function SettingRow({
   config,
   draftValue,
   error,
+  bootNote,
+  child,
   resetting,
   disabled,
   onChange,
@@ -660,6 +506,10 @@ function SettingRow({
   config: VideoConfigResponse | null;
   draftValue: SettingValue | undefined;
   error?: string;
+  /** Non-null when the setting's boot-env dependency is absent: disable + explain. */
+  bootNote: string | null;
+  /** True for a progressive-disclosure child (renders indented under its parent). */
+  child: boolean;
   resetting: boolean;
   disabled: boolean;
   onChange: (value: SettingValue) => void;
@@ -672,7 +522,7 @@ function SettingRow({
   // A key the backend does not return yet renders its full row, disabled —
   // never a crash, never a hidden field (spec: instance-platform-info.md).
   const unsupported = setting === undefined;
-  const inactive = disabled || resetting || unsupported;
+  const inactive = disabled || resetting || unsupported || bootNote !== null;
   const value = draftValue ?? emptyValueFor(control);
   const text = typeof value === "string" ? value : "";
   const list = Array.isArray(value) ? value : [];
@@ -682,7 +532,11 @@ function SettingRow({
   const isToggle = control === "toggle";
 
   return (
-    <div className="flex min-w-0 flex-col gap-2 py-3.5 first:pt-0 last:pb-0">
+    <div
+      className={`flex min-w-0 flex-col gap-2 py-3.5 first:pt-0 last:pb-0 ${
+        child ? "border-l-2 border-border-subtle pl-4" : ""
+      }`}
+    >
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <span className="block break-words text-sm font-medium text-fg">{label}</span>
@@ -694,11 +548,18 @@ function SettingRow({
               Not supported by this server yet.
             </span>
           ) : null}
-          {/* Badge treatment: ONLY an overridden key gets a badge (+ reset);
-              a key at its config default shows nothing. */}
+          {bootNote !== null && !unsupported ? (
+            <span className="block text-xs text-fg-muted">{bootNote}</span>
+          ) : null}
+          {/* Badge treatment: ONLY an overridden key gets a badge (+ its config
+              default and the reset affordance); a key at its config default
+              shows nothing. */}
           {setting?.overridden ? (
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               <Badge variant="accent">Overridden</Badge>
+              <span className="text-xs text-fg-muted">
+                Default: {describeSettingDefault(setting, control)}
+              </span>
               <button
                 type="button"
                 onClick={onReset}

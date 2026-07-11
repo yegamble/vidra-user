@@ -1,16 +1,8 @@
-import { AdminInstanceConfigView } from "@/components/AdminInstanceConfigView";
-import { AdminTabs } from "@/components/AdminTabs";
+import { redirect } from "next/navigation";
 
-export default function AdminConfigPage() {
-  return (
-    <main className="w-full max-w-[1100px] flex-1 px-4 py-8 lg:px-8 lg:py-7">
-      <AdminTabs />
-      <h1 className="mb-1 text-2xl font-bold tracking-tight">Instance configuration</h1>
-      <p className="mb-6 text-[13px] text-fg-muted">
-        Platform information, registration, feature toggles, moderation gates, and the public
-        About page content.
-      </p>
-      <AdminInstanceConfigView />
-    </main>
-  );
+// /admin/config is a layout route (config-parity W2 IA); the index lands on
+// its first page. Deep links to the old single page keep working via this
+// redirect.
+export default function AdminConfigIndexPage() {
+  redirect("/admin/config/general");
 }

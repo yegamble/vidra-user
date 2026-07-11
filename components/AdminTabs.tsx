@@ -32,7 +32,13 @@ export function AdminTabs() {
     >
       <div className="flex min-w-max items-center gap-1 border-b border-border-subtle">
         {TABS.map((tab) => {
-          const active = pathname === tab.href;
+          // Sub-routes light their tab too (Config is a layout route with
+          // per-page children, e.g. /admin/config/general). The Overview tab
+          // stays exact so it never shadows the others.
+          const active =
+            tab.href === "/admin"
+              ? pathname === tab.href
+              : pathname === tab.href || pathname?.startsWith(`${tab.href}/`) === true;
           return (
             <Link
               key={tab.href}

@@ -31,7 +31,19 @@ async function loginAsAdmin(page: Page) {
   // the hidden AdminTabs at this viewport, so click the rail's "Instance" link.
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   await page.getByRole("link", { name: "Instance", exact: true }).click();
+  // /admin/config is a layout route (config-parity W2 IA) — the index
+  // redirects to its first page, General, whose identity section is titled
+  // "Platform".
+  await expect(page).toHaveURL(/\/admin\/config\/general$/);
   await expect(page.getByRole("heading", { name: "Platform", exact: true })).toBeVisible();
+}
+
+// Navigate the persistent config rail to one of the IA's pages.
+async function openConfigPage(page: Page, label: string) {
+  await page
+    .getByRole("navigation", { name: "Configuration pages" })
+    .getByRole("link", { name: label })
+    .click();
 }
 
 test("editing the instance name persists to the DB and shows on the public instance endpoint", async ({
@@ -70,6 +82,8 @@ test("editing the instance name persists to the DB and shows on the public insta
 
 test("toggling a feature off then on round-trips through the DB overlay", async ({ page, request }) => {
   await loginAsAdmin(page);
+  // The uploads toggle re-homed to the VOD page in the W2 IA.
+  await openConfigPage(page, "VOD");
 
   const uploads = page.getByRole("switch", { name: "Video uploads" });
   const save = page.getByRole("button", { name: "Save changes" });
