@@ -42,11 +42,22 @@ export const PLAYER_SETTINGS_EVENT = "vidra:player-settings";
 // useSyncExternalStore's Object.is check schedules a re-render; stable between
 // changes so getSnapshot never loops.
 let current: PlayerSettings = DEFAULT_PLAYER_SETTINGS;
+// Whether `current` is a signed-in user's server-backed settings (hydrated)
+// rather than the baked defaults. Readers that layer the INSTANCE defaults
+// underneath (config-parity W5: lib/player-autoplay) use this to tell "the
+// user's stored preference" apart from "nobody said anything yet".
+let hydrated = false;
 
 /** getPlayerSettingsSnapshot returns the current effective per-user defaults.
  * Read by the session stores' fallback and by getSnapshot below. */
 export function getPlayerSettingsSnapshot(): PlayerSettings {
   return current;
+}
+
+/** True once a signed-in user's server-backed settings were installed (and
+ * until sign-out resets them) — the per-user layer of the preference chain. */
+export function arePlayerSettingsHydrated(): boolean {
+  return hydrated;
 }
 
 function broadcast(): void {
@@ -59,6 +70,7 @@ function broadcast(): void {
  * players re-read their effective defaults, PlayerSettingsView re-renders. */
 export function hydratePlayerSettings(settings: PlayerSettings): void {
   current = settings;
+  hydrated = true;
   broadcast();
 }
 
@@ -66,6 +78,7 @@ export function hydratePlayerSettings(settings: PlayerSettings): void {
  * signed-out session never inherits the previous user's per-user defaults. */
 export function resetPlayerSettings(): void {
   current = DEFAULT_PLAYER_SETTINGS;
+  hydrated = false;
   broadcast();
 }
 

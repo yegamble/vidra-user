@@ -176,6 +176,12 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       description: "A site-wide announcement banner shown to every visitor.",
     },
     {
+      id: "browse",
+      title: "Landing & browse defaults",
+      description:
+        "What visitors who have not chosen anything see first: the landing surface and the feed's default sort and reach.",
+    },
+    {
       id: "social",
       title: "Social",
       description: "How people can support and follow the instance elsewhere.",
@@ -261,6 +267,11 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       description: "How the site header presents this instance.",
     },
     {
+      id: "player",
+      title: "Player",
+      description: "How the video player behaves before a viewer changes anything.",
+    },
+    {
       id: "email",
       title: "Email",
       description: "How outgoing mail from this instance is presented.",
@@ -308,8 +319,12 @@ export type ControlKind =
   | "language-multi"
   | "policy-segmented"
   | "level-segmented" // SegmentedControl over info|warning|error (broadcast)
+  | "enum-segmented" // SegmentedControl over the key's META `options` (W5 enum keys)
   | "number" // bounded integer input (limit keys)
   | "bytes"; // like number, with a human-readable size hint
+
+/** One choice of an enum-segmented control: the wire value + its picker label. */
+export type EnumOption = { value: string; label: string };
 
 /** Immediate inline validation: null = fine, string = the inline error. */
 export type SettingValidator = (value: SettingValue) => string | null;
@@ -359,6 +374,12 @@ export type SettingMeta = {
    * hidden (indented when shown) until the parent's draft value is on.
    */
   parent?: string;
+  /**
+   * enum-segmented only: the enum values with their picker labels, in display
+   * order — kept in lockstep with the server registry's options (the server's
+   * `options` array stays the validation truth; these add the labels).
+   */
+  options?: readonly EnumOption[];
   /** Immediate inline validation run on every edit; blocks saving while set. */
   validate?: SettingValidator;
   /**
@@ -462,12 +483,37 @@ export const META: Record<string, SettingMeta> = {
   // registry key, homed at customization/header to MATCH the server registry
   // placement (vidra-core instancesettings: PageCustomization/"header") so
   // client fallback and server metadata agree.
+  // CUSTOMIZATION / Theme (config-parity W5): seeds the pre-paint bootstrap;
+  // a visitor's own stored theme choice always wins.
+  default_theme: {
+    label: "Default theme",
+    help: "The appearance for visitors who have not picked a theme of their own. “System” follows each visitor’s device setting.",
+    control: "enum-segmented",
+    options: [
+      { value: "system", label: "System" },
+      { value: "light", label: "Light" },
+      { value: "dark", label: "Dark" },
+    ],
+    page: "customization",
+    section: "theme",
+  },
   header_hide_instance_name: {
     label: "Hide the instance name in the header",
     help: "Shows the header logo alone. Only takes effect while a header logo is uploaded (General → Branding) — without one the name always shows, so the header is never empty.",
     control: "toggle",
     page: "customization",
     section: "header",
+  },
+  // CUSTOMIZATION / Player (config-parity W5). One key deliberately seeds
+  // BOTH start-on-open and autoplay-next (documented deviation from
+  // PeerTube's start-on-open-only auto_play); an explicit per-user or
+  // in-session preference is never overridden.
+  default_player_autoplay: {
+    label: "Autoplay",
+    help: "Whether playback starts when a watch page opens and the next video queues up when one ends — for viewers who have not set their own preference. Signed-in players’ saved settings always win.",
+    control: "toggle",
+    page: "customization",
+    section: "player",
   },
   // GENERAL / Broadcast message (config-parity W3): message/level/dismissable
   // are progressively disclosed under the master toggle.
@@ -501,6 +547,51 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "broadcast",
     parent: "broadcast_enabled",
+  },
+  // GENERAL / Landing & browse defaults (config-parity W5). URL params and a
+  // viewer's own choices always win — these seed visitors who chose nothing.
+  default_landing_page: {
+    label: "Landing page",
+    help: "What the front page shows a visitor who has not picked anything. “Homepage document” needs an admin-authored homepage (the Homepage page) and shows the default feed until one is enabled.",
+    control: "enum-segmented",
+    options: [
+      { value: "home-recent", label: "Default feed" },
+      { value: "trending", label: "Trending" },
+      { value: "local", label: "Local feed" },
+      { value: "home", label: "Homepage document" },
+    ],
+    page: "general",
+    section: "browse",
+  },
+  default_feed_sort: {
+    label: "Default feed sort",
+    help: "How the browse feed is ordered before a viewer picks a sort of their own.",
+    control: "enum-segmented",
+    options: [
+      { value: "recent", label: "Recent" },
+      { value: "popular", label: "Popular" },
+      { value: "trending", label: "Trending" },
+    ],
+    page: "general",
+    section: "browse",
+  },
+  default_feed_scope: {
+    label: "Default feed reach",
+    help: "Whether the feed starts with only this instance’s videos or mixes in federated content. Viewers can always switch.",
+    control: "enum-segmented",
+    options: [
+      { value: "local", label: "Local only" },
+      { value: "all", label: "Local + federated" },
+    ],
+    page: "general",
+    section: "browse",
+  },
+  miniature_prefer_author_display_name: {
+    label: "Credit videos to the uploader, not the channel",
+    help: "Video cards show the uploader account’s display name instead of the channel name.",
+    control: "toggle",
+    page: "general",
+    section: "browse",
   },
   // GENERAL / Social
   support_text: {

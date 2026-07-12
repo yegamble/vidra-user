@@ -12,6 +12,8 @@ import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { api, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { useInstanceDefaults } from "@/lib/instance-defaults";
+import { miniatureDisplayName } from "@/lib/miniature-name";
 import type { SearchFilters } from "@/lib/search-url";
 
 type Status = "idle" | "loading" | "error" | "ready";
@@ -29,6 +31,10 @@ function SearchResultRow({ video, onDeleted }: { video: Video; onDeleted: () => 
   // origin-domain badge, and uses the locally cached remote thumbnail. Its
   // channel_handle is a "name@domain" identity, not a local route.
   const isRemote = video.remote === true;
+  // Miniature attribution (config-parity W5): same rule as the grid VideoCard.
+  const preferAuthorName =
+    useInstanceDefaults()?.miniature_prefer_author_display_name === true;
+  const attributionName = miniatureDisplayName(video, preferAuthorName);
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
@@ -102,15 +108,13 @@ function SearchResultRow({ video, onDeleted }: { video: Video; onDeleted: () => 
         {video.channel_handle ? (
           isRemote ? (
             // Remote channel identity ("name@domain") — not a local channel route.
-            <span className="truncate text-xs text-fg-muted">
-              {video.channel_display_name || video.channel_handle}
-            </span>
+            <span className="truncate text-xs text-fg-muted">{attributionName}</span>
           ) : (
             <Link
               href={`/channels/${video.channel_handle}`}
               className="focus-ring relative z-10 w-fit max-w-full truncate rounded text-xs text-fg-muted transition-colors hover:text-fg"
             >
-              {video.channel_display_name || video.channel_handle}
+              {attributionName}
             </Link>
           )
         ) : null}

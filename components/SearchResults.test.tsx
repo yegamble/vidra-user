@@ -32,6 +32,9 @@ vi.mock("@/lib/api", () => ({
   api: { searchVideos: vi.fn() },
   remoteVideoThumbnailUrl: (id: string) => `/remote/${id}/thumbnail`,
   videoThumbnailUrl: (id: string) => `/videos/${id}/thumbnail`,
+  // The W5 miniature-name hook primes this shared fetch; rejecting keeps the
+  // instance defaults null (today's channel attribution).
+  getInstanceCached: vi.fn(() => Promise.reject(new Error("no backend in unit tests"))),
 }));
 
 import { api, type Video } from "@/lib/api";

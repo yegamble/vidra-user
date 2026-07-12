@@ -509,6 +509,81 @@ test("segmented policy + multi-select changes patch as enum string and JSON arra
   expect(patchBody).toEqual({ sensitive_content_policy: "blur", instance_categories: ["7"] });
 });
 
+test("W5 browse/landing/player defaults: enum pickers on their pages, one patch per page", async ({
+  page,
+}) => {
+  // The shared payload plus the six W5 keys (config-parity W5: browse keys on
+  // general/browse, theme + autoplay on customization) — kept local so the
+  // other tests' section expectations stay untouched.
+  const enumRow = (key: string, value: string, options: string[]) => ({
+    key,
+    type: "enum",
+    value,
+    default: value,
+    overridden: false,
+    options,
+  });
+  const w5Settings = {
+    settings: [
+      ...settings.settings,
+      enumRow("default_landing_page", "home-recent", ["home-recent", "trending", "local", "home"]),
+      enumRow("default_feed_sort", "recent", ["recent", "popular", "trending"]),
+      enumRow("default_feed_scope", "local", ["local", "all"]),
+      bool("miniature_prefer_author_display_name"),
+      enumRow("default_theme", "system", ["system", "light", "dark"]),
+      bool("default_player_autoplay", true),
+    ],
+  };
+  await signIn(page, "admin");
+  await page.route(SETTINGS, (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: w5Settings });
+    return route.fallback();
+  });
+  await openConfig(page);
+
+  // General → Landing & browse defaults: segmented enum pickers + the flag.
+  await expect(
+    page.getByRole("heading", { name: "Landing & browse defaults" }),
+  ).toBeVisible();
+  const landing = page.getByRole("group", { name: "Landing page" });
+  await expect(landing.getByRole("button", { name: "Default feed" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await landing.getByRole("button", { name: "Trending" }).click();
+  const feedSort = page.getByRole("group", { name: "Default feed sort" });
+  await feedSort.getByRole("button", { name: "Popular" }).click();
+
+  let patchBody: unknown = null;
+  await page.route(SETTINGS, (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    patchBody = route.request().postDataJSON();
+    const updated = {
+      settings: w5Settings.settings.map((s) => {
+        if (s.key === "default_landing_page") return { ...s, value: "trending", overridden: true };
+        if (s.key === "default_feed_sort") return { ...s, value: "popular", overridden: true };
+        return s;
+      }),
+    };
+    return route.fulfill({ json: updated });
+  });
+  await page.getByRole("button", { name: "Save Landing & browse defaults" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  expect(patchBody).toEqual({ default_landing_page: "trending", default_feed_sort: "popular" });
+
+  // Customization → the theme picker (Theme section) and the player toggle
+  // (its own Player section) render there, matching the backend registry.
+  await configNav(page).getByRole("link", { name: "Customization" }).click();
+  await expect(page).toHaveURL(/\/admin\/config\/customization$/);
+  const theme = page.getByRole("group", { name: "Default theme" });
+  await expect(theme.getByRole("button", { name: "System" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByRole("heading", { name: "Player" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Autoplay" })).toBeChecked();
+});
+
 test("broadcast: progressive disclosure, markdown preview, level picker, one patch", async ({
   page,
 }) => {

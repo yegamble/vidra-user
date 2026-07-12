@@ -19,9 +19,12 @@ import { SpeedMenu } from "@/components/SpeedMenu";
 import { videoThumbnailUrl, type Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
+import { primeInstanceDefaults } from "@/lib/instance-defaults";
 import {
+  readStartOnOpen,
   readStoredAutoplay,
   serverAutoplay,
+  serverStartOnOpen,
   subscribeAutoplay,
   toggleAutoplay,
 } from "@/lib/player-autoplay";
@@ -162,6 +165,15 @@ export function VideoPlayer({
     readStoredAutoplay,
     serverAutoplay,
   );
+
+  // Start-on-open (config-parity W5): the instance's defaults.player_autoplay
+  // seeds whether the WATCH player attempts playback as soon as it opens
+  // (embeds keep waiting for a click — an iframe must never surprise its host
+  // page). false until the instance defaults land client-side; an explicit
+  // session/per-user autoplay preference always wins over the operator seed
+  // (see lib/player-autoplay). The kick lives in primeInstanceDefaults(),
+  // fired from the mount effect below.
+  const startOnOpen = useSyncExternalStore(subscribeAutoplay, readStartOnOpen, serverStartOnOpen);
 
   // The signed-in user's effective player defaults (PLAY-07 / W1.6). speed,
   // theater and autoplay flow through the session stores above (whose fallback is
@@ -311,6 +323,28 @@ export function VideoPlayer({
     );
     btn?.focus();
   }, [ended]);
+
+  // ---- start-on-open (config-parity W5) ----
+
+  // One playback attempt per video while enabled (watch variant only). The
+  // guard ref resets when the video changes so navigating watch→watch can
+  // auto-start again, but a viewer's explicit pause is never fought — once
+  // attempted, this never plays again for the same video. The attempt is
+  // best-effort: the browser may still block it (autoplay policy) and the
+  // rejection is swallowed, leaving the normal click-to-play surface.
+  const startAttempted = useRef(false);
+  useEffect(() => {
+    startAttempted.current = false;
+  }, [video.id]);
+  useEffect(() => {
+    primeInstanceDefaults();
+    if (variant !== "watch" || !startOnOpen || startAttempted.current) return;
+    const el = videoRef.current;
+    if (!el || !el.paused) return;
+    startAttempted.current = true;
+    // el.play() may return undefined in non-browser test DOMs.
+    void el.play()?.catch(() => {});
+  }, [startOnOpen, variant, video.id, videoRef]);
 
   // ---- media-element state subscription (mounted once) ----
 
