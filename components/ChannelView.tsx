@@ -191,7 +191,12 @@ export function ChannelView({ handle }: { handle: string }) {
                   >
                     {sortedVideos.slice(0, visibleCount).map((video) => (
                       <li key={video.id}>
-                        <ChannelVideoCard video={video} />
+                        <ChannelVideoCard
+                          video={video}
+                          onDeleted={() =>
+                            setVideos((cur) => cur.filter((v) => v.id !== video.id))
+                          }
+                        />
                       </li>
                     ))}
                   </ul>

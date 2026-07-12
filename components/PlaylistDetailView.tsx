@@ -185,7 +185,14 @@ export function PlaylistDetailView({ id }: { id: string }) {
         <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {playlist.videos.map((video, index) => (
             <li key={video.id} className="flex flex-col gap-2">
-              <VideoCard video={video} />
+              <VideoCard
+                video={video}
+                onDeleted={() =>
+                  setPlaylist((p) =>
+                    p ? { ...p, videos: p.videos.filter((v) => v.id !== video.id) } : p,
+                  )
+                }
+              />
               {isOwner ? (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex gap-2">

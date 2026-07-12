@@ -15,7 +15,14 @@ import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 // channel, so repeating its identity per tile is noise. The channel-videos list
 // only ever carries this channel's own (local) videos, so there is no remote /
 // federated branch here.
-export function ChannelVideoCard({ video }: { video: Video }) {
+export function ChannelVideoCard({
+  video,
+  onDeleted,
+}: {
+  video: Video;
+  /** See VideoCard.onDeleted — grid parents remove the video from state so the grid reflows. */
+  onDeleted?: () => void;
+}) {
   const [removed, setRemoved] = useState(false);
   const watchHref = `/videos/${video.id}`;
 
@@ -75,7 +82,7 @@ export function ChannelVideoCard({ video }: { video: Video }) {
             </p>
           ) : null}
         </div>
-        <VideoActionsMenu video={video} compact onDeleted={() => setRemoved(true)} />
+        <VideoActionsMenu video={video} compact onDeleted={onDeleted ?? (() => setRemoved(true))} />
       </div>
     </div>
   );
