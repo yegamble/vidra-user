@@ -47,6 +47,14 @@ let current: PlayerSettings = DEFAULT_PLAYER_SETTINGS;
 // underneath (config-parity W5: lib/player-autoplay) use this to tell "the
 // user's stored preference" apart from "nobody said anything yet".
 let hydrated = false;
+// Whether the per-user settings QUESTION has been answered at all this page
+// load: false while the boot auth restore / the signed-in GET /me/player-
+// settings is still in flight, true once WatchView either hydrated a signed-in
+// user's settings or reset for an anonymous visitor. Side-effectful seeds that
+// must never beat a stored pref to the punch (W5 start-on-open) hold until
+// this settles; a failed settings fetch deliberately never settles — better to
+// keep click-to-play than to auto-start a user who may have said no.
+let settled = false;
 
 /** getPlayerSettingsSnapshot returns the current effective per-user defaults.
  * Read by the session stores' fallback and by getSnapshot below. */
@@ -60,6 +68,15 @@ export function arePlayerSettingsHydrated(): boolean {
   return hydrated;
 }
 
+/** True once the per-user layer has RESOLVED this page load — hydrated for a
+ * signed-in user, or reset for an anonymous one. While false, the per-user
+ * answer is still unknown (auth restoring / settings fetch in flight), so
+ * instance-seeded auto-behaviors must hold (see lib/player-autoplay
+ * readStartOnOpen). */
+export function arePlayerSettingsSettled(): boolean {
+  return settled;
+}
+
 function broadcast(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(PLAYER_SETTINGS_EVENT));
@@ -71,14 +88,27 @@ function broadcast(): void {
 export function hydratePlayerSettings(settings: PlayerSettings): void {
   current = settings;
   hydrated = true;
+  settled = true;
   broadcast();
 }
 
-/** resetPlayerSettings drops back to the baked defaults (on sign-out) so a
- * signed-out session never inherits the previous user's per-user defaults. */
+/** resetPlayerSettings drops back to the baked defaults (on sign-out, or when
+ * the visitor resolves as anonymous) so a signed-out session never inherits
+ * the previous user's per-user defaults. Either way the per-user question is
+ * now ANSWERED — "there is no per-user layer" — so this also settles. */
 export function resetPlayerSettings(): void {
   current = DEFAULT_PLAYER_SETTINGS;
   hydrated = false;
+  settled = true;
+  broadcast();
+}
+
+/** Test-only: return to the pristine boot state (nothing hydrated, per-user
+ * layer still UNRESOLVED) so tests can pin the pre-settlement behavior. */
+export function unsettlePlayerSettingsForTests(): void {
+  current = DEFAULT_PLAYER_SETTINGS;
+  hydrated = false;
+  settled = false;
   broadcast();
 }
 

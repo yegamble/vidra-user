@@ -169,10 +169,13 @@ export function VideoPlayer({
   // Start-on-open (config-parity W5): the instance's defaults.player_autoplay
   // seeds whether the WATCH player attempts playback as soon as it opens
   // (embeds keep waiting for a click — an iframe must never surprise its host
-  // page). false until the instance defaults land client-side; an explicit
-  // session/per-user autoplay preference always wins over the operator seed
-  // (see lib/player-autoplay). The kick lives in primeInstanceDefaults(),
-  // fired from the mount effect below.
+  // page). false until the instance defaults land client-side AND the
+  // per-user settings layer settles (WatchView hydrates a signed-in user's
+  // autoplay_next / resets for anonymous) — so the operator seed can never
+  // race ahead of, let alone override, an explicit session/per-user
+  // preference (see lib/player-autoplay readStartOnOpen). The kick lives in
+  // primeInstanceDefaults(), fired from the mount effect below; settlement
+  // re-notifies through the same subscription, re-running the effect.
   const startOnOpen = useSyncExternalStore(subscribeAutoplay, readStartOnOpen, serverStartOnOpen);
 
   // The signed-in user's effective player defaults (PLAY-07 / W1.6). speed,

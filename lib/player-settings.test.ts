@@ -6,14 +6,17 @@ import {
   DEFAULT_PLAYER_SETTINGS,
   PLAYER_SETTINGS_EVENT,
   QUALITY_OPTIONS,
+  arePlayerSettingsHydrated,
+  arePlayerSettingsSettled,
   getPlayerSettingsSnapshot,
   hydratePlayerSettings,
   matchQualityLevel,
   resetPlayerSettings,
+  unsettlePlayerSettingsForTests,
 } from "./player-settings";
 
 afterEach(() => {
-  resetPlayerSettings();
+  unsettlePlayerSettingsForTests(); // pristine boot state, incl. settled=false
   vi.restoreAllMocks();
 });
 
@@ -46,6 +49,21 @@ describe("effective-settings holder", () => {
     expect(getPlayerSettingsSnapshot()).toEqual(server);
     resetPlayerSettings();
     expect(getPlayerSettingsSnapshot()).toEqual(DEFAULT_PLAYER_SETTINGS);
+  });
+
+  it("tracks hydration and settlement separately (W5 start-on-open hold)", () => {
+    // Boot: nothing hydrated, per-user layer UNRESOLVED.
+    expect(arePlayerSettingsHydrated()).toBe(false);
+    expect(arePlayerSettingsSettled()).toBe(false);
+    // A signed-in user's settings landing settles the question…
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, autoplay_next: false });
+    expect(arePlayerSettingsHydrated()).toBe(true);
+    expect(arePlayerSettingsSettled()).toBe(true);
+    // …and so does resolving as anonymous / signing out: no per-user layer,
+    // but the question is ANSWERED (settled without hydration).
+    resetPlayerSettings();
+    expect(arePlayerSettingsHydrated()).toBe(false);
+    expect(arePlayerSettingsSettled()).toBe(true);
   });
 
   it("broadcasts the settings event on hydrate and reset", () => {

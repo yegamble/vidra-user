@@ -41,8 +41,10 @@ import {
 import { getVideoConfigCached, resolveOptionLabel } from "@/lib/api/video-config";
 import type { Channel, Video, VideoConfigResponse } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { feedDefaultsForLanding, resolveLandingPage } from "@/lib/feed-defaults";
 import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { hydratePlayerSettings, resetPlayerSettings } from "@/lib/player-settings";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { parseStartTime } from "@/lib/start-time";
@@ -65,6 +67,18 @@ const RESUME_MIN_SECONDS = 5;
 // position.
 export function WatchView({ id }: { id: string }) {
   const { status: authStatus } = useSession();
+  // The instance browse defaults (config-parity W5). The tag chips below link
+  // to the recent feed filtered by tag; feedHref keeps ?sort= only when it
+  // differs from the effective default, so the URL must be built against the
+  // same landing-aware baseline the home page resolves with — otherwise a
+  // non-recent default_feed_sort would silently reinterpret a bare /?tag=…
+  // as the operator's default sort. null (defaults not landed / no backend)
+  // reproduces the shipped recent/local baseline, i.e. the pre-W5 URLs.
+  const instanceDefaults = useInstanceDefaults();
+  const tagFeedDefaults = feedDefaultsForLanding(
+    resolveLandingPage(instanceDefaults),
+    instanceDefaults,
+  );
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<Video | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -502,7 +516,7 @@ export function WatchView({ id }: { id: string }) {
               {video.tags.map((tag) => (
                 <li key={tag}>
                   <Link
-                    href={feedHref("recent", { tag })}
+                    href={feedHref("recent", { tag }, tagFeedDefaults)}
                     aria-label={`Browse videos tagged ${tag}`}
                     className="focus-ring inline-flex rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
                   >
