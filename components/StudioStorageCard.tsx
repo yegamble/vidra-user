@@ -7,11 +7,13 @@ import type { QuotaStatus } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 
 // StudioStorageCard — the design's Studio "Storage" card, bound to the REAL
-// GET /api/v1/me/quota contract ({ used_bytes, quota_bytes|null }). Borderless
-// surface-muted card: "Storage" label + "X of Y" (or "X used" when unlimited) +
-// a 5px progress bar (surface-strong track, fg fill). Purely informational, so a
-// load failure hides it rather than showing a broken/faked meter (the frontend
-// truthfulness rule — never invent numbers).
+// GET /api/v1/me/quota contract ({ used_bytes, quota_bytes|null, daily_used_bytes,
+// daily_quota_bytes|null }). Borderless surface-muted card: "Storage" label +
+// "X of Y" (or "X used" when unlimited) + a 5px progress bar (surface-strong
+// track, fg fill), plus a "Daily uploads" footnote with the remaining rolling-24h
+// headroom when the instance sets a daily quota (config-parity W7). Purely
+// informational, so a load failure hides it rather than showing a broken/faked
+// meter (the frontend truthfulness rule — never invent numbers).
 export function StudioStorageCard() {
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
 
@@ -30,6 +32,10 @@ export function StudioStorageCard() {
 
   const { used_bytes: used, quota_bytes: total } = quota;
   const unlimited = total === null;
+  // Rolling daily window (W7): null quota = no daily limit configured; shown
+  // only when finite. Remaining clamps at 0 for an already-exhausted window.
+  const dailyQuota = quota.daily_quota_bytes ?? null;
+  const dailyRemaining = dailyQuota === null ? null : Math.max(0, dailyQuota - quota.daily_used_bytes);
   // Clamp the fill to 0–100 so an over-quota account (used > quota) can't paint a
   // bar wider than its track.
   const percent =
@@ -60,6 +66,14 @@ export function StudioStorageCard() {
           <div className="h-full rounded-full bg-fg" style={{ width: `${percent}%` }} />
         </div>
       )}
+      {dailyRemaining !== null && dailyQuota !== null ? (
+        <div className="flex items-center justify-between gap-3 text-[12.5px]">
+          <span className="text-fg-muted">Daily uploads</span>
+          <span className="tabular-nums text-fg-muted">
+            {formatBytes(dailyRemaining)} left of {formatBytes(dailyQuota)} per 24h
+          </span>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -31,7 +31,7 @@ function item(id: string, status: BatchItemStatus, total = 10, extra: Partial<Ba
 }
 
 function quota(used: number, total: number | null): QuotaStatus {
-  return { used_bytes: used, quota_bytes: total };
+  return { used_bytes: used, quota_bytes: total, daily_used_bytes: 0, daily_quota_bytes: null };
 }
 
 describe("titleFromFilename", () => {

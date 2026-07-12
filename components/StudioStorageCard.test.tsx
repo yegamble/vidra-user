@@ -23,7 +23,7 @@ afterEach(() => {
 describe("StudioStorageCard", () => {
   it("renders used-of-quota with a clamped progress bar", async () => {
     // 5 GiB of 20 GiB → 25%.
-    mockQuota.mockResolvedValue({ used_bytes: 5 * GB, quota_bytes: 20 * GB });
+    mockQuota.mockResolvedValue({ used_bytes: 5 * GB, quota_bytes: 20 * GB, daily_used_bytes: 0, daily_quota_bytes: null });
     render(<StudioStorageCard />);
 
     await waitFor(() => expect(screen.getByText("5.0 GB of 20.0 GB")).toBeTruthy());
@@ -32,7 +32,7 @@ describe("StudioStorageCard", () => {
   });
 
   it("caps the bar at 100% when usage exceeds the quota", async () => {
-    mockQuota.mockResolvedValue({ used_bytes: 30 * GB, quota_bytes: 20 * GB });
+    mockQuota.mockResolvedValue({ used_bytes: 30 * GB, quota_bytes: 20 * GB, daily_used_bytes: 0, daily_quota_bytes: null });
     render(<StudioStorageCard />);
 
     const bar = await screen.findByRole("progressbar", { name: "Storage used" });
@@ -40,12 +40,50 @@ describe("StudioStorageCard", () => {
   });
 
   it("shows an unlimited state without a progress bar", async () => {
-    mockQuota.mockResolvedValue({ used_bytes: 3 * GB, quota_bytes: null });
+    mockQuota.mockResolvedValue({ used_bytes: 3 * GB, quota_bytes: null, daily_used_bytes: 0, daily_quota_bytes: null });
     render(<StudioStorageCard />);
 
     await waitFor(() => expect(screen.getByText("3.0 GB used")).toBeTruthy());
     expect(screen.getByText("Unlimited on this instance.")).toBeTruthy();
     expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("shows the rolling daily headroom when a daily quota is set (W7)", async () => {
+    mockQuota.mockResolvedValue({
+      used_bytes: 3 * GB,
+      quota_bytes: null,
+      daily_used_bytes: 1 * GB,
+      daily_quota_bytes: 4 * GB,
+    });
+    render(<StudioStorageCard />);
+
+    await waitFor(() => expect(screen.getByText("Daily uploads")).toBeTruthy());
+    expect(screen.getByText("3.0 GB left of 4.0 GB per 24h")).toBeTruthy();
+  });
+
+  it("clamps the daily headroom at zero when the window is exhausted", async () => {
+    mockQuota.mockResolvedValue({
+      used_bytes: 0,
+      quota_bytes: null,
+      daily_used_bytes: 6 * GB,
+      daily_quota_bytes: 4 * GB,
+    });
+    render(<StudioStorageCard />);
+
+    await waitFor(() => expect(screen.getByText("0 B left of 4.0 GB per 24h")).toBeTruthy());
+  });
+
+  it("hides the daily row while no daily quota is configured", async () => {
+    mockQuota.mockResolvedValue({
+      used_bytes: 3 * GB,
+      quota_bytes: null,
+      daily_used_bytes: 0,
+      daily_quota_bytes: null,
+    });
+    render(<StudioStorageCard />);
+
+    await waitFor(() => expect(screen.getByText("3.0 GB used")).toBeTruthy());
+    expect(screen.queryByText("Daily uploads")).toBeNull();
   });
 
   it("renders nothing when the quota lookup fails", async () => {

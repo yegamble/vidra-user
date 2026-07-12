@@ -153,6 +153,7 @@ export function SettingsView() {
         initialDisplayName={user.display_name}
         initialBio={user.bio}
         initialUnlisted={user.unlisted ?? false}
+        initialHistoryEnabled={user.history_enabled ?? true}
         updateProfile={updateProfile}
       />
       <ProfileImagesSection
@@ -560,16 +561,19 @@ function ProfileForm({
   initialDisplayName,
   initialBio,
   initialUnlisted,
+  initialHistoryEnabled,
   updateProfile,
 }: {
   initialDisplayName: string;
   initialBio: string;
   initialUnlisted: boolean;
+  initialHistoryEnabled: boolean;
   updateProfile: (input: UpdateProfileRequest) => Promise<void>;
 }) {
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [bio, setBio] = useState(initialBio);
   const [unlisted, setUnlisted] = useState(initialUnlisted);
+  const [historyEnabled, setHistoryEnabled] = useState(initialHistoryEnabled);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
@@ -579,7 +583,7 @@ function ProfileForm({
     setFormError(null);
     setState("saving");
     try {
-      await updateProfile({ display_name: displayName, bio, unlisted });
+      await updateProfile({ display_name: displayName, bio, unlisted, history_enabled: historyEnabled });
       setState("saved");
     } catch (err) {
       setState("idle");
@@ -690,6 +694,30 @@ function ProfileForm({
           <span id="settings-unlisted-help" className="text-xs text-fg-muted">
             Your channels and videos stay reachable by direct link but no longer appear in the
             public feed or search on this instance.
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-2">
+        <input
+          id="settings-history-enabled"
+          name="settings-history-enabled"
+          type="checkbox"
+          checked={historyEnabled}
+          onChange={(e) => {
+            setHistoryEnabled(e.target.checked);
+            setState("idle");
+          }}
+          aria-describedby="settings-history-enabled-help"
+          className="focus-ring mt-0.5 h-4 w-4 rounded border-border accent-accent"
+        />
+        <div className="flex flex-col">
+          <label htmlFor="settings-history-enabled" className="text-sm font-medium text-fg">
+            Keep my watch history
+          </label>
+          <span id="settings-history-enabled-help" className="text-xs text-fg-muted">
+            While off, videos you watch are not recorded and resume positions are not saved.
+            Entries already in your history are kept — clear them from the History page.
           </span>
         </div>
       </div>

@@ -646,6 +646,9 @@ function importOrUploadError(err: unknown, source: "file" | "url"): string {
     if (err.code === "quota_exceeded") {
       return "This upload would exceed your storage quota. Free up space or remove older videos and try again.";
     }
+    if (err.code === "daily_quota_exceeded") {
+      return "This upload would exceed your daily upload limit. Try again later — the limit is a rolling 24-hour window.";
+    }
     if (source === "url" && err.status === 422) {
       return "Couldn't fetch that URL — it must be a public link to a video file.";
     }
