@@ -70,7 +70,10 @@ describe("AdminInstanceConfigView limits (VOD page)", () => {
     expect(sessions.getAttribute("type")).toBe("number");
 
     // A bytes-kind limit at 0 shows the "Unlimited" hint (formatBytes echo).
-    expect(screen.getByText("Unlimited")).toBeTruthy();
+    // Two match here: default_user_quota_bytes (fixture row) and the W7
+    // default_user_daily_quota_bytes META key (no server row yet → disabled
+    // placeholder row at 0).
+    expect(screen.getAllByText("Unlimited").length).toBeGreaterThan(0);
 
     // Editing the number field and saving sends a JSON NUMBER (not a string),
     // scoped to only the changed key.

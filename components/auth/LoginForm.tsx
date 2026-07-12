@@ -102,6 +102,9 @@ export function LoginForm({
       setError(
         errorMessage(err, "Something went wrong. Please try again.", {
           "401": "Invalid email or password.",
+          // W7 verification hold: valid credentials, account not yet verified.
+          email_verification_required:
+            "Verify your email address first — check your inbox for the verification link, then sign in again.",
         }),
       );
       setSubmitting(false);

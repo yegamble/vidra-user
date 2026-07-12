@@ -30,18 +30,28 @@ export function SignupForm({
 
   const [regState, setRegState] = useState<RegState>("loading");
   const [requiresApproval, setRequiresApproval] = useState(false);
+  // W7 signup-policy fields from GET /instance: the effective
+  // email-verification gate, the age-attestation threshold (0 = off), and the
+  // machine-readable closure reason ("user_limit_reached" when the instance
+  // is full).
+  const [requiresVerification, setRequiresVerification] = useState(false);
+  const [minimumAge, setMinimumAge] = useState(0);
+  const [closedReason, setClosedReason] = useState("");
   const [providers, setProviders] = useState<string[]>([]);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [note, setNote] = useState("");
+  const [ageAttested, setAgeAttested] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(
     oauthError ? oauthErrorMessage(oauthError) : null,
   );
   const [submitting, setSubmitting] = useState(false);
-  // Set when register answered 202: the signup awaits admin approval.
+  // Set when register answered 202: the signup awaits admin approval, or the
+  // account is held until its email is verified (W7).
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [pendingKind, setPendingKind] = useState<"approval" | "verification">("approval");
   // Sticky OAuth-landing marker (see LoginForm): while the boot silent-refresh
   // decides, a spinner shows; a settled "anon" is surfaced as an honest error.
   const [oauthLanding] = useState(oauthPending && !oauthError);
@@ -66,6 +76,9 @@ export function SignupForm({
       .getInstance(controller.signal)
       .then((instance) => {
         setRequiresApproval(instance.registration_requires_approval === true);
+        setRequiresVerification(instance.registration_requires_email_verification === true);
+        setMinimumAge(instance.registration_minimum_age ?? 0);
+        setClosedReason(instance.registration_disabled_reason ?? "");
         setProviders(instance.oauth_providers ?? []);
         setRegState(instance.registration_enabled ? "open" : "closed");
       })
@@ -88,10 +101,13 @@ export function SignupForm({
         email,
         password,
         note: note.trim() || undefined,
+        age_attestation: minimumAge > 0 ? ageAttested : undefined,
       });
-      if (outcome === "pending") {
-        // The instance requires approval: no account/session exists yet — show
-        // the awaiting-approval confirmation instead of navigating home signed in.
+      if (outcome === "pending" || outcome === "verification_pending") {
+        // No session yet: the signup awaits admin approval, or the account is
+        // held until the emailed verification link is confirmed (W7) — show
+        // the matching confirmation instead of navigating home signed in.
+        setPendingKind(outcome === "verification_pending" ? "verification" : "approval");
         setPendingEmail(email);
         return;
       }
@@ -114,6 +130,23 @@ export function SignupForm({
   }
 
   if (pendingEmail) {
+    if (pendingKind === "verification") {
+      return (
+        <EmptyState
+          title="Check your email"
+          message={
+            <>
+              We sent a verification link to <span className="font-medium">{pendingEmail}</span>.
+              Follow it to activate your account, then{" "}
+              <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
+                sign in
+              </Link>
+              . You cannot sign in until your email is verified.
+            </>
+          }
+        />
+      );
+    }
     return (
       <EmptyState
         title="Your account is awaiting approval"
@@ -153,12 +186,17 @@ export function SignupForm({
       : null);
 
   if (regState === "closed") {
+    // The user-limit closure gets honest copy (W7): the instance is full, not
+    // deliberately closed by policy.
+    const limitReached = closedReason === "user_limit_reached";
     return (
       <EmptyState
-        title="Registration is closed"
+        title={limitReached ? "This instance is full" : "Registration is closed"}
         message={
           <>
-            This instance is not accepting new accounts right now.{" "}
+            {limitReached
+              ? "This instance has reached its maximum number of accounts and cannot accept new signups right now."
+              : "This instance is not accepting new accounts right now."}{" "}
             <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
               Sign in
             </Link>{" "}
@@ -233,6 +271,31 @@ export function SignupForm({
         />
       ) : null}
 
+      {minimumAge > 0 ? (
+        <div className="flex items-start gap-2.5">
+          <input
+            id="signup-age-attestation"
+            name="signup-age-attestation"
+            type="checkbox"
+            checked={ageAttested}
+            onChange={(e) => setAgeAttested(e.target.checked)}
+            aria-invalid={fieldErrors.age_attestation ? true : undefined}
+            aria-describedby={fieldErrors.age_attestation ? "signup-age-attestation-error" : undefined}
+            className="focus-ring mt-0.5 h-4 w-4 rounded border-border accent-accent"
+          />
+          <div className="flex flex-col">
+            <label htmlFor="signup-age-attestation" className="text-sm font-medium text-fg">
+              I am at least {minimumAge} years old
+            </label>
+            {fieldErrors.age_attestation ? (
+              <p id="signup-age-attestation-error" className="text-xs text-danger">
+                {fieldErrors.age_attestation}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <Button type="submit" size="lg" className="w-full" disabled={submitting}>
         {submitting ? "Creating account…" : "Create account"}
       </Button>
@@ -242,6 +305,14 @@ export function SignupForm({
           <InfoIcon size={14} strokeWidth={2} className="mt-0.5 shrink-0" />
           New accounts on this instance require administrator approval. Your signup will be
           reviewed before you can sign in.
+        </p>
+      ) : null}
+
+      {requiresVerification ? (
+        <p className="flex items-start gap-2.5 rounded-xl bg-surface-muted px-3.5 py-3 text-[13px] leading-relaxed text-fg-muted">
+          <InfoIcon size={14} strokeWidth={2} className="mt-0.5 shrink-0" />
+          This instance requires email verification. After signing up, follow the link we email
+          you before you can sign in.
         </p>
       ) : null}
 

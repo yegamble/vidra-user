@@ -34,9 +34,11 @@ type SessionStatus = "restoring" | "anon" | "authed";
 /**
  * Outcome of a register call: "created" — the account exists and the session is
  * live; "pending" — the instance requires approval, a request was filed and
- * nobody is signed in.
+ * nobody is signed in; "verification_pending" — the account exists but is held
+ * behind the email-verification gate (W7): no session until the emailed link
+ * is confirmed.
  */
-export type RegisterOutcome = "created" | "pending";
+export type RegisterOutcome = "created" | "pending" | "verification_pending";
 
 /**
  * Outcome of a login call: "authed" — the session is live; "mfa_required" —
@@ -218,9 +220,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(
     async (input: Omit<RegisterRequest, "cookie_mode">): Promise<RegisterOutcome> => {
       const res = await authApi.register(input);
-      // A 202 means the instance requires approval: a pending request was filed
-      // and there is no session to apply.
-      if (!res || !("token" in res)) return "pending";
+      // A 202 means no session was issued: the signup awaits admin approval
+      // ("pending") or the account is held behind the email-verification gate
+      // ("verification_pending", W7) — the body's status says which.
+      if (!res || !("token" in res)) {
+        return res && "status" in res && res.status === "verification_pending"
+          ? "verification_pending"
+          : "pending";
+      }
       apply(res);
       return "created";
     },

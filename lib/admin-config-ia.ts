@@ -801,6 +801,44 @@ export const META: Record<string, SettingMeta> = {
     section: "signup",
     parent: "registration_enabled",
   },
+  // Sign-up & new users (config-parity W7).
+  registration_require_email_verification: {
+    label: "Require email verification",
+    help: "New accounts must confirm their email address before they can sign in. Accounts created before this is turned on are never locked out. Composes with approval: approve first, then verify.",
+    control: "toggle",
+    page: "general",
+    section: "signup",
+    parent: "registration_enabled",
+    bootDep: {
+      note: "Outgoing mail is not configured on this server (SMTP), so verification emails cannot be sent. This gate has no effect until mail delivery is set up.",
+      isSatisfied: (instance) => instance.features?.mail !== false,
+    },
+  },
+  registration_user_limit: {
+    label: "Maximum number of accounts",
+    help: "New signups are refused once the instance holds this many accounts (the signup page explains why). 0 = unlimited.",
+    control: "number",
+    page: "general",
+    section: "signup",
+    parent: "registration_enabled",
+    validate: zeroOrIntRange(1, null, "Must be 0 (unlimited) or a positive number."),
+  },
+  registration_minimum_age: {
+    label: "Minimum age",
+    help: 'Signup requires ticking "I am at least N years old" — an attestation, no birthdate is collected. 0 = disabled; otherwise 1–150.',
+    control: "number",
+    page: "general",
+    section: "signup",
+    parent: "registration_enabled",
+    validate: zeroOrIntRange(1, 150, "Must be 0 (disabled) or between 1 and 150."),
+  },
+  new_user_history_enabled: {
+    label: "Watch history for new accounts",
+    help: "Whether accounts created from now on start with watch history enabled. Each user can change it later in their account settings; existing accounts are untouched.",
+    control: "toggle",
+    page: "general",
+    section: "signup",
+  },
   // GENERAL / Comments
   comments_enabled: {
     label: "Comments",
@@ -835,6 +873,13 @@ export const META: Record<string, SettingMeta> = {
   default_user_quota_bytes: {
     label: "Default storage quota per user",
     help: "Bytes each account may store. Per-user overrides still win. 0 = unlimited.",
+    control: "bytes",
+    page: "vod",
+    section: "uploads",
+  },
+  default_user_daily_quota_bytes: {
+    label: "Daily upload quota per user",
+    help: "Bytes each account may upload in a rolling 24-hour window (config-parity W7). Deleting videos does not refund the window. 0 = unlimited.",
     control: "bytes",
     page: "vod",
     section: "uploads",
