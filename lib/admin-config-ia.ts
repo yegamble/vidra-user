@@ -127,6 +127,13 @@ export type SectionDef = {
   id: string;
   title: string;
   description: string;
+  /**
+   * This section hosts a non-registry panel (e.g. the Branding assets
+   * manager) and must render even when no registry key lands in it — a
+   * registry-keyed section only renders once it has keys, but a panel
+   * section's content does not come from the registry at all.
+   */
+  alwaysRender?: boolean;
 };
 
 /** Every page's auto-render fallback section (the invariant's landing zone). */
@@ -158,6 +165,10 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       title: "Branding",
       description:
         "The imagery this instance presents: avatar, banner, header logos, favicon, and the social-card image.",
+      // The section's content is the InstanceBrandingManager panel (dedicated
+      // upload/delete endpoints, not registry keys), so it renders regardless
+      // of which registry keys the server places here.
+      alwaysRender: true,
     },
     {
       id: "broadcast",
@@ -243,6 +254,11 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       id: "theme",
       title: "Theme",
       description: "The default appearance for visitors who have not picked their own.",
+    },
+    {
+      id: "header",
+      title: "Header",
+      description: "How the site header presents this instance.",
     },
     {
       id: "email",
@@ -439,16 +455,19 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "identity",
   },
-  // GENERAL / Branding (config-parity W4). The asset slots themselves are NOT
-  // registry keys — they upload through dedicated admin endpoints and render
-  // as the InstanceBrandingManager panel in this section; only the companion
-  // toggle lives in the registry.
+  // CUSTOMIZATION / Header (config-parity W4). The branding ASSET slots are
+  // NOT registry keys — they upload through dedicated admin endpoints and
+  // render as the InstanceBrandingManager panel in the General page's
+  // Branding section (alwaysRender above); this companion toggle is the one
+  // registry key, homed at customization/header to MATCH the server registry
+  // placement (vidra-core instancesettings: PageCustomization/"header") so
+  // client fallback and server metadata agree.
   header_hide_instance_name: {
     label: "Hide the instance name in the header",
-    help: "Shows the header logo alone. Only takes effect while a header logo is uploaded — without one the name always shows, so the header is never empty.",
+    help: "Shows the header logo alone. Only takes effect while a header logo is uploaded (General → Branding) — without one the name always shows, so the header is never empty.",
     control: "toggle",
-    page: "general",
-    section: "branding",
+    page: "customization",
+    section: "header",
   },
   // GENERAL / Broadcast message (config-parity W3): message/level/dismissable
   // are progressively disclosed under the master toggle.
@@ -735,11 +754,12 @@ export type PageSection = {
 };
 
 /**
- * The render model for one config page: its non-empty sections in display
- * order (known sections first, then server-invented auto sections in
- * first-seen order, then "Other settings"), each with its keys — META keys in
- * META order (including keys the server does not return yet, which render
- * disabled), then unknown server keys in server order.
+ * The render model for one config page: its non-empty sections (plus
+ * alwaysRender panel sections, even key-less) in display order (known
+ * sections first, then server-invented auto sections in first-seen order,
+ * then "Other settings"), each with its keys — META keys in META order
+ * (including keys the server does not return yet, which render disabled),
+ * then unknown server keys in server order.
  */
 export function buildPageModel(
   page: ConfigPageId,
@@ -774,7 +794,9 @@ export function buildPageModel(
   const sections: PageSection[] = [];
   for (const def of known) {
     const keys = buckets.get(def.id);
-    if (keys && keys.length > 0) sections.push({ section: def, keys });
+    // A panel section (alwaysRender) is part of the page even with no
+    // registry keys — its content does not come from the registry.
+    if ((keys && keys.length > 0) || def.alwaysRender) sections.push({ section: def, keys: keys ?? [] });
   }
   for (const id of autoOrder) {
     const keys = buckets.get(id);

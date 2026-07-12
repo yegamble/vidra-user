@@ -330,8 +330,16 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   };
 
   const renderSection = ({ section, keys }: PageSection) => {
+    // Config-parity W4: the branding ASSETS are not registry keys — they
+    // manage themselves through dedicated upload/delete endpoints in the
+    // InstanceBrandingManager panel, which renders in this section
+    // independently of any registry key (the section is alwaysRender in the
+    // IA registry, so it exists even when the server homes its companion
+    // toggle elsewhere — the real backend places header_hide_instance_name
+    // at customization/header).
+    const isBrandingPanel = page === "general" && section.id === "branding";
     const visibleKeys = keys.filter(isVisible);
-    if (visibleKeys.length === 0) return null;
+    if (visibleKeys.length === 0 && !isBrandingPanel) return null;
     const sectionChanged = keys.filter((key) => changedKeys.includes(key));
     const sectionInvalid = sectionChanged.some((key) => clientErrors[key] !== undefined);
     const headingId = sectionAnchorId(section.id);
@@ -365,30 +373,28 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
             </Button>
           ) : null}
         </div>
-        {/* Config-parity W4: the branding ASSETS are not registry keys — they
-            manage themselves through dedicated upload/delete endpoints in this
-            panel; the section's registry keys (hide-name toggle) render in the
-            usual rows below it. */}
-        {page === "general" && section.id === "branding" ? <InstanceBrandingManager /> : null}
-        <div className="flex min-w-0 flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted p-4">
-          {visibleKeys.map((key) => (
-            <SettingRow
-              key={key}
-              settingKey={key}
-              setting={byKey.get(key)}
-              config={config}
-              draftValue={draft[key]}
-              error={fieldErrors[key] ?? clientErrors[key]}
-              bootNote={bootDepNote(META[key], instance)}
-              child={META[key]?.parent !== undefined}
-              resetting={resetting === key}
-              disabled={saving}
-              onChange={(v) => setValue(key, v)}
-              onReset={() => void resetToDefault(key)}
-              onPreview={(label, text) => setPreview({ label, text })}
-            />
-          ))}
-        </div>
+        {isBrandingPanel ? <InstanceBrandingManager /> : null}
+        {visibleKeys.length > 0 ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted p-4">
+            {visibleKeys.map((key) => (
+              <SettingRow
+                key={key}
+                settingKey={key}
+                setting={byKey.get(key)}
+                config={config}
+                draftValue={draft[key]}
+                error={fieldErrors[key] ?? clientErrors[key]}
+                bootNote={bootDepNote(META[key], instance)}
+                child={META[key]?.parent !== undefined}
+                resetting={resetting === key}
+                disabled={saving}
+                onChange={(v) => setValue(key, v)}
+                onReset={() => void resetToDefault(key)}
+                onPreview={(label, text) => setPreview({ label, text })}
+              />
+            ))}
+          </div>
+        ) : null}
       </section>
     );
   };

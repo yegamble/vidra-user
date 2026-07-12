@@ -338,9 +338,14 @@ test("the left rail walks the IA: VOD, Live, Federation, empty pages, Advanced",
   await expect(page.getByText(/FEDERATION_ENABLED/)).toBeVisible();
   await expect(page.getByText("Nothing to configure here yet")).toBeVisible();
 
-  // Customization/Homepage: honest empty states until their waves land.
+  // Customization: the hide-name toggle's home (W4) — rendered disabled while
+  // this mocked backend does not return the key, never hidden.
   await nav.getByRole("link", { name: "Customization" }).click();
-  await expect(page.getByText("Nothing to configure here yet")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Header", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("switch", { name: "Hide the instance name in the header" }),
+  ).toBeDisabled();
+  // Homepage: honest empty state until its wave lands.
   await nav.getByRole("link", { name: "Homepage" }).click();
   await expect(page.getByText("Nothing to configure here yet")).toBeVisible();
 
@@ -591,16 +596,20 @@ test("branding: six asset slots, inline type validation, upload, and confirmed r
       json: {
         settings: [
           ...settings.settings,
-          bool("header_hide_instance_name"),
-          str("social_meta_twitter_username"),
+          // The REAL backend's W1 placement metadata for the W4 keys
+          // (vidra-core instancesettings registry): the hide-name toggle is
+          // server-placed at customization/header, NOT in general/branding —
+          // the panel must render on General regardless.
+          { ...bool("header_hide_instance_name"), page: "customization", section: "header" },
+          { ...str("social_meta_twitter_username"), page: "general", section: "social" },
         ],
       },
     }),
   );
   await openConfig(page);
 
-  // The Branding section hosts the assets panel + the hide-name registry
-  // toggle; the social handle renders under Social.
+  // The Branding section hosts the assets panel even though no registry key
+  // lands in it; the social handle renders under Social.
   await expect(page.getByRole("heading", { name: "Branding", exact: true })).toBeVisible();
   const panel = page.getByRole("group", { name: "Branding assets" });
   for (const label of [
@@ -616,9 +625,12 @@ test("branding: six asset slots, inline type validation, upload, and confirmed r
   // Nothing set: every slot honestly reports the built-in default, none removable.
   await expect(panel.getByText("Using the built-in default.")).toHaveCount(6);
   await expect(panel.getByRole("button", { name: /^Remove/ })).toHaveCount(0);
+  // The server homes the hide-name toggle on the Customization page, so it
+  // does NOT render here (asserted there at the end of this test)…
   await expect(
     page.getByRole("switch", { name: "Hide the instance name in the header" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  // …while the server-placed social handle renders under Social.
   await expect(page.getByLabel("X (Twitter) username for link cards")).toBeVisible();
 
   // Inline validation mirrors the backend type gate: a GIF never leaves the browser.
@@ -672,6 +684,14 @@ test("branding: six asset slots, inline type validation, upload, and confirmed r
   await expect(panel.getByAltText("Current avatar")).toHaveCount(0);
   await expect(panel.getByText("Using the built-in default.")).toHaveCount(6);
   expect(deleted).toBe(true);
+
+  // The server-placed hide-name toggle lives on Customization, under the
+  // pre-declared Header section — present, enabled, and editable.
+  await configNav(page).getByRole("link", { name: "Customization" }).click();
+  await expect(page.getByRole("heading", { name: "Header", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("switch", { name: "Hide the instance name in the header" }),
+  ).toBeEnabled();
 });
 
 test("the markdown Preview button opens the shared rendered-preview modal", async ({ page }) => {

@@ -69,7 +69,7 @@ const SLOTS: SlotDef[] = [
   {
     id: "header-wide",
     label: "Header logo (wide)",
-    help: "Shown in the header on larger screens — beside the instance name, or alone when the name is hidden below.",
+    help: "Shown in the header on larger screens — beside the instance name, or alone when the name is hidden (Customization → Header).",
     previewClass: "h-12 w-auto max-w-xs rounded-lg object-contain",
     pick: (b) => b.logos?.header_wide,
     upload: (f) => api.setInstanceLogo("header-wide", f),

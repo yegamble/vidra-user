@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getInstanceSettings: vi.fn(),
   updateInstanceSettings: vi.fn(),
+  getInstance: vi.fn(),
   getVideoConfigCached: vi.fn(),
   getInstanceCached: vi.fn(),
 }));
@@ -20,6 +21,7 @@ vi.mock("@/lib/api", async (importActual) => {
       ...actual.api,
       getInstanceSettings: mocks.getInstanceSettings,
       updateInstanceSettings: mocks.updateInstanceSettings,
+      getInstance: mocks.getInstance,
     },
     getVideoConfigCached: mocks.getVideoConfigCached,
     getInstanceCached: mocks.getInstanceCached,
@@ -44,6 +46,7 @@ const doc = {
 beforeEach(() => {
   mocks.getInstanceSettings.mockResolvedValue(doc);
   mocks.updateInstanceSettings.mockResolvedValue(doc);
+  mocks.getInstance.mockResolvedValue({ name: "Test", federation_enabled: true });
   mocks.getVideoConfigCached.mockResolvedValue({ languages: [], categories: [] });
   mocks.getInstanceCached.mockResolvedValue({ federation_enabled: true });
 });
@@ -292,5 +295,82 @@ describe("page placement and progressive disclosure", () => {
     expect((screen.getByLabelText("Max concurrent uploads per user") as HTMLInputElement).value).toBe("5");
     expect(screen.queryByText("1 unsaved change")).toBeNull();
     expect(mocks.updateInstanceSettings).not.toHaveBeenCalled();
+  });
+});
+
+describe("branding panel reachability (General page, config-parity W4)", () => {
+  // The real backend's placement rows for the W4 registry keys (vidra-core
+  // instancesettings registry: customization/header and general/social) —
+  // NOT the META fallback path. The review-caught regression: the panel must
+  // not depend on a registry key landing in general/branding.
+  const w4Settings = {
+    settings: [
+      ...doc.settings,
+      {
+        key: "header_hide_instance_name",
+        type: "bool",
+        value: false,
+        default: false,
+        overridden: false,
+        page: "customization",
+        section: "header",
+      },
+      {
+        key: "social_meta_twitter_username",
+        type: "string",
+        value: "",
+        default: "",
+        overridden: false,
+        page: "general",
+        section: "social",
+      },
+    ],
+  };
+
+  it("renders the Branding assets panel on General even though the server homes the hide-name toggle at customization/header", async () => {
+    mocks.getInstanceSettings.mockResolvedValue(w4Settings);
+    const unset = { url: "", is_fallback: true };
+    mocks.getInstance.mockResolvedValue({
+      name: "Test",
+      federation_enabled: true,
+      branding: {
+        avatar: unset,
+        banner: unset,
+        logos: { favicon: unset, header_wide: unset, header_square: unset, opengraph: unset },
+        hide_instance_name: false,
+      },
+    });
+    render(<ConfigForm page="general" />);
+
+    expect(await screen.findByRole("group", { name: "Branding assets" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Branding" })).toBeTruthy();
+    // The server-placed toggle does NOT render here…
+    expect(
+      screen.queryByRole("switch", { name: "Hide the instance name in the header" }),
+    ).toBeNull();
+    // …but the social handle (server-placed general/social) does.
+    expect(screen.getByLabelText("X (Twitter) username for link cards")).toBeTruthy();
+  });
+
+  it("renders the hide-name toggle on Customization under the Header section", async () => {
+    mocks.getInstanceSettings.mockResolvedValue(w4Settings);
+    render(<ConfigForm page="customization" />);
+
+    const toggle = await screen.findByRole("switch", {
+      name: "Hide the instance name in the header",
+    });
+    expect(toggle).toBeTruthy();
+    expect((toggle as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole("heading", { name: "Header" })).toBeTruthy();
+    // The branding assets panel lives on General, not here.
+    expect(screen.queryByRole("group", { name: "Branding assets" })).toBeNull();
+  });
+
+  it("keeps the Branding section (with the honest pre-W1 note) when the backend returns no W4 keys and no branding block", async () => {
+    render(<ConfigForm page="general" />);
+    await screen.findByRole("heading", { name: "Branding" });
+    expect(
+      await screen.findByText("Instance branding is not supported by this server yet."),
+    ).toBeTruthy();
   });
 });
