@@ -16,14 +16,17 @@ export const THEME_STORAGE_KEY = "vidra.theme";
  * Build the inline no-flash bootstrap script. `instanceDefault` is the
  * instance-configured default theme; only "light"/"dark" have any effect
  * ("system", undefined, or garbage all mean: follow the OS), and it only
- * applies when the visitor has no stored preference of their own.
+ * applies when the visitor has no stored preference of their own. A stored
+ * "system" IS a preference — an explicit "follow my OS" choice (written by
+ * lib/theme.ts writeThemePreference) — so it skips the instance default;
+ * only an absent/unknown value means "never chose".
  */
 export function buildThemeBootstrapScript(instanceDefault?: string): string {
   const fallback =
     instanceDefault === "light" || instanceDefault === "dark" ? instanceDefault : null;
   return (
     `try{var t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});` +
-    `if(t!=="light"&&t!=="dark")t=${JSON.stringify(fallback)};` +
+    `if(t!=="light"&&t!=="dark"&&t!=="system")t=${JSON.stringify(fallback)};` +
     `if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`
   );
 }

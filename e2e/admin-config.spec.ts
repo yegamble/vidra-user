@@ -512,26 +512,45 @@ test("segmented policy + multi-select changes patch as enum string and JSON arra
 test("W5 browse/landing/player defaults: enum pickers on their pages, one patch per page", async ({
   page,
 }) => {
-  // The shared payload plus the six W5 keys (config-parity W5: browse keys on
-  // general/browse, theme + autoplay on customization) — kept local so the
-  // other tests' section expectations stay untouched.
-  const enumRow = (key: string, value: string, options: string[]) => ({
+  // The shared payload plus the six W5 keys. The real backend ALWAYS
+  // serializes page/section (vidra-core admin_instance_settings.go), and
+  // server placement wins over the client META fallback — so the fixture
+  // carries the registry's placement (general/browse ×4, customization/theme,
+  // customization/player) to exercise the server-placement path a live
+  // instance takes; a registry/META divergence would fail here instead of
+  // being masked by the fallback (the W4 branding lesson, commit 945f887).
+  // Kept local so the other tests' section expectations stay untouched.
+  const enumRow = (
+    key: string,
+    value: string,
+    options: string[],
+    page: string,
+    section: string,
+  ) => ({
     key,
     type: "enum",
     value,
     default: value,
     overridden: false,
     options,
+    page,
+    section,
   });
   const w5Settings = {
     settings: [
       ...settings.settings,
-      enumRow("default_landing_page", "home-recent", ["home-recent", "trending", "local", "home"]),
-      enumRow("default_feed_sort", "recent", ["recent", "popular", "trending"]),
-      enumRow("default_feed_scope", "local", ["local", "all"]),
-      bool("miniature_prefer_author_display_name"),
-      enumRow("default_theme", "system", ["system", "light", "dark"]),
-      bool("default_player_autoplay", true),
+      enumRow(
+        "default_landing_page",
+        "home-recent",
+        ["home-recent", "trending", "local", "home"],
+        "general",
+        "browse",
+      ),
+      enumRow("default_feed_sort", "recent", ["recent", "popular", "trending"], "general", "browse"),
+      enumRow("default_feed_scope", "local", ["local", "all"], "general", "browse"),
+      { ...bool("miniature_prefer_author_display_name"), page: "general", section: "browse" },
+      enumRow("default_theme", "system", ["system", "light", "dark"], "customization", "theme"),
+      { ...bool("default_player_autoplay", true), page: "customization", section: "player" },
     ],
   };
   await signIn(page, "admin");

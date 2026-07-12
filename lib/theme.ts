@@ -47,11 +47,12 @@ function applyThemePreference(preference: ThemePreference): void {
 
 export function writeThemePreference(preference: ThemePreference): void {
   try {
-    if (preference === "system") {
-      localStorage.removeItem(THEME_KEY);
-    } else {
-      localStorage.setItem(THEME_KEY, preference);
-    }
+    // "system" is stored EXPLICITLY (config-parity W5): an absent key means
+    // "never chose", which the pre-paint bootstrap fills with the instance's
+    // default_theme — if choosing System merely removed the key, a visitor on
+    // an instance defaulting to light/dark could never durably follow their
+    // OS. A stored "system" tells the bootstrap to skip the instance default.
+    localStorage.setItem(THEME_KEY, preference);
   } catch {
     // The preference just won't persist beyond this page.
   }

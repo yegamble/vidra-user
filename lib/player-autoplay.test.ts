@@ -15,11 +15,14 @@ import {
   DEFAULT_PLAYER_SETTINGS,
   hydratePlayerSettings,
   resetPlayerSettings,
+  unsettlePlayerSettingsForTests,
 } from "./player-settings";
 
 afterEach(() => {
   window.sessionStorage.clear();
-  resetPlayerSettings();
+  // Pristine boot state: nothing hydrated AND the per-user layer unresolved
+  // (resetPlayerSettings would settle it, hiding the pre-settlement holds).
+  unsettlePlayerSettingsForTests();
   setInstanceDefaultsForTests(null);
   vi.restoreAllMocks();
 });
@@ -113,6 +116,7 @@ describe("player-autoplay store", () => {
 
 describe("start-on-open (W5)", () => {
   it("stays off without an instance signal — today's exact behavior", () => {
+    resetPlayerSettings(); // anonymous visitor, per-user layer resolved
     expect(serverStartOnOpen()).toBe(false);
     expect(readStartOnOpen()).toBe(false);
     // Even a defaults block without the key means "not seeded".
@@ -120,10 +124,43 @@ describe("start-on-open (W5)", () => {
     expect(readStartOnOpen()).toBe(false);
   });
 
-  it("follows the instance seed once present", () => {
+  it("follows the instance seed once the per-user layer has resolved", () => {
+    resetPlayerSettings(); // anonymous visitor, per-user layer resolved
     setInstanceDefaultsForTests({ player_autoplay: true });
     expect(readStartOnOpen()).toBe(true);
     setInstanceDefaultsForTests({ player_autoplay: false });
+    expect(readStartOnOpen()).toBe(false);
+  });
+
+  it("holds the seed until the per-user settings resolve (feed→watch hydration race)", () => {
+    // The feed page already primed the instance defaults, but the signed-in
+    // user's server-backed autoplay_next (migration 0075) is still in flight:
+    // the seed alone must NOT start playback…
+    setInstanceDefaultsForTests({ player_autoplay: true });
+    expect(readStartOnOpen()).toBe(false);
+    // …and when the stored pref lands as OFF, it stays off — the user's
+    // explicit choice was never raced.
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, autoplay_next: false });
+    expect(readStartOnOpen()).toBe(false);
+  });
+
+  it("releases the hold once settings resolve in favor — or as anonymous", () => {
+    setInstanceDefaultsForTests({ player_autoplay: true });
+    expect(readStartOnOpen()).toBe(false); // unresolved: held
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, autoplay_next: true });
+    expect(readStartOnOpen()).toBe(true); // signed-in, autoplay on
+    unsettlePlayerSettingsForTests();
+    expect(readStartOnOpen()).toBe(false); // fresh load: held again
+    resetPlayerSettings(); // resolves as anonymous → the seed applies
+    expect(readStartOnOpen()).toBe(true);
+  });
+
+  it("an explicit session choice does not wait for settlement", () => {
+    // The end card's switch is the strongest layer — it can't be raced.
+    setInstanceDefaultsForTests({ player_autoplay: false });
+    setAutoplay(true);
+    expect(readStartOnOpen()).toBe(true);
+    setAutoplay(false);
     expect(readStartOnOpen()).toBe(false);
   });
 

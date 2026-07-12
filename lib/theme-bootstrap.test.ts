@@ -38,6 +38,14 @@ describe("buildThemeBootstrapScript", () => {
     expect(run(script, "garbage")).toBe("dark");
   });
 
+  it("honours an explicit stored 'system' choice over the instance default", () => {
+    // writeThemePreference persists "system" explicitly (W5): the visitor
+    // chose to follow their OS, so the instance default must NOT re-apply.
+    expect(run(buildThemeBootstrapScript("dark"), "system")).toBeUndefined();
+    expect(run(buildThemeBootstrapScript("light"), "system")).toBeUndefined();
+    expect(run(THEME_BOOTSTRAP_SCRIPT, "system")).toBeUndefined();
+  });
+
   it("treats system/unknown instance defaults as follow-the-OS", () => {
     expect(run(buildThemeBootstrapScript("system"), null)).toBeUndefined();
     expect(run(buildThemeBootstrapScript("blue"), null)).toBeUndefined();
