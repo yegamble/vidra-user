@@ -590,6 +590,21 @@ export const api = {
     ),
 
   /**
+   * POST /api/v1/videos/{id}/replace-session — open a resumable (chunked)
+   * session whose completion REPLACES a published video's source file
+   * (config-parity W14; auth, owner or moderator/admin). Same chunk/complete
+   * machinery as a plain upload session; completion answers 200 with the
+   * still-published video + new source file. 403 feature_disabled while
+   * video_replace_enabled is off; 409 replace_conflict while the video is not
+   * published / still transcoding / already being replaced.
+   */
+  createReplaceSession: (videoId: string, body: CreateUploadSessionRequest) =>
+    apiRequest<UploadSessionResponse>(
+      `/api/v1/videos/${encodeURIComponent(videoId)}/replace-session`,
+      { method: "POST", body },
+    ),
+
+  /**
    * GET /api/v1/uploads/{upload_id} — the resume contract: which chunk indices
    * have landed (owner only). Read after an interruption to skip received chunks.
    */

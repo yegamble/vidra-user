@@ -1707,6 +1707,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace a published video's source file (direct multipart)
+         * @description Uploads a NEW source for an ALREADY PUBLISHED video (config-parity W14; owner, or a moderator/admin managing any local video) as a multipart form with a single "file" part. The video's id, URLs and metadata (title, policies, thumbnails, captions) are unchanged; the new source is malware-scanned and probed BEFORE anything is swapped (a rejected file leaves the video fully intact, 422), then the original-file record flips to the new version and a re-transcode is enqueued through the regular pipeline. Playback keeps working mid-swap: the previous HLS renditions keep serving until the new generation is promoted atomically on transcode completion (media GC collects the superseded files); progressive playback and downloads serve the new source immediately. The rolling daily upload quota and the storage quota are checked and recorded against the video's OWNER. Gated by the video_replace_enabled admin setting (403 feature_disabled while off, default off). A video that is not published, still transcoding, or already being replaced answers 409 replace_conflict. For large files prefer the resumable shape: POST /api/v1/videos/{id}/replace-session.
+         */
+        post: operations["replaceVideoFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/uploads": {
         parameters: {
             query?: never;
@@ -1743,6 +1763,26 @@ export interface paths {
          *     BATCH GUARD (UPLOAD-10): a caller may hold at most UPLOAD_MAX_ACTIVE_SESSIONS_PER_USER active (unfinished, unexpired) upload sessions at once (instance default 5; 0 disables the limit). Opening one past the cap is 429 with the stable code too_many_active_uploads — a batch-upload client should queue and retry once an in-flight session completes or is cancelled (either frees a slot). This is a fairness guard, not a security boundary; batching stays client-orchestrated over these per-video session endpoints (there is no /uploads/batch surface).
          */
         post: operations["createUploadSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/replace-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a resumable (chunked) session that replaces a video's source
+         * @description Opens a chunked/resumable upload session whose completion REPLACES the source of an ALREADY PUBLISHED video (config-parity W14; owner, or a moderator/admin). Identical protocol to the plain upload session — upload chunks with PUT /api/v1/uploads/{upload_id}/chunks/{n}, then POST /api/v1/uploads/{upload_id}/complete (which finalises through the replacement flow instead of the publish pipeline and answers 200 with the still-published video + new source file); GET/DELETE on the session work unchanged. The declared size, filename extension, and the video OWNER's storage + rolling-daily quotas are validated up front, and re-checked at completion. Gated by the video_replace_enabled admin setting (403 feature_disabled while off, default off); a video that is not published, still transcoding, or already being replaced answers 409 replace_conflict. The batch guard (429 too_many_active_uploads) applies as for plain sessions.
+         */
+        post: operations["createReplaceSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4288,6 +4328,10 @@ export interface components {
                 user_export: boolean;
                 /** @description Whether the HLS transcoding pipeline is effectively available (transcoding_enabled on AND ffmpeg/ffprobe wired at boot, config-parity W10). Already-produced playlists keep serving when this is false; new uploads stay playable via the retained original. */
                 transcoding: boolean;
+                /** @description Whether video file replacement is effectively available (video_replace_enabled on AND uploads on, config-parity W14). The studio hides the "Replace video file" affordance in lock-step with the 403 feature_disabled gate on POST /videos/{id}/replace and /videos/{id}/replace-session. */
+                video_replace: boolean;
+                /** @description Whether the extended upload container set (.m4v/.mov/.mkv/…) is currently accepted (upload_additional_extensions_enabled, config-parity W10) so the studio can narrow its file-picker accept list in lock-step with the server's extension gate. */
+                upload_additional_extensions: boolean;
                 /** @description Whether this deployment has an outbound mail path (an SMTP relay via MAIL_ENABLED, or the dev capture seam) — a boot capability, not a runtime setting. The admin UI renders the mail-dependent settings (email_subject_prefix, email_body_signature, contact_form_enabled) disabled-with-explanation when false, since they are inert without a mailer (config-parity W6 email seam). */
                 mail: boolean;
             };
@@ -11627,6 +11671,110 @@ export interface operations {
             };
         };
     };
+    replaceVideoFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The replacement media file.
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The source was replaced; the video stays published. The previous renditions keep serving until the re-transcode promotes the new generation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadVideoFileResponse"];
+                };
+            };
+            /** @description The multipart "file" field is missing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Video file replacement is disabled on this instance (code feature_disabled; video_replace_enabled off, or uploads off). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or the caller may not manage it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The video cannot be replaced right now (code replace_conflict) — it is not published, a transcode of its current source is still pending/running, or another replacement is already in flight. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The uploaded file exceeds the instance upload size cap. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The file extension is not an accepted video container. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Storing the file would exceed the owner's storage quota (code quota_exceeded) or the rolling-24h daily upload quota (code daily_quota_exceeded), or the replacement source was rejected by the malware scan / media probe (the video is untouched). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listMyUploads: {
         parameters: {
             query?: {
@@ -11729,6 +11877,104 @@ export interface operations {
                 };
             };
             /** @description The caller already holds UPLOAD_MAX_ACTIVE_SESSIONS_PER_USER active upload sessions (code too_many_active_uploads). Queue and retry after an in-flight session completes or is cancelled. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createReplaceSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUploadSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The resumable replacement session was opened. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSessionResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Video file replacement is disabled on this instance (code feature_disabled). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or the caller may not manage it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The video cannot be replaced right now (code replace_conflict). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The declared size exceeds the instance upload size cap. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The filename extension is not an accepted video container. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The body is invalid, or the file would exceed the owner's storage quota (code quota_exceeded) or rolling-24h daily quota (code daily_quota_exceeded). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller already holds the maximum number of active upload sessions (code too_many_active_uploads). */
             429: {
                 headers: {
                     [name: string]: unknown;

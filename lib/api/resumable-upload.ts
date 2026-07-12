@@ -199,6 +199,15 @@ export interface ResumableUploadOptions {
    * the file (e.g. to match it against GET /me/uploads) avoid recomputing it.
    */
   fingerprint?: string;
+  /**
+   * "replace" opens the session via POST /videos/{id}/replace-session, so
+   * completion REPLACES the published video's source instead of publishing a
+   * draft (config-parity W14). Replace sessions are NOT remembered in
+   * localStorage — an interrupted replacement is simply restarted (the server
+   * sweeper collects the abandoned session), keeping the resume-match logic
+   * scoped to plain uploads. Default "upload".
+   */
+  mode?: "upload" | "replace";
 }
 
 function emit(onProgress: ResumableUploadOptions["onProgress"], loaded: number, total: number): void {
@@ -267,7 +276,8 @@ export async function resumableUpload(
     // exact file?" for cross-refresh / cross-device resume (GET /me/uploads).
     const fileFingerprint = opts.fingerprint ?? (await computeFileFingerprint(file));
     if (opts.signal?.aborted) throw cancelledError();
-    const session = await api.createUploadSession(videoId, {
+    const open = opts.mode === "replace" ? api.createReplaceSession : api.createUploadSession;
+    const session = await open(videoId, {
       size: file.size,
       filename: file.name,
       file_fingerprint: fileFingerprint,
@@ -277,14 +287,16 @@ export async function resumableUpload(
     totalChunks = session.total_chunks;
     received = new Set();
     bytesReceived = 0;
-    rememberUploadSession({
-      uploadId,
-      videoId,
-      filename: file.name,
-      size: file.size,
-      fileFingerprint,
-      expiresAt: session.expires_at,
-    });
+    if (opts.mode !== "replace") {
+      rememberUploadSession({
+        uploadId,
+        videoId,
+        filename: file.name,
+        size: file.size,
+        fileFingerprint,
+        expiresAt: session.expires_at,
+      });
+    }
   }
 
   opts.onSessionOpened?.(uploadId);
