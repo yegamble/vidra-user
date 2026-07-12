@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { InstanceBrandingManager } from "@/components/InstanceBrandingManager";
 import { Markdown } from "@/components/Markdown";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
@@ -364,6 +365,11 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
             </Button>
           ) : null}
         </div>
+        {/* Config-parity W4: the branding ASSETS are not registry keys — they
+            manage themselves through dedicated upload/delete endpoints in this
+            panel; the section's registry keys (hide-name toggle) render in the
+            usual rows below it. */}
+        {page === "general" && section.id === "branding" ? <InstanceBrandingManager /> : null}
         <div className="flex min-w-0 flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted p-4">
           {visibleKeys.map((key) => (
             <SettingRow

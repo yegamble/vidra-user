@@ -573,6 +573,107 @@ test("broadcast: progressive disclosure, markdown preview, level picker, one pat
   });
 });
 
+test("branding: six asset slots, inline type validation, upload, and confirmed remove", async ({
+  page,
+}) => {
+  // A W1+ backend: /instance carries the branding block (everything fallback).
+  const unset = { url: "", is_fallback: true };
+  const emptyBranding = {
+    avatar: unset,
+    banner: unset,
+    logos: { favicon: unset, header_wide: unset, header_square: unset, opengraph: unset },
+    hide_instance_name: false,
+  };
+  const brandedInstance = { ...instanceDoc, branding: emptyBranding };
+  await signIn(page, "admin", brandedInstance);
+  await page.route(SETTINGS, (route) =>
+    route.fulfill({
+      json: {
+        settings: [
+          ...settings.settings,
+          bool("header_hide_instance_name"),
+          str("social_meta_twitter_username"),
+        ],
+      },
+    }),
+  );
+  await openConfig(page);
+
+  // The Branding section hosts the assets panel + the hide-name registry
+  // toggle; the social handle renders under Social.
+  await expect(page.getByRole("heading", { name: "Branding", exact: true })).toBeVisible();
+  const panel = page.getByRole("group", { name: "Branding assets" });
+  for (const label of [
+    "Avatar image",
+    "Banner image",
+    "Favicon image",
+    "Header logo (wide) image",
+    "Header logo (square) image",
+    "Social card image image",
+  ]) {
+    await expect(panel.getByLabel(label)).toBeVisible();
+  }
+  // Nothing set: every slot honestly reports the built-in default, none removable.
+  await expect(panel.getByText("Using the built-in default.")).toHaveCount(6);
+  await expect(panel.getByRole("button", { name: /^Remove/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("switch", { name: "Hide the instance name in the header" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("X (Twitter) username for link cards")).toBeVisible();
+
+  // Inline validation mirrors the backend type gate: a GIF never leaves the browser.
+  let uploadRequests = 0;
+  await page.route(/\/api\/v1\/admin\/instance-(avatar|banner|logo\/[a-z-]+)$/, (route) => {
+    uploadRequests += 1;
+    return route.fulfill({ status: 201, json: {} });
+  });
+  await panel.getByLabel("Banner image").setInputFiles({
+    name: "anim.gif",
+    mimeType: "image/gif",
+    buffer: Buffer.from("gif"),
+  });
+  await expect(page.getByText("The image must be a JPEG, PNG, or WebP.")).toBeVisible();
+  expect(uploadRequests).toBe(0);
+
+  // A valid pick POSTs multipart to the W1 endpoint and the panel re-reads
+  // /instance for the fresh URL + is_fallback state.
+  await page.route(INSTANCE, (route) =>
+    route.fulfill({
+      json: {
+        ...brandedInstance,
+        branding: {
+          ...emptyBranding,
+          avatar: { url: "/api/v1/instance/avatar", is_fallback: false },
+        },
+      },
+    }),
+  );
+  await panel.getByLabel("Avatar image").setInputFiles({
+    name: "avatar.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("png"),
+  });
+  await expect(panel.getByAltText("Current avatar")).toBeVisible();
+  expect(uploadRequests).toBe(1);
+
+  // Remove asks for an inline confirmation before the DELETE; afterwards the
+  // slot falls back to the built-in default.
+  let deleted = false;
+  await page.route(/\/api\/v1\/admin\/instance-avatar$/, (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    deleted = true;
+    return route.fulfill({ status: 204, body: "" });
+  });
+  await page.route(INSTANCE, (route) => route.fulfill({ json: brandedInstance }));
+  await panel.getByRole("button", { name: "Remove avatar" }).click();
+  await expect(panel.getByText("Remove this image?")).toBeVisible();
+  expect(deleted).toBe(false);
+  await panel.getByRole("button", { name: "Confirm removing avatar" }).click();
+  await expect(panel.getByAltText("Current avatar")).toHaveCount(0);
+  await expect(panel.getByText("Using the built-in default.")).toHaveCount(6);
+  expect(deleted).toBe(true);
+});
+
 test("the markdown Preview button opens the shared rendered-preview modal", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(SETTINGS, (route) => route.fulfill({ json: settings }));

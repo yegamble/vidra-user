@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
 
+import type { InstanceConfigSnapshot } from "./instance-config.server";
 import { FALLBACK_DESCRIPTION, FALLBACK_TITLE, buildRootMetadata } from "./layout-metadata";
 
-// W2 contract: the metadata builder seam exists but changes NOTHING visible —
-// with or without a snapshot it returns exactly the values app/layout.tsx
-// hardcoded before the seam (W4 starts consuming branding/social blocks).
+// Config-parity W4: the metadata builder consumes the SSR instance snapshot —
+// title/description from the instance identity, favicon + og:image from the
+// branding logo slots (only when NOT is_fallback), twitter:site from
+// social.twitter_username. Precedence rule: a null snapshot / absent block /
+// fallback slot always degrades to the pre-W4 hardcoded behavior (and no icon
+// or social-card entries at all). apiBaseUrl in tests is the default
+// http://localhost:8080 (lib/config).
+
+const API = "http://localhost:8080";
+
+function snapshot(overrides: Record<string, unknown> = {}): InstanceConfigSnapshot {
+  return { name: "ExampleTube", short_description: "Videos, federated.", ...overrides } as InstanceConfigSnapshot;
+}
+
+const set = (url: string) => ({ url, is_fallback: false });
+const unset = { url: "", is_fallback: true };
 
 describe("buildRootMetadata", () => {
   it("returns the hardcoded fallbacks when the backend is unreachable", () => {
@@ -14,14 +28,77 @@ describe("buildRootMetadata", () => {
     });
   });
 
-  it("still returns today's values with a snapshot present (W2: no visible change)", () => {
-    const snapshot = {
-      name: "Renamed Instance",
-      short_description: "Something else",
-    } as Parameters<typeof buildRootMetadata>[0];
-    expect(buildRootMetadata(snapshot)).toEqual({
-      title: "Vidra",
-      description: "A federated, PeerTube-inspired video platform.",
+  it("titles from the instance name and short description when present", () => {
+    const meta = buildRootMetadata(snapshot());
+    expect(meta.title).toBe("ExampleTube");
+    expect(meta.description).toBe("Videos, federated.");
+  });
+
+  it("falls back per-field when the identity values are blank", () => {
+    const meta = buildRootMetadata(snapshot({ name: "  ", short_description: "" }));
+    expect(meta.title).toBe(FALLBACK_TITLE);
+    expect(meta.description).toBe(FALLBACK_DESCRIPTION);
+  });
+
+  it("emits no icon/social entries when the branding block is absent (pre-W1 backend)", () => {
+    const meta = buildRootMetadata(snapshot());
+    expect(meta.icons).toBeUndefined();
+    expect(meta.openGraph).toBeUndefined();
+    expect(meta.twitter).toBeUndefined();
+  });
+
+  it("emits no icon/social entries while every slot reports is_fallback", () => {
+    const meta = buildRootMetadata(
+      snapshot({
+        branding: { logos: { favicon: unset, opengraph: unset } },
+        social: { twitter_username: "" },
+      }),
+    );
+    expect(meta.icons).toBeUndefined();
+    expect(meta.openGraph).toBeUndefined();
+    expect(meta.twitter).toBeUndefined();
+  });
+
+  it("wires a SET favicon slot into icons, resolved against the API origin", () => {
+    const meta = buildRootMetadata(
+      snapshot({ branding: { logos: { favicon: set("/api/v1/instance/logo/favicon") } } }),
+    );
+    expect(meta.icons).toEqual({ icon: `${API}/api/v1/instance/logo/favicon` });
+  });
+
+  it("wires a SET opengraph slot into og:image and twitter:image", () => {
+    const meta = buildRootMetadata(
+      snapshot({ branding: { logos: { opengraph: set("/api/v1/instance/logo/opengraph") } } }),
+    );
+    expect(meta.openGraph).toEqual({
+      title: "ExampleTube",
+      description: "Videos, federated.",
+      siteName: "ExampleTube",
+      images: [{ url: `${API}/api/v1/instance/logo/opengraph` }],
+    });
+    expect(meta.twitter).toEqual({
+      card: "summary_large_image",
+      images: [`${API}/api/v1/instance/logo/opengraph`],
+    });
+  });
+
+  it("emits twitter:site (normalized to @handle) when the operator set a username", () => {
+    const meta = buildRootMetadata(snapshot({ social: { twitter_username: "exampletube" } }));
+    expect(meta.twitter).toEqual({ card: "summary", site: "@exampletube" });
+    expect(meta.openGraph).toBeUndefined();
+  });
+
+  it("combines the full social card: og image + twitter:site on one snapshot", () => {
+    const meta = buildRootMetadata(
+      snapshot({
+        branding: { logos: { opengraph: set("/api/v1/instance/logo/opengraph") } },
+        social: { twitter_username: "@exampletube" },
+      }),
+    );
+    expect(meta.twitter).toEqual({
+      card: "summary_large_image",
+      site: "@exampletube",
+      images: [`${API}/api/v1/instance/logo/opengraph`],
     });
   });
 });

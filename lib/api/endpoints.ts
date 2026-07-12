@@ -133,6 +133,12 @@ import type {
   WatchProgress,
 } from "./types";
 
+/**
+ * The typed instance logo slots (config-parity W4; PeerTube LogoType parity).
+ * The path-segment values of POST/DELETE /api/v1/admin/instance-logo/{type}.
+ */
+export type InstanceLogoType = "favicon" | "header-wide" | "header-square" | "opengraph";
+
 export interface FeedParams {
   sort?: FeedSort;
   /**
@@ -1770,6 +1776,63 @@ export const api = {
     apiRequest<InstanceSettingsResponse>("/api/v1/admin/instance-settings", {
       method: "PATCH",
       body: patch,
+    }),
+
+  /**
+   * POST /api/v1/admin/instance-avatar — set the instance's avatar (admin,
+   * multipart, JPEG/PNG/WebP by extension; otherwise 415 — the same gate as
+   * user/channel avatars). The GET /instance branding block reflects it
+   * immediately (config-parity W1 endpoints, W4 consumers).
+   */
+  setInstanceAvatar: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<ProfileImage>("/api/v1/admin/instance-avatar", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  /** DELETE /api/v1/admin/instance-avatar — remove the instance avatar (admin; 404 when none set). */
+  deleteInstanceAvatar: () =>
+    apiRequest<void>("/api/v1/admin/instance-avatar", { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/admin/instance-banner — set the instance's banner (admin,
+   * multipart; same type gate as the avatar).
+   */
+  setInstanceBanner: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<ProfileImage>("/api/v1/admin/instance-banner", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  /** DELETE /api/v1/admin/instance-banner — remove the instance banner (admin; 404 when none set). */
+  deleteInstanceBanner: () =>
+    apiRequest<void>("/api/v1/admin/instance-banner", { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/admin/instance-logo/{type} — set one typed instance logo slot
+   * (admin, multipart; type ∈ favicon | header-wide | header-square |
+   * opengraph — PeerTube LogoType parity; the opengraph slot doubles as the
+   * social-card image).
+   */
+  setInstanceLogo: (type: InstanceLogoType, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<ProfileImage>(`/api/v1/admin/instance-logo/${encodeURIComponent(type)}`, {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  /** DELETE /api/v1/admin/instance-logo/{type} — remove one typed logo slot (admin; 404 when unset). */
+  deleteInstanceLogo: (type: InstanceLogoType) =>
+    apiRequest<void>(`/api/v1/admin/instance-logo/${encodeURIComponent(type)}`, {
+      method: "DELETE",
     }),
 
   /**

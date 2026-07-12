@@ -34,7 +34,13 @@ export {
 } from "./resumable-upload";
 export type { ResumableUploadOptions, StoredUploadSession } from "./resumable-upload";
 export { computeFileFingerprint, findUploadByFingerprint } from "./fingerprint";
-export type { FeedParams, JobRunListParams, SearchParams, SearchVideosParams } from "./endpoints";
+export type {
+  FeedParams,
+  InstanceLogoType,
+  JobRunListParams,
+  SearchParams,
+  SearchVideosParams,
+} from "./endpoints";
 export {
   openAuthenticatedEventStream,
   parseEventStream,

@@ -1524,6 +1524,59 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ terms_url: null });
   });
 
+  it("setInstanceAvatar POSTs multipart to the admin instance-avatar endpoint (W4)", async () => {
+    const file = new File(["img"], "avatar.png", { type: "image/png" });
+    await api.setInstanceAvatar(file);
+    const [url, init] = fetchMock.mock.calls[0] as [
+      string,
+      RequestInit & { headers: Record<string, string> },
+    ];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/instance-avatar");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+    expect(init.headers["content-type"]).toBeUndefined();
+  });
+
+  it("deleteInstanceAvatar DELETEs the admin instance-avatar endpoint", async () => {
+    await api.deleteInstanceAvatar();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/instance-avatar");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("setInstanceBanner POSTs multipart to the admin instance-banner endpoint", async () => {
+    const file = new File(["img"], "banner.png", { type: "image/png" });
+    await api.setInstanceBanner(file);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/instance-banner");
+    expect(init.method).toBe("POST");
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
+  it("deleteInstanceBanner DELETEs the admin instance-banner endpoint", async () => {
+    await api.deleteInstanceBanner();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/instance-banner");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("setInstanceLogo POSTs multipart to the typed logo-slot endpoint", async () => {
+    const file = new File(["img"], "wide.png", { type: "image/png" });
+    await api.setInstanceLogo("header-wide", file);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/instance-logo/header-wide");
+    expect(init.method).toBe("POST");
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
+  it("deleteInstanceLogo DELETEs the typed logo-slot endpoint", async () => {
+    await api.deleteInstanceLogo("opengraph");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/instance-logo/opengraph");
+    expect(init.method).toBe("DELETE");
+  });
+
   it("getJobs targets the admin jobs endpoint", async () => {
     await api.getJobs();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/jobs");
