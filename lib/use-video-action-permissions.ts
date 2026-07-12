@@ -86,7 +86,13 @@ export function useVideoActionPermissions(video: Video): VideoActionPermissions 
           ownedChannels?.userId === user.id &&
           !!video.channel_id &&
           ownedChannels.ids.has(video.channel_id))),
-    canDownload: video.remote !== true && (privileged || downloadsEnabled),
+    // Effective download availability (config-parity W9): the instance
+    // downloads feature AND the video's own download_enabled flag — absent
+    // (card payloads don't carry it) is treated as enabled, the server's
+    // layered gate stays authoritative. Moderators/admins bypass both.
+    canDownload:
+      video.remote !== true &&
+      (privileged || (downloadsEnabled && video.download_enabled !== false)),
   };
 }
 

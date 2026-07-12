@@ -34,7 +34,19 @@ type Status = "loading" | "error" | "ready";
 // author-name snapshot, an origin-domain badge, and the ActivityPub protocol
 // label; they have no local account, so the account controls (Message/Mute/Block/
 // Report user) are replaced by Mute instance + Report comment.
-export function CommentsSection({ videoId }: { videoId: string }) {
+export function CommentsSection({
+  videoId,
+  commentsEnabled = true,
+}: {
+  videoId: string;
+  /**
+   * The EFFECTIVE comment availability from the video detail payload
+   * (config-parity W9: instance comments_enabled AND the video's
+   * comments_policy). When false the composer is replaced by a quiet note;
+   * existing comments keep rendering (reading stays open server-side too).
+   */
+  commentsEnabled?: boolean;
+}) {
   const [status, setStatus] = useState<Status>("loading");
   const [comments, setComments] = useState<Comment[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
@@ -85,7 +97,13 @@ export function CommentsSection({ videoId }: { videoId: string }) {
         {status === "ready" ? `Comments (${comments.length})` : "Comments"}
       </h2>
 
-      <CommentForm videoId={videoId} onPosted={onPosted} />
+      {commentsEnabled ? (
+        <CommentForm videoId={videoId} onPosted={onPosted} />
+      ) : (
+        <p className="rounded-2xl bg-surface-muted px-4 py-3 text-sm text-fg-muted">
+          Comments are turned off for this video.
+        </p>
+      )}
 
       {status === "loading" ? (
         <div className="flex justify-center py-8">

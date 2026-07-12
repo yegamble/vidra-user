@@ -363,3 +363,41 @@ describe("display helpers", () => {
     expect(bootDepNote(META.instance_name, { federation_enabled: false })).toBeNull();
   });
 });
+
+describe("publish defaults placement (config-parity W9)", () => {
+  const keys = [
+    "default_video_privacy",
+    "default_video_licence",
+    "default_comment_policy",
+    "default_download_enabled",
+  ];
+
+  it("places every defaults.publish key on vod/publish-defaults via META", () => {
+    for (const key of keys) {
+      expect(placementFor(key)).toEqual({ page: "vod", section: "publish-defaults" });
+    }
+  });
+
+  it("the server's publish_defaults section normalizes into the declared vod section", () => {
+    // vidra-core sends section "publish_defaults"; the slug must land in the
+    // pre-declared "publish-defaults" section (title + description intact).
+    const placement = placementFor("default_video_privacy", {
+      page: "vod",
+      section: "publish_defaults",
+    });
+    expect(placement).toEqual({ page: "vod", section: "publish-defaults" });
+    expect(PAGE_SECTIONS.vod.some((s) => s.id === "publish-defaults")).toBe(true);
+
+    const sections = buildPageModel("vod", keys.map((k) => setting(k, { page: "vod", section: "publish_defaults" })));
+    const publish = sections.find((s) => s.section.id === "publish-defaults");
+    expect(publish?.section.title).toBe("Publish defaults");
+    for (const key of keys) expect(publish?.keys).toContain(key);
+  });
+
+  it("default_video_licence validates 0 or a PT-compatible licence id", () => {
+    const validate = META.default_video_licence.validate!;
+    expect(validate(0)).toBeNull();
+    expect(validate(3)).toBeNull();
+    expect(validate(8)).not.toBeNull();
+  });
+});

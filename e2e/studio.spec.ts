@@ -1433,3 +1433,77 @@ test("a creator can delete a video", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Doomed clip" })).toHaveCount(0);
   await expect(page.getByText("No videos in this channel yet.")).toBeVisible();
 });
+
+test("the upload form prefills from the instance publish defaults and sends the policies (W9)", async ({
+  page,
+}) => {
+  // The operator's defaults.publish block seeds the publish form: privacy,
+  // licence preselection, and the per-video comment/download toggles.
+  await page.route(/\/api\/v1\/instance$/, (route) =>
+    route.fulfill({
+      json: {
+        name: "Vidra",
+        features: { uploads: true, imports: true, live: false, comments: true, downloads: true },
+        defaults: {
+          feed_sort: "recent",
+          feed_scope: "local",
+          landing_page: "home-recent",
+          theme: "system",
+          player_autoplay: true,
+          miniature_prefer_author_display_name: false,
+          publish: {
+            privacy: "unlisted",
+            licence: 7,
+            comment_policy: "disabled",
+            download_enabled: false,
+          },
+        },
+      },
+    }),
+  );
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  let draftBody: Record<string, unknown> | undefined;
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      draftBody = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  await mockChunkedUpload(page, { video: video() });
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await page.getByRole("link", { name: "Studio" }).click();
+
+  // Prefilled from defaults.publish (licence 7 exists in the config mock).
+  await expect(page.getByLabel("Privacy", { exact: true })).toHaveValue("unlisted");
+  await expect(page.getByLabel("Video license")).toHaveValue("7");
+  await expect(page.getByRole("switch", { name: "Allow comments" })).toHaveAttribute(
+    "aria-checked",
+    "false",
+  );
+  await expect(page.getByRole("switch", { name: "Allow downloads" })).toHaveAttribute(
+    "aria-checked",
+    "false",
+  );
+
+  // The (untouched) form publishes with the seeded policies on the draft body.
+  await page.getByLabel("Video title").fill("Seeded clip");
+  await page.getByLabel("Video file").setInputFiles({
+    name: "clip.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("test"),
+  });
+  await page.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByText("Published!")).toBeVisible();
+  expect(draftBody).toMatchObject({
+    title: "Seeded clip",
+    privacy: "unlisted",
+    license: "7",
+    comments_policy: "disabled",
+    download_enabled: false,
+  });
+});

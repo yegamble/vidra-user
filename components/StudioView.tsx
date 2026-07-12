@@ -731,6 +731,10 @@ function UploadSection({
   // is_sensitive on the create-draft body so the instance policy (hide/warn/
   // blur/display) can apply to the published video.
   const [sensitive, setSensitive] = useState(false);
+  // Per-video publish policies (config-parity W9), prefilled from the
+  // instance's defaults.publish block once GET /instance resolves.
+  const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">("enabled");
+  const [downloadEnabled, setDownloadEnabled] = useState(true);
   const [publishAt, setPublishAt] = useState("");
   const [source, setSource] = useState<"file" | "url">("file");
   const [videoUrl, setVideoUrl] = useState("");
@@ -786,7 +790,23 @@ function UploadSection({
     const controller = new AbortController();
     api
       .getInstance(controller.signal)
-      .then((res) => setImportsEnabled(res.features.imports))
+      .then((res) => {
+        setImportsEnabled(res.features.imports);
+        // Prefill the publish form from the operator's defaults.publish block
+        // (config-parity W9). Fires once on load, before the creator has
+        // touched anything; absent fields (older backend) leave the shipped
+        // form defaults. Licence 0 = "no default" keeps the empty selection.
+        const publish = res.defaults?.publish;
+        if (!publish) return;
+        if (publish.privacy) setPrivacy(publish.privacy as VideoPrivacy);
+        if (publish.licence) setLicense(String(publish.licence));
+        if (publish.comment_policy === "enabled" || publish.comment_policy === "disabled") {
+          setCommentsPolicy(publish.comment_policy);
+        }
+        if (typeof publish.download_enabled === "boolean") {
+          setDownloadEnabled(publish.download_enabled);
+        }
+      })
       .catch(() => {});
     return () => controller.abort();
   }, []);
@@ -1024,6 +1044,11 @@ function UploadSection({
         ...(tags.length > 0 ? { tags } : {}),
         ...(scheduleIso ? { publish_at: scheduleIso } : {}),
         ...(sensitive ? { is_sensitive: true } : {}),
+        // Per-video publish policies (W9): the visible form state is what is
+        // saved (it was prefilled from defaults.publish, so an untouched form
+        // still matches the instance defaults).
+        comments_policy: commentsPolicy,
+        download_enabled: downloadEnabled,
       });
       draftId = draft.id;
       // Cancel clicked while the draft POST was still in flight: stop before the
@@ -1264,6 +1289,36 @@ function UploadSection({
             checked={sensitive}
             onChange={setSensitive}
             label="Contains sensitive content"
+            disabled={state === "uploading"}
+          />
+        </div>
+        {/* Per-video publish policies (config-parity W9), prefilled from the
+            instance defaults.publish block. */}
+        <div className="flex items-center justify-between gap-4 text-sm">
+          <div className="min-w-0">
+            <span className="block font-medium text-fg">Allow comments</span>
+            <span className="block text-xs text-fg-muted">
+              Viewers can comment on this video. Existing comments stay visible if turned off later.
+            </span>
+          </div>
+          <Toggle
+            checked={commentsPolicy === "enabled"}
+            onChange={(on) => setCommentsPolicy(on ? "enabled" : "disabled")}
+            label="Allow comments"
+            disabled={state === "uploading"}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4 text-sm">
+          <div className="min-w-0">
+            <span className="block font-medium text-fg">Allow downloads</span>
+            <span className="block text-xs text-fg-muted">
+              Viewers can download this video&apos;s files — only while the instance allows downloads at all.
+            </span>
+          </div>
+          <Toggle
+            checked={downloadEnabled}
+            onChange={setDownloadEnabled}
+            label="Allow downloads"
             disabled={state === "uploading"}
           />
         </div>
@@ -1679,6 +1734,12 @@ function VideoRow({
   // Sensitive-content flag; the authoritative value arrives with the detail
   // fetch (list rows omit it), mirroring how tags are handled.
   const [sensitive, setSensitive] = useState(isSensitiveVideo(video));
+  // Per-video publish policies (config-parity W9); like tags/sensitive, the
+  // authoritative values arrive with the detail fetch (list rows omit them).
+  const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">(
+    video.comments_policy === "disabled" ? "disabled" : "enabled",
+  );
+  const [downloadEnabled, setDownloadEnabled] = useState(video.download_enabled !== false);
   // The number of stored passwords (CORE-17), reported up by PasswordManager
   // while privacy is "password". null = not yet known; used to block a
   // privacy=password save that has no passwords (which the server would 400).
@@ -1729,6 +1790,8 @@ function VideoRow({
         // Same rule for the sensitive flag: only sent once the detail supplied
         // the real current value (list rows omit it).
         ...(detail ? { is_sensitive: sensitive } : {}),
+        // Same rule for the per-video publish policies (W9).
+        ...(detail ? { comments_policy: commentsPolicy, download_enabled: downloadEnabled } : {}),
         ...(scheduleChanged ? { publish_at: scheduleIso } : {}),
       });
       onUpdated(updated);
@@ -1750,6 +1813,8 @@ function VideoRow({
     setTags(detail?.tags ?? video.tags ?? []);
     setPrivacy(video.privacy ?? "private");
     setSensitive(isSensitiveVideo(detail ?? video));
+    setCommentsPolicy((detail ?? video).comments_policy === "disabled" ? "disabled" : "enabled");
+    setDownloadEnabled((detail ?? video).download_enabled !== false);
     setPublishAt(toLocalInputValue((detail ?? video).publish_at));
     setError(null);
   }
@@ -1770,6 +1835,8 @@ function VideoRow({
       setTags(full.tags ?? []);
       setPrivacy(full.privacy ?? "private");
       setSensitive(isSensitiveVideo(full));
+      setCommentsPolicy(full.comments_policy === "disabled" ? "disabled" : "enabled");
+      setDownloadEnabled(full.download_enabled !== false);
       setPublishAt(toLocalInputValue(full.publish_at));
     } catch {
       // Keep the list-derived defaults already in state (and claim nothing
@@ -1862,6 +1929,30 @@ function VideoRow({
               disabled={busy}
             />
           </div>
+        ) : null}
+        {/* Per-video publish policies (config-parity W9): same detail-gated
+            rule as the sensitive flag. */}
+        {detail ? (
+          <>
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="font-medium text-fg">Allow comments</span>
+              <Toggle
+                checked={commentsPolicy === "enabled"}
+                onChange={(on) => setCommentsPolicy(on ? "enabled" : "disabled")}
+                label="Edit allow comments"
+                disabled={busy}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="font-medium text-fg">Allow downloads</span>
+              <Toggle
+                checked={downloadEnabled}
+                onChange={setDownloadEnabled}
+                label="Edit allow downloads"
+                disabled={busy}
+              />
+            </div>
+          </>
         ) : null}
         {canSchedule ? (
           // Scheduling is only editable while the video has not published yet —

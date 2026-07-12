@@ -534,7 +534,10 @@ export function WatchView({ id }: { id: string }) {
         </div>
       </article>
 
-      <CommentsSection videoId={video.id} />
+      {/* comments_enabled is the server's EFFECTIVE value (instance toggle AND
+          this video's comments_policy, config-parity W9); absent (older
+          payloads) fails open — the server still gates posting. */}
+      <CommentsSection videoId={video.id} commentsEnabled={video.comments_enabled !== false} />
       </div>
 
       <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setRelatedNextVideo} />

@@ -501,3 +501,21 @@ test("an anonymous viewer is prompted to sign in when replying", async ({ page }
   await expect(parentRow.getByRole("link", { name: "Sign in" })).toBeVisible();
   await expect(page.getByLabel("Write a reply")).toHaveCount(0);
 });
+
+test("hides the composer behind a note when the video's comments are turned off (W9)", async ({ page }) => {
+  // comments_enabled is the server's EFFECTIVE per-video value (instance
+  // toggle AND comments_policy); the list stays readable either way.
+  await page.route(DETAIL, (route) => route.fulfill({ json: { ...detail, comments_enabled: false } }));
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(COMMENTS, (route) =>
+    route.fulfill({ json: { comments: [comment("c1", "Still readable")], limit: 20, offset: 0 } }),
+  );
+  await page.route(RATING, (route) => route.fulfill({ json: NO_RATING }));
+
+  await page.goto("/videos/v1");
+
+  await expect(page.getByText("Comments are turned off for this video.")).toBeVisible();
+  await expect(page.getByText("Still readable")).toBeVisible();
+  await expect(page.getByLabel("Add a comment")).toHaveCount(0);
+  await expect(page.getByText("to leave a comment")).toHaveCount(0);
+});

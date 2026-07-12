@@ -122,3 +122,41 @@ test("the download dialog links the original file", async ({ page }) => {
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
 });
+
+// Per-video download policy (config-parity W9): the watch page button follows
+// the EFFECTIVE state — instance downloads feature AND the video's own
+// download_enabled flag from the detail payload.
+test("the download button follows the per-video download_enabled flag", async ({ page }) => {
+  const INSTANCE = /\/api\/v1\/instance$/;
+  const instanceDoc = {
+    name: "Vidra",
+    description: "",
+    registration_enabled: false,
+    features: { uploads: true, imports: true, live: false, comments: true, downloads: true },
+  };
+  await page.route(INSTANCE, (route) => route.fulfill({ json: instanceDoc }));
+
+  // Instance gate on + per-video flag off => no Download button.
+  await page.route(DETAIL, (route) =>
+    route.fulfill({ json: { ...detail, download_enabled: false } }),
+  );
+  await page.route(ORIGINAL, (route) => route.abort());
+  await page.route(/\/api\/v1\/videos\/v1\/comments/, (route) =>
+    route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Share Me" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Share" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
+
+  // Same instance, per-video flag on => the button renders.
+  await page.route(DETAIL, (route) =>
+    route.fulfill({ json: { ...detail, download_enabled: true } }),
+  );
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Share Me" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download" })).toBeVisible();
+});

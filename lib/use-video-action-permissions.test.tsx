@@ -77,6 +77,35 @@ describe("useVideoActionPermissions", () => {
     expect(result.current.canManage).toBe(false);
   });
 
+  it("layers the per-video download policy on the instance setting (W9)", async () => {
+    mocks.getInstanceCached.mockResolvedValue({ features: { downloads: true } });
+    const { result } = renderHook(() =>
+      useVideoActionPermissions(video("channel-1", { download_enabled: false })),
+    );
+
+    await waitFor(() => expect(mocks.getInstanceCached).toHaveBeenCalledTimes(1));
+    await act(async () => Promise.resolve());
+    // Instance on + per-video off => no download for regular viewers.
+    expect(result.current.canDownload).toBe(false);
+  });
+
+  it("treats an absent per-video flag as enabled (card payloads omit it)", async () => {
+    mocks.getInstanceCached.mockResolvedValue({ features: { downloads: true } });
+    const { result } = renderHook(() => useVideoActionPermissions(video()));
+
+    await waitFor(() => expect(result.current.canDownload).toBe(true));
+  });
+
+  it("lets a moderator download even when the per-video flag is off", async () => {
+    mocks.session = { status: "authed", user: { id: "mod-1", role: "moderator" } };
+    const { result } = renderHook(() =>
+      useVideoActionPermissions(video("channel-1", { download_enabled: false })),
+    );
+
+    expect(result.current.canDownload).toBe(true);
+    await waitFor(() => expect(mocks.getInstanceCached).toHaveBeenCalledTimes(1));
+  });
+
   it.each(["moderator", "admin"] as const)(
     "lets a %s manage and download local videos even when downloads are disabled",
     async (role) => {
