@@ -346,9 +346,9 @@ export function PlaylistIcon(props: IconProps) {
 export function MoreHorizontalIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <circle cx="5" cy="12" r="1.8" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" />
-      <circle cx="19" cy="12" r="1.8" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="12" r="2.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="2.2" fill="currentColor" stroke="none" />
     </Icon>
   );
 }
@@ -357,9 +357,9 @@ export function MoreHorizontalIcon(props: IconProps) {
 export function MoreVerticalIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <circle cx="12" cy="5" r="1.8" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="19" r="1.8" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="5" r="2.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="2.2" fill="currentColor" stroke="none" />
     </Icon>
   );
 }

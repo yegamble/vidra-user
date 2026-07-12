@@ -128,14 +128,14 @@ export function VideoActionsMenu({
   return (
     <>
       <Dropdown
-        trigger={<MoreVerticalIcon size={compact ? 18 : 20} />}
+        trigger={<MoreVerticalIcon size={compact ? 20 : 22} />}
         triggerLabel={`Actions for ${video.title}`}
         items={items}
         align="end"
         triggerClassName={
           compact
-            ? "h-8 w-8 justify-center border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-muted hover:text-fg"
-            : "h-9 w-9 justify-center border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-muted hover:text-fg"
+            ? "h-9 w-9 justify-center border-0 bg-transparent p-0 text-fg hover:bg-surface-muted"
+            : "h-10 w-10 justify-center border-0 bg-transparent p-0 text-fg hover:bg-surface-muted"
         }
       />
 
