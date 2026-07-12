@@ -1,0 +1,131 @@
+import { describe, expect, it } from "vitest";
+
+import type { Video } from "@/lib/api/types";
+import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
+import { buildWatchMetadata, metaDescription, watchThumbnailUrl } from "@/lib/watch-metadata";
+
+// apiBaseUrl's test-environment default (lib/config.ts).
+const API = "http://localhost:8080";
+
+function video(overrides: Partial<Video> = {}): Video {
+  return {
+    id: "v1",
+    channel_id: "c1",
+    title: "Launch Day",
+    description: "The first upload.",
+    privacy: "public",
+    state: "published",
+    created_at: "2026-01-01T00:00:00Z",
+    has_thumbnail: true,
+    ...overrides,
+  } as Video;
+}
+
+function instance(overrides: object = {}): InstanceConfigSnapshot {
+  return {
+    name: "Vidra",
+    branding: {
+      logos: {
+        opengraph: { url: "/api/v1/instance/logo/opengraph", is_fallback: false },
+      },
+    },
+    social: { twitter_username: "@vidra" },
+    ...overrides,
+  } as InstanceConfigSnapshot;
+}
+
+describe("watchThumbnailUrl", () => {
+  it("builds the API thumbnail URL for a video with a thumbnail", () => {
+    expect(watchThumbnailUrl(video())).toBe(`${API}/api/v1/videos/v1/thumbnail`);
+  });
+
+  it("URL-encodes the id", () => {
+    expect(watchThumbnailUrl(video({ id: "a/b" } as Partial<Video>))).toBe(
+      `${API}/api/v1/videos/a%2Fb/thumbnail`,
+    );
+  });
+
+  it.each([false, undefined])("is null when has_thumbnail is %s", (flag) => {
+    expect(watchThumbnailUrl(video({ has_thumbnail: flag } as Partial<Video>))).toBeNull();
+  });
+});
+
+describe("metaDescription", () => {
+  it("keeps a short single line as-is", () => {
+    expect(metaDescription("A short description.")).toBe("A short description.");
+  });
+
+  it("takes only the first line and trims it", () => {
+    expect(metaDescription("  First line  \nSecond line")).toBe("First line");
+  });
+
+  it("caps long text with an ellipsis at 200 chars", () => {
+    const out = metaDescription("x".repeat(500));
+    expect(out.length).toBe(200);
+    expect(out.endsWith("…")).toBe(true);
+  });
+
+  it("is empty for null/undefined/blank", () => {
+    expect(metaDescription(null)).toBe("");
+    expect(metaDescription(undefined)).toBe("");
+    expect(metaDescription("   ")).toBe("");
+  });
+});
+
+describe("buildWatchMetadata", () => {
+  it("emits nothing for a missing video (layout defaults stand)", () => {
+    expect(buildWatchMetadata(null, instance())).toEqual({});
+  });
+
+  it("emits nothing for a blank title", () => {
+    expect(buildWatchMetadata(video({ title: "  " }), instance())).toEqual({});
+  });
+
+  it("prefers the video thumbnail as og:image over the instance opengraph logo", () => {
+    const md = buildWatchMetadata(video(), instance());
+    expect(md.title).toBe("Launch Day");
+    expect(md.description).toBe("The first upload.");
+    expect(md.openGraph).toMatchObject({
+      title: "Launch Day",
+      type: "video.other",
+      description: "The first upload.",
+      images: [{ url: `${API}/api/v1/videos/v1/thumbnail` }],
+    });
+    expect(md.twitter).toMatchObject({
+      card: "summary_large_image",
+      site: "@vidra",
+      images: [`${API}/api/v1/videos/v1/thumbnail`],
+    });
+  });
+
+  it("falls back to the instance opengraph logo when the video has no thumbnail", () => {
+    const md = buildWatchMetadata(video({ has_thumbnail: false }), instance());
+    expect(md.openGraph).toMatchObject({
+      images: [{ url: `${API}/api/v1/instance/logo/opengraph` }],
+    });
+    expect(md.twitter).toMatchObject({ card: "summary_large_image" });
+  });
+
+  it("degrades to an imageless summary card without thumbnail or instance branding", () => {
+    const md = buildWatchMetadata(video({ has_thumbnail: false }), null);
+    expect(md.openGraph).not.toHaveProperty("images");
+    expect(md.twitter).toMatchObject({ card: "summary" });
+    expect(md.twitter).not.toHaveProperty("site");
+  });
+
+  it("omits description keys for a blank description", () => {
+    const md = buildWatchMetadata(video({ description: "" }), instance());
+    expect(md).not.toHaveProperty("description");
+    expect(md.openGraph).not.toHaveProperty("description");
+  });
+
+  it("ignores a fallback instance opengraph slot", () => {
+    const md = buildWatchMetadata(
+      video({ has_thumbnail: false }),
+      instance({
+        branding: { logos: { opengraph: { url: "", is_fallback: true } } },
+      }),
+    );
+    expect(md.openGraph).not.toHaveProperty("images");
+  });
+});

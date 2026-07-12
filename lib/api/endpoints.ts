@@ -35,6 +35,7 @@ import type {
   ChannelSyncListResponse,
   ChannelSyncResponse,
   CreateChannelSyncRequest,
+  FederationFollowerRequestListResponse,
   FollowedChannelsResponse,
   AddDonationAddressRequest,
   DonationAddress,
@@ -1585,6 +1586,44 @@ export const api = {
     apiRequest<void>(
       `/api/v1/admin/registration-requests/${encodeURIComponent(id)}/reject`,
       { method: "POST", body },
+    ),
+
+  /**
+   * GET /api/v1/admin/federation/follower-requests — pending inbound
+   * ActivityPub channel Follows awaiting an admin decision, newest first
+   * (federation_follower_approval, config-parity W12; admin only).
+   */
+  getFederationFollowerRequests: (
+    params: { limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<FederationFollowerRequestListResponse>(
+      "/api/v1/admin/federation/follower-requests",
+      { query: { limit: params.limit, offset: params.offset }, signal },
+    ),
+
+  /**
+   * POST /api/v1/admin/federation/follower-requests/{id}/approve — accept one
+   * pending channel Follow: the follow flips to accepted and the Accept
+   * activity is queued to the follower's inbox (admin only, 204). 404 if
+   * unknown/already resolved.
+   */
+  approveFederationFollowerRequest: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/follower-requests/${encodeURIComponent(id)}/approve`,
+      { method: "POST" },
+    ),
+
+  /**
+   * POST /api/v1/admin/federation/follower-requests/{id}/reject — reject one
+   * pending channel Follow: the pending follow is removed and a Reject
+   * activity is queued to the follower's inbox (admin only, 204). 404 if
+   * unknown/already resolved.
+   */
+  rejectFederationFollowerRequest: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/follower-requests/${encodeURIComponent(id)}/reject`,
+      { method: "POST" },
     ),
 
   /** GET /api/v1/admin/audit-log — the security audit trail, newest first (admin). */

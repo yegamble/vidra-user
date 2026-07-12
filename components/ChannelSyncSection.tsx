@@ -9,7 +9,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
-import { api, errorMessage, fieldErrors } from "@/lib/api";
+import { api, errorMessage, fieldErrors, getInstanceCached } from "@/lib/api";
 import type { Channel, ChannelSync } from "@/lib/api";
 import {
   channelSyncStateClass,
@@ -23,9 +23,11 @@ import { relativeTime } from "@/lib/format";
 // W2.U5). Below the channel cards: a connect form (target channel + external
 // channel URL) plus the caller's syncs, each with a state pill
 // (waiting_first_run | syncing | idle | failed), last_sync_at, a safe last_error,
-// and Sync now / Remove. There is no proactive GET flag for this feature (the list
-// endpoint always 200s), so the honest "disabled" empty state is driven reactively
-// by the stable 503 the create / sync-now endpoints return when auto-sync is off.
+// and Sync now / Remove. The "disabled" empty state is driven two ways: proactively
+// by the /instance features.channel_sync flag (config-parity W8/W15 — only an
+// EXPLICIT false disables, so an older backend or a failed read keeps the shipped
+// behavior), and reactively by the stable 503 the create / sync-now endpoints
+// return when auto-sync is off (covers a flag change mid-session).
 
 type Status = "loading" | "error" | "ready";
 
@@ -53,6 +55,23 @@ export function ChannelSyncSection({ channels }: { channels: Channel[] }) {
       });
     return () => controller.abort();
   }, [reloadKey]);
+
+  // Proactive feature flag: the operator turned channel auto-sync off, so the
+  // connect form gives way to the honest disabled empty state up front instead
+  // of 503ing on submit. Existing syncs stay visible for management.
+  useEffect(() => {
+    let cancelled = false;
+    getInstanceCached()
+      .then((instance) => {
+        if (!cancelled && instance.features.channel_sync === false) setDisabled(true);
+      })
+      .catch(() => {
+        // Unknown instance policy → keep the reactive-503 behavior only.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Re-read the whole list from the server (the source of truth) after a sync-now,
   // so any state change (e.g. → syncing) shows without guessing client-side.

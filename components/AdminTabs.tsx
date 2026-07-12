@@ -9,6 +9,7 @@ const TABS = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/registration-requests", label: "Registration" },
+  { href: "/admin/federation/follower-requests", label: "Followers" },
   { href: "/admin/config", label: "Config" },
   { href: "/admin/jobs", label: "Jobs" },
   { href: "/admin/import-peertube", label: "Import" },

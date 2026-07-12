@@ -45,6 +45,7 @@ const PRIMARY: readonly ConsoleItem[] = [
 // bottom-tab bar and the horizontal AdminTabs are hidden at this width).
 const SECONDARY: readonly { href: string; label: string }[] = [
   { href: "/admin/registration-requests", label: "Registration" },
+  { href: "/admin/federation/follower-requests", label: "Followers" },
   { href: "/admin/jobs", label: "Jobs" },
   { href: "/admin/import-peertube", label: "Import" },
   { href: "/admin/media", label: "Media storage" },

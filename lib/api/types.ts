@@ -123,6 +123,9 @@ export type RegistrationRequestStatus = NonNullable<Schemas["RegistrationRequest
 export type RegistrationRequest = Schemas["RegistrationRequest"];
 export type RegistrationRequestListResponse = Schemas["RegistrationRequestListResponse"];
 export type RejectRegistrationRequest = Schemas["RejectRegistrationRequest"];
+export type FederationFollowerRequest = Schemas["FederationFollowerRequest"];
+export type FederationFollowerRequestListResponse =
+  Schemas["FederationFollowerRequestListResponse"];
 export type User = Schemas["User"];
 export type ProfileImage = Schemas["ProfileImage"];
 export type RegisterRequest = Schemas["RegisterRequest"];

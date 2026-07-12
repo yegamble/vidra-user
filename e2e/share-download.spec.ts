@@ -105,21 +105,58 @@ test("the embed player honors ?t=", async ({ page }) => {
   );
 });
 
-test("the download dialog links the original file", async ({ page }) => {
+// The reworked DownloadButton (video thumbnail actions menu) renders only when
+// the instance downloads feature is on, and opens a format-picker dialog fed by
+// GET /videos/{id}/download; the chosen file is fetched with the bearer token
+// (no plain <a href> anymore).
+test("the download dialog offers the original file and fetches it", async ({ page }) => {
+  await page.route(/\/api\/v1\/instance$/, (route) =>
+    route.fulfill({
+      json: {
+        name: "Vidra",
+        description: "",
+        registration_enabled: false,
+        features: { uploads: true, imports: true, live: false, comments: true, downloads: true },
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/download$/, (route) =>
+    route.fulfill({
+      json: {
+        files: [
+          {
+            kind: "original",
+            url: "/api/v1/videos/v1/download/original",
+            filename: "source.mp4",
+            content_type: "video/mp4",
+            size_bytes: 1_000_000,
+            original_name: "camera-source.mp4",
+          },
+        ],
+      },
+    }),
+  );
+  let fetchedOriginal = false;
+  await page.route(/\/api\/v1\/videos\/v1\/download\/original$/, (route) => {
+    fetchedOriginal = true;
+    return route.fulfill({ body: "bytes", contentType: "video/mp4" });
+  });
+
   await openWatch(page);
-  await page.getByRole("button", { name: "Download" }).click();
-  const dialog = page.getByRole("dialog", { name: "Download this video" });
+  await page.getByRole("button", { name: "Download", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Download" });
   await expect(dialog).toBeVisible();
 
-  const link = dialog.getByRole("link", { name: "Original file" });
-  await expect(link).toBeVisible();
-  await expect(link).toHaveAttribute(
-    "href",
-    "http://localhost:8080/api/v1/videos/v1/original",
-  );
-  await expect(link).toHaveAttribute("download", "");
+  // The original file is listed and preselected (the only video-mode file).
+  const original = dialog.getByRole("radio", { name: /Original file/ });
+  await expect(original).toBeVisible();
+  await expect(original).toBeChecked();
 
-  await dialog.getByRole("button", { name: "Close" }).click();
+  // Download fetches the chosen attachment through the authenticated helper.
+  await dialog.getByRole("button", { name: "Download", exact: true }).click();
+  await expect.poll(() => fetchedOriginal).toBe(true);
+
+  await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
 });
 

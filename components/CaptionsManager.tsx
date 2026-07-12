@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { ApiError, api, errorMessage } from "@/lib/api";
+import { ApiError, api, errorMessage, getInstanceCached } from "@/lib/api";
 import type { Caption, VideoConfigOption } from "@/lib/api";
 
 // How often to poll an in-progress auto-caption job for its status.
@@ -67,6 +67,27 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
         // Keep the free-text fallback; no user-facing error for a config miss.
       });
     return () => controller.abort();
+  }, []);
+
+  // Proactive feature flag (config-parity W8/W15): /instance features.transcription
+  // is false while Whisper auto-captioning is unavailable (toggle off, or no
+  // endpoint wired), so the control renders the honest "unavailable" explanation
+  // up front instead of 503ing on use. Only an EXPLICIT false disables — an older
+  // backend or a failed read keeps the shipped reactive-503 behavior. Never
+  // downgrades a job already in flight.
+  useEffect(() => {
+    let cancelled = false;
+    getInstanceCached()
+      .then((instance) => {
+        if (cancelled || instance.features.transcription !== false) return;
+        setAutoState((prev) => (prev === "idle" ? "unsupported" : prev));
+      })
+      .catch(() => {
+        // Unknown instance policy → keep the reactive-503 behavior only.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function upload(e: React.FormEvent) {
