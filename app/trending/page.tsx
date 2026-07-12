@@ -66,7 +66,7 @@ export default async function TrendingPage({
         </div>
         <FeedSortTabs active="trending" filters={filters} urlDefaults={urlDefaults} />
       </section>
-      <div className="mb-9 flex flex-col gap-3 rounded-[20px] border border-border-subtle bg-surface-muted/65 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
+      <div className="scrollbar-none mb-8 flex flex-nowrap items-center gap-2.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible">
         <FeedScopeToggle active={scope} sort="trending" filters={filters} urlDefaults={urlDefaults} />
         <FeedFilters sort="trending" filters={filters} urlDefaults={urlDefaults} />
       </div>

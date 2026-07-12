@@ -176,6 +176,15 @@ body {
   }
 }
 
+/* Hide the scrollbar on horizontal chip/filter strips — the content still
+   scrolls by touch/trackpad; a visible bar under a chip row reads as clutter. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* A quiet, dimensional fallback for media that has no server thumbnail. */
 .media-placeholder {
   background: var(--surface-muted);

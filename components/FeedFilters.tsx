@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { CloseIcon } from "@/components/icons";
+import { ChevronDownIcon, CloseIcon } from "@/components/icons";
 import type { FeedSort, VideoConfigResponse } from "@/lib/api";
 import { getVideoConfigCached } from "@/lib/api/video-config";
 import { feedHref, type FeedFilters as Filters, type FeedUrlDefaults } from "@/lib/feed-url";
@@ -48,47 +48,68 @@ export function FeedFilters({
     router.push(feedHref(sort, { ...filters, ...next }, urlDefaults));
   }
 
+  // Pill-styled native selects (appearance-none + overlaid chevron) so the
+  // filters speak the same visual language as the segmented control and sort
+  // chips beside them, instead of default browser select chrome.
   const selectClass =
-    "focus-ring min-h-11 min-w-24 rounded-xl border border-border bg-surface-raised px-3 py-1.5 text-[13px] font-semibold text-fg disabled:opacity-60 sm:min-h-9";
+    "focus-ring min-h-11 appearance-none rounded-full border border-border bg-surface-raised py-1.5 pl-3.5 pr-8 text-[13px] font-semibold text-fg disabled:opacity-60 sm:min-h-9";
 
   return (
-    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto" role="group" aria-label="Filter videos">
-      <label className="flex w-full items-center justify-between gap-2 px-1 text-[13px] text-fg-muted sm:w-auto sm:justify-start sm:px-0">
+    <div
+      className="flex flex-nowrap items-center gap-2 sm:flex-wrap"
+      role="group"
+      aria-label="Filter videos"
+    >
+      <label className="flex shrink-0 items-center gap-2 text-[13px] text-fg-muted">
         <span>Category</span>
-        <select
-          value={filters.category ?? ""}
-          onChange={(e) => apply({ category: e.target.value || undefined })}
-          aria-label="Filter by category"
-          disabled={config === null}
-          className={selectClass}
-        >
-          <option value="">All</option>
-          {(config?.categories ?? []).map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <span className="relative inline-flex items-center">
+          <select
+            value={filters.category ?? ""}
+            onChange={(e) => apply({ category: e.target.value || undefined })}
+            aria-label="Filter by category"
+            disabled={config === null}
+            className={selectClass}
+          >
+            <option value="">All</option>
+            {(config?.categories ?? []).map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDownIcon
+            size={14}
+            strokeWidth={2.2}
+            className="pointer-events-none absolute right-3 text-fg-muted"
+          />
+        </span>
       </label>
-      <label className="flex w-full items-center justify-between gap-2 px-1 text-[13px] text-fg-muted sm:w-auto sm:justify-start sm:px-0">
+      <label className="flex shrink-0 items-center gap-2 text-[13px] text-fg-muted">
         <span>Language</span>
-        <select
-          value={filters.language ?? ""}
-          onChange={(e) => apply({ language: e.target.value || undefined })}
-          aria-label="Filter by language"
-          disabled={config === null}
-          className={selectClass}
-        >
-          <option value="">All</option>
-          {(config?.languages ?? []).map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <span className="relative inline-flex items-center">
+          <select
+            value={filters.language ?? ""}
+            onChange={(e) => apply({ language: e.target.value || undefined })}
+            aria-label="Filter by language"
+            disabled={config === null}
+            className={selectClass}
+          >
+            <option value="">All</option>
+            {(config?.languages ?? []).map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDownIcon
+            size={14}
+            strokeWidth={2.2}
+            className="pointer-events-none absolute right-3 text-fg-muted"
+          />
+        </span>
       </label>
       {filters.tag ? (
-        <span className="inline-flex min-h-11 items-center gap-1 rounded-full bg-surface-raised py-1 pl-3 pr-1 text-[13px] font-semibold text-fg sm:min-h-9">
+        <span className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full bg-surface-raised py-1 pl-3 pr-1 text-[13px] font-semibold text-fg sm:min-h-9">
           <span className="sr-only">Filtered by tag </span>#{filters.tag}
           <Link
             href={feedHref(sort, { ...filters, tag: undefined }, urlDefaults)}
