@@ -561,6 +561,12 @@ export function VideoPlayer({
       }
     }
     document.addEventListener("keydown", onKeyDown);
+    // Readiness stamp: the controls are in the DOM from the render commit, but
+    // this document-level listener only exists once the (post-paint) effect has
+    // run — a keypress in that gap is silently lost. Mark the container so the
+    // e2e suite can wait for the shortcuts to actually be live before pressing.
+    // The attribute is not in the JSX, so React never touches it after this.
+    containerRef.current?.setAttribute("data-shortcuts", "ready");
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [
     videoRef,

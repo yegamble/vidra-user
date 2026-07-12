@@ -62,6 +62,15 @@ async function mockWatchPage(page: Page, opts: { realVideo?: boolean; captions?:
   );
 }
 
+// The player's document-level shortcut listener attaches in a post-paint effect,
+// but the controls are in the DOM from the render commit — under machine load
+// that gap stretches, and a keypress inside it is silently lost (the historical
+// full-suite flake). The shell stamps data-shortcuts="ready" once the listener
+// is live; always wait for it before pressing shortcut keys.
+async function shortcutsReady(page: Page) {
+  await expect(page.getByTestId("video-player")).toHaveAttribute("data-shortcuts", "ready");
+}
+
 test("the speed selector offers the full 0.25×–4× ladder and applies the chosen rate", async ({
   page,
 }) => {
@@ -95,11 +104,19 @@ test("keyboard shortcuts toggle mute and start playback", async ({ page }) => {
   await mockWatchPage(page, { realVideo: true });
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  await shortcutsReady(page);
 
+  // Both M presses happen BEFORE playback starts: the fixture clip is
+  // sub-second, and once it ends the end card focuses its primary button — a
+  // focused button sits inside SHORTCUT_IGNORE_SELECTOR, so a late M would be
+  // (correctly) ignored. Muting first keeps the toggle assertions free of that
+  // wall-clock race under machine load (the historical full-suite flake).
   const muted = () => page.locator("video").evaluate((el: HTMLVideoElement) => el.muted);
   expect(await muted()).toBe(false);
   await page.keyboard.press("m");
   await expect.poll(muted).toBe(true);
+  await page.keyboard.press("m");
+  await expect.poll(muted).toBe(false);
 
   // K starts playback (asserted via the play event — the fixture clip is
   // sub-second, so `paused` flips back too fast to assert reliably).
@@ -113,15 +130,13 @@ test("keyboard shortcuts toggle mute and start playback", async ({ page }) => {
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __played: boolean }).__played))
     .toBe(true);
-
-  await page.keyboard.press("m");
-  await expect.poll(muted).toBe(false);
 });
 
 test("C toggles captions on and off", async ({ page }) => {
   await mockWatchPage(page, { captions: true });
   await page.goto("/videos/v1");
   await expect(page.locator("video track")).toHaveCount(1);
+  await shortcutsReady(page);
 
   const mode = () =>
     page.locator("video").evaluate((el: HTMLVideoElement) => el.textTracks[0]?.mode ?? "none");
@@ -135,6 +150,9 @@ test("shortcuts are ignored while typing in a field", async ({ page }) => {
   await mockWatchPage(page);
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  // Without the listener live this test would pass vacuously — gate it so the
+  // "ignored while typing" proof is real.
+  await shortcutsReady(page);
 
   const search = page.getByLabel("Search videos");
   await search.click();
@@ -147,6 +165,7 @@ test("the T shortcut toggles theater mode from anywhere on the watch page", asyn
   await mockWatchPage(page);
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  await shortcutsReady(page);
 
   const stage = page.locator("[data-theater]").first();
   await expect(stage).toHaveAttribute("data-theater", "off");
@@ -160,6 +179,7 @@ test("the > shortcut steps the playback speed up the ladder", async ({ page }) =
   await mockWatchPage(page);
   await page.goto("/videos/v1");
   await expect(page.getByRole("button", { name: "Speed: 1×" })).toBeVisible();
+  await shortcutsReady(page);
 
   await page.keyboard.press(">");
   await expect(page.getByRole("button", { name: "Speed: 1.25×" })).toBeVisible();
@@ -174,6 +194,7 @@ test("the number keys seek to deciles (5 jumps to 50%)", async ({ page }) => {
   await mockWatchPage(page);
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  await shortcutsReady(page);
 
   // Stamp a known duration and record every requested seek WITHOUT writing the
   // media element (the /original stream is aborted, so there is no media whose
@@ -207,6 +228,7 @@ test("volume arrows adjust volume only while the player region has focus", async
   await mockWatchPage(page, { realVideo: true });
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  await shortcutsReady(page);
 
   const vol = () =>
     page.locator("video").evaluate((el: HTMLVideoElement) => Math.round(el.volume * 100) / 100);
