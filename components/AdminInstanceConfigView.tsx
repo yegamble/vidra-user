@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { InstanceBrandingManager } from "@/components/InstanceBrandingManager";
 import { InstanceDocumentEditor } from "@/components/InstanceDocumentEditor";
 import { Markdown } from "@/components/Markdown";
+import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +28,7 @@ import {
   describeSettingDefault,
   emptyValueFor,
   type ConfigPageId,
+  type EnumOption,
   type InstanceBootInfo,
   type PageSection,
   type PlacedInstanceSetting,
@@ -323,12 +325,17 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   const pageBootNote = instance && pageDef.bootNote ? pageDef.bootNote(instance) : null;
 
   // Progressive disclosure: a child row stays hidden while its parent toggle
-  // is off. A parent the server does not return cannot vouch either way, so
-  // the child stays visible (it renders disabled on its own merits anyway).
+  // is off. Disclosure is transitive — a grandchild (e.g. live_default_save_replay
+  // under live_allow_replay under live_enabled) hides when ANY ancestor is off,
+  // so it never outlives a hidden parent. A parent the server does not return
+  // cannot vouch either way, so the child stays visible (it renders disabled on
+  // its own merits anyway).
   const isVisible = (key: string): boolean => {
     const parent = META[key]?.parent;
-    if (!parent || byKey.get(parent) === undefined) return true;
-    return draft[parent] === true;
+    if (!parent) return true;
+    if (byKey.get(parent) === undefined) return true;
+    if (draft[parent] !== true) return false;
+    return isVisible(parent);
   };
 
   const renderSection = ({ section, keys }: PageSection) => {
@@ -601,7 +608,12 @@ function SettingRow({
     >
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <span className="block break-words text-sm font-medium text-fg">{label}</span>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="break-words text-sm font-medium text-fg">{label}</span>
+            {/* Federation-protocol badge (config-parity W12): names the protocol
+                whose surface the gate governs — ActivityPub for the inbox gates. */}
+            {meta?.protocol ? <ProtocolBadge protocol={meta.protocol} /> : null}
+          </span>
           {meta?.help ? (
             <span className="block text-xs text-fg-muted">{meta.help}</span>
           ) : null}
@@ -745,6 +757,17 @@ function SettingRow({
           label={label}
           options={(control === "category-multi" ? config?.categories : config?.languages) ?? []}
           value={list}
+          onChange={onChange}
+          error={error}
+          disabled={inactive}
+        />
+      ) : null}
+
+      {control === "list" ? (
+        <ListControl
+          label={label}
+          value={list}
+          options={meta?.options}
           onChange={onChange}
           error={error}
           disabled={inactive}
@@ -952,6 +975,113 @@ function MultiSelectList({
       <p className="text-xs text-fg-muted">
         {value.length === 0 ? "None selected." : `${value.length} selected.`}
       </p>
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
+    </div>
+  );
+}
+
+// ListControl — the token-conformant editor for KindList settings that have NO
+// server-supplied option universe (the server exposes `options` for enums only).
+// It renders the current array as removable chips and adds via a free-text input
+// (so ANY list-kind setting is editable, keeping the auto-render invariant true)
+// plus optional quick-add suggestion chips from META options (the canonical
+// transcoding rungs). Empty/duplicate additions are refused at the control;
+// the whole-value inline validator (e.g. validateRungSet) carries the messaging.
+function ListControl({
+  label,
+  value,
+  options,
+  onChange,
+  error,
+  disabled,
+}: {
+  label: string;
+  value: string[];
+  options?: readonly EnumOption[];
+  onChange: (value: string[]) => void;
+  error?: string;
+  disabled: boolean;
+}) {
+  const [entry, setEntry] = useState("");
+  const add = (raw: string) => {
+    const v = raw.trim();
+    if (v === "" || value.includes(v)) return; // no blanks, no duplicates
+    onChange([...value, v]);
+    setEntry("");
+  };
+  const remove = (v: string) => onChange(value.filter((x) => x !== v));
+  const labelFor = (v: string) => options?.find((o) => o.value === v)?.label ?? v;
+  // Suggestions not already chosen (canonical rungs for transcoding_resolutions).
+  const suggestions = (options ?? []).filter((o) => !value.includes(o.value));
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div
+        role="group"
+        aria-label={label}
+        className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-xl border border-border bg-surface p-1.5"
+      >
+        {value.length === 0 ? (
+          <span className="px-1 text-xs text-fg-muted">None yet.</span>
+        ) : (
+          value.map((v) => (
+            <span
+              key={v}
+              className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-fg"
+            >
+              {labelFor(v)}
+              <button
+                type="button"
+                onClick={() => remove(v)}
+                disabled={disabled}
+                aria-label={`Remove ${labelFor(v)}`}
+                className="focus-ring rounded-full leading-none text-fg-muted hover:text-fg disabled:opacity-60"
+              >
+                ×
+              </button>
+            </span>
+          ))
+        )}
+      </div>
+      {suggestions.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {suggestions.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => add(o.value)}
+              disabled={disabled}
+              className="focus-ring rounded-full border border-border-subtle px-2 py-0.5 text-xs text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-60"
+            >
+              + {o.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label={`Add to ${label}`}
+          value={entry}
+          onChange={(e) => setEntry(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add(entry);
+            }
+          }}
+          placeholder="Add a value…"
+          disabled={disabled}
+          className="max-w-48"
+        />
+        <Button
+          type="button"
+          variant="tonal"
+          size="sm"
+          onClick={() => add(entry)}
+          disabled={disabled || entry.trim() === ""}
+        >
+          Add
+        </Button>
+      </div>
       {error ? <p className="text-xs text-danger">{error}</p> : null}
     </div>
   );

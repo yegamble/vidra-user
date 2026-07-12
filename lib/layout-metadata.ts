@@ -15,11 +15,11 @@
 // og:image precedence: Next.js merges metadata per route segment, and a page
 // segment's `openGraph` replaces the layout's wholesale — so any page that
 // supplies its own image (e.g. a video thumbnail) automatically wins over the
-// instance opengraph default. DEVIATION NOTE (W4): the watch page has no
-// server-side generateMetadata today (the video loads client-side in
-// WatchView, app/videos/[id]/page.tsx), so there is no page-level og:image to
-// take that precedence yet; building an SSR metadata surface for watch pages
-// is out of this wave's scope per the wave plan.
+// instance opengraph default. As of W15 (b216134) the watch page does exactly
+// this: app/videos/[id]/page.tsx has a server-side generateMetadata (via
+// lib/video.server.ts + lib/watch-metadata.ts) whose og:image prefers the
+// video thumbnail and falls back to this instance opengraph logo — so the
+// instance default built here is the floor for watch pages, not the ceiling.
 
 import type { Metadata } from "next";
 

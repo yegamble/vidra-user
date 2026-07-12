@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -266,7 +266,7 @@ describe("page placement and progressive disclosure", () => {
     mocks.getInstanceSettings.mockResolvedValue({
       settings: [
         {
-          key: "storyboards_enabled",
+          key: "clamav_enabled",
           type: "bool",
           value: true,
           default: true,
@@ -277,15 +277,24 @@ describe("page placement and progressive disclosure", () => {
       ],
     });
     render(<ConfigForm page="vod" />);
-    expect(await screen.findByRole("switch", { name: "storyboards_enabled" })).toBeTruthy();
+    // A genuinely-unknown server key auto-renders under the section the server
+    // names, keyed only by its raw id (no META label yet).
+    expect(await screen.findByRole("switch", { name: "clamav_enabled" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Transcoding" })).toBeTruthy();
   });
 
-  it("renders an empty state on a page with nothing to configure yet", async () => {
-    // Federation has no registry keys in this fixture (and no panel section).
+  it("renders the federation gates with ActivityPub protocol badges (config-parity W12)", async () => {
+    // The four inbox gates are curated META now, so the federation page is no
+    // longer empty even when the backend returns no federation rows: they render
+    // as disabled placeholder rows, each carrying an ActivityPub protocol badge.
     render(<ConfigForm page="federation" />);
-    expect(await screen.findByText("Nothing to configure here yet")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    expect(await screen.findByText("Accept remote comments")).toBeTruthy();
+    expect(screen.getByText("Allow remote followers")).toBeTruthy();
+    expect(screen.getByText("Require follower approval")).toBeTruthy();
+    expect(screen.getByText("Auto-follow back")).toBeTruthy();
+    // Exactly the four gates carry the badge; the remote-search keys do not.
+    expect(screen.getAllByText("ActivityPub")).toHaveLength(4);
+    expect(screen.getByText("Remote search for signed-in users")).toBeTruthy();
   });
 
   it("the homepage page hosts the W6 document editor panel, not registry rows", async () => {
@@ -387,5 +396,92 @@ describe("branding panel reachability (General page, config-parity W4)", () => {
     expect(
       await screen.findByText("Instance branding is not supported by this server yet."),
     ).toBeTruthy();
+  });
+});
+
+describe("transcoding ladder list control (config-parity W1/W10)", () => {
+  const transcodingDoc = {
+    settings: [
+      {
+        key: "transcoding_enabled",
+        type: "bool",
+        value: true,
+        default: true,
+        overridden: false,
+        page: "vod",
+        section: "transcoding",
+      },
+      {
+        key: "transcoding_resolutions",
+        type: "list",
+        value: ["1080", "720"],
+        default: ["1080", "720", "480", "360"],
+        overridden: true,
+        page: "vod",
+        section: "transcoding",
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mocks.getInstanceSettings.mockResolvedValue(transcodingDoc);
+    mocks.updateInstanceSettings.mockResolvedValue(transcodingDoc);
+  });
+
+  it("renders the array value as removable rung chips (not a blanked text field)", async () => {
+    render(<ConfigForm page="vod" />);
+    const ladder = await screen.findByRole("group", { name: "Transcoding ladder" });
+    // Each rung is a chip with a Remove control — proving the array survived.
+    expect(within(ladder).getByRole("button", { name: "Remove 1080p" })).toBeTruthy();
+    expect(within(ladder).getByRole("button", { name: "Remove 720p" })).toBeTruthy();
+  });
+
+  it("adds a rung via a suggestion chip and PATCHes a JSON array", async () => {
+    render(<ConfigForm page="vod" />);
+    await screen.findByRole("group", { name: "Transcoding ladder" });
+    fireEvent.click(screen.getByRole("button", { name: /480p/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(mocks.updateInstanceSettings).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceSettings).toHaveBeenCalledWith({
+      transcoding_resolutions: ["1080", "720", "480"],
+    });
+  });
+
+  it("adds a free-text rung and emits the array", async () => {
+    render(<ConfigForm page="vod" />);
+    await screen.findByRole("group", { name: "Transcoding ladder" });
+    fireEvent.change(screen.getByLabelText("Add to Transcoding ladder"), {
+      target: { value: "240" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(mocks.updateInstanceSettings).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceSettings).toHaveBeenCalledWith({
+      transcoding_resolutions: ["1080", "720", "240"],
+    });
+  });
+
+  it("ignores a duplicate add (no blank/duplicate rungs)", async () => {
+    render(<ConfigForm page="vod" />);
+    const ladder = await screen.findByRole("group", { name: "Transcoding ladder" });
+    // "1080" is already selected: adding it again is a no-op (still one chip).
+    fireEvent.change(screen.getByLabelText("Add to Transcoding ladder"), {
+      target: { value: "1080" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(within(ladder).getAllByRole("button", { name: "Remove 1080p" })).toHaveLength(1);
+    // Nothing changed → nothing to save.
+    expect(screen.queryByText("1 unsaved change")).toBeNull();
+  });
+
+  it("rejects an emptied ladder inline and blocks saving", async () => {
+    render(<ConfigForm page="vod" />);
+    const ladder = await screen.findByRole("group", { name: "Transcoding ladder" });
+    fireEvent.click(within(ladder).getByRole("button", { name: "Remove 1080p" }));
+    fireEvent.click(within(ladder).getByRole("button", { name: "Remove 720p" }));
+    expect(await screen.findByText(/Enable at least one resolution/)).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Save changes" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });

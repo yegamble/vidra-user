@@ -220,17 +220,17 @@ test("the general page renders its sections with badge-only-when-overridden", as
   await page.route(SETTINGS, (route) => route.fulfill({ json: settings }));
   await openConfig(page);
 
-  // The general page's section structure, in order (uploads/limits moved to VOD).
+  // The general page's section structure mirrors the server section ids
+  // (uploads/limits and the comments toggle moved to VOD; the legal/terms/
+  // support/hardware markdown consolidated into the server's About page section).
   for (const title of [
-    "Administrators",
     "Platform",
+    "Administrators & contact",
     "Broadcast message",
     "Social",
     "Moderation & sensitive content",
-    "You and your platform",
-    "Other information",
+    "About page",
     "Sign-up & new users",
-    "Comments",
   ]) {
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
   }
@@ -304,7 +304,7 @@ test("the left rail walks the IA: VOD, Live, Federation, empty pages, Advanced",
           // The auto-render invariant: an unknown key with server placement
           // lands in the named page/section; one without lands in Advanced.
           {
-            key: "storyboards_enabled",
+            key: "clamav_enabled",
             type: "bool",
             value: true,
             default: true,
@@ -328,16 +328,19 @@ test("the left rail walks the IA: VOD, Live, Federation, empty pages, Advanced",
   await expect(page.getByLabel("Import resolution cap")).toHaveValue("1080");
   // Server-placed unknown key: under the Transcoding section, fully editable.
   await expect(page.getByRole("heading", { name: "Transcoding", exact: true })).toBeVisible();
-  await expect(page.getByRole("switch", { name: "storyboards_enabled" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "clamav_enabled" })).toBeVisible();
 
   // Live: its master toggle lives here now.
   await nav.getByRole("link", { name: "Live" }).click();
   await expect(page.getByRole("switch", { name: "Live streaming" })).toBeVisible();
 
-  // Federation: no runtime keys yet + a boot-dependency explanation.
+  // Federation: the W12 inbox gates render (disabled here — this mock returns no
+  // federation rows) carrying an ActivityPub protocol badge, plus a page-wide
+  // boot-dependency explanation while federation is off at boot.
   await nav.getByRole("link", { name: "Federation" }).click();
   await expect(page.getByText(/FEDERATION_ENABLED/)).toBeVisible();
-  await expect(page.getByText("Nothing to configure here yet")).toBeVisible();
+  await expect(page.getByText("Accept remote comments")).toBeVisible();
+  await expect(page.getByText("ActivityPub").first()).toBeVisible();
 
   // Customization: the hide-name toggle's home (W4) — rendered disabled while
   // this mocked backend does not return the key, never hidden.
@@ -431,7 +434,7 @@ test("per-section save patches only that section's changed keys", async ({ page 
   });
   await openConfig(page);
 
-  // Dirty two sections: Administrators (contact_email) and Platform (name).
+  // Dirty two sections: Administrators & contact (contact_email) and Platform (name).
   await page.getByLabel("Admin email").fill("root@example.test");
   await page.getByLabel("Name", { exact: true }).fill("My Vidra");
   await expect(page.getByText("2 unsaved changes")).toBeVisible();
@@ -448,7 +451,7 @@ test("per-section save patches only that section's changed keys", async ({ page 
     return route.fulfill({ json: updated });
   });
 
-  await page.getByRole("button", { name: "Save Administrators" }).click();
+  await page.getByRole("button", { name: "Save Administrators & contact" }).click();
   await expect(page.getByText("Settings saved.")).toBeVisible();
   expect(patchBody).toEqual({ contact_email: "root@example.test" });
 
@@ -1046,7 +1049,7 @@ test("a form loaded from an older backend renders new fields disabled, not broke
   await openConfig(page);
 
   // The full structure still renders…
-  await expect(page.getByRole("heading", { name: "You and your platform" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "About page" })).toBeVisible();
   await expect(page.getByText("Who is behind the instance?")).toBeVisible();
   // …but a key the server does not return is disabled (with honest copy), and
   // known keys stay editable.
