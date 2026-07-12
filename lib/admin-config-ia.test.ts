@@ -13,6 +13,7 @@ import {
   isConfigPageId,
   placementFor,
   validateHexColor,
+  validateTwitterHandle,
   zeroOrIntRange,
   type PlacedInstanceSetting,
 } from "./admin-config-ia";
@@ -185,6 +186,34 @@ describe("validators", () => {
     expect(META.import_max_height.validate?.(0)).toBeNull();
     expect(META.upload_max_size_bytes.validate?.(1024)).toMatch(/MiB/);
     expect(META.upload_max_size_bytes.validate?.(1048576)).toBeNull();
+  });
+
+  it("validateTwitterHandle accepts empty and @?[A-Za-z0-9_]{1,15} only (W4)", () => {
+    expect(validateTwitterHandle("")).toBeNull();
+    expect(validateTwitterHandle("@vidra")).toBeNull();
+    expect(validateTwitterHandle("vidra")).toBeNull();
+    expect(validateTwitterHandle("Vi_dra42")).toBeNull();
+    expect(validateTwitterHandle("@way_too_long_handle")).toMatch(/handle/);
+    expect(validateTwitterHandle("no spaces")).toMatch(/handle/);
+    expect(validateTwitterHandle("dot.com")).toMatch(/handle/);
+  });
+});
+
+describe("W4 branding & social identity placement", () => {
+  it("places the hide-name toggle in general/branding and the handle in general/social", () => {
+    expect(placementFor("header_hide_instance_name")).toEqual({
+      page: "general",
+      section: "branding",
+    });
+    expect(placementFor("social_meta_twitter_username")).toEqual({
+      page: "general",
+      section: "social",
+    });
+    expect(META.social_meta_twitter_username.validate).toBe(validateTwitterHandle);
+  });
+
+  it("declares the Branding section on the general page (the assets panel's home)", () => {
+    expect(PAGE_SECTIONS.general.map((s) => s.id)).toContain("branding");
   });
 });
 

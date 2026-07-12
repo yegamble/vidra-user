@@ -8,6 +8,8 @@ import { PlusIcon } from "@/components/icons";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchBox } from "@/components/SearchBox";
 import { isStandaloneRoute } from "@/lib/app-shell";
+import { brandingAssetUrl } from "@/lib/branding";
+import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 
 // App shell header (design templates "Vidra App" + "Vidra Desktop"): the brand
 // wordmark, centered pill search, Create, notifications, account. Primary
@@ -18,21 +20,55 @@ import { isStandaloneRoute } from "@/lib/app-shell";
 // the search box and Create collapse away there (Search and Create are bottom
 // tabs). At sm+ it settles into the smaller desktop wordmark beside the centered
 // search. Hidden on focused standalone routes (embeds and account entry).
-export function Header() {
+//
+// Config-parity W4 branding: the SSR instance snapshot (passed down by
+// app/layout.tsx; null when the backend is unreachable) supplies the header
+// logo slots — header_wide for the sm+ header, header_square as the compact
+// phone mark (each falling back to the other when only one is set) — and the
+// instance name. branding.hide_instance_name drops the text ONLY when a logo
+// is actually set, so the header is never empty.
+export function Header({ instance = null }: { instance?: InstanceConfigSnapshot | null }) {
   const pathname = usePathname();
 
   if (isStandaloneRoute(pathname)) {
     return null;
   }
 
+  const rawName = typeof instance?.name === "string" ? instance.name.trim() : "";
+  const name = rawName !== "" ? rawName : "Vidra";
+  const wideLogo = brandingAssetUrl(instance?.branding?.logos?.header_wide);
+  const squareLogo = brandingAssetUrl(instance?.branding?.logos?.header_square);
+  const hasLogo = wideLogo !== null || squareLogo !== null;
+  const hideName = instance?.branding?.hide_instance_name === true && hasLogo;
+  // Each breakpoint uses its intended slot, falling back to the other so one
+  // uploaded logo still brands the whole header.
+  const phoneLogo = squareLogo ?? wideLogo;
+  const desktopLogo = wideLogo ?? squareLogo;
+
   return (
     <header className="sticky top-0 z-30 px-2 pt-2 sm:px-3 sm:pt-3">
       <div className="glass-chrome mx-auto flex h-16 w-full items-center gap-3 rounded-[22px] px-4 sm:h-14 sm:gap-5 sm:px-5">
         <Link
           href="/"
-          className="focus-ring flex min-h-11 items-center rounded-lg text-2xl font-bold tracking-tight text-fg sm:text-xl sm:tracking-[-0.045em]"
+          className="focus-ring flex min-h-11 items-center gap-2.5 rounded-lg text-2xl font-bold tracking-tight text-fg sm:gap-2 sm:text-xl sm:tracking-[-0.045em]"
         >
-          Vidra
+          {phoneLogo !== null ? (
+            // eslint-disable-next-line @next/next/no-img-element -- operator-uploaded image served by the backend, not a static asset
+            <img
+              src={phoneLogo}
+              alt={hideName ? name : ""}
+              className="h-9 w-auto max-w-40 object-contain sm:hidden"
+            />
+          ) : null}
+          {desktopLogo !== null ? (
+            // eslint-disable-next-line @next/next/no-img-element -- operator-uploaded image served by the backend, not a static asset
+            <img
+              src={desktopLogo}
+              alt={hideName ? name : ""}
+              className="hidden h-8 w-auto max-w-48 object-contain sm:block"
+            />
+          ) : null}
+          {hideName ? null : <span>{name}</span>}
         </Link>
         <div className="hidden min-w-0 flex-1 justify-center px-2 sm:flex">
           <SearchBox />

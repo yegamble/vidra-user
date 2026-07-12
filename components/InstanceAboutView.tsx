@@ -29,6 +29,8 @@ import type {
   InstanceAboutResponse,
   VideoConfigResponse,
 } from "@/lib/api";
+import { brandingAssetUrl } from "@/lib/branding";
+import type { InstanceBrandingBlock } from "@/lib/instance-config.server";
 
 // InstanceAboutView is the /about surface, rebuilt to the PeerTube structure
 // (spec: instance-platform-info.md): a sub-nav over four sections —
@@ -108,6 +110,12 @@ export function InstanceAboutView() {
   }
 
   const name = instance.name;
+  // Config-parity W4: the operator-set instance banner and avatar head the
+  // About page. Typed as optional over the response so a pre-W1 backend (no
+  // branding block) simply renders neither.
+  const branding = (instance as { branding?: InstanceBrandingBlock }).branding;
+  const bannerUrl = brandingAssetUrl(branding?.banner);
+  const avatarUrl = brandingAssetUrl(branding?.avatar);
   const social = instance.social_links;
   const socialLinks = [
     { label: "Website", href: social?.website ?? "", Icon: GlobeIcon },
@@ -159,7 +167,23 @@ export function InstanceAboutView() {
       {/* ── General ─────────────────────────────────────────────────────── */}
       <section id="general" aria-label="General" className="flex scroll-mt-20 flex-col gap-5">
         <header className="flex flex-col gap-2">
+          {bannerUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- operator-uploaded image served by the backend, not a static asset
+            <img
+              src={bannerUrl}
+              alt={`${name} banner`}
+              className="mb-2 aspect-[4/1] w-full rounded-2xl bg-surface-muted object-cover"
+            />
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- operator-uploaded image served by the backend, not a static asset
+              <img
+                src={avatarUrl}
+                alt={`${name} avatar`}
+                className="h-14 w-14 rounded-2xl bg-surface-muted object-cover"
+              />
+            ) : null}
             <h1 className="text-2xl font-bold tracking-tight">{name}</h1>
             <ProtocolBadge protocol={instance.federation_enabled ? "activitypub" : "local"} />
           </div>

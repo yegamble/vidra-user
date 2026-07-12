@@ -19,6 +19,7 @@ import { buildThemeBootstrapScript } from "@/lib/theme-bootstrap";
 // hardcoded behavior). Later waves extend the seam modules, never this file:
 //   - metadata        → lib/layout-metadata.ts (W4 branding/social)
 //   - banner slot     → components/InstanceBanner.tsx (W3 broadcast)
+//   - header branding → components/Header.tsx (W4 logos + hide_instance_name)
 //   - theme bootstrap → lib/theme-bootstrap.ts (W5 default_theme)
 //   - CSS/JS inject   → components/InstanceCustomization.tsx (W6 documents)
 
@@ -65,7 +66,7 @@ export default async function RootLayout({
         <AuthProvider>
           <ToastProvider>
             <InstanceBanner instance={instance} />
-            <Header />
+            <Header instance={instance} />
             <div className="flex w-full flex-1">
               <Sidebar />
               <div

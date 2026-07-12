@@ -154,6 +154,12 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       description: "The public identity of this instance: name, descriptions, and classification.",
     },
     {
+      id: "branding",
+      title: "Branding",
+      description:
+        "The imagery this instance presents: avatar, banner, header logos, favicon, and the social-card image.",
+    },
+    {
       id: "broadcast",
       title: "Broadcast message",
       description: "A site-wide announcement banner shown to every visitor.",
@@ -298,6 +304,18 @@ export function validateHexColor(value: SettingValue): string | null {
   return /^#[0-9a-fA-F]{6}$/.test(value) ? null : "Enter a 6-digit hex color, like #7c5cff.";
 }
 
+/**
+ * "" is fine (unset); anything else must be an X/Twitter handle — an optional
+ * leading @ plus 1–15 word characters (mirrors the backend validator for
+ * social_meta_twitter_username).
+ */
+export function validateTwitterHandle(value: SettingValue): string | null {
+  if (typeof value !== "string" || value === "") return null;
+  return /^@?[A-Za-z0-9_]{1,15}$/.test(value)
+    ? null
+    : "Enter a handle like @vidra: up to 15 letters, digits, or underscores.";
+}
+
 /** 0 = unlimited (the vidra convention — never -1); otherwise min..max. */
 export function zeroOrIntRange(
   min: number,
@@ -421,6 +439,17 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "identity",
   },
+  // GENERAL / Branding (config-parity W4). The asset slots themselves are NOT
+  // registry keys — they upload through dedicated admin endpoints and render
+  // as the InstanceBrandingManager panel in this section; only the companion
+  // toggle lives in the registry.
+  header_hide_instance_name: {
+    label: "Hide the instance name in the header",
+    help: "Shows the header logo alone. Only takes effect while a header logo is uploaded — without one the name always shows, so the header is never empty.",
+    control: "toggle",
+    page: "general",
+    section: "branding",
+  },
   // GENERAL / Broadcast message (config-parity W3): message/level/dismissable
   // are progressively disclosed under the master toggle.
   broadcast_enabled: {
@@ -489,6 +518,18 @@ export const META: Record<string, SettingMeta> = {
     control: "text",
     page: "general",
     section: "social",
+  },
+  // Distinct from x_link (an About-page profile URL): this is the twitter:site
+  // META-TAG handle on shared link cards (config-parity W4; pairs with the
+  // social-card image in the Branding section).
+  social_meta_twitter_username: {
+    label: "X (Twitter) username for link cards",
+    help: "The @handle shared links credit in their preview cards (the twitter:site meta tag) — not the About-page profile link.",
+    placeholder: "@vidra",
+    control: "text",
+    page: "general",
+    section: "social",
+    validate: validateTwitterHandle,
   },
   // GENERAL / Moderation & sensitive content
   instance_is_sensitive: {
