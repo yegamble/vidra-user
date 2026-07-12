@@ -7,11 +7,13 @@ import { Avatar } from "@/components/ui/Avatar";
 import { channelAvatarUrl } from "@/lib/api";
 import { formatCount } from "@/lib/format";
 
-// WatchChannelCard is the design's channel row under the watch metadata (DR5): a
-// surface-muted rounded card with the owning channel's avatar + name (a link to
-// the channel) and its follower count, plus a Follow toggle on the right. The
-// follower count is optional — it appears once the channel detail resolves and is
-// omitted while it loads or if the read fails (never a fabricated number).
+// WatchChannelCard is the channel row under the watch metadata (DR5): the owning
+// channel's avatar + name (a link to the channel) and its follower count, plus a
+// Follow toggle on the right. Transparent on the page background (YouTube-style
+// identity row) — a filled band here read as a heavy box between the title and
+// the actions. The follower count is optional — it appears once the channel
+// detail resolves and is omitted while it loads or if the read fails (never a
+// fabricated number).
 export function WatchChannelCard({
   handle,
   name,
@@ -24,7 +26,7 @@ export function WatchChannelCard({
   onDelta?: (delta: number) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-[14px] bg-surface-muted p-3">
+    <div className="flex items-center gap-3 py-1">
       <Link
         href={`/channels/${handle}`}
         className="focus-ring group flex min-w-0 flex-1 items-center gap-3 rounded-lg"

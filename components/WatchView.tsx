@@ -363,13 +363,11 @@ export function WatchView({ id }: { id: string }) {
       />
     ) : null;
 
+  // Taxonomy chips only (category/language/license). Duration and pixel
+  // dimensions are deliberately NOT chips: the player timeline already shows
+  // duration and resolution lives in the quality menu — repeating them here as
+  // metadata pills read as developer debris on the watch page.
   const chips: Array<{ key: string; label: string; sr?: string }> = [];
-  if (typeof video.duration_seconds === "number") {
-    chips.push({ key: "duration", label: formatDuration(video.duration_seconds) });
-  }
-  if (typeof video.width === "number" && typeof video.height === "number") {
-    chips.push({ key: "dimensions", label: `${video.width}×${video.height}` });
-  }
   // Taxonomy chips render once the (cached) config resolves the human labels —
   // or with the raw ids if the config fetch failed. Only shown when set.
   if (config !== null || configFailed) {
@@ -455,7 +453,7 @@ export function WatchView({ id }: { id: string }) {
         </div>
 
         <div className="flex flex-col gap-3">
-          <h1 className="text-lg font-bold leading-snug tracking-tight sm:text-xl">
+          <h1 className="text-xl font-bold leading-snug tracking-tight sm:text-[22px]">
             {video.title}
           </h1>
           {/* views · age (+ owner-facing privacy badge). */}
@@ -466,9 +464,23 @@ export function WatchView({ id }: { id: string }) {
             <PrivacyBadge privacy={video.privacy ?? "public"} />
             {meta.length > 0 ? <span className="tabular-nums">{meta.join(" · ")}</span> : null}
           </div>
+          {/* Channel row above the actions (YouTube order: title → channel →
+              actions) — who made it before what you can do with it. */}
+          {channelHandle ? (
+            <WatchChannelCard
+              handle={channelHandle}
+              name={channelName}
+              followerCount={channel?.follower_count ?? null}
+              onDelta={(d) =>
+                setChannel((c) =>
+                  c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c,
+                )
+              }
+            />
+          ) : null}
           {/* Action row — Support (accent) leads, then the tonal pills; scrolls
               horizontally on a phone (design), wraps on desktop. */}
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto border-t border-border-subtle pt-4 lg:flex-wrap lg:overflow-x-visible">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto lg:flex-wrap lg:overflow-x-visible">
             {channelHandle ? (
               <SupportButton sources={supportSources} name={channelName || "this creator"} />
             ) : null}
@@ -483,19 +495,6 @@ export function WatchView({ id }: { id: string }) {
             <DownloadButton video={video} playbackToken={playbackToken} />
             <ReportButton kind="video" targetId={video.id} />
           </div>
-          {/* Channel row: avatar + name (link) + followers + Follow toggle. */}
-          {channelHandle ? (
-            <WatchChannelCard
-              handle={channelHandle}
-              name={channelName}
-              followerCount={channel?.follower_count ?? null}
-              onDelta={(d) =>
-                setChannel((c) =>
-                  c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c,
-                )
-              }
-            />
-          ) : null}
           {/* Secondary technical/taxonomy chips (duration, dimensions,
               category/language/license) on their own quiet row. */}
           {chips.length > 0 ? (
@@ -673,7 +672,15 @@ function Player({
         onTimeUpdate={recordThrottled}
         onPause={record}
       />
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Quiet under-player row: Resume (when known) left, the shortcuts
+          disclosure ghosted right. The whole row disappears on touch-size
+          screens when Resume is absent — keyboard help means nothing there. */}
+      <div
+        className={cn(
+          resumeAt !== null ? "flex" : "hidden sm:flex",
+          "flex-wrap items-center gap-2",
+        )}
+      >
         {resumeAt !== null ? (
           <button
             type="button"
@@ -683,7 +690,9 @@ function Player({
             Resume from {formatDuration(resumeAt)}
           </button>
         ) : null}
-        <KeyboardShortcutsHelp />
+        <div className="ml-auto hidden sm:block">
+          <KeyboardShortcutsHelp />
+        </div>
       </div>
     </div>
   );
