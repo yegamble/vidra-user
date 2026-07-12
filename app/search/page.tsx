@@ -1,6 +1,7 @@
 import { SearchField } from "@/components/SearchField";
 import { SearchFilters } from "@/components/SearchFilters";
 import { SearchResults } from "@/components/SearchResults";
+import { getInstanceConfig } from "@/lib/instance-config.server";
 import { readSearchFilters } from "@/lib/search-url";
 
 // The search page. The query AND the category/language/tag filters (the same
@@ -15,6 +16,10 @@ export default async function SearchPage({
   const sp = await searchParams;
   const query = (sp.q ?? "").trim();
   const filters = readSearchFilters(sp);
+  // Remote-URI search gates (config-parity W13): the SSR snapshot's search{}
+  // block drives the results component's URL/handle help text (absent on an
+  // older backend or when the fetch fails — the feature then stays dark).
+  const remoteSearch = (await getInstanceConfig())?.search;
   const resultsKey = [query, filters.category ?? "", filters.language ?? "", filters.tag ?? ""].join(
     "|",
   );
@@ -32,7 +37,7 @@ export default async function SearchPage({
       <div className="mb-3 sm:mb-4">
         <SearchFilters query={query} filters={filters} />
       </div>
-      <SearchResults key={resultsKey} query={query} filters={filters} />
+      <SearchResults key={resultsKey} query={query} filters={filters} remoteSearch={remoteSearch} />
     </main>
   );
 }

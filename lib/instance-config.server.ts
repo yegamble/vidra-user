@@ -80,6 +80,17 @@ export type InstanceHomepageBlock = {
 };
 
 /**
+ * W13. EFFECTIVE remote-URI search gates (runtime setting AND federation
+ * wired): whether URL/handle-shaped search queries resolve remote content for
+ * logged-in / anonymous callers. Drives the search page's help text only —
+ * the backend enforces the gate either way.
+ */
+export type InstanceSearchBlock = {
+  remote_uri_users?: boolean;
+  remote_uri_anonymous?: boolean;
+};
+
+/**
  * GET /instance with the additive config-parity blocks. All new blocks are
  * optional (absent until the matching vidra-core wave lands).
  */
@@ -90,6 +101,7 @@ export type InstanceConfigSnapshot = InstanceResponse & {
   customization?: InstanceCustomizationBlock;
   social?: InstanceSocialBlock;
   homepage?: InstanceHomepageBlock;
+  search?: InstanceSearchBlock;
 };
 
 // The backend serves Cache-Control: s-maxage=60 on this document; the Next
