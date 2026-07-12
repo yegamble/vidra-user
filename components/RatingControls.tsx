@@ -50,20 +50,25 @@ export function RatingControls({ videoId }: { videoId: string }) {
 
   return (
     <div className="flex items-center gap-2">
-      <RatingButton
-        label="Like"
-        count={rating.like_count}
-        active={rating.my_rating === "like"}
-        disabled={!authed || busy}
-        onClick={() => void choose("like")}
-      />
-      <RatingButton
-        label="Dislike"
-        count={rating.dislike_count}
-        active={rating.my_rating === "dislike"}
-        disabled={!authed || busy}
-        onClick={() => void choose("dislike")}
-      />
+      {/* Joined like/dislike capsule (YouTube's segmented pill): one tonal
+          surface, a hairline divider, per-segment active fill. */}
+      <div className="flex shrink-0 items-stretch overflow-hidden rounded-full bg-surface-muted">
+        <RatingButton
+          label="Like"
+          count={rating.like_count}
+          active={rating.my_rating === "like"}
+          disabled={!authed || busy}
+          onClick={() => void choose("like")}
+        />
+        <span aria-hidden className="my-1.5 w-px shrink-0 bg-border" />
+        <RatingButton
+          label="Dislike"
+          count={rating.dislike_count}
+          active={rating.my_rating === "dislike"}
+          disabled={!authed || busy}
+          onClick={() => void choose("dislike")}
+        />
+      </div>
       {!authed ? (
         <Link
           href="/login"
@@ -97,10 +102,9 @@ function RatingButton({
       disabled={disabled}
       onClick={onClick}
       className={
-        "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 " +
-        (active
-          ? "bg-accent text-accent-fg hover:bg-accent/90"
-          : "bg-surface-muted text-fg hover:bg-surface-strong")
+        "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 " +
+        (label === "Like" ? "pl-4 pr-3.5 " : "pl-3.5 pr-4 ") +
+        (active ? "bg-accent text-accent-fg hover:bg-accent/90" : "text-fg hover:bg-surface-strong")
       }
     >
       {label === "Like" ? <ThumbsUpIcon size={16} /> : <ThumbsDownIcon size={16} />}

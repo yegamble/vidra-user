@@ -54,9 +54,15 @@ test("plays a video and shows its metadata", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
   await expect(page.getByText("4.2K views")).toBeVisible();
-  await expect(page.getByText("1:23")).toBeVisible();
-  await expect(page.getByText("1280×720")).toBeVisible();
   await expect(page.getByText("A nice clip.")).toBeVisible();
+
+  // Duration/dimensions are deliberately NOT metadata chips (design audit
+  // FINDING-005): the player timeline shows duration and resolution lives in
+  // the quality menu. Guard against them creeping back as standalone chips
+  // (exact match — the player's own time readout may legitimately contain
+  // the duration as a substring).
+  await expect(page.getByText("1:23", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("1280×720", { exact: true })).toHaveCount(0);
 
   // Taxonomy chips render the labels resolved from GET /videos/config, with
   // sr-only prefixes for screen readers.

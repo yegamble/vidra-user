@@ -47,7 +47,7 @@ export function KeyboardShortcutsHelp() {
         aria-expanded={open}
         aria-controls="player-shortcuts-help"
         onClick={() => setOpen((o) => !o)}
-        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
+        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
       >
         {/* Minified inline command-key icon */}
         <svg
@@ -69,7 +69,7 @@ export function KeyboardShortcutsHelp() {
           id="player-shortcuts-help"
           role="region"
           aria-label="Keyboard shortcuts"
-          className="absolute bottom-full left-0 z-20 mb-2 max-h-64 w-72 overflow-y-auto rounded-xl border border-border-subtle bg-surface-raised p-3 shadow-lg sm:max-h-none sm:overflow-visible"
+          className="absolute bottom-full right-0 z-20 mb-2 max-h-64 w-72 overflow-y-auto rounded-xl border border-border-subtle bg-surface-raised p-3 shadow-lg sm:max-h-none sm:overflow-visible"
         >
           <dl className="flex flex-col gap-1.5 text-sm">
             {SHORTCUTS.map(([keys, action]) => (
