@@ -144,6 +144,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instance/homepage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public admin-authored homepage document
+         * @description The operator-authored homepage document as RAW markdown plus its content hash (config-parity W1). Rendering/sanitisation is the client's job. Public, unauthenticated; 404 while no homepage is set (see the homepage block on GET /api/v1/instance for the enabled flag).
+         */
+        get: operations["getInstanceHomepage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instance/custom.css": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operator custom stylesheet
+         * @description The operator's custom CSS as a same-origin text/css file (config-parity W1). Consumed hash-busted (`?v={css_hash}` from the GET /api/v1/instance customization block); the response carries the content hash as a strong ETag. Public; 404 while unset.
+         */
+        get: operations["getInstanceCustomCSS"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instance/custom.js": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operator custom script
+         * @description The operator's custom JavaScript as a same-origin application/javascript file (config-parity W1; external-file delivery keeps a future script-src 'self' CSP viable). Consumed hash-busted (`?v={js_hash}`). Public; 404 while unset.
+         */
+        get: operations["getInstanceCustomJS"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instance/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Instance avatar image
+         * @description Serves the instance's avatar (config-parity W1), with the content type derived at upload time. Public; 404 when none is set (the GET /api/v1/instance branding block reports is_fallback=true then).
+         */
+        get: operations["getInstanceAvatar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instance/banner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Instance banner image
+         * @description Serves the instance's banner (config-parity W1). Public; 404 when none is set.
+         */
+        get: operations["getInstanceBanner"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instance/logo/{type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Instance logo image (typed slot)
+         * @description Serves one of the instance's typed logo slots (PeerTube LogoType parity). Public; 404 when the slot is unset or the type is unknown.
+         */
+        get: operations["getInstanceLogo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/register": {
         parameters: {
             query?: never;
@@ -155,7 +275,7 @@ export interface paths {
         put?: never;
         /**
          * Register a new account
-         * @description Creates an account and returns it with an access token. The first account created on a fresh instance is granted the admin role. Rate limited; subject to the standard request guards. When the instance requires registration approval, no account is created: a pending registration request is filed and 202 is returned with no token. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body.
+         * @description Creates an account and returns it with an access token. The first account created on a fresh instance is granted the admin role. Rate limited; subject to the standard request guards. When the instance requires registration approval, no account is created: a pending registration request is filed and 202 is returned with no token. When the instance requires email verification (registration_require_email_verification, effective only while the deployment has an outbound mail path — see features.mail), the account is created HELD: 202 `{"status":"verification_pending"}`, no token, and login stays 403 until the emailed link is confirmed. Both gates compose: approval first, then the approved account is held for verification. While registration_minimum_age is active the request must carry `age_attestation: true`. While registration_user_limit is reached signup answers 403 (GET /api/v1/instance reports registration_enabled=false with registration_disabled_reason `user_limit_reached`). With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body.
          */
         post: operations["register"];
         delete?: never;
@@ -547,7 +667,7 @@ export interface paths {
         put?: never;
         /**
          * Create a channel
-         * @description Creates a channel owned by the authenticated user.
+         * @description Creates a channel owned by the authenticated user. 422 when the caller is at the operator's per-user channel limit (max_channels_per_user, config-parity W8; 0 = unlimited).
          */
         post: operations["createChannel"];
         delete?: never;
@@ -761,7 +881,7 @@ export interface paths {
         put?: never;
         /**
          * Request an export of the caller's account data
-         * @description Enqueues a durable background job that assembles the caller's account data — profile, channels, video metadata (including taxonomy and tags), playlists, comments, follows, saved videos, watch history, and notification preferences — into a single JSON archive. The archive NEVER contains the password hash, tokens, or any other credential material. Media files are NOT bundled in v1: each video entry carries its original file's download URL instead. One export may be active per user (409 while one is pending/running); requesting again after completion replaces the previous archive. The finished archive stays downloadable for 7 days, then a sweeper deletes it.
+         * @description Enqueues a durable background job that assembles the caller's account data — profile, channels, video metadata (including taxonomy and tags), playlists, comments, follows, saved videos, watch history, and notification preferences — into a single JSON archive. The archive NEVER contains the password hash, tokens, or any other credential material. Media files are NOT bundled in v1: each video entry carries its original file's download URL instead. One export may be active per user (409 while one is pending/running); requesting again after completion replaces the previous archive. The finished archive stays downloadable for the operator-configured retention (user_export_expiration_hours, default 168h; 0 = never expires), then a sweeper deletes it. 403 feature_disabled when the operator has turned exports off (user_export_enabled), and 403 when the caller's stored media exceeds the operator's export cap (user_export_max_quota_bytes; 0 = no cap).
          */
         post: operations["requestAccountExport"];
         delete?: never;
@@ -801,7 +921,7 @@ export interface paths {
         put?: never;
         /**
          * Import a vidra account archive (safe subsets)
-         * @description Accepts the JSON archive produced by the account export and re-creates the SAFE subsets for the caller: profile fields (display name, bio), playlists (each item matched by video id and added only when that video exists locally), follows of local channels (matched by handle), and notification preferences. Everything else in the archive — channels, videos, comments, saved videos, watch history — is NOT re-created in v1 and is reported per section in the returned summary's skipped_sections. The import is additive: it never deletes existing data, follows are idempotent, and re-importing creates duplicate playlists. The request body is bounded by the instance's HTTP body limit (default 8 MB).
+         * @description Accepts the JSON archive produced by the account export and re-creates the SAFE subsets for the caller: profile fields (display name, bio), playlists (each item matched by video id and added only when that video exists locally), follows of local channels (matched by handle), and notification preferences. Everything else in the archive — channels, videos, comments, saved videos, watch history — is NOT re-created in v1 and is reported per section in the returned summary's skipped_sections. The import is additive: it never deletes existing data, follows are idempotent, and re-importing creates duplicate playlists. The request body is bounded by the instance's HTTP body limit (default 8 MB). 403 feature_disabled when the operator has turned archive imports off (user_import_enabled).
          */
         post: operations["importAccountArchive"];
         delete?: never;
@@ -819,7 +939,7 @@ export interface paths {
         };
         /**
          * Get the caller's storage usage and quota
-         * @description Returns the authenticated user's current storage usage — the total stored bytes of their video files (originals, renditions, thumbnails) across the videos owned via their channels — and the effective storage quota that applies to them: their per-user override when an admin set one, else the instance default (INSTANCE_DEFAULT_QUOTA_BYTES). quota_bytes is null when the caller is unlimited. Uploads and URL imports that would exceed the quota are rejected with 422 quota_exceeded.
+         * @description Returns the authenticated user's current storage usage — the total stored bytes of their video files (originals, renditions, thumbnails) across the videos owned via their channels — and the effective storage quota that applies to them: their per-user override when an admin set one, else the instance default (INSTANCE_DEFAULT_QUOTA_BYTES). quota_bytes is null when the caller is unlimited. Uploads and URL imports that would exceed the quota are rejected with 422 quota_exceeded. The daily_* pair reports the rolling-24h upload window (default_user_daily_quota_bytes): daily_quota_bytes is null while no daily quota is configured; exceeding it answers 422 daily_quota_exceeded.
          */
         get: operations["getMyQuota"];
         put?: never;
@@ -1088,6 +1208,7 @@ export interface paths {
         /**
          * Search public videos by title or tag
          * @description Fuzzy (trigram) search over public, published video titles, ranked by similarity then recency. A video also matches when one of its free-form tags contains the query (case-insensitive); tag-only matches rank after title matches. Videos of accounts that opted out of discovery (User.unlisted) never appear. Ingested federated remote videos are UNIONed in by title match as remote:true cards (origin domain + watch/stream URLs); they respect the admin instance blocklist and an authenticated viewer's instance mutes. Each result carries its view count and whether a poster image exists. Auth is optional: an authenticated viewer's muted accounts' videos are hidden from results (per-viewer); an anonymous viewer sees all. Requires a non-empty q (<= 100 chars); paginated with limit (1–100, default 20) and offset (>= 0).
+         *     Remote-URI search (config-parity W13): a URI-shaped ("https://…") or handle-shaped ("@user@host" / "user@host") first-page query is additionally resolved to remote content through the federation machinery (WebFinger/actor/object fetch, SSRF-guarded), gated per auth state by search_remote_uri_users (default on) / search_remote_uri_anonymous (default off) and rate-limited per caller (10 resolutions/minute by default). Resolution runs CONCURRENTLY with the local search under a strict ~2.5s deadline, so ordinary searches are unaffected and a slow origin delays the response by at most that deadline. A resolved remote video/channel/account rides the additive `remote` array; anything unresolvable (bad target, blocked domain, timeout, exhausted budget) silently yields local-only results. The 100-char q cap applies to shaped queries too — longer URLs are 400, as before.
          */
         get: operations["searchVideos"];
         put?: never;
@@ -1577,7 +1698,7 @@ export interface paths {
         put?: never;
         /**
          * Upload a video's original file
-         * @description Uploads the original media file for a video (owner only) as a multipart form with a single "file" part, stores it via the configured storage backend, then finalises the video: it is published (or, if a configured media probe rejects it, marked failed). Re-uploading replaces the previous original. A non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The file extension must be an accepted video container (otherwise 415); the body must be within UPLOAD_MAX_SIZE (otherwise 413); when a storage quota applies to the caller, a file that would not fit is rejected before storing (422 quota_exceeded). Real transcoding into multiple renditions happens in a later stage; for now the original is the playable source.
+         * @description Uploads the original media file for a video (owner only) as a multipart form with a single "file" part, stores it via the configured storage backend, then finalises the video: it is published (or, if a configured media probe rejects it, marked failed). Re-uploading replaces the previous original. A non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The file extension must be an accepted video container (otherwise 415); the body must be within UPLOAD_MAX_SIZE (otherwise 413); when a storage quota applies to the caller, a file that would not fit is rejected before storing (422 quota_exceeded; a size beyond the rolling-24h daily upload quota is 422 daily_quota_exceeded). Real transcoding into multiple renditions happens in a later stage; for now the original is the playable source.
          */
         post: operations["uploadVideoFile"];
         delete?: never;
@@ -1617,7 +1738,7 @@ export interface paths {
         put?: never;
         /**
          * Open a resumable (chunked) upload session
-         * @description Opens a chunked/resumable upload for a video's original file (owner only). The declared size, filename extension, and the caller's storage quota are validated UP FRONT: a non-video extension is 415, a size beyond UPLOAD_MAX_SIZE is 413, and a size that would exceed the caller's quota is 422 (code quota_exceeded). Returns the upload id, the fixed chunk size to send (every chunk but the last must be exactly this many bytes), the total number of chunks, and the 24h session expiry. Upload each chunk with PUT /api/v1/uploads/{upload_id}/chunks/{n}, then POST /api/v1/uploads/{upload_id}/complete to assemble and finalise the video through the same pipeline as a direct upload. Non-owner/unknown video → 404.
+         * @description Opens a chunked/resumable upload for a video's original file (owner only). The declared size, filename extension, and the caller's storage quota are validated UP FRONT: a non-video extension is 415, a size beyond UPLOAD_MAX_SIZE is 413, and a size that would exceed the caller's quota is 422 (code quota_exceeded; the rolling-24h daily upload quota answers code daily_quota_exceeded). Returns the upload id, the fixed chunk size to send (every chunk but the last must be exactly this many bytes), the total number of chunks, and the 24h session expiry. Upload each chunk with PUT /api/v1/uploads/{upload_id}/chunks/{n}, then POST /api/v1/uploads/{upload_id}/complete to assemble and finalise the video through the same pipeline as a direct upload. Non-owner/unknown video → 404.
          *
          *     BATCH GUARD (UPLOAD-10): a caller may hold at most UPLOAD_MAX_ACTIVE_SESSIONS_PER_USER active (unfinished, unexpired) upload sessions at once (instance default 5; 0 disables the limit). Opening one past the cap is 429 with the stable code too_many_active_uploads — a batch-upload client should queue and retry once an in-flight session completes or is cancelled (either frees a slot). This is a fairness guard, not a security boundary; batching stays client-orchestrated over these per-video session endpoints (there is no /uploads/batch surface).
          */
@@ -1709,7 +1830,7 @@ export interface paths {
          * Enqueue a URL import of a video's original file
          * @description Enqueues an ASYNCHRONOUS import of a remote media file by URL (owner only) and returns 202 with the queued job — it no longer blocks on the fetch. Ownership is checked before any job is created, so a non-owner or unknown video is 404 and nothing runs on their behalf. The URL is validated up front (http/https only, no literal non-public address); a missing/malformed/non-public URL is 422. A background worker then performs the SSRF-guarded fetch (loopback, private, link-local, CGNAT, and cloud-metadata addresses refused at connection time, so DNS rebinding and internal redirects are blocked too), enforces UPLOAD_MAX_SIZE and the caller's storage quota, and runs the bytes through the same AttachOriginal → Process pipeline as a direct upload (probe/scan/quarantine/transcode). Poll GET /api/v1/videos/{id}/import for progress (resolver + stage). A single import runs per video at a time: while one is in flight, re-posting returns the same job.
          *
-         *     The optional `resolver` selects the fetch mechanism (auto|direct|ytdlp). The yt-dlp platform extractor is sandboxed and OFF by default (YTDLP_IMPORT_ENABLED): an explicit resolver=ytdlp is refused with 503 when it is disabled; auto simply never falls back to it.
+         *     The optional `resolver` selects the fetch mechanism (auto|direct|ytdlp). The yt-dlp platform extractor is sandboxed and OFF by default (YTDLP_IMPORT_ENABLED): an explicit resolver=ytdlp is refused with 503 when the deployment has not wired it; auto simply never falls back to it. When the extractor IS wired but the admin has turned the platform path off at runtime (import_http_enabled, config-parity W8), an explicit resolver=ytdlp is 403 with the stable code feature_disabled instead, and auto never falls back to yt-dlp while it is off.
          */
         post: operations["importVideoFile"];
         delete?: never;
@@ -1735,7 +1856,7 @@ export interface paths {
          * Create a channel auto-sync
          * @description Binds a LOCAL channel you own to an external platform channel URL so a periodic worker mirrors that channel's recent uploads into yours. Each not-yet-seen upload becomes a private draft video plus a sandboxed `ytdlp` URL import, so downloaded bytes land through the same AttachOriginal → Process (scan/probe/transcode) pipeline as any other ingest — nothing is servable before the ClamAV scan. Synced videos are created PRIVATE for you to review and publish; the instance never auto-publishes mirrored content.
          *
-         *     OFF by default: the feature runs only when CHANNEL_SYNC_ENABLED and the yt-dlp import resolver (YTDLP_IMPORT_ENABLED) are both on — otherwise this endpoint returns 503. The external URL is SSRF-validated (http/https only, no literal non-public address). At most CHANNEL_SYNC_MAX_PER_USER syncs per user.
+         *     OFF by default: when the runtime admin settings (channel_sync_enabled, or the import_http_enabled platform-import path it rides on; config-parity W8) turn the feature off this endpoint returns 403 with the stable code feature_disabled; when the deployment lacks the yt-dlp import resolver (YTDLP_IMPORT_ENABLED) it returns 503. The external URL is SSRF-validated (http/https only, no literal non-public address). At most channel_sync_max_per_user syncs per user (default CHANNEL_SYNC_MAX_PER_USER; 0 = unlimited).
          */
         post: operations["createChannelSync"];
         delete?: never;
@@ -1775,7 +1896,7 @@ export interface paths {
         put?: never;
         /**
          * Trigger a channel auto-sync now
-         * @description Schedules an owned sync to run on the next worker tick (a manual refresh between cadence runs). A server-side cooldown (CHANNEL_SYNC_COOLDOWN, measured from the last completed run) throttles repeat triggers: a request inside the window is rejected 429 with a Retry-After header. 503 when the feature is disabled; 404 when the sync is unknown or not owned.
+         * @description Schedules an owned sync to run on the next worker tick (a manual refresh between cadence runs). A server-side cooldown (CHANNEL_SYNC_COOLDOWN, measured from the last completed run) throttles repeat triggers: a request inside the window is rejected 429 with a Retry-After header. 403 feature_disabled when the runtime admin settings turn the feature off; 503 when the deployment lacks the yt-dlp resolver; 404 when the sync is unknown or not owned.
          */
         post: operations["syncChannelNow"];
         delete?: never;
@@ -1799,7 +1920,7 @@ export interface paths {
         put?: never;
         /**
          * Request an auto-generated caption track (Whisper)
-         * @description Enqueues an ASYNCHRONOUS auto-caption job for a video (owner only) and returns 202 with the queued job. A background worker extracts the audio (ffmpeg → 16 kHz mono WAV), sends it to the configured Whisper transcription service, renders the result to WebVTT, and stores it via the same replace-by-language path as a manual caption upload — then notifies the owner (a caption_ready notification, honoring preferences). `language` is optional (defaults to WHISPER_DEFAULT_LANGUAGE); it is both the caption's language tag and the transcription hint. Ownership is checked before any job is created, so a non-owner or unknown video is 404. Auto-captioning disabled on this server → 503; a malformed language tag → 422; a job already pending/running for the video → 409. Poll GET /api/v1/videos/{id}/captions/auto for progress.
+         * @description Enqueues an ASYNCHRONOUS auto-caption job for a video (owner only) and returns 202 with the queued job. A background worker extracts the audio (ffmpeg → 16 kHz mono WAV), sends it to the configured Whisper transcription service, renders the result to WebVTT, and stores it via the same replace-by-language path as a manual caption upload — then notifies the owner (a caption_ready notification, honoring preferences). `language` is optional (defaults to WHISPER_DEFAULT_LANGUAGE); it is both the caption's language tag and the transcription hint. Ownership is checked before any job is created, so a non-owner or unknown video is 404. Auto-captioning turned off at runtime (transcription_enabled, config-parity W8) → 403 feature_disabled; the Whisper boot capability missing (no WHISPER_ENDPOINT) → 503; a malformed language tag → 422; a job already pending/running for the video → 409. Poll GET /api/v1/videos/{id}/captions/auto for progress.
          */
         post: operations["requestAutoCaption"];
         delete?: never;
@@ -3135,7 +3256,7 @@ export interface paths {
         put?: never;
         /**
          * Live ingest "on-publish" hook (media-server-facing)
-         * @description The RTMP ingest boundary calls this when a publisher connects, presenting the publisher's stream key; the matching stream is flipped to "live" (allow the publish). Authenticated by the X-Ingest-Secret shared secret, NOT a user token. Accepts either a JSON {stream_key} body (curl/harness) or the nginx-rtmp `name` form field. For the nginx-rtmp form callback the response is a 302 redirect whose last path segment is the stream ID, renaming the RTMP session so HLS segments and the recording are keyed by the ID and the raw key never lands on disk. Returns 404 when LIVE_INGEST_SECRET is not configured (disabled), 401 on a bad secret, and 404 when no stream matches.
+         * @description The RTMP ingest boundary calls this when a publisher connects, presenting the publisher's stream key; the matching stream is flipped to "live" (allow the publish). Authenticated by the X-Ingest-Secret shared secret, NOT a user token. Accepts either a JSON {stream_key} body (curl/harness) or the nginx-rtmp `name` form field. For the nginx-rtmp form callback the response is a 302 redirect whose last path segment is the stream ID, renaming the RTMP session so HLS segments and the recording are keyed by the ID and the raw key never lands on disk. Returns 404 when LIVE_INGEST_SECRET is not configured (disabled), 401 on a bad secret, 404 when no stream matches, and 403 when a simultaneous-live cap (live_max_instance_lives / live_max_user_lives, config-parity W11) refuses the publish — any non-2xx/3xx answer makes nginx-rtmp deny the session.
          */
         post: operations["liveIngestStart"];
         delete?: never;
@@ -3632,9 +3753,105 @@ export interface paths {
         head?: never;
         /**
          * Update instance settings (admin)
-         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
+         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, transcription_enabled, user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
          */
         patch: operations["updateInstanceSettings"];
+        trace?: never;
+    };
+    "/api/v1/admin/instance-documents/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an instance document (admin)
+         * @description Returns one instance document's stored state (config-parity W1): the raw body plus its sha256 content hash. A never-set/cleared document returns an empty body and hash (a stable shape for the admin editor). Restricted to admins.
+         */
+        get: operations["getInstanceDocument"];
+        /**
+         * Set or clear an instance document (admin)
+         * @description Stores an instance document body (homepage max 100KB; custom_css and custom_js max 200KB) or clears it with an empty body — the public delivery routes 404 while a document is unset. Changes take effect immediately (the in-memory cache reloads) and the new content hash shows in the GET /api/v1/instance customization/homepage blocks for cache busting. Restricted to admins; every write is audited (admin.instance_document.update with the document name + content hash, never the body). Custom JS runs in every visitor's browser — clients must gate the editor behind an explicit warning flow.
+         */
+        put: operations["putInstanceDocument"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instance-avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload the instance avatar (admin)
+         * @description Stores the instance's avatar (config-parity W1; multipart form field "file", JPEG/PNG/WebP by extension, otherwise 415 — the same gate as user/channel avatars), replacing any previous one. Bounded by the global HTTP body limit. Restricted to admins; audited (admin.instance_asset.update). The GET /api/v1/instance branding block reflects the new URL immediately.
+         */
+        post: operations["setInstanceAvatar"];
+        /**
+         * Remove the instance avatar (admin)
+         * @description Removes the instance's avatar (row + stored object); the branding block falls back. Restricted to admins; audited. 404 when none is set.
+         */
+        delete: operations["deleteInstanceAvatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instance-banner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload the instance banner (admin)
+         * @description Stores the instance's banner, replacing any previous one. Same multipart/type gate as the avatar. Restricted to admins; audited.
+         */
+        post: operations["setInstanceBanner"];
+        /**
+         * Remove the instance banner (admin)
+         * @description Removes the instance's banner. Restricted to admins; audited. 404 when none is set.
+         */
+        delete: operations["deleteInstanceBanner"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instance-logo/{type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload an instance logo slot (admin)
+         * @description Stores one of the instance's typed logo slots (favicon, header-wide, header-square, opengraph — PeerTube LogoType parity; the opengraph slot doubles as the social-card image), replacing any previous one. Same multipart/type gate as the avatar. Restricted to admins; audited.
+         */
+        post: operations["setInstanceLogo"];
+        /**
+         * Remove an instance logo slot (admin)
+         * @description Removes one typed logo slot. Restricted to admins; audited. 404 when the type is unknown or the slot is unset.
+         */
+        delete: operations["deleteInstanceLogo"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/peertube-import": {
@@ -3801,6 +4018,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/federation/follower-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the federation follower-approval queue
+         * @description Returns pending inbound ActivityPub channel Follows awaiting an admin decision, newest first, while federation_follower_approval is on (config-parity W12). Modeled on the registration-requests queue. Restricted to admins. Paginated via limit (1–100, default 20) and offset. A vidra deviation from PeerTube recorded in the parity ledger: approval applies to CHANNEL followers because vidra has no instance-level AP actor. Governs the ActivityPub inbox only — the ATProto integration is outbound cross-posting with no inbound path.
+         */
+        get: operations["listFederationFollowerRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/follower-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a pending channel follower
+         * @description Approves one pending inbound channel Follow: the follow flips to accepted and the Accept activity is queued to the follower's inbox (the delivery the remote has been waiting on). When federation_auto_follow_back is on, an instance-initiated follow-back of the follower is queued too — signed by the FOLLOWED CHANNEL's actor, since vidra has no instance-level AP actor. Admin only; audited (admin.federation.follower_approve, safe row id only). An unknown/already-resolved id is 404. ActivityPub only.
+         */
+        post: operations["approveFederationFollowerRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/follower-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a pending channel follower
+         * @description Rejects one pending inbound channel Follow: the pending follow is removed and a Reject activity is queued to the follower's inbox. Admin only; audited (admin.federation.follower_reject, safe row id only). An unknown/already-resolved id is 404. ActivityPub only.
+         */
+        post: operations["rejectFederationFollowerRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -3954,10 +4231,22 @@ export interface components {
                 /** @example 0.1.0 */
                 version: string;
             };
-            /** @description Whether public account signup is currently accepted. */
+            /** @description Whether public account signup is currently accepted — the EFFECTIVE value: the runtime toggle AND registration_user_limit headroom (false while the instance is at its user limit; see registration_disabled_reason). */
             registration_enabled: boolean;
             /** @description Whether signup files a pending request for admin approval instead of creating an account immediately (only relevant when registration is enabled). */
             registration_requires_approval: boolean;
+            /**
+             * @description "" while registration is effectively enabled (or plainly toggled off); "user_limit_reached" when the runtime toggle is on but the registration_user_limit is exhausted — so the signup page can explain the closure honestly.
+             * @enum {string}
+             */
+            registration_disabled_reason: "" | "user_limit_reached";
+            /** @description EFFECTIVE registration email-verification gate: the registration_require_email_verification setting AND an outbound mail path on the deployment (features.mail). When true, signup answers 202 {"status":"verification_pending"} and login stays 403 email_verification_required until the emailed link is confirmed. */
+            registration_requires_email_verification: boolean;
+            /**
+             * Format: int64
+             * @description Signup age-attestation threshold: 0 = off; otherwise registration requires `age_attestation: true` ("I am at least N years old" — PeerTube parity, no birthdate is collected).
+             */
+            registration_minimum_age: number;
             /**
              * @description Configured OIDC login provider names, in display order. Render a "continue with <provider>" button per entry, navigating (top-level) to GET /api/v1/auth/oauth/{provider}. Empty when OAuth login is off.
              * @example [
@@ -3973,7 +4262,7 @@ export interface components {
             privacy_url: string;
             /** @description Operator contact email; may be empty. */
             contact_email: string;
-            /** @description Effective feature toggles (the DB-backed instance-settings overlay over static config). The frontend disables the matching affordances in lock-step with the backend's enforcement. */
+            /** @description Effective feature toggles (the DB-backed instance-settings overlay over static config). The frontend disables the matching affordances in lock-step with the backend's enforcement. The config-parity W8 flags (import_http, channel_sync, storyboards, transcription, user_import, user_export) and the W10 transcoding flag report EFFECTIVE availability — the runtime admin setting AND, where one exists, the deployment's boot capability (yt-dlp resolver, Whisper endpoint, ffmpeg/ffprobe). The mail flag is pure boot capability (an outbound mail path exists). */
             features: {
                 /** @description Whether new video uploads are accepted. */
                 uploads: boolean;
@@ -3985,7 +4274,129 @@ export interface components {
                 comments: boolean;
                 /** @description Whether regular users may download video media. Moderators and admins retain download access when this operator toggle is off. */
                 downloads: boolean;
+                /** @description Whether the yt-dlp platform-URL import path is available (imports on, import_http_enabled on, and the yt-dlp resolver wired on this deployment). */
+                import_http: boolean;
+                /** @description Whether channel auto-sync is available (channel_sync_enabled on, the platform import path on, and the yt-dlp resolver wired). */
+                channel_sync: boolean;
+                /** @description Whether seek-preview storyboard generation is enabled (storyboards_enabled). Already-stored storyboards keep serving when this is off. */
+                storyboards: boolean;
+                /** @description Whether Whisper auto-captioning is available (transcription_enabled on AND a Whisper endpoint configured). */
+                transcription: boolean;
+                /** @description Whether POST /api/v1/me/import accepts account archives. */
+                user_import: boolean;
+                /** @description Whether POST /api/v1/me/export accepts export requests. */
+                user_export: boolean;
+                /** @description Whether the HLS transcoding pipeline is effectively available (transcoding_enabled on AND ffmpeg/ffprobe wired at boot, config-parity W10). Already-produced playlists keep serving when this is false; new uploads stay playable via the retained original. */
+                transcoding: boolean;
+                /** @description Whether this deployment has an outbound mail path (an SMTP relay via MAIL_ENABLED, or the dev capture seam) — a boot capability, not a runtime setting. The admin UI renders the mail-dependent settings (email_subject_prefix, email_body_signature, contact_form_enabled) disabled-with-explanation when false, since they are inert without a mailer (config-parity W6 email seam). */
+                mail: boolean;
             };
+            /** @description Instance imagery (config-parity W1 shape; W4 populates the frontend consumers). Each slot carries its public serving URL ("" when unset) and an is_fallback flag telling the client to use its built-in default imagery. The response also gains an ETag and Cache-Control s-maxage=60. */
+            branding: {
+                avatar: components["schemas"]["InstanceAssetRef"];
+                banner: components["schemas"]["InstanceAssetRef"];
+                logos: {
+                    favicon: components["schemas"]["InstanceAssetRef"];
+                    header_wide: components["schemas"]["InstanceAssetRef"];
+                    header_square: components["schemas"]["InstanceAssetRef"];
+                    opengraph: components["schemas"]["InstanceAssetRef"];
+                };
+                /** @description Hide the textual instance name in the header (meaningful once a header logo is set). */
+                hide_instance_name: boolean;
+            };
+            /** @description Operator-tuned client behaviour defaults (W5/W9 consume): what anonymous visitors see first and how publish forms are seeded. */
+            defaults: {
+                /** @enum {string} */
+                feed_sort: "recent" | "popular" | "trending";
+                /** @enum {string} */
+                feed_scope: "local" | "all";
+                /**
+                 * @description "home" is the admin-authored homepage document and only takes effect once one is set (homepage.enabled).
+                 * @enum {string}
+                 */
+                landing_page: "home-recent" | "trending" | "local" | "home";
+                /** @enum {string} */
+                theme: "system" | "light" | "dark";
+                /** @description Seeds BOTH start-on-open and autoplay-next for anonymous/unset users (documented deviation); never overrides an explicit per-user preference. */
+                player_autoplay: boolean;
+                miniature_prefer_author_display_name: boolean;
+                publish: {
+                    /** @enum {string} */
+                    privacy: "public" | "unlisted" | "private";
+                    /**
+                     * Format: int64
+                     * @description PT-compatible licence id; 0 = no default licence.
+                     */
+                    licence: number;
+                    /** @enum {string} */
+                    comment_policy: "enabled" | "disabled";
+                    download_enabled: boolean;
+                };
+            };
+            /** @description Operator broadcast banner (W3 renders it). */
+            broadcast: {
+                enabled: boolean;
+                /** @description Raw markdown. */
+                message: string;
+                /** @enum {string} */
+                level: "info" | "warning" | "error";
+                dismissable: boolean;
+            };
+            /** @description Custom CSS/JS references by content hash (never inlined; fetch /api/v1/instance/custom.css?v={css_hash}) plus the primary-color override. */
+            customization: {
+                /** @description sha256 of the custom_css document; "" when unset. */
+                css_hash: string;
+                /** @description sha256 of the custom_js document; "" when unset. */
+                js_hash: string;
+                /** @description "#rrggbb" or "" (no override). */
+                primary_color: string;
+            };
+            /** @description Link-card metadata (distinct from social_links.x — twitter:site wants a handle, not a profile URL). */
+            social: {
+                /** @example @vidra */
+                twitter_username: string;
+            };
+            /** @description Admin-authored homepage document state; the body is fetched from GET /api/v1/instance/homepage. */
+            homepage: {
+                enabled: boolean;
+                /** @description sha256 of the homepage document; "" when unset. */
+                hash: string;
+            };
+            /** @description Effective live-streaming policy (config-parity W11) so the live-create UI can hide the replay toggle, seed its default, and explain the caps. features.live stays the master availability flag; every limit here uses 0 = unlimited / no limit. */
+            live: {
+                /** @description Instance master gate for replay-to-VOD: when false, no replay is produced regardless of a stream's replay_enabled flag. */
+                allow_replay: boolean;
+                /** @description EFFECTIVE default seeded into a new live stream's replay_enabled when the client omits it (the live_default_save_replay setting AND allow_replay). */
+                default_save_replay: boolean;
+                /**
+                 * Format: int64
+                 * @description Max simultaneous live sessions across the instance, enforced at the RTMP publish callback (403 deny). 0 = unlimited.
+                 */
+                max_instance_lives: number;
+                /**
+                 * Format: int64
+                 * @description Max simultaneous live sessions per user (across all their channels), enforced at the same callback. 0 = unlimited.
+                 */
+                max_user_lives: number;
+                /**
+                 * Format: int64
+                 * @description Max live-session duration; a watchdog force-closes over-limit sessions (permanent streams return to offline, one-shots end). 0 = no limit.
+                 */
+                max_duration_secs: number;
+            };
+            /** @description EFFECTIVE remote-URI search gates (config-parity W13): whether a URI/handle-shaped search query is resolved to remote content for logged-in and anonymous callers. Each flag is the runtime setting (search_remote_uri_users / search_remote_uri_anonymous) AND the boot capability (federation enabled + wired), so the search UI's help text stays in lock-step with the backend gate. */
+            search: {
+                /** @description Logged-in callers may search by URL/handle (default on). */
+                remote_uri_users: boolean;
+                /** @description Anonymous callers may search by URL/handle (default off — the SSRF/abuse surface, matching PeerTube). */
+                remote_uri_anonymous: boolean;
+            };
+        };
+        /** @description One instance branding asset reference: its public serving URL ("" when unset) and whether the client should fall back to built-in imagery. */
+        InstanceAssetRef: {
+            /** @description Public serving path, e.g. /api/v1/instance/avatar. */
+            url: string;
+            is_fallback: boolean;
         };
         /** @description The operator-authored about-page texts (spec instance-platform-info). Every field is RAW markdown, "" when unset. */
         InstanceAboutResponse: {
@@ -4066,6 +4477,8 @@ export interface components {
             bio: string;
             /** @description Account-level discovery opt-out. When true, the account's channels and videos are excluded from public discovery surfaces (video feed, search) while direct channel/video URLs keep serving. Default false. */
             unlisted?: boolean;
+            /** @description Per-user watch-history preference. While false, watch-progress and history writes are skipped (PUT /videos/{id}/watch-progress is a no-op 204). Seeded at account creation from the new_user_history_enabled instance setting; existing entries are kept (clear them via DELETE /me/history). */
+            history_enabled: boolean;
             /** Format: date-time */
             created_at: string;
             /** @description Whether an avatar is set (served at GET /users/{id}/avatar). Present on GET/PATCH /auth/me; omitted elsewhere. */
@@ -4095,6 +4508,8 @@ export interface components {
             bio?: string;
             /** @description Toggle the account-level discovery opt-out (see User.unlisted). */
             unlisted?: boolean;
+            /** @description Toggle the per-user watch-history preference (see User.history_enabled). */
+            history_enabled?: boolean;
         };
         Channel: {
             /**
@@ -4768,10 +5183,34 @@ export interface components {
             /** @example go concurrency */
             query: string;
             videos: components["schemas"]["Video"][];
+            /** @description Remote-URI search hits (config-parity W13). Present only on the first page (offset 0) when the query was URI/handle-shaped, the caller's auth-state gate (search_remote_uri_users / search_remote_uri_anonymous) allowed resolution, AND the target resolved within the strict deadline; omitted otherwise — unresolvable/timeout/rate-limited resolution degrades silently to local-only results. */
+            remote?: components["schemas"]["RemoteSearchResult"][];
             /** @example 20 */
             limit: number;
             /** @example 0 */
             offset: number;
+        };
+        /** @description One typed remote hit resolved from a URI/handle-shaped search query (config-parity W13): a remote video (same projection as GET /api/v1/remote-videos/{id}) or a remote channel/account identity. Exactly one of video/actor is present, matching type. */
+        RemoteSearchResult: {
+            /**
+             * @description video = a resolved remote Video object (ingested + cached); channel = a Group actor; account = a Person (or other non-Group) actor.
+             * @enum {string}
+             */
+            type: "video" | "channel" | "account";
+            video?: components["schemas"]["RemoteVideo"];
+            actor?: components["schemas"]["RemoteSearchActor"];
+        };
+        /** @description A resolved remote channel/account: the followable identity — POST /api/v1/me/remote-follows accepts either the handle or the actor URL. */
+        RemoteSearchActor: {
+            /** @description The ActivityPub actor URL on the origin. */
+            actor_url: string;
+            /**
+             * @description The name@domain identity.
+             * @example movies@tube.example
+             */
+            handle: string;
+            /** @description The origin instance's domain. */
+            domain: string;
         };
         WatchProgressRequest: {
             /**
@@ -5310,6 +5749,16 @@ export interface components {
              * @description Effective storage quota in bytes; null = unlimited.
              */
             quota_bytes: number | null;
+            /**
+             * Format: int64
+             * @description Bytes of originals the caller stored in the trailing 24h (ROLLING window, config default_user_daily_quota_bytes). 0 while no daily quota is configured (the ledger is not consulted).
+             */
+            daily_used_bytes: number;
+            /**
+             * Format: int64
+             * @description The instance's rolling-24h daily upload quota in bytes; null = unlimited/not configured. Exceeding it answers 422 `daily_quota_exceeded` on the upload gates.
+             */
+            daily_quota_bytes: number | null;
         };
         /** @description Password confirmation for the irreversible account hard delete (a stolen access token alone must not be able to destroy the account). */
         DeleteAccountRequest: {
@@ -5499,11 +5948,8 @@ export interface components {
             privacy: "public" | "unlisted" | "private";
             /** @default false */
             permanent: boolean;
-            /**
-             * @description Record sessions and republish them as VODs (see LiveStream.replay_enabled).
-             * @default false
-             */
-            replay_enabled: boolean;
+            /** @description Record sessions and republish them as VODs (see LiveStream.replay_enabled). When OMITTED, the instance default (live_default_save_replay, exposed as the /instance live block's default_save_replay) is seeded; an explicit value always wins. While the instance disallows replay (live.allow_replay=false) the seed is always false and any stored flag produces no replay. */
+            replay_enabled?: boolean;
         };
         UpdateLiveStreamRequest: {
             title: string;
@@ -6145,7 +6591,7 @@ export interface components {
             /** Format: date-time */
             failed_at: string;
         };
-        /** @description One runtime-mutable instance setting's effective state: its type, the effective value (a string for text/enum keys, a boolean for toggle keys, an integer for limit keys, an array of strings for list keys), the default, and whether the database currently overrides it. Enum-typed settings also list their allowed options. */
+        /** @description One runtime-mutable instance setting's effective state: its type, the effective value (a string for text/enum keys, a boolean for toggle keys, an integer for limit keys, an array of strings for list keys), the default, and whether the database currently overrides it. Enum-typed settings also list their allowed options. Every setting carries its admin-IA placement (page + section, config-parity W1) so the metadata-driven admin UI auto-places keys into the right page. */
         InstanceSetting: {
             /**
              * @description The stable setting key.
@@ -6162,6 +6608,13 @@ export interface components {
             overridden: boolean;
             /** @description For type=enum only: the allowed values, in display order. Absent for other types. */
             options?: string[];
+            /**
+             * @description The admin-config page this key renders on.
+             * @enum {string}
+             */
+            page: "general" | "vod" | "live" | "federation" | "customization" | "homepage" | "advanced";
+            /** @description The in-page section (stable snake_case label), e.g. "broadcast". */
+            section: string;
         };
         /** @description Launch parameters for a PeerTube import run. The source connection is NOT here — it comes from server config only. */
         PeerTubeImportLaunchRequest: {
@@ -6300,6 +6753,25 @@ export interface components {
         };
         InstanceSettingsResponse: {
             settings: components["schemas"]["InstanceSetting"][];
+        };
+        /** @description The admin-authored homepage document (config-parity W1): RAW markdown plus its sha256 content hash. */
+        InstanceHomepageResponse: {
+            /** @description Raw markdown; the client renders/sanitises. */
+            body: string;
+            /** @description Lowercase-hex sha256 of the body. */
+            hash: string;
+        };
+        /** @description One instance document's stored state (admin editor shape). A never-set or cleared document has an empty body and hash. */
+        InstanceDocumentResponse: {
+            /** @enum {string} */
+            name: "homepage" | "custom_css" | "custom_js";
+            body: string;
+            /** @description Lowercase-hex sha256 of the body ("" when unset). */
+            hash: string;
+        };
+        /** @description The new document body. An empty string clears the document (public delivery 404s while unset). Caps: homepage 100KB; custom_css/custom_js 200KB. */
+        UpdateInstanceDocumentRequest: {
+            body: string;
         };
         /**
          * @description A flat object of setting key → new value. Toggle keys take a boolean; text/markdown/link and enum keys take a string; limit keys (quota, upload size/sessions, import resolution) take an integer; list keys take an array of strings. A null value clears the override (reset to the config default). Only the keys present are changed. At least one key is required. Limit changes take effect on the next request/job (no restart).
@@ -6574,6 +7046,8 @@ export interface components {
             password: string;
             /** @description Optional message to moderators, used only when the instance requires registration approval; ignored otherwise. */
             note?: string;
+            /** @description PeerTube-style minimum-age attestation ("I am at least N years old"). Required (true) while the instance's registration_minimum_age setting is active (GET /api/v1/instance reports the threshold); no birthdate is collected. Missing/false while active is a 422 field error on `age_attestation`. */
+            age_attestation?: boolean;
             /**
              * @description Opt the new session into cookie mode (browser clients): the rotating refresh token is set as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances, Max-Age = the refresh TTL) and omitted from the response body.
              * @default false
@@ -6582,10 +7056,10 @@ export interface components {
         };
         RegistrationPending: {
             /**
-             * @description The signup is queued for admin approval; no account exists yet.
+             * @description `pending`: the signup is queued for admin approval; no account exists yet. `verification_pending`: the account was created HELD behind the email-verification gate (registration_require_email_verification) — no session is issued and login answers 403 `email_verification_required` until the emailed link is confirmed at POST /api/v1/auth/verify-email/confirm.
              * @enum {string}
              */
-            status: "pending";
+            status: "pending" | "verification_pending";
         };
         RegistrationRequest: {
             /** Format: uuid */
@@ -6615,6 +7089,30 @@ export interface components {
         RejectRegistrationRequest: {
             /** @description Optional internal moderator note (not shown to the applicant). */
             note?: string;
+        };
+        /** @description One pending inbound ActivityPub channel Follow awaiting an admin decision (federation_follower_approval, config-parity W12). */
+        FederationFollowerRequest: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            channel_id: string;
+            /** @description Handle of the local channel being followed. */
+            channel_handle: string;
+            /** @description The remote follower's ActivityPub actor URL. */
+            actor_url: string;
+            /** @description The follower's cached fediverse identity (preferred_username@domain); omitted when the remote-actor cache row is gone. */
+            handle?: string;
+            /** @description The follower's home domain; omitted when uncached. */
+            domain?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        FederationFollowerRequestListResponse: {
+            requests: components["schemas"]["FederationFollowerRequest"][];
+            /** @example 20 */
+            limit: number;
+            /** @example 0 */
+            offset: number;
         };
         LoginRequest: {
             /** @example ada@example.test */
@@ -6884,6 +7382,196 @@ export interface operations {
             };
         };
     };
+    getInstanceHomepage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The homepage document. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceHomepageResponse"];
+                };
+            };
+            /** @description No homepage document is set. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getInstanceCustomCSS: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stylesheet body. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/css": string;
+                };
+            };
+            /** @description Not modified (If-None-Match matched the content hash). */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No custom stylesheet is set. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getInstanceCustomJS: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The script body. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/javascript": string;
+                };
+            };
+            /** @description Not modified (If-None-Match matched the content hash). */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No custom script is set. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getInstanceAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description No instance avatar is set. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getInstanceBanner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description No instance banner is set. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getInstanceLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: "favicon" | "header-wide" | "header-square" | "opengraph";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Unknown logo type, or no image set for the slot. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     register: {
         parameters: {
             query?: never;
@@ -6906,7 +7594,7 @@ export interface operations {
                     "application/json": components["schemas"]["AuthResponse"];
                 };
             };
-            /** @description Registration requires approval; a pending request was filed. No account or token is created until an admin approves it. */
+            /** @description Registration requires approval (a pending request was filed; no account exists yet) or email verification (the account exists but is held sessionless until the emailed link is confirmed) — the body's `status` says which. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6924,7 +7612,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Registration is disabled on this instance. */
+            /** @description Registration is disabled on this instance, or the registration_user_limit is reached. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6942,7 +7630,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation failed. */
+            /** @description Validation failed (including a missing `age_attestation` while registration_minimum_age is active). */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6984,7 +7672,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Account is disabled. */
+            /** @description Account is disabled — or, with the stable code `email_verification_required`, the account was created behind the registration email-verification gate and its email is still unverified (confirm the emailed link, then retry). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7882,7 +8570,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation failed. */
+            /** @description Validation failed, or the caller is at the per-user channel limit. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8539,6 +9227,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Account exports are disabled on this instance (stable code feature_disabled), or the caller's stored media exceeds the operator's export cap (stable code forbidden). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description An export is already in progress. */
             409: {
                 headers: {
@@ -8630,6 +9327,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Account archive imports are disabled on this instance. Stable code feature_disabled. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10885,7 +11591,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Storing the file would exceed the caller's storage quota (code quota_exceeded). */
+            /** @description Storing the file would exceed the caller's storage quota (code quota_exceeded; or the rolling-24h daily upload quota, code daily_quota_exceeded). */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10988,7 +11694,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The body is invalid (size must be > 0, filename required) or the file would exceed the caller's storage quota (code quota_exceeded). */
+            /** @description The body is invalid (size must be > 0, filename required) or the file would exceed the caller's storage quota (code quota_exceeded) or the rolling-24h daily upload quota (code daily_quota_exceeded). */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -11215,7 +11921,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description One or more chunks are missing or the wrong size, or completing would exceed the caller's storage quota (code quota_exceeded). */
+            /** @description One or more chunks are missing or the wrong size, or completing would exceed the caller's storage quota (code quota_exceeded) or the rolling-24h daily upload quota (code daily_quota_exceeded). */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -11292,6 +11998,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description URL imports are disabled on this instance (imports_enabled off), or resolver=ytdlp was requested while the platform import path is turned off at runtime (import_http_enabled). Stable code feature_disabled. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11388,6 +12103,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Channel auto-sync is turned off at runtime (channel_sync_enabled or import_http_enabled). Stable code feature_disabled. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such channel, or not owned by the caller. */
             404: {
                 headers: {
@@ -11415,7 +12139,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Channel auto-sync is disabled on this instance (CHANNEL_SYNC_ENABLED or YTDLP_IMPORT_ENABLED is off). Stable code service_unavailable. */
+            /** @description The deployment lacks the yt-dlp import resolver (YTDLP_IMPORT_ENABLED off), so channel auto-sync cannot run. Stable code service_unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -11491,6 +12215,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Channel auto-sync is turned off at runtime (channel_sync_enabled or import_http_enabled). Stable code feature_disabled. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such channel sync, or not owned by the caller. */
             404: {
                 headers: {
@@ -11509,7 +12242,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Channel auto-sync is disabled on this instance. Stable code service_unavailable. */
+            /** @description The deployment lacks the yt-dlp import resolver, so channel auto-sync cannot run. Stable code service_unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -11593,6 +12326,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Auto-captioning is turned off at runtime (transcription_enabled). Stable code feature_disabled. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such video, or not owned by the caller. */
             404: {
                 headers: {
@@ -11620,7 +12362,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Auto-captioning is not enabled on this server. */
+            /** @description The Whisper boot capability is not configured on this deployment (WHISPER_ENDPOINT), so auto-captioning cannot run. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -15428,6 +16170,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description A simultaneous-live cap refused the publish (live_max_instance_lives or live_max_user_lives reached). nginx-rtmp denies the session. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Ingest not enabled, or no stream matches the key. */
             404: {
                 headers: {
@@ -16761,6 +17512,472 @@ export interface operations {
             };
         };
     };
+    getInstanceDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: "homepage" | "custom_css" | "custom_js";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stored document. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceDocumentResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown document name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putInstanceDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: "homepage" | "custom_css" | "custom_js";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateInstanceDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored (or cleared) document. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceDocumentResponse"];
+                };
+            };
+            /** @description Malformed request body (the body field is required). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown document name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The body exceeds the document's size cap. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setInstanceAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The image (JPEG/PNG/WebP).
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The stored image metadata. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileImage"];
+                };
+            };
+            /** @description The multipart "file" field is missing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not an accepted image type (JPEG/PNG/WebP by extension). */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteInstanceAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No instance avatar is set. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setInstanceBanner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The image (JPEG/PNG/WebP).
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The stored image metadata. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileImage"];
+                };
+            };
+            /** @description The multipart "file" field is missing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not an accepted image type (JPEG/PNG/WebP by extension). */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteInstanceBanner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No instance banner is set. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setInstanceLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: "favicon" | "header-wide" | "header-square" | "opengraph";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The image (JPEG/PNG/WebP).
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The stored image metadata. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileImage"];
+                };
+            };
+            /** @description The multipart "file" field is missing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown logo type. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not an accepted image type (JPEG/PNG/WebP by extension). */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteInstanceLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: "favicon" | "header-wide" | "header-square" | "opengraph";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown logo type, or no image set for the slot. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listPeerTubeImports: {
         parameters: {
             query?: never;
@@ -17242,6 +18459,141 @@ export interface operations {
             };
             /** @description Validation failed. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listFederationFollowerRequests: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of pending follower requests (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FederationFollowerRequestListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approveFederationFollowerRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The follower was approved and the Accept queued. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such pending follower request. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rejectFederationFollowerRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The follower was rejected and the Reject queued. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such pending follower request. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
