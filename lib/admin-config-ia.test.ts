@@ -200,10 +200,13 @@ describe("validators", () => {
 });
 
 describe("W4 branding & social identity placement", () => {
-  it("places the hide-name toggle in general/branding and the handle in general/social", () => {
+  it("places the hide-name toggle in customization/header and the handle in general/social", () => {
+    // The META fallback MATCHES the server registry placement (vidra-core
+    // instancesettings: PageCustomization/"header" and PageGeneral/"social"),
+    // so a pre-metadata backend and the real one agree.
     expect(placementFor("header_hide_instance_name")).toEqual({
-      page: "general",
-      section: "branding",
+      page: "customization",
+      section: "header",
     });
     expect(placementFor("social_meta_twitter_username")).toEqual({
       page: "general",
@@ -212,8 +215,42 @@ describe("W4 branding & social identity placement", () => {
     expect(META.social_meta_twitter_username.validate).toBe(validateTwitterHandle);
   });
 
+  it("agrees with the real backend's server placement rows for the W4 keys", () => {
+    expect(
+      placementFor("header_hide_instance_name", { page: "customization", section: "header" }),
+    ).toEqual({ page: "customization", section: "header" });
+    expect(
+      placementFor("social_meta_twitter_username", { page: "general", section: "social" }),
+    ).toEqual({ page: "general", section: "social" });
+  });
+
   it("declares the Branding section on the general page (the assets panel's home)", () => {
     expect(PAGE_SECTIONS.general.map((s) => s.id)).toContain("branding");
+    expect(PAGE_SECTIONS.customization.map((s) => s.id)).toContain("header");
+  });
+
+  it("the general page model carries the key-less Branding panel section regardless of registry placement", () => {
+    // The regression the review caught: with the real backend's rows (the
+    // hide-name toggle server-placed at customization/header), no registry
+    // key lands in general/branding — the panel section must render anyway.
+    const serverRows = [
+      setting("header_hide_instance_name", {
+        type: "bool",
+        value: false,
+        default: false,
+        page: "customization",
+        section: "header",
+      }),
+    ];
+    const general = buildPageModel("general", serverRows);
+    const branding = general.find((s) => s.section.id === "branding");
+    expect(branding).toBeDefined();
+    expect(branding?.keys).toEqual([]);
+    // …and the toggle itself renders on the customization page's Header section.
+    const customization = buildPageModel("customization", serverRows);
+    const header = customization.find((s) => s.section.id === "header");
+    expect(header?.section.title).toBe("Header");
+    expect(header?.keys).toEqual(["header_hide_instance_name"]);
   });
 });
 
