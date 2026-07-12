@@ -149,3 +149,24 @@ describe("CommentsSection reply attribution", () => {
     expect(within(replies).queryByText("@", { exact: false })).toBeNull();
   });
 });
+
+describe("CommentsSection per-video comment policy (config-parity W9)", () => {
+  it("replaces the composer with a note when comments are disabled, keeping the list readable", async () => {
+    resolveComments([mk("c1", { body: "still visible" })]);
+    render(<CommentsSection videoId="v1" commentsEnabled={false} />);
+
+    // Existing comments keep rendering (reading stays open server-side too)…
+    expect(await screen.findByText("still visible")).toBeTruthy();
+    // …but the composer is gone, replaced by the quiet policy note.
+    expect(screen.queryByLabelText("Add a comment")).toBeNull();
+    expect(screen.getByText("Comments are turned off for this video.")).toBeTruthy();
+  });
+
+  it("keeps the composer when comments are enabled (and by default)", async () => {
+    resolveComments([]);
+    render(<CommentsSection videoId="v1" commentsEnabled />);
+
+    expect(await screen.findByLabelText("Add a comment")).toBeTruthy();
+    expect(screen.queryByText("Comments are turned off for this video.")).toBeNull();
+  });
+});

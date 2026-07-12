@@ -242,7 +242,9 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       description: "Whether viewers can save video files from this instance.",
     },
     {
-      id: "publish",
+      // Matches the server metadata's `publish_defaults` section id
+      // (normalized to "publish-defaults") so the W9 keys land here.
+      id: "publish-defaults",
       title: "Publish defaults",
       description: "What a new video starts with before its creator changes anything.",
     },
@@ -908,6 +910,45 @@ export const META: Record<string, SettingMeta> = {
     control: "toggle",
     page: "vod",
     section: "downloads",
+  },
+  // VOD / Publish defaults (config-parity W9: defaults.publish)
+  default_video_privacy: {
+    label: "Default privacy",
+    help: "The privacy a new video starts with when its creator does not choose one. Password-protected is never a default (it needs a password first).",
+    control: "enum-segmented",
+    options: [
+      { value: "public", label: "Public" },
+      { value: "unlisted", label: "Unlisted" },
+      { value: "private", label: "Private" },
+    ],
+    page: "vod",
+    section: "publish-defaults",
+  },
+  default_video_licence: {
+    label: "Default licence",
+    help: "The licence id preselected on the publish form (PeerTube-compatible: 1–6 Creative Commons, 7 CC0). 0 = no default — the picker starts empty.",
+    control: "number",
+    page: "vod",
+    section: "publish-defaults",
+    validate: zeroOrIntRange(1, 7, "Must be 0 (no default) or a licence id between 1 and 7."),
+  },
+  default_comment_policy: {
+    label: "Default comment policy",
+    help: "Whether new videos start with comments on. Creators can change it per video; existing comments always stay readable.",
+    control: "enum-segmented",
+    options: [
+      { value: "enabled", label: "Enabled" },
+      { value: "disabled", label: "Disabled" },
+    ],
+    page: "vod",
+    section: "publish-defaults",
+  },
+  default_download_enabled: {
+    label: "Downloads on new videos",
+    help: "Whether new videos start downloadable. Only effective while video downloads are enabled instance-wide; creators can change it per video.",
+    control: "toggle",
+    page: "vod",
+    section: "publish-defaults",
   },
   // LIVE
   live_enabled: {

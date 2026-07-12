@@ -1149,7 +1149,7 @@ export interface paths {
         put?: never;
         /**
          * Create a draft video
-         * @description Creates a draft video under a channel the caller owns. The video starts in the "draft" state; privacy defaults to "private" when omitted.
+         * @description Creates a draft video under a channel the caller owns. The video starts in the "draft" state. Omitted privacy/license/comments_policy/ download_enabled fields seed from the instance publish defaults (GET /instance defaults.publish — default_video_privacy, default_video_licence, default_comment_policy, default_download_enabled); explicit values always win.
          */
         post: operations["createVideo"];
         delete?: never;
@@ -1316,7 +1316,7 @@ export interface paths {
         };
         /**
          * List a video's downloadable files
-         * @description Returns metadata for actual single-file downloads: the stored original, an optional progressive VP9/WebM alternate, progressive MP4 remuxes for each ready HLS rung (muxed video+audio plus an optional video-only URL), an audio-only M4A when the source has audio, and WebVTT subtitles. Regular/anonymous callers require the effective downloads_enabled setting and ordinary video visibility. Moderators/admins bypass that setting and may download any local video for moderation. A visible video with no stored files yet returns an empty list.
+         * @description Returns metadata for actual single-file downloads: the stored original, an optional progressive VP9/WebM alternate, progressive MP4 remuxes for each ready HLS rung (muxed video+audio plus an optional video-only URL), an audio-only M4A when the source has audio, and WebVTT subtitles. Regular/anonymous callers require the LAYERED download policy (config-parity W9): the instance-wide downloads_enabled setting AND the video's own download_enabled flag (instance gate off means no downloads regardless of the per-video flag), plus ordinary video visibility. The same layered gate guards every /download/* byte route. Moderators/admins bypass both gates and may download any local video for moderation. A visible video with no stored files yet returns an empty list.
          */
         get: operations["getVideoDownloads"];
         put?: never;
@@ -1992,7 +1992,7 @@ export interface paths {
         put?: never;
         /**
          * Post a comment on a video
-         * @description Adds a comment by the authenticated user to a public, published video.
+         * @description Adds a comment by the authenticated user to a public, published video. Posting requires the instance-wide comments_enabled setting AND the video's comments_policy to be "enabled" (403 feature_disabled otherwise, config-parity W9); reading comments stays open either way.
          */
         post: operations["createComment"];
         delete?: never;
@@ -4625,6 +4625,8 @@ export interface components {
             channel_handle?: string;
             /** @description The owning channel's display name; present alongside channel_handle on card/feed views. */
             channel_display_name?: string;
+            /** @description The uploader ACCOUNT's display name (config-parity W5/W9), present alongside the channel identity on local card/feed views and the detail view when the account has set one; omitted when unset and on remote cards. Drives miniature_prefer_author_display_name. */
+            author_display_name?: string;
             /** @example My first upload */
             title: string;
             description: string;
@@ -4679,6 +4681,15 @@ export interface components {
             language?: string;
             /** @description Optional content-license id from GET /videos/config; omitted when unset. */
             license?: string;
+            /**
+             * @description The per-video comment policy (config-parity W9). Present on the create/update/detail views; omitted on list/feed views and remote cards.
+             * @enum {string}
+             */
+            comments_policy?: "enabled" | "disabled";
+            /** @description EFFECTIVE comment availability on the DETAIL view only: the instance-wide comments_enabled setting AND this video's comments_policy. Reading existing comments stays open either way; this reports whether posting is possible. */
+            comments_enabled?: boolean;
+            /** @description The per-video download policy (config-parity W9). Present on the create/update/detail views; omitted on list/feed views. Effective availability for regular viewers is this flag AND the instance downloads feature (GET /instance features.downloads); moderators/admins bypass both. */
+            download_enabled?: boolean;
             /** @description The video's free-form tags (lowercased, alphabetical; at most 5). Present on the create/update/detail views; omitted when empty and on list/feed views. */
             tags?: string[];
             /**
@@ -4865,7 +4876,7 @@ export interface components {
             title: string;
             description?: string;
             /**
-             * @description Defaults to "private" when omitted.
+             * @description Omitted/empty seeds the instance's default_video_privacy setting (registry default "public"). "password" is never seeded (a password video needs a password first).
              * @enum {string}
              */
             privacy?: "public" | "unlisted" | "private" | "password";
@@ -4873,7 +4884,7 @@ export interface components {
             category?: string;
             /** @description Optional content language code (see GET /videos/config). Unknown value -> 422. */
             language?: string;
-            /** @description Optional content-license id (see GET /videos/config). Unknown value -> 422. */
+            /** @description Optional content-license id (see GET /videos/config); unknown value -> 422. Omitted/empty seeds the instance's default_video_licence setting (0 = no default, left unset). */
             license?: string;
             /** @description Free-form tags. Lowercased, trimmed, and deduped server-side; at most 5 distinct tags of at most 50 characters each -> 422 otherwise. */
             tags?: string[];
@@ -4884,6 +4895,13 @@ export interface components {
             publish_at?: string;
             /** @description Mark the video as sensitive content (defaults to false). See the Video schema for how the instance policy treats flagged videos. */
             is_sensitive?: boolean;
+            /**
+             * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting. PeerTube's requires_approval tier is deliberately not supported -> 422.
+             * @enum {string}
+             */
+            comments_policy?: "enabled" | "disabled";
+            /** @description Per-video download policy (config-parity W9), layered on the instance-wide downloads_enabled gate (both must be on for regular viewers). Omitted (null) seeds the instance's default_download_enabled setting. */
+            download_enabled?: boolean;
         };
         /** @description Partial update; provide at least one field. */
         UpdateVideoRequest: {
@@ -4906,6 +4924,13 @@ export interface components {
             publish_at?: string;
             /** @description Set or clear the sensitive-content flag (omit to leave unchanged). */
             is_sensitive?: boolean;
+            /**
+             * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open.
+             * @enum {string}
+             */
+            comments_policy?: "enabled" | "disabled";
+            /** @description Set the per-video download policy (omit to leave unchanged), layered on the instance-wide downloads_enabled gate. */
+            download_enabled?: boolean;
         };
         /** @description A WebVTT caption track's metadata (the file is fetched separately). */
         Caption: {
@@ -10464,7 +10489,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller. */
+            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10522,7 +10547,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller. */
+            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10580,7 +10605,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller. */
+            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10642,7 +10667,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller. */
+            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10700,7 +10725,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller. */
+            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10750,7 +10775,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller. */
+            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12610,6 +12635,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Commenting is disabled (code "feature_disabled") — by the instance comments_enabled setting or this video's comments_policy. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
