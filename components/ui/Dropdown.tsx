@@ -3,6 +3,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -51,8 +52,37 @@ export function Dropdown({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const menuId = useId();
+  // Viewport-aware placement, measured pre-paint each time the menu opens:
+  // flip above the trigger when the space below can't fit the menu, and flip
+  // the horizontal alignment when the preferred side would leave the viewport.
+  const [placement, setPlacement] = useState<{ up: boolean; end: boolean }>({
+    up: false,
+    end: align === "end",
+  });
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!trigger || !menu) return;
+    const t = trigger.getBoundingClientRect();
+    const menuH = menu.offsetHeight;
+    const menuW = menu.offsetWidth;
+    const margin = 8;
+    const spaceBelow = window.innerHeight - t.bottom - margin;
+    const spaceAbove = t.top - margin;
+    const up = spaceBelow < menuH && spaceAbove > spaceBelow;
+    let end = align === "end";
+    if (end && t.right - menuW < margin && t.left + menuW <= window.innerWidth - margin) {
+      end = false;
+    } else if (!end && t.left + menuW > window.innerWidth - margin && t.right - menuW >= margin) {
+      end = true;
+    }
+    setPlacement({ up, end });
+  }, [open, align, items.length]);
 
   // Close on outside click / focus leaving the widget.
   useEffect(() => {
@@ -133,11 +163,14 @@ export function Dropdown({
       {open ? (
         <div
           id={menuId}
+          ref={menuRef}
           role="menu"
           aria-label={triggerLabel}
           className={cn(
-            "absolute z-40 mt-1 min-w-40 rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg",
-            align === "end" ? "right-0" : "left-0",
+            "absolute z-40 min-w-52 overflow-y-auto rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg",
+            "max-h-[min(60vh,480px)]",
+            placement.up ? "bottom-full mb-1" : "top-full mt-1",
+            placement.end ? "right-0" : "left-0",
           )}
         >
           {items.map((item, index) => (
@@ -156,7 +189,7 @@ export function Dropdown({
                 closeAndRefocus();
               }}
               className={cn(
-                "block w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors focus-ring disabled:opacity-50",
+                "block w-full whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors focus-ring disabled:opacity-50",
                 item.danger ? "text-danger hover:bg-danger/10" : "text-fg hover:bg-surface-muted",
               )}
             >
