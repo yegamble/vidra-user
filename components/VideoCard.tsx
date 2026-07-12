@@ -33,6 +33,7 @@ import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 export function VideoCard({
   video,
   progressFraction,
+  onDeleted,
 }: {
   video: Video;
   /**
@@ -41,6 +42,13 @@ export function VideoCard({
    * keeps an accessible "Resume at m:ss" text alongside. Capped at 100%.
    */
   progressFraction?: number;
+  /**
+   * Called after the overflow-menu Delete succeeds. Grid parents MUST remove
+   * the video from their list state here so the grid reflows — the card's
+   * render-null fallback (used only when this is omitted) leaves the parent's
+   * empty <li> behind as a hole in the grid.
+   */
+  onDeleted?: () => void;
 }) {
   const [removed, setRemoved] = useState(false);
   // A federated remote card: links to the remote watch surface, shows its
@@ -223,7 +231,7 @@ export function VideoCard({
           ) : null}
         </div>
         <div className="-mr-1 shrink-0">
-          <VideoActionsMenu video={video} onDeleted={() => setRemoved(true)} />
+          <VideoActionsMenu video={video} onDeleted={onDeleted ?? (() => setRemoved(true))} />
         </div>
       </div>
     </div>

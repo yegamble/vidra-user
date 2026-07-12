@@ -104,7 +104,10 @@ export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: Fe
       <VideoGrid>
         {videos.map((video) => (
           <li key={video.id}>
-            <VideoCard video={video} />
+            <VideoCard
+              video={video}
+              onDeleted={() => setVideos((cur) => cur.filter((v) => v.id !== video.id))}
+            />
           </li>
         ))}
       </VideoGrid>

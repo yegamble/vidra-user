@@ -137,6 +137,7 @@ function History() {
                   ? item.position_seconds / item.duration_seconds
                   : undefined
               }
+              onDeleted={() => setItems((list) => list.filter((it) => it.id !== item.id))}
             />
             <div className="flex items-center justify-between gap-2 text-[13px] text-fg-muted">
               <span className="tabular-nums">
