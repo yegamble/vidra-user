@@ -99,9 +99,14 @@ async function openStudio(page: Page) {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   await page.getByRole("link", { name: "Studio" }).click();
+  // This first paint of the studio is provably CPU-bound, not an event race:
+  // the click loads + executes the code-split studio chunk, mounts the page,
+  // resolves the (mocked) channels fetch, and only then mounts this section.
+  // Under full-suite machine load that pipeline can starve the default 5s
+  // expect window, so this one navigation-boundary assertion gets headroom.
   await expect(
     page.getByRole("heading", { name: "Auto-import from another platform" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
 }
 
 test("connecting an external channel creates a sync row with a Waiting first run pill", async ({

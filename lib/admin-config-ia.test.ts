@@ -121,8 +121,8 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["registration_require_email_verification", "general", "signup"],
   ["registration_user_limit", "general", "signup"],
   ["registration_minimum_age", "general", "signup"],
-  ["default_user_daily_quota_bytes", "vod", "uploads"],
   ["new_user_history_enabled", "general", "signup"],
+  ["default_user_daily_quota_bytes", "vod", "uploads"],
 ];
 
 describe("config pages", () => {
