@@ -1,21 +1,32 @@
-// Autoplay-next preference (PLAY-08). Pure module — only the guarded
-// session-persistence helpers — so the store is unit-testable in isolation
-// (lib/player-autoplay.test.ts), mirroring lib/player-theater's shape.
+// Autoplay preference (PLAY-08 + config-parity W5). Pure module — only the
+// guarded session-persistence helpers — so the store is unit-testable in
+// isolation (lib/player-autoplay.test.ts), mirroring lib/player-theater's shape.
 //
-// The end card honours this "effective" autoplay-next preference. In this slice
-// the scope is a per-browsing-session toggle with a baked default of ON — the
-// signed-out default the spec mandates. The on-card "Autoplay next" switch writes
-// here, so the choice survives reloads/navigations within the tab (never past
-// it). Both the card and any future reader use the one external store (the house
-// useSyncExternalStore pattern), so they stay in lockstep without prop-drilling.
+// The end card honours the "effective" autoplay-next preference; since W5 the
+// same effective value also drives START-ON-OPEN (whether the watch page's
+// player begins playing on load). The preference chain, strongest first:
 //
-// When no session value is stored, the fallback is the signed-in user's effective
-// `autoplay_next` (GET /api/v1/me/player-settings, hydrated into
-// lib/player-settings), or the baked ON default for signed-out users. An
-// in-session choice (the end card's switch) still wins for the session.
+//   1. the session's explicit choice (the end card's switch — sessionStorage)
+//   2. a signed-in user's server-backed `autoplay_next` (migration 0075,
+//      hydrated into lib/player-settings) — an explicit stored user pref is
+//      NEVER overridden by the instance default
+//   3. the instance's `defaults.player_autoplay` (GET /instance, W5) — the
+//      operator seed for anonymous/unset users. DOCUMENTED DEVIATION: one
+//      instance key seeds BOTH autoplay-next and start-on-open (PeerTube's
+//      auto_play is start-on-open only; vidra's stored pref is autoplay-next)
+//   4. the baked ON default (the pre-W5 signed-out behavior)
+//
+// Start-on-open additionally requires the instance signal to EXIST: with no
+// defaults block (old backend, backend down, mocked e2e) the player keeps
+// today's behavior and never auto-starts (readStartOnOpen → false).
 
 import {
+  getInstanceDefaultsSnapshot,
+  subscribeInstanceDefaults,
+} from "@/lib/instance-defaults";
+import {
   PLAYER_SETTINGS_EVENT,
+  arePlayerSettingsHydrated,
   getPlayerSettingsSnapshot,
 } from "@/lib/player-settings";
 
@@ -23,15 +34,18 @@ const AUTOPLAY_KEY = "vidra.autoplay-next";
 const AUTOPLAY_EVENT = "vidra:autoplay-next";
 
 /** subscribeAutoplay notifies on any autoplay change (this tab via the custom
- * event, another tab via `storage`, or the per-user settings hydrating). */
+ * event, another tab via `storage`, the per-user settings hydrating, or the
+ * instance defaults landing). */
 export function subscribeAutoplay(onChange: () => void): () => void {
   window.addEventListener("storage", onChange);
   window.addEventListener(AUTOPLAY_EVENT, onChange);
   window.addEventListener(PLAYER_SETTINGS_EVENT, onChange);
+  const unsubscribeDefaults = subscribeInstanceDefaults(onChange);
   return () => {
     window.removeEventListener("storage", onChange);
     window.removeEventListener(AUTOPLAY_EVENT, onChange);
     window.removeEventListener(PLAYER_SETTINGS_EVENT, onChange);
+    unsubscribeDefaults();
   };
 }
 
@@ -42,21 +56,46 @@ export function serverAutoplay(): boolean {
   return true;
 }
 
-/**
- * readStoredAutoplay returns the session's remembered autoplay preference: the
- * exact "1"/"0" markers win (an in-session choice); when unset — or a corrupt
- * value — it falls back to the effective per-user `autoplay_next` (baked ON for
- * signed-out users). Safe when storage is unavailable (private mode).
- */
-export function readStoredAutoplay(): boolean {
+/** The session's explicit "1"/"0" marker, or null when unset/corrupt/blocked. */
+function readSessionAutoplay(): boolean | null {
   try {
     const raw = window.sessionStorage.getItem(AUTOPLAY_KEY);
     if (raw === "1") return true;
     if (raw === "0") return false;
-    return getPlayerSettingsSnapshot().autoplay_next;
+    return null;
   } catch {
-    return getPlayerSettingsSnapshot().autoplay_next;
+    return null; // storage unavailable (private mode)
   }
+}
+
+/**
+ * readStoredAutoplay returns the effective autoplay-next preference per the
+ * chain above: session choice → hydrated per-user pref → instance default →
+ * baked ON. Safe when storage is unavailable (private mode).
+ */
+export function readStoredAutoplay(): boolean {
+  const session = readSessionAutoplay();
+  if (session !== null) return session;
+  if (arePlayerSettingsHydrated()) return getPlayerSettingsSnapshot().autoplay_next;
+  return getInstanceDefaultsSnapshot()?.player_autoplay ?? true;
+}
+
+/**
+ * readStartOnOpen returns whether the watch player should attempt playback on
+ * open (config-parity W5). false while the instance carries no player_autoplay
+ * signal — today's exact behavior, the player waits for a click. Once the
+ * instance seeds it, the same explicit user preferences win (chain above), so
+ * a viewer who switched autoplay off is never auto-started either.
+ */
+export function readStartOnOpen(): boolean {
+  const seeded = getInstanceDefaultsSnapshot()?.player_autoplay;
+  if (seeded === undefined) return false;
+  return readStoredAutoplay();
+}
+
+/** SSR snapshot for start-on-open — always false (defaults are client-fetched). */
+export function serverStartOnOpen(): boolean {
+  return false;
 }
 
 /** setAutoplay remembers the preference for the session and broadcasts the

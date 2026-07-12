@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
 import type { FeedScope, FeedSort } from "@/lib/api";
-import { feedHref, type FeedFilters } from "@/lib/feed-url";
+import { feedHref, type FeedFilters, type FeedUrlDefaults } from "@/lib/feed-url";
 
 const OPTIONS: readonly SegmentedOption<FeedScope>[] = [
   { value: "local", label: "Local" },
@@ -20,23 +20,30 @@ const OPTIONS: readonly SegmentedOption<FeedScope>[] = [
 // back/forward friendly — selecting pushes a new URL and the server page remounts
 // the feed. Group semantics (role="group" name "Feed scope" + aria-pressed
 // buttons) come from the primitive.
+//
+// A pick is always passed through EXPLICITLY (both values): feedHref keeps it
+// in the URL exactly when it differs from the instance's effective default
+// scope (config-parity W5) — so "Local" still wins on an instance whose
+// operator default is "all", while the shipped local default keeps today's
+// pretty scope-less URLs.
 export function FeedScopeToggle({
   active,
   sort,
   filters = {},
+  urlDefaults,
 }: {
   active: FeedScope;
   sort: FeedSort;
   filters?: FeedFilters;
+  /** The instance's effective feed defaults — the URL baseline (see above). */
+  urlDefaults?: FeedUrlDefaults;
 }) {
   const router = useRouter();
   return (
     <SegmentedControl
       options={OPTIONS}
       value={active}
-      onChange={(scope) =>
-        router.push(feedHref(sort, { ...filters, scope: scope === "all" ? "all" : undefined }))
-      }
+      onChange={(scope) => router.push(feedHref(sort, { ...filters, scope }, urlDefaults))}
       label="Feed scope"
       size="sm"
       fullWidth

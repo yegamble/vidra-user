@@ -31,6 +31,22 @@ describe("feedHref", () => {
       "/?sort=popular&scope=all&tag=cats",
     );
     expect(feedHref("recent", { scope: undefined })).toBe("/");
+    // An explicit local pick matches the shipped default → stays pretty.
+    expect(feedHref("recent", { scope: "local" })).toBe("/");
+  });
+
+  it("builds URLs against the instance defaults (W5): matching picks stay bare, differing picks stay explicit", () => {
+    const defaults = { sort: "popular", scope: "all" } as const;
+    // The operator-default sort is the bare home URL; others pin themselves.
+    expect(feedHref("popular", {}, defaults)).toBe("/");
+    expect(feedHref("recent", {}, defaults)).toBe("/?sort=recent");
+    expect(feedHref("trending", {}, defaults)).toBe("/trending");
+    // Scope: "all" now matches the default (omitted), "local" must survive.
+    expect(feedHref("popular", { scope: "all" }, defaults)).toBe("/");
+    expect(feedHref("popular", { scope: "local" }, defaults)).toBe("/?scope=local");
+    expect(feedHref("recent", { scope: "local", tag: "cats" }, defaults)).toBe(
+      "/?sort=recent&scope=local&tag=cats",
+    );
   });
 });
 
@@ -56,9 +72,10 @@ describe("readFeedFilters", () => {
     });
   });
 
-  it("normalizes scope: only 'all' is kept, anything else is the local default", () => {
+  it("normalizes scope: both explicit values are kept (an explicit ?scope=local must beat an instance default of all), unknowns fall back", () => {
     expect(readFeedFilters({ scope: "all" }).scope).toBe("all");
-    expect(readFeedFilters({ scope: "local" }).scope).toBeUndefined();
+    expect(readFeedFilters({ scope: "local" }).scope).toBe("local");
     expect(readFeedFilters({ scope: "bogus" }).scope).toBeUndefined();
+    expect(readFeedFilters({}).scope).toBeUndefined();
   });
 });

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import type { FeedSort } from "@/lib/api";
-import { feedHref, type FeedFilters } from "@/lib/feed-url";
+import { feedHref, type FeedFilters, type FeedUrlDefaults } from "@/lib/feed-url";
 
 const OPTIONS: { sort: FeedSort; label: string }[] = [
   { sort: "recent", label: "Recent" },
@@ -23,9 +23,16 @@ const OPTIONS: { sort: FeedSort; label: string }[] = [
 export function FeedSortTabs({
   active,
   filters = {},
+  urlDefaults,
 }: {
   active: FeedSort;
   filters?: FeedFilters;
+  /**
+   * The instance's effective feed defaults (config-parity W5) — the URL
+   * baseline: a pick matching the default keeps the pretty bare URL, a pick
+   * differing from it stays explicit so it wins over the operator default.
+   */
+  urlDefaults?: FeedUrlDefaults;
 }) {
   const router = useRouter();
   return (
@@ -40,7 +47,7 @@ export function FeedSortTabs({
           type="button"
           aria-pressed={active === sort}
           onClick={() => {
-            if (sort !== active) router.push(feedHref(sort, filters));
+            if (sort !== active) router.push(feedHref(sort, filters, urlDefaults));
           }}
           className={
             active === sort

@@ -254,6 +254,74 @@ describe("W4 branding & social identity placement", () => {
   });
 });
 
+describe("W5 browse, landing & player defaults placement", () => {
+  const W5_ENUM_KEYS = ["default_landing_page", "default_feed_sort", "default_feed_scope"];
+
+  it("places the browse keys in general/browse, matching the backend registry", () => {
+    // vidra-core instancesettings: PageGeneral/"browse" for the four browse
+    // keys — the META fallback must agree so a pre-metadata backend and the
+    // real one render identically.
+    for (const key of [...W5_ENUM_KEYS, "miniature_prefer_author_display_name"]) {
+      expect(placementFor(key)).toEqual({ page: "general", section: "browse" });
+      expect(placementFor(key, { page: "general", section: "browse" })).toEqual({
+        page: "general",
+        section: "browse",
+      });
+    }
+    expect(PAGE_SECTIONS.general.map((s) => s.id)).toContain("browse");
+  });
+
+  it("places the theme default in customization/theme and autoplay in customization/player", () => {
+    expect(placementFor("default_theme")).toEqual({ page: "customization", section: "theme" });
+    expect(placementFor("default_player_autoplay")).toEqual({
+      page: "customization",
+      section: "player",
+    });
+    expect(PAGE_SECTIONS.customization.map((s) => s.id)).toContain("player");
+  });
+
+  it("renders the enum keys as segmented pickers whose options mirror the backend enums", () => {
+    expect(META.default_feed_sort.control).toBe("enum-segmented");
+    expect(META.default_feed_sort.options?.map((o) => o.value)).toEqual([
+      "recent",
+      "popular",
+      "trending",
+    ]);
+    expect(META.default_feed_scope.options?.map((o) => o.value)).toEqual(["local", "all"]);
+    expect(META.default_landing_page.options?.map((o) => o.value)).toEqual([
+      "home-recent",
+      "trending",
+      "local",
+      "home",
+    ]);
+    expect(META.default_theme.options?.map((o) => o.value)).toEqual([
+      "system",
+      "light",
+      "dark",
+    ]);
+    // Every enum-segmented META entry must carry its options.
+    for (const [key, meta] of Object.entries(META)) {
+      if (meta.control === "enum-segmented") {
+        expect(meta.options?.length, key).toBeGreaterThan(0);
+      }
+    }
+    // The two flags stay plain toggles.
+    expect(META.miniature_prefer_author_display_name.control).toBe("toggle");
+    expect(META.default_player_autoplay.control).toBe("toggle");
+  });
+
+  it("builds the general page with the browse section holding the four keys in META order", () => {
+    const browse = buildPageModel("general", []).find((s) => s.section.id === "browse");
+    expect(browse?.section.title).toBe("Landing & browse defaults");
+    expect(browse?.keys).toEqual([
+      "default_landing_page",
+      "default_feed_sort",
+      "default_feed_scope",
+      "miniature_prefer_author_display_name",
+    ]);
+  });
+});
+
 describe("display helpers", () => {
   it("humanizes server-invented section ids", () => {
     expect(humanizeSectionId("channel-sync")).toBe("Channel sync");

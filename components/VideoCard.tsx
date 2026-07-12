@@ -16,6 +16,8 @@ import {
 import type { Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { useInstanceDefaults } from "@/lib/instance-defaults";
+import { miniatureDisplayName } from "@/lib/miniature-name";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 
 // Grid video card in the template's language (specs/design/{app,desktop}-template):
@@ -52,11 +54,17 @@ export function VideoCard({
   // under `warn` it is badged only; `display` (and `hide`, which is enforced
   // server-side, or an unknown policy) applies no client treatment.
   const policy = useSensitiveContentPolicy();
+  // Miniature attribution (config-parity W5): when the operator prefers the
+  // uploader's display name, the card credits it instead of the channel name
+  // (falling back to the channel while the payload lacks the author field —
+  // see lib/miniature-name). Same shared instance fetch as the policy above.
+  const preferAuthorName =
+    useInstanceDefaults()?.miniature_prefer_author_display_name === true;
   if (removed) return null;
   const sensitive = isSensitiveVideo(video);
   const blurSensitive = sensitive && policy === "blur";
   const markSensitive = sensitive && (policy === "blur" || policy === "warn");
-  const channelName = video.channel_display_name || video.channel_handle || "";
+  const channelName = miniatureDisplayName(video, preferAuthorName);
   const avatarSrc =
     !isRemote && video.channel_handle ? channelAvatarUrl(video.channel_handle) : null;
 

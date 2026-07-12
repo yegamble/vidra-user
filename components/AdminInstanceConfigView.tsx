@@ -732,6 +732,27 @@ function SettingRow({
         </div>
       ) : null}
 
+      {/* Generic enum picker (config-parity W5): the META `options` carry the
+          labels; the value falls back to the server default, then the first
+          option, so the control is never in an unselectable state. */}
+      {control === "enum-segmented" && meta?.options && meta.options.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <SegmentedControl
+            options={meta.options}
+            value={
+              text ||
+              (typeof setting?.default === "string" ? setting.default : "") ||
+              meta.options[0].value
+            }
+            onChange={(next) => onChange(next)}
+            label={label}
+            size="sm"
+            disabled={inactive}
+          />
+          {error ? <p className="text-xs text-danger">{error}</p> : null}
+        </div>
+      ) : null}
+
       {isToggle && error ? <p className="text-xs text-danger">{error}</p> : null}
     </div>
   );

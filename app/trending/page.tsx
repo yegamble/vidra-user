@@ -3,24 +3,43 @@ import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
 import { LiveNowRail } from "@/components/LiveNowRail";
 import { VideoFeed } from "@/components/VideoFeed";
-import { readFeedFilters } from "@/lib/feed-url";
+import {
+  feedDefaultsForLanding,
+  resolveFeedScope,
+  resolveLandingPage,
+} from "@/lib/feed-defaults";
+import { readFeedFilters, type FeedUrlDefaults } from "@/lib/feed-url";
+import { getInstanceConfig } from "@/lib/instance-config.server";
 
 // /trending is the canonical trending surface: the public feed with
 // sort=trending preselected, sharing the home page's segmented sort control
 // (Recent/Popular link back to the home feed modes), filter row, and VideoFeed
 // grid. The home page's ?sort=trending deep link keeps working; this route is
 // the linkable navigation destination (sidebar entry, PeerTube parity).
+// The scope fallback honours the operator's defaults.feed_scope (config-parity
+// W5); an explicit ?scope= still wins, and no snapshot means local (shipped).
 export default async function TrendingPage({
   searchParams,
 }: {
   searchParams: Promise<{ tag?: string; category?: string; language?: string; scope?: string }>;
 }) {
-  const sp = await searchParams;
+  const [sp, instance] = await Promise.all([searchParams, getInstanceConfig()]);
+  // This surface is not the landing switch — browse defaults apply directly
+  // (home-recent maps landing-neutrally onto feed_sort/feed_scope).
+  const browseDefaults = feedDefaultsForLanding("home-recent", instance?.defaults);
+  // URL-building baseline: the sort chips lead back to "/", whose bare-URL
+  // sort is the LANDING-aware default (landing=trending makes bare "/" show
+  // trending, so an explicit Recent pick must stay explicit there); the scope
+  // baseline is THIS page's effective default scope.
+  const urlDefaults: FeedUrlDefaults = {
+    sort: feedDefaultsForLanding(resolveLandingPage(instance?.defaults), instance?.defaults).sort,
+    scope: browseDefaults.scope,
+  };
   const filters = readFeedFilters(sp);
-  const scope = filters.scope ?? "local";
+  const scope = resolveFeedScope(filters.scope, browseDefaults.scope);
   const feedKey = [
     "trending",
-    filters.scope ?? "local",
+    scope,
     filters.category ?? "",
     filters.language ?? "",
     filters.tag ?? "",
@@ -45,11 +64,11 @@ export default async function TrendingPage({
             What viewers are discovering right now.
           </p>
         </div>
-        <FeedSortTabs active="trending" filters={filters} />
+        <FeedSortTabs active="trending" filters={filters} urlDefaults={urlDefaults} />
       </section>
       <div className="mb-9 flex flex-col gap-3 rounded-[20px] border border-border-subtle bg-surface-muted/65 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
-        <FeedScopeToggle active={scope} sort="trending" filters={filters} />
-        <FeedFilters sort="trending" filters={filters} />
+        <FeedScopeToggle active={scope} sort="trending" filters={filters} urlDefaults={urlDefaults} />
+        <FeedFilters sort="trending" filters={filters} urlDefaults={urlDefaults} />
       </div>
       {/* "Live now" rail — persists across the shared sort chips (matches the
           design's single feed screen, where Recent/Popular/Trending are re-sorts

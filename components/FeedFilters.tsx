@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { CloseIcon } from "@/components/icons";
 import type { FeedSort, VideoConfigResponse } from "@/lib/api";
 import { getVideoConfigCached } from "@/lib/api/video-config";
-import { feedHref, type FeedFilters as Filters } from "@/lib/feed-url";
+import { feedHref, type FeedFilters as Filters, type FeedUrlDefaults } from "@/lib/feed-url";
 
 // FeedFilters is the browse feed's filter row (home + /trending): category and
 // language selects populated from the shared GET /videos/config taxonomy, plus
@@ -17,7 +17,16 @@ import { feedHref, type FeedFilters as Filters } from "@/lib/feed-url";
 // the server page re-reads searchParams and remounts the feed. The selects
 // stay disabled until the taxonomy arrives; if it fails to load they stay
 // disabled (the feed itself is unaffected) — an active tag chip still renders.
-export function FeedFilters({ sort, filters }: { sort: FeedSort; filters: Filters }) {
+export function FeedFilters({
+  sort,
+  filters,
+  urlDefaults,
+}: {
+  sort: FeedSort;
+  filters: Filters;
+  /** The instance's effective feed defaults — the URL baseline (config-parity W5). */
+  urlDefaults?: FeedUrlDefaults;
+}) {
   const router = useRouter();
   const [config, setConfig] = useState<VideoConfigResponse | null>(null);
 
@@ -36,7 +45,7 @@ export function FeedFilters({ sort, filters }: { sort: FeedSort; filters: Filter
   }, []);
 
   function apply(next: Partial<Filters>) {
-    router.push(feedHref(sort, { ...filters, ...next }));
+    router.push(feedHref(sort, { ...filters, ...next }, urlDefaults));
   }
 
   const selectClass =
@@ -82,7 +91,7 @@ export function FeedFilters({ sort, filters }: { sort: FeedSort; filters: Filter
         <span className="inline-flex min-h-11 items-center gap-1 rounded-full bg-surface-raised py-1 pl-3 pr-1 text-[13px] font-semibold text-fg sm:min-h-9">
           <span className="sr-only">Filtered by tag </span>#{filters.tag}
           <Link
-            href={feedHref(sort, { ...filters, tag: undefined })}
+            href={feedHref(sort, { ...filters, tag: undefined }, urlDefaults)}
             aria-label={`Remove tag filter ${filters.tag}`}
             className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg sm:h-7 sm:w-7"
           >
