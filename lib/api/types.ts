@@ -86,6 +86,16 @@ export type InstanceSetting = Schemas["InstanceSetting"];
 export type InstanceSettingType = NonNullable<Schemas["InstanceSetting"]["type"]>;
 export type InstanceSettingsResponse = Schemas["InstanceSettingsResponse"];
 export type UpdateInstanceSettingsRequest = Schemas["UpdateInstanceSettingsRequest"];
+// Instance documents (config-parity W1 store, W6 editors). Hand-written: the
+// shape is fixed by .ralph/specs/config-parity/instance-contract.md so the
+// editors do not depend on the generated spec snapshot in use.
+export type InstanceDocumentName = "homepage" | "custom_css" | "custom_js";
+/** One document's stored state; body "" + hash "" when never set / cleared. */
+export type InstanceDocument = {
+  name: InstanceDocumentName;
+  body: string;
+  hash: string;
+};
 export type JobsOverview = Schemas["JobsOverview"];
 export type QueueStatus = Schemas["QueueStatus"];
 export type JobFailure = Schemas["JobFailure"];

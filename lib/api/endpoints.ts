@@ -9,6 +9,8 @@ import type {
   AdminUser,
   AdminUserListResponse,
   AuditLogListResponse,
+  InstanceDocument,
+  InstanceDocumentName,
   InstanceSettingsResponse,
   UpdateInstanceSettingsRequest,
   InstanceAboutResponse,
@@ -1834,6 +1836,31 @@ export const api = {
     apiRequest<void>(`/api/v1/admin/instance-logo/${encodeURIComponent(type)}`, {
       method: "DELETE",
     }),
+
+  /**
+   * GET /api/v1/admin/instance-documents/{name} — one instance document's
+   * stored state (admin only; config-parity W1 store, W6 editors). A document
+   * that was never set comes back with body "" and hash "" — a stable shape
+   * for the editors, never a 404.
+   */
+  getInstanceDocument: (name: InstanceDocumentName, signal?: AbortSignal) =>
+    apiRequest<InstanceDocument>(
+      `/api/v1/admin/instance-documents/${encodeURIComponent(name)}`,
+      { signal },
+    ),
+
+  /**
+   * PUT /api/v1/admin/instance-documents/{name} — store an instance document
+   * (admin only; homepage capped at 100 KiB, custom CSS/JS at 200 KiB — an
+   * over-cap body is a 422 with a `body` field error). An empty body CLEARS
+   * the document. Every write is audit-enveloped server-side with the new
+   * content hash.
+   */
+  putInstanceDocument: (name: InstanceDocumentName, body: string) =>
+    apiRequest<InstanceDocument>(
+      `/api/v1/admin/instance-documents/${encodeURIComponent(name)}`,
+      { method: "PUT", body: { body } },
+    ),
 
   /**
    * GET /api/v1/admin/jobs — durable job-queue operations snapshot (admin only):

@@ -9,7 +9,10 @@
 // fallback — so a missing snapshot reproduces the pre-W5 behavior exactly.
 
 import type { FeedScope, FeedSort } from "@/lib/api";
-import type { InstanceDefaultsBlock } from "@/lib/instance-config.server";
+import type {
+  InstanceDefaultsBlock,
+  InstanceHomepageBlock,
+} from "@/lib/instance-config.server";
 
 /** The shipped fallbacks (pre-W5 behavior; also vidra-core's config defaults). */
 export const FALLBACK_FEED_SORT: FeedSort = "recent";
@@ -74,6 +77,41 @@ export function resolveLandingPage(defaults?: InstanceDefaultsBlock | null): Lan
  * These are DEFAULTS, not forces: explicit ?sort=/?scope= params still win in
  * the callers' resolve* step above.
  */
+/**
+ * Whether a "/" request shows the admin-authored homepage document instead of
+ * the feed (config-parity W6, the 'home' landing branch W5 reserved):
+ *
+ *   - the operator picked landing_page = "home", AND
+ *   - a homepage document is enabled (a non-empty document is stored — the
+ *     backend's homepage.enabled), AND
+ *   - the URL carries NO explicit feed parameter — ?sort=/?scope=/filters are
+ *     a visitor asking for the feed, and they must keep working (every feed
+ *     view stays shareable), so any of them wins over the landing choice.
+ *
+ * With no snapshot (backend down, mocked e2e) this is false — the shipped
+ * feed renders, like every other defaults consumer.
+ */
+export function shouldRenderHomepageDocument(
+  landing: LandingPage,
+  homepage: InstanceHomepageBlock | null | undefined,
+  params: {
+    sort?: string;
+    scope?: string;
+    tag?: string;
+    category?: string;
+    language?: string;
+  },
+): boolean {
+  if (landing !== "home" || homepage?.enabled !== true) return false;
+  return (
+    params.sort === undefined &&
+    params.scope === undefined &&
+    params.tag === undefined &&
+    params.category === undefined &&
+    params.language === undefined
+  );
+}
+
 export function feedDefaultsForLanding(
   landing: LandingPage,
   defaults?: InstanceDefaultsBlock | null,

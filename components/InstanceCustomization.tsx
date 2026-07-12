@@ -1,5 +1,6 @@
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 import { apiBaseUrl } from "@/lib/config";
+import { buildAccentOverrideCss } from "@/lib/contrast";
 
 // InstanceCustomization is the root-layout CSS/JS injection point
 // (config-parity W2 seam; posture per architecture note 6). The admin-authored
@@ -14,9 +15,15 @@ import { apiBaseUrl } from "@/lib/config";
 // validated to hex before use so a malformed backend value can never produce a
 // surprising URL. React hoists these tags into <head> from the layout body.
 //
-// theme_primary_color (customization.primary_color) is W6 work and is
-// deliberately NOT injected here yet — it is design-gated on the WCAG
-// contrast guard.
+// theme_primary_color (customization.primary_color, config-parity W6) rides
+// the same seam: when a strictly-valid #rrggbb color is set, a tiny inline
+// stylesheet overrides the --accent TOKEN PAIR (--accent + its computed
+// --accent-fg label ink — lib/contrast.ts), never individual rules, so every
+// bg-accent/text-accent-fg call site follows in both themes. It is part of
+// the server-rendered HTML (this component renders in the layout before the
+// app shell), so the override applies before first paint — no accent flash.
+// buildAccentOverrideCss returns null for anything that is not #rrggbb, so a
+// malformed backend value can never inject CSS.
 
 const HEX_HASH = /^[0-9a-f]{8,128}$/i;
 
@@ -26,9 +33,11 @@ export function InstanceCustomization({ instance }: { instance: InstanceConfigSn
   const jsHash = customization?.js_hash;
   const css = cssHash && HEX_HASH.test(cssHash) ? cssHash : null;
   const js = jsHash && HEX_HASH.test(jsHash) ? jsHash : null;
-  if (!css && !js) return null;
+  const accentCss = buildAccentOverrideCss(customization?.primary_color ?? "");
+  if (!css && !js && !accentCss) return null;
   return (
     <>
+      {accentCss ? <style data-testid="accent-override">{accentCss}</style> : null}
       {css ? (
         <link
           rel="stylesheet"
