@@ -52,6 +52,7 @@ import type {
   VideoState,
 } from "@/lib/api";
 import { formatBytes, formatDateTime } from "@/lib/format";
+import { videoAcceptAttr } from "@/lib/upload-accept";
 import {
   IMPORT_STAGES,
   importActiveStage,
@@ -710,7 +711,8 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-function UploadSection({
+// Exported for tests (the W9 prefill-race regression coverage renders it directly).
+export function UploadSection({
   channels,
   config,
   onUploaded,
@@ -746,6 +748,11 @@ function UploadSection({
   // null = unknown/not-yet-loaded → the form stays enabled (fail open); false →
   // the URL tab renders the honest disabled state instead of a dead form.
   const [importsEnabled, setImportsEnabled] = useState<boolean | null>(null);
+  // Whether the extended upload container set is accepted
+  // (features.upload_additional_extensions, config-parity W10) — narrows the
+  // file picker's accept list in lock-step with the server's extension gate.
+  // null = unknown → permissive (fail open).
+  const [additionalExts, setAdditionalExts] = useState<boolean | null>(null);
   // The in-flight URL-import job, refreshed on every poll tick so the stage rail
   // (queued → fetching metadata → downloading → scanning & processing) tracks the
   // backend's `import_job.stage`. Cleared between attempts.
@@ -756,6 +763,11 @@ function UploadSection({
   // Guards the one-shot metadata prefill so it fires once per import, right after
   // the resolving stage, and never clobbers a field the user has since edited.
   const prefillDoneRef = useRef(false);
+  // Fields the creator has ALREADY touched before GET /instance resolved: the
+  // defaults.publish prefill below must never clobber them (W9 review's
+  // prefill-race fix). A ref, not state — reads happen inside the fetch
+  // callback and must see the latest set without re-running the effect.
+  const publishTouchedRef = useRef<Set<"privacy" | "license" | "comments" | "download">>(new Set());
   // Chunk-accurate progress percent (0–100) for the in-flight file upload.
   const [progress, setProgress] = useState(0);
   // Bytes transferred so far / total, for the "X of Y" detail under the bar
@@ -792,18 +804,25 @@ function UploadSection({
       .getInstance(controller.signal)
       .then((res) => {
         setImportsEnabled(res.features.imports);
+        setAdditionalExts(res.features.upload_additional_extensions ?? null);
         // Prefill the publish form from the operator's defaults.publish block
-        // (config-parity W9). Fires once on load, before the creator has
-        // touched anything; absent fields (older backend) leave the shipped
-        // form defaults. Licence 0 = "no default" keeps the empty selection.
+        // (config-parity W9). Absent fields (older backend) leave the shipped
+        // form defaults; Licence 0 = "no default" keeps the empty selection.
+        // The prefill only fills fields the creator has NOT touched yet — a
+        // slow /instance response must never clobber an explicit choice made
+        // while it was in flight (the W9 review's prefill race).
+        const touched = publishTouchedRef.current;
         const publish = res.defaults?.publish;
         if (!publish) return;
-        if (publish.privacy) setPrivacy(publish.privacy as VideoPrivacy);
-        if (publish.licence) setLicense(String(publish.licence));
-        if (publish.comment_policy === "enabled" || publish.comment_policy === "disabled") {
+        if (publish.privacy && !touched.has("privacy")) setPrivacy(publish.privacy as VideoPrivacy);
+        if (publish.licence && !touched.has("license")) setLicense(String(publish.licence));
+        if (
+          (publish.comment_policy === "enabled" || publish.comment_policy === "disabled") &&
+          !touched.has("comments")
+        ) {
           setCommentsPolicy(publish.comment_policy);
         }
-        if (typeof publish.download_enabled === "boolean") {
+        if (typeof publish.download_enabled === "boolean" && !touched.has("download")) {
           setDownloadEnabled(publish.download_enabled);
         }
       })
@@ -1250,7 +1269,10 @@ function UploadSection({
           label="License"
           ariaLabel="Video license"
           value={license}
-          onChange={setLicense}
+          onChange={(v) => {
+            publishTouchedRef.current.add("license");
+            setLicense(v);
+          }}
           options={config?.licenses ?? []}
           error={fieldErrors.license}
           errorId="publish-license-error"
@@ -1261,7 +1283,10 @@ function UploadSection({
           <span className="relative">
             <select
               value={privacy}
-              onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
+              onChange={(e) => {
+                publishTouchedRef.current.add("privacy");
+                setPrivacy(e.target.value as VideoPrivacy);
+              }}
               aria-label="Privacy"
               aria-invalid={fieldErrors.privacy ? true : undefined}
               aria-describedby={fieldErrors.privacy ? "publish-privacy-error" : undefined}
@@ -1303,7 +1328,10 @@ function UploadSection({
           </div>
           <Toggle
             checked={commentsPolicy === "enabled"}
-            onChange={(on) => setCommentsPolicy(on ? "enabled" : "disabled")}
+            onChange={(on) => {
+              publishTouchedRef.current.add("comments");
+              setCommentsPolicy(on ? "enabled" : "disabled");
+            }}
             label="Allow comments"
             disabled={state === "uploading"}
           />
@@ -1317,7 +1345,10 @@ function UploadSection({
           </div>
           <Toggle
             checked={downloadEnabled}
-            onChange={setDownloadEnabled}
+            onChange={(on) => {
+              publishTouchedRef.current.add("download");
+              setDownloadEnabled(on);
+            }}
             label="Allow downloads"
             disabled={state === "uploading"}
           />
@@ -1366,7 +1397,10 @@ function UploadSection({
               <input
                 ref={fileRef}
                 type="file"
-                accept="video/*"
+                // The accept list narrows to the base containers when the
+                // admin turns the extended set off (W10) — the server's 415
+                // gate stays the enforcement truth.
+                accept={videoAcceptAttr(additionalExts)}
                 multiple
                 aria-label="Video file"
                 onChange={onFilePicked}
@@ -1625,6 +1659,26 @@ function MyVideosSection({
   const [status, setStatus] = useState<Status>("loading");
   const [videos, setVideos] = useState<Video[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  // Video file replacement availability (features.video_replace, config-parity
+  // W14) + the picker accept list (features.upload_additional_extensions) —
+  // fetched ONCE per section mount and passed down so each VideoRow's edit
+  // surface can render the Replace flow without an N+1 /instance fetch.
+  // Replacement defaults hidden (false) until the fetch says otherwise: the
+  // affordance only appears when the instance actually accepts it.
+  const [replaceEnabled, setReplaceEnabled] = useState(false);
+  const [additionalExts, setAdditionalExts] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .getInstance(controller.signal)
+      .then((res) => {
+        setReplaceEnabled(res.features.video_replace === true);
+        setAdditionalExts(res.features.upload_additional_extensions ?? null);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (handle === "") return;
@@ -1690,6 +1744,8 @@ function MyVideosSection({
               key={v.id}
               video={v}
               config={config}
+              replaceEnabled={replaceEnabled}
+              replaceAccept={videoAcceptAttr(additionalExts)}
               onUpdated={(u) => setVideos((list) => list.map((x) => (x.id === u.id ? u : x)))}
               onDeleted={() => setVideos((list) => list.filter((x) => x.id !== v.id))}
             />
@@ -1711,6 +1767,8 @@ function VideoRow({
   onDeleted,
   initiallyEditing = false,
   basicOnly = false,
+  replaceEnabled = false,
+  replaceAccept = "video/*",
 }: {
   video: Video;
   config: VideoConfigResponse | null;
@@ -1719,6 +1777,10 @@ function VideoRow({
   initiallyEditing?: boolean;
   /** Privileged management edits metadata only; owner-only media tools stay hidden. */
   basicOnly?: boolean;
+  /** features.video_replace (config-parity W14): shows the Replace video file flow. */
+  replaceEnabled?: boolean;
+  /** File-picker accept list for the replace flow (extension gate, W10). */
+  replaceAccept?: string;
 }) {
   const [mode, setMode] = useState<RowMode>(initiallyEditing ? "edit" : "view");
   const [title, setTitle] = useState(video.title);
@@ -1971,6 +2033,12 @@ function VideoRow({
         {detail ? <StreamingStatus video={detail} /> : null}
         {!basicOnly ? (
           <>
+            {/* Video file replacement (config-parity W14): feature-gated and
+                only offered for a published video — anything else the server
+                would refuse with 409 replace_conflict anyway. */}
+            {replaceEnabled && editable.state === "published" ? (
+              <ReplaceVideoManager videoId={video.id} accept={replaceAccept} onReplaced={onUpdated} />
+            ) : null}
             <ThumbnailManager
               videoId={video.id}
               hasThumbnail={video.has_thumbnail ?? false}
@@ -2077,6 +2145,164 @@ function VideoRow({
         </div>
       )}
     </li>
+  );
+}
+
+// replaceErrorMessage maps a replacement failure onto a friendly message. The
+// 409 replace_conflict envelope carries a specific, client-safe reason from
+// the server (mid-transcode, another replacement in flight, …) — surface it
+// verbatim; the quota codes reuse the upload wording.
+function replaceErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.code === "replace_conflict" && err.message.trim() !== "") return err.message;
+    if (err.code === "feature_disabled") {
+      return "Replacing video files has been turned off on this instance.";
+    }
+    if (err.code === "quota_exceeded") {
+      return "This file would exceed your storage quota. Free up space and try again.";
+    }
+    if (err.code === "daily_quota_exceeded") {
+      return "This file would exceed your daily upload limit. Try again later — the limit is a rolling 24-hour window.";
+    }
+    if (err.status === 415) {
+      return "That file type is not accepted here. Pick a supported video container.";
+    }
+  }
+  return errorMessage(err, "Could not replace the video file.");
+}
+
+// ReplaceVideoManager is the edit-surface "Replace video file" flow
+// (config-parity W14, feature-gated by features.video_replace): pick a new
+// source, upload it through the resumable replace-session machinery with
+// chunk-accurate progress, and hand the still-published video back to the row.
+// Viewers keep watching the current version until the replacement finishes
+// processing — the note says so honestly.
+// Exported for tests (the W14 replace-flow coverage renders it directly).
+export function ReplaceVideoManager({
+  videoId,
+  accept,
+  onReplaced,
+}: {
+  videoId: string;
+  accept: string;
+  onReplaced: (v: Video) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [state, setState] = useState<UploadState>("idle");
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  function onPicked() {
+    setError(null);
+    if (state === "done") setState("idle");
+    const file = fileRef.current?.files?.[0];
+    setFileName(file ? file.name : null);
+  }
+
+  async function replace() {
+    const file = fileRef.current?.files?.[0];
+    if (!file || state === "uploading") return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    sessionIdRef.current = null;
+    setState("uploading");
+    setProgress(0);
+    setError(null);
+    try {
+      const res = await resumableUpload(videoId, file, {
+        mode: "replace",
+        onProgress: (p) => setProgress(p.percent),
+        signal: controller.signal,
+        onSessionOpened: (id) => {
+          sessionIdRef.current = id;
+        },
+      });
+      setState("done");
+      setFileName(null);
+      if (fileRef.current) fileRef.current.value = "";
+      onReplaced(res.video);
+    } catch (err) {
+      if (isUploadCancelled(err)) {
+        // Cancel drops the replace session (and its chunks); the video keeps
+        // its current source untouched.
+        if (sessionIdRef.current) void api.cancelUploadSession(sessionIdRef.current).catch(() => {});
+        setState("cancelled");
+        return;
+      }
+      setError(replaceErrorMessage(err));
+      setState("error");
+    } finally {
+      abortRef.current = null;
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-border-subtle p-3 text-sm">
+      <span className="font-medium text-fg">Replace video file</span>
+      <p className="text-xs text-fg-muted">
+        Upload a new file for this video. Its link, views, and details stay the same; viewers keep
+        watching the current version until the new file finishes processing.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          accept={accept}
+          aria-label="Replacement video file"
+          onChange={onPicked}
+          disabled={state === "uploading"}
+          className="min-w-0 flex-1 text-xs text-fg-muted file:mr-2 file:rounded-lg file:border-0 file:bg-surface-strong file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-fg"
+        />
+        {state === "uploading" ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-label="Cancel replacement upload"
+            onClick={() => abortRef.current?.abort()}
+          >
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            disabled={fileName === null}
+            onClick={() => void replace()}
+            aria-label="Upload replacement"
+          >
+            Replace
+          </Button>
+        )}
+      </div>
+      {state === "uploading" ? (
+        <div className="flex items-center gap-2">
+          <div
+            role="progressbar"
+            aria-label="Replacement upload progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+            className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-surface-strong"
+          >
+            <div
+              className="h-full rounded-full bg-fg transition-[width] duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span aria-hidden="true" className="text-xs font-semibold tabular-nums text-fg-muted">
+            {progress}%
+          </span>
+        </div>
+      ) : null}
+      {state === "done" ? (
+        <p role="status" className="text-xs text-success">
+          New file uploaded — viewers see the current version until processing finishes.
+        </p>
+      ) : null}
+      {state === "error" && error ? <p className="text-xs text-danger">{error}</p> : null}
+    </div>
   );
 }
 

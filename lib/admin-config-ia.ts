@@ -886,6 +886,14 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "uploads",
   },
+  video_replace_enabled: {
+    label: "Allow replacing video files",
+    help: "Let creators upload a new source file for an already-published video. The video keeps its URL, stats, and metadata; viewers keep watching the current version until the replacement finishes processing. Counts against the uploader's quotas.",
+    control: "toggle",
+    page: "vod",
+    section: "uploads",
+    parent: "uploads_enabled",
+  },
   // VOD / Imports
   imports_enabled: {
     label: "URL imports",
