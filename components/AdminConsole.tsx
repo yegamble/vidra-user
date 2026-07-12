@@ -96,14 +96,12 @@ export function AdminConsole() {
       aria-label="Admin console"
       className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-[230px] shrink-0 flex-col self-start overflow-y-auto border-r border-border-subtle px-2.5 py-4 lg:flex"
     >
-      <Link
-        href="/"
-        className="focus-ring mx-0.5 mb-3 flex items-baseline gap-2 rounded-lg px-2.5 py-1"
-        aria-label="Vidra admin — back to the app"
-      >
-        <span className="text-[19px] font-bold tracking-[-0.04em] text-fg">Vidra</span>
-        <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-fg-muted">Admin</span>
-      </Link>
+      {/* Section label only — the global Header directly above already carries the
+          "Vidra" wordmark (and the back-to-app home link), so repeating the brand
+          here read as a duplicate. The rail names the area, like a Settings sidebar. */}
+      <h2 className="mx-0.5 mb-3 px-2.5 py-1 text-[15px] font-bold tracking-[-0.02em] text-fg">
+        Admin
+      </h2>
 
       <ul className="flex flex-col gap-0.5">
         {PRIMARY.map((item) => {
