@@ -10,17 +10,120 @@ import {
   configPage,
   describeSettingDefault,
   humanizeSectionId,
+  intRange,
   isConfigPageId,
   placementFor,
   validateHexColor,
+  validateRungSet,
   validateTwitterHandle,
   zeroOrIntRange,
+  type ConfigPageId,
   type PlacedInstanceSetting,
 } from "./admin-config-ia";
 
 function setting(key: string, extra: Partial<PlacedInstanceSetting> = {}): PlacedInstanceSetting {
   return { key, type: "string", value: "", default: "", overridden: false, ...extra };
 }
+
+// The authoritative server registry mirror (vidra-core
+// internal/instancesettings/service.go `specs`): every mutable setting as a
+// (key, page, RAW server section id) tuple, in registry order. The section ids
+// are the server's snake_case form (normalized to slugs by the client). This
+// fixture is what the section-id-drift + META-less coverage tests run against.
+const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
+  ["instance_name", "general", "identity"],
+  ["instance_description", "general", "identity"],
+  ["terms_url", "general", "about"],
+  ["privacy_url", "general", "about"],
+  ["contact_email", "general", "contact"],
+  ["registration_enabled", "general", "signup"],
+  ["registration_require_approval", "general", "signup"],
+  ["quarantine_new_uploads", "general", "moderation"],
+  ["uploads_enabled", "vod", "uploads"],
+  ["imports_enabled", "vod", "imports"],
+  ["live_enabled", "live", "streaming"],
+  ["comments_enabled", "vod", "comments"],
+  ["downloads_enabled", "vod", "downloads"],
+  ["instance_short_description", "general", "identity"],
+  ["server_country", "general", "identity"],
+  ["support_text", "general", "about"],
+  ["website_link", "general", "social"],
+  ["mastodon_link", "general", "social"],
+  ["x_link", "general", "social"],
+  ["bluesky_link", "general", "social"],
+  ["terms", "general", "about"],
+  ["code_of_conduct", "general", "about"],
+  ["moderation_info", "general", "about"],
+  ["administrator_info", "general", "about"],
+  ["creation_reason", "general", "about"],
+  ["maintenance_lifetime", "general", "about"],
+  ["business_model", "general", "about"],
+  ["hardware_info", "general", "about"],
+  ["default_language", "general", "identity"],
+  ["contact_form_enabled", "general", "contact"],
+  ["instance_is_sensitive", "general", "moderation"],
+  ["sensitive_content_policy", "general", "moderation"],
+  ["instance_categories", "general", "identity"],
+  ["moderator_languages", "general", "identity"],
+  ["default_user_quota_bytes", "vod", "uploads"],
+  ["upload_max_size_bytes", "vod", "uploads"],
+  ["upload_max_active_sessions_per_user", "vod", "uploads"],
+  ["import_max_height", "vod", "imports"],
+  ["broadcast_enabled", "general", "broadcast"],
+  ["broadcast_message", "general", "broadcast"],
+  ["broadcast_level", "general", "broadcast"],
+  ["broadcast_dismissable", "general", "broadcast"],
+  ["default_feed_sort", "general", "browse"],
+  ["default_feed_scope", "general", "browse"],
+  ["default_landing_page", "general", "browse"],
+  ["miniature_prefer_author_display_name", "general", "browse"],
+  ["default_video_privacy", "vod", "publish_defaults"],
+  ["default_video_licence", "vod", "publish_defaults"],
+  ["default_comment_policy", "vod", "publish_defaults"],
+  ["default_download_enabled", "vod", "publish_defaults"],
+  ["default_theme", "customization", "theme"],
+  ["theme_primary_color", "customization", "theme"],
+  ["header_hide_instance_name", "customization", "header"],
+  ["default_player_autoplay", "customization", "player"],
+  ["email_subject_prefix", "customization", "email"],
+  ["email_body_signature", "customization", "email"],
+  ["social_meta_twitter_username", "general", "social"],
+  ["import_http_enabled", "vod", "imports"],
+  ["channel_sync_enabled", "vod", "imports"],
+  ["channel_sync_max_per_user", "vod", "imports"],
+  ["storyboards_enabled", "vod", "storyboards"],
+  ["transcription_enabled", "vod", "transcription"],
+  ["user_import_enabled", "advanced", "user_data"],
+  ["user_export_enabled", "advanced", "user_data"],
+  ["user_export_expiration_hours", "advanced", "user_data"],
+  ["user_export_max_quota_bytes", "advanced", "user_data"],
+  ["max_channels_per_user", "general", "channels"],
+  ["transcoding_enabled", "vod", "transcoding"],
+  ["transcoding_resolutions", "vod", "transcoding"],
+  ["transcoding_max_fps", "vod", "transcoding"],
+  ["transcoding_threads", "vod", "transcoding"],
+  ["transcoding_concurrency", "vod", "transcoding"],
+  ["transcoding_original_resolution", "vod", "transcoding"],
+  ["import_jobs_concurrency", "vod", "imports"],
+  ["upload_additional_extensions_enabled", "vod", "uploads"],
+  ["video_replace_enabled", "vod", "uploads"],
+  ["live_allow_replay", "live", "replay"],
+  ["live_default_save_replay", "live", "replay"],
+  ["live_max_instance_lives", "live", "limits"],
+  ["live_max_user_lives", "live", "limits"],
+  ["live_max_duration_secs", "live", "limits"],
+  ["federation_accept_remote_comments", "federation", "comments"],
+  ["federation_allow_channel_followers", "federation", "followers"],
+  ["federation_follower_approval", "federation", "followers"],
+  ["federation_auto_follow_back", "federation", "followers"],
+  ["search_remote_uri_users", "federation", "search"],
+  ["search_remote_uri_anonymous", "federation", "search"],
+  ["registration_require_email_verification", "general", "signup"],
+  ["registration_user_limit", "general", "signup"],
+  ["registration_minimum_age", "general", "signup"],
+  ["default_user_daily_quota_bytes", "vod", "uploads"],
+  ["new_user_history_enabled", "general", "signup"],
+];
 
 describe("config pages", () => {
   it("exposes the seven-page IA in order", () => {
@@ -60,7 +163,7 @@ describe("placementFor", () => {
   it("uses the client META map when the server sends no placement", () => {
     expect(placementFor("instance_name")).toEqual({ page: "general", section: "identity" });
     expect(placementFor("uploads_enabled")).toEqual({ page: "vod", section: "uploads" });
-    expect(placementFor("live_enabled")).toEqual({ page: "live", section: "live" });
+    expect(placementFor("live_enabled")).toEqual({ page: "live", section: "streaming" });
   });
 
   it("places the broadcast slice on general/broadcast, disclosed under its master toggle", () => {
@@ -100,7 +203,7 @@ describe("placementFor", () => {
 
   it("an unknown key with server placement lands where the server says", () => {
     expect(
-      placementFor("storyboards_enabled", { page: "vod", section: "transcoding" }),
+      placementFor("future_unknown_knob", { page: "vod", section: "transcoding" }),
     ).toEqual({ page: "vod", section: "transcoding" });
   });
 
@@ -119,18 +222,29 @@ describe("placementFor", () => {
 describe("buildPageModel", () => {
   it("renders META keys even when the server does not return them", () => {
     const model = buildPageModel("live", []);
-    expect(model).toHaveLength(1);
-    expect(model[0].section.id).toBe("live");
+    // The live page mirrors the server's streaming/replay/limits sections.
+    expect(model.map((s) => s.section.id)).toEqual(["streaming", "replay", "limits"]);
     expect(model[0].keys).toEqual(["live_enabled"]);
+    expect(model.find((s) => s.section.id === "replay")?.keys).toEqual([
+      "live_allow_replay",
+      "live_default_save_replay",
+    ]);
+    expect(model.find((s) => s.section.id === "limits")?.keys).toEqual([
+      "live_max_instance_lives",
+      "live_max_user_lives",
+      "live_max_duration_secs",
+    ]);
   });
 
-  it("puts unknown keys with server metadata under the named section", () => {
+  it("puts an unknown key with server metadata under the named section", () => {
     const model = buildPageModel("vod", [
-      setting("storyboards_enabled", { type: "bool", value: false, default: false, page: "vod", section: "transcoding" }),
+      setting("clamav_enabled", { type: "bool", value: false, default: false, page: "vod", section: "transcoding" }),
     ]);
     const transcoding = model.find((s) => s.section.id === "transcoding");
     expect(transcoding?.section.title).toBe("Transcoding");
-    expect(transcoding?.keys).toEqual(["storyboards_enabled"]);
+    // The curated transcoding keys land here too; the unknown server key joins them.
+    expect(transcoding?.keys).toContain("clamav_enabled");
+    expect(transcoding?.keys).toContain("transcoding_enabled");
   });
 
   it("auto-creates a titled section for a server-invented section id", () => {
@@ -399,5 +513,98 @@ describe("publish defaults placement (config-parity W9)", () => {
     expect(validate(0)).toBeNull();
     expect(validate(3)).toBeNull();
     expect(validate(8)).not.toBeNull();
+  });
+});
+
+describe("server registry mirror (config-parity closure slice)", () => {
+  it("curates a META entry for every server registry key (no raw snake_case rows)", () => {
+    for (const [key] of SERVER_REGISTRY) {
+      expect(META[key], `${key} has a curated META entry`).toBeDefined();
+    }
+  });
+
+  it("has no META entry the server registry does not know (the two sets match 1:1)", () => {
+    const known = new Set(SERVER_REGISTRY.map(([key]) => key));
+    for (const key of Object.keys(META)) expect(known.has(key), key).toBe(true);
+    expect(Object.keys(META).length).toBe(SERVER_REGISTRY.length);
+  });
+
+  it("places every server key under a DECLARED section on its page — never stranded in Other/auto", () => {
+    for (const [key, page, section] of SERVER_REGISTRY) {
+      const placement = placementFor(key, { page, section });
+      expect(placement.page, key).toBe(page);
+      const declared = PAGE_SECTIONS[placement.page].map((s) => s.id);
+      // The MIRROR RULE: the normalized server section is a real curated header.
+      expect(declared, `${key} → ${page}/${section}`).toContain(placement.section);
+      expect(placement.section, key).not.toBe(OTHER_SECTION_ID);
+    }
+  });
+
+  it("client META fallback AGREES with server placement for every key (no section-id drift)", () => {
+    for (const [key, page, section] of SERVER_REGISTRY) {
+      const slug = section.replace(/_/g, "-"); // server snake_case → client slug
+      expect(META[key].page, `${key} page`).toBe(page);
+      expect(META[key].section, `${key} section`).toBe(slug);
+    }
+  });
+
+  it("builds every page with server rows landing only in declared sections (no auto ids)", () => {
+    const rows = SERVER_REGISTRY.map(([key, page, section]) => setting(key, { page, section }));
+    for (const p of CONFIG_PAGES) {
+      const model = buildPageModel(p.id, rows);
+      const declared = new Set(PAGE_SECTIONS[p.id].map((d) => d.id));
+      for (const s of model) {
+        expect(declared.has(s.section.id), `${p.id} rendered auto section ${s.section.id}`).toBe(
+          true,
+        );
+      }
+    }
+  });
+
+  it("labels the four ActivityPub federation gates and nothing else", () => {
+    const gates = [
+      "federation_accept_remote_comments",
+      "federation_allow_channel_followers",
+      "federation_follower_approval",
+      "federation_auto_follow_back",
+    ];
+    for (const key of gates) expect(META[key].protocol, key).toBe("activitypub");
+    // The remote-search keys deliberately carry NO protocol badge.
+    expect(META.search_remote_uri_users.protocol).toBeUndefined();
+    // No key claims ATProto coverage (vidra has no inbound ATProto gate).
+    for (const meta of Object.values(META)) {
+      if (meta.protocol) expect(meta.protocol).toBe("activitypub");
+    }
+  });
+
+  it("wires the two-level live replay disclosure", () => {
+    expect(META.live_allow_replay.parent).toBe("live_enabled");
+    expect(META.live_default_save_replay.parent).toBe("live_allow_replay");
+    expect(META.channel_sync_max_per_user.parent).toBe("channel_sync_enabled");
+  });
+});
+
+describe("transcoding_resolutions list control (config-parity W1/W10)", () => {
+  it("is the only list-kind META key and renders via the list control", () => {
+    expect(META.transcoding_resolutions.control).toBe("list");
+    expect(META.transcoding_resolutions.options?.map((o) => o.value)).toContain("1080");
+  });
+
+  it("validateRungSet rejects empty and duplicate rung sets, accepts a clean list", () => {
+    expect(validateRungSet(["1080", "720"])).toBeNull();
+    expect(validateRungSet([])).toMatch(/at least one/);
+    expect(validateRungSet(["1080", "1080"])).toMatch(/twice/);
+    expect(validateRungSet(["1080", ""])).toMatch(/blank/);
+    // Non-arrays are the server's problem, not inline validation's.
+    expect(validateRungSet("1080")).toBeNull();
+  });
+
+  it("intRange requires a bounded integer (concurrency knobs, no 0 sentinel)", () => {
+    const check = intRange(1, 16, "bad");
+    expect(check(1)).toBeNull();
+    expect(check(16)).toBeNull();
+    expect(check(0)).toBe("bad");
+    expect(check(17)).toBe("bad");
+    expect(check("x")).toBeNull();
   });
 });

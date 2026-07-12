@@ -16,7 +16,9 @@ import { buildThemeBootstrapScript } from "@/lib/theme-bootstrap";
 // Config-parity W2: this layout is a fixed set of extension SEAMS wired to the
 // server-side instance-config snapshot (lib/instance-config.server.ts, null
 // when the backend is unreachable — every seam then falls back to today's
-// hardcoded behavior). Later waves extend the seam modules, never this file:
+// hardcoded behavior). Later waves extend the seam modules; edits to this file
+// are limited to wiring a new seam consumer's props (one sanctioned case: W4
+// Header branding, a2965c6):
 //   - metadata        → lib/layout-metadata.ts (W4 branding/social)
 //   - banner slot     → components/InstanceBanner.tsx (W3 broadcast)
 //   - header branding → components/Header.tsx (W4 logos + hide_instance_name)
