@@ -42,7 +42,14 @@ export type PlacedInstanceSetting = Omit<InstanceSetting, "page" | "section"> & 
 /** The minimal /instance shape boot-dependency checks read (client fetch). */
 export type InstanceBootInfo = {
   federation_enabled?: boolean;
-  features?: { uploads?: boolean; imports?: boolean; live?: boolean; comments?: boolean };
+  features?: {
+    uploads?: boolean;
+    imports?: boolean;
+    live?: boolean;
+    comments?: boolean;
+    /** Outbound-mail boot capability (config-parity W6 email seam). */
+    mail?: boolean;
+  };
 };
 
 // --- Pages ---------------------------------------------------------------
@@ -281,10 +288,32 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
     {
       id: "homepage",
       title: "Homepage document",
-      description: "An admin-authored page visitors can land on instead of the video feed.",
+      description:
+        "An admin-authored page visitors can land on instead of the video feed. Saving a non-empty document unlocks the “Homepage document” landing option (General → Landing & browse defaults).",
+      // Config-parity W6: the section's content is the homepage document
+      // editor panel (the W1 document store, not a registry key).
+      alwaysRender: true,
     },
   ],
   advanced: [
+    // Config-parity W6: the custom CSS/JS document editors (architecture
+    // note 6's security posture — CSS first, JS danger-styled behind a typed
+    // confirmation). Panel sections over the W1 document store, not registry
+    // keys.
+    {
+      id: "custom-css",
+      title: "Custom CSS",
+      description:
+        "A stylesheet injected into every page, applied on top of the built-in styles.",
+      alwaysRender: true,
+    },
+    {
+      id: "custom-js",
+      title: "Custom JavaScript",
+      description:
+        "A script injected into every page. It runs in every visitor's browser — treat it like deploying code.",
+      alwaysRender: true,
+    },
     {
       id: "search",
       title: "Search",
@@ -321,7 +350,8 @@ export type ControlKind =
   | "level-segmented" // SegmentedControl over info|warning|error (broadcast)
   | "enum-segmented" // SegmentedControl over the key's META `options` (W5 enum keys)
   | "number" // bounded integer input (limit keys)
-  | "bytes"; // like number, with a human-readable size hint
+  | "bytes" // like number, with a human-readable size hint
+  | "color"; // hex input + swatch + live WCAG contrast warnings (W6 primary color)
 
 /** One choice of an enum-segmented control: the wire value + its picker label. */
 export type EnumOption = { value: string; label: string };
@@ -485,6 +515,19 @@ export const META: Record<string, SettingMeta> = {
   // client fallback and server metadata agree.
   // CUSTOMIZATION / Theme (config-parity W5): seeds the pre-paint bootstrap;
   // a visitor's own stored theme choice always wins.
+  // CUSTOMIZATION / Theme (config-parity W6): ONE operator color overriding
+  // the --accent token pair in both themes. The control shows a live WCAG
+  // contrast check against each theme's canvas — a WARNING, never a block
+  // (the operator may deliberately favor one theme).
+  theme_primary_color: {
+    label: "Primary color",
+    help: "Replaces the accent color on buttons and highlights, in both themes. Leave empty to keep the built-in monochrome accent.",
+    placeholder: "#0f62fe",
+    control: "color",
+    page: "customization",
+    section: "theme",
+    validate: validateHexColor,
+  },
   default_theme: {
     label: "Default theme",
     help: "The appearance for visitors who have not picked a theme of their own. “System” follows each visitor’s device setting.",
@@ -514,6 +557,34 @@ export const META: Record<string, SettingMeta> = {
     control: "toggle",
     page: "customization",
     section: "player",
+  },
+  // CUSTOMIZATION / Email (config-parity W6): presentation strings applied at
+  // the backend's single plaintext mail seam. Effective only when the
+  // deployment has an outbound mail path — the /instance features.mail boot
+  // signal drives the disabled-with-explanation treatment; an older backend
+  // that does not report the flag renders the rows normally.
+  email_subject_prefix: {
+    label: "Email subject prefix",
+    help: "Prepended to the subject of every email this instance sends. Write {instance_name} to substitute the instance's name.",
+    placeholder: "[{instance_name}]",
+    control: "text",
+    page: "customization",
+    section: "email",
+    bootDep: {
+      note: "Outgoing mail is not configured on this server (SMTP), so emails are never sent. This setting takes effect once mail delivery is set up.",
+      isSatisfied: (instance) => instance.features?.mail !== false,
+    },
+  },
+  email_body_signature: {
+    label: "Email signature",
+    help: "Appended to the end of every email this instance sends.",
+    control: "textarea",
+    page: "customization",
+    section: "email",
+    bootDep: {
+      note: "Outgoing mail is not configured on this server (SMTP), so emails are never sent. This setting takes effect once mail delivery is set up.",
+      isSatisfied: (instance) => instance.features?.mail !== false,
+    },
   },
   // GENERAL / Broadcast message (config-parity W3): message/level/dismissable
   // are progressively disclosed under the master toggle.

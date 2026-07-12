@@ -1,6 +1,7 @@
 import { FeedFilters } from "@/components/FeedFilters";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
+import { HomepageDocument } from "@/components/HomepageDocument";
 import { LiveNowRail } from "@/components/LiveNowRail";
 import { VideoFeed } from "@/components/VideoFeed";
 import type { FeedSort } from "@/lib/api";
@@ -9,9 +10,11 @@ import {
   resolveFeedScope,
   resolveFeedSort,
   resolveLandingPage,
+  shouldRenderHomepageDocument,
 } from "@/lib/feed-defaults";
 import { readFeedFilters } from "@/lib/feed-url";
 import { getInstanceConfig } from "@/lib/instance-config.server";
+import { getInstanceHomepage } from "@/lib/instance-homepage.server";
 
 const HEADINGS: Record<FeedSort, string> = {
   recent: "Recent videos",
@@ -50,9 +53,15 @@ export default async function Home({
 }) {
   const [sp, instance] = await Promise.all([searchParams, getInstanceConfig()]);
   const landing = resolveLandingPage(instance?.defaults);
-  // W6 (homepage document) adds its branch here:
-  //   if (landing === "home" && instance?.homepage?.enabled) return <Homepage … />;
-  // Until then "home" falls through to the home-recent feed defaults.
+  // The 'home' landing branch (config-parity W6): a bare "/" renders the
+  // admin-authored homepage document when the operator picked it AND a
+  // non-empty document is enabled. Explicit feed params always win (the feed
+  // stays reachable/shareable), and an empty/unreachable document falls
+  // through to the home-recent feed — never a blank page.
+  if (shouldRenderHomepageDocument(landing, instance?.homepage, sp)) {
+    const doc = await getInstanceHomepage();
+    if (doc) return <HomepageDocument body={doc.body} />;
+  }
   const landingDefaults = feedDefaultsForLanding(landing, instance?.defaults);
   const active = resolveFeedSort(sp.sort, landingDefaults.sort);
   const filters = readFeedFilters(sp);

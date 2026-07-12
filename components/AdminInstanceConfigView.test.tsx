@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getInstanceSettings: vi.fn(),
   updateInstanceSettings: vi.fn(),
   getInstance: vi.fn(),
+  getInstanceDocument: vi.fn(),
   getVideoConfigCached: vi.fn(),
   getInstanceCached: vi.fn(),
 }));
@@ -22,6 +23,7 @@ vi.mock("@/lib/api", async (importActual) => {
       getInstanceSettings: mocks.getInstanceSettings,
       updateInstanceSettings: mocks.updateInstanceSettings,
       getInstance: mocks.getInstance,
+      getInstanceDocument: mocks.getInstanceDocument,
     },
     getVideoConfigCached: mocks.getVideoConfigCached,
     getInstanceCached: mocks.getInstanceCached,
@@ -45,6 +47,9 @@ const doc = {
 
 beforeEach(() => {
   mocks.getInstanceSettings.mockResolvedValue(doc);
+  mocks.getInstanceDocument.mockImplementation((name: string) =>
+    Promise.resolve({ name, body: "", hash: "" }),
+  );
   mocks.updateInstanceSettings.mockResolvedValue(doc);
   mocks.getInstance.mockResolvedValue({ name: "Test", federation_enabled: true });
   mocks.getVideoConfigCached.mockResolvedValue({ languages: [], categories: [] });
@@ -274,9 +279,16 @@ describe("page placement and progressive disclosure", () => {
   });
 
   it("renders an empty state on a page with nothing to configure yet", async () => {
-    render(<ConfigForm page="homepage" />);
+    // Federation has no registry keys in this fixture (and no panel section).
+    render(<ConfigForm page="federation" />);
     expect(await screen.findByText("Nothing to configure here yet")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+
+  it("the homepage page hosts the W6 document editor panel, not registry rows", async () => {
+    render(<ConfigForm page="homepage" />);
+    expect(await screen.findByRole("group", { name: "Homepage content editor" })).toBeTruthy();
+    expect(screen.getByLabelText("Homepage content")).toBeTruthy();
   });
 
   it("shows the federation boot note when federation is disabled at boot", async () => {

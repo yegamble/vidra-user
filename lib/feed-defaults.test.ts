@@ -5,6 +5,7 @@ import {
   resolveFeedScope,
   resolveFeedSort,
   resolveLandingPage,
+  shouldRenderHomepageDocument,
 } from "./feed-defaults";
 
 describe("resolveFeedSort", () => {
@@ -111,5 +112,37 @@ describe("feedDefaultsForLanding", () => {
       sort: "recent",
       scope: "local",
     });
+  });
+});
+
+// The 'home' landing branch (config-parity W6): when a bare "/" shows the
+// admin-authored homepage document instead of the feed.
+describe("shouldRenderHomepageDocument", () => {
+  const bare = {};
+
+  it("renders the document for a bare '/' when landing=home and it is enabled", () => {
+    expect(shouldRenderHomepageDocument("home", { enabled: true, hash: "h" }, bare)).toBe(true);
+  });
+
+  it("falls back to the feed when the document is empty/disabled or absent", () => {
+    expect(shouldRenderHomepageDocument("home", { enabled: false, hash: "" }, bare)).toBe(false);
+    expect(shouldRenderHomepageDocument("home", {}, bare)).toBe(false);
+    expect(shouldRenderHomepageDocument("home", undefined, bare)).toBe(false);
+    expect(shouldRenderHomepageDocument("home", null, bare)).toBe(false);
+  });
+
+  it("never renders for any other landing choice, even with a document", () => {
+    expect(shouldRenderHomepageDocument("home-recent", { enabled: true }, bare)).toBe(false);
+    expect(shouldRenderHomepageDocument("trending", { enabled: true }, bare)).toBe(false);
+    expect(shouldRenderHomepageDocument("local", { enabled: true }, bare)).toBe(false);
+  });
+
+  it("an explicit feed param wins — the feed stays shareable/reachable", () => {
+    const homepage = { enabled: true };
+    expect(shouldRenderHomepageDocument("home", homepage, { sort: "recent" })).toBe(false);
+    expect(shouldRenderHomepageDocument("home", homepage, { scope: "all" })).toBe(false);
+    expect(shouldRenderHomepageDocument("home", homepage, { tag: "music" })).toBe(false);
+    expect(shouldRenderHomepageDocument("home", homepage, { category: "7" })).toBe(false);
+    expect(shouldRenderHomepageDocument("home", homepage, { language: "en" })).toBe(false);
   });
 });

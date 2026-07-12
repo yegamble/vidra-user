@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { InstanceBrandingManager } from "@/components/InstanceBrandingManager";
+import { InstanceDocumentEditor } from "@/components/InstanceDocumentEditor";
 import { Markdown } from "@/components/Markdown";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
@@ -45,6 +46,7 @@ import type {
   VideoConfigOption,
   VideoConfigResponse,
 } from "@/lib/api";
+import { primaryColorContrast } from "@/lib/contrast";
 import { COUNTRIES } from "@/lib/countries";
 import { formatBytes } from "@/lib/format";
 
@@ -330,16 +332,17 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   };
 
   const renderSection = ({ section, keys }: PageSection) => {
-    // Config-parity W4: the branding ASSETS are not registry keys — they
-    // manage themselves through dedicated upload/delete endpoints in the
-    // InstanceBrandingManager panel, which renders in this section
-    // independently of any registry key (the section is alwaysRender in the
-    // IA registry, so it exists even when the server homes its companion
-    // toggle elsewhere — the real backend places header_hide_instance_name
-    // at customization/header).
-    const isBrandingPanel = page === "general" && section.id === "branding";
+    // Panel sections host content that is NOT registry keys (their sections
+    // are alwaysRender in the IA registry, so they exist even keyless):
+    //   - W4 branding assets: dedicated upload/delete endpoints
+    //     (InstanceBrandingManager on General; the real backend places the
+    //     companion header_hide_instance_name toggle at customization/header);
+    //   - W6 instance documents: the W1 document store's GET/PUT editors —
+    //     the homepage markdown document plus the custom CSS/JS injections
+    //     (JS danger-styled behind a typed confirmation, architecture note 6).
+    const panel = sectionPanel(page, section.id);
     const visibleKeys = keys.filter(isVisible);
-    if (visibleKeys.length === 0 && !isBrandingPanel) return null;
+    if (visibleKeys.length === 0 && panel === null) return null;
     const sectionChanged = keys.filter((key) => changedKeys.includes(key));
     const sectionInvalid = sectionChanged.some((key) => clientErrors[key] !== undefined);
     const headingId = sectionAnchorId(section.id);
@@ -373,7 +376,7 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
             </Button>
           ) : null}
         </div>
-        {isBrandingPanel ? <InstanceBrandingManager /> : null}
+        {panel}
         {visibleKeys.length > 0 ? (
           <div className="flex min-w-0 flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted p-4">
             {visibleKeys.map((key) => (
@@ -505,6 +508,46 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   );
 }
 
+// The non-registry panel a page section hosts, if any (see renderSection).
+function sectionPanel(page: ConfigPageId, sectionId: string): ReactNode | null {
+  if (page === "general" && sectionId === "branding") return <InstanceBrandingManager />;
+  if (page === "homepage" && sectionId === "homepage") {
+    return (
+      <InstanceDocumentEditor
+        name="homepage"
+        label="Homepage content"
+        help="Markdown. Saving a non-empty document enables it; clearing it (or saving empty) falls back to the video feed."
+        placeholder="# Welcome…"
+        markdown
+      />
+    );
+  }
+  if (page === "advanced" && sectionId === "custom-css") {
+    return (
+      <InstanceDocumentEditor
+        name="custom_css"
+        label="Custom CSS"
+        help="Served to every visitor as a stylesheet, after the built-in styles."
+        placeholder={`.header {\n  /* … */\n}`}
+        code
+      />
+    );
+  }
+  if (page === "advanced" && sectionId === "custom-js") {
+    return (
+      <InstanceDocumentEditor
+        name="custom_js"
+        label="Custom JavaScript"
+        help="Runs in every visitor's browser on every page. Saving asks for a typed confirmation."
+        placeholder={`// console.log("hello");`}
+        code
+        dangerConfirm
+      />
+    );
+  }
+  return null;
+}
+
 function SettingRow({
   settingKey,
   setting,
@@ -620,6 +663,10 @@ function SettingRow({
           error={error}
           disabled={inactive}
         />
+      ) : null}
+
+      {control === "color" ? (
+        <ColorControl label={label} value={text} onChange={onChange} error={error} disabled={inactive} />
       ) : null}
 
       {control === "number" || control === "bytes" ? (
@@ -754,6 +801,65 @@ function SettingRow({
       ) : null}
 
       {isToggle && error ? <p className="text-xs text-danger">{error}</p> : null}
+    </div>
+  );
+}
+
+// ColorControl — the hex-color editor for theme_primary_color (config-parity
+// W6): a #rrggbb text input, a live swatch preview (the picked color as the
+// accent fill with its computed label ink, exactly what the runtime override
+// injects), and the mandatory live WCAG check — the candidate against each
+// theme's canvas, warning (never blocking) below 4.5:1 per theme.
+function ColorControl({
+  label,
+  value,
+  onChange,
+  error,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  disabled: boolean;
+}) {
+  const contrast = primaryColorContrast(value);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-3">
+        <Input
+          aria-label={label}
+          value={value}
+          onChange={(e) => onChange(e.target.value.trim())}
+          placeholder="#0f62fe"
+          error={error}
+          disabled={disabled}
+          className="max-w-40 font-mono"
+          spellCheck={false}
+        />
+        {contrast ? (
+          <span
+            aria-hidden="true"
+            data-testid="color-swatch"
+            className="h-9 w-9 shrink-0 rounded-xl border border-border-subtle"
+            style={{ backgroundColor: value }}
+          />
+        ) : null}
+      </div>
+      {contrast && contrast.warnings.length > 0 ? (
+        <div role="note" className="flex flex-col gap-0.5">
+          {contrast.warnings.map((warning) => (
+            <p key={warning} className="text-xs text-warning">
+              {warning}
+            </p>
+          ))}
+        </div>
+      ) : null}
+      {contrast && contrast.warnings.length === 0 ? (
+        <p className="text-xs text-fg-muted">
+          Passes WCAG AA contrast against both the light and dark theme.
+        </p>
+      ) : null}
     </div>
   );
 }

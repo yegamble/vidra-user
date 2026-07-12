@@ -14,6 +14,7 @@ const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const USERS = /\/api\/v1\/admin\/users(\?|$)/;
 const SETTINGS = /\/api\/v1\/admin\/instance-settings$/;
+const DOCS = /\/api\/v1\/admin\/instance-documents\/(homepage|custom_css|custom_js)$/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 const INSTANCE = /\/api\/v1\/instance$/;
 
@@ -345,12 +346,23 @@ test("the left rail walks the IA: VOD, Live, Federation, empty pages, Advanced",
   await expect(
     page.getByRole("switch", { name: "Hide the instance name in the header" }),
   ).toBeDisabled();
-  // Homepage: honest empty state until its wave lands.
+  // Homepage: the W6 document editor panel (not a registry key).
+  await page.route(DOCS, (route) =>
+    route.fulfill({
+      json: { name: route.request().url().split("/").pop(), body: "", hash: "" },
+    }),
+  );
   await nav.getByRole("link", { name: "Homepage" }).click();
-  await expect(page.getByText("Nothing to configure here yet")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Homepage document" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Homepage content editor" })).toBeVisible();
 
-  // Advanced: the unplaced unknown key auto-renders under "Other settings".
+  // Advanced: the W6 custom CSS/JS editors + the unplaced unknown key
+  // auto-rendering under "Other settings".
   await nav.getByRole("link", { name: "Advanced" }).click();
+  await expect(page.getByRole("heading", { name: "Custom CSS", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Custom JavaScript", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Other settings" })).toBeVisible();
   await expect(page.getByRole("switch", { name: "mystery_knob" })).toBeVisible();
 });
@@ -805,6 +817,208 @@ test("the markdown Preview button opens the shared rendered-preview modal", asyn
   await expect(dialog.getByText("excellent")).toBeVisible();
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("W6 homepage document editor: load, preview, size counter, save, clear", async ({
+  page,
+}) => {
+  await signIn(page, "admin");
+  await page.route(SETTINGS, (route) => route.fulfill({ json: settings }));
+  let putBody: unknown = null;
+  await page.route(DOCS, (route) => {
+    if (route.request().method() === "PUT") {
+      putBody = route.request().postDataJSON();
+      const body = (putBody as { body: string }).body;
+      return route.fulfill({
+        json: { name: "homepage", body, hash: body === "" ? "" : "beef1234" },
+      });
+    }
+    return route.fulfill({
+      json: { name: "homepage", body: "# Old welcome", hash: "aa11" },
+    });
+  });
+  await openConfig(page);
+  await configNav(page).getByRole("link", { name: "Homepage" }).click();
+
+  // The stored document loads into the editor with its live byte counter.
+  const editor = page.getByRole("group", { name: "Homepage content editor" });
+  const field = editor.getByLabel("Homepage content", { exact: true });
+  await expect(field).toHaveValue("# Old welcome");
+  await expect(editor.getByText("0 KB of 100 KB")).toBeVisible();
+  const save = editor.getByRole("button", { name: "Save homepage content" });
+  await expect(save).toBeDisabled(); // nothing changed yet
+
+  // Edit → dirty state; the shared preview modal renders the markdown.
+  await field.fill("# Welcome to **Vidra**");
+  await expect(editor.getByText("Unsaved changes")).toBeVisible();
+  await editor.getByRole("button", { name: "Preview Homepage content" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Welcome to Vidra" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+
+  // Save PUTs the whole body to the W1 document endpoint.
+  await save.click();
+  await expect(editor.getByText("Saved.")).toBeVisible();
+  expect(putBody).toEqual({ body: "# Welcome to **Vidra**" });
+
+  // Clear asks for an inline confirmation, then PUTs an empty body.
+  await editor.getByRole("button", { name: "Clear" }).click();
+  expect(putBody).toEqual({ body: "# Welcome to **Vidra**" }); // not yet
+  await editor.getByRole("button", { name: "Confirm clearing Homepage content" }).click();
+  await expect(field).toHaveValue("");
+  expect(putBody).toEqual({ body: "" });
+});
+
+test("W6 custom CSS saves directly; custom JS demands the typed confirmation", async ({
+  page,
+}) => {
+  await signIn(page, "admin");
+  await page.route(SETTINGS, (route) => route.fulfill({ json: settings }));
+  const puts: Record<string, string> = {};
+  await page.route(DOCS, (route) => {
+    const name = route.request().url().split("/").pop() ?? "";
+    if (route.request().method() === "PUT") {
+      const body = (route.request().postDataJSON() as { body: string }).body;
+      puts[name] = body;
+      return route.fulfill({ json: { name, body, hash: body === "" ? "" : "cc33" } });
+    }
+    return route.fulfill({ json: { name, body: "", hash: "" } });
+  });
+  await openConfig(page);
+  await configNav(page).getByRole("link", { name: "Advanced" }).click();
+
+  // Custom CSS: a code editor with the 200 KB counter; saving needs no ceremony.
+  const css = page.getByRole("group", { name: "Custom CSS editor" });
+  await expect(css.getByText("0 KB of 200 KB")).toBeVisible();
+  await css.getByLabel("Custom CSS").fill(".site-header { display: none; }");
+  await css.getByRole("button", { name: "Save custom css" }).click();
+  await expect(css.getByText("Saved.")).toBeVisible();
+  expect(puts.custom_css).toBe(".site-header { display: none; }");
+
+  // Custom JS: danger-styled, gated behind the typed phrase.
+  const js = page.getByRole("group", { name: "Custom JavaScript editor" });
+  await js.getByLabel("Custom JavaScript").fill("console.log('ads');");
+  await js.getByRole("button", { name: "Save custom javascript" }).click();
+  const confirmDialog = page.getByRole("dialog");
+  await expect(
+    confirmDialog.getByRole("heading", {
+      name: "This JavaScript runs in every visitor's browser",
+    }),
+  ).toBeVisible();
+  const confirm = confirmDialog.getByRole("button", { name: "Save and run it" });
+  await expect(confirm).toBeDisabled();
+  expect(puts.custom_js).toBeUndefined(); // nothing sent yet
+
+  // A wrong phrase keeps the save blocked; the exact phrase unlocks it.
+  const phrase = confirmDialog.getByLabel(/run this code/);
+  await phrase.fill("run code");
+  await expect(confirm).toBeDisabled();
+  await phrase.fill("run this code");
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect(js.getByText("Saved.")).toBeVisible();
+  expect(puts.custom_js).toBe("console.log('ads');");
+});
+
+test("W6 customization: primary color with live contrast warnings + email keys", async ({
+  page,
+}) => {
+  // The registry rows carry the REAL backend's W1 placement metadata (the W4
+  // lesson: feed server rows WITH page/section so a registry/META divergence
+  // fails here instead of being masked by the client fallback).
+  const w6Settings = {
+    settings: [
+      ...settings.settings,
+      { ...str("theme_primary_color"), page: "customization", section: "theme" },
+      { ...str("email_subject_prefix"), page: "customization", section: "email" },
+      { ...str("email_body_signature"), page: "customization", section: "email" },
+    ],
+  };
+  // A deployment WITH outbound mail: the email rows are editable.
+  await signIn(page, "admin", {
+    ...instanceDoc,
+    features: { ...instanceDoc.features, mail: true },
+  });
+  await page.route(SETTINGS, (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: w6Settings });
+    return route.fallback();
+  });
+  await openConfig(page);
+  await configNav(page).getByRole("link", { name: "Customization" }).click();
+
+  // The color control: hex input + live WCAG contrast feedback per theme.
+  const color = page.getByLabel("Primary color");
+  await color.fill("#7c5cff"); // the dead zone: warns for the light theme
+  await expect(page.getByText(/Low contrast in the light theme/)).toBeVisible();
+  await color.fill("#fbbf24"); // bright: dark passes, light warns
+  await expect(page.getByText(/Low contrast in the light theme/)).toBeVisible();
+  await expect(page.getByText(/Low contrast in the dark theme/)).toHaveCount(0);
+
+  // An invalid hex is an inline ERROR (blocks saving); warnings never block.
+  await color.fill("#12");
+  await expect(page.getByText("Enter a 6-digit hex color, like #7c5cff.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await color.fill("#1d4ed8");
+  await expect(page.getByText(/Low contrast in the dark theme/)).toBeVisible();
+
+  // The email presentation strings render under the Email section, editable,
+  // with the {instance_name} substitution hint on the prefix.
+  await expect(page.getByRole("heading", { name: "Email", exact: true })).toBeVisible();
+  await expect(page.getByText(/\{instance_name\} to substitute/)).toBeVisible();
+  const prefix = page.getByLabel("Email subject prefix");
+  await expect(prefix).toBeEnabled();
+  await prefix.fill("[{instance_name}]");
+  await page.getByLabel("Email signature").fill("— the team");
+
+  // The warning-but-valid color + both email strings travel in one PATCH.
+  let patchBody: unknown = null;
+  await page.route(SETTINGS, (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    patchBody = route.request().postDataJSON();
+    const updated = {
+      settings: w6Settings.settings.map((s) => {
+        if (s.key === "theme_primary_color") return { ...s, value: "#1d4ed8", overridden: true };
+        if (s.key === "email_subject_prefix")
+          return { ...s, value: "[{instance_name}]", overridden: true };
+        if (s.key === "email_body_signature") return { ...s, value: "— the team", overridden: true };
+        return s;
+      }),
+    };
+    return route.fulfill({ json: updated });
+  });
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  expect(patchBody).toEqual({
+    theme_primary_color: "#1d4ed8",
+    email_subject_prefix: "[{instance_name}]",
+    email_body_signature: "— the team",
+  });
+});
+
+test("W6 email keys render disabled-with-explanation when mail is not wired", async ({
+  page,
+}) => {
+  const w6Settings = {
+    settings: [
+      ...settings.settings,
+      { ...str("email_subject_prefix"), page: "customization", section: "email" },
+      { ...str("email_body_signature"), page: "customization", section: "email" },
+    ],
+  };
+  // features.mail === false: the boot capability is absent.
+  await signIn(page, "admin", {
+    ...instanceDoc,
+    features: { ...instanceDoc.features, mail: false },
+  });
+  await page.route(SETTINGS, (route) => route.fulfill({ json: w6Settings }));
+  await openConfig(page);
+  await configNav(page).getByRole("link", { name: "Customization" }).click();
+
+  await expect(page.getByLabel("Email subject prefix")).toBeDisabled();
+  await expect(page.getByLabel("Email signature")).toBeDisabled();
+  await expect(
+    page.getByText("Outgoing mail is not configured on this server (SMTP)", { exact: false }).first(),
+  ).toBeVisible();
 });
 
 test("a form loaded from an older backend renders new fields disabled, not broken", async ({
