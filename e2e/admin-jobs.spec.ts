@@ -240,7 +240,8 @@ test("an admin sees per-queue cards, recent failures, and can refresh", async ({
 
   // Refresh re-reads the snapshot.
   expect(calls).toBe(1);
-  await page.getByRole("button", { name: "Refresh" }).click();
+  // exact: the executions section has its own "Refresh executions" button.
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect.poll(() => calls).toBe(2);
   await expect(queueList.getByText("transcode_jobs")).toBeVisible();
 });
@@ -265,11 +266,13 @@ test("an admin can filter executions and inspect sanitized detail history", asyn
   await openJobs(page);
 
   await page.getByLabel("State").selectOption("failed");
-  await page.getByLabel("Type").fill("video_import");
+  // exact: "Resource type" also label-matches a substring "Type".
+  await page.getByLabel("Type", { exact: true }).fill("video_import");
   await page.getByLabel("Resource type").fill("video");
   await page.getByLabel("Resource ID").fill("video-bbbb");
   await page.getByLabel("Worker").fill("worker-a");
-  await page.getByLabel("Failure").selectOption("true");
+  // exact: the "Recent failures" region's aria-label also label-matches "Failure".
+  await page.getByLabel("Failure", { exact: true }).selectOption("true");
   await page.getByLabel("Created after").fill("2026-07-01T00:00");
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect.poll(() => filteredUrl).toContain("state=failed");

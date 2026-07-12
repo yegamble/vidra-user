@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Spinner } from "@/components/ui/Spinner";
-import { ApiError, authApi, errorMessage } from "@/lib/api";
+import { ApiError, authApi, errorMessage, getInstanceCached } from "@/lib/api";
 import type { AccountArchive, AccountExportStatus, AccountImportSummary } from "@/lib/api";
 
 // How often the export card re-reads GET /me/export while the job is
@@ -31,15 +31,43 @@ type ExportView =
 /**
  * AccountDataSection is the /settings "Your data" surface: request/track/
  * download the account export archive, and import one back (safe subsets).
+ *
+ * Feature flags (config-parity W8/W15): the /instance features.user_export /
+ * features.user_import operator toggles hide the matching card — the backend
+ * answers those endpoints 403 feature_disabled while off, so a dead card would
+ * only error on use. Only an EXPLICIT false hides: an absent flag (older
+ * backend) or a failed /instance read keeps the shipped always-on behavior.
  */
 export function AccountDataSection() {
+  const [flags, setFlags] = useState({ exportEnabled: true, importEnabled: true });
+
+  useEffect(() => {
+    let cancelled = false;
+    getInstanceCached()
+      .then((instance) => {
+        if (cancelled) return;
+        setFlags({
+          exportEnabled: instance.features.user_export !== false,
+          importEnabled: instance.features.user_import !== false,
+        });
+      })
+      .catch(() => {
+        // Unknown instance policy → keep the shipped behavior (both shown).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!flags.exportEnabled && !flags.importEnabled) return null;
+
   return (
     <section className="flex max-w-xl flex-col gap-4" aria-labelledby="your-data-heading">
       <h2 id="your-data-heading" className="text-base font-semibold tracking-tight text-fg">
         Your data
       </h2>
-      <ExportCard />
-      <ImportCard />
+      {flags.exportEnabled ? <ExportCard /> : null}
+      {flags.importEnabled ? <ImportCard /> : null}
     </section>
   );
 }

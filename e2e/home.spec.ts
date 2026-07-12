@@ -122,7 +122,8 @@ test("the sort control refetches with the selected sort and updates the URL", as
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Fresh Upload" })).toBeVisible();
-  const popular = page.getByRole("button", { name: "Popular" });
+  // exact: the card's "Actions for Popular Pick" menu button also contains "Popular".
+  const popular = page.getByRole("button", { name: "Popular", exact: true });
   await expect(popular).toHaveAttribute("aria-pressed", "false");
 
   await popular.click();
@@ -149,7 +150,8 @@ test("a sort mode URL is shareable (deep link)", async ({ page }) => {
   });
   await page.goto("/?sort=trending");
   await expect(page.getByRole("heading", { name: "Trending videos" })).toBeAttached();
-  await expect(page.getByRole("button", { name: "Trending" })).toHaveAttribute(
+  // exact: the card's "Actions for Trending Now" menu button also contains "Trending".
+  await expect(page.getByRole("button", { name: "Trending", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
