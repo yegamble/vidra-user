@@ -97,9 +97,11 @@ export default async function Home({
         </div>
         <FeedSortTabs active={active} filters={filters} urlDefaults={landingDefaults} />
       </section>
-      {/* Scope and taxonomy are one quiet refinement toolbar instead of several
-          disconnected controls. It wraps cleanly at phone and text-zoom widths. */}
-      <div className="mb-9 flex flex-col gap-3 rounded-[20px] border border-border-subtle bg-surface-muted/65 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
+      {/* Scope and taxonomy are one quiet refinement row on the page canvas —
+          a single horizontally scrollable strip on phones (YouTube's chip-row
+          pattern) instead of a stacked filter card that pushed the first video
+          below the fold. Wraps at sm+ and at text-zoom widths. */}
+      <div className="scrollbar-none mb-8 flex flex-nowrap items-center gap-2.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible">
         <FeedScopeToggle active={scope} sort={active} filters={filters} urlDefaults={landingDefaults} />
         <FeedFilters sort={active} filters={filters} urlDefaults={landingDefaults} />
       </div>
