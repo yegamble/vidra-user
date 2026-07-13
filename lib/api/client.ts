@@ -52,6 +52,20 @@ export interface RequestOptions {
    * refresh/logout), where a 401 is a real answer, never a stale access token.
    */
   retryOn401?: boolean;
+  /**
+   * Extra request headers merged in AFTER the built-in accept / content-type /
+   * authorization / correlation headers (so those can never be overwritten) but
+   * BEFORE trace-context injection. Used by the search/recommendation/event
+   * calls to attach the anonymous X-Vidra-Session identifier; keep values ASCII
+   * and PII-free — they are sent verbatim.
+   */
+  headers?: Record<string, string>;
+  /**
+   * Use fetch keepalive so the request survives a page unload/visibility change
+   * (the search-event flush uses this, sendBeacon-style). keepalive bodies are
+   * capped at ~64KB by the platform, which the ≤20-event batches never approach.
+   */
+  keepalive?: boolean;
 }
 
 const REFRESH_PATH = "/api/v1/auth/refresh";
@@ -127,6 +141,23 @@ async function doRequest<T>(
   if (token) {
     headers.authorization = `Bearer ${token}`;
   }
+  // Caller-supplied headers (e.g. X-Vidra-Session): merged after the built-in
+  // headers so they cannot clobber accept/content-type/authorization/
+  // correlation, but before trace injection.
+  if (opts.headers) {
+    for (const [key, value] of Object.entries(opts.headers)) {
+      const lower = key.toLowerCase();
+      if (
+        lower === "accept" ||
+        lower === "content-type" ||
+        lower === "authorization" ||
+        lower === "x-correlation-id"
+      ) {
+        continue;
+      }
+      headers[key] = value;
+    }
+  }
   // Inject the W3C `traceparent` for the active span so this call and its
   // vidra-core handling share one trace (no-op when OTel is off — the X-
   // Correlation-ID above is then the sole correlation carrier). Runs after our
@@ -146,6 +177,7 @@ async function doRequest<T>(
             : JSON.stringify(opts.body),
       signal: opts.signal,
       ...(opts.credentials ? { credentials: opts.credentials } : {}),
+      ...(opts.keepalive ? { keepalive: true } : {}),
     });
   } catch (cause) {
     logger.error("api request network error", {

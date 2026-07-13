@@ -80,14 +80,26 @@ export type InstanceHomepageBlock = {
 };
 
 /**
- * W13. EFFECTIVE remote-URI search gates (runtime setting AND federation
- * wired): whether URL/handle-shaped search queries resolve remote content for
- * logged-in / anonymous callers. Drives the search page's help text only —
- * the backend enforces the gate either way.
+ * W13 + search-service W4. The `search` block carries two families of gates:
+ *
+ * - W13 EFFECTIVE remote-URI gates (runtime setting AND federation wired):
+ *   whether URL/handle-shaped queries resolve remote content for logged-in /
+ *   anonymous callers. Drives the search page's help text only — the backend
+ *   enforces the gate either way.
+ * - search-service W4 discovery gates: the effective instance-level ranking
+ *   family and the suggestion / personalization / history toggles. Each is
+ *   absent until vidra-core wires the search service, so every consumer treats
+ *   `undefined` as "feature off / not yet shipped" (suggestions only fire when
+ *   `suggestions_enabled !== false`).
  */
 export type InstanceSearchBlock = {
   remote_uri_users?: boolean;
   remote_uri_anonymous?: boolean;
+  mode?: "simple" | "advanced";
+  suggestions_enabled?: boolean;
+  personalized_search_enabled?: boolean;
+  personalized_recommendations_enabled?: boolean;
+  search_history_enabled?: boolean;
 };
 
 /**
