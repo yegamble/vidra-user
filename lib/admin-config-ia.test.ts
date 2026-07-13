@@ -97,6 +97,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["user_export_enabled", "advanced", "user_data"],
   ["user_export_expiration_hours", "advanced", "user_data"],
   ["user_export_max_quota_bytes", "advanced", "user_data"],
+  ["search_service_enabled", "advanced", "search"],
   ["search_mode", "advanced", "search"],
   ["search_suggestions_enabled", "advanced", "search"],
   ["personalized_search_enabled", "advanced", "search"],
