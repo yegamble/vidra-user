@@ -73,7 +73,7 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
           {hideName ? null : <span>{name}</span>}
         </Link>
         <div className="hidden min-w-0 flex-1 justify-center px-2 sm:flex">
-          <SearchBox />
+          <SearchBox search={instance?.search} />
         </div>
         <div className="flex-1 sm:hidden" />
         <Link

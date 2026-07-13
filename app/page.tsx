@@ -2,6 +2,7 @@ import { FeedFilters } from "@/components/FeedFilters";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
 import { HomepageDocument } from "@/components/HomepageDocument";
+import { HomeRecommendationsRail } from "@/components/HomeRecommendationsRail";
 import { LiveNowRail } from "@/components/LiveNowRail";
 import { VideoFeed } from "@/components/VideoFeed";
 import type { FeedSort } from "@/lib/api";
@@ -109,6 +110,10 @@ export default async function Home({
           Self-contained: renders nothing when nothing is live or the read fails,
           so it never reserves space or shows an error on the public feed. */}
       <LiveNowRail />
+      {/* "For you" / "Trending now" recommendation rail (search-service W4) —
+          self-hiding like LiveNowRail: renders nothing until the endpoint
+          returns items, so it never reserves space or duplicates an empty feed. */}
+      <HomeRecommendationsRail />
       <VideoFeed key={feedKey} sort={active} filters={filters} />
     </main>
   );

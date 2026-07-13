@@ -12,15 +12,16 @@ import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 
 const RELATED_COUNT = 6;
 
-// RelatedVideos composes a small "watch next" rail for the watch page from the
-// existing public endpoints (no dedicated related-videos contract). Same-channel
-// videos come first: the detail response now carries `channel_handle` (Wave A
-// contract gap closed), so we can list the channel directly via GET
-// /channels/{handle}/videos instead of scanning a recent feed page for a
-// channel_id match. Same-category videos (GET /videos?category=) fill the rest.
-// The current video is excluded and results deduped, capped at 6 cards. The
-// section hides itself while loading, on failure, and when nothing relates — it
-// is pure polish and must never break the watch page.
+// RelatedVideos is the watch page's "watch next" rail. It prefers the search
+// service's related-videos endpoint (GET /api/v1/videos/{id}/recommendations,
+// search-service W4) and FALLS BACK to the original same-channel + same-category
+// composition when that endpoint errors or returns nothing — so an older core
+// (or a search outage) still shows a sensible rail. The fallback lists the
+// channel directly via GET /channels/{handle}/videos (detail carries
+// channel_handle) and fills the rest from GET /videos?category=. The current
+// video is excluded and results deduped, capped at 6 cards. The section hides
+// itself while loading, on failure, and when nothing relates — it is pure polish
+// and must never break the watch page.
 //
 // `belowLayout` (theater mode, PLAY-04): when the watch page is in theater mode
 // the rail reflows to a full-width row of cards BELOW the stage instead of the
@@ -49,6 +50,25 @@ export function RelatedVideos({
     let cancelled = false;
 
     async function load() {
+      // Prefer the recommendations endpoint. On error/empty, fall through to the
+      // heuristic composition below (core itself degrades server-side, so this is
+      // a second safety net that also covers an older core lacking the route).
+      let recommended: Video[] | null = null;
+      try {
+        const res = await api.getVideoRecommendations(id, { limit: RELATED_COUNT }, controller.signal);
+        recommended = res.items ?? [];
+      } catch {
+        if (controller.signal.aborted) return;
+        recommended = null;
+      }
+      if (recommended && recommended.length > 0) {
+        if (!cancelled) {
+          setRelated(recommended);
+          onFirstRelated?.(recommended[0] ?? null);
+        }
+        return;
+      }
+
       const [sameChannel, sameCategory] = await Promise.all([
         // Prefer the channel's own listing (detail now carries channel_handle);
         // fall back to an empty list if the handle is absent (e.g. a remote card).
@@ -158,7 +178,9 @@ export function RelatedVideos({
 // (aria-hidden, out of the tab order) so the accessibility tree is unchanged.
 function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void }) {
   const isRemote = video.remote === true;
-  const href = isRemote ? `/remote/${video.id}` : `/videos/${video.id}`;
+  // ?src=related tags the destination so the watch page emits play_started with
+  // context "related" (a non-PII discovery marker; no query text in the URL).
+  const href = isRemote ? `/remote/${video.id}` : `/videos/${video.id}?src=related`;
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);

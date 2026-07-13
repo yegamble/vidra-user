@@ -16,10 +16,12 @@ export default async function SearchPage({
   const sp = await searchParams;
   const query = (sp.q ?? "").trim();
   const filters = readSearchFilters(sp);
-  // Remote-URI search gates (config-parity W13): the SSR snapshot's search{}
-  // block drives the results component's URL/handle help text (absent on an
-  // older backend or when the fetch fails — the feature then stays dark).
-  const remoteSearch = (await getInstanceConfig())?.search;
+  // The SSR snapshot's search{} block: the W13 remote-URI gates drive the
+  // results component's URL/handle help text; the search-service W4 gates drive
+  // the autocomplete (suggestions_enabled) and the personalization hint (mode).
+  // Absent on an older backend / when the fetch fails — every feature then stays
+  // dark.
+  const search = (await getInstanceConfig())?.search;
   const resultsKey = [query, filters.category ?? "", filters.language ?? "", filters.tag ?? ""].join(
     "|",
   );
@@ -32,12 +34,12 @@ export default async function SearchPage({
           the page title stays for the accessibility tree only. */}
       <h1 className="sr-only">{query ? `Search results for “${query}”` : "Search"}</h1>
       <div className="mb-3">
-        <SearchField query={query} filters={filters} />
+        <SearchField query={query} filters={filters} search={search} />
       </div>
       <div className="mb-3 sm:mb-4">
         <SearchFilters query={query} filters={filters} />
       </div>
-      <SearchResults key={resultsKey} query={query} filters={filters} remoteSearch={remoteSearch} />
+      <SearchResults key={resultsKey} query={query} filters={filters} remoteSearch={search} />
     </main>
   );
 }

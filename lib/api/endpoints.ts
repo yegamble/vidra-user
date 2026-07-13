@@ -1,8 +1,10 @@
 import { apiBaseUrl } from "@/lib/config";
+import { searchSessionHeaders } from "@/lib/search-session";
 
 import { getAccessToken } from "./auth-store";
 import { ApiError, apiRequest } from "./client";
 import { uploadWithProgress, type UploadProgress } from "./upload";
+import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
   AdminStats,
@@ -130,6 +132,9 @@ import type {
   VideoRating,
   VideoStatsResponse,
   VideoSearchResponse,
+  SearchSuggestionsResponse,
+  RecommendationsResponse,
+  SearchHistoryResponse,
   WatchedWord,
   WatchedWordListResponse,
   WatchedWordMatchListResponse,
@@ -296,6 +301,99 @@ export const api = {
       },
       signal,
     }),
+
+  /**
+   * GET /api/v1/search/suggestions?q= — autocomplete suggestions from the search
+   * service (search-service W4). Always 200: a disabled service, an empty query,
+   * a timeout, or any error degrades to an empty list — a suggestion box never
+   * errors. Carries the anonymous X-Vidra-Session header so the service can
+   * correlate a session's typing without an account. Optional auth.
+   */
+  getSearchSuggestions: (
+    query: string,
+    params: { limit?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<SearchSuggestionsResponse>("/api/v1/search/suggestions", {
+      query: { q: query, limit: params.limit },
+      headers: searchSessionHeaders(),
+      signal,
+    }),
+
+  /**
+   * GET /api/v1/recommendations/home?limit= — the "For you" / "Trending now"
+   * home rail. Personalized when the instance + user allow it and the caller is
+   * signed in; otherwise the trending feed (source="fallback"). Never errors.
+   */
+  getHomeRecommendations: (params: { limit?: number } = {}, signal?: AbortSignal) =>
+    apiRequest<RecommendationsResponse>("/api/v1/recommendations/home", {
+      query: { limit: params.limit },
+      headers: searchSessionHeaders(),
+      signal,
+    }),
+
+  /**
+   * GET /api/v1/videos/{id}/recommendations?limit= — the related-videos rail for
+   * a watch page. Falls back server-side to a same-channel + same-category
+   * heuristic when the search service is unavailable. Optional auth.
+   */
+  getVideoRecommendations: (
+    id: string,
+    params: { limit?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<RecommendationsResponse>(
+      `/api/v1/videos/${encodeURIComponent(id)}/recommendations`,
+      {
+        query: { limit: params.limit },
+        headers: searchSessionHeaders(),
+        signal,
+      },
+    ),
+
+  /**
+   * POST /api/v1/search/events — record a batch (≤20) of behavioural
+   * search/discovery events. Core enriches each with the caller's user id,
+   * session, and history policy, then enqueues them; it never blocks on the
+   * search service (202). Best-effort: fire-and-forget from lib/search-events.
+   * `keepalive` lets a flush survive a page unload/visibility change.
+   */
+  postSearchEvents: (
+    events: readonly SearchEventInput[],
+    opts: { keepalive?: boolean } = {},
+  ) =>
+    apiRequest<void>("/api/v1/search/events", {
+      method: "POST",
+      body: { events },
+      headers: searchSessionHeaders(),
+      keepalive: opts.keepalive,
+    }),
+
+  /**
+   * GET /api/v1/me/search-history — the caller's stored search history (auth).
+   * Answers 503 search_unavailable (ApiError code "search_unavailable") when the
+   * search service is disabled or unreachable — never a fake empty history, so
+   * the settings UI can tell "no history" from "temporarily unavailable".
+   */
+  getSearchHistory: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+    apiRequest<SearchHistoryResponse>("/api/v1/me/search-history", {
+      query: { limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /** DELETE /api/v1/me/search-history — clear the caller's entire history (auth). */
+  clearSearchHistory: () =>
+    apiRequest<void>("/api/v1/me/search-history", { method: "DELETE" }),
+
+  /**
+   * DELETE /api/v1/me/search-history/{query} — remove one normalized query from
+   * the caller's history (auth). The query is path-escaped.
+   */
+  deleteSearchHistoryEntry: (query: string) =>
+    apiRequest<void>(
+      `/api/v1/me/search-history/${encodeURIComponent(query)}`,
+      { method: "DELETE" },
+    ),
 
   /** GET /api/v1/channels/{handle} — channel by handle. */
   getChannel: (handle: string, signal?: AbortSignal) =>
