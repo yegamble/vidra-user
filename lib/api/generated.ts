@@ -4578,12 +4578,14 @@ export interface components {
                 remote_uri_users: boolean;
                 /** @description Anonymous callers may search by URL/handle (default off — the SSRF/abuse surface, matching PeerTube). */
                 remote_uri_anonymous: boolean;
+                /** @description Effective smart-search availability (search-service W9): the vidra-search service is wired AND the admin routing toggle (search_service_enabled) is on. When false, all search surfaces use their local backup path. */
+                service_enabled?: boolean;
                 /**
                  * @description Effective search ranking family (search-service W4): simple heuristics or advanced learned/behavioural signals.
                  * @enum {string}
                  */
                 mode?: "simple" | "advanced";
-                /** @description Whether autocomplete suggestions are available (the search service is wired AND the admin toggle is on). */
+                /** @description Whether autocomplete suggestions are available (the search service is wired AND the admin routing toggle is on AND the suggestions toggle is on). */
                 suggestions_enabled?: boolean;
                 /** @description Instance-level personalized-search gate (search-service W4). */
                 personalized_search_enabled?: boolean;
