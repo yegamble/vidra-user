@@ -49,6 +49,23 @@ export const en = {
   "auth.password": "Password",
   "auth.signIn": "Sign in",
   "auth.signingIn": "Signing in…",
+
+  // Search & discovery (search-service W4). A11y-facing strings for the
+  // autocomplete combobox, the results personalization hint, and the settings
+  // surface. Kept plain so the whole catalog stays swappable per-locale.
+  "search.inputLabel": "Search videos",
+  "search.placeholder": "Search videos, channels, tags",
+  "search.landmarkHeader": "Search videos",
+  "search.landmarkPage": "Search",
+  "search.clear": "Clear search",
+  "search.suggestionsLabel": "Search suggestions",
+  "search.suggestionsOne": "1 suggestion available",
+  "search.suggestionsMany": "{count} suggestions available",
+  "search.removeHistory": "Remove “{query}” from your search history",
+  "search.historyBadge": "Recent search",
+  "search.personalBadge": "From your history",
+  "search.personalizedHint": "Results are personalized for you.",
+  "search.personalizedManage": "Manage",
 } as const;
 
 /** A valid message key — every key present in the default catalog. */
