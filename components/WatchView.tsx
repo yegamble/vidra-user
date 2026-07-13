@@ -49,6 +49,7 @@ import { hydratePlayerSettings, resetPlayerSettings } from "@/lib/player-setting
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { parseStartTime } from "@/lib/start-time";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useRestrictedMode } from "@/lib/device-preferences";
 import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
 
 type Status = "loading" | "error" | "notfound" | "locked" | "ready";
@@ -121,6 +122,7 @@ export function WatchView({ id }: { id: string }) {
   // confirmation scrim until the viewer explicitly proceeds. `display` (or an
   // absent policy — `hide` is enforced server-side) plays normally.
   const sensitivePolicy = useSensitiveContentPolicy();
+  const restrictedMode = useRestrictedMode();
   const [sensitiveAccepted, setSensitiveAccepted] = useState(false);
   // IPFS playback surface (DR5): the video streams from the authoritative server
   // by default; a viewer can opt into the IPFS gateway mirror. "fetching" probes
@@ -329,6 +331,14 @@ export function WatchView({ id }: { id: string }) {
   }
   if (status === "error" || video === null) {
     return <ErrorState message="Could not load this video." onRetry={retry} />;
+  }
+  if (restrictedMode && isSensitiveVideo(video)) {
+    return (
+      <EmptyState
+        title="Unavailable in Restricted Mode"
+        message="Turn off Restricted Mode from your account menu to view sensitive content."
+      />
+    );
   }
 
   const meta: string[] = [];

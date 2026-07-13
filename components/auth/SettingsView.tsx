@@ -154,6 +154,7 @@ export function SettingsView() {
         initialBio={user.bio}
         initialUnlisted={user.unlisted ?? false}
         initialHistoryEnabled={user.history_enabled ?? true}
+        initialProfilePublic={user.profile_public}
         updateProfile={updateProfile}
       />
       <ProfileImagesSection
@@ -562,18 +563,21 @@ function ProfileForm({
   initialBio,
   initialUnlisted,
   initialHistoryEnabled,
+  initialProfilePublic,
   updateProfile,
 }: {
   initialDisplayName: string;
   initialBio: string;
   initialUnlisted: boolean;
   initialHistoryEnabled: boolean;
+  initialProfilePublic: boolean;
   updateProfile: (input: UpdateProfileRequest) => Promise<void>;
 }) {
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [bio, setBio] = useState(initialBio);
   const [unlisted, setUnlisted] = useState(initialUnlisted);
   const [historyEnabled, setHistoryEnabled] = useState(initialHistoryEnabled);
+  const [profilePublic, setProfilePublic] = useState(initialProfilePublic);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
@@ -583,7 +587,13 @@ function ProfileForm({
     setFormError(null);
     setState("saving");
     try {
-      await updateProfile({ display_name: displayName, bio, unlisted, history_enabled: historyEnabled });
+      await updateProfile({
+        display_name: displayName,
+        bio,
+        unlisted,
+        history_enabled: historyEnabled,
+        profile_public: profilePublic,
+      });
       setState("saved");
     } catch (err) {
       setState("idle");
@@ -672,6 +682,30 @@ function ProfileForm({
             {fieldErrors.bio}
           </p>
         ) : null}
+      </div>
+
+      <div className="flex items-start gap-2">
+        <input
+          id="settings-profile-public"
+          name="settings-profile-public"
+          type="checkbox"
+          checked={profilePublic}
+          onChange={(e) => {
+            setProfilePublic(e.target.checked);
+            setState("idle");
+          }}
+          aria-describedby="settings-profile-public-help"
+          className="focus-ring mt-0.5 h-4 w-4 rounded border-border accent-accent"
+        />
+        <div className="flex flex-col">
+          <label htmlFor="settings-profile-public" className="text-sm font-medium text-fg">
+            Make my profile public
+          </label>
+          <span id="settings-profile-public-help" className="text-xs text-fg-muted">
+            Your profile introduces you and links your publishing channels. When off, visitors get
+            a 404; you can still preview it while signed in.
+          </span>
+        </div>
       </div>
 
       <div className="flex items-start gap-2">
