@@ -172,6 +172,8 @@ test.describe("autocomplete combobox", () => {
     const listbox = page.getByRole("listbox", { name: "Search suggestions" });
     await expect(listbox.getByRole("option")).toHaveCount(2);
 
+    // The remove × reveals on hover / when the row is the active descendant.
+    await listbox.getByRole("option").first().hover();
     await page.getByTitle(/Remove .*past query.* from your search history/).click();
     await expect(listbox.getByRole("option")).toHaveCount(1);
     expect(deleted).toBe("past query");

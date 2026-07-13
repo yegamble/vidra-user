@@ -8,8 +8,26 @@ import { expect, test, type Page } from "@playwright/test";
 // other spec in this suite; a real backend is not running in `npm run ci`.
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
+const SEARCH = /\/api\/v1\/videos\/search/;
+const SUGGEST = /\/api\/v1\/search\/suggestions/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const USERS = /\/api\/v1\/admin\/users(\?|$)/;
+
+// A mixed suggestion set (queries + history + video/channel/tag groups) so axe
+// exercises the full grouped panel: headers, per-row type labels, and the
+// history remove ×.
+function suggestionPanel(q: string) {
+  return {
+    query: q,
+    suggestions: [
+      { text: "golang tutorials", type: "query", is_personal: false },
+      { text: "go basics", type: "history", is_personal: true },
+      { text: "Go Deep Dive", type: "video", is_personal: false, video_id: "v1" },
+      { text: "Go Channel", type: "channel", is_personal: false, channel_handle: "go" },
+      { text: "golang", type: "tag", is_personal: false },
+    ],
+  };
+}
 
 type Role = "user" | "admin";
 
@@ -90,6 +108,64 @@ test("home passes axe (feed cards rendered)", async ({ page }) => {
   );
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "First Test Video" })).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
+// The redesigned suggestion panel must pass axe wherever the header box renders.
+async function openHeaderPanel(page: Page) {
+  await page.route(SUGGEST, (route) => {
+    const q = new URL(route.request().url()).searchParams.get("q") ?? "";
+    route.fulfill({ json: suggestionPanel(q) });
+  });
+  // Type a value distinct from any reflected /search query so the draft actually
+  // changes (and the panel opens) even when the box already mirrors `q`.
+  const box = page.getByLabel("Search videos");
+  await box.fill("golang");
+  await expect(page.getByRole("listbox", { name: "Search suggestions" })).toBeVisible();
+}
+
+test("home passes axe with the search suggestions panel open", async ({ page }) => {
+  await page.route(FEED, (route) =>
+    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+  );
+  await page.goto("/");
+  await openHeaderPanel(page);
+  await expectNoSevereViolations(page);
+});
+
+test("the search page passes axe with the suggestions panel open", async ({ page }) => {
+  await page.route(SEARCH, (route) =>
+    route.fulfill({ json: { query: "go", videos: [video("v1", "Go Basics", 3)], limit: 20, offset: 0 } }),
+  );
+  await page.goto("/search?q=go");
+  await expect(page.getByRole("heading", { name: "Go Basics" })).toBeVisible();
+  // Re-focus the header box and type to reopen the grouped panel over the results.
+  await openHeaderPanel(page);
+  await expectNoSevereViolations(page);
+});
+
+test("the watch page passes axe with the search suggestions panel open", async ({ page }) => {
+  await page.route(/\/api\/v1\/videos\/v1$/, (route) =>
+    route.fulfill({ json: { ...video("v1", "Watch Me", 4200), width: 1280, height: 720 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/original/, (route) => route.abort());
+  await page.route(/\/api\/v1\/videos\/v1\/comments/, (route) =>
+    route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
+    route.fulfill({ json: { captions: [] } }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada\/videos(\?|$)/, (route) =>
+    route.fulfill({ json: { videos: [] } }),
+  );
+  await page.route(/\/avatar/, (route) => route.abort());
+
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+  await openHeaderPanel(page);
   await expectNoSevereViolations(page);
 });
 
