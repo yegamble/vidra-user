@@ -66,6 +66,8 @@ export const en = {
   "search.personalBadge": "From your history",
   "search.personalizedHint": "Results are personalized for you.",
   "search.personalizedManage": "Manage",
+  "home.forYou": "For you",
+  "home.trendingNow": "Trending now",
 } as const;
 
 /** A valid message key — every key present in the default catalog. */
