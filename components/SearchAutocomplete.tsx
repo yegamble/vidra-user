@@ -1,7 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -11,44 +12,33 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 
-import { ClockIcon, CloseIcon, HashIcon, SearchIcon, UserIcon, VideoIcon } from "@/components/icons";
+import { ChevronLeftIcon, ClockIcon, CloseIcon, HashIcon, SearchIcon, UserIcon, VideoIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { SearchSuggestion } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { trackSearchEvent } from "@/lib/search-events";
-import { searchHref, type SearchFilters } from "@/lib/search-url";
+import { readSearchFilters, searchHref, type SearchFilters } from "@/lib/search-url";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 
 const DEBOUNCE_MS = 200;
 const SUGGESTION_LIMIT = 8;
 const CACHE_MAX = 20;
 
-export type SearchAutocompleteVariant = "header" | "field";
+// Focusables the mobile sheet's Tab trap cycles between (mirrors ui/Modal).
+const FOCUSABLE =
+  'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
-export interface SearchAutocompleteProps {
-  /** Accessible name for the wrapping role="search" landmark. Keep the header
-   *  and page landmarks distinct so they remain unique. */
-  landmarkLabel: string;
-  /** Seed for the input; re-seeded when it changes (a deep link / clear). */
-  initialQuery?: string;
-  /** Active taxonomy/tag filters, threaded onto query/tag navigations. */
-  filters?: SearchFilters;
-  /** When false, suggestions never fetch (the instance toggle is off / the
-   *  service is unwired). The plain input still submits searches. */
-  suggestionsEnabled?: boolean;
-  /** Visual treatment: the header pill or the results-page field. */
-  variant?: SearchAutocompleteVariant;
-  /** Navigate to /search on an empty submit (the field clears the results);
-   *  the header does nothing on an empty submit. */
-  submitEmpty?: boolean;
-  autoFocus?: boolean;
-}
+// Display grouping order (YouTube-flat then realestate-grouped): queries and
+// personal history share the flat top block (0); videos, channels, and tags each
+// form their own titled group below a hairline. A stable sort keeps the search
+// service's blend/slot-reservation ordering within each bucket.
+const TYPE_ORDER: Record<string, number> = { query: 0, history: 0, video: 1, channel: 2, tag: 3 };
 
 /** A tiny insertion-ordered LRU: on hit we re-insert to mark recent; on
- *  overflow we drop the oldest key. Scoped per component instance (per session,
- *  since the widget lives for the tab). */
+ *  overflow we drop the oldest key. Scoped per component instance. */
 function cacheGet(
   cache: Map<string, SearchSuggestion[]>,
   key: string,
@@ -75,10 +65,17 @@ function cacheSet(
   }
 }
 
-/** Bold the first case-insensitive occurrence of the typed prefix inside a
- *  suggestion's text. The full text stays as the element's textContent, so a
- *  screen reader announces the whole label — the <strong> is a visual accent
- *  only. */
+/** Order a fetched suggestion set into display order (query+history first, then
+ *  video/channel/tag groups). Array.prototype.sort is stable, so the service's
+ *  ordering within each bucket is preserved. */
+function orderSuggestions(list: SearchSuggestion[]): SearchSuggestion[] {
+  return [...list].sort((a, b) => (TYPE_ORDER[a.type] ?? 0) - (TYPE_ORDER[b.type] ?? 0));
+}
+
+/** Bold the first case-insensitive occurrence of the typed prefix (realestate
+ *  style — bold what was typed, regular completion). The full text stays the
+ *  element's textContent so a screen reader announces the whole label; the
+ *  <strong> is a visual accent only. */
 function highlightMatch(text: string, query: string): ReactNode {
   const q = query.trim();
   if (!q) return text;
@@ -99,73 +96,101 @@ function highlightMatch(text: string, query: string): ReactNode {
 function suggestionIcon(type: string): ReactNode {
   switch (type) {
     case "history":
-      return <ClockIcon size={16} strokeWidth={2} className="shrink-0 text-fg-muted" />;
+      return <ClockIcon size={17} strokeWidth={2} className="shrink-0 text-fg-muted" />;
     case "video":
-      return <VideoIcon size={16} strokeWidth={2} className="shrink-0 text-fg-muted" />;
+      return <VideoIcon size={17} strokeWidth={2} className="shrink-0 text-fg-muted" />;
     case "channel":
-      return <UserIcon size={16} strokeWidth={2} className="shrink-0 text-fg-muted" />;
+      return <UserIcon size={17} strokeWidth={2} className="shrink-0 text-fg-muted" />;
     case "tag":
-      return <HashIcon size={16} strokeWidth={2} className="shrink-0 text-fg-muted" />;
+      return <HashIcon size={17} strokeWidth={2} className="shrink-0 text-fg-muted" />;
     default:
-      return <SearchIcon size={16} strokeWidth={2} className="shrink-0 text-fg-muted" />;
+      return <SearchIcon size={17} strokeWidth={2} className="shrink-0 text-fg-muted" />;
   }
 }
 
-/**
- * SearchAutocomplete — the accessible search combobox (WAI-ARIA 1.2
- * combobox-with-listbox pattern, forked from Dropdown's keyboard/placement
- * scaffold): the input is role="combobox" (aria-expanded / aria-controls /
- * aria-activedescendant / aria-autocomplete="list"); the popup is role="listbox"
- * with role="option" children. Suggestions are fetched from the search service,
- * 200ms-debounced, IME-safe (no fetch mid-composition), stale-response-cancelled
- * (AbortController + a monotonic request id), and prefix-cached (LRU 20). The
- * popup is an absolute overlay so loading / empty / degraded states never shift
- * layout — they are simply silent. History rows carry a clock icon, an optional
- * "from your history" mark, and an aria-hidden × remove button (Delete on the
- * active option is the keyboard affordance, keeping the combobox's focus model
- * intact).
- */
-export function SearchAutocomplete({
-  landmarkLabel,
-  initialQuery = "",
-  filters = {},
-  suggestionsEnabled = true,
-  variant = "header",
-  submitEmpty = false,
-  autoFocus = false,
-}: SearchAutocompleteProps) {
+function groupLabel(bucket: number): string {
+  if (bucket === 1) return t("search.groupVideos");
+  if (bucket === 2) return t("search.groupChannels");
+  return t("search.groupTags");
+}
+
+function typeLabel(type: string): string | null {
+  if (type === "video") return t("search.typeVideo");
+  if (type === "channel") return t("search.typeChannel");
+  if (type === "tag") return t("search.typeTag");
+  return null;
+}
+
+// ── Shared combobox engine ──────────────────────────────────────────────────
+// One hook drives one combobox surface. The header pill and the mobile sheet
+// each own a private instance (they are never used at the same time), which
+// keeps the ARIA ids, refs, and fetch lifecycle cleanly separated. The hook
+// reads the current route: on /search it reflects the URL's `q` (re-seeding the
+// draft when the query changes) and threads the active filters onto every
+// navigation, so the single header box IS the results-page search.
+
+type ComboboxRefs = {
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  listRef: React.RefObject<HTMLUListElement | null>;
+  optionRefs: React.RefObject<(HTMLLIElement | null)[]>;
+};
+
+type Combobox = ReturnType<typeof useSearchCombobox>;
+
+// The refs live in the rendering surface (created with useRef there) and are
+// threaded in, so the hook returns only render values + callbacks — never ref
+// objects. Returning refs from a hook and reading them in another component's
+// render trips the React Compiler's ref rules; this keeps the render pure.
+function useSearchCombobox({
+  suggestionsEnabled,
+  onCommit,
+  inputRef,
+  listRef,
+  optionRefs,
+}: {
+  suggestionsEnabled: boolean;
+  /** Fired after any navigation (select / submit). The mobile sheet closes; the
+   *  header pill ignores it. */
+  onCommit?: () => void;
+} & ComboboxRefs) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const onSearchPage = pathname === "/search";
+  const urlQuery = onSearchPage ? searchParams.get("q") ?? "" : "";
+  const filters: SearchFilters = onSearchPage
+    ? readSearchFilters({
+        category: searchParams.get("category") ?? undefined,
+        language: searchParams.get("language") ?? undefined,
+        tag: searchParams.get("tag") ?? undefined,
+      })
+    : {};
+
   const baseId = useId();
   const listboxId = `${baseId}-listbox`;
   const optionId = (i: number) => `${baseId}-opt-${i}`;
 
-  const [value, setValue] = useState(initialQuery);
+  const [value, setValue] = useState(urlQuery);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [liveMessage, setLiveMessage] = useState("");
   const [flipUp, setFlipUp] = useState(false);
-  // IME composition is state (not a ref) so the fetch effect can depend on it:
-  // typing mid-composition never fetches, and composition-END flips this false,
-  // re-running the effect to fetch for the finished text.
   const [composing, setComposing] = useState(false);
 
-  const inputRef = useRef<HTMLInputElement>(null);
-  const rootRef = useRef<HTMLFormElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
-  const optionRefs = useRef<(HTMLLIElement | null)[]>([]);
   const cacheRef = useRef<Map<string, SearchSuggestion[]>>(new Map());
   const seqRef = useRef(0);
   const focusedRef = useRef(false);
   const shownForRef = useRef<string | null>(null);
 
-  // Re-seed the editable draft when the committed query prop changes (deep link,
-  // header submit, the clear button navigating to a blank query). Done during
-  // render — not in an effect — to avoid a cascading re-render.
-  const [committed, setCommitted] = useState(initialQuery);
-  if (initialQuery !== committed) {
-    setCommitted(initialQuery);
-    setValue(initialQuery);
+  // Reflect the results-page URL query in the box: when `q` (or the page)
+  // changes, re-seed the editable draft. Done during render — not in an effect —
+  // to avoid a cascading re-render.
+  const [syncedQuery, setSyncedQuery] = useState(urlQuery);
+  if (urlQuery !== syncedQuery) {
+    setSyncedQuery(urlQuery);
+    setValue(urlQuery);
   }
 
   const debounced = useDebouncedValue(value, DEBOUNCE_MS);
@@ -175,24 +200,24 @@ export function SearchAutocomplete({
     setActiveIndex(-1);
   }, []);
 
-  // Publish a resolved suggestion set: open only while focused with results,
-  // announce the count for screen readers, and emit suggestions_shown once per
-  // distinct prefix actually shown. Called only from async callbacks (never
-  // synchronously in an effect body).
+  // Publish a resolved suggestion set (reordered for display), open only while
+  // focused with results, announce the count, and emit suggestions_shown once
+  // per distinct prefix actually shown.
   const applyResults = useCallback((prefix: string, list: SearchSuggestion[]) => {
-    setSuggestions(list);
+    const ordered = orderSuggestions(list);
+    setSuggestions(ordered);
     setActiveIndex(-1);
-    const shouldOpen = focusedRef.current && list.length > 0;
+    const shouldOpen = focusedRef.current && ordered.length > 0;
     setOpen(shouldOpen);
     if (shouldOpen) {
       setLiveMessage(
-        list.length === 1
+        ordered.length === 1
           ? t("search.suggestionsOne")
-          : t("search.suggestionsMany", { count: list.length }),
+          : t("search.suggestionsMany", { count: ordered.length }),
       );
       if (shownForRef.current !== prefix) {
         shownForRef.current = prefix;
-        trackSearchEvent({ type: "search.suggestions_shown", query: prefix, count: list.length });
+        trackSearchEvent({ type: "search.suggestions_shown", query: prefix, count: ordered.length });
       }
     } else {
       setLiveMessage("");
@@ -202,8 +227,8 @@ export function SearchAutocomplete({
 
   // Fetch suggestions for the debounced prefix. Guards: suggestions disabled,
   // mid-IME-composition, or an empty prefix. A cache hit resolves without a
-  // request. Every path carries a monotonic id so an out-of-order / superseded
-  // response is discarded, and all state writes happen in async callbacks.
+  // request. Every path carries a monotonic id so a superseded response is
+  // discarded, and all state writes happen in async callbacks.
   useEffect(() => {
     if (suggestionsEnabled === false) return;
     if (composing) return;
@@ -245,8 +270,8 @@ export function SearchAutocomplete({
     return () => controller.abort();
   }, [debounced, suggestionsEnabled, composing, applyResults, closePopup]);
 
-  // Viewport-aware flip: if the popup can't fit below the input and there is more
-  // room above, render it upward (measured pre-paint on open, like Dropdown).
+  // Viewport-aware flip for the header pill's popup (measured pre-paint on open).
+  // The mobile sheet ignores it.
   useLayoutEffect(() => {
     if (!open) return;
     const input = inputRef.current;
@@ -258,18 +283,22 @@ export function SearchAutocomplete({
     const spaceBelow = window.innerHeight - rect.bottom - margin;
     const spaceAbove = rect.top - margin;
     setFlipUp(spaceBelow < listH && spaceAbove > spaceBelow);
-  }, [open, suggestions.length]);
+  }, [open, suggestions.length, inputRef, listRef]);
 
   // Keep the active option scrolled into view during keyboard navigation.
   useEffect(() => {
     if (activeIndex < 0) return;
-    // Optional-call guard: jsdom (and some embedded webviews) lack scrollIntoView.
     optionRefs.current[activeIndex]?.scrollIntoView?.({ block: "nearest" });
-  }, [activeIndex]);
+  }, [activeIndex, optionRefs]);
+
+  function go(href: string) {
+    router.push(href);
+    onCommit?.();
+  }
 
   function navigateToQuery(text: string) {
     setValue(text);
-    router.push(searchHref(text.trim(), filters));
+    go(searchHref(text.trim(), filters));
   }
 
   function selectSuggestion(s: SearchSuggestion, index: number) {
@@ -284,21 +313,21 @@ export function SearchAutocomplete({
     switch (s.type) {
       case "video":
         if (s.video_id) {
-          router.push(`/videos/${encodeURIComponent(s.video_id)}`);
+          go(`/videos/${encodeURIComponent(s.video_id)}`);
           return;
         }
         navigateToQuery(s.text);
         return;
       case "channel":
         if (s.channel_handle) {
-          router.push(`/channels/${encodeURIComponent(s.channel_handle)}`);
+          go(`/channels/${encodeURIComponent(s.channel_handle)}`);
           return;
         }
         navigateToQuery(s.text);
         return;
       case "tag":
         setValue(s.text);
-        router.push(searchHref("", { ...filters, tag: s.text }));
+        go(searchHref("", { ...filters, tag: s.text }));
         return;
       case "query":
       case "history":
@@ -311,10 +340,19 @@ export function SearchAutocomplete({
   function submitRaw() {
     const q = value.trim();
     closePopup();
-    if (!q && !submitEmpty) return;
-    // search.submitted is emitted by SearchResults when the results page loads,
-    // so it is not double-counted here — this only navigates.
-    router.push(searchHref(q, filters));
+    // The header does nothing on an empty submit; on /search an empty submit
+    // clears the results back to the prompt (drops `q`, keeps the filters).
+    if (!q && !onSearchPage) return;
+    go(searchHref(q, filters));
+  }
+
+  // Clear the field. On /search this navigates back to the prompt (keeping the
+  // filters) but never closes the mobile sheet — the user is still searching.
+  function clear() {
+    setValue("");
+    closePopup();
+    inputRef.current?.focus();
+    if (onSearchPage) router.push(searchHref("", filters));
   }
 
   function removeHistoryItem(index: number) {
@@ -322,7 +360,6 @@ export function SearchAutocomplete({
     if (!s || s.type !== "history") return;
     const next = suggestions.filter((_, i) => i !== index);
     setSuggestions(next);
-    // Keep the LRU cache for this prefix in sync so re-typing doesn't resurrect it.
     const key = debounced.trim();
     if (key) cacheSet(cacheRef.current, key, next);
     setActiveIndex((prev) => {
@@ -332,15 +369,11 @@ export function SearchAutocomplete({
       return prev;
     });
     if (next.length === 0) closePopup();
-    // Best-effort delete; optimistic removal stands even if the call fails.
     void api.deleteSearchHistoryEntry(s.text).catch(() => {});
-    // The × lives outside the combobox focus model — keep focus on the input.
     inputRef.current?.focus();
   }
 
   function onKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
-    // Never treat keys as combobox navigation mid-IME-composition (an Enter that
-    // confirms a candidate must not submit / select).
     if (composing || e.nativeEvent.isComposing) return;
     const last = suggestions.length - 1;
 
@@ -380,20 +413,17 @@ export function SearchAutocomplete({
           e.preventDefault();
           selectSuggestion(suggestions[activeIndex], activeIndex);
         }
-        // Otherwise let the form's onSubmit run (submitRaw).
         return;
       case "Escape":
         if (open) {
           e.preventDefault();
           closePopup();
         } else if (value !== "") {
-          // Second Escape (popup already closed) clears the field.
           e.preventDefault();
           setValue("");
         }
         return;
       case "Tab":
-        // Let focus leave; just dismiss the popup.
         closePopup();
         return;
       case "Delete":
@@ -407,151 +437,417 @@ export function SearchAutocomplete({
     }
   }
 
-  const isField = variant === "field";
-  const showPopup = open && suggestions.length > 0 && debounced.trim().length >= 1;
+  const showPanel = open && suggestions.length > 0 && debounced.trim().length >= 1;
 
+  return {
+    value,
+    setValue,
+    suggestions,
+    activeIndex,
+    setActiveIndex,
+    liveMessage,
+    flipUp,
+    showPanel,
+    debounced,
+    listboxId,
+    optionId,
+    onKeyDown,
+    onFocus: () => {
+      focusedRef.current = true;
+      if (suggestions.length > 0) setOpen(true);
+    },
+    onBlur: () => {
+      focusedRef.current = false;
+      closePopup();
+    },
+    onCompositionStart: () => setComposing(true),
+    onCompositionEnd: () => setComposing(false),
+    selectSuggestion,
+    removeHistoryItem,
+    submitRaw,
+    clear,
+  } as const;
+}
+
+// ── Shared presentational pieces ────────────────────────────────────────────
+
+function ClearButton({ onClick }: { onClick: () => void }) {
   return (
-    <form
-      ref={rootRef}
-      role="search"
-      aria-label={landmarkLabel}
-      className={cn("relative", isField ? "w-full" : "w-full max-w-md")}
-      onSubmit={(e) => {
-        e.preventDefault();
-        submitRaw();
-      }}
+    <button
+      type="button"
+      // Keep the input focused (prevent the mousedown blur) — clearing then
+      // refocuses it so the caret stays in the box.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      aria-label={t("search.clear")}
+      className="focus-ring -mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:text-fg"
     >
-      <div
-        className={cn(
-          "flex items-center gap-2.5 bg-surface-muted transition-colors focus-within:bg-surface-strong/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus",
-          isField ? "rounded-xl px-3.5 py-2.5" : "min-h-11 rounded-full px-4 py-2",
-        )}
-      >
-        <SearchIcon
-          size={isField ? 17 : 16}
-          strokeWidth={2}
-          className="shrink-0 text-fg-muted"
-        />
-        <input
-          ref={inputRef}
-          type="search"
-          name="q"
-          role="combobox"
-          aria-expanded={showPopup}
-          aria-controls={listboxId}
-          aria-activedescendant={showPopup && activeIndex >= 0 ? optionId(activeIndex) : undefined}
-          aria-autocomplete="list"
-          aria-label={t("search.inputLabel")}
-          autoComplete="off"
-          autoFocus={autoFocus}
-          value={value}
-          placeholder={t("search.placeholder")}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={onKeyDown}
-          onFocus={() => {
-            focusedRef.current = true;
-            if (suggestions.length > 0) setOpen(true);
-          }}
-          onBlur={() => {
-            focusedRef.current = false;
-            closePopup();
-          }}
-          onCompositionStart={() => setComposing(true)}
-          onCompositionEnd={() => setComposing(false)}
-          className={cn(
-            "w-full bg-transparent text-fg outline-none placeholder:text-fg-muted [&::-webkit-search-cancel-button]:appearance-none",
-            isField ? "text-[15px]" : "text-sm",
-          )}
-        />
-        {value ? (
-          <button
-            type="button"
-            onClick={() => {
-              setValue("");
-              closePopup();
-              inputRef.current?.focus();
-              if (submitEmpty && committed) router.push(searchHref("", filters));
-            }}
-            aria-label={t("search.clear")}
-            className="focus-ring -mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:text-fg"
-          >
-            <CloseIcon size={16} strokeWidth={2} />
-          </button>
-        ) : null}
-      </div>
+      <CloseIcon size={16} strokeWidth={2} />
+    </button>
+  );
+}
 
-      {/* SR-only live region: announces the suggestion count without stealing
-          focus or moving the popup. */}
-      <div role="status" aria-live="polite" className="sr-only">
-        {liveMessage}
-      </div>
+// The rounded-full pill: search glyph, the combobox input, and a clear ×. The
+// caller wraps it in the role="search" form so submit navigates.
+function PillInput({
+  c,
+  inputRef,
+  autoFocus,
+}: {
+  c: Combobox;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  autoFocus?: boolean;
+}) {
+  return (
+    <div className="flex min-h-11 items-center gap-2.5 rounded-full border border-border bg-surface-muted px-4 py-2 transition-colors focus-within:bg-surface has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-focus">
+      <SearchIcon size={17} strokeWidth={2} className="shrink-0 text-fg-muted" />
+      <input
+        ref={inputRef}
+        type="search"
+        name="q"
+        role="combobox"
+        aria-expanded={c.showPanel}
+        aria-controls={c.listboxId}
+        aria-activedescendant={c.showPanel && c.activeIndex >= 0 ? c.optionId(c.activeIndex) : undefined}
+        aria-autocomplete="list"
+        aria-label={t("search.inputLabel")}
+        autoComplete="off"
+        autoFocus={autoFocus}
+        value={c.value}
+        placeholder={t("search.placeholder")}
+        onChange={(e) => c.setValue(e.target.value)}
+        onKeyDown={c.onKeyDown}
+        onFocus={c.onFocus}
+        onBlur={c.onBlur}
+        onCompositionStart={c.onCompositionStart}
+        onCompositionEnd={c.onCompositionEnd}
+        className="w-full bg-transparent text-sm text-fg outline-none placeholder:text-fg-muted [&::-webkit-search-cancel-button]:appearance-none"
+      />
+      {c.value ? <ClearButton onClick={c.clear} /> : null}
+    </div>
+  );
+}
 
-      <ul
-        ref={listRef}
-        id={listboxId}
-        role="listbox"
-        aria-label={t("search.suggestionsLabel")}
-        hidden={!showPopup}
-        className={cn(
-          "absolute left-0 right-0 z-50 max-h-[min(60vh,360px)] overflow-y-auto rounded-2xl border border-border-subtle bg-surface-raised p-1.5 shadow-lg",
-          flipUp ? "bottom-full mb-2" : "top-full mt-2",
-        )}
-      >
-        {suggestions.map((s, index) => {
-          const active = index === activeIndex;
-          const isHistory = s.type === "history";
-          return (
+// The listbox of grouped suggestion rows, shared by the header popup and the
+// mobile sheet. Rows are 44px: leading type icon, the label (bold prefix +
+// regular completion), and a trailing muted type label (Video / Channel / Tag)
+// — except history rows, whose trailing slot is an aria-hidden remove × shown
+// while the row is active (Delete on the active option is the keyboard path).
+// Group headers are aria-hidden visual sugar; each option carries its own type
+// label in the a11y tree.
+function SuggestionListbox({
+  c,
+  listRef,
+  optionRefs,
+  hidden,
+  className,
+}: {
+  c: Combobox;
+  listRef: React.RefObject<HTMLUListElement | null>;
+  optionRefs: React.RefObject<(HTMLLIElement | null)[]>;
+  hidden: boolean;
+  className: string;
+}) {
+  return (
+    <ul
+      ref={listRef}
+      id={c.listboxId}
+      role="listbox"
+      aria-label={t("search.suggestionsLabel")}
+      hidden={hidden}
+      className={className}
+    >
+      {c.suggestions.map((s, index) => {
+        const active = index === c.activeIndex;
+        const isHistory = s.type === "history";
+        const bucket = TYPE_ORDER[s.type] ?? 0;
+        const prevBucket = index > 0 ? TYPE_ORDER[c.suggestions[index - 1].type] ?? 0 : -1;
+        const showHeader = bucket >= 1 && bucket !== prevBucket;
+        const label = typeLabel(s.type);
+        return (
+          <Fragment key={`${s.type}-${s.text}-${index}`}>
+            {showHeader ? (
+              <li
+                role="presentation"
+                aria-hidden="true"
+                className="mt-1 border-t border-border-subtle px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-fg-muted first:mt-0 first:border-t-0"
+              >
+                {groupLabel(bucket)}
+              </li>
+            ) : null}
             <li
-              key={`${s.type}-${s.text}-${index}`}
-              id={optionId(index)}
+              id={c.optionId(index)}
               role="option"
               aria-selected={active}
               ref={(el) => {
                 optionRefs.current[index] = el;
               }}
               // Keep the input focused (activedescendant model): prevent the
-              // mousedown from blurring it, then handle selection on click.
+              // mousedown blur, then select on click.
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => selectSuggestion(s, index)}
-              onMouseMove={() => setActiveIndex(index)}
+              onClick={() => c.selectSuggestion(s, index)}
+              onMouseMove={() => c.setActiveIndex(index)}
               className={cn(
-                "flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm",
+                "group flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-4 text-sm",
                 active ? "bg-surface-muted" : "bg-transparent",
               )}
             >
               {suggestionIcon(s.type)}
-              <span className="min-w-0 flex-1 truncate text-fg-muted">
-                {highlightMatch(s.text, debounced)}
+              <span className="min-w-0 flex-1 truncate text-fg">
+                {highlightMatch(s.text, c.debounced)}
               </span>
-              {isHistory && s.is_personal ? (
-                <span className="shrink-0 text-[11px] font-medium text-fg-muted">
-                  {t("search.personalBadge")}
-                </span>
-              ) : null}
               {isHistory ? (
-                <button
-                  type="button"
-                  // Outside the combobox aria flow: the option itself is the
-                  // interactive target for AT; this is a mouse convenience whose
-                  // keyboard equivalent is Delete on the active option. Native
-                  // title tooltip for sighted mouse users (aria-hidden from AT).
-                  aria-hidden
-                  tabIndex={-1}
-                  title={t("search.removeHistory", { query: s.text })}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeHistoryItem(index);
-                  }}
-                  className="focus-ring -mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
-                >
-                  <CloseIcon size={14} strokeWidth={2} />
-                </button>
+                active ? (
+                  <button
+                    type="button"
+                    aria-hidden
+                    tabIndex={-1}
+                    title={t("search.removeHistory", { query: s.text })}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      c.removeHistoryItem(index);
+                    }}
+                    className="focus-ring -mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
+                  >
+                    <CloseIcon size={14} strokeWidth={2} />
+                  </button>
+                ) : null
+              ) : label ? (
+                <span className="shrink-0 text-[11px] font-medium text-fg-muted">{label}</span>
               ) : null}
             </li>
-          );
-        })}
-      </ul>
-    </form>
+          </Fragment>
+        );
+      })}
+    </ul>
+  );
+}
+
+// ── The header pill (sm and up) ─────────────────────────────────────────────
+
+function HeaderSearchField({ suggestionsEnabled }: { suggestionsEnabled: boolean }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const optionRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const c = useSearchCombobox({ suggestionsEnabled, inputRef, listRef, optionRefs });
+  return (
+    <div className="hidden min-w-0 flex-1 justify-center px-2 sm:flex">
+      <form
+        role="search"
+        aria-label={t("search.landmark")}
+        className="relative w-full max-w-xl"
+        onSubmit={(e) => {
+          e.preventDefault();
+          c.submitRaw();
+        }}
+      >
+        <PillInput c={c} inputRef={inputRef} />
+        <div role="status" aria-live="polite" className="sr-only">
+          {c.liveMessage}
+        </div>
+        <SuggestionListbox
+          c={c}
+          listRef={listRef}
+          optionRefs={optionRefs}
+          hidden={!c.showPanel}
+          className={cn(
+            "scrollbar-none absolute left-0 right-0 z-50 max-h-[28rem] overflow-y-auto rounded-2xl border border-border-subtle bg-surface-raised p-1.5 shadow-lg",
+            c.flipUp ? "bottom-full mb-2" : "top-full mt-2",
+          )}
+        />
+      </form>
+    </div>
+  );
+}
+
+// ── The mobile full-screen sheet (below sm) ─────────────────────────────────
+
+function MobileSearchOverlay({
+  suggestionsEnabled,
+  onClose,
+}: {
+  suggestionsEnabled: boolean;
+  onClose: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const optionRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const c = useSearchCombobox({ suggestionsEnabled, onCommit: onClose, inputRef, listRef, optionRefs });
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Focus the input, lock body scroll, trap Tab, and close on Escape (focus is
+  // returned to the trigger by the caller's onClose).
+  useEffect(() => {
+    inputRef.current?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = overlayRef.current;
+      if (!root) return;
+      const items = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const activeEl = document.activeElement;
+      if (e.shiftKey && activeEl === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && activeEl === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+    // inputRef is a stable ref object; onClose is stable (useCallback).
+  }, [inputRef, onClose]);
+
+  return createPortal(
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-[60] flex flex-col bg-canvas sm:hidden"
+    >
+      <div className="flex items-center gap-1.5 px-2 pb-1 pt-[max(env(safe-area-inset-top),0.5rem)]">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("search.close")}
+          title={t("search.close")}
+          className="focus-ring flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+        >
+          <ChevronLeftIcon size={22} strokeWidth={2} />
+        </button>
+        <form
+          role="search"
+          aria-label={t("search.landmark")}
+          className="relative min-w-0 flex-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            c.submitRaw();
+          }}
+        >
+          <PillInput c={c} inputRef={inputRef} autoFocus />
+          <div role="status" aria-live="polite" className="sr-only">
+            {c.liveMessage}
+          </div>
+        </form>
+      </div>
+      <SuggestionListbox
+        c={c}
+        listRef={listRef}
+        optionRefs={optionRefs}
+        hidden={!c.showPanel}
+        className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-2 pb-8 pt-1"
+      />
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * SearchAutocomplete — the ONE site-search box, rendered by the app header on
+ * every page and breakpoint (WAI-ARIA 1.2 combobox-with-listbox pattern):
+ *
+ *  - Desktop (sm+): a centered pill combobox in the header; its popup is an
+ *    absolute overlay so loading / empty / degraded states never shift layout —
+ *    they are simply silent.
+ *  - Mobile (<sm): the header shows a search icon button; tapping it opens a
+ *    full-screen sheet (input + back button, suggestions below) with a Tab
+ *    focus trap, Escape / back to collapse, body scroll locked, and focus
+ *    returned to the icon button on close. When the Search tab lands on an empty
+ *    /search, the sheet auto-opens with the keyboard focused.
+ *
+ * There is exactly one visible role="search" landmark at a time. Suggestions are
+ * gated on the instance's effective `suggestions_enabled`; when off (or the
+ * service is down) the box is a plain search field with a silent panel — the
+ * input, its submit, and the results page are unaffected.
+ */
+export function SearchAutocomplete({ suggestionsEnabled = true }: { suggestionsEnabled?: boolean }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const autoOpenedRef = useRef(false);
+
+  const emptySearchPage = pathname === "/search" && (searchParams.get("q") ?? "") === "";
+
+  // Auto-open the mobile sheet when the Search tab lands on an empty /search
+  // (phones only). Rising-edge guarded so dismissing it doesn't re-open it. The
+  // open is deferred to a microtask so the effect body never sets state
+  // synchronously (cascading-render lint).
+  useEffect(() => {
+    if (!emptySearchPage) {
+      autoOpenedRef.current = false;
+      return;
+    }
+    if (autoOpenedRef.current) return;
+    if (typeof window === "undefined" || !window.matchMedia("(max-width: 639px)").matches) return;
+    autoOpenedRef.current = true;
+    Promise.resolve().then(() => setMobileOpen(true));
+  }, [emptySearchPage]);
+
+  const closeMobile = useCallback(() => {
+    setMobileOpen(false);
+    triggerRef.current?.focus();
+  }, []);
+
+  return (
+    <>
+      <HeaderSearchField suggestionsEnabled={suggestionsEnabled} />
+      <div className="flex flex-1 justify-end sm:hidden">
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label={t("search.open")}
+          title={t("search.open")}
+          aria-expanded={mobileOpen}
+          className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+        >
+          <SearchIcon size={22} strokeWidth={2} />
+        </button>
+      </div>
+      {mobileOpen ? (
+        <MobileSearchOverlay suggestionsEnabled={suggestionsEnabled} onClose={closeMobile} />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * A static, non-interactive twin of the search box with identical dimensions.
+ * The header renders it as the Suspense fallback while the interactive box —
+ * which reads `useSearchParams` to reflect the results-page query — resolves, so
+ * statically prerendered routes don't bail to CSR and there is no layout shift.
+ */
+export function SearchAutocompleteFallback() {
+  return (
+    <>
+      <div className="hidden min-w-0 flex-1 justify-center px-2 sm:flex">
+        <div className="relative w-full max-w-xl">
+          <div className="flex min-h-11 items-center gap-2.5 rounded-full border border-border bg-surface-muted px-4 py-2">
+            <SearchIcon size={17} strokeWidth={2} className="shrink-0 text-fg-muted" />
+            <span className="truncate text-sm text-fg-muted">{t("search.placeholder")}</span>
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-1 justify-end sm:hidden">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full text-fg-muted">
+          <SearchIcon size={22} strokeWidth={2} />
+        </span>
+      </div>
+    </>
   );
 }
