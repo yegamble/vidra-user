@@ -47,6 +47,7 @@ import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { hydratePlayerSettings, resetPlayerSettings } from "@/lib/player-settings";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
+import { trackSearchEvent } from "@/lib/search-events";
 import { parseStartTime } from "@/lib/start-time";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 import { useRestrictedMode } from "@/lib/device-preferences";
@@ -107,6 +108,16 @@ export function WatchView({ id }: { id: string }) {
   const [startAt] = useState<number | null>(() =>
     typeof window === "undefined" ? null : parseStartTime(window.location.search),
   );
+  // The discovery context this watch page was opened from (search-service W4):
+  // a rail/result appends ?src=<home|related|search> so the play_started event
+  // can report where the play came from. A non-PII marker parsed once (no query
+  // text ever rides the URL); defaults to "watch" (a direct/bare visit).
+  const [playSource] = useState<string>(() => {
+    if (typeof window === "undefined") return "watch";
+    const src = new URLSearchParams(window.location.search).get("src");
+    return src && /^[a-z_]{1,16}$/.test(src) ? src : "watch";
+  });
+  const playStartedForRef = useRef<string | null>(null);
   // The metadata taxonomy for the category/language/license chips, loaded
   // (cached, once per page load) only when the video carries any of them.
   const [config, setConfig] = useState<VideoConfigResponse | null>(null);
@@ -169,6 +180,18 @@ export function WatchView({ id }: { id: string }) {
       });
     return () => controller.abort();
   }, [id, reloadKey, playbackToken]);
+
+  // Emit video.play_started once per watched local video (search-service W4),
+  // tagged with the discovery context this page was opened from. Best-effort
+  // telemetry — the search service learns from it; core enforces attribution
+  // policy. Remote videos are out of the local search corpus, so they are
+  // skipped.
+  useEffect(() => {
+    if (!video || video.remote === true) return;
+    if (playStartedForRef.current === video.id) return;
+    playStartedForRef.current = video.id;
+    trackSearchEvent({ type: "video.play_started", video_id: video.id, context: playSource });
+  }, [video, playSource]);
 
   // On successful unlock: keep the token in the in-memory store + this state, and
   // drop to the loading state so the token-change refetch (the effect above)
