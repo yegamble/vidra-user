@@ -91,10 +91,18 @@ export type InstanceHomepageBlock = {
  *   absent until vidra-core wires the search service, so every consumer treats
  *   `undefined` as "feature off / not yet shipped" (suggestions only fire when
  *   `suggestions_enabled !== false`).
+ *
+ * `search_service_enabled` is the master toggle: when false the instance serves
+ * the built-in deterministic (backup SQL) search and `suggestions_enabled` is
+ * reported as its EFFECTIVE value (service AND suggestions), so the combobox —
+ * which already gates on `suggestions_enabled` — degrades to a plain search box
+ * automatically. It is additive/informational; the box's presence and submit
+ * behaviour never depend on it.
  */
 export type InstanceSearchBlock = {
   remote_uri_users?: boolean;
   remote_uri_anonymous?: boolean;
+  search_service_enabled?: boolean;
   mode?: "simple" | "advanced";
   suggestions_enabled?: boolean;
   personalized_search_enabled?: boolean;

@@ -1338,6 +1338,16 @@ export const META: Record<string, SettingMeta> = {
   // "search" on the advanced page. Defaults preserve the shipped behaviour:
   // simple mode, everything on. The bools are the INSTANCE half of the
   // two-factor per-request gate (instance setting AND user pref AND signed-in).
+  //
+  // The master toggle: when off, search routes to the built-in deterministic
+  // (backup SQL) path and suggestions are disabled instance-wide.
+  search_service_enabled: {
+    label: "Smart search service",
+    help: "Use the smart search service for ranking and autocomplete. When off, Vidra falls back to the built-in deterministic search and suggestions are disabled.",
+    control: "toggle",
+    page: "advanced",
+    section: "search",
+  },
   search_mode: {
     label: "Ranking mode",
     help: "How search and recommendations rank results. Simple uses deterministic heuristics; Advanced adds learned and behavioural signals (needs the search service to have collected enough activity).",
