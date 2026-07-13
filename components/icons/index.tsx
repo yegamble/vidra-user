@@ -198,6 +198,15 @@ export function VideoIcon(props: IconProps) {
   );
 }
 
+/** Hash / tag — the "#" glyph for a tag suggestion. */
+export function HashIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18" />
+    </Icon>
+  );
+}
+
 /* ── Communication ───────────────────────────────────────────────────────── */
 
 export function BellIcon(props: IconProps) {
