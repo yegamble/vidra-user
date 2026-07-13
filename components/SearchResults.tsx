@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
+import { useOptionalSession } from "@/components/auth/AuthProvider";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -258,7 +258,7 @@ export function SearchResults({
 }) {
   const trimmed = query.trim();
   const { category, language, tag } = filters;
-  const { user } = useSession();
+  const user = useOptionalSession()?.user ?? null;
   // The personalization hint (search-service W4): shown only when the instance
   // runs advanced ranking AND allows personalized search AND the signed-in user
   // has kept their personalized-search preference on — i.e. results the viewer

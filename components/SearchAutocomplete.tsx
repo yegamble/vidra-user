@@ -263,7 +263,8 @@ export function SearchAutocomplete({
   // Keep the active option scrolled into view during keyboard navigation.
   useEffect(() => {
     if (activeIndex < 0) return;
-    optionRefs.current[activeIndex]?.scrollIntoView({ block: "nearest" });
+    // Optional-call guard: jsdom (and some embedded webviews) lack scrollIntoView.
+    optionRefs.current[activeIndex]?.scrollIntoView?.({ block: "nearest" });
   }, [activeIndex]);
 
   function navigateToQuery(text: string) {
@@ -532,9 +533,11 @@ export function SearchAutocomplete({
                   type="button"
                   // Outside the combobox aria flow: the option itself is the
                   // interactive target for AT; this is a mouse convenience whose
-                  // keyboard equivalent is Delete on the active option.
+                  // keyboard equivalent is Delete on the active option. Native
+                  // title tooltip for sighted mouse users (aria-hidden from AT).
                   aria-hidden
                   tabIndex={-1}
+                  title={t("search.removeHistory", { query: s.text })}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={(e) => {
                     e.stopPropagation();
