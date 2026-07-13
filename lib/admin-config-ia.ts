@@ -378,6 +378,17 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       alwaysRender: true,
     },
     {
+      // Server id "search" (search-service W4): the ranking family plus the
+      // instance-half personalization / history / suggestion gates and the event
+      // retention / suggestion-threshold limits. Mirrors the server section id.
+      // (Distinct from the Federation page's own "search" section, which governs
+      // W13 remote-URI resolution — sections are scoped per page.)
+      id: "search",
+      title: "Search & recommendations",
+      description:
+        "How search ranks and what discovery learns: the ranking family, the instance-level personalization, suggestion, and history gates, and how long behavioural events are kept.",
+    },
+    {
       // Server id "user_data" (normalized to "user-data"): the account
       // import/export controls. (The W13 remote-search keys the client once
       // stubbed here live on the Federation page — vidra-core homes them there.)
@@ -1322,6 +1333,65 @@ export const META: Record<string, SettingMeta> = {
     control: "toggle",
     page: "federation",
     section: "search",
+  },
+  // ADVANCED / Search & recommendations (search-service W4). Server section
+  // "search" on the advanced page. Defaults preserve the shipped behaviour:
+  // simple mode, everything on. The bools are the INSTANCE half of the
+  // two-factor per-request gate (instance setting AND user pref AND signed-in).
+  search_mode: {
+    label: "Ranking mode",
+    help: "How search and recommendations rank results. Simple uses deterministic heuristics; Advanced adds learned and behavioural signals (needs the search service to have collected enough activity).",
+    control: "enum-segmented",
+    options: [
+      { value: "simple", label: "Simple" },
+      { value: "advanced", label: "Advanced" },
+    ],
+    page: "advanced",
+    section: "search",
+  },
+  search_suggestions_enabled: {
+    label: "Autocomplete suggestions",
+    help: "Show query, video, channel, and tag suggestions as visitors type in the search box.",
+    control: "toggle",
+    page: "advanced",
+    section: "search",
+  },
+  personalized_search_enabled: {
+    label: "Personalized search",
+    help: "Allow search results to be tailored to a signed-in user's activity. Each user can still opt out in their own settings.",
+    control: "toggle",
+    page: "advanced",
+    section: "search",
+  },
+  personalized_recommendations_enabled: {
+    label: "Personalized recommendations",
+    help: "Allow the home and related-video rails to be tailored to a signed-in user's activity. Each user can still opt out in their own settings.",
+    control: "toggle",
+    page: "advanced",
+    section: "search",
+  },
+  search_history_enabled: {
+    label: "Search history",
+    help: "Let signed-in users keep a personal search history that powers their suggestions. Each user can still turn theirs off and clear it.",
+    control: "toggle",
+    page: "advanced",
+    section: "search",
+  },
+  search_event_retention_days: {
+    label: "Behavioural event retention",
+    help: "How many days the search service keeps raw behavioural events (searches, clicks, plays) before deleting them. Aggregates may be kept longer. 1–365.",
+    control: "number",
+    page: "advanced",
+    section: "search",
+    validate: intRange(1, 365, "Must be between 1 and 365 days."),
+  },
+  search_min_query_user_count: {
+    label: "Minimum distinct users for a suggestion",
+    help: "How many different people must have run a query before it can appear as a global autocomplete suggestion — a privacy guard so a rare, personal query never becomes a public suggestion. 1–100.",
+    control: "number",
+    page: "advanced",
+    section: "search",
+    validate: intRange(1, 100, "Must be between 1 and 100 users."),
   },
   // ADVANCED / User data portability (config-parity W8). Server section
   // "user_data" (normalized to "user-data").
