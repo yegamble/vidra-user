@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { PlusIcon } from "@/components/icons";
 import { NotificationsBell } from "@/components/NotificationsBell";
-import { SearchBox } from "@/components/SearchBox";
+import { SearchAutocomplete, SearchAutocompleteFallback } from "@/components/SearchAutocomplete";
 import { isStandaloneRoute } from "@/lib/app-shell";
 import { brandingAssetUrl } from "@/lib/branding";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
@@ -16,10 +17,11 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 // navigation lives in the Sidebar (desktop/tablet) and the BottomTabBar
 // (phones) — no hamburger menu (design-system.md). On phones the "Vidra"
 // wordmark reads as the large page title of the mobile app template
-// (text-2xl large-title feel) in a compact top row with just the bell + avatar;
-// the search box and Create collapse away there (Search and Create are bottom
-// tabs). At sm+ it settles into the smaller desktop wordmark beside the centered
-// search. Hidden on focused standalone routes (embeds and account entry).
+// (text-2xl large-title feel) in a compact top row with a search icon button,
+// the bell, and the avatar; Create collapses away there (it is a bottom tab).
+// Tapping the search icon expands the full-screen search sheet. At sm+ the
+// wordmark shrinks beside the centered search pill. Hidden on focused standalone
+// routes (embeds and account entry).
 //
 // Config-parity W4 branding: the SSR instance snapshot (passed down by
 // app/layout.tsx; null when the backend is unreachable) supplies the header
@@ -72,10 +74,16 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
           ) : null}
           {hideName ? null : <span>{name}</span>}
         </Link>
-        <div className="hidden min-w-0 flex-1 justify-center px-2 sm:flex">
-          <SearchBox search={instance?.search} />
-        </div>
-        <div className="flex-1 sm:hidden" />
+        {/* The single site-search box: a centered pill at sm+, a search icon
+            button that expands to a full-screen sheet on phones. It renders its
+            own responsive layout (the desktop pill takes the centered flex-1
+            slot; the phone trigger takes the trailing flex-1 slot), so the
+            header needs no separate mobile spacer. Wrapped in Suspense because it
+            reads useSearchParams (to reflect the /search query); the static twin
+            keeps prerendered routes from bailing to CSR with no layout shift. */}
+        <Suspense fallback={<SearchAutocompleteFallback />}>
+          <SearchAutocomplete suggestionsEnabled={instance?.search?.suggestions_enabled !== false} />
+        </Suspense>
         <Link
           href="/studio"
           className="focus-ring hidden min-h-10 items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-raised/80 sm:flex"
