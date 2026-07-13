@@ -26,6 +26,7 @@ import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
 import { SupportButton } from "@/components/SupportButton";
+import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
 import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
@@ -45,7 +46,6 @@ import { feedDefaultsForLanding, resolveLandingPage } from "@/lib/feed-defaults"
 import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
-import { hydratePlayerSettings, resetPlayerSettings } from "@/lib/player-settings";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { trackSearchEvent } from "@/lib/search-events";
 import { parseStartTime } from "@/lib/start-time";
@@ -68,7 +68,6 @@ const RESUME_MIN_SECONDS = 5;
 // their history and can be resumed) and offers a Resume control from the saved
 // position.
 export function WatchView({ id }: { id: string }) {
-  const { status: authStatus } = useSession();
   // The instance browse defaults (config-parity W5). The tag chips below link
   // to the recent feed filtered by tag; feedHref keeps ?sort= only when it
   // differs from the effective default, so the URL must be built against the
@@ -216,27 +215,6 @@ export function WatchView({ id }: { id: string }) {
     if (sensitiveAccepted) setSensitiveAccepted(false);
   }
   useEffect(() => () => clearPlaybackToken(id), [id]);
-
-  // Hydrate the signed-in user's player settings (PLAY-07 / W1.6) so the bespoke
-  // shell starts at their default speed, quality, captions and theater mode.
-  // Signed-out (or on sign-out): reset to the baked defaults so a shared tab
-  // never inherits the previous user's preferences. Failures are silent — the
-  // player just keeps the baked defaults.
-  useEffect(() => {
-    if (authStatus === "restoring") return;
-    if (authStatus !== "authed") {
-      resetPlayerSettings();
-      return;
-    }
-    const controller = new AbortController();
-    api
-      .getPlayerSettings(controller.signal)
-      .then((s) => hydratePlayerSettings(s))
-      .catch(() => {
-        /* keep the baked defaults on failure */
-      });
-    return () => controller.abort();
-  }, [authStatus]);
 
   const hasTaxonomy = Boolean(video && (video.category || video.language || video.license));
   useEffect(() => {
@@ -530,6 +508,7 @@ export function WatchView({ id }: { id: string }) {
             />
             <DownloadButton video={video} playbackToken={playbackToken} />
             <ReportButton kind="video" targetId={video.id} />
+            <VideoActionsMenu video={video} onDeleted={() => window.location.assign("/")} />
           </div>
           {/* Secondary technical/taxonomy chips (duration, dimensions,
               category/language/license) on their own quiet row. */}

@@ -4,17 +4,25 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { ChevronRightIcon, PlayIcon, PlaylistIcon, PlusIcon } from "@/components/icons";
+import { ChevronRightIcon, PlaylistIcon, PlusIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
+import { VideoCardPreview } from "@/components/VideoCardPreview";
 import {
   api,
+  isSensitiveVideo,
   playlistThumbnailUrl,
   remoteVideoThumbnailUrl,
+  videoOriginalUrl,
   videoThumbnailUrl,
 } from "@/lib/api";
 import type { HistoryItem, Playlist, Video } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import { useRestrictedMode } from "@/lib/device-preferences";
+import { useInstanceFeatures } from "@/lib/instance-features";
+import { usePlayerSettings } from "@/lib/player-settings";
+import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 
 // LibraryView is the design's Library hub (Vidra App template): a History rail
 // with real resume-progress, a Playlists list, and a Saved list — each bound to
@@ -141,48 +149,96 @@ function HistorySection() {
 function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: () => void }) {
   const isRemote = item.remote === true;
   const href = isRemote ? `/remote/${item.id}` : `/videos/${item.id}`;
+  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
+  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
+  const policy = useSensitiveContentPolicy();
+  const restrictedMode = useRestrictedMode();
+  const sensitive = isSensitiveVideo(item);
+  const blurSensitive = sensitive && policy === "blur";
+  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
+  const previewEligible =
+    previewFeatureEnabled &&
+    previewPreferenceEnabled &&
+    !isRemote &&
+    item.state === "published" &&
+    item.privacy !== "private" &&
+    item.privacy !== "password" &&
+    !blurSensitive;
+  const duration =
+    typeof item.duration_seconds === "number" && item.duration_seconds > 0
+      ? item.duration_seconds
+      : null;
   const progressPct =
-    typeof item.duration_seconds === "number" &&
-    item.duration_seconds > 0 &&
+    duration !== null &&
     item.position_seconds > 0
-      ? Math.min(100, Math.round((item.position_seconds / item.duration_seconds) * 1000) / 10)
+      ? Math.min(100, Math.round((item.position_seconds / duration) * 1000) / 10)
       : null;
 
+  if (sensitive && restrictedMode) {
+    return (
+      <div className="flex aspect-video items-center justify-center rounded-xl bg-surface-muted px-3 text-center text-xs font-medium text-fg-muted">
+        Hidden by Restricted Mode
+      </div>
+    );
+  }
+
   return (
-    <div className="group relative">
-      <Link href={href} aria-label={item.title} className="focus-ring block rounded-xl">
-        <div className="media-placeholder relative aspect-video w-full overflow-hidden rounded-xl">
-          {item.has_thumbnail ? (
-            // eslint-disable-next-line @next/next/no-img-element -- backend-served thumbnail
-            <img
-              src={isRemote ? remoteVideoThumbnailUrl(item.id) : videoThumbnailUrl(item.id)}
-              alt=""
-              loading="lazy"
-              className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-fg-subtle">
-              <PlayIcon size={22} />
-            </div>
-          )}
-          {progressPct !== null ? (
-            // Thin WHITE resume bar directly on the thumbnail (design) — matching
-            // VideoCard's history progress: no track, so on a real (darker) frame
-            // the fill reads and the unfilled remainder is just the thumbnail.
-            <div aria-hidden className="absolute inset-x-0 bottom-0 h-[3px]">
+    <div className="group/card relative">
+      <VideoCardPreview
+        videoId={item.id}
+        title={item.title}
+        href={href}
+        src={previewEligible ? videoOriginalUrl(item.id) : null}
+        poster={
+          item.has_thumbnail
+            ? isRemote
+              ? remoteVideoThumbnailUrl(item.id)
+              : videoThumbnailUrl(item.id)
+            : null
+        }
+        duration={duration}
+        hasStoryboard={previewEligible}
+        previewEnabled={previewEligible}
+        className="rounded-xl"
+        posterClassName={cn(
+          "transition-transform group-hover/preview:scale-[1.02]",
+          blurSensitive && "scale-110 blur-2xl",
+        )}
+        fallback={
+          <div className="media-placeholder absolute inset-0 flex items-center justify-center text-[11px] text-fg-muted">
+            No preview
+          </div>
+        }
+        overlay={
+          <>
+            {markSensitive ? (
+              <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10">
+                Sensitive
+              </span>
+            ) : null}
+            {progressPct !== null ? (
+              // Thin WHITE resume bar directly on the thumbnail (design) — matching
+              // VideoCard's history progress. It yields to the preview timeline.
               <div
-                data-resume-progress={String(progressPct)}
-                style={{ width: `${progressPct}%` }}
-                className="h-full bg-white"
-              />
-            </div>
-          ) : null}
-        </div>
-        <p className="mt-2 line-clamp-2 pr-8 text-[13px] font-semibold leading-snug text-fg transition-colors group-hover:text-fg-muted">
+                aria-hidden
+                className="absolute inset-x-0 bottom-0 h-[3px] group-data-[preview-active=true]/preview:hidden"
+              >
+                <div
+                  data-resume-progress={String(progressPct)}
+                  style={{ width: `${progressPct}%` }}
+                  className="h-full bg-white"
+                />
+              </div>
+            ) : null}
+          </>
+        }
+      />
+      <Link href={href} className="focus-ring mt-2 block rounded-sm">
+        <p className="line-clamp-2 pr-8 text-[13px] font-semibold leading-snug text-fg transition-colors group-hover/card:text-fg-muted">
           {item.title}
         </p>
       </Link>
-      <div className="absolute bottom-0 right-0 z-10">
+      <div className="absolute bottom-0 right-0 z-10 opacity-0 transition-opacity duration-150 group-hover/card:opacity-100 group-focus-within/card:opacity-100 [@media(hover:none)]:opacity-100">
         <VideoActionsMenu video={item} compact onDeleted={onDeleted} />
       </div>
     </div>
@@ -360,28 +416,76 @@ function SavedRow({ video, onDeleted }: { video: Video; onDeleted: () => void })
   const isRemote = video.remote === true;
   const href = isRemote ? `/remote/${video.id}` : `/videos/${video.id}`;
   const channelName = video.channel_display_name || video.channel_handle || "";
+  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
+  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
+  const policy = useSensitiveContentPolicy();
+  const restrictedMode = useRestrictedMode();
+  const sensitive = isSensitiveVideo(video);
+  const blurSensitive = sensitive && policy === "blur";
+  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
+  const previewEligible =
+    previewFeatureEnabled &&
+    previewPreferenceEnabled &&
+    !isRemote &&
+    video.state === "published" &&
+    video.privacy !== "private" &&
+    video.privacy !== "password" &&
+    !blurSensitive;
+  const duration =
+    typeof video.duration_seconds === "number" && video.duration_seconds > 0
+      ? video.duration_seconds
+      : null;
+
+  if (sensitive && restrictedMode) {
+    return (
+      <div className="flex min-h-[72px] items-center justify-center rounded-[9px] bg-surface-muted px-3 text-center text-xs font-medium text-fg-muted">
+        Hidden by Restricted Mode
+      </div>
+    );
+  }
+
   return (
-    <div className="group relative flex items-center gap-3 py-2.5">
-      <div className="media-placeholder relative aspect-video w-[112px] flex-none overflow-hidden rounded-[9px]">
-        {video.has_thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element -- backend-served thumbnail
-          <img
-            src={isRemote ? remoteVideoThumbnailUrl(video.id) : videoThumbnailUrl(video.id)}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-[11px] text-fg-muted">
-            No preview
-          </div>
-        )}
+    <div className="group/card relative flex items-center gap-3 py-2.5">
+      <div className="w-[112px] flex-none">
+        <VideoCardPreview
+          videoId={video.id}
+          title={video.title}
+          href={href}
+          src={previewEligible ? videoOriginalUrl(video.id) : null}
+          poster={
+            video.has_thumbnail
+              ? isRemote
+                ? remoteVideoThumbnailUrl(video.id)
+                : videoThumbnailUrl(video.id)
+              : null
+          }
+          duration={duration}
+          hasStoryboard={previewEligible}
+          previewEnabled={previewEligible}
+          className="rounded-[9px]"
+          posterClassName={cn(
+            "transition-transform group-hover/preview:scale-[1.02]",
+            blurSensitive && "scale-110 blur-2xl",
+          )}
+          fallback={
+            <div className="media-placeholder absolute inset-0 flex items-center justify-center text-[11px] text-fg-muted">
+              No preview
+            </div>
+          }
+          overlay={
+            markSensitive ? (
+              <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10">
+                Sensitive
+              </span>
+            ) : null
+          }
+        />
       </div>
       <div className="min-w-0 flex-1">
         <h3 className="text-[13.5px] font-semibold leading-snug text-fg">
           <Link
             href={href}
-            className="focus-ring line-clamp-2 rounded-sm before:absolute before:inset-0 transition-colors group-hover:text-fg-muted"
+            className="focus-ring line-clamp-2 rounded-sm transition-colors group-hover/card:text-fg-muted"
           >
             {video.title}
           </Link>
@@ -399,7 +503,7 @@ function SavedRow({ video, onDeleted }: { video: Video; onDeleted: () => void })
           )
         ) : null}
       </div>
-      <div className="relative z-20 -mr-1 shrink-0 self-end">
+      <div className="relative z-20 -mr-1 shrink-0 self-end opacity-0 transition-opacity duration-150 group-hover/card:opacity-100 group-focus-within/card:opacity-100 [@media(hover:none)]:opacity-100">
         <VideoActionsMenu video={video} compact onDeleted={onDeleted} />
       </div>
     </div>

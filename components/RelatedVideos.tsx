@@ -5,10 +5,21 @@ import { useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/ui/Skeleton";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
-import { api, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
+import { VideoCardPreview } from "@/components/VideoCardPreview";
+import {
+  api,
+  isSensitiveVideo,
+  remoteVideoThumbnailUrl,
+  videoOriginalUrl,
+  videoThumbnailUrl,
+} from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useRestrictedMode } from "@/lib/device-preferences";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { useInstanceFeatures } from "@/lib/instance-features";
+import { usePlayerSettings } from "@/lib/player-settings";
+import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 
 const RELATED_COUNT = 6;
 
@@ -174,13 +185,27 @@ export function RelatedVideos({
 // RelatedRow is the rail's dense row card (150px thumb + text column), per the
 // desktop template's UP NEXT list. It keeps the same interactive semantics as
 // the feed's VideoCard: one link named by the video title (heading), plus a
-// separate channel link — the thumbnail's link is a pointer-only duplicate
-// (aria-hidden, out of the tab order) so the accessibility tree is unchanged.
+// separate channel link. Thumbnail and title are parallel watch links.
 function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void }) {
   const isRemote = video.remote === true;
   // ?src=related tags the destination so the watch page emits play_started with
   // context "related" (a non-PII discovery marker; no query text in the URL).
   const href = isRemote ? `/remote/${video.id}` : `/videos/${video.id}?src=related`;
+  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
+  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
+  const policy = useSensitiveContentPolicy();
+  const restrictedMode = useRestrictedMode();
+  const sensitive = isSensitiveVideo(video);
+  const blurSensitive = sensitive && policy === "blur";
+  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
+  const previewEligible =
+    previewFeatureEnabled &&
+    previewPreferenceEnabled &&
+    !isRemote &&
+    video.state === "published" &&
+    video.privacy !== "private" &&
+    video.privacy !== "password" &&
+    !blurSensitive;
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
@@ -194,34 +219,58 @@ function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void 
       ? video.duration_seconds
       : null;
 
+  if (sensitive && restrictedMode) {
+    return (
+      <div className="flex min-h-[84px] flex-1 items-center justify-center rounded-lg bg-surface-muted px-3 text-center text-xs font-medium text-fg-muted">
+        Hidden by Restricted Mode
+      </div>
+    );
+  }
+
   return (
-    <div className="flex gap-3">
-      <Link
-        href={href}
-        tabIndex={-1}
-        aria-hidden="true"
-        className="media-placeholder relative block aspect-video w-[150px] shrink-0 overflow-hidden rounded-lg"
-      >
-        {video.has_thumbnail ? (
-          // Backend-served image; a plain <img> avoids next/image remote config.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={isRemote ? remoteVideoThumbnailUrl(video.id) : videoThumbnailUrl(video.id)}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <span className="flex h-full w-full items-center justify-center text-[11px] text-fg-muted">
-            No preview
-          </span>
-        )}
-        {duration !== null ? (
-          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none tabular-nums text-white">
-            {formatDuration(duration)}
-          </span>
-        ) : null}
-      </Link>
+    <div className="group/card flex gap-3">
+      <div className="w-[150px] shrink-0">
+        <VideoCardPreview
+          videoId={video.id}
+          title={video.title}
+          href={href}
+          src={previewEligible ? videoOriginalUrl(video.id) : null}
+          poster={
+            video.has_thumbnail
+              ? isRemote
+                ? remoteVideoThumbnailUrl(video.id)
+                : videoThumbnailUrl(video.id)
+              : null
+          }
+          duration={duration}
+          hasStoryboard={previewEligible}
+          previewEnabled={previewEligible}
+          className="rounded-lg"
+          posterClassName={cn(
+            "transition-transform group-hover/preview:scale-[1.02]",
+            blurSensitive && "scale-110 blur-2xl",
+          )}
+          fallback={
+            <div className="media-placeholder absolute inset-0 flex items-center justify-center text-[11px] text-fg-muted">
+              No preview
+            </div>
+          }
+          overlay={
+            <>
+              {markSensitive ? (
+                <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10">
+                  Sensitive
+                </span>
+              ) : null}
+              {duration !== null ? (
+                <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none tabular-nums text-white group-data-[preview-active=true]/preview:bottom-10">
+                  {formatDuration(duration)}
+                </span>
+              ) : null}
+            </>
+          }
+        />
+      </div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-0.5">
         <Link href={href} className="focus-ring rounded">
           <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-fg">
@@ -247,7 +296,7 @@ function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void 
           <p className="text-xs tabular-nums text-fg-muted">{meta.join(" · ")}</p>
         ) : null}
       </div>
-      <div className="-mr-1 shrink-0 self-end">
+      <div className="-mr-1 shrink-0 self-end opacity-0 transition-opacity duration-150 group-hover/card:opacity-100 group-focus-within/card:opacity-100 [@media(hover:none)]:opacity-100">
         <VideoActionsMenu video={video} compact onDeleted={onDeleted} />
       </div>
     </div>

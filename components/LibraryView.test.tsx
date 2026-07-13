@@ -2,6 +2,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const previewMocks = vi.hoisted(() => ({
+  featureEnabled: false,
+  preferenceEnabled: false,
+  sensitivePolicy: "display" as "display" | "warn" | "blur",
+  restrictedMode: false,
+  props: new Map<string, Record<string, unknown>>(),
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -33,13 +41,45 @@ vi.mock("@/components/VideoActionsMenu", () => ({
   ),
 }));
 
+vi.mock("@/components/VideoCardPreview", () => ({
+  VideoCardPreview: (props: Record<string, unknown>) => {
+    previewMocks.props.set(String(props.videoId), props);
+    return (
+      <a href={String(props.href)} aria-label={String(props.title)} data-testid={`preview-${props.videoId}`}>
+        {props.fallback as React.ReactNode}
+        {props.overlay as React.ReactNode}
+      </a>
+    );
+  },
+}));
+
+vi.mock("@/lib/instance-features", () => ({
+  useInstanceFeatures: () => ({ video_card_previews: previewMocks.featureEnabled }),
+}));
+
+vi.mock("@/lib/player-settings", () => ({
+  usePlayerSettings: () => ({
+    video_card_previews_enabled: previewMocks.preferenceEnabled,
+  }),
+}));
+
+vi.mock("@/lib/use-sensitive-policy", () => ({
+  useSensitiveContentPolicy: () => previewMocks.sensitivePolicy,
+}));
+
+vi.mock("@/lib/device-preferences", () => ({
+  useRestrictedMode: () => previewMocks.restrictedMode,
+}));
+
 vi.mock("@/lib/api", () => ({
   api: {
     getWatchHistory: vi.fn(),
     getMyPlaylists: vi.fn(),
     getSavedVideos: vi.fn(),
   },
+  isSensitiveVideo: (candidate: { is_sensitive?: boolean }) => candidate.is_sensitive === true,
   videoThumbnailUrl: (id: string) => `/api/v1/videos/${id}/thumbnail`,
+  videoOriginalUrl: (id: string) => `/api/v1/videos/${id}/original`,
   remoteVideoThumbnailUrl: (id: string) => `/api/v1/remote-videos/${id}/thumbnail`,
   playlistThumbnailUrl: (id: string) => `/api/v1/playlists/${id}/thumbnail`,
 }));
@@ -100,6 +140,11 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   sessionStatus = "authed";
+  previewMocks.featureEnabled = false;
+  previewMocks.preferenceEnabled = false;
+  previewMocks.sensitivePolicy = "display";
+  previewMocks.restrictedMode = false;
+  previewMocks.props.clear();
 });
 
 describe("LibraryView", () => {
@@ -141,9 +186,10 @@ describe("LibraryView", () => {
     const bars = document.querySelectorAll("[data-resume-progress]");
     expect(bars).toHaveLength(1);
     expect(bars[0].getAttribute("data-resume-progress")).toBe("47.5");
-    expect(screen.getByRole("link", { name: "Grading session" }).getAttribute("href")).toBe(
-      "/videos/h1",
-    );
+    const historyLinks = screen.getAllByRole("link", { name: "Grading session" });
+    expect(historyLinks).toHaveLength(2);
+    expect(historyLinks.every((link) => link.getAttribute("href") === "/videos/h1")).toBe(true);
+    expect(historyLinks.some((link) => link.textContent?.includes("No preview"))).toBe(true);
 
     // Playlists rows.
     const watchLater = await screen.findByRole("link", { name: /Watch later/ });
@@ -154,11 +200,17 @@ describe("LibraryView", () => {
     // Saved rows: the title is a heading and links to the watch page.
     const saved = await screen.findByRole("heading", { name: "Saved clip" });
     expect(saved).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Saved clip" }).getAttribute("href")).toBe(
-      "/videos/s1",
-    );
-    expect(screen.getByRole("button", { name: "Actions for Saved clip" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Actions for Grading session" })).toBeTruthy();
+    const savedLinks = screen.getAllByRole("link", { name: "Saved clip" });
+    expect(savedLinks).toHaveLength(2);
+    expect(savedLinks.every((link) => link.getAttribute("href") === "/videos/s1")).toBe(true);
+    const savedActions = screen.getByRole("button", { name: "Actions for Saved clip" });
+    const historyActions = screen.getByRole("button", { name: "Actions for Grading session" });
+    for (const button of [savedActions, historyActions]) {
+      expect(button.parentElement?.className).toContain("opacity-0");
+      expect(button.parentElement?.className).toContain("group-hover/card:opacity-100");
+      expect(button.parentElement?.className).toContain("group-focus-within/card:opacity-100");
+      expect(button.parentElement?.className).toContain("[@media(hover:none)]:opacity-100");
+    }
 
     // Exactly one link is named "Playlists" (the section header → /playlists).
     const playlistsLinks = screen.getAllByRole("link", { name: "Playlists" });
@@ -178,7 +230,7 @@ describe("LibraryView", () => {
     expect(screen.queryByRole("heading", { name: "History" })).toBeNull();
     expect(screen.queryByRole("link", { name: "See all" })).toBeNull();
     // Playlists entry stays present; empty hints render.
-    expect(screen.getByText("No playlists yet. Create one to organise videos.")).toBeTruthy();
+    expect(await screen.findByText("No playlists yet. Create one to organise videos.")).toBeTruthy();
     expect(await screen.findByText("Your library is empty")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: "Playlists" })).toHaveLength(1);
   });
@@ -215,5 +267,82 @@ describe("LibraryView", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Actions for Saved deletion" }));
     expect(screen.queryByRole("heading", { name: "Saved deletion" })).toBeNull();
     expect(screen.getByText("Your library is empty")).toBeTruthy();
+  });
+
+  it("previews local published history and saved videos only when both gates allow it", async () => {
+    previewMocks.featureEnabled = true;
+    previewMocks.preferenceEnabled = true;
+    mockHistory.mockResolvedValue({
+      videos: [historyItem("h1", "Preview history", 12, 100)],
+      limit: 12,
+      offset: 0,
+    });
+    mockPlaylists.mockResolvedValue({ playlists: [] });
+    mockSaved.mockResolvedValue({
+      videos: [video("s1", "Preview saved", { duration_seconds: 120 })],
+      sort: "recent",
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<LibraryView />);
+    await screen.findByRole("heading", { name: "Preview saved" });
+
+    expect(previewMocks.props.get("h1")?.previewEnabled).toBe(true);
+    expect(previewMocks.props.get("h1")?.src).toBe("/api/v1/videos/h1/original");
+    expect(previewMocks.props.get("s1")?.previewEnabled).toBe(true);
+    expect(previewMocks.props.get("s1")?.src).toBe("/api/v1/videos/s1/original");
+  });
+
+  it("keeps library originals private when either gate is off", async () => {
+    previewMocks.featureEnabled = true;
+    previewMocks.preferenceEnabled = false;
+    mockHistory.mockResolvedValue({
+      videos: [historyItem("h1", "Preview history", 12, 100)],
+      limit: 12,
+      offset: 0,
+    });
+    mockPlaylists.mockResolvedValue({ playlists: [] });
+    mockSaved.mockResolvedValue({
+      videos: [video("s1", "Preview saved")],
+      sort: "recent",
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<LibraryView />);
+    await screen.findByRole("heading", { name: "Preview saved" });
+
+    expect(previewMocks.props.get("h1")?.src).toBeNull();
+    expect(previewMocks.props.get("s1")?.src).toBeNull();
+  });
+
+  it("never previews federated, private, or blurred-sensitive library entries", async () => {
+    previewMocks.featureEnabled = true;
+    previewMocks.preferenceEnabled = true;
+    previewMocks.sensitivePolicy = "blur";
+    mockHistory.mockResolvedValue({
+      videos: [
+        historyItem("remote", "Remote history", 12, 100) as HistoryItem,
+        { ...historyItem("sensitive", "Sensitive history", 12, 100), is_sensitive: true },
+      ].map((item, index) => (index === 0 ? { ...item, remote: true } : item)),
+      limit: 12,
+      offset: 0,
+    });
+    mockPlaylists.mockResolvedValue({ playlists: [] });
+    mockSaved.mockResolvedValue({
+      videos: [video("private", "Private saved", { privacy: "private" })],
+      sort: "recent",
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<LibraryView />);
+    await screen.findByRole("heading", { name: "Private saved" });
+
+    expect(previewMocks.props.get("remote")?.src).toBeNull();
+    expect(previewMocks.props.get("private")?.src).toBeNull();
+    expect(previewMocks.props.get("sensitive")?.src).toBeNull();
+    expect(String(previewMocks.props.get("sensitive")?.posterClassName)).toContain("blur-2xl");
   });
 });
