@@ -2,6 +2,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const previewMocks = vi.hoisted(() => ({
+  featureEnabled: false,
+  preferenceEnabled: false,
+  sensitivePolicy: "display" as "display" | "warn" | "blur",
+  restrictedMode: false,
+  props: new Map<string, Record<string, unknown>>(),
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -28,12 +36,46 @@ vi.mock("@/components/VideoActionsMenu", () => ({
   ),
 }));
 
+vi.mock("@/components/VideoCardPreview", () => ({
+  VideoCardPreview: (props: Record<string, unknown>) => {
+    previewMocks.props.set(String(props.videoId), props);
+    return (
+      <a href={String(props.href)} aria-label={String(props.title)} data-testid={`preview-${props.videoId}`}>
+        {props.fallback as React.ReactNode}
+        {props.overlay as React.ReactNode}
+      </a>
+    );
+  },
+}));
+
+vi.mock("@/lib/instance-features", () => ({
+  useInstanceFeatures: () => ({ video_card_previews: previewMocks.featureEnabled }),
+}));
+
+vi.mock("@/lib/player-settings", () => ({
+  usePlayerSettings: () => ({
+    video_card_previews_enabled: previewMocks.preferenceEnabled,
+  }),
+}));
+
+vi.mock("@/lib/use-sensitive-policy", () => ({
+  useSensitiveContentPolicy: () => previewMocks.sensitivePolicy,
+}));
+
+vi.mock("@/lib/device-preferences", () => ({
+  useRestrictedMode: () => previewMocks.restrictedMode,
+}));
+
 // The current access token the mocked auth store reports; tests flip it to
 // exercise the authed/anonymous help-text and follow affordances (W13).
 let mockedToken: string | null = null;
 
 vi.mock("@/lib/api", () => ({
-  api: { searchVideos: vi.fn(), createRemoteFollow: vi.fn() },
+  api: {
+    searchVideos: vi.fn(),
+    createRemoteFollow: vi.fn(),
+    postSearchEvents: vi.fn(() => Promise.resolve()),
+  },
   ApiError: class MockApiError extends Error {
     status: number;
     constructor(status = 500) {
@@ -44,7 +86,9 @@ vi.mock("@/lib/api", () => ({
   errorMessage: (_err: unknown, fallback: string) => fallback,
   getAccessToken: () => mockedToken,
   remoteVideoThumbnailUrl: (id: string) => `/remote/${id}/thumbnail`,
+  videoOriginalUrl: (id: string) => `/videos/${id}/original`,
   videoThumbnailUrl: (id: string) => `/videos/${id}/thumbnail`,
+  isSensitiveVideo: (candidate: { is_sensitive?: boolean }) => candidate.is_sensitive === true,
   // The W5 miniature-name hook primes this shared fetch; rejecting keeps the
   // instance defaults null (today's channel attribution).
   getInstanceCached: vi.fn(() => Promise.reject(new Error("no backend in unit tests"))),
@@ -100,6 +144,11 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mockedToken = null;
+  previewMocks.featureEnabled = false;
+  previewMocks.preferenceEnabled = false;
+  previewMocks.sensitivePolicy = "display";
+  previewMocks.restrictedMode = false;
+  previewMocks.props.clear();
 });
 
 describe("SearchResults video actions", () => {
@@ -109,10 +158,93 @@ describe("SearchResults video actions", () => {
     render(<SearchResults query="grading" />);
 
     expect(await screen.findByRole("heading", { name: "Search match" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Actions for Search match" }));
+    const actions = screen.getByRole("button", { name: "Actions for Search match" });
+    expect(actions.parentElement?.className).toContain("opacity-0");
+    expect(actions.parentElement?.className).toContain("group-hover/card:opacity-100");
+    expect(actions.parentElement?.className).toContain("group-focus-within/card:opacity-100");
+    expect(actions.parentElement?.className).toContain("[@media(hover:none)]:opacity-100");
+    fireEvent.click(actions);
 
     expect(screen.queryByRole("heading", { name: "Search match" })).toBeNull();
     expect(screen.getByText("No results")).toBeTruthy();
+  });
+});
+
+describe("SearchResults inline preview integration", () => {
+  it.each([
+    [false, true],
+    [true, false],
+    [false, false],
+  ])("keeps a local result poster-only unless admin=%s and viewer=%s", async (admin, viewer) => {
+    previewMocks.featureEnabled = admin;
+    previewMocks.preferenceEnabled = viewer;
+    searchVideos.mockResolvedValue({ videos: [video("v1", "Search match")] } as never);
+
+    render(<SearchResults query="grading" />);
+    await screen.findByRole("heading", { name: "Search match" });
+
+    expect(previewMocks.props.get("v1")?.previewEnabled).toBe(false);
+    expect(previewMocks.props.get("v1")?.src).toBeNull();
+  });
+
+  it("uses the local original only when both gates allow a published non-private result", async () => {
+    previewMocks.featureEnabled = true;
+    previewMocks.preferenceEnabled = true;
+    searchVideos.mockResolvedValue({ videos: [video("v1", "Search match")] } as never);
+
+    render(<SearchResults query="grading" />);
+    await screen.findByRole("heading", { name: "Search match" });
+
+    expect(previewMocks.props.get("v1")?.previewEnabled).toBe(true);
+    expect(previewMocks.props.get("v1")?.src).toBe("/videos/v1/original");
+    expect(previewMocks.props.get("v1")?.hasStoryboard).toBe(true);
+  });
+
+  it.each([
+    { remote: true },
+    { privacy: "private" },
+    { state: "processing" },
+  ])("never exposes the original source for an ineligible result %#", async (overrides) => {
+    previewMocks.featureEnabled = true;
+    previewMocks.preferenceEnabled = true;
+    searchVideos.mockResolvedValue({
+      videos: [{ ...video("v1", "Search match"), ...overrides }],
+    } as never);
+
+    render(<SearchResults query="grading" />);
+    await screen.findByRole("heading", { name: "Search match" });
+
+    expect(previewMocks.props.get("v1")?.previewEnabled).toBe(false);
+    expect(previewMocks.props.get("v1")?.src).toBeNull();
+  });
+
+  it("blocks playback when a sensitive result must stay blurred", async () => {
+    previewMocks.featureEnabled = true;
+    previewMocks.preferenceEnabled = true;
+    previewMocks.sensitivePolicy = "blur";
+    searchVideos.mockResolvedValue({
+      videos: [{ ...video("v1", "Search match"), is_sensitive: true }],
+    } as never);
+
+    render(<SearchResults query="grading" />);
+    await screen.findByRole("heading", { name: "Search match" });
+
+    expect(previewMocks.props.get("v1")?.previewEnabled).toBe(false);
+    expect(String(previewMocks.props.get("v1")?.posterClassName)).toContain("blur-2xl");
+  });
+
+  it("replaces a sensitive result when Restricted Mode is active", async () => {
+    previewMocks.featureEnabled = true;
+    previewMocks.preferenceEnabled = true;
+    previewMocks.restrictedMode = true;
+    searchVideos.mockResolvedValue({
+      videos: [{ ...video("v1", "Search match"), is_sensitive: true }],
+    } as never);
+
+    render(<SearchResults query="grading" />);
+
+    expect(await screen.findByText("Hidden by Restricted Mode")).toBeTruthy();
+    expect(previewMocks.props.has("v1")).toBe(false);
   });
 });
 

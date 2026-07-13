@@ -2,6 +2,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const mocks = vi.hoisted(() => ({
+  previewProps: null as Record<string, unknown> | null,
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -18,6 +22,37 @@ vi.mock("next/link", () => ({
 // own focused suite and otherwise requires router/auth/toast providers here.
 vi.mock("@/components/VideoActionsMenu", () => ({
   VideoActionsMenu: () => null,
+}));
+
+vi.mock("@/components/VideoCardPreview", () => ({
+  VideoCardPreview: (props: {
+    href: string;
+    title: string;
+    overlay?: React.ReactNode;
+    posterClassName?: string;
+    previewEnabled?: boolean;
+  }) => {
+    mocks.previewProps = props;
+    return <a href={props.href} aria-label={props.title}>
+      {props.overlay}
+    </a>
+  },
+}));
+
+vi.mock("@/lib/instance-features", () => ({
+  useInstanceFeatures: () => ({ video_card_previews: true }),
+}));
+
+vi.mock("@/lib/player-settings", () => ({
+  usePlayerSettings: () => ({ video_card_previews_enabled: true }),
+}));
+
+vi.mock("@/lib/use-sensitive-policy", () => ({
+  useSensitiveContentPolicy: () => "blur",
+}));
+
+vi.mock("@/lib/device-preferences", () => ({
+  useRestrictedMode: () => false,
 }));
 
 import { ChannelVideoCard } from "./ChannelVideoCard";
@@ -39,7 +74,10 @@ function video(overrides: Partial<Video> = {}): Video {
   } as Video;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  mocks.previewProps = null;
+});
 
 describe("ChannelVideoCard", () => {
   it("links to the watch page, shows the title as a heading, views and duration", () => {
@@ -62,5 +100,12 @@ describe("ChannelVideoCard", () => {
   it("omits the views line when the count is absent (never fabricated)", () => {
     render(<ChannelVideoCard video={video({ views: undefined })} />);
     expect(screen.queryByText(/views/)).toBeNull();
+  });
+
+  it("keeps sensitive channel cards blurred and labeled instead of autoplaying them", () => {
+    render(<ChannelVideoCard video={video({ is_sensitive: true, has_thumbnail: true })} />);
+    expect(screen.getByText("Sensitive")).toBeTruthy();
+    expect(mocks.previewProps?.posterClassName).toContain("blur-2xl");
+    expect(mocks.previewProps?.previewEnabled).toBe(false);
   });
 });

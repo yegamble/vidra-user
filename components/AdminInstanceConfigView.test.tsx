@@ -399,6 +399,79 @@ describe("branding panel reachability (General page, config-parity W4)", () => {
   });
 });
 
+describe("inline video-card preview gate", () => {
+  const previewDoc = {
+    settings: [
+      {
+        key: "video_card_previews_enabled",
+        type: "bool",
+        value: false,
+        default: false,
+        overridden: false,
+        page: "vod",
+        section: "playback",
+      },
+      {
+        key: "video_card_previews_default_enabled",
+        type: "bool",
+        value: false,
+        default: false,
+        overridden: false,
+        page: "vod",
+        section: "playback",
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mocks.getInstanceSettings.mockResolvedValue(previewDoc);
+    mocks.updateInstanceSettings.mockResolvedValue(previewDoc);
+  });
+
+  it("places availability and viewer-default switches under VOD Playback", async () => {
+    render(<ConfigForm page="vod" />);
+
+    expect(await screen.findByRole("heading", { name: "Playback" })).toBeTruthy();
+    const availability = screen.getByRole("switch", { name: "Inline video-card previews" });
+    expect(availability.getAttribute("aria-checked")).toBe("false");
+    expect(
+      screen.queryByRole("switch", { name: "Enable previews by default" }),
+    ).toBeNull();
+
+    fireEvent.click(availability);
+    const viewerDefault = await screen.findByRole("switch", {
+      name: "Enable previews by default",
+    });
+    expect(viewerDefault.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mocks.updateInstanceSettings).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceSettings).toHaveBeenCalledWith({
+      video_card_previews_enabled: true,
+    });
+  });
+
+  it("lets the admin enable the inherited viewer default independently", async () => {
+    mocks.getInstanceSettings.mockResolvedValue({
+      settings: previewDoc.settings.map((row) =>
+        row.key === "video_card_previews_enabled" ? { ...row, value: true } : row,
+      ),
+    });
+    render(<ConfigForm page="vod" />);
+
+    const viewerDefault = await screen.findByRole("switch", {
+      name: "Enable previews by default",
+    });
+    fireEvent.click(viewerDefault);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mocks.updateInstanceSettings).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceSettings).toHaveBeenCalledWith({
+      video_card_previews_default_enabled: true,
+    });
+  });
+});
+
 describe("transcoding ladder list control (config-parity W1/W10)", () => {
   const transcodingDoc = {
     settings: [
@@ -434,6 +507,53 @@ describe("transcoding ladder list control (config-parity W1/W10)", () => {
     // Each rung is a chip with a Remove control — proving the array survived.
     expect(within(ladder).getByRole("button", { name: "Remove 1080p" })).toBeTruthy();
     expect(within(ladder).getByRole("button", { name: "Remove 720p" })).toBeTruthy();
+  });
+
+  it("always renders selected resolution chips from largest to smallest", async () => {
+    mocks.getInstanceSettings.mockResolvedValue({
+      settings: [
+        transcodingDoc.settings[0],
+        {
+          ...transcodingDoc.settings[1],
+          // Reproduce an admin selecting the shipped defaults first and then
+          // adding larger/smaller rungs later, as in the reported screenshot.
+          value: ["1080", "720", "480", "360", "2160", "1440", "240", "144"],
+        },
+      ],
+    });
+    render(<ConfigForm page="vod" />);
+    const ladder = await screen.findByRole("group", { name: "Transcoding ladder" });
+    expect(
+      within(ladder)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual([
+      "Remove 2160p",
+      "Remove 1440p",
+      "Remove 1080p",
+      "Remove 720p",
+      "Remove 480p",
+      "Remove 360p",
+      "Remove 240p",
+      "Remove 144p",
+    ]);
+  });
+
+  it("inserts a newly selected higher rung into canonical order before saving", async () => {
+    render(<ConfigForm page="vod" />);
+    const ladder = await screen.findByRole("group", { name: "Transcoding ladder" });
+    fireEvent.click(screen.getByRole("button", { name: /2160p/ }));
+    expect(
+      within(ladder)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Remove 2160p", "Remove 1080p", "Remove 720p"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(mocks.updateInstanceSettings).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceSettings).toHaveBeenCalledWith({
+      transcoding_resolutions: ["2160", "1080", "720"],
+    });
   });
 
   it("adds a rung via a suggestion chip and PATCHes a JSON array", async () => {

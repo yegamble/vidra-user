@@ -2034,13 +2034,13 @@ export interface paths {
         };
         /**
          * Get a video's auto-caption job status
-         * @description Returns the most recent auto-caption (Whisper) job for a video (owner only). state is pending, running, done, or failed; on failure `error` is a safe, human-readable reason (never a raw internal error or the Whisper endpoint URL). Non-owner/unknown video → 404; a video that never requested auto-captioning → 404.
+         * @description Returns the most recent auto-caption (Whisper) job for a video's owner, a moderator, or an admin. state is pending, running, done, or failed; on failure `error` is a safe, human-readable reason (never a raw internal error or the Whisper endpoint URL). Ordinary non-owner/unknown video → 404; a video that never requested auto-captioning → 404.
          */
         get: operations["getAutoCaption"];
         put?: never;
         /**
          * Request an auto-generated caption track (Whisper)
-         * @description Enqueues an ASYNCHRONOUS auto-caption job for a video (owner only) and returns 202 with the queued job. A background worker extracts the audio (ffmpeg → 16 kHz mono WAV), sends it to the configured Whisper transcription service, renders the result to WebVTT, and stores it via the same replace-by-language path as a manual caption upload — then notifies the owner (a caption_ready notification, honoring preferences). `language` is optional (defaults to WHISPER_DEFAULT_LANGUAGE); it is both the caption's language tag and the transcription hint. Ownership is checked before any job is created, so a non-owner or unknown video is 404. Auto-captioning turned off at runtime (transcription_enabled, config-parity W8) → 403 feature_disabled; the Whisper boot capability missing (no WHISPER_ENDPOINT) → 503; a malformed language tag → 422; a job already pending/running for the video → 409. Poll GET /api/v1/videos/{id}/captions/auto for progress.
+         * @description Enqueues an ASYNCHRONOUS auto-caption job for a video (owner, moderator, or admin) and returns 202 with the queued job. A background worker extracts the audio (ffmpeg → 16 kHz mono WAV), sends it to the configured Whisper transcription service, renders the result to WebVTT, and stores it via the same replace-by-language path as a manual caption upload — then notifies the owner (a caption_ready notification, honoring preferences). `language` is optional (defaults to WHISPER_DEFAULT_LANGUAGE); it is both the caption's language tag and the transcription hint. Authorization is checked before any job is created, so an ordinary non-owner or unknown video is 404. Auto-captioning turned off at runtime (transcription_enabled, config-parity W8) → 403 feature_disabled; the Whisper boot capability missing (no WHISPER_ENDPOINT) → 503; a malformed language tag → 422; a job already pending/running for the video → 409. Poll GET /api/v1/videos/{id}/captions/auto for progress.
          */
         post: operations["requestAutoCaption"];
         delete?: never;
@@ -2462,7 +2462,7 @@ export interface paths {
         };
         /**
          * Get the caller's player settings
-         * @description Returns the signed-in user's effective player defaults (PLAY-07): whether the next video autoplays, the default playback speed, the default quality, and whether captions / theater mode start on. Always 200 with the full object — a user who never saved gets the built-in defaults (no 404). The custom player hydrates from this on load, replacing its interim local storage.
+         * @description Returns the signed-in user's effective player defaults (PLAY-07): whether the next video autoplays, the default playback speed, the default quality, whether captions / theater mode start on, and whether video-card hover previews are enabled. Always 200 with the full object — a user who never saved gets effective defaults (no 404). Until the user explicitly chooses, the preview preference follows GET /instance features.video_card_previews_default_enabled. It is the user half of a two-factor gate and only takes effect while features.video_card_previews is also true. The custom player hydrates from this on load, replacing its interim local storage.
          */
         get: operations["getPlayerSettings"];
         /**
@@ -2835,6 +2835,26 @@ export interface paths {
         get: operations["listAdminVideos"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/videos/{id}/transcoding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-run a video's HLS or Web Video transcoding
+         * @description Enqueues recovery transcoding for one locally hosted video. Restricted to moderators/admins. The server always resolves the retained original video file as the source; a client cannot provide a derivative storage key. Existing output files for the selected class are replaced and stale files removed. Returns 409 when another transcode is active or no original exists.
+         */
+        post: operations["runAdminVideoTranscoding"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3937,7 +3957,7 @@ export interface paths {
         head?: never;
         /**
          * Update instance settings (admin)
-         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, transcription_enabled, user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
+         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
          */
         patch: operations["updateInstanceSettings"];
         trace?: never;
@@ -4446,7 +4466,7 @@ export interface components {
             privacy_url: string;
             /** @description Operator contact email; may be empty. */
             contact_email: string;
-            /** @description Effective feature toggles (the DB-backed instance-settings overlay over static config). The frontend disables the matching affordances in lock-step with the backend's enforcement. The config-parity W8 flags (import_http, channel_sync, storyboards, transcription, user_import, user_export) and the W10 transcoding flag report EFFECTIVE availability — the runtime admin setting AND, where one exists, the deployment's boot capability (yt-dlp resolver, Whisper endpoint, ffmpeg/ffprobe). The mail flag is pure boot capability (an outbound mail path exists). */
+            /** @description Effective feature toggles (the DB-backed instance-settings overlay over static config). The frontend disables the matching affordances in lock-step with the backend's enforcement. The config-parity W8 flags (import_http, channel_sync, storyboards, transcription, user_import, user_export) and the W10 transcoding flag report EFFECTIVE availability — the runtime admin setting AND, where one exists, the deployment's boot capability (yt-dlp resolver, Whisper endpoint, ffmpeg/ffprobe). video_card_previews is the global half of the hover-preview gate; video_card_previews_default_enabled is the preference inherited by users who have never explicitly chosen. Signed-in clients must still require both the global gate and the effective video_card_previews_enabled player preference. The mail flag is pure boot capability (an outbound mail path exists). */
             features: {
                 /** @description Whether new video uploads are accepted. */
                 uploads: boolean;
@@ -4464,6 +4484,10 @@ export interface components {
                 channel_sync: boolean;
                 /** @description Whether seek-preview storyboard generation is enabled (storyboards_enabled). Already-stored storyboards keep serving when this is off. */
                 storyboards: boolean;
+                /** @description Instance-level master gate for video-card hover playback (video_card_previews_enabled, default false). A client may start a preview only for a signed-in user whose player setting video_card_previews_enabled is also true. */
+                video_card_previews: boolean;
+                /** @description Current instance default inherited by signed-in users who have never explicitly enabled or disabled video-card previews (video_card_previews_default_enabled, default false). This does not bypass the video_card_previews global gate. */
+                video_card_previews_default_enabled: boolean;
                 /** @description Whether Whisper auto-captioning is available (transcription_enabled on AND a Whisper endpoint configured). */
                 transcription: boolean;
                 /** @description Whether POST /api/v1/me/import accepts account archives. */
@@ -5613,7 +5637,7 @@ export interface components {
                 [key: string]: boolean;
             };
         };
-        /** @description A signed-in user's effective player defaults (PLAY-07). Every field is always present; a user who never saved gets these built-in defaults. */
+        /** @description A signed-in user's effective player defaults (PLAY-07). Every field is always present. video_card_previews_enabled is resolved from the current instance default until the user explicitly chooses true or false. */
         PlayerSettings: {
             /**
              * @description Whether the next video autoplays when the current one ends.
@@ -5640,8 +5664,13 @@ export interface components {
              * @example false
              */
             theater_default: boolean;
+            /**
+             * @description The signed-in user's effective video-card hover-preview preference. Until the user explicitly chooses, it follows GET /instance features.video_card_previews_default_enabled; an explicit true or false is durable across later admin-default changes. This preference only permits playback while features.video_card_previews is true.
+             * @example false
+             */
+            video_card_previews_enabled: boolean;
         };
-        /** @description Merge-update body: every field is optional. An omitted field keeps its stored value (or the default, for a user who never saved); a supplied field replaces it. At least one field is normally sent, but an empty body is accepted as a no-op that returns the current effective settings. */
+        /** @description Merge-update body: every field is optional. An omitted field keeps its stored value (or the default, for a user who never saved); a supplied field replaces it. At least one field is normally sent, but an empty body is accepted as a no-op that returns the current effective settings. Omitting video_card_previews_enabled does not turn an inherited value into an explicit choice. */
         UpdatePlayerSettingsRequest: {
             /** @example false */
             autoplay_next?: boolean;
@@ -5659,6 +5688,11 @@ export interface components {
             captions_default?: boolean;
             /** @example true */
             theater_default?: boolean;
+            /**
+             * @description Explicitly enable or disable the caller's video-card hover-preview preference, overriding the instance default. The preference only takes effect while the instance feature gate is enabled.
+             * @example true
+             */
+            video_card_previews_enabled?: boolean;
         };
         Playlist: {
             /** Format: uuid */
@@ -5863,7 +5897,7 @@ export interface components {
             /** @example 0 */
             offset: number;
         };
-        /** @description A video in the admin/moderator overview (any privacy/state), with block status. */
+        /** @description A local or federated video in the moderator inventory, with media/storage facts. */
         AdminVideo: {
             /** Format: uuid */
             id: string;
@@ -5877,7 +5911,27 @@ export interface components {
             /** Format: int64 */
             views: number;
             /** Format: date-time */
-            created_at: string;
+            published_at: string;
+            duration_seconds?: number;
+            is_local: boolean;
+            /** @description Origin instance for a federated video; omitted for local videos. */
+            origin_domain?: string;
+            /**
+             * Format: uri
+             * @description Origin watch URL for a federated video; omitted for local videos.
+             */
+            watch_url?: string;
+            sensitive: boolean;
+            /** @description Whether a local video was imported from an external URL. */
+            external_link: boolean;
+            has_thumbnail: boolean;
+            has_original: boolean;
+            hls_count: number;
+            web_video_count: number;
+            /** @description Whether the local media backend is S3-compatible object storage. */
+            object_storage: boolean;
+            /** Format: int64 */
+            size_bytes: number;
             /** @description Whether the video is currently blocked (hidden from public surfaces). */
             blocked: boolean;
         };
@@ -7209,6 +7263,9 @@ export interface components {
             error?: string;
             /** @description How many times the auto-caption has been attempted. */
             attempts: number;
+            /** @description Safe coarse stage such as preparing, transcribing, storing, or complete. */
+            stage?: string;
+            progress_percent: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -12872,7 +12929,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No such video (or not owned by the caller), or no auto-caption job exists. */
+            /** @description No such/authorized video, or no auto-caption job exists. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -15186,6 +15243,85 @@ export interface operations {
             };
             /** @description The caller is not a moderator or admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    runAdminVideoTranscoding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    type: "hls" | "web_video";
+                };
+            };
+        };
+        responses: {
+            /** @description Transcoding was queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "queued";
+                        /** @enum {string} */
+                        type: "hls" | "web_video";
+                    };
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller lacks permission or transcoding is disabled. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The local video does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No original exists or another transcode is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description ffmpeg/ffprobe transcoding capability is unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

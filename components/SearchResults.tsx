@@ -10,13 +10,27 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
-import { ApiError, api, errorMessage, getAccessToken, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
+import { VideoCardPreview } from "@/components/VideoCardPreview";
+import {
+  ApiError,
+  api,
+  errorMessage,
+  getAccessToken,
+  isSensitiveVideo,
+  remoteVideoThumbnailUrl,
+  videoOriginalUrl,
+  videoThumbnailUrl,
+} from "@/lib/api";
 import type { Video } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import { useRestrictedMode } from "@/lib/device-preferences";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { InstanceSearchBlock } from "@/lib/instance-config.server";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
+import { useInstanceFeatures } from "@/lib/instance-features";
 import { miniatureDisplayName } from "@/lib/miniature-name";
+import { usePlayerSettings } from "@/lib/player-settings";
 import { trackSearchEvent } from "@/lib/search-events";
 import {
   readRemoteSearchResults,
@@ -25,6 +39,7 @@ import {
 } from "@/lib/remote-search";
 import type { RemoteSearchActor, RemoteSearchResult } from "@/lib/remote-search";
 import type { SearchFilters } from "@/lib/search-url";
+import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 
 type Status = "idle" | "loading" | "error" | "ready";
 type MoreStatus = "idle" | "loading" | "error";
@@ -32,10 +47,8 @@ type MoreStatus = "idle" | "loading" | "error";
 // SearchResultRow is the template's SEARCH list-row treatment of a result:
 // thumbnail left (148px, 220px from `sm`), title/channel/meta right, hairline
 // divider below. Same links, strings, and remote-video handling as the grid
-// VideoCard, re-laid-out as a dense row. Exactly ONE link carries the video
-// title (the stretched title link — its decorative before:inset-0 overlay
-// makes the whole row clickable, thumbnail included); the channel link is
-// layered above the overlay so it stays independently clickable.
+// VideoCard, re-laid-out as a dense row. Thumbnail and title are parallel
+// watch links; the channel link remains independently clickable.
 function SearchResultRow({
   video,
   onDeleted,
@@ -54,6 +67,21 @@ function SearchResultRow({
   const preferAuthorName =
     useInstanceDefaults()?.miniature_prefer_author_display_name === true;
   const attributionName = miniatureDisplayName(video, preferAuthorName);
+  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
+  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
+  const policy = useSensitiveContentPolicy();
+  const restrictedMode = useRestrictedMode();
+  const sensitive = isSensitiveVideo(video);
+  const blurSensitive = sensitive && policy === "blur";
+  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
+  const previewEligible =
+    previewFeatureEnabled &&
+    previewPreferenceEnabled &&
+    !isRemote &&
+    video.state === "published" &&
+    video.privacy !== "private" &&
+    video.privacy !== "password" &&
+    !blurSensitive;
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
@@ -67,36 +95,68 @@ function SearchResultRow({
       ? video.duration_seconds
       : null;
 
+  if (sensitive && restrictedMode) {
+    return (
+      <li className="flex min-h-24 items-center justify-center border-b border-border-subtle py-3 text-sm font-medium text-fg-muted">
+        Hidden by Restricted Mode
+      </li>
+    );
+  }
+
   return (
-    <li className="group relative flex gap-3 border-b border-border-subtle py-3">
-      <div className="media-placeholder relative aspect-video w-[148px] flex-none overflow-hidden rounded-[10px] sm:w-[220px]">
-        {video.has_thumbnail ? (
-          // Backend-served image; a plain <img> avoids next/image remote config.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={isRemote ? remoteVideoThumbnailUrl(video.id) : videoThumbnailUrl(video.id)}
-            alt={video.title}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-fg-muted">
-            No preview
-          </div>
-        )}
-        {duration !== null ? (
-          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white tabular-nums">
-            {formatDuration(duration)}
-          </span>
-        ) : null}
+    <li className="group/card relative flex gap-3 border-b border-border-subtle py-3">
+      <div
+        className="w-[148px] flex-none sm:w-[220px]"
+        onClick={() => onSelect?.()}
+      >
+        <VideoCardPreview
+          videoId={video.id}
+          title={video.title}
+          href={isRemote ? `/remote/${video.id}` : `/videos/${video.id}`}
+          src={previewEligible ? videoOriginalUrl(video.id) : null}
+          poster={
+            video.has_thumbnail
+              ? isRemote
+                ? remoteVideoThumbnailUrl(video.id)
+                : videoThumbnailUrl(video.id)
+              : null
+          }
+          duration={duration}
+          hasStoryboard={previewEligible}
+          previewEnabled={previewEligible}
+          className="rounded-[10px]"
+          posterClassName={cn(
+            "transition-transform group-hover/preview:scale-[1.02]",
+            blurSensitive && "scale-110 blur-2xl",
+          )}
+          fallback={
+            <div className="media-placeholder absolute inset-0 flex items-center justify-center text-xs text-fg-muted">
+              No preview
+            </div>
+          }
+          overlay={
+            <>
+              {markSensitive ? (
+                <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10">
+                  Sensitive
+                </span>
+              ) : null}
+              {duration !== null ? (
+                <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none tabular-nums text-white group-data-[preview-active=true]/preview:bottom-10">
+                  {formatDuration(duration)}
+                </span>
+              ) : null}
+            </>
+          }
+        />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
         <Link
           href={isRemote ? `/remote/${video.id}` : `/videos/${video.id}`}
           onClick={onSelect}
-          className="focus-ring rounded-md before:absolute before:inset-0 before:rounded-xl"
+          className="focus-ring rounded-md"
         >
-          <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-fg transition-colors group-hover:text-fg-muted">
+          <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-fg transition-colors group-hover/card:text-fg-muted">
             {video.title}
           </h3>
         </Link>
@@ -140,7 +200,7 @@ function SearchResultRow({
         ) : null}
         {meta.length > 0 ? <p className="text-xs text-fg-muted">{meta.join(" · ")}</p> : null}
       </div>
-      <div className="relative z-20 -mr-1 shrink-0 self-end">
+      <div className="relative z-20 -mr-1 shrink-0 self-end opacity-0 transition-opacity duration-150 group-hover/card:opacity-100 group-focus-within/card:opacity-100 [@media(hover:none)]:opacity-100">
         <VideoActionsMenu video={video} compact onDeleted={onDeleted} />
       </div>
     </li>

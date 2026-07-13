@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 import { AuthProvider } from "@/components/auth/AuthProvider";
+import { PlayerSettingsBootstrap } from "@/components/auth/PlayerSettingsBootstrap";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { Header } from "@/components/Header";
 import { InstanceBanner } from "@/components/InstanceBanner";
@@ -66,6 +67,7 @@ export default async function RootLayout({
           {t("a11y.skipToContent")}
         </a>
         <AuthProvider>
+          <PlayerSettingsBootstrap />
           <ToastProvider>
             <InstanceBanner instance={instance} />
             <Header instance={instance} />

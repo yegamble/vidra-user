@@ -452,9 +452,9 @@ export const api = {
   /**
    * GET /api/v1/me/player-settings — the caller's effective player defaults
    * (PLAY-07, auth): autoplay_next, default_speed, default_quality,
-   * captions_default, theater_default. Always 200 with the full object (a user
-   * who never saved gets the built-in defaults). The bespoke player hydrates
-   * from this on the watch page; the settings surface edits it.
+   * captions_default, theater_default, and video_card_previews_enabled. Always
+   * 200 with the full object (a user who never saved gets the built-in
+   * defaults). The app shell hydrates it for both watch and browse surfaces.
    */
   getPlayerSettings: (signal?: AbortSignal) =>
     apiRequest<PlayerSettings>("/api/v1/me/player-settings", { signal }),
@@ -1826,6 +1826,13 @@ export const api = {
       query: { q: params.q, limit: params.limit, offset: params.offset },
       signal,
     }),
+
+  /** POST /admin/videos/{id}/transcoding — moderator/admin recovery transcode from the retained original. */
+  runVideoTranscoding: (id: string, type: "hls" | "web_video") =>
+    apiRequest<{ status: "queued"; type: "hls" | "web_video" }>(
+      `/api/v1/admin/videos/${encodeURIComponent(id)}/transcoding`,
+      { method: "POST", body: { type } },
+    ),
 
   /**
    * GET /api/v1/admin/comments — all comments newest first, each with its author

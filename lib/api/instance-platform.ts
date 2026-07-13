@@ -88,7 +88,16 @@ export function getInstanceCached(): Promise<InstanceResponse> {
   return cachedInstance;
 }
 
-/** Test-only: forget the cached instance document so unit tests stay independent. */
-export function resetInstanceCacheForTests(): void {
+/**
+ * Forget the cached public instance document. Runtime admin-setting updates use
+ * this before refetching so capability consumers never keep a pre-save gate for
+ * the rest of a client-side navigation session.
+ */
+export function invalidateInstanceCache(): void {
   cachedInstance = null;
+}
+
+/** Test-only alias kept for existing callers. */
+export function resetInstanceCacheForTests(): void {
+  invalidateInstanceCache();
 }

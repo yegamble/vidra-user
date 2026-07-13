@@ -6,13 +6,14 @@
 // toggle, the end card's autoplay switch) still writes the session store, which
 // wins for the rest of that browsing session; only when a session store is unset
 // does the effective per-user default apply. Signed-out users keep the baked
-// defaults + session stores exactly as before.
+// defaults + session stores exactly as before. Video-card previews are an
+// explicit opt-in and also require the public instance capability gate.
 //
 // This module is the low-level effective-settings holder. It deliberately does
 // NOT import the three session stores (they import the getter below for their
 // fallback — one direction, no cycle). The React entry point is
-// usePlayerSettings(); WatchView hydrates the holder from the server for the
-// watch page, and PlayerSettingsView edits it.
+// usePlayerSettings(); PlayerSettingsBootstrap hydrates the holder once for the
+// whole app, and PlayerSettingsView edits it.
 
 import { useSyncExternalStore } from "react";
 
@@ -21,9 +22,10 @@ import type { PlayerSettings } from "@/lib/api";
 
 /**
  * The baked player defaults — identical to the pre-W1.6 behaviour (speed 1×,
- * autoplay on, quality Auto, captions off, theater off) and to the server's
- * built-in defaults for a user who never saved. Used for SSR, for signed-out
- * users, and until a signed-in user's settings hydrate.
+ * autoplay on, quality Auto, captions off, theater off, card previews off).
+ * Used for SSR, for signed-out users, and until a signed-in user's effective
+ * settings hydrate. The server resolves a never-chosen preview preference from
+ * the administrator's current default before returning it.
  */
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   autoplay_next: true,
@@ -31,6 +33,7 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   default_quality: "auto",
   captions_default: false,
   theater_default: false,
+  video_card_previews_enabled: false,
 };
 
 // The window event the holder broadcasts on hydrate/reset. The session stores
@@ -49,8 +52,8 @@ let current: PlayerSettings = DEFAULT_PLAYER_SETTINGS;
 let hydrated = false;
 // Whether the per-user settings QUESTION has been answered at all this page
 // load: false while the boot auth restore / the signed-in GET /me/player-
-// settings is still in flight, true once WatchView either hydrated a signed-in
-// user's settings or reset for an anonymous visitor. Side-effectful seeds that
+// settings is still in flight, true once the app bootstrap either hydrated a
+// signed-in user's settings or reset for an anonymous visitor. Side-effectful seeds that
 // must never beat a stored pref to the punch (W5 start-on-open) hold until
 // this settles; a failed settings fetch deliberately never settles — better to
 // keep click-to-play than to auto-start a user who may have said no.
@@ -92,6 +95,19 @@ export function hydratePlayerSettings(settings: PlayerSettings): void {
   broadcast();
 }
 
+/**
+ * Clear a previous account's settings while a newly authenticated account is
+ * being loaded. Unlike resetPlayerSettings(), this leaves the question
+ * unsettled: preview/autoplay features that require an explicit user answer
+ * must remain off until the request succeeds.
+ */
+export function beginPlayerSettingsLoad(): void {
+  current = DEFAULT_PLAYER_SETTINGS;
+  hydrated = false;
+  settled = false;
+  broadcast();
+}
+
 /** resetPlayerSettings drops back to the baked defaults (on sign-out, or when
  * the visitor resolves as anonymous) so a signed-out session never inherits
  * the previous user's per-user defaults. Either way the per-user question is
@@ -106,10 +122,7 @@ export function resetPlayerSettings(): void {
 /** Test-only: return to the pristine boot state (nothing hydrated, per-user
  * layer still UNRESOLVED) so tests can pin the pre-settlement behavior. */
 export function unsettlePlayerSettingsForTests(): void {
-  current = DEFAULT_PLAYER_SETTINGS;
-  hydrated = false;
-  settled = false;
-  broadcast();
+  beginPlayerSettingsLoad();
 }
 
 function subscribe(onChange: () => void): () => void {

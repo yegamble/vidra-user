@@ -22,6 +22,7 @@ const DEFAULTS = {
   default_quality: "auto",
   captions_default: false,
   theater_default: false,
+  video_card_previews_enabled: false,
 };
 
 const session = {
@@ -100,6 +101,8 @@ test("renders every control at its stored value and merge-PUTs single fields", a
     "aria-checked",
     "true",
   );
+  const previews = page.getByRole("switch", { name: "Inline video previews" });
+  await expect(previews).toHaveAttribute("aria-checked", "false");
 
   // Toggling autoplay sends ONLY autoplay_next.
   await autoplay.click();
@@ -113,6 +116,10 @@ test("renders every control at its stored value and merge-PUTs single fields", a
   // Changing the default quality sends ONLY default_quality.
   await page.getByLabel("Default quality").selectOption("720p");
   await expect.poll(() => puts.at(-1)).toEqual({ default_quality: "720p" });
+
+  // The viewer can override the administrator-provided starting value.
+  await previews.click();
+  await expect.poll(() => puts.at(-1)).toEqual({ video_card_previews_enabled: true });
 
   // Each PUT carried exactly one field (true merge semantics).
   expect(puts.every((p) => Object.keys(p).length === 1)).toBe(true);

@@ -253,6 +253,11 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       description: "How uploaded videos are processed into streamable renditions.",
     },
     {
+      id: "playback",
+      title: "Playback",
+      description: "Optional playback experiences available while viewers browse video cards.",
+    },
+    {
       // Server id "storyboards": seek-preview sprite generation.
       id: "storyboards",
       title: "Storyboards",
@@ -1154,6 +1159,24 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "transcoding",
     parent: "transcoding_enabled",
+  },
+  // VOD / Playback: availability plus the inherited viewer default. A user's
+  // explicit playback preference wins over the default; the master gate wins
+  // over both and prevents all automatic card playback while disabled.
+  video_card_previews_enabled: {
+    label: "Inline video-card previews",
+    help: "Make seekable hover playback available on video cards. Signed-in viewers can still turn previews on or off in their playback settings.",
+    control: "toggle",
+    page: "vod",
+    section: "playback",
+  },
+  video_card_previews_default_enabled: {
+    label: "Enable previews by default",
+    help: "Choose the starting behavior for signed-in viewers who have not made their own choice. Existing viewer choices are preserved.",
+    control: "toggle",
+    page: "vod",
+    section: "playback",
+    parent: "video_card_previews_enabled",
   },
   // VOD / Storyboards (config-parity W8).
   storyboards_enabled: {

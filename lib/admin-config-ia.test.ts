@@ -92,6 +92,8 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["channel_sync_enabled", "vod", "imports"],
   ["channel_sync_max_per_user", "vod", "imports"],
   ["storyboards_enabled", "vod", "storyboards"],
+  ["video_card_previews_enabled", "vod", "playback"],
+  ["video_card_previews_default_enabled", "vod", "playback"],
   ["transcription_enabled", "vod", "transcription"],
   ["user_import_enabled", "advanced", "user_data"],
   ["user_export_enabled", "advanced", "user_data"],

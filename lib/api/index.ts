@@ -58,6 +58,7 @@ export {
   contactInstance,
   getInstanceAbout,
   getInstanceCached,
+  invalidateInstanceCache,
   isSensitiveVideo,
   resetInstanceCacheForTests,
 } from "./instance-platform";

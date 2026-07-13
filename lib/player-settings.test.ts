@@ -21,13 +21,14 @@ afterEach(() => {
 });
 
 describe("DEFAULT_PLAYER_SETTINGS", () => {
-  it("mirrors the baked player behaviour (1×, autoplay on, Auto, captions off, theater off)", () => {
+  it("mirrors the baked player behaviour, including previews off by default", () => {
     expect(DEFAULT_PLAYER_SETTINGS).toEqual({
       autoplay_next: true,
       default_speed: 1,
       default_quality: "auto",
       captions_default: false,
       theater_default: false,
+      video_card_previews_enabled: false,
     });
   });
 });
@@ -44,6 +45,7 @@ describe("effective-settings holder", () => {
       default_quality: "1080p",
       captions_default: true,
       theater_default: true,
+      video_card_previews_enabled: true,
     };
     hydratePlayerSettings(server);
     expect(getPlayerSettingsSnapshot()).toEqual(server);

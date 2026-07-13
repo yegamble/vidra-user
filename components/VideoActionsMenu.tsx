@@ -5,13 +5,16 @@ import { useState, type ReactNode } from "react";
 
 import { DownloadDialog } from "@/components/DownloadButton";
 import {
+  CaptionsIcon,
   ClockIcon,
   DownloadIcon,
   FlagIcon,
   MoreVerticalIcon,
   PlaylistIcon,
   PlusIcon,
+  SettingsIcon,
   ShareIcon,
+  SlashCircleIcon,
   TrashIcon,
   VideoIcon,
 } from "@/components/icons";
@@ -50,6 +53,14 @@ export function VideoActionsMenu({
   const { toast } = useToast();
   const permissions = useVideoActionPermissions(video);
   const [dialog, setDialog] = useState<Dialog>(null);
+
+  const runPrivilegedAction = (success: string, operation: () => Promise<unknown>) => {
+    void operation()
+      .then(() => toast({ message: success, variant: "success" }))
+      .catch((err: unknown) =>
+        toast({ message: errorMessage(err, "The operation could not be started."), variant: "error" }),
+      );
+  };
 
   const local = video.remote !== true;
   const items: DropdownItem[] = [
@@ -104,17 +115,50 @@ export function VideoActionsMenu({
   });
 
   if (permissions.canManage) {
-    items.push(
-      {
-        label: <ActionLabel icon={<VideoIcon size={18} />}>Manage</ActionLabel>,
-        onSelect: () => router.push(`/studio?video=${encodeURIComponent(video.id)}`),
-      },
-      {
-        label: <ActionLabel icon={<TrashIcon size={18} />}>Delete</ActionLabel>,
-        onSelect: () => setDialog("delete"),
-        danger: true,
-      },
-    );
+    items.push({
+      label: <ActionLabel icon={<VideoIcon size={18} />}>Manage</ActionLabel>,
+      onSelect: () => router.push(`/studio?video=${encodeURIComponent(video.id)}`),
+    });
+
+    if (permissions.privileged) {
+      items.push({
+        label: <ActionLabel icon={<SlashCircleIcon size={18} />}>Block</ActionLabel>,
+        onSelect: () =>
+          runPrivilegedAction("Video blocked.", () => api.blockVideo(video.id)),
+      });
+    }
+
+    items.push({
+      label: <ActionLabel icon={<TrashIcon size={18} />}>Delete</ActionLabel>,
+      onSelect: () => setDialog("delete"),
+      danger: true,
+    });
+
+    if (permissions.privileged) {
+      items.push(
+        {
+          label: <ActionLabel icon={<SettingsIcon size={18} />}>Run HLS transcoding</ActionLabel>,
+          onSelect: () =>
+            runPrivilegedAction("HLS transcoding queued.", () =>
+              api.runVideoTranscoding(video.id, "hls"),
+            ),
+        },
+        {
+          label: <ActionLabel icon={<SettingsIcon size={18} />}>Run Web Video transcoding</ActionLabel>,
+          onSelect: () =>
+            runPrivilegedAction("Web Video transcoding queued.", () =>
+              api.runVideoTranscoding(video.id, "web_video"),
+            ),
+        },
+        {
+          label: <ActionLabel icon={<CaptionsIcon size={18} />}>Generate caption</ActionLabel>,
+          onSelect: () =>
+            runPrivilegedAction("Caption generation queued.", () =>
+              api.requestAutoCaption(video.id),
+            ),
+        },
+      );
+    }
   }
 
   items.push({
@@ -128,7 +172,7 @@ export function VideoActionsMenu({
   return (
     <>
       <Dropdown
-        trigger={<MoreVerticalIcon size={compact ? 20 : 22} />}
+        trigger={<MoreVerticalIcon size={compact ? 24 : 26} />}
         triggerLabel={`Actions for ${video.title}`}
         items={items}
         align="end"

@@ -25,6 +25,7 @@ const DEFAULTS = {
   default_quality: "auto",
   captions_default: false,
   theater_default: false,
+  video_card_previews_enabled: false,
 };
 
 vi.mock("@/lib/api", () => ({
@@ -79,6 +80,9 @@ describe("PlayerSettingsView", () => {
       screen.getByRole("switch", { name: "Captions on by default" }).getAttribute("aria-checked"),
     ).toBe("false");
     expect(
+      screen.getByRole("switch", { name: "Inline video previews" }).getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(
       screen.getByRole("switch", { name: "Theater mode by default" }).getAttribute("aria-checked"),
     ).toBe("true");
   });
@@ -97,6 +101,23 @@ describe("PlayerSettingsView", () => {
     expect(
       screen.getByRole("switch", { name: "Autoplay next" }).getAttribute("aria-checked"),
     ).toBe("false");
+  });
+
+  it("saves the user's inline-preview opt-in independently", async () => {
+    getPlayerSettings.mockResolvedValue({ ...DEFAULTS });
+    updatePlayerSettings.mockResolvedValue({
+      ...DEFAULTS,
+      video_card_previews_enabled: true,
+    });
+    render(<PlayerSettingsView />);
+
+    const previews = await screen.findByRole("switch", { name: "Inline video previews" });
+    fireEvent.click(previews);
+
+    await waitFor(() =>
+      expect(updatePlayerSettings).toHaveBeenCalledWith({ video_card_previews_enabled: true }),
+    );
+    expect(previews.getAttribute("aria-checked")).toBe("true");
   });
 
   it("changing the default speed PUTs only default_speed as a number", async () => {

@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   saveVideo: vi.fn(),
   deleteVideo: vi.fn(),
+  blockVideo: vi.fn(),
+  runVideoTranscoding: vi.fn(),
+  requestAutoCaption: vi.fn(),
   playlistDialog: vi.fn(),
   downloadDialog: vi.fn(),
   shareDialog: vi.fn(),
@@ -50,6 +53,9 @@ vi.mock("@/lib/api", () => ({
   api: {
     saveVideo: mocks.saveVideo,
     deleteVideo: mocks.deleteVideo,
+    blockVideo: mocks.blockVideo,
+    runVideoTranscoding: mocks.runVideoTranscoding,
+    requestAutoCaption: mocks.requestAutoCaption,
   },
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
@@ -129,6 +135,9 @@ beforeEach(() => {
   });
   mocks.saveVideo.mockResolvedValue(undefined);
   mocks.deleteVideo.mockResolvedValue(undefined);
+  mocks.blockVideo.mockResolvedValue(undefined);
+  mocks.runVideoTranscoding.mockResolvedValue({ status: "queued" });
+  mocks.requestAutoCaption.mockResolvedValue({ status: "queued" });
   resetVideoQueueForTests();
 });
 
@@ -139,6 +148,15 @@ afterEach(() => {
 });
 
 describe("VideoActionsMenu", () => {
+  it("uses the larger vertical-dot glyph while retaining a 40px action target", () => {
+    renderMenu();
+    const trigger = screen.getByRole("button", { name: "Actions for A carefully graded film" });
+    const icon = trigger.querySelector("svg");
+    expect(icon?.getAttribute("width")).toBe("26");
+    expect(trigger.className).toContain("h-10");
+    expect(trigger.className).toContain("w-10");
+  });
+
   it("shows every local action in the requested order when policy allows it", () => {
     Object.assign(mocks.permissions, { privileged: true, canManage: true, canDownload: true });
     renderMenu();
@@ -151,7 +169,11 @@ describe("VideoActionsMenu", () => {
       "Download",
       "Share",
       "Manage",
+      "Block",
       "Delete",
+      "Run HLS transcoding",
+      "Run Web Video transcoding",
+      "Generate caption",
       "Report",
     ]);
   });
@@ -253,5 +275,26 @@ describe("VideoActionsMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(mocks.deleteVideo).toHaveBeenCalledWith("video-1"));
     expect(onDeleted).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs moderator recovery actions from the video menu", async () => {
+    Object.assign(mocks.permissions, { privileged: true, canManage: true });
+    renderMenu();
+
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Block" }));
+    await waitFor(() => expect(mocks.blockVideo).toHaveBeenCalledWith("video-1"));
+
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Run HLS transcoding" }));
+    await waitFor(() => expect(mocks.runVideoTranscoding).toHaveBeenCalledWith("video-1", "hls"));
+
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Run Web Video transcoding" }));
+    await waitFor(() => expect(mocks.runVideoTranscoding).toHaveBeenCalledWith("video-1", "web_video"));
+
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Generate caption" }));
+    await waitFor(() => expect(mocks.requestAutoCaption).toHaveBeenCalledWith("video-1"));
   });
 });

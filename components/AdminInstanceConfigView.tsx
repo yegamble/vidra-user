@@ -51,6 +51,7 @@ import type {
 import { primaryColorContrast } from "@/lib/contrast";
 import { COUNTRIES } from "@/lib/countries";
 import { formatBytes } from "@/lib/format";
+import { refreshInstanceFeatures } from "@/lib/instance-features";
 
 type Status = "loading" | "error" | "ready";
 
@@ -215,6 +216,7 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
       seed(res.settings);
       setFieldErrors({});
       setSaveError(null);
+      refreshInstanceFeatures();
     },
     [seed],
   );
@@ -1003,16 +1005,36 @@ function ListControl({
   disabled: boolean;
 }) {
   const [entry, setEntry] = useState("");
+  // META options are already in the product's canonical display order. For
+  // the transcoding ladder that is highest resolution → lowest resolution, so
+  // selection order can never leave 2160p appended after 360p. Unknown values
+  // sort after known options (the server will still validate membership).
+  const optionOrder = new Map((options ?? []).map((option, index) => [option.value, index]));
+  const ordered = (values: string[]) =>
+    [...values].sort((a, b) => {
+      const aIndex = optionOrder.get(a);
+      const bIndex = optionOrder.get(b);
+      if (aIndex !== undefined || bIndex !== undefined) {
+        if (aIndex === undefined) return 1;
+        if (bIndex === undefined) return -1;
+        return aIndex - bIndex;
+      }
+      const aNumber = Number(a);
+      const bNumber = Number(b);
+      if (Number.isFinite(aNumber) && Number.isFinite(bNumber)) return bNumber - aNumber;
+      return a.localeCompare(b);
+    });
+  const orderedValue = ordered(value);
   const add = (raw: string) => {
     const v = raw.trim();
-    if (v === "" || value.includes(v)) return; // no blanks, no duplicates
-    onChange([...value, v]);
+    if (v === "" || orderedValue.includes(v)) return; // no blanks, no duplicates
+    onChange(ordered([...orderedValue, v]));
     setEntry("");
   };
-  const remove = (v: string) => onChange(value.filter((x) => x !== v));
+  const remove = (v: string) => onChange(orderedValue.filter((x) => x !== v));
   const labelFor = (v: string) => options?.find((o) => o.value === v)?.label ?? v;
   // Suggestions not already chosen (canonical rungs for transcoding_resolutions).
-  const suggestions = (options ?? []).filter((o) => !value.includes(o.value));
+  const suggestions = (options ?? []).filter((o) => !orderedValue.includes(o.value));
   return (
     <div className="flex flex-col gap-1.5">
       <div
@@ -1020,10 +1042,10 @@ function ListControl({
         aria-label={label}
         className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-xl border border-border bg-surface p-1.5"
       >
-        {value.length === 0 ? (
+        {orderedValue.length === 0 ? (
           <span className="px-1 text-xs text-fg-muted">None yet.</span>
         ) : (
-          value.map((v) => (
+          orderedValue.map((v) => (
             <span
               key={v}
               className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-fg"
