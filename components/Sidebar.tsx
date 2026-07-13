@@ -104,9 +104,9 @@ export function Sidebar() {
       </div>
       <div className="flex flex-col gap-0.5">
         <SidebarLink
-          item={{ href: "/about", label: "About", Icon: InfoIcon }}
+          item={{ href: "/about/instance/home", label: "About", Icon: InfoIcon }}
           collapsed={collapsed}
-          active={pathname === "/about"}
+          active={pathname === "/about" || pathname?.startsWith("/about/") === true}
         />
         <button
           type="button"

@@ -9,8 +9,9 @@
 // and twitter:site (social.twitter_username). Every field falls back to
 // today's hardcoded behavior when the snapshot is null (backend unreachable),
 // the block is absent (pre-W1 backend), or the slot reports is_fallback —
-// the fallback favicon behavior is "no icons entry" (vidra ships no static
-// app/icon asset today).
+// the fallback favicon behavior is the built-in Vidra icon. It lives in
+// public/ rather than app/: Next.js file-based icon metadata has higher
+// priority and would otherwise mask an operator-uploaded favicon.
 //
 // og:image precedence: Next.js merges metadata per route segment, and a page
 // segment's `openGraph` replaces the layout's wholesale — so any page that
@@ -29,6 +30,7 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 /** The pre-W4 hardcoded values — the fallback floor for every field. */
 export const FALLBACK_TITLE = "Vidra";
 export const FALLBACK_DESCRIPTION = "A federated, PeerTube-inspired video platform.";
+export const FALLBACK_ICON = "/icon.svg";
 
 export function buildRootMetadata(instance: InstanceConfigSnapshot | null): Metadata {
   const name = typeof instance?.name === "string" ? instance.name.trim() : "";
@@ -39,12 +41,11 @@ export function buildRootMetadata(instance: InstanceConfigSnapshot | null): Meta
 
   const metadata: Metadata = { title, description };
 
-  // Favicon: only a SET (non-fallback) favicon slot emits an icons entry;
-  // the fallback keeps today's behavior (no icon metadata at all).
+  // Prefer the operator's SET (non-fallback) favicon and use the built-in
+  // public asset otherwise. Keep this config-based: an app/icon file would
+  // take precedence over generateMetadata and hide the uploaded favicon.
   const favicon = brandingAssetUrl(instance?.branding?.logos?.favicon);
-  if (favicon !== null) {
-    metadata.icons = { icon: favicon };
-  }
+  metadata.icons = { icon: favicon ?? FALLBACK_ICON };
 
   // Social cards: the opengraph logo slot is the instance-wide og:image /
   // twitter:image default (a page-supplied image wins via segment merging,
