@@ -3,6 +3,11 @@ import { expect, test, type Page } from "@playwright/test";
 const SEARCH = /\/api\/v1\/videos\/search/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
 const CONFIG_URL = /\/api\/v1\/videos\/config$/;
+const SUGGEST = /\/api\/v1\/search\/suggestions/;
+
+function suggestion(text: string, extra: Record<string, unknown> = {}) {
+  return { text, type: "query", is_personal: false, ...extra };
+}
 
 function video(id: string, title: string) {
   return {
@@ -126,10 +131,9 @@ test("the header search box navigates to results", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Go Basics" })).toBeVisible();
 });
 
-test("the inline search field on the results page runs a new query", async ({ page }) => {
-  // The inline field is the page's own search input (and the only one on phones,
-  // where the header search box is hidden). Scope to <main> so the desktop
-  // header search box (same accessible name) is never matched.
+test("the header search box reflects the results-page query and runs a new one", async ({ page }) => {
+  // There is no inline field anymore: the single header box IS the results-page
+  // search. It reflects the URL's `q` and, on submit, re-navigates /search.
   await page.route(SEARCH, (route) => {
     const url = new URL(route.request().url());
     const q = url.searchParams.get("q") ?? "";
@@ -138,7 +142,7 @@ test("the inline search field on the results page runs a new query", async ({ pa
     });
   });
   await page.goto("/search?q=go");
-  const field = page.getByRole("main").getByLabel("Search videos");
+  const field = page.getByLabel("Search videos");
   await expect(field).toHaveValue("go");
   await expect(page.getByRole("heading", { name: "Result for go" })).toBeVisible();
 
@@ -148,18 +152,75 @@ test("the inline search field on the results page runs a new query", async ({ pa
   await expect(page.getByRole("heading", { name: "Result for rust" })).toBeVisible();
 });
 
-test("clearing the inline search field returns to the prompt", async ({ page }) => {
+test("clearing the header search box on the results page returns to the prompt", async ({ page }) => {
   await page.route(SEARCH, (route) =>
     route.fulfill({ json: { query: "go", videos: [video("v1", "Go Basics")], limit: 20, offset: 0 } }),
   );
   await page.goto("/search?q=go");
-  const field = page.getByRole("main").getByLabel("Search videos");
+  const field = page.getByLabel("Search videos");
   await expect(field).toHaveValue("go");
 
   await page.getByRole("button", { name: "Clear search" }).click();
   await expect(page).toHaveURL(/\/search$/);
   await expect(field).toHaveValue("");
   await expect(page.getByText("Search for videos")).toBeVisible();
+});
+
+// Phone shell: the header shows a search icon that expands a full-screen sheet,
+// and the Search tab lands on /search where the sheet auto-opens.
+test.describe("mobile single search box", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("the Search tab opens the sheet and a suggestion navigates to results", async ({ page }) => {
+    await page.route(FEED, (route) =>
+      route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+    );
+    await page.route(SUGGEST, (route) => {
+      const q = new URL(route.request().url()).searchParams.get("q") ?? "";
+      route.fulfill({ json: { query: q, suggestions: [suggestion("go basics"), suggestion("go generics")] } });
+    });
+    await page.route(SEARCH, (route) =>
+      route.fulfill({ json: { query: "go basics", videos: [video("v1", "Go Basics")], limit: 20, offset: 0 } }),
+    );
+
+    await page.goto("/");
+    await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Search" }).click();
+    await expect(page).toHaveURL(/\/search$/);
+
+    // The sheet auto-opens with the input focused (no inline field on the page).
+    // Scope to the input's own name so the results-page filter <select>s (also
+    // role=combobox) are never matched.
+    const sheetInput = page.getByRole("combobox", { name: "Search videos" });
+    await expect(sheetInput).toBeFocused();
+    await sheetInput.fill("go");
+
+    const listbox = page.getByRole("listbox", { name: "Search suggestions" });
+    await expect(listbox.getByRole("option").first()).toBeVisible();
+    await listbox.getByRole("option", { name: /go basics/i }).click();
+
+    await expect(page).toHaveURL(/\/search\?q=go\+basics/);
+    await expect(page.getByRole("heading", { name: "Go Basics", exact: true })).toBeVisible();
+  });
+
+  test("the sheet's clear button empties the field", async ({ page }) => {
+    await page.route(FEED, (route) =>
+      route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+    );
+    await page.route(SUGGEST, (route) =>
+      route.fulfill({ json: { query: "", suggestions: [] } }),
+    );
+
+    await page.goto("/");
+    // Open the sheet from the header search icon button.
+    await page.getByRole("banner").getByRole("button", { name: "Search" }).click();
+    const sheetInput = page.getByRole("combobox", { name: "Search videos" });
+    await expect(sheetInput).toBeFocused();
+    await sheetInput.fill("rust");
+    await expect(sheetInput).toHaveValue("rust");
+
+    await page.getByRole("button", { name: "Clear search" }).click();
+    await expect(sheetInput).toHaveValue("");
+  });
 });
 
 test("category/language filters narrow the search and land in the URL", async ({ page }) => {

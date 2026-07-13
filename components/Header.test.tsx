@@ -23,7 +23,10 @@ vi.mock("next/navigation", () => ({
 // providers; this suite covers the W4 branding: logo slots + hide-name.
 vi.mock("@/components/auth/AccountMenu", () => ({ AccountMenu: () => null }));
 vi.mock("@/components/NotificationsBell", () => ({ NotificationsBell: () => null }));
-vi.mock("@/components/SearchBox", () => ({ SearchBox: () => null }));
+vi.mock("@/components/SearchAutocomplete", () => ({
+  SearchAutocomplete: () => null,
+  SearchAutocompleteFallback: () => null,
+}));
 
 import { Header } from "./Header";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
