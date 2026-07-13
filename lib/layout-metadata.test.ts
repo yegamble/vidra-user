@@ -1,14 +1,21 @@
+import { readdirSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import type { InstanceConfigSnapshot } from "./instance-config.server";
-import { FALLBACK_DESCRIPTION, FALLBACK_TITLE, buildRootMetadata } from "./layout-metadata";
+import {
+  FALLBACK_DESCRIPTION,
+  FALLBACK_ICON,
+  FALLBACK_TITLE,
+  buildRootMetadata,
+} from "./layout-metadata";
 
 // Config-parity W4: the metadata builder consumes the SSR instance snapshot —
 // title/description from the instance identity, favicon + og:image from the
 // branding logo slots (only when NOT is_fallback), twitter:site from
 // social.twitter_username. Precedence rule: a null snapshot / absent block /
-// fallback slot always degrades to the pre-W4 hardcoded behavior (and no icon
-// or social-card entries at all). apiBaseUrl in tests is the default
+// fallback slot always degrades to the built-in Vidra icon (and no social-card
+// entries at all). apiBaseUrl in tests is the default
 // http://localhost:8080 (lib/config).
 
 const API = "http://localhost:8080";
@@ -25,6 +32,7 @@ describe("buildRootMetadata", () => {
     expect(buildRootMetadata(null)).toEqual({
       title: FALLBACK_TITLE,
       description: FALLBACK_DESCRIPTION,
+      icons: { icon: FALLBACK_ICON },
     });
   });
 
@@ -40,21 +48,21 @@ describe("buildRootMetadata", () => {
     expect(meta.description).toBe(FALLBACK_DESCRIPTION);
   });
 
-  it("emits no icon/social entries when the branding block is absent (pre-W1 backend)", () => {
+  it("uses the built-in icon and no social entries when branding is absent", () => {
     const meta = buildRootMetadata(snapshot());
-    expect(meta.icons).toBeUndefined();
+    expect(meta.icons).toEqual({ icon: FALLBACK_ICON });
     expect(meta.openGraph).toBeUndefined();
     expect(meta.twitter).toBeUndefined();
   });
 
-  it("emits no icon/social entries while every slot reports is_fallback", () => {
+  it("uses the built-in icon and no social entries while every slot is fallback", () => {
     const meta = buildRootMetadata(
       snapshot({
         branding: { logos: { favicon: unset, opengraph: unset } },
         social: { twitter_username: "" },
       }),
     );
-    expect(meta.icons).toBeUndefined();
+    expect(meta.icons).toEqual({ icon: FALLBACK_ICON });
     expect(meta.openGraph).toBeUndefined();
     expect(meta.twitter).toBeUndefined();
   });
@@ -100,5 +108,16 @@ describe("buildRootMetadata", () => {
       site: "@exampletube",
       images: [`${API}/api/v1/instance/logo/opengraph`],
     });
+  });
+});
+
+describe("favicon metadata precedence", () => {
+  it("keeps higher-priority App Router icon files out of the root segment", () => {
+    const rootFiles = readdirSync(new URL("../app/", import.meta.url));
+    const metadataIcons = rootFiles.filter((file) =>
+      /^(?:favicon\.ico|icon\d*\.(?:ico|jpe?g|png|svg|js|jsx|ts|tsx))$/i.test(file),
+    );
+
+    expect(metadataIcons).toEqual([]);
   });
 });

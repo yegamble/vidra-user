@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+// These routes share one production-server instance-config cache warm-up. Keep
+// the redirect- and metadata-heavy scenarios in one worker so fullyParallel
+// runs do not stampede the same cold SSR dependency before browser mocks apply.
+test.describe.configure({ mode: "serial" });
+
 const INSTANCE = /\/api\/v1\/instance$/;
 const INSTANCE_ABOUT = /\/api\/v1\/instance\/about$/;
 const INSTANCE_CONTACT = /\/api\/v1\/instance\/contact$/;
@@ -33,6 +38,12 @@ function instanceJson(federationEnabled: boolean, overrides: Record<string, unkn
     privacy_url: "",
     contact_email: "admin@example.test",
     features: { uploads: true, imports: true, live: false, comments: true },
+    branding: {
+      avatar: { url: "/api/v1/instance/avatar", is_fallback: false },
+      banner: { url: "/api/v1/instance/banner", is_fallback: false },
+      logos: {},
+      hide_instance_name: false,
+    },
     ...overrides,
   };
 }
@@ -79,15 +90,32 @@ async function routeAbout(
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig }));
 }
 
-test("the PeerTube-style about page renders platform information and markdown sections", async ({
+async function expectNoHorizontalPageScroll(page: import("@playwright/test").Page) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, "the About page must not scroll horizontally").toBeLessThanOrEqual(1);
+}
+
+test("the PeerTube-style about pages expose branding and paginate each section", async ({
   page,
 }) => {
   await routeAbout(page);
   await page.goto("/about");
 
+  await expect(page).toHaveURL(/\/about\/instance\/home$/);
+
   await expect(page.getByRole("heading", { name: "Vidra Test", exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Vidra Test icon" })).toHaveAttribute(
+    "src",
+    "http://localhost:8080/api/v1/instance/avatar",
+  );
+  await expect(page.getByRole("img", { name: "Vidra Test banner" })).toHaveAttribute(
+    "src",
+    "http://localhost:8080/api/v1/instance/banner",
+  );
   await expect(page.getByText("A community video home.")).toBeVisible();
-  await expect(page.getByText("ActivityPub", { exact: true })).toBeVisible();
+  await expect(page.getByText("ActivityPub", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Comedy")).toBeVisible();
   await expect(page.getByText("English")).toBeVisible();
   await expect(page.getByText("Vidra Test is dedicated to sensitive content.")).toBeVisible();
@@ -96,20 +124,38 @@ test("the PeerTube-style about page renders platform information and markdown se
   await expect(page.getByText("careful")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Terms" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Terms of service" })).toBeVisible();
-  await expect(page.getByText("Server country: Canada")).toBeVisible();
+  await expect(page.getByText("Canada", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Website" })).toHaveAttribute(
     "href",
     "https://vidra.example.test",
   );
   await expect(page.getByRole("link", { name: "Bluesky" })).toBeVisible();
 
+  await page.getByRole("link", { name: "Team", exact: true }).click();
+  await expect(page).toHaveURL(/\/about\/instance\/team$/);
   await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
   await expect(page.getByText("The Vidra maintainers.")).toBeVisible();
+
+  await page.getByRole("link", { name: "Moderation and code of conduct" }).click();
+  await expect(page).toHaveURL(/\/about\/instance\/moderation$/);
   await expect(page.getByRole("heading", { name: "Moderation and code of conduct" })).toBeVisible();
   await expect(page.getByText("Reports are reviewed by humans.")).toBeVisible();
+
+  await page.getByRole("link", { name: "Technical information" }).click();
+  await expect(page).toHaveURL(/\/about\/instance\/tech$/);
   await expect(page.getByRole("heading", { name: "Technical information" })).toBeVisible();
   await expect(page.getByText("vidra v0.1.0")).toBeVisible();
   await expect(page.getByText("Video uploads")).toBeVisible();
+
+  await page.getByRole("link", { name: "Vidra", exact: true }).click();
+  await expect(page).toHaveURL(/\/about\/vidra$/);
+  await expect(page.getByRole("heading", { name: "This platform is powered by Vidra" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Network", exact: true }).click();
+  await expect(page).toHaveURL(/\/about\/network$/);
+  await expect(page.getByRole("heading", { name: "Network" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Platform", exact: true }).click();
 
   await page.getByRole("button", { name: "Support" }).click();
   const support = page.getByRole("dialog", { name: "Support Vidra Test" });
@@ -124,9 +170,10 @@ test("the contact modal posts visitor messages and shows success", async ({ page
     body = route.request().postDataJSON();
     return route.fulfill({ status: 202, body: "" });
   });
-  await page.goto("/about");
+  // The shared identity header keeps Contact us available on every About tab.
+  await page.goto("/about/network");
 
-  await page.getByRole("button", { name: "Contact" }).click();
+  await page.getByRole("button", { name: "Contact us" }).click();
   const dialog = page.getByRole("dialog", { name: "Contact Vidra Test" });
   await dialog.getByLabel("Your name").fill("Ada");
   await dialog.getByLabel("Your email").fill("ada@example.test");
@@ -175,7 +222,7 @@ test("the contact modal maps 422, disabled, and rate-limit errors", async ({ pag
   });
   await page.goto("/about");
 
-  await page.getByRole("button", { name: "Contact" }).click();
+  await page.getByRole("button", { name: "Contact us" }).click();
   const dialog = page.getByRole("dialog", { name: "Contact Vidra Test" });
   await dialog.getByLabel("Your name").fill("Ada");
   await dialog.getByLabel("Your email").fill("ada@example.test");
@@ -213,12 +260,14 @@ test("a non-federating instance is labeled Local only and hides empty optional s
   );
   await page.goto("/about");
 
-  await expect(page.getByText("Local only", { exact: true })).toBeVisible();
-  await expect(page.getByText(/does not federate/)).toBeVisible();
+  await expect(page.getByText("Local only", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("ActivityPub", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Team" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Contact" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Contact us" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Support" })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Network", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Federation disabled" })).toBeVisible();
 });
 
 test("the sidebar About entry reaches the page", async ({ page }) => {
@@ -233,7 +282,7 @@ test("the sidebar About entry reaches the page", async ({ page }) => {
     .getByRole("link", { name: "About" })
     .click();
 
-  await expect(page).toHaveURL(/\/about$/);
+  await expect(page).toHaveURL(/\/about\/instance\/home$/);
   await expect(page.getByRole("heading", { name: "Vidra Test", exact: true })).toBeVisible();
 });
 
@@ -254,3 +303,34 @@ test("an instance fetch failure shows the retryable error state", async ({ page 
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByRole("heading", { name: "Vidra Test", exact: true })).toBeVisible();
 });
+
+for (const viewport of [
+  { name: "phone", width: 390, height: 844 },
+  { name: "tablet", width: 768, height: 1024 },
+  { name: "desktop", width: 1440, height: 900 },
+] as const) {
+  test(`the About experience stays usable at ${viewport.name} width`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await routeAbout(page);
+    await page.goto("/about/instance/home");
+
+    await expect(page.getByRole("heading", { name: "Vidra Test", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "About categories" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Platform information" })).toBeVisible();
+    await expectNoHorizontalPageScroll(page);
+
+    await page.getByRole("link", { name: "Technical information" }).click();
+    await expect(page).toHaveURL(/\/about\/instance\/tech$/);
+    await expect(page.getByRole("heading", { name: "Technical information" })).toBeVisible();
+    await expectNoHorizontalPageScroll(page);
+
+    await page.getByRole("button", { name: "Contact us" }).click();
+    const dialog = page.getByRole("dialog", { name: "Contact Vidra Test" });
+    await expect(dialog).toBeVisible();
+    const dialogBox = await dialog.boundingBox();
+    expect(dialogBox).not.toBeNull();
+    expect(dialogBox!.x).toBeGreaterThanOrEqual(0);
+    expect(dialogBox!.x + dialogBox!.width).toBeLessThanOrEqual(viewport.width);
+    await expectNoHorizontalPageScroll(page);
+  });
+}

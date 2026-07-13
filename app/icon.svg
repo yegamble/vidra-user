@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Vidra favicon: the brand's black-on-white language as a rounded tile with
-       a white play glyph (optically centered — nudged right of geometric center).
-       Served by the App Router as /icon (fixes the previous favicon 404). -->
-  <rect width="64" height="64" rx="14" fill="#0a0a0c"/>
-  <path d="M25 20.5v23l19.5-11.5z" fill="#ffffff"/>
-</svg>

@@ -24,9 +24,10 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 // Config-parity W4 branding: the SSR instance snapshot (passed down by
 // app/layout.tsx; null when the backend is unreachable) supplies the header
 // logo slots — header_wide for the sm+ header, header_square as the compact
-// phone mark (each falling back to the other when only one is set) — and the
-// instance name. branding.hide_instance_name drops the text ONLY when a logo
-// is actually set, so the header is never empty.
+// phone mark — and the instance name. The uploaded instance avatar is the
+// PeerTube-style compact identity fallback when no typed header logo exists.
+// branding.hide_instance_name drops the text ONLY when an image is actually
+// set, so the header is never empty.
 export function Header({ instance = null }: { instance?: InstanceConfigSnapshot | null }) {
   const pathname = usePathname();
 
@@ -38,12 +39,13 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
   const name = rawName !== "" ? rawName : "Vidra";
   const wideLogo = brandingAssetUrl(instance?.branding?.logos?.header_wide);
   const squareLogo = brandingAssetUrl(instance?.branding?.logos?.header_square);
-  const hasLogo = wideLogo !== null || squareLogo !== null;
+  const avatar = brandingAssetUrl(instance?.branding?.avatar);
+  const hasLogo = wideLogo !== null || squareLogo !== null || avatar !== null;
   const hideName = instance?.branding?.hide_instance_name === true && hasLogo;
   // Each breakpoint uses its intended slot, falling back to the other so one
   // uploaded logo still brands the whole header.
-  const phoneLogo = squareLogo ?? wideLogo;
-  const desktopLogo = wideLogo ?? squareLogo;
+  const phoneLogo = squareLogo ?? avatar ?? wideLogo;
+  const desktopLogo = wideLogo ?? squareLogo ?? avatar;
 
   return (
     <header className="sticky top-0 z-30 px-2 pt-2 sm:px-3 sm:pt-3">

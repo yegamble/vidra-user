@@ -72,6 +72,15 @@ describe("Header branding", () => {
     }
   });
 
+  it("uses the uploaded instance avatar in the navbar when no header logo is set", () => {
+    render(<Header instance={snapshot({ avatar: set("/api/v1/instance/avatar"), logos: {} })} />);
+    const imgs = Array.from(document.querySelectorAll("img"));
+    expect(imgs.length).toBe(2);
+    for (const img of imgs) {
+      expect(img.getAttribute("src")).toBe(`${API}/api/v1/instance/avatar`);
+    }
+  });
+
   it("uses header_square as the compact mark and header_wide for sm+ when both are set", () => {
     render(
       <Header
