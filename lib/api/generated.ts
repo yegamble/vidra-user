@@ -1239,6 +1239,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/search/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Autocomplete suggestions for a search prefix
+         * @description Proxies query/video/channel/tag/history autocomplete to the search service (search-service W4) with core-computed personalization and history flags (instance setting AND user pref AND signed-in). Optional auth. Always 200: a disabled service, a disabled suggestions toggle, an empty query, a timeout, or any error degrades to an empty list — a suggestion box never errors.
+         */
+        get: operations["searchSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recommendations/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Home ("for you" / trending) recommendation rail
+         * @description Personalized home recommendations from the search service when the instance + user allow it and the caller is signed in; otherwise the trending feed. Optional auth. Never errors — any search failure falls back to the trending feed (source="fallback").
+         */
+        get: operations["getHomeRecommendations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record behavioural search/discovery events
+         * @description Accepts a batch (<= 20) of behavioural events (suggestions shown / selected, search submitted, result clicked, impression, play started, completed), enriches each with the caller's user id, session, and an allow_history flag, and enqueues them for the search service (search-service W4). Optional auth, rate-limited. Never blocks on the search service.
+         */
+        post: operations["recordSearchEvents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}": {
         parameters: {
             query?: never;
@@ -2152,6 +2212,70 @@ export interface paths {
          * @description Removes a video from the caller's library (idempotent).
          */
         delete: operations["unsaveVideo"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Related-videos rail for a watch page
+         * @description Related recommendations for a video from the search service (search-service W4); falls back to a server-side same-channel + same-category heuristic when the service is unavailable or returns nothing. Optional auth.
+         */
+        get: operations["getVideoRecommendations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/search-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get my search history
+         * @description Returns the caller's stored search history from the search service (search-service W4). Requires auth. Answers 503 search_unavailable when the search service is disabled or unreachable — never a fake empty history.
+         */
+        get: operations["getMySearchHistory"];
+        put?: never;
+        post?: never;
+        /**
+         * Clear my entire search history
+         * @description Clears the caller's entire search history in the search service (search-service W4). Requires auth. Answers 503 search_unavailable when the service is down — the delete must not silently fail.
+         */
+        delete: operations["clearMySearchHistory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/search-history/{query}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a single search-history entry
+         * @description Removes one normalized query from the caller's search history (search-service W4). Requires auth. Answers 503 search_unavailable when the service is down.
+         */
+        delete: operations["deleteMySearchHistoryEntry"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4454,6 +4578,19 @@ export interface components {
                 remote_uri_users: boolean;
                 /** @description Anonymous callers may search by URL/handle (default off — the SSRF/abuse surface, matching PeerTube). */
                 remote_uri_anonymous: boolean;
+                /**
+                 * @description Effective search ranking family (search-service W4): simple heuristics or advanced learned/behavioural signals.
+                 * @enum {string}
+                 */
+                mode?: "simple" | "advanced";
+                /** @description Whether autocomplete suggestions are available (the search service is wired AND the admin toggle is on). */
+                suggestions_enabled?: boolean;
+                /** @description Instance-level personalized-search gate (search-service W4). */
+                personalized_search_enabled?: boolean;
+                /** @description Instance-level personalized-recommendations gate (search-service W4). */
+                personalized_recommendations_enabled?: boolean;
+                /** @description Instance-level search-history gate (search-service W4). */
+                search_history_enabled?: boolean;
             };
         };
         /** @description One instance branding asset reference: its public serving URL ("" when unset) and whether the client should fall back to built-in imagery. */
@@ -4545,6 +4682,12 @@ export interface components {
             history_enabled: boolean;
             /** @description Whether the account profile is publicly accessible. Private, inactive, and unknown profile URLs all return 404. */
             profile_public: boolean;
+            /** @description Per-user search-history preference (search-service W4): the user half of the two-factor history gate. Default true. */
+            search_history_enabled?: boolean;
+            /** @description Per-user personalized-search preference (search-service W4). Default true. */
+            personalized_search_enabled?: boolean;
+            /** @description Per-user personalized-recommendations preference (search-service W4). Default true. */
+            personalized_recommendations_enabled?: boolean;
             /** Format: date-time */
             created_at: string;
             /** @description Whether an avatar is set (served at GET /users/{id}/avatar). Present on GET/PATCH /auth/me; omitted elsewhere. */
@@ -4578,6 +4721,12 @@ export interface components {
             history_enabled?: boolean;
             /** @description Toggle public access to the account profile. */
             profile_public?: boolean;
+            /** @description Toggle the per-user search-history preference (search-service W4). */
+            search_history_enabled?: boolean;
+            /** @description Toggle the per-user personalized-search preference (search-service W4). */
+            personalized_search_enabled?: boolean;
+            /** @description Toggle the per-user personalized-recommendations preference (search-service W4). */
+            personalized_recommendations_enabled?: boolean;
         };
         PublicUserProfile: {
             /** Format: uuid */
@@ -5294,6 +5443,16 @@ export interface components {
             limit: number;
             /** @example 0 */
             offset: number;
+        };
+        /** @description A recommendation rail (search-service W4). items are video cards, each with an added `reason`; personalized reflects whether personalization was applied; source is "search" (ranked by vidra-search) or "fallback" (server-side trending / related heuristic). */
+        RecommendationsResponse: {
+            items: (components["schemas"]["Video"] & {
+                /** @description subscribed | trending | co_watch | similar | fresh | popular | related */
+                reason?: string;
+            })[];
+            personalized: boolean;
+            /** @enum {string} */
+            source: "search" | "fallback";
         };
         /** @description One typed remote hit resolved from a URI/handle-shaped search query (config-parity W13): a remote video (same projection as GET /api/v1/remote-videos/{id}) or a remote channel/account identity. Exactly one of video/actor is present, matching type. */
         RemoteSearchResult: {
@@ -10317,6 +10476,97 @@ export interface operations {
             };
         };
     };
+    searchSuggestions: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suggestions (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        query: string;
+                        suggestions: {
+                            text: string;
+                            /** @description query | video | channel | tag | history */
+                            type: string;
+                            video_id?: string;
+                            channel_handle?: string;
+                            is_personal: boolean;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    getHomeRecommendations: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A recommendation rail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationsResponse"];
+                };
+            };
+        };
+    };
+    recordSearchEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    events: {
+                        /** @description One of the behavioural-event allowlist types. */
+                        type: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Events accepted for asynchronous delivery. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description More than 20 events, or an unsupported event type. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getVideo: {
         parameters: {
             query?: never;
@@ -13310,6 +13560,129 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getVideoRecommendations: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A related-videos rail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationsResponse"];
+                };
+            };
+        };
+    };
+    getMySearchHistory: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's search history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        entries: {
+                            query?: string;
+                            normalized_query?: string;
+                            /** Format: date-time */
+                            last_used_at?: string;
+                            use_count?: number;
+                        }[];
+                        limit: number;
+                        offset: number;
+                    };
+                };
+            };
+            /** @description The search service is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    clearMySearchHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description History cleared. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The search service is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteMySearchHistoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The normalized query string to remove (path-escaped). */
+                query: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entry removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The search service is unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useOptionalSession } from "@/components/auth/AuthProvider";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -12,9 +13,11 @@ import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { ApiError, api, errorMessage, getAccessToken, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { t } from "@/lib/i18n";
 import type { InstanceSearchBlock } from "@/lib/instance-config.server";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { miniatureDisplayName } from "@/lib/miniature-name";
+import { trackSearchEvent } from "@/lib/search-events";
 import {
   readRemoteSearchResults,
   remoteVideoToCard,
@@ -33,7 +36,16 @@ type MoreStatus = "idle" | "loading" | "error";
 // title (the stretched title link — its decorative before:inset-0 overlay
 // makes the whole row clickable, thumbnail included); the channel link is
 // layered above the overlay so it stays independently clickable.
-function SearchResultRow({ video, onDeleted }: { video: Video; onDeleted: () => void }) {
+function SearchResultRow({
+  video,
+  onDeleted,
+  onSelect,
+}: {
+  video: Video;
+  onDeleted: () => void;
+  /** Fired when the row's title link is activated (search.result_clicked). */
+  onSelect?: () => void;
+}) {
   // A federated remote row: links to the remote watch surface, shows its
   // origin-domain badge, and uses the locally cached remote thumbnail. Its
   // channel_handle is a "name@domain" identity, not a local route.
@@ -81,6 +93,7 @@ function SearchResultRow({ video, onDeleted }: { video: Video; onDeleted: () => 
       <div className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
         <Link
           href={isRemote ? `/remote/${video.id}` : `/videos/${video.id}`}
+          onClick={onSelect}
           className="focus-ring rounded-md before:absolute before:inset-0 before:rounded-xl"
         >
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-fg transition-colors group-hover:text-fg-muted">
@@ -245,6 +258,16 @@ export function SearchResults({
 }) {
   const trimmed = query.trim();
   const { category, language, tag } = filters;
+  const user = useOptionalSession()?.user ?? null;
+  // The personalization hint (search-service W4): shown only when the instance
+  // runs advanced ranking AND allows personalized search AND the signed-in user
+  // has kept their personalized-search preference on — i.e. results the viewer
+  // sees really are tailored to them. A link to /settings/search lets them turn
+  // it off. Absent gates (older backend) keep it dark.
+  const personalizedActive =
+    remoteSearch?.mode === "advanced" &&
+    remoteSearch?.personalized_search_enabled !== false &&
+    user?.personalized_search_enabled === true;
   const [videos, setVideos] = useState<Video[]>([]);
   const [remote, setRemote] = useState<RemoteSearchResult[]>([]);
   const [status, setStatus] = useState<Status>(trimmed ? "loading" : "idle");
@@ -269,6 +292,9 @@ export function SearchResults({
         setRemote(readRemoteSearchResults(res));
         setHasMore(res.videos.length === PAGE_SIZE);
         setStatus("ready");
+        // A search was submitted and produced this many local results — the
+        // signal the search service learns ranking from.
+        trackSearchEvent({ type: "search.submitted", query: trimmed, count: res.videos.length });
       })
       .catch(() => {
         if (!controller.signal.aborted) setStatus("error");
@@ -364,13 +390,32 @@ export function SearchResults({
   }
   return (
     <div className="flex flex-col gap-6">
+      {personalizedActive ? (
+        <p className="text-xs text-fg-muted">
+          {t("search.personalizedHint")}{" "}
+          <Link
+            href="/settings/search"
+            className="focus-ring rounded font-medium text-fg underline-offset-2 hover:underline"
+          >
+            {t("search.personalizedManage")}
+          </Link>
+        </p>
+      ) : null}
       {remoteGroup}
       {videos.length > 0 ? (
         <ul className="flex flex-col">
-          {videos.map((video) => (
+          {videos.map((video, index) => (
             <SearchResultRow
               key={video.id}
               video={video}
+              onSelect={() =>
+                trackSearchEvent({
+                  type: "search.result_clicked",
+                  query: trimmed,
+                  video_id: video.id,
+                  position: index,
+                })
+              }
               onDeleted={() => setVideos((current) => current.filter((item) => item.id !== video.id))}
             />
           ))}

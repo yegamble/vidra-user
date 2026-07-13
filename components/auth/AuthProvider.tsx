@@ -305,3 +305,14 @@ export function useSession(): SessionContextValue {
   }
   return ctx;
 }
+
+/**
+ * useOptionalSession returns the session context, or null when there is no
+ * AuthProvider above (never throws). For components that render both inside the
+ * app shell and standalone — e.g. SearchResults, mounted under AuthProvider in
+ * the app but rendered bare in unit tests — where the absence of a session is a
+ * valid "no signed-in user" answer, not a programming error.
+ */
+export function useOptionalSession(): SessionContextValue | null {
+  return useContext(SessionContext);
+}

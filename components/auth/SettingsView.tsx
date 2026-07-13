@@ -205,6 +205,12 @@ export function SettingsView() {
       </SettingsGroup>
       <SettingsGroup label="Privacy & safety">
         <SettingsNavRow
+          href="/settings/search"
+          action="Manage search and recommendations"
+          title="Search & recommendations"
+          desc="Personalization, and your search history."
+        />
+        <SettingsNavRow
           href="/settings/mutes"
           action="Manage muted accounts"
           title="Mutes"
