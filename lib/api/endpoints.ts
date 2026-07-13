@@ -32,6 +32,7 @@ import type {
   CaptionListResponse,
   Channel,
   ChannelListResponse,
+  PublicUserProfile,
   ChannelSyncListResponse,
   ChannelSyncResponse,
   CreateChannelSyncRequest,
@@ -299,6 +300,13 @@ export const api = {
   /** GET /api/v1/channels/{handle} — channel by handle. */
   getChannel: (handle: string, signal?: AbortSignal) =>
     apiRequest<Channel>(`/api/v1/channels/${encodeURIComponent(handle)}`, { signal }),
+
+  /** GET /api/v1/users/{username}/profile — public profile or owner preview. */
+  getUserProfile: (username: string, signal?: AbortSignal) =>
+    apiRequest<PublicUserProfile>(
+      `/api/v1/users/${encodeURIComponent(username)}/profile`,
+      { signal },
+    ),
 
   /** GET /api/v1/channels/{handle}/videos — a channel's videos (cards). */
   listChannelVideos: (handle: string, token?: string, signal?: AbortSignal) =>

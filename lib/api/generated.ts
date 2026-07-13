@@ -826,6 +826,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{username}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a user's profile
+         * @description Returns an active account's profile and owned channels when the account opted into a public profile. Private, inactive, and unknown accounts all return 404. An authenticated owner may view their own private profile as a preview.
+         */
+        get: operations["getUserProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/donation-addresses": {
         parameters: {
             query?: never;
@@ -4523,6 +4543,8 @@ export interface components {
             unlisted?: boolean;
             /** @description Per-user watch-history preference. While false, watch-progress and history writes are skipped (PUT /videos/{id}/watch-progress is a no-op 204). Seeded at account creation from the new_user_history_enabled instance setting; existing entries are kept (clear them via DELETE /me/history). */
             history_enabled: boolean;
+            /** @description Whether the account profile is publicly accessible. Private, inactive, and unknown profile URLs all return 404. */
+            profile_public: boolean;
             /** Format: date-time */
             created_at: string;
             /** @description Whether an avatar is set (served at GET /users/{id}/avatar). Present on GET/PATCH /auth/me; omitted elsewhere. */
@@ -4554,6 +4576,20 @@ export interface components {
             unlisted?: boolean;
             /** @description Toggle the per-user watch-history preference (see User.history_enabled). */
             history_enabled?: boolean;
+            /** @description Toggle public access to the account profile. */
+            profile_public?: boolean;
+        };
+        PublicUserProfile: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            display_name: string;
+            bio: string;
+            /** Format: date-time */
+            created_at: string;
+            has_avatar: boolean;
+            has_banner: boolean;
+            channels: components["schemas"]["Channel"][];
         };
         Channel: {
             /**
@@ -9169,6 +9205,37 @@ export interface operations {
             };
             /** @description Ownership verification is not supported for this network. */
             501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getUserProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile and its publishing channels. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicUserProfile"];
+                };
+            };
+            /** @description The profile is private, inactive, or unknown. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

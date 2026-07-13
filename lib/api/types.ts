@@ -127,6 +127,7 @@ export type FederationFollowerRequest = Schemas["FederationFollowerRequest"];
 export type FederationFollowerRequestListResponse =
   Schemas["FederationFollowerRequestListResponse"];
 export type User = Schemas["User"];
+export type PublicUserProfile = Schemas["PublicUserProfile"];
 export type ProfileImage = Schemas["ProfileImage"];
 export type RegisterRequest = Schemas["RegisterRequest"];
 export type RegistrationPending = Schemas["RegistrationPending"];

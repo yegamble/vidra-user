@@ -19,6 +19,7 @@ import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { miniatureDisplayName } from "@/lib/miniature-name";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useRestrictedMode } from "@/lib/device-preferences";
 
 // Grid video card in the template's language (specs/design/{app,desktop}-template):
 // a borderless rounded-2xl thumbnail on the page background, then a row with the
@@ -62,6 +63,7 @@ export function VideoCard({
   // under `warn` it is badged only; `display` (and `hide`, which is enforced
   // server-side, or an unknown policy) applies no client treatment.
   const policy = useSensitiveContentPolicy();
+  const restrictedMode = useRestrictedMode();
   // Miniature attribution (config-parity W5): when the operator prefers the
   // uploader's display name, the card credits it instead of the channel name
   // (falling back to the channel while the payload lacks the author field —
@@ -70,6 +72,13 @@ export function VideoCard({
     useInstanceDefaults()?.miniature_prefer_author_display_name === true;
   if (removed) return null;
   const sensitive = isSensitiveVideo(video);
+  if (sensitive && restrictedMode) {
+    return (
+      <div className="flex aspect-video items-center justify-center rounded-2xl bg-surface-muted px-4 text-center text-sm font-medium text-fg-muted">
+        Hidden by Restricted Mode
+      </div>
+    );
+  }
   const blurSensitive = sensitive && policy === "blur";
   const markSensitive = sensitive && (policy === "blur" || policy === "warn");
   const channelName = miniatureDisplayName(video, preferAuthorName);

@@ -11,6 +11,12 @@ export const apiBaseUrl: string = trimTrailingSlash(
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080",
 );
 
+// Server-only calls use compose/service DNS when configured. Host-run Next
+// falls back to the same public address, so local npm dev needs no extra env.
+export const internalApiBaseUrl: string = trimTrailingSlash(
+  process.env.INTERNAL_API_BASE_URL ?? apiBaseUrl,
+);
+
 // OpenTelemetry is opt-in and zero-cost when off. When OTEL_ENABLED=true,
 // instrumentation.ts registers the OTel SDK and every server-side call to
 // vidra-core injects a W3C `traceparent` (see lib/observability/trace.ts). When
