@@ -55,7 +55,11 @@ export const en = {
   // surface. Kept plain so the whole catalog stays swappable per-locale.
   "search.inputLabel": "Search videos",
   "search.placeholder": "Search videos, channels, tags",
-  "search.landmarkHeader": "Search videos",
+  // The two role="search" landmarks stay distinctly labelled AND distinct from
+  // the input's own "Search videos" name, so getByLabel("Search videos") resolves
+  // unambiguously to the field: the header is "Site search", the results-page /
+  // mobile field is "Search".
+  "search.landmarkHeader": "Site search",
   "search.landmarkPage": "Search",
   "search.clear": "Clear search",
   "search.suggestionsLabel": "Search suggestions",

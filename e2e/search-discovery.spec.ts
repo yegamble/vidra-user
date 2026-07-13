@@ -167,10 +167,13 @@ test.describe("autocomplete combobox", () => {
     await page.goto("/");
     const box = page.getByLabel("Search videos");
     await box.fill("pa");
-    await expect(page.getByRole("option")).toHaveCount(2);
+    // Scope option queries to the suggestions listbox — the page's native
+    // <select> filters also expose role="option" ("All").
+    const listbox = page.getByRole("listbox", { name: "Search suggestions" });
+    await expect(listbox.getByRole("option")).toHaveCount(2);
 
     await page.getByTitle(/Remove .*past query.* from your search history/).click();
-    await expect(page.getByRole("option")).toHaveCount(1);
+    await expect(listbox.getByRole("option")).toHaveCount(1);
     expect(deleted).toBe("past query");
     // Removing must not navigate away.
     await expect(page).toHaveURL(/\/$/);
@@ -230,7 +233,9 @@ test.describe("account search settings", () => {
     await page.getByLabel("Email").fill("ada@example.test");
     await page.getByLabel("Password").fill("supersecret");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+    // The account-menu dropdown trigger is the signed-in signal in the redesigned
+    // header (the profile/settings/sign-out links live inside it).
+    await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   }
 
   test("toggles persist via PATCH and the history list renders + passes axe", async ({ page }) => {
@@ -254,8 +259,10 @@ test.describe("account search settings", () => {
       return route.fulfill({ json: { ...userSession().user, personalized_recommendations_enabled: true } });
     });
 
-    // Client-side nav keeps the in-memory session.
-    await page.getByRole("link", { name: "ada" }).click();
+    // Client-side nav keeps the in-memory session: open the account menu →
+    // Settings → the "Search & recommendations" row.
+    await page.getByRole("button", { name: "Open account menu" }).click();
+    await page.getByRole("link", { name: "Settings" }).click();
     await page.getByRole("link", { name: "Manage search and recommendations" }).click();
     await expect(page.getByRole("heading", { name: "Search & recommendations" })).toBeVisible();
 
@@ -323,7 +330,7 @@ test.describe("admin search section", () => {
     await page.getByLabel("Email").fill("ada@example.test");
     await page.getByLabel("Password").fill("supersecret");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   }
 
   test("renders the search section on Advanced with the enum control and saves a change", async ({

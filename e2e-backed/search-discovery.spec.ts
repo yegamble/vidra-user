@@ -22,7 +22,8 @@ async function loginUI(page: Page, email: string, password: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  // The account-menu dropdown trigger is the signed-in signal in the redesigned header.
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("the header autocomplete suggests an indexed public video title", async ({ page, request }) => {
@@ -63,8 +64,9 @@ test("a signed-in user can delete a search-history entry", async ({ page, reques
   await page.getByLabel("Search videos").press("Enter");
   await expect(page).toHaveURL(new RegExp(`/search\\?q=${query}`));
 
-  // The history write is async; poll the settings page until it appears.
-  await page.getByRole("link", { name: user.username }).click();
+  // The history write is async; open the account menu → Settings → the search row.
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("link", { name: "Manage search and recommendations" }).click();
   await expect(page.getByRole("heading", { name: "Search & recommendations" })).toBeVisible();
 
