@@ -70,6 +70,55 @@ export type VideoSearchResponse = Schemas["VideoSearchResponse"];
 export type VideoDownloadFile = Schemas["VideoDownloadFile"];
 export type VideoDownloadResponse = Schemas["VideoDownloadResponse"];
 
+// --- Search & discovery (search-service W4) ---------------------------------
+// Autocomplete suggestions. The response is inline in the spec (not a named
+// component), so it is derived from the operation. `type` is a string in the
+// contract; the union below is the client-side allowlist we branch navigation on.
+export type SearchSuggestionsResponse =
+  operations["searchSuggestions"]["responses"]["200"]["content"]["application/json"];
+export type SearchSuggestion = SearchSuggestionsResponse["suggestions"][number];
+export type SearchSuggestionType = "query" | "video" | "channel" | "tag" | "history";
+// A home / related recommendation rail: video cards each carrying a `reason`.
+export type RecommendationsResponse = Schemas["RecommendationsResponse"];
+export type RecommendationItem = RecommendationsResponse["items"][number];
+export type RecommendationSource = NonNullable<RecommendationsResponse["source"]>;
+// The caller's stored search history (GET /me/search-history). Inline in the
+// spec, derived from the operation.
+export type SearchHistoryResponse =
+  operations["getMySearchHistory"]["responses"]["200"]["content"]["application/json"];
+export type SearchHistoryEntry = NonNullable<SearchHistoryResponse["entries"]>[number];
+// The behavioural events POST /search/events accepts. The spec's body schema
+// only pins `type` (the allowlist is enforced server-side and additional
+// properties are forwarded), so the client type is authored here: a discriminated
+// bag whose optional fields carry ONLY ids/positions/counts — never query text
+// beyond the search term the user typed, and no other PII. See lib/search-events.ts.
+export type SearchEventType =
+  | "search.suggestions_shown"
+  | "search.suggestion_selected"
+  | "search.submitted"
+  | "search.result_clicked"
+  | "video.impression"
+  | "video.play_started"
+  | "video.completed";
+export interface SearchEventInput {
+  type: SearchEventType;
+  /** The raw prefix/query the user typed (allowed — it is their own search term). */
+  query?: string;
+  /** The chosen suggestion's text (suggestion_selected). */
+  suggestion?: string;
+  /** Suggestion/result type: query | video | channel | tag | history. */
+  suggestion_type?: string;
+  video_id?: string;
+  /** 0-based position in a suggestion list / result list / rail. */
+  position?: number;
+  /** Number of suggestions shown (suggestions_shown). */
+  count?: number;
+  /** Play/impression surface: home | search | related | watch | other. */
+  context?: string;
+  /** Ranking model version echoed back from a result set, when known. */
+  model_version?: string;
+}
+
 // --- Users / auth -----------------------------------------------------------
 export type UserRole = NonNullable<Schemas["User"]["role"]>;
 export type AdminUser = Schemas["AdminUser"];
