@@ -146,6 +146,14 @@
   --color-live: var(--live);
 }
 
+html {
+  /* Reserve the scrollbar track in classic-scrollbar environments (Windows,
+     Linux, mouse-attached macOS) so navigating between a short page and a
+     scrolling page doesn't shift the whole layout horizontally. Overlay
+     scrollbars (trackpad macOS, phones) are unaffected. */
+  scrollbar-gutter: stable;
+}
+
 body {
   background: var(--canvas);
   color: var(--fg);

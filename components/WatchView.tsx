@@ -32,7 +32,7 @@ import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
+import { WatchSkeleton } from "@/components/watch/WatchSkeleton";
 import { ApiError, api, ipfsHlsMasterUrl, isSensitiveVideo, videoCaptionUrl } from "@/lib/api";
 import {
   clearPlaybackToken,
@@ -301,9 +301,12 @@ export function WatchView({ id }: { id: string }) {
   }
 
   if (status === "loading") {
+    // Same silhouette as the route loading boundary and the loaded page, so
+    // navigation → hydration → data reads as one surface filling in.
     return (
-      <div className="flex justify-center py-24">
-        <Spinner label="Loading video" />
+      <div role="status" aria-live="polite">
+        <span className="sr-only">Loading video…</span>
+        <WatchSkeleton />
       </div>
     );
   }

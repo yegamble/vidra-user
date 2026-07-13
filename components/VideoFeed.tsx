@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
-import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
+import { VideoGridSkeleton } from "@/components/VideoCardSkeleton";
 import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { FeedSort, Video } from "@/lib/api";
@@ -75,9 +75,12 @@ export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: Fe
   }
 
   if (status === "loading") {
+    // Same silhouette as the grid that replaces it (and as app/loading.tsx),
+    // so the route → client-fetch → data handoff doesn't jump layouts.
     return (
-      <div className="flex justify-center py-24">
-        <Spinner label="Loading videos" />
+      <div role="status" aria-live="polite">
+        <span className="sr-only">Loading videos…</span>
+        <VideoGridSkeleton />
       </div>
     );
   }

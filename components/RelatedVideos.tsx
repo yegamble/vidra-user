@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { Skeleton } from "@/components/ui/Skeleton";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { api, remoteVideoThumbnailUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
@@ -87,7 +88,37 @@ export function RelatedVideos({
     };
   }, [id, channelHandle, channelId, category, onFirstRelated]);
 
-  if (!related || related.length === 0) return null;
+  // While loading, hold the rail's lg-column width with skeleton rows instead
+  // of returning null — otherwise the player column renders full-width and
+  // then visibly shrinks when the rail pops in. Only the lg+ two-column
+  // layout needs the reservation (stacked layouts just append below), so the
+  // placeholder stays hidden under lg. A resolved-but-empty list collapses.
+  if (related === null) {
+    return (
+      <aside
+        aria-label="Related videos"
+        aria-busy="true"
+        className={cn(
+          "hidden w-full shrink-0 flex-col gap-3.5 lg:flex",
+          belowLayout ? null : "lg:w-[344px]",
+        )}
+      >
+        <h2 className="text-[13px] font-bold tracking-[0.02em] text-fg-muted">Related videos</h2>
+        <div aria-hidden className="flex flex-col gap-3.5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex gap-3">
+              <Skeleton className="aspect-video w-[150px] shrink-0 rounded-lg" />
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-0.5">
+                <Skeleton className="h-3.5 w-11/12" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+    );
+  }
+  if (related.length === 0) return null;
 
   function removeRelated(deleted: Video) {
     const next = related?.filter((item) => item.id !== deleted.id) ?? [];
