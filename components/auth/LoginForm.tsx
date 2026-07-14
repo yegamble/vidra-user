@@ -28,11 +28,14 @@ import { ApiError, api, errorMessage } from "@/lib/api";
 export function LoginForm({
   oauthPending = false,
   oauthError = "",
+  initialProviders,
 }: {
   /** True when the URL carried the ?oauth=1 return_to marker. */
   oauthPending?: boolean;
   /** The ?oauth_error=<code> from a failed OAuth callback ("" when none). */
   oauthError?: string;
+  /** SSR snapshot; undefined means the server could not reach the instance API. */
+  initialProviders?: string[];
 }) {
   const router = useRouter();
   const { status, login, completeMfaChallenge } = useSession();
@@ -59,7 +62,7 @@ export function LoginForm({
   const [landingDismissed, setLandingDismissed] = useState(false);
   const completingOAuth = oauthLanding && !landingDismissed && status === "restoring";
   const oauthSilentFailure = oauthLanding && !landingDismissed && status === "anon";
-  const [providers, setProviders] = useState<string[]>([]);
+  const [providers, setProviders] = useState<string[]>(initialProviders ?? []);
 
   // Clean the one-shot OAuth markers out of the URL (they must not survive a
   // reload/bookmark); the outcome already lives in state.
@@ -74,6 +77,8 @@ export function LoginForm({
   }, [oauthLanding, status, router]);
 
   useEffect(() => {
+    // Paint the server snapshot immediately, then revalidate it in place so a
+    // recently changed provider list and route-mocked environments stay live.
     const controller = new AbortController();
     api
       .getInstance(controller.signal)
@@ -82,7 +87,7 @@ export function LoginForm({
         // No instance document — the password form still works without buttons.
       });
     return () => controller.abort();
-  }, []);
+  }, [initialProviders]);
 
   async function submit() {
     setError(null);

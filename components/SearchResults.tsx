@@ -8,7 +8,7 @@ import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
 import {
@@ -43,6 +43,37 @@ import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 
 type Status = "idle" | "loading" | "error" | "ready";
 type MoreStatus = "idle" | "loading" | "error";
+
+// The search page is a thumbnail-left list, not a browse grid. Matching that
+// geometry during the client fetch prevents the global/grid → spinner → rows
+// sequence that used to move the entire results surface on every query.
+function SearchResultsSkeleton({ count = 5 }: { count?: number }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-testid="search-results-loading"
+    >
+      <span className="sr-only">Searching…</span>
+      <ul aria-hidden className="flex flex-col">
+        {Array.from({ length: count }).map((_, index) => (
+          <li
+            key={index}
+            data-testid="search-result-skeleton"
+            className="flex gap-3 border-b border-border-subtle py-3"
+          >
+            <Skeleton className="aspect-video w-[148px] flex-none rounded-[10px] sm:w-[220px]" />
+            <div className="flex min-w-0 flex-1 flex-col gap-2 pt-1">
+              <Skeleton className="h-4 w-11/12" />
+              <Skeleton className="h-3 w-2/5" />
+              <Skeleton className="h-3 w-1/3" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // SearchResultRow is the template's SEARCH list-row treatment of a result:
 // thumbnail left (148px, 220px from `sm`), title/channel/meta right, hairline
@@ -104,7 +135,10 @@ function SearchResultRow({
   }
 
   return (
-    <li className="group/card relative flex gap-3 border-b border-border-subtle py-3">
+    <li
+      data-testid="search-result-row"
+      className="group/card relative flex gap-3 border-b border-border-subtle py-3"
+    >
       <div
         className="w-[148px] flex-none sm:w-[220px]"
         onClick={() => onSelect?.()}
@@ -398,11 +432,7 @@ export function SearchResults({
     );
   }
   if (status === "loading") {
-    return (
-      <div className="flex justify-center py-24">
-        <Spinner label="Searching" />
-      </div>
-    );
+    return <SearchResultsSkeleton />;
   }
   if (status === "error") {
     return <ErrorState message="Search failed. Please try again." onRetry={retry} />;

@@ -15,6 +15,8 @@ import {
   VideoIcon,
   XIcon,
 } from "@/components/icons";
+import { useInstanceAboutBootstrap } from "@/components/InstanceAboutProvider";
+import { InstanceAboutSkeleton } from "@/components/InstanceAboutSkeleton";
 import { InstanceContactModal } from "@/components/InstanceContactModal";
 import { Markdown } from "@/components/Markdown";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
@@ -22,7 +24,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Modal } from "@/components/ui/Modal";
-import { Spinner } from "@/components/ui/Spinner";
 import {
   EMPTY_INSTANCE_ABOUT,
   api,
@@ -72,8 +73,9 @@ const INSTANCE_SECTIONS = new Set<InstanceAboutSection>([
 // and primary tabs are shared by every section; only the content panel changes,
 // keeping long operator documents out of one unbounded page.
 export function InstanceAboutView({ section }: { section: InstanceAboutSection }) {
-  const [instance, setInstance] = useState<ExtendedInstanceResponse | null>(null);
-  const [about, setAbout] = useState<InstanceAboutResponse | null>(null);
+  const bootstrap = useInstanceAboutBootstrap();
+  const [instance, setInstance] = useState<ExtendedInstanceResponse | null>(bootstrap.instance);
+  const [about, setAbout] = useState<InstanceAboutResponse | null>(bootstrap.about);
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [config, setConfig] = useState<VideoConfigResponse | null>(null);
@@ -81,20 +83,26 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
   const [supportOpen, setSupportOpen] = useState(false);
 
   useEffect(() => {
+    // Stale-while-revalidate: normal navigations paint the server bootstrap
+    // immediately, then refresh it without clearing the existing shell. The
+    // fallback fetch also keeps route-mocked/local environments functional
+    // when the Next server cannot reach the API directly.
     const controller = new AbortController();
     api
       .getInstance(controller.signal)
       .then((res) => setInstance(res as ExtendedInstanceResponse))
       .catch(() => {
-        if (!controller.signal.aborted) setError(true);
+        if (!controller.signal.aborted && bootstrap.instance === null) setError(true);
       });
     getInstanceAbout(controller.signal)
       .then(setAbout)
       .catch(() => {
-        if (!controller.signal.aborted) setAbout(EMPTY_INSTANCE_ABOUT);
+        if (!controller.signal.aborted && bootstrap.about === null) {
+          setAbout(EMPTY_INSTANCE_ABOUT);
+        }
       });
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [bootstrap.about, bootstrap.instance, reloadKey]);
 
   const hasTaxonomy = Boolean(
     instance &&
@@ -128,11 +136,7 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
   }
 
   if (instance === null || about === null) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading instance details" />
-      </div>
-    );
+    return <InstanceAboutSkeleton />;
   }
 
   const name = instance.name;

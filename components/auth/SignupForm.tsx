@@ -13,31 +13,43 @@ import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { ApiError, api, errorMessage } from "@/lib/api";
+import type { InstanceResponse } from "@/lib/api";
 
 type RegState = "loading" | "open" | "closed";
 
 export function SignupForm({
   oauthPending = false,
   oauthError = "",
+  initialInstance,
 }: {
   /** True when the URL carried the ?oauth=1 return_to marker. */
   oauthPending?: boolean;
   /** The ?oauth_error=<code> from a failed OAuth callback ("" when none). */
   oauthError?: string;
+  /** SSR snapshot; undefined keeps the resilient browser-fetch fallback. */
+  initialInstance?: InstanceResponse;
 }) {
   const router = useRouter();
   const { status, register } = useSession();
 
-  const [regState, setRegState] = useState<RegState>("loading");
-  const [requiresApproval, setRequiresApproval] = useState(false);
+  const [regState, setRegState] = useState<RegState>(() =>
+    initialInstance ? (initialInstance.registration_enabled ? "open" : "closed") : "loading",
+  );
+  const [requiresApproval, setRequiresApproval] = useState(
+    initialInstance?.registration_requires_approval === true,
+  );
   // W7 signup-policy fields from GET /instance: the effective
   // email-verification gate, the age-attestation threshold (0 = off), and the
   // machine-readable closure reason ("user_limit_reached" when the instance
   // is full).
-  const [requiresVerification, setRequiresVerification] = useState(false);
-  const [minimumAge, setMinimumAge] = useState(0);
-  const [closedReason, setClosedReason] = useState("");
-  const [providers, setProviders] = useState<string[]>([]);
+  const [requiresVerification, setRequiresVerification] = useState(
+    initialInstance?.registration_requires_email_verification === true,
+  );
+  const [minimumAge, setMinimumAge] = useState(initialInstance?.registration_minimum_age ?? 0);
+  const [closedReason, setClosedReason] = useState(
+    initialInstance?.registration_disabled_reason ?? "",
+  );
+  const [providers, setProviders] = useState<string[]>(initialInstance?.oauth_providers ?? []);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -85,10 +97,10 @@ export function SignupForm({
       .catch(() => {
         // If we cannot read instance config, show the form and let the register
         // attempt surface the real outcome rather than blocking signup.
-        if (!controller.signal.aborted) setRegState("open");
+        if (!controller.signal.aborted && initialInstance === undefined) setRegState("open");
       });
     return () => controller.abort();
-  }, []);
+  }, [initialInstance]);
 
   async function submit() {
     setFieldErrors({});

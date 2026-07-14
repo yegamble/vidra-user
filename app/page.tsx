@@ -106,15 +106,13 @@ export default async function Home({
         <FeedScopeToggle active={scope} sort={active} filters={filters} urlDefaults={landingDefaults} />
         <FeedFilters sort={active} filters={filters} urlDefaults={landingDefaults} />
       </div>
-      {/* "Live now" discovery rail — currently-live public streams (GET /live).
-          Self-contained: renders nothing when nothing is live or the read fails,
-          so it never reserves space or shows an error on the public feed. */}
-      <LiveNowRail />
-      {/* "For you" / "Trending now" recommendation rail (search-service W4) —
-          self-hiding like LiveNowRail: renders nothing until the endpoint
-          returns items, so it never reserves space or duplicates an empty feed. */}
-      <HomeRecommendationsRail />
       <VideoFeed key={feedKey} sort={active} filters={filters} />
+      {/* Optional discovery rails resolve independently in the browser. Keep
+          them after the stable primary feed so a slow live/recommendation
+          response never injects content above videos the viewer is already
+          reading (the web.dev CLS guidance for late, variable content). */}
+      <LiveNowRail />
+      <HomeRecommendationsRail />
     </main>
   );
 }

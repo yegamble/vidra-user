@@ -11,9 +11,8 @@ import type { LiveStreamCard } from "@/lib/api";
 // app+desktop templates): a horizontal rail of the currently-live PUBLIC streams
 // (GET /api/v1/live, newest session first), each card linking to its
 // /live/[id] watch page. It renders NOTHING while loading, on error, or when
-// nothing is live — a quiet progressive-enhancement surface that never reserves
-// space, and never shows an error UI on a public feed (matching ChannelLiveBadge
-// / SidebarFollowing).
+// nothing is live. Feed pages mount this progressive enhancement after their
+// primary results, so its variable late arrival cannot displace visible cards.
 //
 // Faithful to the contract's deliberate omissions (design-refresh spec §5.6):
 //   • the design's "N watching" chip is NOT rendered — there is no server-side
@@ -39,7 +38,7 @@ export function LiveNowRail() {
   if (streams.length === 0) return null;
 
   return (
-    <section aria-label="Live now" className="mb-10">
+    <section aria-label="Live now" className="mt-10">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-bold tracking-[-0.025em]">Live now</h2>
         <span className="shrink-0 text-[13px] tabular-nums text-fg-muted">
