@@ -2144,14 +2144,20 @@ export function videoOriginalUrl(id: string, pt?: string | null): string {
 /**
  * Direct URL to a video's HLS master playlist. Only meaningful once the detail
  * response carries `hls_url` (the readiness signal — the playlist 404s before
- * transcoding completes). The path is deterministic per the contract, matching
- * the detail's hls_url value.
+ * transcoding completes). When supplied, the advertised URL is preferred so
+ * generation-version cache keys returned by the backend are preserved.
  */
-export function videoHlsMasterUrl(id: string, pt?: string | null): string {
-  return withPlaybackToken(
-    `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/hls/master.m3u8`,
-    pt,
-  );
+export function videoHlsMasterUrl(
+  id: string,
+  pt?: string | null,
+  advertisedUrl?: string | null,
+): string {
+  const url = advertisedUrl
+    ? /^https?:\/\//i.test(advertisedUrl)
+      ? advertisedUrl
+      : `${apiBaseUrl}${advertisedUrl.startsWith("/") ? "" : "/"}${advertisedUrl}`
+    : `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/hls/master.m3u8`;
+  return withPlaybackToken(url, pt);
 }
 
 /**

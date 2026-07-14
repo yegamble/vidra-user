@@ -13,6 +13,7 @@ const hlsMock = vi.hoisted(() => ({
     autoLevelCapping: number;
     bandwidthEstimate: number;
     destroyed: boolean;
+    source: string | null;
     levels: Array<{ height: number }>;
     emit: (event: string, ...args: unknown[]) => void;
   }>,
@@ -37,6 +38,7 @@ vi.mock("hls.js", () => {
     autoLevelCapping = -1;
     bandwidthEstimate = 7_500_000;
     destroyed = false;
+    source: string | null = null;
     levels: Array<{ height: number }> = [];
     handlers: Record<string, Array<(...args: unknown[]) => void>> = {};
 
@@ -52,7 +54,7 @@ vi.mock("hls.js", () => {
       for (const handler of this.handlers[event] ?? []) handler(event, ...args);
     }
     loadSource(source: string) {
-      void source;
+      this.source = source;
     }
     attachMedia(media: HTMLMediaElement) {
       void media;
@@ -86,7 +88,11 @@ describe("hls.js playback tuning", () => {
   it("bounds the VOD back-buffer and caps ABR to player/decode capacity", async () => {
     const videoRef = { current: document.createElement("video") };
     const { result } = renderHook(() =>
-      useHlsPlayback(videoRef, { id: "video-1", hls_url: "/master.m3u8" }, 12),
+      useHlsPlayback(
+        videoRef,
+        { id: "video-1", hls_url: "/master.m3u8?v=generation-1" },
+        12,
+      ),
     );
 
     await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
@@ -97,6 +103,9 @@ describe("hls.js playback tuning", () => {
       capLevelOnFPSDrop: true,
       abrEwmaDefaultEstimate: 5_000_000,
     });
+    expect(hlsMock.instances[0].source).toBe(
+      "http://localhost:8080/master.m3u8?v=generation-1",
+    );
 
     act(() => result.current.setLevel(2));
     expect(hlsMock.instances[0].nextLevel).toBe(2);
@@ -151,6 +160,7 @@ describe("hls.js playback tuning", () => {
 
     await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
     expect(hlsMock.instances[0].config).toMatchObject({
+      lowLatencyMode: false,
       backBufferLength: 30,
       capLevelToPlayerSize: true,
       capLevelOnFPSDrop: true,

@@ -26,7 +26,9 @@ test("a published video is transcoded to HLS and the watch page streams it with 
   // pipeline has persisted the ladder. This is the DB-effect evidence — the
   // videos row now advertises its streaming playlist.
   const detail = await waitForHls(request, videoId);
-  expect(detail.hls_url).toBe(`/api/v1/videos/${videoId}/hls/master.m3u8`);
+  expect(detail.hls_url).toMatch(
+    new RegExp(`^/api/v1/videos/${videoId}/hls/master\\.m3u8\\?v=`),
+  );
   expect(detail.renditions?.length ?? 0).toBeGreaterThan(0);
   const heights = (detail.renditions ?? []).map((r) => r.height);
 

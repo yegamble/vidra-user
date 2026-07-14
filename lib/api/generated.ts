@@ -1516,7 +1516,7 @@ export interface paths {
         };
         /**
          * Get a video's HLS master playlist
-         * @description Returns the HLS master playlist for a transcoded video. Variant URIs are relative ("720p/playlist.m3u8"), resolving to GET /videos/{id}/hls/{rendition}/{file}. Visibility mirrors /original (private → owner only, else 404). 404 until the transcode pipeline has marked the video's streaming playlist ready — the detail response's hls_url field tells clients when it exists.
+         * @description Returns the HLS master playlist for a transcoded video. Variant URIs are relative ("720p/playlist.m3u8"), resolving to GET /videos/{id}/hls/{rendition}/{file}. Visibility mirrors /original (private → owner only, else 404). 404 until the transcode pipeline has marked the video's streaming playlist ready — the detail response's hls_url field tells clients when it exists. Relative playlist references carry the current generation's v query parameter so completed VOD assets can be cached immutably in a private browser cache.
          */
         get: operations["getVideoHLSMaster"];
         put?: never;
@@ -1536,7 +1536,7 @@ export interface paths {
         };
         /**
          * Get an HLS rendition playlist or segment
-         * @description Serves one file of a transcoded HLS rendition: its variant playlist (file = "playlist.m3u8", served as application/vnd.apple.mpegurl) or one MPEG-TS segment (file = "seg_00000.ts", served as video/mp2t). Rendition directories are named by rung height ("720p"). Same visibility and readiness rules as the master playlist; names outside the transcoder's fixed naming are 404.
+         * @description Serves one file of a transcoded HLS rendition: its variant playlist (file = "playlist.m3u8"), a dense byte-range I-frame trick-play playlist and media object ("iframe.m3u8" / "iframe.ts"), or one MPEG-TS segment (file = "seg_00000.ts"). Rendition directories are named by rung height ("720p"). Same visibility and readiness rules as the master playlist; names outside the transcoder's fixed naming are 404.
          */
         get: operations["getVideoHLSFile"];
         put?: never;
@@ -4948,8 +4948,8 @@ export interface components {
             /** @description The video's free-form tags (lowercased, alphabetical; at most 5). Present on the create/update/detail views; omitted when empty and on list/feed views. */
             tags?: string[];
             /**
-             * @description Path of the HLS master playlist (GET /videos/{id}/hls/master.m3u8). Present on the detail endpoint only once the transcoded streaming playlist is ready; omitted while transcoding is pending/failed or disabled. Progressive playback via /original is always available.
-             * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/master.m3u8
+             * @description Versioned path of the HLS master playlist (GET /videos/{id}/hls/master.m3u8?v=<generation>). Present on the detail endpoint only once the transcoded streaming playlist is ready; omitted while transcoding is pending/failed or disabled. Progressive playback via /original is always available.
+             * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/master.m3u8?v=ctw5ps0e8w00
              */
             hls_url?: string;
             /** @description The available HLS ladder rungs (tallest first), present alongside hls_url on the detail endpoint once transcoding completed. */
@@ -11217,7 +11217,10 @@ export interface operations {
     };
     getVideoHLSMaster: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Playlist-generation cache key advertised in the video's hls_url. A stale non-empty value returns 404 rather than serving new bytes under an old immutable URL. */
+                v?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -11248,13 +11251,16 @@ export interface operations {
     };
     getVideoHLSFile: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Playlist-generation cache key propagated from the parent playlist. */
+                v?: string;
+            };
             header?: never;
             path: {
                 id: string;
                 /** @description The rendition directory, e.g. "720p". */
                 rendition: string;
-                /** @description "playlist.m3u8" or a segment such as "seg_00000.ts". */
+                /** @description "playlist.m3u8", "iframe.m3u8", "iframe.ts", or a segment such as "seg_00000.ts". */
                 file: string;
             };
             cookie?: never;
