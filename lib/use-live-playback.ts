@@ -89,7 +89,13 @@ export function useLivePlayback(
           setHlsFailed(true);
           return;
         }
-        const hls = new HlsClass();
+        const hls = new HlsClass({
+          // Live playback needs a much shorter rewind window than VOD. Bounding
+          // it prevents an open live tab from retaining the entire broadcast.
+          backBufferLength: 30,
+          capLevelToPlayerSize: true,
+          capLevelOnFPSDrop: true,
+        });
         hlsRef.current = hls;
         let parsed = false;
         let recoveries = 0;
@@ -139,7 +145,9 @@ export function useLivePlayback(
     setLevel: (level: number) => {
       const hls = hlsRef.current;
       if (!hls) return;
-      hls.currentLevel = level;
+      // Switch at the next fragment boundary instead of flushing the live
+      // buffer and re-seeking immediately.
+      hls.nextLevel = level;
       setCurrentLevel(level);
     },
     failed,

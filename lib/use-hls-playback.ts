@@ -118,6 +118,14 @@ export function useHlsPlayback(
         }
         const hls = new HlsClass({
           startPosition: startAt ?? -1,
+          // Keep long watches and autoplay sessions from retaining every played
+          // fragment in MSE. Ninety seconds still leaves a useful instant
+          // scrub-back window without letting memory grow for the full session.
+          backBufferLength: 90,
+          // Do not download/decode a rendition the rendered player cannot use,
+          // and step down when decoding cannot keep up with the selected rung.
+          capLevelToPlayerSize: true,
+          capLevelOnFPSDrop: true,
           // Credential a password-protected video's HLS requests with the Bearer
           // playback token. Skipped when playing the IPFS gateway mirror (a public
           // gateway needs no token and a non-simple Authorization header would trip

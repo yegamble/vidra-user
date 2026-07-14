@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   // `next start` still works (it warns that standalone output exists) — the
   // Playwright webServer keeps using it outside Docker.
   output: "standalone",
+  poweredByHeader: false,
 };
 
 export default nextConfig;

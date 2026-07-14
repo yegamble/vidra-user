@@ -226,6 +226,7 @@ export function VideoCardPreview({
           src={poster}
           alt=""
           loading="lazy"
+          decoding="async"
           className={cn("absolute inset-0 h-full w-full object-cover", posterClassName)}
         />
       ) : (
