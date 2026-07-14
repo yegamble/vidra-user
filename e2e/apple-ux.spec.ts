@@ -155,6 +155,50 @@ test.describe("Apple HIG polish at phone width", () => {
 test.describe("Apple HIG polish at desktop width", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
+  test("keeps primary destinations on one responsive page canvas", async ({ page }) => {
+    await mockHome(page);
+
+    const destinations = [
+      { path: "/", heading: "Recent videos" },
+      { path: "/trending", heading: "Trending videos" },
+      { path: "/subscriptions", heading: "Subscriptions" },
+      { path: "/library", heading: "Library" },
+      { path: "/history", heading: "History" },
+      { path: "/messages", heading: "Messages" },
+      { path: "/studio", heading: "Studio" },
+      { path: "/about/instance/home", heading: "About" },
+    ] as const;
+
+    let baseline: { left: number; right: number; paddingLeft: number; paddingRight: number } | null =
+      null;
+
+    for (const destination of destinations) {
+      await page.goto(destination.path);
+      await expect(
+        page.getByRole("heading", { name: destination.heading, level: 1 }),
+      ).toBeVisible();
+
+      const shell = page.locator('main[data-page-shell=""]');
+      await expect(shell).toHaveCount(1);
+      const geometry = await shell.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return {
+          left: rect.left,
+          right: rect.right,
+          paddingLeft: Number.parseFloat(style.paddingLeft),
+          paddingRight: Number.parseFloat(style.paddingRight),
+        };
+      });
+
+      baseline ??= geometry;
+      expect(Math.abs(geometry.left - baseline.left), destination.path).toBeLessThanOrEqual(1);
+      expect(Math.abs(geometry.right - baseline.right), destination.path).toBeLessThanOrEqual(1);
+      expect(geometry.paddingLeft, destination.path).toBe(baseline.paddingLeft);
+      expect(geometry.paddingRight, destination.path).toBe(baseline.paddingRight);
+    }
+  });
+
   test("uses a distinct elevated navigation layer without obscuring content", async ({ page }) => {
     await mockHome(page);
     await page.goto("/");
@@ -186,17 +230,31 @@ test.describe("Apple HIG polish at desktop width", () => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: sampleVideos.at(-1)!.title })).toBeVisible();
 
+    const banner = page.getByRole("banner");
+    const sidebar = page.getByRole("navigation", { name: "Primary" });
+    const [initialBannerBox, initialSidebarBox] = await Promise.all([
+      banner.boundingBox(),
+      sidebar.boundingBox(),
+    ]);
+    expect(initialBannerBox).not.toBeNull();
+    expect(initialSidebarBox).not.toBeNull();
+    const initialGap =
+      initialSidebarBox!.y - (initialBannerBox!.y + initialBannerBox!.height);
+
     await page.evaluate(() => window.scrollTo(0, 600));
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
 
-    const banner = page.getByRole("banner");
-    const sidebar = page.getByRole("navigation", { name: "Primary" });
     const [bannerBox, sidebarBox] = await Promise.all([banner.boundingBox(), sidebar.boundingBox()]);
     expect(bannerBox).not.toBeNull();
     expect(sidebarBox).not.toBeNull();
     expect(bannerBox!.y).toBeGreaterThanOrEqual(0);
     expect(bannerBox!.y).toBeLessThanOrEqual(1);
-    expect(sidebarBox!.y).toBeGreaterThanOrEqual(bannerBox!.y + bannerBox!.height + 4);
+    const scrolledGap = sidebarBox!.y - (bannerBox!.y + bannerBox!.height);
+    expect(scrolledGap).toBeGreaterThanOrEqual(8);
+    expect(
+      Math.abs(scrolledGap - initialGap),
+      "header/sidebar gap must not change on scroll",
+    ).toBeLessThanOrEqual(1);
 
     await page.getByRole("button", { name: "Collapse sidebar" }).click();
     await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
