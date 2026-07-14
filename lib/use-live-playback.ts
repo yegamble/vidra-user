@@ -90,6 +90,10 @@ export function useLivePlayback(
           return;
         }
         const hls = new HlsClass({
+          // nginx-rtmp emits conventional HLS playlists (EXTINF segments), not
+          // LL-HLS parts/server-control tags. Keep hls.js on its matching plain
+          // HLS path until the media server actually publishes those LL tags.
+          lowLatencyMode: false,
           // Live playback needs a much shorter rewind window than VOD. Bounding
           // it prevents an open live tab from retaining the entire broadcast.
           backBufferLength: 30,

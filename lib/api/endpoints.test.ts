@@ -145,6 +145,9 @@ describe("api endpoints", () => {
     expect(videoHlsMasterUrl("a/b")).toBe(
       "http://localhost:8080/api/v1/videos/a%2Fb/hls/master.m3u8",
     );
+    expect(
+      videoHlsMasterUrl("v1", null, "/api/v1/videos/v1/hls/master.m3u8?v=generation-1"),
+    ).toBe("http://localhost:8080/api/v1/videos/v1/hls/master.m3u8?v=generation-1");
   });
 
   it("media URL helpers append a ?pt= playback token (CORE-17) when one is passed", () => {
@@ -155,6 +158,15 @@ describe("api endpoints", () => {
     );
     expect(videoHlsMasterUrl("v1", "tok1")).toBe(
       "http://localhost:8080/api/v1/videos/v1/hls/master.m3u8?pt=tok1",
+    );
+    expect(
+      videoHlsMasterUrl(
+        "v1",
+        "tok1",
+        "/api/v1/videos/v1/hls/master.m3u8?v=generation-1",
+      ),
+    ).toBe(
+      "http://localhost:8080/api/v1/videos/v1/hls/master.m3u8?v=generation-1&pt=tok1",
     );
     expect(videoThumbnailUrl("v1", "tok1")).toBe(
       "http://localhost:8080/api/v1/videos/v1/thumbnail?pt=tok1",

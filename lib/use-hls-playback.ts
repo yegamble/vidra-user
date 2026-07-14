@@ -198,7 +198,9 @@ export function useHlsPlayback(
             setFailedId(video.id);
           }
         });
-        hls.loadSource(hlsMasterOverride || videoHlsMasterUrl(video.id));
+        hls.loadSource(
+          hlsMasterOverride || videoHlsMasterUrl(video.id, null, video.hls_url),
+        );
         hls.attachMedia(el);
       })
       .catch(() => {
@@ -209,7 +211,7 @@ export function useHlsPlayback(
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [mode, video.id, videoRef, startAt, hlsMasterOverride, playbackToken]);
+  }, [mode, video.id, video.hls_url, videoRef, startAt, hlsMasterOverride, playbackToken]);
 
   const fragment = startAt !== null ? `#t=${startAt}` : "";
   // The `?pt=` token rides only on the SERVER media URLs (native-HLS master +
@@ -219,7 +221,8 @@ export function useHlsPlayback(
     mode === "hls-js"
       ? undefined
       : mode === "native-hls"
-        ? (hlsMasterOverride || videoHlsMasterUrl(video.id, playbackToken)) + fragment
+        ? (hlsMasterOverride ||
+            videoHlsMasterUrl(video.id, playbackToken, video.hls_url)) + fragment
         : videoOriginalUrl(video.id, playbackToken) + fragment;
 
   return {
