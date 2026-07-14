@@ -20,14 +20,17 @@ export async function generateMetadata({
   return buildWatchMetadata(video, instance);
 }
 
-// The watch page is the destination feed cards link to. The video itself loads
-// client-side in WatchView (route-mockable, refetchable); this server component
-// just resolves the dynamic id.
+// The watch page is the destination feed cards link to. Seed the client view
+// with the same anonymous public document used for metadata (React cache()
+// deduplicates the read within the render pass), then let WatchView revalidate
+// in the browser. Private/password videos still return null here and use the
+// authenticated client path unchanged.
 export default async function WatchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const initialVideo = await getPublicVideo(id);
   return (
     <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-4 sm:px-6 sm:py-6">
-      <WatchView id={id} />
+      <WatchView key={id} id={id} initialVideo={initialVideo} />
     </main>
   );
 }

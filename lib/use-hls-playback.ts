@@ -6,6 +6,13 @@ import type Hls from "hls.js";
 
 import { videoHlsMasterUrl, videoOriginalUrl } from "@/lib/api";
 import {
+  HLS_ABR_DEFAULT_ESTIMATE,
+  autoLevelCapForNetwork,
+  browserNetworkInformation,
+  readStoredBandwidthEstimate,
+  storeBandwidthEstimate,
+} from "@/lib/hls-bandwidth";
+import {
   AUTO_LEVEL,
   buildLevelMenu,
   canPlayNativeHls,
@@ -118,6 +125,12 @@ export function useHlsPlayback(
         }
         const hls = new HlsClass({
           startPosition: startAt ?? -1,
+          // A recent authoritative-server measurement prevents an unnecessarily
+          // low cold start. IPFS mirrors have different path characteristics,
+          // so they use the balanced seed without reading the stored estimate.
+          abrEwmaDefaultEstimate: hlsMasterOverride
+            ? HLS_ABR_DEFAULT_ESTIMATE
+            : readStoredBandwidthEstimate(),
           // Keep long watches and autoplay sessions from retaining every played
           // fragment in MSE. Ninety seconds still leaves a useful instant
           // scrub-back window without letting memory grow for the full session.
@@ -144,7 +157,17 @@ export function useHlsPlayback(
         hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
           parsed = true;
           setLevels(buildLevelMenu(hls.levels));
+          const networkCap = autoLevelCapForNetwork(
+            hls.levels,
+            browserNetworkInformation(),
+          );
+          if (networkCap !== null) hls.autoLevelCapping = networkCap;
         });
+        if (!hlsMasterOverride) {
+          hls.on(HlsClass.Events.FRAG_BUFFERED, () => {
+            storeBandwidthEstimate(hls.bandwidthEstimate);
+          });
+        }
         // Every effective rung switch (ABR on Auto, or a confirmed manual pick):
         // record the active height for the "Auto (720p)" readout, and clear the
         // pending flag once the switch reaches the requested rung.

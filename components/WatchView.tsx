@@ -61,13 +61,13 @@ const PROGRESS_INTERVAL_MS = 10_000;
 // trivial positions a viewer would not want to "resume" into).
 const RESUME_MIN_SECONDS = 5;
 
-// WatchView loads one video client-side and plays it: the transcoded HLS ladder
-// when the detail carries hls_url (see useHlsPlayback), else the original via a
-// Range-capable <video src>. States: loading / not-found (404) / error (retry) /
-// ready. For a signed-in viewer it records watch progress (so the video enters
-// their history and can be resumed) and offers a Resume control from the saved
-// position.
-export function WatchView({ id }: { id: string }) {
+// WatchView plays one video, starting from an anonymous server seed when the
+// route could fetch one and revalidating it client-side. Private/password or
+// backend-down server reads pass no seed and retain the client loading/unlock/
+// retry path. For a signed-in viewer it records watch progress (so the video
+// enters their history and can be resumed) and offers a Resume control from the
+// saved position.
+export function WatchView({ id, initialVideo = null }: { id: string; initialVideo?: Video | null }) {
   // The instance browse defaults (config-parity W5). The tag chips below link
   // to the recent feed filtered by tag; feedHref keeps ?sort= only when it
   // differs from the effective default, so the URL must be built against the
@@ -80,8 +80,9 @@ export function WatchView({ id }: { id: string }) {
     resolveLandingPage(instanceDefaults),
     instanceDefaults,
   );
-  const [status, setStatus] = useState<Status>("loading");
-  const [video, setVideo] = useState<Video | null>(null);
+  const seed = initialVideo?.id === id ? initialVideo : null;
+  const [status, setStatus] = useState<Status>(seed ? "ready" : "loading");
+  const [video, setVideo] = useState<Video | null>(seed);
   const [reloadKey, setReloadKey] = useState(0);
   // A minted, video-scoped playback token for a password-protected video
   // (CORE-17). Held in memory only (the module playback-token store + this state
@@ -172,13 +173,20 @@ export function WatchView({ id }: { id: string }) {
         // without a valid credential — render the unlock prompt, not the generic
         // error state (a plain unknown id is still 404).
         if (err instanceof ApiError && err.status === 401 && err.code === "password_required") {
+          setVideo(null);
           setStatus("locked");
-        } else {
-          setStatus(err instanceof ApiError && err.status === 404 ? "notfound" : "error");
+        } else if (err instanceof ApiError && err.status === 404) {
+          setVideo(null);
+          setStatus("notfound");
+        } else if (!seed) {
+          // A transient revalidation failure must not replace a usable public
+          // server seed with an error screen. Unseeded reads keep the existing
+          // retry surface.
+          setStatus("error");
         }
       });
     return () => controller.abort();
-  }, [id, reloadKey, playbackToken]);
+  }, [id, reloadKey, playbackToken, seed]);
 
   // Emit video.play_started once per watched local video (search-service W4),
   // tagged with the discovery context this page was opened from. Best-effort

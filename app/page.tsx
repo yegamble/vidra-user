@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { FeedFilters } from "@/components/FeedFilters";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
@@ -6,6 +8,7 @@ import { HomeRecommendationsRail } from "@/components/HomeRecommendationsRail";
 import { LiveNowRail } from "@/components/LiveNowRail";
 import { PageShell } from "@/components/PageShell";
 import { VideoFeed } from "@/components/VideoFeed";
+import { VideoGridSkeleton } from "@/components/VideoCardSkeleton";
 import type { FeedSort } from "@/lib/api";
 import {
   feedDefaultsForLanding,
@@ -15,8 +18,11 @@ import {
   shouldRenderHomepageDocument,
 } from "@/lib/feed-defaults";
 import { readFeedFilters } from "@/lib/feed-url";
+import type { FeedFilters as FeedFilterValues } from "@/lib/feed-url";
+import { getPublicFeed } from "@/lib/feed.server";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { getInstanceHomepage } from "@/lib/instance-homepage.server";
+import { PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 
 const HEADINGS: Record<FeedSort, string> = {
   recent: "Recent videos",
@@ -107,7 +113,13 @@ export default async function Home({
         <FeedScopeToggle active={scope} sort={active} filters={filters} urlDefaults={landingDefaults} />
         <FeedFilters sort={active} filters={filters} urlDefaults={landingDefaults} />
       </div>
-      <VideoFeed key={feedKey} sort={active} filters={filters} />
+      <Suspense key={feedKey} fallback={<StreamedFeedFallback />}>
+        <StreamedVideoFeed
+          sort={active}
+          filters={{ ...filters, scope }}
+          feedKey={feedKey}
+        />
+      </Suspense>
       {/* Optional discovery rails resolve independently in the browser. Keep
           them after the stable primary feed so a slow live/recommendation
           response never injects content above videos the viewer is already
@@ -115,5 +127,43 @@ export default async function Home({
       <LiveNowRail />
       <HomeRecommendationsRail />
     </PageShell>
+  );
+}
+
+async function StreamedVideoFeed({
+  sort,
+  filters,
+  feedKey,
+}: {
+  sort: FeedSort;
+  filters: FeedFilterValues;
+  feedKey: string;
+}) {
+  const initialPage = await getPublicFeed({
+    sort,
+    scope: filters.scope,
+    tag: filters.tag,
+    category: filters.category,
+    language: filters.language,
+    limit: PAGE_SIZE,
+    offset: 0,
+  });
+  return (
+    <VideoFeed
+      key={feedKey}
+      sort={sort}
+      filters={filters}
+      initialPage={initialPage}
+      prioritizeFirstRow
+    />
+  );
+}
+
+function StreamedFeedFallback() {
+  return (
+    <div role="status" aria-live="polite">
+      <span className="sr-only">Loading videos…</span>
+      <VideoGridSkeleton />
+    </div>
   );
 }
