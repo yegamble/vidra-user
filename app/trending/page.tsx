@@ -2,6 +2,7 @@ import { FeedFilters } from "@/components/FeedFilters";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
 import { LiveNowRail } from "@/components/LiveNowRail";
+import { PageShell } from "@/components/PageShell";
 import { VideoFeed } from "@/components/VideoFeed";
 import {
   feedDefaultsForLanding,
@@ -45,7 +46,7 @@ export default async function TrendingPage({
     filters.tag ?? "",
   ].join("|");
   return (
-    <main className="mx-auto w-full max-w-[1480px] flex-1 px-4 pb-12 pt-7 sm:px-6 sm:pb-16 sm:pt-10 lg:px-8">
+    <PageShell className="pb-12 pt-7 sm:pb-16 sm:pt-10">
       <section
         aria-labelledby="trending-feed-heading"
         className="mb-6 flex flex-col gap-5 lg:mb-8 lg:flex-row lg:items-end lg:justify-between"
@@ -74,6 +75,6 @@ export default async function TrendingPage({
       {/* Late optional content follows the stable feed so it cannot push the
           visible result grid down when the client request resolves. */}
       <LiveNowRail />
-    </main>
+    </PageShell>
   );
 }

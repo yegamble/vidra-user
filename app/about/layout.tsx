@@ -1,3 +1,4 @@
+import { PageShell } from "@/components/PageShell";
 import { InstanceAboutProvider } from "@/components/InstanceAboutProvider";
 import {
   getInstanceAboutDocument,
@@ -11,10 +12,10 @@ export default async function AboutLayout({ children }: { children: React.ReactN
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+    <PageShell className="py-8 sm:py-10">
       <InstanceAboutProvider instance={instance} about={about}>
         {children}
       </InstanceAboutProvider>
-    </main>
+    </PageShell>
   );
 }

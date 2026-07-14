@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 
+import { PageShell } from "@/components/PageShell";
 import { cn } from "@/lib/cn";
 
 import { ConversationRail } from "./ConversationRail";
@@ -21,7 +22,7 @@ export function MessagingShell({ children }: { children: React.ReactNode }) {
   const onThread = pathname !== "/messages";
 
   return (
-    <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1">
+    <PageShell gutters="desktop" className="flex min-h-0">
       <div
         className={cn(
           "min-h-0 flex-col lg:flex lg:w-[360px] lg:flex-none lg:shrink-0 lg:border-r lg:border-border-subtle",
@@ -38,6 +39,6 @@ export function MessagingShell({ children }: { children: React.ReactNode }) {
       >
         {children}
       </div>
-    </main>
+    </PageShell>
   );
 }

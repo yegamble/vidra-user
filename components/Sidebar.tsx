@@ -84,7 +84,7 @@ export function Sidebar() {
   return (
     <nav
       aria-label="Primary"
-      className={`glass-chrome sticky top-[4.75rem] mb-3 ml-3 mt-3 hidden max-h-[calc(100vh-5.5rem)] shrink-0 flex-col justify-between gap-2 self-start overflow-y-auto rounded-[22px] p-2 transition-[width] duration-200 motion-reduce:transition-none sm:flex ${
+      className={`glass-chrome sticky top-20 mb-3 ml-3 mt-3 hidden max-h-[calc(100vh-5.75rem)] shrink-0 flex-col justify-between gap-2 self-start overflow-y-auto rounded-[22px] p-2 transition-[width] duration-200 motion-reduce:transition-none sm:flex ${
         collapsed ? "w-16" : "w-56"
       }`}
     >

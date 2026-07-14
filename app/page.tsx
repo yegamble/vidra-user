@@ -4,6 +4,7 @@ import { FeedSortTabs } from "@/components/FeedSortTabs";
 import { HomepageDocument } from "@/components/HomepageDocument";
 import { HomeRecommendationsRail } from "@/components/HomeRecommendationsRail";
 import { LiveNowRail } from "@/components/LiveNowRail";
+import { PageShell } from "@/components/PageShell";
 import { VideoFeed } from "@/components/VideoFeed";
 import type { FeedSort } from "@/lib/api";
 import {
@@ -75,7 +76,7 @@ export default async function Home({
     filters.tag ?? "",
   ].join("|");
   return (
-    <main className="mx-auto w-full max-w-[1480px] flex-1 px-4 pb-12 pt-7 sm:px-6 sm:pb-16 sm:pt-10 lg:px-8">
+    <PageShell className="pb-12 pt-7 sm:pb-16 sm:pt-10">
       {/* A visible large title gives the feed a stable sense of place. The sort
           remains URL-backed, so the title and supporting copy update together. */}
       <section
@@ -113,6 +114,6 @@ export default async function Home({
           reading (the web.dev CLS guidance for late, variable content). */}
       <LiveNowRail />
       <HomeRecommendationsRail />
-    </main>
+    </PageShell>
   );
 }
