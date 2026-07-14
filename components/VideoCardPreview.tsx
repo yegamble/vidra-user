@@ -14,6 +14,7 @@ import {
 import { api, videoCaptionUrl } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
+import { browserNetworkInformation, shouldConserveData } from "@/lib/hls-bandwidth";
 import { fractionAt, fractionOfTime, timeAtFraction } from "@/lib/player-ui";
 import { useStoryboard, type SeekStoryboard } from "@/lib/use-storyboard";
 import {
@@ -34,6 +35,8 @@ export interface VideoCardPreviewProps {
   /** A browser-playable progressive source. null keeps the poster-only card. */
   src: string | null | undefined;
   poster?: string | null;
+  /** Eager/high-priority poster for an above-the-fold card. */
+  posterPriority?: boolean;
   duration?: number | null;
   hasStoryboard?: boolean;
   /**
@@ -73,6 +76,7 @@ export function VideoCardPreview({
   href,
   src,
   poster,
+  posterPriority = false,
   duration,
   hasStoryboard = false,
   captions,
@@ -95,7 +99,13 @@ export function VideoCardPreview({
     choice: boolean | null;
   }>({ muted, choice: null });
   const storyboard = useStoryboard(videoId, hasStoryboard);
-  const allowed = previewEnabled && typeof src === "string" && src.length > 0;
+  // Hover previews are optional egress. Respect Save-Data and 2G/3G signals;
+  // the normal thumbnail link remains unchanged on those connections.
+  const allowed =
+    previewEnabled &&
+    typeof src === "string" &&
+    src.length > 0 &&
+    !shouldConserveData(browserNetworkInformation());
   const active = allowed && hoverActive;
   const captionTracks = usePreviewCaptionTracks(videoId, active, captions);
   const primaryCaptionSrc = captionTracks[0]?.src;
@@ -225,7 +235,8 @@ export function VideoCardPreview({
         <img
           src={poster}
           alt=""
-          loading="lazy"
+          loading={posterPriority ? "eager" : "lazy"}
+          fetchPriority={posterPriority ? "high" : undefined}
           decoding="async"
           className={cn("absolute inset-0 h-full w-full object-cover", posterClassName)}
         />

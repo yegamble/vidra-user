@@ -10,7 +10,11 @@ const hlsMock = vi.hoisted(() => ({
     config: Record<string, unknown>;
     currentLevel: number;
     nextLevel: number;
+    autoLevelCapping: number;
+    bandwidthEstimate: number;
     destroyed: boolean;
+    levels: Array<{ height: number }>;
+    emit: (event: string, ...args: unknown[]) => void;
   }>,
 }));
 
@@ -19,6 +23,7 @@ vi.mock("hls.js", () => {
     static Events = {
       MANIFEST_PARSED: "manifestParsed",
       LEVEL_SWITCHED: "levelSwitched",
+      FRAG_BUFFERED: "fragBuffered",
       ERROR: "error",
     };
     static ErrorTypes = { NETWORK_ERROR: "networkError", MEDIA_ERROR: "mediaError" };
@@ -29,8 +34,11 @@ vi.mock("hls.js", () => {
     config: Record<string, unknown>;
     currentLevel = -1;
     nextLevel = -1;
+    autoLevelCapping = -1;
+    bandwidthEstimate = 7_500_000;
     destroyed = false;
     levels: Array<{ height: number }> = [];
+    handlers: Record<string, Array<(...args: unknown[]) => void>> = {};
 
     constructor(config: Record<string, unknown> = {}) {
       this.config = config;
@@ -38,8 +46,10 @@ vi.mock("hls.js", () => {
     }
 
     on(event: string, handler: (...args: unknown[]) => void) {
-      void event;
-      void handler;
+      this.handlers[event] = [...(this.handlers[event] ?? []), handler];
+    }
+    emit(event: string, ...args: unknown[]) {
+      for (const handler of this.handlers[event] ?? []) handler(event, ...args);
     }
     loadSource(source: string) {
       void source;
@@ -59,6 +69,8 @@ vi.mock("hls.js", () => {
 
 beforeEach(() => {
   hlsMock.instances.length = 0;
+  localStorage.clear();
+  Reflect.deleteProperty(navigator, "connection");
   Object.defineProperty(window, "MediaSource", {
     configurable: true,
     value: class MediaSource {},
@@ -83,10 +95,54 @@ describe("hls.js playback tuning", () => {
       backBufferLength: 90,
       capLevelToPlayerSize: true,
       capLevelOnFPSDrop: true,
+      abrEwmaDefaultEstimate: 5_000_000,
     });
 
     act(() => result.current.setLevel(2));
     expect(hlsMock.instances[0].nextLevel).toBe(2);
+  });
+
+  it("caps Auto after the manifest and persists server-path throughput", async () => {
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: { effectiveType: "3g" },
+    });
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() =>
+      useHlsPlayback(videoRef, { id: "video-1", hls_url: "/master.m3u8" }, null),
+    );
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    hls.levels = [{ height: 1080 }, { height: 480 }, { height: 720 }];
+    act(() => hls.emit("manifestParsed"));
+    expect(hls.autoLevelCapping).toBe(2);
+
+    act(() => hls.emit("fragBuffered"));
+    expect(localStorage.getItem("vidra:hls-bandwidth-estimate:v1")).toContain("7500000");
+  });
+
+  it("does not reuse or persist the server estimate for an IPFS mirror", async () => {
+    localStorage.setItem(
+      "vidra:hls-bandwidth-estimate:v1",
+      JSON.stringify({ bitsPerSecond: 12_000_000, measuredAt: Date.now() }),
+    );
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() =>
+      useHlsPlayback(
+        videoRef,
+        { id: "video-1", hls_url: "/master.m3u8" },
+        null,
+        "https://ipfs.test/master.m3u8",
+      ),
+    );
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    expect(hls.config.abrEwmaDefaultEstimate).toBe(5_000_000);
+    hls.bandwidthEstimate = 3_000_000;
+    act(() => hls.emit("fragBuffered"));
+    expect(localStorage.getItem("vidra:hls-bandwidth-estimate:v1")).toContain("12000000");
   });
 
   it("uses the shorter live buffer and switches quality without a hard flush", async () => {

@@ -39,6 +39,7 @@ export function VideoCard({
   video,
   progressFraction,
   onDeleted,
+  priority = false,
 }: {
   video: Video;
   /**
@@ -54,6 +55,8 @@ export function VideoCard({
    * empty <li> behind as a hole in the grid.
    */
   onDeleted?: () => void;
+  /** Eager/high-priority poster for the first above-the-fold feed row. */
+  priority?: boolean;
 }) {
   const [removed, setRemoved] = useState(false);
   // A federated remote card: links to the remote watch surface, shows its
@@ -139,6 +142,7 @@ export function VideoCard({
           duration={duration}
           hasStoryboard={previewEligible}
           previewEnabled={previewEligible}
+          posterPriority={priority}
           className="rounded-2xl"
           posterClassName={cn(
             "transition-transform duration-200",

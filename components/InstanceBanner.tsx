@@ -1,9 +1,9 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useSyncExternalStore } from "react";
 
 import { CloseIcon, InfoIcon, WarningIcon } from "@/components/icons";
-import { Markdown } from "@/components/Markdown";
 import {
   BROADCAST_BANNER_ID,
   BROADCAST_DISMISS_EVENT,
@@ -16,6 +16,11 @@ import {
 } from "@/lib/broadcast";
 import { cn } from "@/lib/cn";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
+
+// InstanceBanner is mounted in the root layout, but most instances do not have
+// a broadcast. Keep react-markdown + remark-gfm out of every route's initial
+// client bundle while retaining server rendering when a banner is present.
+const Markdown = dynamic(() => import("@/components/Markdown").then((mod) => mod.Markdown));
 
 // InstanceBanner — the root-layout banner slot (config-parity W2 seam), now
 // carrying the W3 broadcast-message banner. It renders from the SSR instance

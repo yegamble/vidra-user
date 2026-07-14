@@ -54,6 +54,14 @@ export default defineConfig({
   webServer: {
     command: `npm run start -- -p ${PORT}`,
     url: BASE_URL,
+    // The mocked Chromium suite intercepts browser requests only. Keep server
+    // component reads deterministically backend-less so the streamed feed/watch
+    // fallbacks reach those route mocks even when a developer happens to have
+    // vidra-core running on :8080. Backend-backed runs supply E2E_API_URL and
+    // therefore point server reads at the real stack.
+    env: {
+      INTERNAL_API_BASE_URL: process.env.E2E_API_URL ?? "http://127.0.0.1:1",
+    },
     // Always start a FRESH `next start` against the just-built output and never
     // adopt whatever already holds the port. CI already ran this way
     // (`!process.env.CI` === false under CI), so this is CI-semantics-preserving;

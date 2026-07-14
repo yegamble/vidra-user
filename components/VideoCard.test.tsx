@@ -117,6 +117,11 @@ describe("VideoCard preview integration", () => {
     expect(mocks.previewProps?.hasStoryboard).toBe(true);
   });
 
+  it("passes above-the-fold poster priority into the shared preview", () => {
+    render(<VideoCard video={video()} priority />);
+    expect(mocks.previewProps?.posterPriority).toBe(true);
+  });
+
   it("keeps federated cards poster-only until their HLS-capable preview path exists", () => {
     mocks.featureEnabled = true;
     mocks.preferenceEnabled = true;

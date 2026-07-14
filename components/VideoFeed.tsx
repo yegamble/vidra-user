@@ -9,29 +9,39 @@ import { VideoCard } from "@/components/VideoCard";
 import { VideoGridSkeleton } from "@/components/VideoCardSkeleton";
 import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
-import type { FeedSort, Video } from "@/lib/api";
+import type { FeedSort, Video, VideoFeedResponse } from "@/lib/api";
 import type { FeedFilters } from "@/lib/feed-url";
 
 type Status = "loading" | "error" | "ready";
 type MoreStatus = "idle" | "loading" | "error";
 
-// VideoFeed loads the public feed in the browser (so it is route-mockable in
-// tests and refetchable) and renders loading / error / empty / grid states plus
-// a "Load more" pager (limit/offset; the pager hides once a page comes back
-// short). Optional URL-reflected filters (tag/category/language) narrow the
-// feed. The page mounts it with a key derived from sort+filters, so any change
-// gives a fresh load (no synchronous setState in the effect). The API client
-// already logs failures; this component only reflects them in the UI.
-export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: FeedFilters }) {
-  const [status, setStatus] = useState<Status>("loading");
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [hasMore, setHasMore] = useState(false);
+// VideoFeed hydrates from an optional server-fetched first page and owns client
+// pagination/retry thereafter. Without a seed (backend unavailable server-side,
+// /trending, or a route-mocked e2e) it preserves the original browser fetch.
+export function VideoFeed({
+  sort,
+  filters = {},
+  initialPage,
+  prioritizeFirstRow = false,
+}: {
+  sort: FeedSort;
+  filters?: FeedFilters;
+  initialPage?: VideoFeedResponse | null;
+  prioritizeFirstRow?: boolean;
+}) {
+  const seeded = initialPage !== undefined && initialPage !== null;
+  const [status, setStatus] = useState<Status>(seeded ? "ready" : "loading");
+  const [videos, setVideos] = useState<Video[]>(initialPage?.videos ?? []);
+  const [hasMore, setHasMore] = useState(
+    Boolean(initialPage && initialPage.videos.length >= PAGE_SIZE),
+  );
   const [more, setMore] = useState<MoreStatus>("idle");
   const [reloadKey, setReloadKey] = useState(0);
 
   const { tag, category, language, scope } = filters;
 
   useEffect(() => {
+    if (seeded && reloadKey === 0) return;
     const controller = new AbortController();
     api
       .getFeed(
@@ -47,7 +57,7 @@ export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: Fe
         if (!controller.signal.aborted) setStatus("error");
       });
     return () => controller.abort();
-  }, [sort, scope, tag, category, language, reloadKey]);
+  }, [sort, scope, tag, category, language, reloadKey, seeded]);
 
   function retry() {
     setStatus("loading");
@@ -105,10 +115,11 @@ export function VideoFeed({ sort, filters = {} }: { sort: FeedSort; filters?: Fe
   return (
     <div className="flex flex-col gap-6">
       <VideoGrid>
-        {videos.map((video) => (
+        {videos.map((video, index) => (
           <li key={video.id}>
             <VideoCard
               video={video}
+              priority={prioritizeFirstRow && index < 3}
               onDeleted={() => setVideos((cur) => cur.filter((v) => v.id !== video.id))}
             />
           </li>

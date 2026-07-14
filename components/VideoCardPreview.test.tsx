@@ -68,6 +68,7 @@ beforeEach(() => {
   storyboardState.current = null;
   apiMocks.getCaptions.mockReset();
   apiMocks.getCaptions.mockResolvedValue({ captions: [] });
+  Reflect.deleteProperty(navigator, "connection");
   Object.defineProperty(window.URL, "createObjectURL", {
     configurable: true,
     writable: true,
@@ -106,6 +107,13 @@ afterEach(() => {
 });
 
 describe("VideoCardPreview", () => {
+  it("marks an above-the-fold poster eager and high priority", () => {
+    const { container } = renderPreview({ posterPriority: true });
+    const poster = container.querySelector('img[src="/poster.jpg"]');
+    expect(poster?.getAttribute("loading")).toBe("eager");
+    expect(poster?.getAttribute("fetchpriority")).toBe("high");
+  });
+
   it("waits for deliberate hover, cancels incidental hover, and restores the poster on leave", () => {
     const { container } = renderPreview();
     const surface = screen.getByTestId("video-card-preview");
@@ -144,6 +152,18 @@ describe("VideoCardPreview", () => {
 
     rerender(<VideoCardPreview {...BASE_PROPS} />);
     fireEvent.pointerEnter(surface, { pointerType: "touch" });
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.queryByTestId("video-card-preview-media")).toBeNull();
+  });
+
+  it("keeps optional preview media off Save-Data connections", () => {
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: { saveData: true, effectiveType: "4g" },
+    });
+    renderPreview();
+
+    fireEvent.pointerEnter(screen.getByTestId("video-card-preview"), { pointerType: "mouse" });
     act(() => vi.advanceTimersByTime(100));
     expect(screen.queryByTestId("video-card-preview-media")).toBeNull();
   });

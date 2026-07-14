@@ -46,7 +46,7 @@ describe("InstanceBanner", () => {
     expect(banner()).toBeNull();
   });
 
-  it("renders the message as sanitized markdown when enabled", () => {
+  it("renders the message as sanitized markdown when enabled", async () => {
     render(
       <InstanceBanner
         instance={snapshot({
@@ -59,7 +59,9 @@ describe("InstanceBanner", () => {
     const region = banner();
     expect(region).toBeTruthy();
     // Markdown renders as elements…
-    expect(screen.getByText("tonight").tagName).toBe("STRONG");
+    expect((await screen.findByText("tonight", undefined, { timeout: 10_000 })).tagName).toBe(
+      "STRONG",
+    );
     // …but raw HTML never becomes ELEMENTS (components/Markdown.tsx security
     // stance: it stays inert text). Not dismissable, so no inline dismiss
     // script exists to confuse this.
