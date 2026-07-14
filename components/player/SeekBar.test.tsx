@@ -38,6 +38,52 @@ describe("SeekBar", () => {
     expect(onSeek).toHaveBeenLastCalledWith(120); // 118+5 clamped to 120
   });
 
+  it("previews a pointer drag locally and commits exactly one seek on release", () => {
+    const onSeek = vi.fn();
+    render(<SeekBar currentTime={0} duration={120} buffered={[]} onSeek={onSeek} />);
+    const slider = screen.getByRole("slider", { name: "Seek" });
+    Object.assign(slider, {
+      getBoundingClientRect: () => ({ left: 0, width: 200 }),
+      setPointerCapture: vi.fn(),
+      releasePointerCapture: vi.fn(),
+    });
+    const pointer = (type: string, clientX: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, { button: 0, pointerId: 1, pointerType: "mouse", clientX });
+      fireEvent(slider, event);
+    };
+
+    pointer("pointerdown", 20);
+    pointer("pointermove", 80);
+    pointer("pointermove", 150);
+    expect(onSeek).not.toHaveBeenCalled();
+
+    pointer("pointerup", 150);
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(90);
+  });
+
+  it("cancels a pointer drag without seeking", () => {
+    const onSeek = vi.fn();
+    render(<SeekBar currentTime={0} duration={120} buffered={[]} onSeek={onSeek} />);
+    const slider = screen.getByRole("slider", { name: "Seek" });
+    Object.assign(slider, {
+      getBoundingClientRect: () => ({ left: 0, width: 200 }),
+      setPointerCapture: vi.fn(),
+      releasePointerCapture: vi.fn(),
+    });
+    const pointer = (type: string, clientX: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, { button: 0, pointerId: 1, pointerType: "mouse", clientX });
+      fireEvent(slider, event);
+    };
+
+    pointer("pointerdown", 20);
+    pointer("pointermove", 150);
+    pointer("pointercancel", 150);
+    expect(onSeek).not.toHaveBeenCalled();
+  });
+
   it("does nothing on keys while the duration is unknown", () => {
     const onSeek = vi.fn();
     render(<SeekBar currentTime={0} duration={0} buffered={[]} onSeek={onSeek} />);

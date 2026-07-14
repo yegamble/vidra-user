@@ -266,7 +266,8 @@ export function VideoPlayer({
     (time: number) => {
       const el = videoRef.current;
       if (!el) return;
-      el.currentTime = time;
+      if (typeof el.fastSeek === "function") el.fastSeek(time);
+      else el.currentTime = time;
       setCurrentTime(time); // optimistic — timeupdate confirms
     },
     [videoRef],

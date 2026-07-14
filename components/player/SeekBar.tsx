@@ -27,7 +27,9 @@ import type { SeekStoryboard } from "@/lib/use-storyboard";
 // map (and, once a frame paints, the sprite sheet) only load when a preview is
 // actually needed. Without a storyboard the bubble degrades to the timestamp
 // alone. Controlled — the shell owns the media state and applies seeks via
-// onSeek.
+// onSeek. Pointer drags only update the local preview; the media seek is
+// committed once on release so an MSE-backed stream does not flush and refetch
+// fragments for every pointermove event.
 //
 // White fills on the media surface (design-system documented media-overlay
 // exception); no new hues. 44pt tall hit area (the visible bar is thin).
@@ -111,7 +113,6 @@ export function SeekBar({
     trackRef.current?.setPointerCapture(e.pointerId);
     const frac = fracFromEvent(e.clientX);
     setScrubFrac(frac);
-    seekToFrac(frac);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
@@ -119,13 +120,19 @@ export function SeekBar({
     const frac = fracFromEvent(e.clientX);
     if (scrubFrac !== null) {
       setScrubFrac(frac);
-      seekToFrac(frac);
     } else {
       setHoverFrac(frac);
     }
   }
 
-  function endScrub(e: React.PointerEvent<HTMLDivElement>) {
+  function commitScrub(e: React.PointerEvent<HTMLDivElement>) {
+    if (scrubFrac === null) return;
+    trackRef.current?.releasePointerCapture(e.pointerId);
+    seekToFrac(fracFromEvent(e.clientX));
+    setScrubFrac(null);
+  }
+
+  function cancelScrub(e: React.PointerEvent<HTMLDivElement>) {
     if (scrubFrac === null) return;
     trackRef.current?.releasePointerCapture(e.pointerId);
     setScrubFrac(null);
@@ -173,8 +180,8 @@ export function SeekBar({
       tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={endScrub}
-      onPointerCancel={endScrub}
+      onPointerUp={commitScrub}
+      onPointerCancel={cancelScrub}
       onPointerLeave={() => setHoverFrac(null)}
       onFocus={() => {
         setFocused(true);
