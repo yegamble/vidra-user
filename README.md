@@ -24,9 +24,22 @@ npm run typecheck  # tsc --noEmit (strict)
 npm run lint       # eslint (no-console enforced; logger module is the only exception)
 npm run test       # vitest unit/component tests
 npm run build      # next build
+npm run analyze    # write Turbopack bundle report to .next/diagnostics/analyze
 npm run e2e        # playwright (needs: npx playwright install chromium)
 ```
 The single structured logger is `lib/logger.ts` (raw `console.*` is banned elsewhere).
+
+The bundle report is opt-in and stays out of normal builds and CI. Open
+`.next/diagnostics/analyze/index.html` after `npm run analyze` to inspect client/server
+modules by route and trace why a dependency is included.
+
+React Compiler remains deliberately disabled. On Next 16.2.9, the Tier 3 comparison
+raised the same production build from 18.19s to 47.18s and increased sampled routes'
+uncompressed first-load JavaScript by 34–68 KB. Re-run the comparison after meaningful
+compiler or framework upgrades rather than enabling it as an unmeasured default.
+Likewise, loading fallbacks remain route-specific: a root `app/loading.tsx` was tested
+and rejected because it painted a misleading catch-all skeleton while navigating from
+the video feed to unrelated destinations such as Login.
 
 ## API client
 `lib/api/` is the typed client over the `vidra-core` contract: `apiRequest<T>` (a fetch
@@ -38,12 +51,12 @@ hand-maintained against the backend OpenAPI and marked provisional. Configure th
 with `NEXT_PUBLIC_API_BASE_URL` (`lib/config.ts`).
 
 ## UI
-`components/Header.tsx` is the app-shell header; `components/VideoFeed.tsx` (a client
-component) loads the public feed and renders loading / error / empty / grid states using
+`components/Header.tsx` is the app-shell header; `components/VideoFeed.tsx` hydrates the
+server-streamed first home page and owns client pagination, retry, and fallback states using
 `components/VideoCard.tsx` and the `components/ui/*` primitives. The home route
-(`app/page.tsx`) is the discovery grid. Because the feed loads client-side, Playwright
-route-mocks the API in `e2e/` to test the grid without a running backend; proving real
-data still requires the backend-backed profile (later slice). The watch page
+(`app/page.tsx`) is the discovery grid. Playwright keeps server reads backend-less while
+route-mocking browser API calls; the backend-backed profile points both paths at the real
+stack. The watch page
 (`app/videos/[id]` → `components/WatchView.tsx`) plays a video's original via a native
 Range-capable `<video>` and shows its metadata, with loading / not-found / error states.
 
