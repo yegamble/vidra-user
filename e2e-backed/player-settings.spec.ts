@@ -22,10 +22,14 @@ test("the default playback speed persists, refetches, and drives the player", as
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Settings → Playback (client-side nav keeps the in-memory session).
-  await page.getByRole("link", { name: `play${id}` }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page
+    .getByRole("dialog", { name: "Account menu" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
   await page.getByRole("link", { name: "Manage playback settings" }).click();
   await expect(page.getByRole("heading", { name: "Playback", exact: true })).toBeVisible();
 
@@ -66,7 +70,11 @@ test("the default playback speed persists, refetches, and drives the player", as
     .toBe(1.5);
 
   // Toggle back to 1× and prove the merge writes the reversal too.
-  await page.getByRole("link", { name: `play${id}` }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page
+    .getByRole("dialog", { name: "Account menu" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
   await page.getByRole("link", { name: "Manage playback settings" }).click();
   const savedBack = page.waitForResponse(
     (r) =>

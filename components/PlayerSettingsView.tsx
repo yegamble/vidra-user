@@ -145,7 +145,7 @@ function Settings() {
           desc="Play videos inside cards when you hover. Previews start muted with captions and only work when enabled by the instance administrator. Until you choose, the administrator's instance default applies."
           control={
             <Toggle
-              checked={settings.video_card_previews_enabled}
+              checked={settings.video_card_previews_enabled ?? false}
               onChange={(next) => void save({ video_card_previews_enabled: next })}
               label="Inline video previews"
             />

@@ -34,6 +34,7 @@ function adminVideo(id: string, title: string, blocked = false, privacy = "publi
   return {
     id,
     title,
+    is_local: true,
     privacy,
     state,
     channel_handle: "ada",
@@ -55,7 +56,7 @@ async function signIn(page: Page, role: Role) {
   await page.getByLabel("Email").fill("mod@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("anonymous viewers are gated out of the admin videos overview", async ({ page }) => {
@@ -91,20 +92,25 @@ test("an admin browses all videos and blocks one from the overview", async ({ pa
   await expect(page.getByRole("link", { name: "Fresh clip" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
 
-  // The already-blocked video shows a "blocked" badge + an Unblock button.
-  const blockedRow = page.locator("article", { hasText: "Bad clip" });
-  await expect(blockedRow.getByText("blocked")).toBeVisible();
-  await expect(blockedRow.getByRole("button", { name: "Unblock" })).toBeVisible();
+  // The already-blocked video shows a Blocked badge and exposes Unblock from
+  // its row actions menu.
+  const blockedRow = page.getByRole("row").filter({ hasText: "Bad clip" });
+  await expect(blockedRow.getByText("Blocked", { exact: true })).toBeVisible();
+  await blockedRow.getByRole("button", { name: "Actions for Bad clip" }).click();
+  await expect(page.getByRole("menuitem", { name: "Unblock" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
   // Block the fresh clip.
-  const freshRow = page.locator("article", { hasText: "Fresh clip" });
+  const freshRow = page.getByRole("row").filter({ hasText: "Fresh clip" });
   const blocked = page.waitForResponse(
     (r) => BLOCK_ONE.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await freshRow.getByRole("button", { name: "Block" }).click();
+  await freshRow.getByRole("button", { name: "Actions for Fresh clip" }).click();
+  await page.getByRole("menuitem", { name: "Block" }).click();
   await blocked;
 
-  // Its row now reflects the block.
-  await expect(freshRow.getByText("blocked")).toBeVisible();
-  await expect(freshRow.getByRole("button", { name: "Unblock" })).toBeVisible();
+  // Its row now reflects the block and flips the menu action to Unblock.
+  await expect(freshRow.getByText("Blocked", { exact: true })).toBeVisible();
+  await freshRow.getByRole("button", { name: "Actions for Fresh clip" }).click();
+  await expect(page.getByRole("menuitem", { name: "Unblock" })).toBeVisible();
 });

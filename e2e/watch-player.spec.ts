@@ -106,11 +106,9 @@ test("keyboard shortcuts toggle mute and start playback", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
   await shortcutsReady(page);
 
-  // Both M presses happen BEFORE playback starts: the fixture clip is
-  // sub-second, and once it ends the end card focuses its primary button — a
-  // focused button sits inside SHORTCUT_IGNORE_SELECTOR, so a late M would be
-  // (correctly) ignored. Muting first keeps the toggle assertions free of that
-  // wall-clock race under machine load (the historical full-suite flake).
+  // Both M presses happen BEFORE playback starts. Once playback ends, the end
+  // card focuses its primary button, which sits inside SHORTCUT_IGNORE_SELECTOR;
+  // muting first keeps these assertions free of the historical timing race.
   const muted = () => page.locator("video").evaluate((el: HTMLVideoElement) => el.muted);
   expect(await muted()).toBe(false);
   await page.keyboard.press("m");
@@ -118,8 +116,8 @@ test("keyboard shortcuts toggle mute and start playback", async ({ page }) => {
   await page.keyboard.press("m");
   await expect.poll(muted).toBe(false);
 
-  // K starts playback (asserted via the play event — the fixture clip is
-  // sub-second, so `paused` flips back too fast to assert reliably).
+  // K starts playback. Assert the play event directly instead of polling a media
+  // state that can change as playback completes.
   await page.locator("video").evaluate((el: HTMLVideoElement) => {
     (window as unknown as { __played: boolean }).__played = false;
     el.addEventListener("play", () => {
@@ -395,9 +393,9 @@ test("the seek bar shows chapter ticks, the current-chapter readout, and chapter
   // The chapters are fetched because has_chapters is set.
   await expect.poll(() => chapterRequests).toBe(1);
 
-  // Give the shell a real duration (the fixture clip is sub-second) so the tick
-  // positions and aria-valuemax are meaningful — the same technique the unit test
-  // uses to exercise duration-dependent geometry.
+  // Give the shell a known duration so the tick positions and aria-valuemax are
+  // meaningful — the same technique the unit test uses for duration-dependent
+  // geometry.
   await page.evaluate(() => {
     const v = document.querySelector("video");
     if (!v) return;

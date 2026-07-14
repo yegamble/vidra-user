@@ -24,18 +24,19 @@ test("signup persists the account and a fresh login reads it back", async ({ pag
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
 
-  // The account is created and the session is established (header shows Sign out).
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  // The account is created and the visible menu trigger proves the session exists.
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Sign out, then sign back in with the same credentials. A successful fresh
   // login can only work if the account row persisted in the database.
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("dialog", { name: "Account menu" }).getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 });

@@ -26,10 +26,11 @@ test("account and channel avatars persist and render after refetch", async ({ pa
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Settings → upload the account avatar (starts on the initial-letter fallback).
-  await page.getByRole("link", { name: username }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
   const avatarSection = page.getByRole("region", { name: "Avatar", exact: true });
   await expect(avatarSection.locator("img")).toHaveCount(0);

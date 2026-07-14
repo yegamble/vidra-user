@@ -23,7 +23,7 @@ test("a creator can batch-upload three videos that all persist (chunked)", async
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the studio and create a channel.
   await page.getByRole("link", { name: "Studio", exact: true }).click();

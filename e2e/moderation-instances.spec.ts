@@ -45,7 +45,7 @@ async function signIn(page: Page, role: Role) {
   await page.getByLabel("Email").fill("mod@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 // Moderation → Instances tab (client-side nav keeps the in-memory session).

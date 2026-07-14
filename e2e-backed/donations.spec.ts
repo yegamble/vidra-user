@@ -40,7 +40,7 @@ test("donation addresses persist, show on public reads, and survive delete + rel
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Seed a channel via the API so the scope select can target it.
   const token = await loginToken(request, email, password);
@@ -48,7 +48,8 @@ test("donation addresses persist, show on public reads, and survive delete + rel
   await createChannel(request, token, handle, `Donate ${id}`);
 
   // Settings → Donation addresses (client-side nav keeps the in-memory session).
-  await page.getByRole("link", { name: username }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("link", { name: "Manage donation addresses" }).click();
   await expect(page.getByRole("heading", { name: "Donation addresses" })).toBeVisible();
 

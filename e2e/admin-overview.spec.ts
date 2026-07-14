@@ -127,7 +127,7 @@ async function signIn(page: Page, role: Role) {
   await page.getByLabel("Email").fill("boss@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 // Reach /admin via client-side navigation so the in-memory session survives:
@@ -138,7 +138,7 @@ async function openOverview(page: Page) {
   );
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   await page.getByRole("link", { name: "Overview" }).click();
-  await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Admin", level: 1 })).toBeVisible();
 }
 
 test("anonymous viewers are gated out of the admin overview", async ({ page }) => {

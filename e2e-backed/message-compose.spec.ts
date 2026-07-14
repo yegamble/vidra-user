@@ -21,7 +21,7 @@ test("user A composes a new message to user B by username and it persists for B"
   await page.getByLabel("Email").fill(alice.email);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the inbox and the New message composer (client-side nav keeps session).
   await page.getByRole("link", { name: "Messages" }).first().click();

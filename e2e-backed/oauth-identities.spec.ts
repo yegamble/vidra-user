@@ -14,9 +14,13 @@ test("connected logins loads (empty) from the real backend", async ({ page }) =>
   await page.getByLabel("Email").fill(`e2e-oid-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: `oid${id}` }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page
+    .getByRole("dialog", { name: "Account menu" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
   await expect(page.getByRole("heading", { name: "Connected logins" })).toBeVisible();
   await expect(page.getByText("No external logins are linked to this account.")).toBeVisible();
 });

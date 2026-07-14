@@ -31,7 +31,7 @@ test("a viewer can message a commenter and the message persists", async ({ page,
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the watch page from the home feed (client-side nav keeps the session).
   await page.getByRole("heading", { name: videoTitle }).click();
@@ -104,7 +104,7 @@ test("a DM attachment round-trips: upload, send, appears, and the recipient sees
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("heading", { name: videoTitle }).click();
   await expect(page.getByText(commentBody)).toBeVisible();
@@ -175,7 +175,7 @@ test("a read receipt persists: opening a thread clears unread and the sender see
   await page.getByLabel("Email").fill(recipient.email);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   const read = page.waitForResponse(
     (r) => /\/conversations\/[^/]+\/read$/.test(r.url()) && r.request().method() === "POST" && r.ok(),

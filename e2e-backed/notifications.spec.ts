@@ -47,7 +47,7 @@ test("a follow notifies the channel owner, who can read and clear it", async ({ 
   await page.getByLabel("Email").fill(ownerEmail);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // The header bell reflects the unread notification.
   await expect(page.getByRole("button", { name: "Notifications (1 unread)" })).toBeVisible();
@@ -85,7 +85,7 @@ test("a direct message notifies the recipient, who can open the thread", async (
   await page.getByLabel("Email").fill(recipient.email);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // The header bell reflects the unread message notification.
   await expect(page.getByRole("button", { name: "Notifications (1 unread)" })).toBeVisible();

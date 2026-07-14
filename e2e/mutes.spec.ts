@@ -64,7 +64,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("muting a comment's author hides that account's comments", async ({ page }) => {
@@ -140,7 +140,8 @@ test("the muted-accounts page lists muted accounts and unmutes them", async ({ p
   );
 
   // Settings → Muted accounts (client-side nav keeps the session).
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("link", { name: "Manage muted accounts" }).click();
   await expect(page.getByText("Bob Jones")).toBeVisible();
   await expect(page.getByText("@bob")).toBeVisible();

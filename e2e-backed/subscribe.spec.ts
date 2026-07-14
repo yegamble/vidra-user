@@ -18,7 +18,7 @@ test("subscribing from a video card persists the follow", async ({ page, request
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // The seeded video is the newest, so it's on the home feed; click its channel
   // link to reach the channel page (client-side nav preserves the session).

@@ -110,8 +110,11 @@ test("a cookie-mode OAuth success landing silent-refreshes into the session and 
   await page.goto("/login?oauth=1");
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "ada" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Account menu" }).getByText("@ada", { exact: true }),
+  ).toBeVisible();
 });
 
 test("a failed OAuth landing (no session cookie) falls back to the form with an error", async ({
@@ -142,7 +145,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("settings lists the linked identities and unlink removes a row", async ({ page }) => {
@@ -163,7 +166,8 @@ test("settings lists the linked identities and unlink removes a row", async ({ p
     await route.fulfill({ status: 204, body: "" });
   });
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Connected logins" })).toBeVisible();
   await expect(page.getByText("Google")).toBeVisible();
   await expect(page.getByText("Github")).toBeVisible();
@@ -198,7 +202,8 @@ test("unlinking the last sign-in method surfaces the 422 with the remedy", async
     }),
   );
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Unlink Google" }).click();
 
   await expect(page.getByText(/only way to sign in.*Set a password first/)).toBeVisible();
@@ -209,6 +214,7 @@ test("an account with no linked identities shows the empty copy", async ({ page 
   await signIn(page);
   await page.route(IDENTITIES, (route) => route.fulfill({ json: { identities: [] } }));
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByText("No external logins are linked to this account.")).toBeVisible();
 });

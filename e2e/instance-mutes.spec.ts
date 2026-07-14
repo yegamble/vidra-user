@@ -35,7 +35,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("anonymous viewers are prompted to sign in", async ({ page }) => {
@@ -69,7 +69,8 @@ test("the Instances tab lists muted instances and unmutes them", async ({ page }
   );
 
   // Settings → Mutes → Instances tab (client-side nav keeps the session).
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("link", { name: "Manage muted accounts" }).click();
   await expect(page.getByText("No muted accounts")).toBeVisible();
   await page.getByRole("link", { name: "Instances" }).click();

@@ -76,7 +76,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("the library hub shows the history rail, playlist rows, and saved rows", async ({ page }) => {
@@ -111,10 +111,10 @@ test("the library hub shows the history rail, playlist rows, and saved rows", as
   const bars = main.locator("[data-resume-progress]");
   await expect(bars).toHaveCount(1);
   await expect(bars).toHaveAttribute("data-resume-progress", "47.5");
-  await expect(main.getByRole("link", { name: "Grading session" })).toHaveAttribute(
-    "href",
-    "/videos/h1",
-  );
+  const historyLinks = main.getByRole("link", { name: "Grading session" });
+  await expect(historyLinks).toHaveCount(2);
+  await expect(historyLinks.first()).toHaveAttribute("href", "/videos/h1");
+  await expect(historyLinks.last()).toHaveAttribute("href", "/videos/h1");
 
   // Playlists row: name, "N videos · Privacy", → /playlists/{id}.
   await expect(main.getByText("6 videos · Private")).toBeVisible();

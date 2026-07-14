@@ -27,5 +27,5 @@ test("a duplicate signup shows the friendly taken message from the real backend"
   // Friendly copy — not a raw "conflict" code, not the terse backend string.
   await expect(page.getByText("That username or email is already taken.")).toBeVisible();
   // No session was created.
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });

@@ -45,7 +45,7 @@ test("the share dialog copies the watch link, with an optional start time", asyn
     if (v) Object.defineProperty(v, "currentTime", { get: () => 95 });
   });
 
-  await page.getByRole("button", { name: "Share" }).click();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Share this video" });
   await expect(dialog).toBeVisible();
 
@@ -71,7 +71,7 @@ test("the share dialog copies the watch link, with an optional start time", asyn
 
 test("the share dialog copies an embed iframe snippet and closes on Escape", async ({ page }) => {
   await openWatch(page);
-  await page.getByRole("button", { name: "Share" }).click();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Share this video" });
   await expect(dialog).toBeVisible();
 
@@ -186,7 +186,7 @@ test("the download button follows the per-video download_enabled flag", async ({
   );
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Share Me" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Share" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Share", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
 
   // Same instance, per-video flag on => the button renders.

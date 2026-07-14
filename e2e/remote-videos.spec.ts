@@ -88,7 +88,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("the subscriptions feed renders remote cards with an origin badge linking to /remote/[id]", async ({
@@ -147,13 +147,16 @@ test("search results render remote cards with the origin badge and remote watch 
   await page.goto("/search?q=documentary");
   const remoteItem = page.locator("li", { hasText: "Remote Documentary" });
   await expect(remoteItem.getByText("videos.example")).toBeVisible();
-  await expect(remoteItem.getByRole("link", { name: /Remote Documentary/ })).toHaveAttribute(
-    "href",
-    "/remote/rv1",
-  );
-  await expect(
-    page.locator("li", { hasText: "Local Documentary" }).getByRole("link", { name: /Local Documentary/ }),
-  ).toHaveAttribute("href", "/videos/v1");
+  const remoteLinks = remoteItem.getByRole("link", { name: /Remote Documentary/ });
+  await expect(remoteLinks).toHaveCount(2);
+  await expect(remoteLinks.first()).toHaveAttribute("href", "/remote/rv1");
+  await expect(remoteLinks.last()).toHaveAttribute("href", "/remote/rv1");
+  const localLinks = page
+    .locator("li", { hasText: "Local Documentary" })
+    .getByRole("link", { name: /Local Documentary/ });
+  await expect(localLinks).toHaveCount(2);
+  await expect(localLinks.first()).toHaveAttribute("href", "/videos/v1");
+  await expect(localLinks.last()).toHaveAttribute("href", "/videos/v1");
 });
 
 test("the home feed scope toggle is URL-reflected and requests scope=all", async ({ page }) => {

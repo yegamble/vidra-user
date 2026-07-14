@@ -24,19 +24,23 @@ test("session survives a hard reload and sign-out sticks across reloads", async 
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // HARD RELOAD: the in-memory access token is gone; the boot-time silent
   // refresh must rehydrate the session from the httpOnly cookie — which only
   // works if the backend persisted the refresh session and honors rotation.
   await page.reload();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-  await expect(page.getByRole("link", { name: username })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Account menu" }).getByText(`@${username}`, { exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
 
   // And again — rotation must have replaced the cookie with a live token, not
   // consumed it (a reused/rotated token would 401 and sign us out).
   await page.reload();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Sign out: the backend revokes the session and clears the cookie. Assert the
   // header's own "Sign in" (scoped to the banner landmark): logout does not
@@ -44,14 +48,15 @@ test("session survives a hard reload and sign-out sticks across reloads", async 
   // may land on a page whose BODY also offers a "Sign in" link (e.g. the signup
   // form's "Already have an account? Sign in") — the banner scope keeps this an
   // unambiguous, single-element assertion of the signed-out header.
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("dialog", { name: "Account menu" }).getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 
   // A reload stays signed out: no cookie, no session — the boot refresh lands
   // quietly anonymous (this is the DB-effect proof that logout revoked the
   // refresh session server-side, not just cleared local state).
   await page.reload();
   await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });

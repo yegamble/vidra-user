@@ -25,7 +25,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu", exact: true })).toBeVisible();
 }
 
 test("editing the profile shows a saved confirmation", async ({ page }) => {
@@ -35,7 +35,8 @@ test("editing the profile shows a saved confirmation", async ({ page }) => {
   );
 
   // Reach settings via the header (client-side nav preserves the in-memory session).
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
 
   await page.getByLabel("Display name").fill("Ada Lovelace");
@@ -52,7 +53,8 @@ test("an unverified user can resend the verification email from settings", async
     await route.fulfill({ status: 202, body: "" });
   });
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
 
   await page.getByRole("button", { name: "Resend verification email" }).click();
@@ -75,7 +77,8 @@ test("maps a 422 field error inline", async ({ page }) => {
     }),
   );
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByLabel("Display name").fill("way too long");
   await page.getByRole("button", { name: "Save" }).click();
 
@@ -90,7 +93,8 @@ test("the discovery opt-out toggle rides along with the profile save", async ({ 
     return route.fulfill({ json: { ...user, unlisted: true } });
   });
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   const toggle = page.getByLabel("Hide my account from discovery");
   await expect(toggle).not.toBeChecked(); // default false
   await toggle.check();
@@ -112,7 +116,8 @@ test("deactivating the account signs the user out", async ({ page }) => {
   await signIn(page);
   await page.route(DEACTIVATE, (route) => route.fulfill({ status: 204, body: "" }));
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByLabel("Current password").fill("supersecret");
   await page.getByRole("button", { name: "Deactivate account" }).click();
 
@@ -120,7 +125,7 @@ test("deactivating the account signs the user out", async ({ page }) => {
   // signed-out prompt in the page body during the redirect would otherwise make
   // an unscoped "Sign in" match two elements and trip strict mode).
   await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });
 
 test("shows an error when the deactivate password is wrong", async ({ page }) => {
@@ -132,12 +137,13 @@ test("shows an error when the deactivate password is wrong", async ({ page }) =>
     }),
   );
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByLabel("Current password").fill("nope");
   await page.getByRole("button", { name: "Deactivate account" }).click();
 
   await expect(page.getByText("Incorrect password.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu", exact: true })).toBeVisible();
 });
 
 test("permanently deleting the account takes the two-step confirm and shows a goodbye state", async ({
@@ -152,7 +158,8 @@ test("permanently deleting the account takes the two-step confirm and shows a go
     return route.fulfill({ status: 204, body: "" });
   });
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
 
   // Step 1: arm. No password/username fields are shown yet.
   await expect(page.getByLabel("Confirm your username")).toHaveCount(0);
@@ -171,7 +178,7 @@ test("permanently deleting the account takes the two-step confirm and shows a go
   // Goodbye state + signed out (the session is gone).
   await expect(page.getByText("Your account has been deleted")).toBeVisible();
   await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
   expect(deleteMethod).toBe("DELETE");
   expect(deleteBody).toEqual({ password: "supersecret" });
 });
@@ -185,7 +192,8 @@ test("a wrong password on permanent delete is surfaced and nothing is deleted", 
     }),
   );
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Delete account permanently" }).click();
   await page.getByLabel("Password", { exact: true }).fill("nope");
   await page.getByLabel("Confirm your username").fill("ada");
@@ -193,6 +201,6 @@ test("a wrong password on permanent delete is surfaced and nothing is deleted", 
 
   await expect(page.getByText("Incorrect password.")).toBeVisible();
   // Still signed in, still on the confirm step — no goodbye state.
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu", exact: true })).toBeVisible();
   await expect(page.getByText("Your account has been deleted")).toHaveCount(0);
 });

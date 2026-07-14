@@ -87,6 +87,18 @@ describe("PlayerSettingsView", () => {
     ).toBe("true");
   });
 
+  it("keeps the inline-preview switch ARIA-valid for a legacy settings payload", async () => {
+    getPlayerSettings.mockResolvedValue({
+      ...DEFAULTS,
+      // Older servers and cached clients can omit a newly introduced preference.
+      video_card_previews_enabled: undefined as unknown as boolean,
+    });
+    render(<PlayerSettingsView />);
+
+    const previews = await screen.findByRole("switch", { name: "Inline video previews" });
+    expect(previews.getAttribute("aria-checked")).toBe("false");
+  });
+
   it("toggling a switch PUTs only that field (merge) and reflects the server response", async () => {
     getPlayerSettings.mockResolvedValue({ ...DEFAULTS });
     updatePlayerSettings.mockResolvedValue({ ...DEFAULTS, autoplay_next: false });

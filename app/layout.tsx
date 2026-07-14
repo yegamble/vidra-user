@@ -44,8 +44,9 @@ export const viewport: Viewport = {
 
 // Typography is the Apple-HIG system stack (see --font-sans in globals.css):
 // SF Pro on Apple platforms, the native UI face elsewhere — no webfont
-// download. suppressHydrationWarning covers the data-theme attribute the
-// bootstrap script may set before React hydrates.
+// download. suppressHydrationWarning is element-local: the html flag covers the
+// data-theme attribute the bootstrap script may set before React hydrates, while
+// the body flag covers attributes browser extensions may inject before hydration.
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -54,7 +55,7 @@ export default async function RootLayout({
   const instance = await getInstanceConfig();
   return (
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {/* Apply the stored theme preference (or, failing that, the instance
             default from the SSR snapshot) before first paint — no flash. */}
         <script

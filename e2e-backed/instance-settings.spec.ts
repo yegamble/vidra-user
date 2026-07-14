@@ -23,7 +23,7 @@ async function loginAsAdmin(page: Page) {
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   // Client-side nav keeps the in-memory session. The DR12 admin-console redesign
   // replaced the horizontal AdminTabs (desktop-hidden, `lg:hidden`) with the
   // desktop AdminConsole rail (`lg:flex`), which labels the instance-config

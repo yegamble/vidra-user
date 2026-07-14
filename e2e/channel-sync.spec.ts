@@ -97,7 +97,7 @@ async function openStudio(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await page.getByRole("link", { name: "Studio" }).click();
   // This first paint of the studio is provably CPU-bound, not an event race:
   // the click loads + executes the code-split studio chunk, mounts the page,

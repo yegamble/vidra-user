@@ -70,7 +70,10 @@ test("the blur policy blurs sensitive video-card thumbnails and badges them", as
   await page.goto("/");
 
   await expect(page.getByText("Sensitive", { exact: true })).toBeVisible();
-  await expect(page.locator('a[aria-label="Sensitive clip"] img')).toHaveClass(/blur-2xl/);
+  const card = page.getByTestId("video-card-preview").filter({
+    has: page.getByRole("link", { name: "Sensitive clip", exact: true }),
+  });
+  await expect(card.locator("img")).toHaveClass(/blur-2xl/);
 });
 
 test("the warn policy gates a sensitive watch page until the viewer confirms", async ({
