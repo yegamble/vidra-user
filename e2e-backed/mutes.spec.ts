@@ -21,7 +21,7 @@ test("muting a commenter hides their comment and unmuting restores it", async ({
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the watch page from the home feed (client-side nav keeps the session).
   await page.getByRole("heading", { name: videoTitle }).click();
@@ -37,7 +37,11 @@ test("muting a commenter hides their comment and unmuting restores it", async ({
   await expect(page.getByText(body)).toHaveCount(0);
 
   // The muted account appears on the management page (a fresh API read).
-  await page.getByRole("link", { name: `fan${id}` }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page
+    .getByRole("dialog", { name: "Account menu" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
   await page.getByRole("link", { name: "Manage muted accounts" }).click();
   await expect(page.getByText(`@${commenter.username}`)).toBeVisible();
 

@@ -24,11 +24,12 @@ test("a seeded instance mute is listed and unmuting persists", async ({ page, re
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Settings → Mutes → Instances (client-side nav keeps the session). The row
   // is a fresh authed read of the persisted mute.
-  await page.getByRole("link", { name: user.username }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("link", { name: "Manage muted accounts" }).click();
   await page.getByRole("link", { name: "Instances" }).click();
   await expect(page.getByRole("heading", { name: "Muted instances" })).toBeVisible();

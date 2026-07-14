@@ -64,7 +64,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("blocking a comment's author posts the block and reflects it", async ({ page }) => {
@@ -133,7 +133,8 @@ test("the blocked-accounts page lists blocked accounts and unblocks them", async
   );
 
   // Settings → Blocked accounts (client-side nav keeps the session).
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("link", { name: "Manage blocked accounts" }).click();
   await expect(page.getByText("Bob Jones")).toBeVisible();
   await expect(page.getByText("@bob")).toBeVisible();

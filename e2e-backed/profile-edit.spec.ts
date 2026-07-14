@@ -20,27 +20,30 @@ test("profile edit persists across a fresh login", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Edit the display name on the settings page (reached via the header link).
-  await page.getByRole("link", { name: username }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
   await page.getByLabel("Display name").fill(newName);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Profile saved.")).toBeVisible();
 
   // Sign out, then sign back in — the fresh session is loaded from the database.
-  // Match the header's exact "Sign out": this runs on the settings page, which
-  // also renders a "Sign out of this device" button (a substring match collides).
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toHaveCount(0);
+  // Scope the exact action to the account menu because the settings page also
+  // renders a "Sign out of this device" button.
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("dialog", { name: "Account menu" }).getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // The persisted display name is shown on the settings form after the fresh login.
-  await page.getByRole("link", { name: username }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Display name")).toHaveValue(newName);
 });

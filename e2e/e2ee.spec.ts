@@ -193,7 +193,7 @@ async function signInToWatch(page: Page, devices: "advertised" | "absent") {
   );
   await page.goto("/videos/v1");
   await e2eeProbe;
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await expect(page.getByText("nice video")).toBeVisible();
 }
 

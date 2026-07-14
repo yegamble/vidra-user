@@ -125,7 +125,7 @@ async function openStudio(page: Page, opts: { importsEnabled?: boolean } = {}) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await page.getByRole("link", { name: "Studio" }).click();
   await expect(page.getByRole("heading", { name: "Upload a video" })).toBeVisible();
 }

@@ -19,7 +19,7 @@ test("saving a video from the watch page persists it and shows in the library", 
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the seeded video's watch page from the home feed and save it.
   await page.getByRole("heading", { name: videoTitle }).click();

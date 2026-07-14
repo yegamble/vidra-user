@@ -18,7 +18,7 @@ async function signUpViewer(page: import("@playwright/test").Page, id: string) {
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 // Proves the video-report round trip against a real vidra-core + PostgreSQL: a
@@ -144,7 +144,7 @@ test("reporting a direct message from the thread persists to the moderation queu
   await page.getByLabel("Email").fill(recipient.email);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the thread from the inbox (keeps the in-memory session).
   await page.getByRole("link", { name: "Messages" }).first().click();

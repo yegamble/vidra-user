@@ -92,7 +92,7 @@ async function signIn(page: Page, role: Role) {
   await page.getByLabel("Email").fill("boss@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("home passes axe (feed cards rendered)", async ({ page }) => {
@@ -291,7 +291,8 @@ test("the login page passes axe", async ({ page }) => {
 
 test("the settings page passes axe (signed in)", async ({ page }) => {
   await signIn(page, "user");
-  await page.getByRole("link", { name: "boss" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
   await expectNoSevereViolations(page);
 });
@@ -310,7 +311,8 @@ test("the playback settings page passes axe (grouped toggles + selects)", async 
     }),
   );
   // Client-side nav (avatar → settings → Playback) keeps the in-memory session.
-  await page.getByRole("link", { name: "boss" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("link", { name: "Manage playback settings" }).click();
   await expect(page.getByRole("switch", { name: "Autoplay next" })).toBeVisible();
   await expect(page.getByLabel("Default speed")).toHaveValue("1.5");

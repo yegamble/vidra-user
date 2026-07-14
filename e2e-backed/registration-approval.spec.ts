@@ -48,7 +48,7 @@ test("a signup files a pending request; approving it creates the account", async
   await page.getByLabel("Message to the administrators (optional)").fill(`please approve ${id}`);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByText("Your account is awaiting approval")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 
   // The request persisted (admin API read) and no account exists yet.
   const token = await adminToken(request);
@@ -63,7 +63,7 @@ test("a signup files a pending request; approving it creates the account", async
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   await page.getByRole("link", { name: "Registration" }).click();
   await expect(page.getByText(email)).toBeVisible();
@@ -106,7 +106,7 @@ test("rejecting a request records the note and creates no account", async ({ pag
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   await page.getByRole("link", { name: "Registration" }).click();
   await expect(page.getByText(email)).toBeVisible();

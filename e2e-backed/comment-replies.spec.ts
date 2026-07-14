@@ -23,7 +23,7 @@ test("posting a comment then replying to it persists the thread", async ({ page,
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the seeded video's watch page from the home feed (client-side nav keeps
   // the session).
@@ -97,7 +97,7 @@ test("a reply-to-reply attributes the replied-to author across three accounts", 
     await p.getByLabel("Email").fill(`e2e-${username}@example.test`);
     await p.getByLabel("Password").fill("supersecret-e2e");
     await p.getByRole("button", { name: "Create account" }).click();
-    await expect(p.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expect(p.getByRole("button", { name: "Open account menu" })).toBeVisible();
     await p.getByRole("heading", { name: videoTitle }).click();
     await expect(p.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
   }

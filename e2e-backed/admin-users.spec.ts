@@ -27,7 +27,7 @@ test("an admin promotes then deactivates a user, and it persists", async ({ page
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the admin console (client-side nav keeps the in-memory session) and
   // search for the seeded account (scopes the list to one row).

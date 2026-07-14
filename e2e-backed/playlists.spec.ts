@@ -37,7 +37,7 @@ test("create a playlist, add a video from the watch page, then remove it", async
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the seeded video's watch page (client-side nav so the session survives).
   await page.getByRole("heading", { name: videoTitle }).click();
@@ -82,7 +82,7 @@ test("an owner can edit a playlist's title and visibility, and it persists", asy
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Create a playlist from the /playlists inline form.
   await openPlaylists(page);
@@ -153,7 +153,7 @@ test("an owner can reorder playlist items, and the order persists", async ({ pag
   await page.getByLabel("Email").fill(viewer.email);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the playlist detail via client-side nav (keeps the in-memory session):
   // initial order is [A, B].
@@ -193,7 +193,7 @@ test("a playlist cover uploaded from the detail page persists", async ({ page, r
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Create a PUBLIC playlist so the cover is readable via the public API.
   await openPlaylists(page);

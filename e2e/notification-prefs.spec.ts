@@ -43,12 +43,13 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 // Reach the prefs page via settings (client-side nav keeps the in-memory session).
 async function openPrefs(page: Page) {
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("link", { name: "Manage notification preferences" }).click();
   await expect(
     page.getByRole("heading", { name: "Notification preferences" }),

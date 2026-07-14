@@ -28,7 +28,7 @@ test("a moderator deletes a comment from the overview and it is gone everywhere"
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Moderation → Comments, then filter to the seeded comment by text.
   await page.getByRole("link", { name: "Moderation" }).click();

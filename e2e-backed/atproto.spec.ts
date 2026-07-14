@@ -47,10 +47,11 @@ test.describe("Bluesky cross-posting connection (backed)", () => {
     await page.getByLabel("Email").fill(user.email);
     await page.getByLabel("Password").fill("supersecret-e2e");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
     // Settings -> Connected accounts (client-side nav keeps the session).
-    await page.getByRole("link", { name: user.username }).click();
+    await page.getByRole("button", { name: "Open account menu" }).click();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
     await page.getByRole("link", { name: "Manage connected accounts" }).click();
     await expect(page.getByRole("heading", { name: "Connected accounts" })).toBeVisible();
 

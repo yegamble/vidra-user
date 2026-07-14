@@ -19,10 +19,14 @@ test("a user verifies their email end to end", async ({ page, request }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Settings shows the unverified prompt; resend the verification email.
-  await page.getByRole("link", { name: `verify${id}` }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page
+    .getByRole("dialog", { name: "Account menu" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   const requested = page.waitForResponse(
     (r) => /\/auth\/verify-email$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
@@ -43,8 +47,12 @@ test("a user verifies their email end to end", async ({ page, request }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-  await page.getByRole("link", { name: `verify${id}` }).click();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page
+    .getByRole("dialog", { name: "Account menu" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
   await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Verify your email" })).toHaveCount(0);
 });

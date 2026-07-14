@@ -36,7 +36,7 @@ test("a playlist cover uploaded on the detail page survives a refetch (no 404)",
   await page.getByLabel("Email").fill(`e2e-cover-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Create a PUBLIC playlist so its cover is readable via the public API.
   await openPlaylists(page);

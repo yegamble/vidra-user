@@ -74,7 +74,7 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 // wireStudio sets up the studio shell + the batch resumable-upload mocks. The

@@ -71,7 +71,7 @@ async function signIn(page: Page, unread = 0) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   // Let the post-login client navigation settle before tests interact with the
   // bell popover — an in-flight route change would (correctly) dismiss it.
   await page.waitForURL("**/");
@@ -225,9 +225,8 @@ test("a message notification links to the conversation thread", async ({ page })
 // navigate client-side (the in-memory session survives).
 const CONVERSATIONS = /\/api\/v1\/me\/conversations(\?|$)/;
 
-// The shared signIn asserts the header "Sign out" button, which the phone shell
-// tucks behind the avatar menu — so a phone-viewport sign-in confirms the authed
-// landing via the bottom tab bar's Inbox link instead.
+// Use the phone-only Inbox tab as this scenario's signed-in readiness signal;
+// it is also the navigation control under test.
 async function signInMobile(page: Page) {
   await page.route(LOGIN, (route) => route.fulfill({ json: session }));
   await page.route(FEED, (route) =>

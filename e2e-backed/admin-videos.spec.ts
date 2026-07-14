@@ -24,7 +24,7 @@ test("an admin blocks and unblocks a video from the videos overview", async ({ p
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Moderation → All videos, then filter to the seeded video by title.
   await page.getByRole("link", { name: "Moderation" }).click();

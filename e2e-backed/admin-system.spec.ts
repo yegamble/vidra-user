@@ -11,7 +11,7 @@ test("the system-status page reflects the real running stack", async ({ page }) 
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the system status page (client-side nav keeps the in-memory session).
   await page.getByRole("link", { name: "Admin", exact: true }).click();

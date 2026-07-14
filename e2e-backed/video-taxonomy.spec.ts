@@ -17,7 +17,7 @@ test("a creator sets and edits a video's category/language/license", async ({ pa
   await page.getByLabel("Email").fill(`e2e-tax-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);

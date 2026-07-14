@@ -42,13 +42,14 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 // Client-side navigation Home → Settings → Connected accounts keeps the
 // in-memory session (a hard reload would land signed-out in the mocked env).
 async function gotoConnections(page: Page) {
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("link", { name: "Manage connected accounts" }).click();
   await expect(page.getByRole("heading", { name: "Connected accounts" })).toBeVisible();
 }

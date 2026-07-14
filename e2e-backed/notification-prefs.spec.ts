@@ -20,10 +20,14 @@ test("disabling a notification type persists and survives a fresh load", async (
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Settings → Notifications (client-side nav keeps the in-memory session).
-  await page.getByRole("link", { name: `prefs${id}` }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page
+    .getByRole("dialog", { name: "Account menu" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
   await page.getByRole("link", { name: "Manage notification preferences" }).click();
   await expect(page.getByRole("heading", { name: "Notification preferences" })).toBeVisible();
 

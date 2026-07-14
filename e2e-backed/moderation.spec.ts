@@ -29,7 +29,7 @@ test("an admin resolves a queued report and the resolution persists", async ({ p
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the moderation queue (client-side nav keeps the in-memory session).
   await page.getByRole("link", { name: "Moderation" }).click();
@@ -67,7 +67,7 @@ test("rejecting a report persists the rejected status", async ({ page, request }
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Moderation" }).click();
   const row = page.locator("article", { hasText: reason });

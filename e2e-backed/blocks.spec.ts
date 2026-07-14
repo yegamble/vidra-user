@@ -21,7 +21,7 @@ test("blocking a user refuses direct messages until unblocked", async ({ page, r
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the watch page from the home feed (client-side nav keeps the session).
   await page.getByRole("heading", { name: videoTitle }).click();
@@ -42,7 +42,11 @@ test("blocking a user refuses direct messages until unblocked", async ({ page, r
   await expect(page).toHaveURL(/\/videos\/[^/]+$/); // did NOT navigate to a thread
 
   // Persistence: the block appears on the blocked-accounts page (a fresh API read).
-  await page.getByRole("link", { name: viewer }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page
+    .getByRole("dialog", { name: "Account menu" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
   await page.getByRole("link", { name: "Manage blocked accounts" }).click();
   await expect(page.getByText(`@${target.username}`)).toBeVisible();
 

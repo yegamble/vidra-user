@@ -22,7 +22,7 @@ async function signUpAndChannel(
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
@@ -104,7 +104,8 @@ test("a set password gates the watch page: prompt, wrong password rejected, righ
   expect(((await anon.json()) as { error: { code: string } }).error.code).toBe("password_required");
 
   // Sign out → a visitor hits the unlock prompt in place of the player.
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("dialog", { name: "Account menu" }).getByRole("button", { name: "Sign out", exact: true }).click();
   await page.goto(`/videos/${mine!.id}`);
   await expect(page.getByText("This video is password protected")).toBeVisible();
 

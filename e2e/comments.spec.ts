@@ -103,7 +103,7 @@ test("an authenticated viewer can post a comment", async ({ page }) => {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());
@@ -174,7 +174,7 @@ test("a signed-in viewer gets Mute instance + Report on a federated comment inst
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());
@@ -248,7 +248,7 @@ test("an author can edit their own comment", async ({ page }) => {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());
@@ -367,7 +367,7 @@ test("an authenticated viewer can reply, and the POST carries the parent_id", as
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());
@@ -418,7 +418,7 @@ test("the reply composer names the comment being replied to", async ({ page }) =
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());

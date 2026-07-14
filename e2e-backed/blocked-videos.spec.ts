@@ -33,7 +33,7 @@ test("an admin unblocks a video from the block-list and it persists", async ({ p
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open Moderation → Blocked videos (client-side nav keeps the in-memory session).
   await page.getByRole("link", { name: "Moderation" }).click();
@@ -73,7 +73,7 @@ test("the remote block-list tab loads (empty) against the real backend", async (
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Moderation" }).click();
   await page.getByRole("link", { name: "Blocked videos" }).click();
@@ -105,7 +105,7 @@ test("an admin blocks a reported video from the moderation queue", async ({ page
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Moderation" }).click();
   const row = page.locator("article", { hasText: reason });

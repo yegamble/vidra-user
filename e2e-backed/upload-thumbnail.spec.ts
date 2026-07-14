@@ -9,11 +9,10 @@ import { API_URL, SAMPLE_MP4_4S_BASE64, channelVideos, loginToken, uniqueId, wai
 // frame is extracted server-side, stored as JPEG, served back (DB/storage proof),
 // and the studio edit surface shows the poster after a fresh refetch.
 //
-// The interactive scrubber is exercised through the UI when the sub-second CI
-// fixture reports a scrubbable (>0s) duration; on a fixture whose probed duration
-// is too small for the scrubber, the frame-pick contract is driven via the API at
-// at_seconds=0 (always valid) — either way the SAME endpoint + DB path is proven,
-// and the UI is asserted to reflect the stored poster after refetch.
+// The interactive scrubber is exercised through the UI when the browser exposes
+// a scrubbable duration. If media metadata is unavailable, the frame-pick contract
+// is driven via the API at at_seconds=0 (always valid) — either way the SAME
+// endpoint + DB path is proven, and the UI reflects the stored poster after refetch.
 test("a creator sets the poster from a video frame (frame-pick)", async ({ page, request }) => {
   const id = uniqueId();
   const handle = `ch${id}`;
@@ -28,7 +27,7 @@ test("a creator sets the poster from a video frame (frame-pick)", async ({ page,
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
@@ -40,8 +39,7 @@ test("a creator sets the poster from a video frame (frame-pick)", async ({ page,
   await channelCreated;
 
   // Publish a real (4s) video via the chunked upload; ffprobe accepts it and
-  // records a positive duration — the frame-pick precondition (a sub-second clip
-  // truncates to 0 and would 409).
+  // records the positive duration required by the frame-picker.
   await page.getByLabel("Video title").fill(videoTitle);
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",

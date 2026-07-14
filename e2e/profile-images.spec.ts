@@ -62,7 +62,7 @@ async function signIn(page: Page, sessionUser = user()) {
   await page.getByLabel("Email").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 test("uploading an avatar in settings updates the preview and the header", async ({ page }) => {
@@ -78,7 +78,8 @@ test("uploading an avatar in settings updates the preview and the header", async
   // No avatar yet: the header shows no avatar image.
   await expect(page.getByRole("banner").locator('img[src*="/users/u1/avatar"]')).toHaveCount(0);
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   const avatarSection = page.getByRole("region", { name: "Avatar", exact: true });
   await expect(avatarSection).toBeVisible();
   // The initial-letter fallback, not an image (and no Remove control yet).
@@ -113,7 +114,8 @@ test("an unsupported avatar file type shows the 415 message", async ({ page }) =
     }),
   );
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   const avatarSection = page.getByRole("region", { name: "Avatar", exact: true });
   await avatarSection.getByLabel("Avatar image").setInputFiles({
     name: "clip.gif",
@@ -133,7 +135,8 @@ test("removing the avatar restores the initial-letter fallback", async ({ page }
   );
   await page.route(MY_AVATAR, (route) => route.fulfill({ status: 204, body: "" }));
 
-  await page.getByRole("link", { name: "ada" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   const avatarSection = page.getByRole("region", { name: "Avatar", exact: true });
   await expect(avatarSection.getByRole("img", { name: "Current avatar" })).toBeVisible();
 

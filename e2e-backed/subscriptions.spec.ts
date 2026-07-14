@@ -16,7 +16,7 @@ test("a new user's subscriptions feed is empty against the real backend", async 
   await page.getByLabel("Email").fill(`e2e-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Navigate to subscriptions via the header (client-side nav keeps the session).
   await page.getByRole("link", { name: "Subscriptions" }).click();

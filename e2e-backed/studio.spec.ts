@@ -30,7 +30,7 @@ test("a creator can create a channel and publish a video (chunked upload)", asyn
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the studio (client-side nav) and create a channel.
   await page.getByRole("link", { name: "Studio", exact: true }).click();
@@ -81,7 +81,7 @@ test("a creator can edit and delete their video", async ({ page, request }) => {
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
@@ -144,8 +144,8 @@ test("a creator can edit and delete their video", async ({ page, request }) => {
 // Proves the chapters round trip against a real vidra-core + PostgreSQL (CORE-15):
 // a creator adds a chapter in the studio edit surface, the whole-set PUT persists
 // it, the API re-GET confirms the stored row (DB evidence), and a fresh load of the
-// watch page shows the chapter (the current-chapter readout — duration-independent,
-// unlike the >0s tick markers the sub-second CI fixture clip cannot position).
+// watch page shows the chapter through the duration-independent current-chapter
+// readout.
 test("a creator can add chapters that persist and show on the watch page", async ({
   page,
   request,
@@ -160,7 +160,7 @@ test("a creator can add chapters that persist and show on the watch page", async
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
@@ -225,7 +225,7 @@ test("a creator can replace their video's thumbnail", async ({ page, request }) 
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
@@ -299,7 +299,7 @@ test("a creator can publish a video by importing from a URL (async job)", async 
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
@@ -345,7 +345,7 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
@@ -393,7 +393,7 @@ test("a non-http import URL shows an inline url field error", async ({ page }) =
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
@@ -437,7 +437,7 @@ test("a creator can create, rekey, and delete a live stream", async ({ page, req
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
@@ -500,7 +500,7 @@ test("a live stream shows LIVE after the ingest hook flips it", async ({ page, r
   await page.getByLabel("Email").fill(`e2e-fan-${id}@example.test`);
   await page.getByLabel("Password").fill("supersecret-e2e");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);

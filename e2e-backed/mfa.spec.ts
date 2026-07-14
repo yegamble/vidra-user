@@ -16,7 +16,8 @@ import { totpCode, uniqueId } from "./fixtures";
 // Each run uses unique credentials so it repeats without a DB reset.
 
 async function signOut(page: Page) {
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("dialog", { name: "Account menu" }).getByRole("button", { name: "Sign out", exact: true }).click();
   // Scope to the header banner: a signed-out page BODY may render its own
   // "Sign in" link, so the banner landmark keeps this to the single header control.
   await expect(page.getByRole("banner").getByRole("link", { name: "Sign in" })).toBeVisible();
@@ -29,7 +30,7 @@ async function loginExpectingChallenge(page: Page, email: string, password: stri
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Two-factor authentication" })).toBeVisible();
   // The credentials alone must NOT have produced a session.
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 }
 
 // The challenge's TOTP entry is the segmented OtpInput: a role=group named
@@ -69,10 +70,11 @@ test("TOTP enroll -> logout -> login gated by a computed code; a recovery code i
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Enroll on /settings/security (client-side nav via the header).
-  await page.getByRole("link", { name: username }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByRole("link", { name: "Manage security settings" }).click();
   await expect(page).toHaveURL(/\/settings\/security$/);
   await expect(page.getByText("Off", { exact: true })).toBeVisible();
@@ -105,18 +107,22 @@ test("TOTP enroll -> logout -> login gated by a computed code; a recovery code i
 
   await fillAuthenticationCode(page, totpCode(secret));
   await page.getByRole("button", { name: "Verify code" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-  await expect(page.getByRole("link", { name: username })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Account menu" }).getByText(`@${username}`, { exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
 
   // The challenge issued a real cookie-mode session: a hard reload restores it.
   await page.reload();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Recovery-code path: it completes the challenge and is consumed (single-use).
   await signOut(page);
   await loginExpectingChallenge(page, email, password);
   await completeChallengeWithRecoveryCode(page, recoveryCodes[0]);
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // The consumed code is reflected in the persisted status (10 -> 9), read
   // fresh from the backend after a hard navigation (cookie-restored session).
@@ -129,5 +135,5 @@ test("TOTP enroll -> logout -> login gated by a computed code; a recovery code i
   await loginExpectingChallenge(page, email, password);
   await completeChallengeWithRecoveryCode(page, recoveryCodes[0]);
   await expect(page.getByText(/That code didn't work/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });

@@ -20,21 +20,19 @@ test("deactivating the account prevents future logins", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Deactivate via the settings page (reached through the header link).
-  await page.getByRole("link", { name: username }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
   await page.getByLabel("Current password").fill(password);
   await page.getByRole("button", { name: "Deactivate account" }).click();
 
-  // Deactivation signs the account out everywhere (the session is gone, so the
-  // header no longer offers "Sign out"). We assert the absence of the session
-  // rather than presence of a "Sign in" link, which is ambiguous now that several
-  // signed-out views render their own "Sign in" link. Match the header's exact
-  // "Sign out" — the settings page also has a "Sign out of this device" button,
-  // which a substring match would collide with.
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeHidden();
+  // Deactivation signs the account out everywhere. The account-menu trigger is
+  // a signed-in-only control, so its absence is unambiguous even though several
+  // signed-out views render their own "Sign in" link.
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeHidden();
 
   // A fresh login with the same credentials is refused — proof the deactivation
   // persisted in the database.
@@ -43,5 +41,5 @@ test("deactivating the account prevents future logins", async ({ page }) => {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText("account is disabled")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });

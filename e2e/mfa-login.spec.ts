@@ -42,7 +42,7 @@ test("an MFA-enabled login swaps to the code entry — no session yet", async ({
   await loginToChallenge(page);
 
   // No session was issued by the credentials alone.
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
   // The six-digit box grid (a named group) is the default entry.
   await expect(page.getByRole("group", { name: "Authentication code" })).toBeVisible();
   await expect(page.getByText(/6-digit code from your authenticator app/)).toBeVisible();
@@ -62,7 +62,7 @@ test("a TOTP code completes the challenge into a cookie-mode session", async ({ 
   await fillTotp(page, "123456");
   await page.getByRole("button", { name: "Verify code" }).click();
 
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
   expect(body).toEqual({ mfa_token: "mfa-tok-1", code: "123456", cookie_mode: true });
 });
@@ -81,7 +81,7 @@ test("a recovery code goes through the same challenge", async ({ page }) => {
   await page.getByLabel("Recovery code").fill("a1b2c-3d4e5");
   await page.getByRole("button", { name: "Verify code" }).click();
 
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   expect(body).toEqual({ mfa_token: "mfa-tok-1", code: "a1b2c-3d4e5", cookie_mode: true });
 });
 
@@ -99,7 +99,7 @@ test("a wrong or expired code is an honest 401, and the challenge stays", async 
 
   await expect(page.getByText(/That code didn't work, or this sign-in attempt has expired/)).toBeVisible();
   await expect(page.getByRole("group", { name: "Authentication code" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });
 
 test("rate limiting on the challenge is reported honestly", async ({ page }) => {

@@ -64,8 +64,8 @@ test("the native controls are gone and a custom overlay drives play/pause", asyn
   // No stock chrome — the <video> carries no `controls` attribute.
   expect(await page.locator("video").getAttribute("controls")).toBeNull();
 
-  // The custom Play button starts playback (asserted via the play event — the
-  // fixture clip is sub-second, so `paused` flips back too fast to poll).
+  // The custom Play button starts playback. Assert the play event directly to
+  // avoid polling a media state that can change as playback completes.
   await page.locator("video").evaluate((el: HTMLVideoElement) => {
     (window as unknown as { __played: boolean }).__played = false;
     el.addEventListener("play", () => {
@@ -111,9 +111,8 @@ test("the seek bar is keyboard operable and drives currentTime", async ({ page }
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Shell Clip" })).toBeVisible();
 
-  // Give the element a known duration and record every requested seek (the
-  // fixture clip is sub-second, so currentTime snaps back — asserting the seek
-  // intent is the honest proof, as in the storyboard spec).
+  // Give the element a known duration and record every requested seek. Asserting
+  // the seek intent avoids depending on browser media timing.
   await page.locator("video").evaluate((el: HTMLVideoElement) => {
     Object.defineProperty(el, "duration", { configurable: true, get: () => 120 });
     el.dispatchEvent(new Event("durationchange"));

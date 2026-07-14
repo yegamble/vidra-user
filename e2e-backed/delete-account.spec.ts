@@ -23,7 +23,7 @@ test("permanently deleting the account refuses future logins and 404s the channe
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Give the account a channel via the API so the §1 content-deletion promise
   // ("content deleted") is provable after the fact.
@@ -36,7 +36,8 @@ test("permanently deleting the account refuses future logins and 404s the channe
   expect((await channelDetail(request, handle)).status).toBe(200);
 
   // Delete permanently through the settings danger zone: two steps.
-  await page.getByRole("link", { name: username }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
   await page.getByRole("button", { name: "Delete account permanently" }).click();
   await page.getByLabel("Password", { exact: true }).fill(password);
@@ -45,7 +46,7 @@ test("permanently deleting the account refuses future logins and 404s the channe
 
   // The goodbye state renders and the session is gone.
   await expect(page.getByText("Your account has been deleted")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 
   // Login is refused — the account row was anonymised (401 invalid credentials,
   // not the deactivated account's 403 "disabled").

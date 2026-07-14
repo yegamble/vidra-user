@@ -32,8 +32,11 @@ test("signing in shows the account in the header", async ({ page }) => {
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-  await expect(page.getByText("ada")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Account menu" }).getByText("@ada", { exact: true }),
+  ).toBeVisible();
 });
 
 test("shows an error on bad credentials", async ({ page }) => {
@@ -50,7 +53,7 @@ test("shows an error on bad credentials", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page.getByText("Invalid email or password.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });
 
 const RESET = /\/api\/v1\/auth\/password-reset$/;
@@ -221,7 +224,7 @@ test("signing up shows the account in the header", async ({ page }) => {
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Create account" }).click();
 
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 });
 
 test("maps 422 field errors inline", async ({ page }) => {
@@ -246,7 +249,7 @@ test("maps 422 field errors inline", async ({ page }) => {
   await page.getByRole("button", { name: "Create account" }).click();
 
   await expect(page.getByText("must be at least 8 characters")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });
 
 test("a duplicate signup shows a friendly taken message, not a raw code", async ({ page }) => {
@@ -265,7 +268,7 @@ test("a duplicate signup shows a friendly taken message, not a raw code", async 
   await page.getByRole("button", { name: "Create account" }).click();
 
   await expect(page.getByText("That username or email is already taken.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });
 
 test("a network failure on login shows a connection message, not a raw error", async ({ page }) => {

@@ -55,7 +55,7 @@ async function signIn(page: Page, role: Role) {
   await page.getByLabel("Email").fill("boss@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
 // Client-side navigate Admin → Registration tab (a hard goto would drop the
@@ -224,7 +224,7 @@ test("signup on an approval-required instance shows the copy and the pending con
 
   await expect(page.getByText("Your account is awaiting approval")).toBeVisible();
   // Nobody is signed in — no session was created.
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
   expect(body).toEqual({
     username: "ada",
     email: "ada@example.test",
@@ -252,5 +252,5 @@ test("signup without approval still signs straight in (no approval copy)", async
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Create account" }).click();
 
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 });
