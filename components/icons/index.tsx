@@ -22,6 +22,11 @@ import type { SVGProps } from "react";
  * Filled-by-design glyphs (Play, Playlist, MoreHorizontal, and Library's inner
  * play) set `fill="currentColor" stroke="none"` on their own child elements,
  * overriding the outline default of the shared <Icon> wrapper.
+ *
+ * Tier 3 bundle audit: Next 16.2's native Turbopack analyzer reports this
+ * client module at ~3.3 KB compressed. Keep the single typed source instead of
+ * creating 55 per-icon files; the transfer saving would be negligible and
+ * Turbopack already analyzes named imports without optimizePackageImports.
  */
 export type IconProps = Omit<SVGProps<SVGSVGElement>, "children"> & {
   /** Pixel size for width & height (default 20). */

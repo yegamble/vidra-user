@@ -6,6 +6,8 @@
     "dev": "next dev",
     "prebuild": "node scripts/copy-olm-wasm.mjs",
     "build": "next build",
+    "preanalyze": "node scripts/copy-olm-wasm.mjs",
+    "analyze": "next experimental-analyze --output",
     "start": "next start",
     "lint": "eslint",
     "lint:icons": "node scripts/check-no-emoji.mjs",
