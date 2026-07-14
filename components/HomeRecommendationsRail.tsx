@@ -9,10 +9,11 @@ import { t } from "@/lib/i18n";
 import { trackSearchEvent } from "@/lib/search-events";
 
 // HomeRecommendationsRail is the home "For you" / "Trending now" discovery rail
-// (search-service W4), mounted between the Live-now rail and the main feed. Like
+// (search-service W4), mounted after the primary feed. Like
 // LiveNowRail it is a quiet progressive-enhancement surface: it renders NOTHING
-// while loading, on error, or when the endpoint returns no items — it never
-// reserves space or shows an error on the public feed.
+// while loading, on error, or when the endpoint returns no items. The home page
+// mounts it after the primary feed so a late personalized response cannot push
+// already-visible videos down the viewport.
 //
 // The endpoint (GET /api/v1/recommendations/home) works for everyone: signed-in
 // callers whose instance + preference allow personalization get a personalized
@@ -89,7 +90,7 @@ function RecommendationRail({
   }, [items, context]);
 
   return (
-    <section aria-label={heading} className="mb-10">
+    <section aria-label={heading} className="mt-10">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-bold tracking-[-0.025em]">{heading}</h2>
       </div>

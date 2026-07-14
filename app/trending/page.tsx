@@ -70,11 +70,10 @@ export default async function TrendingPage({
         <FeedScopeToggle active={scope} sort="trending" filters={filters} urlDefaults={urlDefaults} />
         <FeedFilters sort="trending" filters={filters} urlDefaults={urlDefaults} />
       </div>
-      {/* "Live now" rail — persists across the shared sort chips (matches the
-          design's single feed screen, where Recent/Popular/Trending are re-sorts
-          of one surface that keeps the rail). Renders nothing when nothing's live. */}
-      <LiveNowRail />
       <VideoFeed key={feedKey} sort="trending" filters={filters} />
+      {/* Late optional content follows the stable feed so it cannot push the
+          visible result grid down when the client request resolves. */}
+      <LiveNowRail />
     </main>
   );
 }
