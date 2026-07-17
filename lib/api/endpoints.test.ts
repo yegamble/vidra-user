@@ -1602,6 +1602,23 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/jobs");
   });
 
+  it("gets IPFS status and scopes reconciliation to one network", async () => {
+    fetchMock.mockImplementation(async () => okJson());
+    await api.getIPFSStatus();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/ipfs/status");
+
+    fetchMock.mockClear();
+    await api.reconcileIPFS("private");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/ipfs/reconcile?network=private");
+    expect(init.method).toBe("POST");
+  });
+
+  it("omits the IPFS network query when reconciling all tiers", async () => {
+    await api.reconcileIPFS();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/ipfs/reconcile");
+  });
+
   it("getJobRuns sends the server-backed operations filters and pagination", async () => {
     await api.getJobRuns({
       state: "failed",

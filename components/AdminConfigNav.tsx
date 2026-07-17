@@ -8,7 +8,7 @@ import { CONFIG_PAGES } from "@/lib/admin-config-ia";
 import { cn } from "@/lib/cn";
 
 // AdminConfigNav is the persistent left rail of the instance-configuration IA
-// (config-parity W2): the seven config pages, PeerTube's grouping under Apple
+// (config-parity W2): the config pages, PeerTube's grouping under Apple
 // HIG presentation. On desktop it renders as a vertical rail beside the page
 // content; below lg it collapses to a horizontal scrollable pill row (the
 // AdminConsole rail is desktop-only, so this is the whole config nav there).

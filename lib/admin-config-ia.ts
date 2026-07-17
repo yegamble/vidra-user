@@ -2,7 +2,7 @@
 // architecture note 4). The single /admin/config page split into the
 // PeerTube-mirroring multi-page IA:
 //
-//   general | vod | live | federation | customization | homepage | advanced
+//   general | vod | live | federation | customization | homepage | ipfs | advanced
 //
 // This module is the client-side placement registry: which page + section
 // every known setting renders on, how it is edited, validated, and disclosed.
@@ -74,6 +74,7 @@ export type ConfigPageId =
   | "federation"
   | "customization"
   | "homepage"
+  | "ipfs"
   | "advanced";
 
 export type ConfigPageDef = {
@@ -123,6 +124,11 @@ export const CONFIG_PAGES: readonly ConfigPageDef[] = [
     id: "homepage",
     label: "Homepage",
     description: "The admin-authored homepage document.",
+  },
+  {
+    id: "ipfs",
+    label: "IPFS",
+    description: "Public distribution and private replication mirror health and operations.",
   },
   {
     id: "advanced",
@@ -363,6 +369,11 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       alwaysRender: true,
     },
   ],
+  // IPFS is backed by its dedicated status/reconcile contract rather than the
+  // runtime instance-settings registry. Its route renders AdminIPFSConfigView;
+  // the empty section list keeps ConfigPageId's registry exhaustive without
+  // suggesting boot-only node URLs, credentials, or swarm keys are hot-editable.
+  ipfs: [],
   advanced: [
     // Config-parity W6: the custom CSS/JS document editors (architecture
     // note 6's security posture — CSS first, JS danger-styled behind a typed

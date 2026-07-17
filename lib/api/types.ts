@@ -155,6 +155,12 @@ export type JobEvent = Schemas["JobEvent"];
 export type JobRunsResponse = Schemas["JobRunsResponse"];
 export type JobRunDetailResponse = Schemas["JobRunDetailResponse"];
 export type MediaGCResponse = Schemas["MediaGCResponse"];
+export type IPFSStatus = Schemas["IPFSStatus"];
+export type IPFSNetworks = Schemas["IPFSNetworks"];
+export type IPFSNetworkStatus = Schemas["IPFSNetworkStatus"];
+export type IPFSPinCounts = Schemas["IPFSPinCounts"];
+export type IPFSClassPinCounts = Schemas["IPFSClassPinCounts"];
+export type IPFSReconcileResult = Schemas["IPFSReconcileResult"];
 
 // --- Admin: PeerTube import / migration (P10 UI over P18 backend) ------------
 export type PeerTubeImportLaunchRequest = Schemas["PeerTubeImportLaunchRequest"];

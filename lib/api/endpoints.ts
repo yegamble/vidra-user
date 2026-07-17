@@ -21,6 +21,8 @@ import type {
   JobRunDetailResponse,
   JobRunsResponse,
   JobRunState,
+  IPFSReconcileResult,
+  IPFSStatus,
   MediaGCResponse,
   PeerTubeImportLaunchRequest,
   PeerTubeImportRun,
@@ -1760,6 +1762,20 @@ export const api = {
   /** GET /api/v1/admin/system — operational status snapshot (admin). */
   getSystemStatus: (signal?: AbortSignal) =>
     apiRequest<SystemStatus>("/api/v1/admin/system", { signal }),
+
+  /** GET /api/v1/ipfs/status — effective public/private mirror health and pin counts (admin). */
+  getIPFSStatus: (signal?: AbortSignal) =>
+    apiRequest<IPFSStatus>("/api/v1/ipfs/status", { signal }),
+
+  /**
+   * POST /api/v1/admin/ipfs/reconcile — re-arm failed work and seed missing
+   * eligible pin intents. Omit network to reconcile both configured swarms.
+   */
+  reconcileIPFS: (network?: "public" | "private") =>
+    apiRequest<IPFSReconcileResult>("/api/v1/admin/ipfs/reconcile", {
+      method: "POST",
+      query: { network },
+    }),
 
   /**
    * GET /api/v1/admin/stats — instance-wide overview counts for the admin
