@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 // `npm run ci`; PATCH persistence against the real stack is proven in
 // e2e-backed/instance-settings.spec.ts). Covers the config-parity W2 IA:
 // /admin/config as a layout route with a persistent left rail of pages
-// (general | vod | live | federation | customization | homepage | advanced),
+// (general | vod | live | federation | customization | homepage | ipfs | advanced),
 // per-page grouped sections, progressive disclosure, inline validation, the
 // per-section save, the badge-only-when-overridden rule with the config
 // default displayed, and the metadata-driven auto-render invariant (unknown
@@ -17,6 +17,8 @@ const SETTINGS = /\/api\/v1\/admin\/instance-settings$/;
 const DOCS = /\/api\/v1\/admin\/instance-documents\/(homepage|custom_css|custom_js)$/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 const INSTANCE = /\/api\/v1\/instance$/;
+const IPFS_STATUS = /\/api\/v1\/ipfs\/status$/;
+const IPFS_RECONCILE = /\/api\/v1\/admin\/ipfs\/reconcile/;
 
 type Role = "user" | "moderator" | "admin";
 
@@ -194,7 +196,7 @@ test("/admin/config redirects to the general page and shows the page rail", asyn
   await page.route(SETTINGS, (route) => route.fulfill({ json: settings }));
   await openConfig(page);
 
-  // The seven-page rail, in IA order.
+  // The eight-page rail, in IA order.
   const nav = configNav(page);
   for (const label of [
     "General",
@@ -203,6 +205,7 @@ test("/admin/config redirects to the general page and shows the page rail", asyn
     "Federation",
     "Customization",
     "Homepage",
+    "IPFS",
     "Advanced",
   ]) {
     await expect(nav.getByRole("link", { name: label })).toBeVisible();
@@ -211,6 +214,66 @@ test("/admin/config redirects to the general page and shows the page rail", asyn
     "aria-current",
     "page",
   );
+});
+
+test("the IPFS page shows both swarms and runs a scoped reconciliation", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.route(SETTINGS, (route) => route.fulfill({ json: settings }));
+  await page.route(IPFS_STATUS, (route) =>
+    route.fulfill({
+      json: {
+        enabled: true,
+        node_reachable: true,
+        gateway_url: "https://ipfs.example.test",
+        cluster_enabled: false,
+        cluster_reachable: false,
+        pins: { pinned: 7, pending: 1, failed: 0, unpinned: 2 },
+        by_class: [],
+        networks: {
+          public: {
+            enabled: true,
+            node_reachable: true,
+            cluster_enabled: false,
+            cluster_reachable: false,
+            pins: { pinned: 5, pending: 1, failed: 0, unpinned: 1 },
+            by_class: [
+              {
+                media_class: "thumbnail",
+                pinned: 5,
+                pending: 1,
+                failed: 0,
+                unpinned: 1,
+              },
+            ],
+          },
+          private: {
+            enabled: true,
+            node_reachable: true,
+            cluster_enabled: false,
+            cluster_reachable: false,
+            pins: { pinned: 2, pending: 0, failed: 0, unpinned: 1 },
+            by_class: [],
+          },
+        },
+      },
+    }),
+  );
+  let reconcileURL = "";
+  await page.route(IPFS_RECONCILE, (route) => {
+    reconcileURL = route.request().url();
+    return route.fulfill({ status: 202, json: { enqueued: 2, by_class: { thumbnail: 2 } } });
+  });
+
+  await openConfig(page);
+  await configNav(page).getByRole("link", { name: "IPFS" }).click();
+  await expect(page).toHaveURL(/\/admin\/config\/ipfs$/);
+  await expect(page.getByRole("heading", { name: "Public distribution" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Private replication" })).toBeVisible();
+  await expect(page.getByText("https://ipfs.example.test")).toBeVisible();
+
+  await page.getByRole("button", { name: "Reconcile public" }).click();
+  await expect(page.getByText(/Reconciliation accepted for public IPFS/)).toBeVisible();
+  expect(new URL(reconcileURL).searchParams.get("network")).toBe("public");
 });
 
 test("the general page renders its sections with badge-only-when-overridden", async ({

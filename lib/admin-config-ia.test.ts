@@ -136,7 +136,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
 ];
 
 describe("config pages", () => {
-  it("exposes the seven-page IA in order", () => {
+  it("exposes the eight-page IA in order", () => {
     expect(CONFIG_PAGES.map((p) => p.id)).toEqual([
       "general",
       "vod",
@@ -144,6 +144,7 @@ describe("config pages", () => {
       "federation",
       "customization",
       "homepage",
+      "ipfs",
       "advanced",
     ]);
   });
