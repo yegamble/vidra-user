@@ -66,15 +66,13 @@ export function BlueskyLoginButton({
     }
   }
 
+  // A plain container, NOT a nested <form>: this component renders inside the
+  // login/signup <form>, and nested forms are invalid HTML (the browser drops
+  // the inner one, so a submit button falls through to a native GET). The
+  // Continue button is type="button" and Enter in the field is handled here
+  // (preventDefault stops the outer credentials form from submitting instead).
   return (
-    <form
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-      className="flex flex-col gap-3"
-    >
+    <div className="flex flex-col gap-3">
       {error ? (
         <p
           role="alert"
@@ -101,12 +99,24 @@ export function BlueskyLoginButton({
           setHandle(e.target.value);
           setError(null);
         }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void submit();
+          }
+        }}
       />
 
-      <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+      <Button
+        type="button"
+        size="lg"
+        className="w-full"
+        disabled={submitting}
+        onClick={() => void submit()}
+      >
         {submitting ? <Spinner label="Starting sign-in" /> : "Continue"}
       </Button>
-    </form>
+    </div>
   );
 }
 
