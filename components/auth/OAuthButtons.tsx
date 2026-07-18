@@ -76,6 +76,13 @@ export function oauthErrorMessage(code: string): string {
       return "This account is disabled.";
     case "conflict":
       return "An account could not be created — the username or email is already taken.";
+    // ATProto identity-login callback failures (Bluesky / any PDS).
+    case "atproto_identity_mismatch":
+      return "Bluesky sign-in could not be verified. Try again.";
+    case "atproto_upstream":
+      return "Could not reach your Bluesky server. Try again shortly.";
+    case "atproto_disabled":
+      return "Bluesky sign-in is not enabled on this instance.";
     default:
       return "Signing in with the provider failed. Please try again.";
   }
