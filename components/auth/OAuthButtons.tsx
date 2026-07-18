@@ -21,11 +21,7 @@ export function OAuthButtons({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="my-1 flex items-center gap-3" aria-hidden>
-        <span className="h-px flex-1 bg-border-subtle" />
-        <span className="text-xs text-fg-muted">or</span>
-        <span className="h-px flex-1 bg-border-subtle" />
-      </div>
+      <AuthOrDivider />
       <ul className="flex flex-col gap-2">
         {providers.map((provider) => (
           <li key={provider}>
@@ -51,6 +47,23 @@ export function OAuthButtons({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * The "— or —" rule that separates the primary credentials form from the
+ * alternative sign-in methods. Shared so the OIDC list and the ATProto/Bluesky
+ * affordance never render two competing dividers: OAuthButtons draws it above
+ * its provider list, and the auth forms draw it once for the Bluesky-only case
+ * (no OIDC providers configured).
+ */
+export function AuthOrDivider() {
+  return (
+    <div className="my-1 flex items-center gap-3" aria-hidden>
+      <span className="h-px flex-1 bg-border-subtle" />
+      <span className="text-xs text-fg-muted">or</span>
+      <span className="h-px flex-1 bg-border-subtle" />
     </div>
   );
 }
