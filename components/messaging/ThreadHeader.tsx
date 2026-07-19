@@ -44,7 +44,7 @@ export function ThreadHeader({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-1.5">
-          <h1 className="truncate text-[15px] font-semibold leading-tight text-fg">
+          <h1 className="truncate text-headline text-fg">
             {name}
           </h1>
           {encrypted ? (
@@ -54,11 +54,11 @@ export function ThreadHeader({
           ) : null}
         </div>
         {encrypted ? (
-          <span className="truncate text-[11.5px] font-medium text-success">
+          <span className="truncate text-footnote font-medium text-success">
             End-to-end encrypted
           </span>
         ) : username ? (
-          <span className="truncate text-[12px] text-fg-muted">@{username}</span>
+          <span className="truncate text-footnote text-fg-muted">@{username}</span>
         ) : null}
       </div>
 

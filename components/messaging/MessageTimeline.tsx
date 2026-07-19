@@ -2,6 +2,7 @@
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { ChevronDownIcon } from "@/components/icons";
 import { MessageGroup } from "@/components/messaging/MessageGroup";
 import { NewMessagesDivider, TimeSeparator } from "@/components/messaging/TimeSeparator";
 import { buildTimeline, type DisplayMessage } from "@/lib/messaging/grouping";
@@ -147,20 +148,9 @@ export function MessageTimeline({
               ? `Jump to latest, ${newCount} new ${newCount === 1 ? "message" : "messages"}`
               : "Jump to latest"
           }
-          className="focus-ring absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-raised px-3 py-2 text-[12px] font-semibold text-fg shadow-lg transition-colors hover:bg-surface-muted"
+          className="focus-ring absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-raised px-3 py-2 text-[12px] font-semibold text-fg shadow-soft-strong transition-colors hover:bg-surface-muted"
         >
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-          >
-            <path d="M12 5v14M19 12l-7 7-7-7" />
-          </svg>
+          <ChevronDownIcon size={16} strokeWidth={2} />
           {newCount > 0 ? <span className="tabular-nums">{newCount} new</span> : null}
         </button>
       ) : null}

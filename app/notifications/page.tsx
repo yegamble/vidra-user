@@ -8,7 +8,7 @@ import { NotificationsView } from "@/components/NotificationsView";
 export default function NotificationsPage() {
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
-      <h1 className="mb-4 text-2xl font-bold tracking-tight sm:mb-6">Inbox</h1>
+      <h1 className="mb-4 text-title sm:mb-6 sm:text-large-title">Inbox</h1>
       <InboxTabs active="notifications" className="mb-5" />
       <NotificationsView />
     </main>

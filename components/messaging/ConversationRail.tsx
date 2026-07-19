@@ -41,9 +41,9 @@ export function ConversationRail({ titleAsH1 }: { titleAsH1: boolean }) {
   const { status } = useSession();
 
   const heading = titleAsH1 ? (
-    <h1 className="text-2xl font-bold tracking-tight">Messages</h1>
+    <h1 className="text-title">Messages</h1>
   ) : (
-    <p className="text-[15px] font-bold tracking-tight text-fg">Messages</p>
+    <p className="text-headline text-fg">Messages</p>
   );
 
   if (status !== "authed") {
@@ -205,7 +205,7 @@ function Rail({
                     aria-current={active ? "page" : undefined}
                     className={
                       "focus-ring flex items-center gap-3 rounded-xl px-2 py-3 transition-colors " +
-                      (active ? "bg-surface-muted" : "hover:bg-surface-muted")
+                      (active ? "bg-accent/12" : "hover:bg-surface-muted")
                     }
                   >
                     <Avatar
@@ -217,8 +217,8 @@ function Rail({
                       <span className="flex items-center gap-1.5">
                         <span
                           className={
-                            "truncate text-[14.5px] " +
-                            (unread ? "font-bold text-fg" : "font-semibold text-fg")
+                            "truncate text-headline " +
+                            (active ? "text-accent-text" : "text-fg")
                           }
                         >
                           {name}
@@ -232,13 +232,13 @@ function Rail({
                             <LockIcon size={12} />
                           </span>
                         ) : null}
-                        <span className="ml-auto shrink-0 text-[11.5px] tabular-nums text-fg-muted">
+                        <span className="ml-auto shrink-0 text-caption tabular-nums text-fg-muted">
                           {relativeTime(c.last_message_at)}
                         </span>
                       </span>
                       <span
                         className={
-                          "mt-0.5 truncate text-[13px] " +
+                          "mt-0.5 truncate text-footnote " +
                           (unread ? "font-semibold text-fg" : "text-fg-muted")
                         }
                       >
@@ -249,11 +249,9 @@ function Rail({
                     </div>
                     {unread ? (
                       <span
-                        className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-fg px-[5px] text-[11px] font-bold tabular-nums text-canvas"
+                        className="h-2.5 w-2.5 shrink-0 rounded-full bg-accent"
                         aria-label={`${c.unread_count} unread ${c.unread_count === 1 ? "message" : "messages"}`}
-                      >
-                        {(c.unread_count as number) > 99 ? "99+" : c.unread_count}
-                      </span>
+                      />
                     ) : null}
                   </Link>
                 </li>

@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Notification } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
@@ -30,6 +31,35 @@ export function NotificationTypeIcon({ type }: { type: string }) {
     default:
       return <UserIcon size={16} />;
   }
+}
+
+// The tinted circle each notification leads with — an Apple-style
+// icon-in-tinted-circle keyed to the notification kind (Messages green, new
+// follows blue, comments the indigo accent, moderation red/orange), leaving a
+// neutral fallback for unknown kinds. The tint is supporting decoration (the
+// row's text carries the meaning), so the whole chip — glyph included — stays
+// aria-hidden. Shared with the header bell popover so the two surfaces match.
+const NOTIF_CHIP: Record<string, string> = {
+  follow: "bg-tile-blue/12 text-tile-blue",
+  comment: "bg-accent/12 text-accent",
+  message: "bg-tile-green/12 text-tile-green",
+  video_rejected: "bg-tile-red/12 text-tile-red",
+  report_resolved: "bg-tile-orange/12 text-tile-orange",
+};
+const NOTIF_CHIP_DEFAULT = "bg-surface-muted text-fg-muted";
+
+export function NotificationIconChip({ type }: { type: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+        NOTIF_CHIP[type] ?? NOTIF_CHIP_DEFAULT,
+      )}
+    >
+      <NotificationTypeIcon type={type} />
+    </span>
+  );
 }
 
 // describeNotification renders a notification as a human message plus the link
@@ -205,12 +235,7 @@ function Notifications() {
                 (n.read ? "px-1" : "bg-surface-muted px-3")
               }
             >
-              <span
-                aria-hidden
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-muted text-fg-muted"
-              >
-                <NotificationTypeIcon type={n.type} />
-              </span>
+              <NotificationIconChip type={n.type} />
               <div className="flex min-w-0 flex-1 flex-col">
                 <Link
                   href={href}
@@ -235,7 +260,7 @@ function Notifications() {
               {n.read ? null : (
                 <span
                   aria-hidden
-                  className="mt-2 h-[7px] w-[7px] shrink-0 rounded-full bg-fg"
+                  className="mt-2 h-[7px] w-[7px] shrink-0 rounded-full bg-accent"
                 />
               )}
             </li>
