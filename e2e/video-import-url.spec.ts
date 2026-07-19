@@ -130,6 +130,18 @@ async function openStudio(page: Page, opts: { importsEnabled?: boolean } = {}) {
   await expect(page.getByRole("heading", { name: "Upload a video" })).toBeVisible();
 }
 
+// The upload form now opens in the stepped "Upload video" sheet (pick → details
+// → publish). openUpload launches it; pickUrl completes the URL pick and
+// Continues to the details stage.
+async function openUpload(page: Page) {
+  await page.getByRole("button", { name: "Upload video" }).click();
+}
+async function pickUrl(page: Page, url: string) {
+  await page.getByRole("button", { name: "Import from URL" }).click();
+  await page.getByLabel("Video URL").fill(url);
+  await page.getByRole("button", { name: "Continue" }).click();
+}
+
 // The active rail step carries aria-current="step"; asserting on it is stable as
 // the current step moves down the list.
 function currentStage(page: Page) {
@@ -159,9 +171,9 @@ test("the import stage rail advances queued → metadata → downloading → pro
   });
   await page.route(VIDEO, (route) => route.fulfill({ json: video() }));
 
+  await openUpload(page);
+  await pickUrl(page, "https://platform.example/watch?v=abc");
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("button", { name: "Import from URL" }).click();
-  await page.getByLabel("Video URL").fill("https://platform.example/watch?v=abc");
   await page.getByRole("button", { name: "Publish" }).click();
 
   // The rail renders and walks the stages in order (each ~one poll apart).
@@ -199,9 +211,9 @@ test("a failed import shows the safe error verbatim with a Retry that re-enqueue
   });
   await page.route(VIDEO, (route) => route.fulfill({ json: video() }));
 
+  await openUpload(page);
+  await pickUrl(page, "https://example.com/missing.mp4");
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("button", { name: "Import from URL" }).click();
-  await page.getByLabel("Video URL").fill("https://example.com/missing.mp4");
   await page.getByRole("button", { name: "Publish" }).click();
 
   // The backend's safe reason is shown verbatim, never "Published!".
@@ -218,12 +230,14 @@ test("a failed import shows the safe error verbatim with a Retry that re-enqueue
 test("the URL tab renders an honest disabled state when imports are off", async ({ page }) => {
   await openStudio(page, { importsEnabled: false });
 
+  await openUpload(page);
   await page.getByRole("button", { name: "Import from URL" }).click();
 
   await expect(page.getByText("Imports are disabled on this instance")).toBeVisible();
-  // No URL field, and Publish is disabled so the form can never be submitted.
+  // No URL field, and Continue is disabled so the pick stage can never advance to
+  // publish (Publish itself lives on the details stage, unreachable here).
   await expect(page.getByLabel("Video URL")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Publish" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
 });
 
 test("resolved metadata prefills an empty field but never overwrites the creator's edit", async ({
@@ -255,12 +269,13 @@ test("resolved metadata prefills an empty field but never overwrites the creator
     }),
   );
 
+  await openUpload(page);
+  await pickUrl(page, "https://platform.example/watch?v=abc");
   await page.getByLabel("Video title").fill("My own title");
-  await page.getByRole("button", { name: "Import from URL" }).click();
-  await page.getByLabel("Video URL").fill("https://platform.example/watch?v=abc");
   await page.getByRole("button", { name: "Publish" }).click();
 
   // User edit wins on title; the empty description picks up the resolved value.
+  // (Both fields live on the details stage, which stays mounted during import.)
   await expect(page.getByLabel("Video description")).toHaveValue("Resolved from the platform.");
   await expect(page.getByLabel("Video title")).toHaveValue("My own title");
 });
@@ -268,6 +283,7 @@ test("resolved metadata prefills an empty field but never overwrites the creator
 test("pasting a URL with surrounding whitespace is trimmed into the field", async ({ page }) => {
   await openStudio(page);
 
+  await openUpload(page);
   await page.getByRole("button", { name: "Import from URL" }).click();
   const url = page.getByLabel("Video URL");
   await url.focus();

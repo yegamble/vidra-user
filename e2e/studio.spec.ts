@@ -178,6 +178,23 @@ async function signIn(page: Page) {
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
+// The upload form now opens in the stepped "Upload video" sheet (design's Upload
+// sheet: pick → details → publish). openUpload launches it; pickFile / pickUrl
+// complete the pick stage and Continue to the details stage where title, taxonomy
+// and Publish live.
+async function openUpload(page: Page) {
+  await page.getByRole("button", { name: "Upload video" }).click();
+}
+async function pickFile(page: Page, file: { name: string; mimeType: string; buffer: Buffer }) {
+  await page.getByLabel("Video file").setInputFiles(file);
+  await page.getByRole("button", { name: "Continue" }).click();
+}
+async function pickUrl(page: Page, url: string) {
+  await page.getByRole("button", { name: "Import from URL" }).click();
+  await page.getByLabel("Video URL").fill(url);
+  await page.getByRole("button", { name: "Continue" }).click();
+}
+
 test("the studio prompts anonymous viewers to sign in", async ({ page }) => {
   await page.goto("/studio");
   await expect(page.getByText("Sign in to use the studio")).toBeVisible();
@@ -272,17 +289,14 @@ test("a creator can upload and publish a video", async ({ page }) => {
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("My clip");
   await page.getByLabel("Video description").fill("A short description.");
   await page.getByLabel("Video category").selectOption("7");
   await page.getByLabel("Video language").selectOption("en");
   await page.getByLabel("Video license").selectOption("1");
   await page.getByRole("switch", { name: "Contains sensitive content" }).click();
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
-    buffer: Buffer.from("test"),
-  });
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("Published!")).toBeVisible();
@@ -326,16 +340,13 @@ test("an upload the backend rejects as too large shows a friendly size message",
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickFile(page, { name: "huge.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("Huge clip");
   await page.getByLabel("Video description").fill("A short description.");
   await page.getByLabel("Video category").selectOption("7");
   await page.getByLabel("Video language").selectOption("en");
   await page.getByLabel("Video license").selectOption("1");
-  await page.getByLabel("Video file").setInputFiles({
-    name: "huge.mp4",
-    mimeType: "video/mp4",
-    buffer: Buffer.from("test"),
-  });
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("That file is too large.")).toBeVisible();
@@ -359,6 +370,8 @@ test("publish sends the entered tags, normalized, on the draft", async ({ page }
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("Tagged clip");
   const tagsField = page.getByLabel("Video tags");
   // Enter commits; a comma commits too (paste-friendly); values are lowercased
@@ -374,11 +387,6 @@ test("publish sends the entered tags, normalized, on the draft", async ({ page }
   await tagsField.press("Enter");
   await page.getByRole("button", { name: "Remove tag typo" }).click();
 
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
-    buffer: Buffer.from("test"),
-  });
   await page.getByRole("button", { name: "Publish" }).click();
   await expect(page.getByText("Published!")).toBeVisible();
   expect(draftBody).toMatchObject({ title: "Tagged clip", tags: ["retro", "gaming"] });
@@ -438,12 +446,13 @@ test("a failed upload is reported as a processing failure, not Published!", asyn
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByLabel("Video title").fill("My clip");
-  await page.getByLabel("Video file").setInputFiles({
+  await openUpload(page);
+  await pickFile(page, {
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from("not really a video"),
   });
+  await page.getByLabel("Video title").fill("My clip");
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(
@@ -475,9 +484,9 @@ test("a failed URL import is reported as a processing failure, not Published!", 
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickUrl(page, "https://example.com/clip.mp4");
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("button", { name: "Import from URL" }).click();
-  await page.getByLabel("Video URL").fill("https://example.com/clip.mp4");
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(
@@ -509,9 +518,9 @@ test("a failed URL import surfaces the job's error reason", async ({ page }) => 
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickUrl(page, "https://example.com/missing.mp4");
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("button", { name: "Import from URL" }).click();
-  await page.getByLabel("Video URL").fill("https://example.com/missing.mp4");
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("the source returned 404 Not Found")).toBeVisible();
@@ -535,12 +544,9 @@ test("an upload still processing shows an in-progress message, not Published!", 
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
-    buffer: Buffer.from("test"),
-  });
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("is still processing", { exact: false })).toBeVisible();
@@ -612,12 +618,9 @@ test("a slow upload shows a determinate progress bar and can be cancelled", asyn
   });
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
-    buffer: Buffer.from("test"),
-  });
   await page.getByRole("button", { name: "Publish" }).click();
 
   // The determinate progress bar + percent + Cancel are up while in flight.
@@ -702,8 +705,9 @@ test("a re-picked file offers Resume and finishes the interrupted upload", async
   await page.route(COMPLETE, (route) => route.fulfill({ status: 201, json: { video: video() } }));
 
   await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByLabel("Video title").fill("My clip");
-  // Re-pick the same 10-byte clip.mp4 → the resume banner appears.
+  await openUpload(page);
+  // Re-pick the same 10-byte clip.mp4 on the pick stage → the resume banner
+  // appears (resume reuses the existing draft, so no title/details entry).
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
@@ -742,12 +746,9 @@ test("a 422 field error from the draft renders inline on the title field", async
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
-    buffer: Buffer.from("test"),
-  });
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("must be at most 200 characters")).toBeVisible();
@@ -785,11 +786,13 @@ test("a 422 url field error from the import renders inline on the URL field", as
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickUrl(page, "https://example.com/clip.mp4");
   await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("button", { name: "Import from URL" }).click();
-  await page.getByLabel("Video URL").fill("https://example.com/clip.mp4");
   await page.getByRole("button", { name: "Publish" }).click();
 
+  // A url field error bounces the sheet back to the pick stage where the URL
+  // input lives, so the inline message renders next to it.
   await expect(page.getByText("must be a public http(s) URL")).toBeVisible();
   const url = page.getByLabel("Video URL");
   await expect(url).toHaveAttribute("aria-invalid", "true");
@@ -821,10 +824,10 @@ test("a creator can publish a video by importing from a URL", async ({ page }) =
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  // Switch the source to URL, provide a link, then add details and publish.
+  await pickUrl(page, "https://example.com/clip.mp4");
   await page.getByLabel("Video title").fill("My clip");
-  // Switch the source to URL and provide a link.
-  await page.getByRole("button", { name: "Import from URL" }).click();
-  await page.getByLabel("Video URL").fill("https://example.com/clip.mp4");
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("Published!")).toBeVisible();
@@ -1477,6 +1480,8 @@ test("the upload form prefills from the instance publish defaults and sends the 
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await openUpload(page);
+  await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
 
   // Prefilled from defaults.publish (licence 7 exists in the config mock).
   await expect(page.getByLabel("Privacy", { exact: true })).toHaveValue("unlisted");
@@ -1492,11 +1497,6 @@ test("the upload form prefills from the instance publish defaults and sends the 
 
   // The (untouched) form publishes with the seeded policies on the draft body.
   await page.getByLabel("Video title").fill("Seeded clip");
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
-    buffer: Buffer.from("test"),
-  });
   await page.getByRole("button", { name: "Publish" }).click();
   await expect(page.getByText("Published!")).toBeVisible();
   expect(draftBody).toMatchObject({

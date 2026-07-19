@@ -239,12 +239,15 @@ test("a quarantined publish outcome is reported as held for review, not failed o
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByLabel("Video title").fill("My clip");
+  // Upload now opens in the stepped sheet: pick the file, Continue, add title, publish.
+  await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from("test"),
   });
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Video title").fill("My clip");
   await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("held for review", { exact: false })).toBeVisible();

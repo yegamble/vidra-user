@@ -10,14 +10,19 @@ import { formatBytes } from "@/lib/format";
 // bound to the REAL GET /api/v1/me/quota contract ({ used_bytes,
 // quota_bytes|null, daily_used_bytes, daily_quota_bytes|null }). Elevated
 // surface card (soft shadow): "Storage" label + "X of Y" (or "X used" when
-// unlimited) + a rounded capacity bar (surface-strong track, accent used
-// segment) with a Used/Free legend, plus a "Daily uploads" footnote with the
-// remaining rolling-24h headroom when the instance sets a daily quota
-// (config-parity W7). The quota contract reports one aggregate `used_bytes`
-// (no per-media-kind breakdown), so the bar is a truthful two-tone used/free
-// meter rather than a fabricated per-kind split — never invent numbers.
-// Purely informational, so a load failure hides it rather than showing a
-// broken/faked meter.
+// unlimited) + an iCloud-style segmented capacity bar (surface-strong track,
+// accent used segment inset with a hairline gap so the used/free split reads as
+// distinct segments) with a Used/Free legend, plus a "Daily uploads" footnote
+// with the remaining rolling-24h headroom when the instance sets a daily quota
+// (config-parity W7).
+//
+// NOTE — iCloud shows a *per-media-kind* segmented bar (Photos/Backups/…). The
+// quota contract here reports ONE aggregate `used_bytes` (originals + renditions
+// + thumbnails combined; no per-kind field — verified against the OpenAPI
+// schema), so an honest bar can only segment used-vs-free. A fabricated per-kind
+// split would violate the redesign's "never invent numbers" rule, so the segment
+// stays a truthful two-tone meter. Purely informational, so a load failure hides
+// the card rather than showing a broken/faked meter.
 export function StudioStorageCard() {
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
 
@@ -66,9 +71,14 @@ export function StudioStorageCard() {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={percent}
-            className="h-2.5 overflow-hidden rounded-full bg-surface-strong"
+            className="flex h-3 items-stretch gap-[3px] overflow-hidden rounded-full bg-surface-strong p-[1.5px]"
           >
-            <div className="h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
+            {/* iCloud segmented capacity bar: the used segment is inset with a
+                hairline gap so used/free read as distinct segments. Hidden below
+                ~2% so a near-empty account doesn't paint a stray dot. */}
+            {percent >= 2 ? (
+              <div className="rounded-full bg-accent" style={{ width: `${percent}%` }} />
+            ) : null}
           </div>
           <div className="flex items-center gap-4 text-[12px] text-fg-muted">
             <span className="inline-flex items-center gap-1.5">
