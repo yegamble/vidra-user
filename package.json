@@ -25,7 +25,7 @@
     "@vercel/otel": "^1.14.2",
     "hls.js": "^1.6.16",
     "next": "16.2.9",
-    "react": "19.2.4",
+    "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
