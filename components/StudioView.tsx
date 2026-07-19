@@ -51,7 +51,7 @@ import type {
   VideoPrivacy,
   VideoState,
 } from "@/lib/api";
-import { formatBytes, formatDateTime } from "@/lib/format";
+import { formatBytes, formatCount, formatDateTime } from "@/lib/format";
 import { videoAcceptAttr } from "@/lib/upload-accept";
 import {
   IMPORT_STAGES,
@@ -248,6 +248,7 @@ function Studio() {
 
   return (
     <div className="flex flex-col gap-8">
+      {channels.length > 0 ? <StudioSummary channels={channels} /> : null}
       <StudioStorageCard />
       <UploadRecoveryCard onResumed={() => setVideoReloadKey((k) => k + 1)} />
       <ChannelSection
@@ -284,6 +285,36 @@ function Studio() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+// StudioSummary — the design's Studio "stat cards" row (admin-overview style):
+// elevated surface cards with a Caption uppercase label + a small Apple-system
+// colored dot + a Title (28) value. Derived ONLY from the already-loaded
+// channels list — Channels (count) and Followers (summed follower_count) — so
+// no extra fetch and no invented numbers (there is no aggregate video/view
+// total in the channel contract to show honestly here; the /studio/stats page
+// carries the per-channel analytics).
+function StudioSummary({ channels }: { channels: Channel[] }) {
+  const followers = channels.reduce((sum, c) => sum + (c.follower_count ?? 0), 0);
+  const cards: Array<{ label: string; value: number; dot: string }> = [
+    { label: "Channels", value: channels.length, dot: "bg-tile-blue" },
+    { label: "Followers", value: followers, dot: "bg-tile-green" },
+  ];
+  return (
+    <dl className="grid grid-cols-2 gap-3">
+      {cards.map((c) => (
+        <div key={c.label} className="flex flex-col gap-2 rounded-2xl bg-surface p-4 shadow-soft">
+          <dt className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
+            <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${c.dot}`} />
+            {c.label}
+          </dt>
+          <dd className="text-title tabular-nums text-fg" title={String(c.value)}>
+            {formatCount(c.value)}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -1407,8 +1438,8 @@ export function UploadSection({
                 className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
               />
               <div className="pointer-events-none flex flex-col items-center gap-3 rounded-[18px] border-[1.5px] border-dashed border-border px-6 py-9 text-center transition-colors peer-hover:border-fg-muted peer-focus-visible:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--focus)]">
-                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-muted">
-                  <UploadIcon size={24} className="text-fg" />
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent/12">
+                  <UploadIcon size={24} className="text-accent" />
                 </span>
                 <span className="max-w-full truncate text-[15px] font-semibold text-fg">
                   {fileName ?? "Choose a video"}
@@ -1586,6 +1617,23 @@ export function UploadSection({
               Retry import
             </Button>
           ) : null}
+        </div>
+      ) : null}
+      {/* Minimized progress pill (design): a persistent bottom-right capsule
+          that keeps the in-flight file upload visible while the creator scrolls
+          the studio. Chrome-level, so monochrome surface + accent spinner;
+          aria-hidden because the inline "Upload progress" progressbar already
+          carries the accessible progress. Only for the file source (a URL
+          import has no local byte progress to minimize). */}
+      {state === "uploading" && source === "file" ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed bottom-24 right-4 z-40 flex items-center gap-2.5 rounded-full bg-surface-raised px-4 py-2.5 shadow-soft-strong sm:bottom-6"
+        >
+          <LoaderIcon size={16} className="animate-spin text-accent" />
+          <span className="text-[13px] font-semibold tabular-nums text-fg">
+            Uploading {progress}%
+          </span>
         </div>
       ) : null}
         </>
