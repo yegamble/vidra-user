@@ -136,7 +136,9 @@ test("a regular signed-in user is gated out of the moderation queue", async ({ p
   expect(fetched).toBe(false);
 });
 
-test("an admin sees the open report queue", async ({ page }) => {
+test("an admin sees the open report queue with the first report in the detail pane", async ({
+  page,
+}) => {
   await signIn(page, "admin");
   await page.route(REPORTS, (route) =>
     route.fulfill({
@@ -145,10 +147,18 @@ test("an admin sees the open report queue", async ({ page }) => {
   );
 
   await page.getByRole("link", { name: "Moderation" }).click();
+
+  // Both open reports are queued (Mail-style triage rows); the first (video)
+  // opens in the detail pane by default on the two-pane view.
+  await expect(page.getByRole("button", { name: "Video report by alice" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Comment report by bob" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
-  await expect(page.getByText("nasty comment")).toBeVisible();
   await expect(page.getByText("by alice")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Accept" })).toBeVisible();
+
+  // Selecting the comment report shows its body in the detail pane.
+  await page.getByRole("button", { name: "Comment report by bob" }).click();
+  await expect(page.getByText("nasty comment")).toBeVisible();
 });
 
 test("accepting a report removes it from the open queue", async ({ page }) => {
@@ -161,16 +171,19 @@ test("accepting a report removes it from the open queue", async ({ page }) => {
   await page.route(RESOLVE, (route) => route.fulfill({ status: 204, body: "" }));
 
   await page.getByRole("link", { name: "Moderation" }).click();
+  // The first report (video) is selected in the detail pane by default.
   await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
 
   const resolved = page.waitForResponse(
     (r) => RESOLVE.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.getByRole("button", { name: "Accept" }).first().click();
+  await page.getByRole("button", { name: "Accept" }).click();
   await resolved;
 
-  // The video report (r1) was open; resolving drops it from the open-only view.
+  // The video report (r1) was open; resolving drops it from the open-only view
+  // and advances the detail pane to the next open report (the comment).
   await expect(page.getByRole("link", { name: "Bad clip" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Video report by alice" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(1);
 });
 
@@ -283,14 +296,21 @@ test("the All filter shows resolved reports without resolve actions", async ({ p
   });
 
   await page.getByRole("link", { name: "Moderation" }).click();
-  await expect(page.getByText("nasty comment")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Bad clip" })).toHaveCount(0);
+  // Open view: the comment report is the only queued row.
+  await expect(page.getByRole("button", { name: "Comment report by bob" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Video report by alice" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "All" }).click();
+  // The resolved video report is now queued; open it in the detail pane.
+  await page.getByRole("button", { name: "Video report by alice" }).click();
   await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
   await expect(page.getByText("accepted")).toBeVisible();
-  // Only the still-open comment report keeps its resolve actions.
-  await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(1);
+  // A resolved report has no resolve actions.
+  await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
+
+  // The still-open comment report keeps its resolve actions.
+  await page.getByRole("button", { name: "Comment report by bob" }).click();
+  await expect(page.getByRole("button", { name: "Accept" })).toBeVisible();
 });
 
 test("an admin can hard-delete a resolved report from the All view", async ({ page }) => {
@@ -313,12 +333,19 @@ test("an admin can hard-delete a resolved report from the All view", async ({ pa
 
   await page.getByRole("link", { name: "Moderation" }).click();
   await page.getByRole("button", { name: "All" }).click();
+
+  // Delete lives only on the resolved report's detail pane.
+  await page.getByRole("button", { name: "Video report by alice" }).click();
   await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
-
-  // Delete lives only on the resolved card; the open one keeps resolve actions.
   await expect(page.getByRole("button", { name: "Delete this video report" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Delete this comment report" })).toHaveCount(0);
 
+  // The still-open comment report keeps resolve actions and offers no delete.
+  await page.getByRole("button", { name: "Comment report by bob" }).click();
+  await expect(page.getByRole("button", { name: /Delete this .* report/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Accept" })).toBeVisible();
+
+  // Back to the resolved report and purge it.
+  await page.getByRole("button", { name: "Video report by alice" }).click();
   const deleted = page.waitForResponse(
     (r) => REPORT_ONE.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
   );
@@ -327,9 +354,9 @@ test("an admin can hard-delete a resolved report from the All view", async ({ pa
   await page.getByRole("button", { name: "Confirm" }).click();
   await deleted;
 
-  // The purged row is gone; the open report remains.
+  // The purged report is gone from the queue; the open report remains.
   await expect(page.getByRole("link", { name: "Bad clip" })).toHaveCount(0);
-  await expect(page.getByText("nasty comment")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Comment report by bob" })).toBeVisible();
   expect(deletedId).toBe("r1");
 });
 
