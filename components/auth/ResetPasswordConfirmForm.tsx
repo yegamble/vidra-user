@@ -59,7 +59,7 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
         <p className="text-center text-sm text-fg-muted">
           <Link
             href="/reset-password"
-            className="focus-ring rounded-sm font-semibold text-fg hover:underline"
+            className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80"
           >
             Request a new reset link
           </Link>
@@ -78,7 +78,7 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
           Your password has been reset. You can now sign in with your new password.
         </p>
         <p className="text-center text-sm text-fg-muted">
-          <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
+          <Link href="/login" className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80">
             Sign in
           </Link>
         </p>
@@ -113,6 +113,7 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
         required
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        className="min-h-12 text-base"
       />
 
       {/* The mismatch error is anchored to the confirm field — that's the one
@@ -127,6 +128,7 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
         value={confirm}
         onChange={(e) => setConfirm(e.target.value)}
         error={passwordError ?? undefined}
+        className="min-h-12 text-base"
       />
 
       <Button type="submit" size="lg" className="w-full" disabled={submitting}>

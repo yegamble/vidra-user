@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
 import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
-import { InfoIcon } from "@/components/icons";
+import { ClockIcon, InfoIcon, MailIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
@@ -148,6 +148,7 @@ export function SignupForm({
     if (pendingKind === "verification") {
       return (
         <EmptyState
+          icon={<MailIcon size={24} />}
           title="Check your email"
           message={
             <>
@@ -164,6 +165,8 @@ export function SignupForm({
     }
     return (
       <EmptyState
+        icon={<ClockIcon size={24} />}
+        tint="orange"
         title="Your account is awaiting approval"
         message={
           <>
@@ -206,6 +209,8 @@ export function SignupForm({
     const limitReached = closedReason === "user_limit_reached";
     return (
       <EmptyState
+        icon={<InfoIcon size={24} />}
+        tint="gray"
         title={limitReached ? "This instance is full" : "Registration is closed"}
         message={
           <>
@@ -250,6 +255,7 @@ export function SignupForm({
         value={username}
         onChange={(e) => setUsername(e.target.value)}
         error={fieldErrors.username}
+        className="min-h-12 text-base"
       />
       <Input
         id="signup-email"
@@ -261,6 +267,7 @@ export function SignupForm({
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         error={fieldErrors.email}
+        className="min-h-12 text-base"
       />
       <Input
         id="signup-password"
@@ -272,6 +279,7 @@ export function SignupForm({
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         error={fieldErrors.password}
+        className="min-h-12 text-base"
       />
 
       {requiresApproval ? (
@@ -338,9 +346,12 @@ export function SignupForm({
       <OAuthButtons providers={providers} returnTo="/signup?oauth=1" />
       <BlueskyLoginButton enabled={atprotoEnabled} returnTo="/signup" />
 
-      <p className="text-center text-sm text-fg-muted">
+      <p className="text-center text-subhead text-fg-muted">
         Already have an account?{" "}
-        <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
+        <Link
+          href="/login"
+          className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80"
+        >
           Sign in
         </Link>
       </p>

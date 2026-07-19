@@ -22,26 +22,18 @@ export function OAuthButtons({
   return (
     <div className="flex flex-col gap-3">
       <AuthOrDivider />
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2.5">
         {providers.map((provider) => (
           <li key={provider}>
+            {/* Tonal, full-width sign-in button (mirrors Button size="lg"
+                variant="tonal"). A plain anchor because the begin endpoint
+                answers a 302 that must be reached by a top-level navigation.
+                No leading glyph: the icon set carries no third-party provider
+                brand marks and inline SVGs are disallowed. */}
             <a
               href={oauthBeginUrl(provider, returnTo)}
-              className="focus-ring flex items-center justify-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted"
+              className="focus-ring flex min-h-12 items-center justify-center gap-2 rounded-[10px] bg-surface-muted px-5 py-2.5 text-base font-semibold text-fg transition-colors hover:bg-surface-strong"
             >
-              {/* Key glyph: an external sign-in. */}
-              <svg
-                aria-hidden
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4 shrink-0"
-              >
-                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-              </svg>
               Continue with {providerDisplayName(provider)}
             </a>
           </li>
@@ -62,7 +54,7 @@ export function AuthOrDivider() {
   return (
     <div className="my-1 flex items-center gap-3" aria-hidden>
       <span className="h-px flex-1 bg-border-subtle" />
-      <span className="text-xs text-fg-muted">or</span>
+      <span className="text-footnote text-fg-muted">or</span>
       <span className="h-px flex-1 bg-border-subtle" />
     </div>
   );

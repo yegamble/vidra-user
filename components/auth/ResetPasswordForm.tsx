@@ -42,8 +42,11 @@ export function ResetPasswordForm() {
           If an account exists for that email, we&apos;ve sent a link to reset your
           password. Check your inbox.
         </p>
-        <p className="text-center text-sm text-fg-muted">
-          <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
+        <p className="text-center text-subhead text-fg-muted">
+          <Link
+            href="/login"
+            className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80"
+          >
             Back to sign in
           </Link>
         </p>
@@ -82,6 +85,7 @@ export function ResetPasswordForm() {
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
+        className="min-h-12 text-base"
       />
 
       <Button type="submit" size="lg" className="w-full" disabled={submitting}>

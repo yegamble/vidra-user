@@ -56,7 +56,7 @@ export function VerifyEmailConfirmForm({ token }: { token: string }) {
           Your email has been verified. Thanks!
         </p>
         <p className="text-center text-sm text-fg-muted">
-          <Link href="/" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
+          <Link href="/" className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80">
             Back to home
           </Link>
         </p>
@@ -79,12 +79,12 @@ export function VerifyEmailConfirmForm({ token }: { token: string }) {
         {status === "authed" ? (
           <Link
             href="/settings"
-            className="focus-ring rounded-sm font-semibold text-fg hover:underline"
+            className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80"
           >
             Resend the verification email
           </Link>
         ) : (
-          <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
+          <Link href="/login" className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80">
             Sign in
           </Link>
         )}
