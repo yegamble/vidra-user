@@ -48,4 +48,29 @@ describe("Badge", () => {
     expect(el.className).toContain("bg-surface-strong");
     expect(el.className).toContain("text-fg-muted");
   });
+
+  it("renders the protocol variant as a brand tint + dot with a neutral label", () => {
+    render(
+      <Badge variant="protocol" protocol="bluesky">
+        Bluesky
+      </Badge>,
+    );
+    const el = screen.getByText("Bluesky");
+    // Brand tint fill, but the label stays `fg` (the teal/blue hues fail AA as text).
+    expect(el.className).toContain("bg-protocol-bluesky/12");
+    expect(el.className).toContain("text-fg");
+    // A full-strength brand dot carries the color; it is decorative.
+    const dot = el.querySelector("span[aria-hidden]");
+    expect(dot?.className).toContain("bg-protocol-bluesky");
+  });
+
+  it("renders the federated-origin variant wearing the protocol ribbon on its top edge", () => {
+    render(<Badge variant="federated">peertube.example</Badge>);
+    const el = screen.getByText("peertube.example");
+    expect(el.className).toContain("bg-surface-muted");
+    // The tri-protocol ribbon rides the top edge (placement c) — decorative.
+    const ribbon = el.querySelector(".protocol-ribbon");
+    expect(ribbon).not.toBeNull();
+    expect(ribbon?.getAttribute("aria-hidden")).toBe("true");
+  });
 });

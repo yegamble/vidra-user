@@ -45,7 +45,9 @@ export function buttonClasses(
   className?: string,
 ): string {
   return cn(
-    "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-colors focus-ring disabled:pointer-events-none disabled:opacity-60",
+    // Redesign: buttons are rounded-[10px] (not capsule). Chips/badges/avatars
+    // stay capsule; IconButton stays round.
+    "inline-flex items-center justify-center gap-2 rounded-[10px] font-semibold transition-colors focus-ring disabled:pointer-events-none disabled:opacity-60",
     VARIANT[variant],
     SIZE[size],
     className,

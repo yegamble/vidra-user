@@ -122,8 +122,8 @@ export function Modal({
           isSheet
             ? // Mobile bottom-sheet: full-bleed, rounded top, safe-area footer.
               "w-full rounded-t-[22px] px-5 pb-[max(env(safe-area-inset-bottom),2.75rem)] pt-3"
-            : // Desktop dialog: ~440px, deep shadow (borderless — the shadow separates it).
-              "w-full max-w-md rounded-[20px] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.3)]",
+            : // Desktop dialog: ~440px, soft shadow (borderless — the shadow separates it).
+              "w-full max-w-md rounded-[20px] p-6 shadow-soft-strong",
           className,
         )}
       >

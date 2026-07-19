@@ -1,10 +1,11 @@
 @import "tailwindcss";
 
 /*
- * Vidra design tokens — "quiet luxury" zinc monochrome
- * ----------------------------------------------------
- * Source of truth: the Vidra design templates (Vidra App / Vidra Desktop
- * .dc.html) + .ralph/specs/design-system.md. Every color is a semantic token
+ * Vidra design tokens — Apple-ecosystem redesign (2026-07-19)
+ * ----------------------------------------------------------
+ * Source of truth: .ralph/specs/design-system.md (binding) + the redesign
+ * brief. Soft gray canvas, white surfaces, systemIndigo accent, Apple system
+ * status/protocol/tile hues, SF type ramp. Every color is a semantic token
  * defined once with `light-dark()`; the active scheme is driven by
  * `color-scheme`, so:
  *
@@ -51,22 +52,31 @@
 }
 
 :root {
+  /*
+   * Apple-ecosystem palette (redesign 2026-07-19). The canvas is now a soft
+   * systemGray-6 gray (#f5f5f7) so white cards read as elevated surfaces —
+   * the System Settings / Apple TV look. Surfaces recomputed to harmonize on
+   * the gray canvas; the dark family is kept. accent = systemIndigo.
+   */
+
   /* page canvas (behind everything) */
-  --canvas: light-dark(#ffffff, #0a0a0a);
+  --canvas: light-dark(#f5f5f7, #0a0a0a);
 
   /* surfaces */
-  --surface: light-dark(#ffffff, #18181b); /* cards, panels */
-  --surface-muted: light-dark(#f4f4f5, #1f1f23); /* hover fills, subtle panels, chips */
-  --surface-strong: light-dark(#e9e9eb, #2b2b30); /* progress tracks, pressed fills */
+  --surface: light-dark(#ffffff, #1c1c1e); /* cards, panels */
+  --surface-muted: light-dark(#ebebed, #1f1f23); /* hover fills, subtle panels, chips */
+  --surface-strong: light-dark(#e1e1e3, #2b2b30); /* progress tracks, pressed fills */
   --surface-raised: light-dark(#ffffff, #1f1f23); /* popovers, menus, sheets */
 
   /*
    * Navigation material. Apple HIG treats navigation and controls as a
    * distinct functional layer above content; these translucent values keep
-   * that separation without introducing another brand color. The solid
+   * that separation without introducing another brand color. On the new gray
+   * canvas the ~0.78 white chrome reads a touch brighter than the page, which
+   * strengthens the floating-frosted-panel separation. The solid
    * surface-raised fallback is applied below when transparency is reduced.
    */
-  --chrome: light-dark(rgb(255 255 255 / 0.78), rgb(24 24 27 / 0.78));
+  --chrome: light-dark(rgb(255 255 255 / 0.78), rgb(28 28 30 / 0.78));
   --chrome-border: light-dark(rgb(24 24 27 / 0.09), rgb(244 244 245 / 0.12));
   --chrome-shadow: light-dark(
     0 10px 35px rgb(24 24 27 / 0.09),
@@ -75,31 +85,66 @@
 
   /* foreground / text */
   --fg: light-dark(#18181b, #f4f4f5); /* primary text */
-  --fg-muted: light-dark(#65656e, #a1a1aa); /* secondary text — AA on every surface */
+  --fg-muted: light-dark(#5f5f68, #a1a1aa); /* secondary text — AA on every surface (darkened for the gray canvas) */
   --fg-subtle: light-dark(#a1a1aa, #71717a); /* decorative only, never meaningful text */
 
   /* borders */
   --border: light-dark(#d4d4d8, #3f3f46); /* inputs, outlined buttons */
   --border-subtle: light-dark(#e8e8ea, #26262a); /* hairline dividers */
 
-  /* primary action — monochrome accent */
-  --accent: light-dark(#18181b, #f4f4f5);
-  --accent-fg: light-dark(#ffffff, #18181b);
+  /* primary action — systemIndigo accent */
+  --accent: light-dark(#5856d6, #5e5ce6);
+  --accent-fg: #ffffff;
+  --accent-text: light-dark(#4f4dcb, #8a87ff); /* accent as free-standing text/active labels — tuned so the bg-accent/12 tint-pill clears AA over the gray canvas */
 
-  /* focus ring */
-  --focus: light-dark(#71717a, #a1a1aa);
+  /* focus ring — follows the accent (HIG) */
+  --focus: light-dark(#5856d6, #5e5ce6);
 
-  /* status — text/icon tones (AA as text on canvas/surface/muted) */
-  --danger: light-dark(#c81e1e, #f87171);
-  --danger-solid: #dc2626; /* solid fills (buttons); pairs with --danger-fg */
+  /*
+   * Status. Apple hues are for FILLS / DOTS / ICONS / tinted badges (the
+   * `-solid` tokens); free-standing status TEXT keeps AA-safe values (the
+   * base tokens, which also clear their own /15 tint pills — axe is the
+   * authority, so never lighten these without recomputing the tinted pairs).
+   */
+  --danger: light-dark(#d70015, #ff453a); /* danger text/icons (Apple accessible red) */
+  --danger-solid: #dc2626; /* danger FILL under white text (buttons, unread count badges) — Apple #ff3b30 fails white-text AA, so a safe red backs the fill */
   --danger-fg: #ffffff;
   --danger-surface: light-dark(#fef2f2, #450a0a);
   --danger-border: light-dark(#fecaca, #7f1d1d);
-  --success: light-dark(#166534, #22c55e);
-  --warning: light-dark(#92400e, #f59e0b);
+  --success: light-dark(#0f5f27, #30d158); /* success text — deep enough to clear its /15 pill over surface-muted (axe: 5.2:1) */
+  --success-solid: light-dark(#34c759, #30d158); /* Apple systemGreen fill — dots/health/tiles, never under text */
+  --warning: light-dark(#6f4a00, #ff9f0a); /* warning text — deep amber that clears its /15 pill over surface-muted (axe: 5.3:1) */
+  --warning-solid: light-dark(#ff9500, #ff9f0a); /* Apple systemOrange fill — dots/tiles, never under text */
 
   /* the LIVE pulse dot — Apple systemRed, same in both schemes (sits on media) */
   --live: #ff453a;
+
+  /*
+   * Tri-protocol identity (federation). Brand hues used ONLY inside protocol
+   * badges (as ~12% tint + full-strength dot) and the ProtocolRibbon gradient
+   * — never as chrome, buttons, or free-standing text (the teal/blue fail AA
+   * as text, so the badge label stays `fg`). Bluesky blue must stay distinct
+   * from the indigo accent.
+   */
+  --protocol-activitypub: #6364ff;
+  --protocol-bluesky: #0085ff;
+  --protocol-ipfs: #65c2cb;
+
+  /*
+   * Settings/Admin/Moderation icon-tile palette (System Settings pattern):
+   * a rounded colored square holding a white glyph. Apple system colors,
+   * theme-tuned. The tile is supporting decoration (the adjacent label
+   * carries the meaning), so the white glyph needs no text-contrast.
+   */
+  --tile-blue: light-dark(#007aff, #0a84ff);
+  --tile-gray: light-dark(#8e8e93, #98989d);
+  --tile-red: light-dark(#ff3b30, #ff453a);
+  --tile-purple: light-dark(#af52de, #bf5af2);
+  --tile-orange: light-dark(#ff9500, #ff9f0a);
+  --tile-teal: light-dark(#30b0c7, #40c8e0);
+  --tile-green: light-dark(#34c759, #30d158);
+  --tile-pink: light-dark(#ff2d55, #ff375f);
+  --tile-indigo: light-dark(#5856d6, #5e5ce6);
 
   /* legacy aliases (base body styles + older call sites) */
   --background: var(--canvas);
@@ -123,6 +168,46 @@
     ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
     "Liberation Mono", monospace;
 
+  /*
+   * Apple HIG type ramp (redesign 2026-07-19). Tailwind v4 emits a font-size
+   * utility per `--text-*` token, pulling in the companion line-height,
+   * letter-spacing and font-weight — so `text-large-title` is a one-class
+   * Apple text style (screen agents can still override weight/tracking). Page
+   * H1s use `text-large-title` on desktop / `text-title` on mobile. Keep
+   * `tabular-nums` on updating numbers.
+   */
+  --text-large-title: 34px;
+  --text-large-title--line-height: 40px;
+  --text-large-title--letter-spacing: -0.4px;
+  --text-large-title--font-weight: 700;
+  --text-title: 28px;
+  --text-title--line-height: 34px;
+  --text-title--letter-spacing: -0.3px;
+  --text-title--font-weight: 700;
+  --text-title2: 22px;
+  --text-title2--line-height: 28px;
+  --text-title2--letter-spacing: -0.2px;
+  --text-title2--font-weight: 600;
+  --text-headline: 17px;
+  --text-headline--line-height: 22px;
+  --text-headline--font-weight: 600;
+  --text-body: 17px;
+  --text-body--line-height: 24px;
+  --text-subhead: 15px;
+  --text-subhead--line-height: 20px;
+  --text-footnote: 13px;
+  --text-footnote--line-height: 18px;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+
+  /*
+   * Soft elevation (redesign): quiet Apple shadows for popovers/menus/sheets —
+   * never heavy. `shadow-soft` for raised cards, `shadow-soft-strong` for
+   * floating popovers/dropdowns/dialogs. Chrome keeps its own --chrome-shadow.
+   */
+  --shadow-soft: 0 8px 30px rgb(0 0 0 / 0.06);
+  --shadow-soft-strong: 0 8px 30px rgb(0 0 0 / 0.1);
+
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
@@ -135,6 +220,7 @@
   --color-border-subtle: var(--border-subtle);
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
+  --color-accent-text: var(--accent-text);
   --color-focus: var(--focus);
   --color-danger: var(--danger);
   --color-danger-solid: var(--danger-solid);
@@ -142,8 +228,26 @@
   --color-danger-surface: var(--danger-surface);
   --color-danger-border: var(--danger-border);
   --color-success: var(--success);
+  --color-success-solid: var(--success-solid);
   --color-warning: var(--warning);
+  --color-warning-solid: var(--warning-solid);
   --color-live: var(--live);
+
+  /* Tri-protocol identity — tint fills + dots inside badges, ribbon gradient. */
+  --color-protocol-activitypub: var(--protocol-activitypub);
+  --color-protocol-bluesky: var(--protocol-bluesky);
+  --color-protocol-ipfs: var(--protocol-ipfs);
+
+  /* Icon-tile palette (Settings/Admin/Moderation grouped rows). */
+  --color-tile-blue: var(--tile-blue);
+  --color-tile-gray: var(--tile-gray);
+  --color-tile-red: var(--tile-red);
+  --color-tile-purple: var(--tile-purple);
+  --color-tile-orange: var(--tile-orange);
+  --color-tile-teal: var(--tile-teal);
+  --color-tile-green: var(--tile-green);
+  --color-tile-pink: var(--tile-pink);
+  --color-tile-indigo: var(--tile-indigo);
 }
 
 html {
@@ -191,6 +295,24 @@ body {
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/*
+ * The tri-protocol ribbon — the ONE sanctioned decorative use of protocol
+ * color (AP violet → Bluesky blue → IPFS teal). The gradient is defined here
+ * exactly once; the `ProtocolRibbon` component and the federated-origin Badge
+ * edge both consume this class. Sanctioned placements (pinned in
+ * design-system.md): (a) under the header wordmark, (b) the Network hero
+ * divider, (c) the top edge of federated-origin badges. Any other appearance
+ * is a review defect. Decorative — always aria-hidden at the call site.
+ */
+.protocol-ribbon {
+  background-image: linear-gradient(
+    90deg,
+    var(--protocol-activitypub),
+    var(--protocol-bluesky),
+    var(--protocol-ipfs)
+  );
 }
 
 /* A quiet, dimensional fallback for media that has no server thumbnail. */
