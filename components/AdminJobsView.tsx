@@ -90,9 +90,20 @@ function JobsPanel() {
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Job queues">
           {queues.map((q) => {
             const stuck = q.pending > 0 && q.oldest_pending_age_seconds >= STUCK_AGE_SECONDS;
+            // Failed queues carry a danger ring, stuck (backed-up) queues a
+            // warning ring; healthy queues sit on the plain elevated surface.
+            // A ring (not a fill) keeps the inner danger Badge and danger stat
+            // value legible on the surface — a danger fill would blend with the
+            // Badge and can't clear AA under the danger text.
+            const cardTone =
+              q.failed > 0
+                ? "bg-surface shadow-soft ring-1 ring-inset ring-danger/30"
+                : stuck
+                  ? "bg-surface shadow-soft ring-1 ring-inset ring-warning/40"
+                  : "bg-surface shadow-soft";
             return (
               <li key={q.queue}>
-                <div className="flex h-full flex-col gap-3 rounded-2xl bg-surface-muted p-4">
+                <div className={`flex h-full flex-col gap-3 rounded-2xl p-4 ${cardTone}`}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-sm font-medium text-fg">{q.queue}</span>
                     {q.failed > 0 ? (
