@@ -20,15 +20,21 @@ vi.mock("next/link", () => ({
 let session: { status: string; user?: { username: string } | null };
 vi.mock("@/components/auth/AuthProvider", () => ({ useSession: () => session }));
 
-// These leaf controls carry their own routers / e2ee availability hooks and are
-// not under test here; stub them out so the composer + mention render in isolation.
-vi.mock("@/components/e2ee/StartEncryptedButton", () => ({ StartEncryptedButton: () => null }));
-vi.mock("@/components/MessageButton", () => ({ MessageButton: () => null }));
-vi.mock("@/components/ReportButton", () => ({ ReportButton: () => null }));
+// The overflow menu launches the report dialog + toast + router; those flows are
+// covered elsewhere. Stub the leaf dialog, the toast provider hook, the E2EE
+// availability probe (so no "Encrypted message" item + no network), and the
+// router so the composer + mention render in isolation.
+vi.mock("@/components/ReportButton", () => ({ ReportDialog: () => null }));
+vi.mock("@/components/ui/Toast", () => ({
+  useToast: () => ({ toast: vi.fn(), dismiss: vi.fn() }),
+}));
+vi.mock("@/lib/e2ee/availability", () => ({ useE2EEAvailable: () => false }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const getVideoComments = vi.fn();
 const postComment = vi.fn();
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {},
   api: {
     getVideoComments: (...args: unknown[]) => getVideoComments(...args),
     postComment: (...args: unknown[]) => postComment(...args),

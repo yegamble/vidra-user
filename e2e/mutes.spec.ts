@@ -107,10 +107,11 @@ test("muting a comment's author hides that account's comments", async ({ page })
   const muted = page.waitForResponse(
     (r) => MUTE_ONE.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page
-    .locator("li", { hasText: "spam from bob" })
-    .getByRole("button", { name: "Mute" })
-    .click();
+  // The per-comment contact/moderation actions now live behind a "Comment
+  // actions" overflow menu; open it, then pick Mute.
+  const bobRow = page.locator("li", { hasText: "spam from bob" });
+  await bobRow.getByRole("button", { name: "Comment actions" }).click();
+  await bobRow.getByRole("menuitem", { name: "Mute", exact: true }).click();
   await muted;
 
   await expect(page.getByText("spam from bob")).toHaveCount(0);

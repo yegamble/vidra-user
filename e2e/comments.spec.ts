@@ -208,28 +208,27 @@ test("a signed-in viewer gets Mute instance + Report on a federated comment inst
   const remoteRow = commentsRegion.locator("li", { hasText: "Greetings from afar" });
   const localRow = commentsRegion.locator("li", { hasText: "Local reply" });
 
-  // Remote row: Mute instance + Report only — no Message/Mute/Block (no local account).
-  await expect(
-    remoteRow.getByRole("button", { name: "Mute instance videos.example" }),
-  ).toBeVisible();
-  await expect(remoteRow.getByRole("button", { name: "Report this comment" })).toBeVisible();
-  await expect(remoteRow.getByRole("button", { name: "Message" })).toHaveCount(0);
-  await expect(remoteRow.getByRole("button", { name: "Mute", exact: true })).toHaveCount(0);
-  await expect(remoteRow.getByRole("button", { name: "Block", exact: true })).toHaveCount(0);
-  await expect(remoteRow.getByRole("button", { name: "Report this user" })).toHaveCount(0);
-  // Local row keeps the full account controls.
-  await expect(localRow.getByRole("button", { name: "Mute", exact: true })).toBeVisible();
-  await expect(localRow.getByRole("button", { name: "Message" })).toBeVisible();
-  await expect(localRow.getByRole("button", { name: "Block", exact: true })).toBeVisible();
+  // Secondary contact/moderation actions now collapse into a per-comment
+  // "Comment actions" overflow menu (the row keeps only Reply). Open the remote
+  // comment's menu — it offers Mute instance + Report only, with no local-account
+  // controls (no Message/Mute/Block/Report user), keeping the same names.
+  await remoteRow.getByRole("button", { name: "Comment actions" }).click();
+  await expect(remoteRow.getByRole("menuitem", { name: "Mute instance" })).toBeVisible();
+  await expect(remoteRow.getByRole("menuitem", { name: "Report", exact: true })).toBeVisible();
+  await expect(remoteRow.getByRole("menuitem", { name: "Message" })).toHaveCount(0);
+  await expect(remoteRow.getByRole("menuitem", { name: "Mute", exact: true })).toHaveCount(0);
+  await expect(remoteRow.getByRole("menuitem", { name: "Block", exact: true })).toHaveCount(0);
+  await expect(remoteRow.getByRole("menuitem", { name: "Report user" })).toHaveCount(0);
 
-  // Muting the instance hides EVERY comment from that origin, keeps local ones.
+  // Muting the instance from the menu hides EVERY comment from that origin,
+  // keeps local ones.
   const muted = page.waitForResponse(
     (r) =>
       /\/api\/v1\/me\/mutes\/instances\/[^/]+$/.test(r.url()) &&
       r.request().method() === "POST" &&
       r.ok(),
   );
-  await remoteRow.getByRole("button", { name: "Mute instance videos.example" }).click();
+  await remoteRow.getByRole("menuitem", { name: "Mute instance" }).click();
   await muted;
 
   await expect(page.getByText("Greetings from afar")).toHaveCount(0);
@@ -237,6 +236,13 @@ test("a signed-in viewer gets Mute instance + Report on a federated comment inst
   await expect(page.getByText("Local reply")).toBeVisible();
   expect(muteCalls[0]).toContain("POST ");
   expect(muteCalls[0]).toContain("/api/v1/me/mutes/instances/videos.example");
+
+  // The local comment keeps the full account controls behind its own menu.
+  await localRow.getByRole("button", { name: "Comment actions" }).click();
+  await expect(localRow.getByRole("menuitem", { name: "Mute", exact: true })).toBeVisible();
+  await expect(localRow.getByRole("menuitem", { name: "Message" })).toBeVisible();
+  await expect(localRow.getByRole("menuitem", { name: "Block", exact: true })).toBeVisible();
+  await expect(localRow.getByRole("menuitem", { name: "Report user" })).toBeVisible();
 });
 
 test("an author can edit their own comment", async ({ page }) => {
