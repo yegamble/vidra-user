@@ -6,6 +6,7 @@ import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
 import { HomepageDocument } from "@/components/HomepageDocument";
 import { HomeRecommendationsRail } from "@/components/HomeRecommendationsRail";
+import { HomeShelves } from "@/components/HomeShelves";
 import { LiveNowRail } from "@/components/LiveNowRail";
 import { PageShell } from "@/components/PageShell";
 import { VideoFeed } from "@/components/VideoFeed";
@@ -91,17 +92,21 @@ export default async function Home({
     active === "recent" && !filters.category && !filters.language && !filters.tag;
   return (
     <PageShell className="pb-12 pt-7 sm:pb-16 sm:pt-10">
-      {/* A visible large title gives the feed a stable sense of place. The sort
-          remains URL-backed, so the title and supporting copy update together. */}
+      {/* Signed-in personalization band (Apple-TV shelves): "Continue watching"
+          + "Following" rails ABOVE the browse feed. Client-fetched and authed-
+          only, so it renders nothing for a signed-out viewer or a route-mocked
+          e2e — the browse section below then leads exactly as before. */}
+      <HomeShelves />
+      {/* The browse feed reframed as the final shelf-consistent section: a
+          Title2 header (matching the shelves above and the discovery rails
+          below) over the URL-backed sort control. The sort remains URL-backed,
+          so the title and supporting copy update together. */}
       <section
         aria-labelledby="home-feed-heading"
         className="mb-6 flex flex-col gap-5 lg:mb-8 lg:flex-row lg:items-end lg:justify-between"
       >
         <div className="max-w-xl">
-          <p className="mb-1 text-xs font-bold uppercase tracking-[0.09em] text-fg-muted">
-            Explore
-          </p>
-          <h1 id="home-feed-heading" className="text-title text-fg sm:text-large-title">
+          <h1 id="home-feed-heading" className="text-title2 text-fg">
             {HEADINGS[active]}
           </h1>
           <p className="mt-2 text-subhead text-fg-muted">{DESCRIPTIONS[active]}</p>
