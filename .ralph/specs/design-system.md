@@ -235,6 +235,22 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
   form are launched `Modal`s (dialog on desktop / `variant="sheet"` on mobile),
   consistent with the stepped upload sheet. Keeps the nav rules
   (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger, 44pt targets).
+- **"+ Create" dropdown** (YouTube two-tier Create pattern): a single global
+  creator entry that fans out into the flows rather than dumping the user on the
+  dashboard. Desktop lives in `Header` as a `Dropdown` (the outline "+ Create"
+  pill trigger, right-aligned menu, `hidden sm:flex`); phones use the
+  bottom-tab `CreateSheet`, whose rows mirror it. Both list the two primary
+  flows — **Upload video** → `/studio/content?upload=1`, **Go live** →
+  `/studio/live?new=1` — then a divider, then **New channel** →
+  `/studio/channel?create=1` (the sheet also keeps **Open Studio** → `/studio`
+  as its Studio entry). Each item is a real deep link into the studio surface
+  that auto-opens the flow (`?upload=1` / `?new=1` / `?create=1`, param stripped
+  after open). Glyphs carry the only color: the upload arrow wears `accent`, Go
+  live wears the `live` token; New channel stays neutral. The shared `Dropdown`
+  primitive supports this via optional `DropdownItem.href` (renders a `role=
+  menuitem` `next/link`; Space/Enter activate it), `DropdownItem.icon` (a leading
+  glyph slot), and `{ type: "separator" }` divider entries — separators are
+  skipped in the arrow-key focus ring.
 
 ## Typography
 

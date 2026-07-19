@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 
 import { AccountMenu } from "@/components/auth/AccountMenu";
-import { PlusIcon } from "@/components/icons";
+import { PlusIcon, PlusSquareIcon, TvIcon, UploadIcon } from "@/components/icons";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { ProtocolRibbon } from "@/components/ProtocolRibbon";
 import { SearchAutocomplete, SearchAutocompleteFallback } from "@/components/SearchAutocomplete";
+import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { isStandaloneRoute } from "@/lib/app-shell";
 import { brandingAssetUrl } from "@/lib/branding";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
@@ -31,6 +32,30 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 // PeerTube-style compact identity fallback when no typed header logo exists.
 // branding.hide_instance_name drops the text ONLY when an image is actually
 // set, so the header is never empty.
+// The desktop "+ Create" menu — mirrors the mobile CreateSheet rows: the two
+// primary creator flows (upload / go live), a divider, then New channel. Each
+// row is a real link (deep-linking into the studio surface that auto-opens the
+// flow). Protocol/status color stays inside the glyphs only: the upload arrow
+// wears the accent, Go live wears the `live` token.
+const CREATE_ITEMS: DropdownItem[] = [
+  {
+    label: "Upload video",
+    href: "/studio/content?upload=1",
+    icon: <UploadIcon size={18} className="text-accent-text" />,
+  },
+  {
+    label: "Go live",
+    href: "/studio/live?new=1",
+    icon: <TvIcon size={18} className="text-live" />,
+  },
+  { type: "separator" },
+  {
+    label: "New channel",
+    href: "/studio/channel?create=1",
+    icon: <PlusSquareIcon size={18} />,
+  },
+];
+
 export function Header({ instance = null }: { instance?: InstanceConfigSnapshot | null }) {
   const pathname = usePathname();
 
@@ -91,13 +116,24 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
         <Suspense fallback={<SearchAutocompleteFallback />}>
           <SearchAutocomplete suggestionsEnabled={instance?.search?.suggestions_enabled !== false} />
         </Suspense>
-        <Link
-          href="/studio"
-          className="focus-ring hidden min-h-10 items-center gap-1.5 rounded-[10px] border border-border px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-raised/80 sm:flex"
-        >
-          <PlusIcon size={14} strokeWidth={2.2} />
-          Create
-        </Link>
+        {/* Desktop "+ Create" — a menu deep-linking into the three creator flows
+            (matches the mobile CreateSheet). The trigger keeps the header's
+            outline "+ Create" pill styling; the menu is right-aligned. Hidden on
+            phones, where Create is a bottom tab that opens the CreateSheet. */}
+        <div className="hidden sm:flex">
+          <Dropdown
+            align="end"
+            triggerLabel="Create"
+            triggerClassName="!min-h-10 !gap-1.5 !rounded-[10px] !bg-transparent !px-4 !py-2 !text-[13px] hover:!bg-surface-raised/80"
+            trigger={
+              <>
+                <PlusIcon size={14} strokeWidth={2.2} aria-hidden="true" />
+                Create
+              </>
+            }
+            items={CREATE_ITEMS}
+          />
+        </div>
         <NotificationsBell />
         <AccountMenu />
       </div>
