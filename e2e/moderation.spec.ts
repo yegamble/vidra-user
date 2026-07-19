@@ -305,12 +305,13 @@ test("the All filter shows resolved reports without resolve actions", async ({ p
   await page.getByRole("button", { name: "Video report by alice" }).click();
   await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
   await expect(page.getByText("accepted")).toBeVisible();
-  // A resolved report has no resolve actions.
-  await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
+  // A resolved report has no resolve actions. (exact: the queue row's
+  // accessible name ends in ", accepted", which substring-matches "Accept".)
+  await expect(page.getByRole("button", { name: "Accept", exact: true })).toHaveCount(0);
 
   // The still-open comment report keeps its resolve actions.
   await page.getByRole("button", { name: "Comment report by bob" }).click();
-  await expect(page.getByRole("button", { name: "Accept" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
 });
 
 test("an admin can hard-delete a resolved report from the All view", async ({ page }) => {
@@ -332,6 +333,10 @@ test("an admin can hard-delete a resolved report from the All view", async ({ pa
   });
 
   await page.getByRole("link", { name: "Moderation" }).click();
+  // Anchor on the Reports page before touching the filter: mid-navigation the
+  // home feed is still on screen and its scope toggle also answers to "All" —
+  // clicking that one rewrites the feed URL and cancels the pending navigation.
+  await expect(page.getByRole("group", { name: "Filter reports" })).toBeVisible();
   await page.getByRole("button", { name: "All" }).click();
 
   // Delete lives only on the resolved report's detail pane.
@@ -340,9 +345,10 @@ test("an admin can hard-delete a resolved report from the All view", async ({ pa
   await expect(page.getByRole("button", { name: "Delete this video report" })).toBeVisible();
 
   // The still-open comment report keeps resolve actions and offers no delete.
+  // (exact: the resolved queue row's name ends in ", accepted".)
   await page.getByRole("button", { name: "Comment report by bob" }).click();
   await expect(page.getByRole("button", { name: /Delete this .* report/ })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Accept" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
 
   // Back to the resolved report and purge it.
   await page.getByRole("button", { name: "Video report by alice" }).click();
@@ -369,6 +375,9 @@ test("moderators do not get the report Delete control", async ({ page }) => {
   );
 
   await page.getByRole("link", { name: "Moderation" }).click();
+  // Anchor on the Reports page before touching the filter (see the admin
+  // hard-delete test: the home feed's scope toggle also answers to "All").
+  await expect(page.getByRole("group", { name: "Filter reports" })).toBeVisible();
   await page.getByRole("button", { name: "All" }).click();
   await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
   // Hard-delete is an admin-only purge — moderators resolve but cannot delete.
