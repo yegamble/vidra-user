@@ -209,7 +209,7 @@ function CurrentChannelPanel({ channel }: { channel: Channel }) {
         </div>
       </section>
 
-      <DistributionCard />
+      <DistributionCard channel={channel} canManage onChange={updateChannel} />
 
       <ChannelSyncSection channels={[channel]} />
 

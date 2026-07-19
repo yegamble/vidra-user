@@ -47,7 +47,9 @@ export function DashboardView() {
       <QuickStatsStrip key={`stats-${handle}`} handle={handle} />
       <div className="grid gap-4 lg:grid-cols-2">
         <LatestVideoCard key={`latest-${handle}`} handle={handle} />
-        <DistributionCard href="/studio/channel" />
+        {currentChannel ? (
+          <DistributionCard channel={currentChannel} href="/studio/channel" />
+        ) : null}
       </div>
       <StudioStorageCard />
       <UploadRecoveryCard onResumed={() => {}} />

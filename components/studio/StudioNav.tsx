@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ChevronDownIcon } from "@/components/icons";
 import { Avatar } from "@/components/ui/Avatar";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { channelAvatarUrl } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
+import { ChannelProtocolBadges } from "./ChannelProtocolBadges";
 import { useStudio } from "./StudioContext";
 
 // The studio tab strip — the five surfaces the studio is split into. Active state
@@ -106,7 +106,7 @@ function ChannelSwitcher() {
     return (
       <div className="flex items-center justify-between gap-2 px-1">
         {identity}
-        <ProtocolBadge protocol="activitypub" className="hidden sm:inline-flex" />
+        <ChannelProtocolBadges channel={channel} className="hidden sm:flex" />
       </div>
     );
   }
@@ -127,6 +127,7 @@ function ChannelSwitcher() {
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-semibold text-fg">{c.display_name}</span>
             <span className="truncate text-[12px] text-fg-muted">@{c.handle}</span>
+            <ChannelProtocolBadges channel={c} className="mt-0.5" />
           </span>
           {c.handle === currentHandle ? (
             <span className="ml-auto text-[12px] font-semibold text-accent-text">Current</span>
@@ -155,7 +156,7 @@ function ChannelSwitcher() {
         align="start"
         triggerClassName="max-w-full !rounded-2xl !px-2 !py-1.5"
       />
-      <ProtocolBadge protocol="activitypub" className="hidden sm:inline-flex" />
+      <ChannelProtocolBadges channel={channel} className="hidden sm:flex" />
     </div>
   );
 }
