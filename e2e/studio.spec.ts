@@ -195,6 +195,15 @@ async function pickUrl(page: Page, url: string) {
   await page.getByRole("button", { name: "Continue" }).click();
 }
 
+// The studio is now split into per-surface tabs under a shared shell. Reaching a
+// surface is a two-step client nav (which preserves the in-memory session): the
+// sidebar "Studio" link → the dashboard, then the StudioNav tab strip → the
+// target surface. gotoStudioTab does both.
+async function gotoStudioTab(page: Page, tab: "Dashboard" | "Content" | "Live" | "Analytics" | "Channel") {
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: tab, exact: true }).click();
+}
+
 test("the studio prompts anonymous viewers to sign in", async ({ page }) => {
   await page.goto("/studio");
   await expect(page.getByText("Sign in to use the studio")).toBeVisible();
@@ -210,16 +219,16 @@ test("a creator can create a channel", async ({ page }) => {
   // The new "Your videos" section loads the new channel's (empty) video list.
   await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
-  await expect(page.getByText("Create your first channel to start publishing.")).toBeVisible();
+  await gotoStudioTab(page, "Channel");
+  // Zero channels → the Channel tab's onboarding create form.
+  await expect(page.getByText("Create your first channel")).toBeVisible();
   await page.getByLabel("Channel handle").fill("ada_makes");
   await page.getByLabel("Channel display name").fill("Ada Makes");
   await page.getByRole("button", { name: "Create channel" }).click();
 
-  // The new channel appears, and the upload form becomes available.
-  await expect(page.getByRole("link", { name: /Ada Makes/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Upload a video" })).toBeVisible();
-  await expect(page.getByText("No videos in this channel yet.")).toBeVisible();
+  // The new channel becomes the current one → its management panel appears.
+  await expect(page.getByRole("heading", { name: "Channel details" })).toBeVisible();
+  await expect(page.getByLabel("Edit channel name")).toHaveValue("Ada Makes");
 });
 
 test("a creator can edit a channel's name and description", async ({ page }) => {
@@ -237,13 +246,14 @@ test("a creator can edit a channel's name and description", async ({ page }) => 
     });
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByRole("button", { name: "Edit ada_makes" }).click();
+  await gotoStudioTab(page, "Channel");
+  // The Channel tab edits the current channel directly (no per-row Edit toggle).
   await page.getByLabel("Edit channel name").fill("Ada Builds");
   await page.getByLabel("Edit channel description").fill("Now with more.");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
 
-  await expect(page.getByRole("link", { name: "Ada Builds" })).toBeVisible();
+  // The saved name flows into the channel identity in the studio nav switcher.
+  await expect(page.getByText("Ada Builds")).toBeVisible();
   expect(patchBody).toMatchObject({ display_name: "Ada Builds", description: "Now with more." });
 });
 
@@ -260,14 +270,12 @@ test("a creator can delete a channel", async ({ page }) => {
     return route.fulfill({ status: 204, body: "" });
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Channel");
   await page.getByRole("button", { name: "Delete ada_makes" }).click();
   await page.getByRole("button", { name: "Confirm" }).click();
 
-  // The only channel is gone → back to the create-your-first-channel empty state,
-  // and the upload form disappears with it.
-  await expect(page.getByText("Create your first channel to start publishing.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Upload a video" })).toHaveCount(0);
+  // The only channel is gone → back to the create-your-first-channel onboarding.
+  await expect(page.getByText("Create your first channel")).toBeVisible();
   expect(deleteMethod).toBe("DELETE");
 });
 
@@ -288,7 +296,7 @@ test("a creator can upload and publish a video", async ({ page }) => {
   await mockChunkedUpload(page, { video: video() });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("My clip");
@@ -339,7 +347,7 @@ test("an upload the backend rejects as too large shows a friendly size message",
   );
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickFile(page, { name: "huge.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("Huge clip");
@@ -369,7 +377,7 @@ test("publish sends the entered tags, normalized, on the draft", async ({ page }
   await mockChunkedUpload(page, { video: video() });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("Tagged clip");
@@ -411,7 +419,7 @@ test("editing tags sends the replaced set on the PATCH", async ({ page }) => {
   });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   const row = page.getByRole("listitem").filter({ hasText: "Tagged clip" });
   await row.getByRole("button", { name: "Edit" }).click();
 
@@ -445,7 +453,7 @@ test("a failed upload is reported as a processing failure, not Published!", asyn
   await mockChunkedUpload(page, { video: video({ state: "failed" }) });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickFile(page, {
     name: "clip.mp4",
@@ -483,7 +491,7 @@ test("a failed URL import is reported as a processing failure, not Published!", 
   );
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickUrl(page, "https://example.com/clip.mp4");
   await page.getByLabel("Video title").fill("My clip");
@@ -517,7 +525,7 @@ test("a failed URL import surfaces the job's error reason", async ({ page }) => 
   );
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickUrl(page, "https://example.com/missing.mp4");
   await page.getByLabel("Video title").fill("My clip");
@@ -543,7 +551,7 @@ test("an upload still processing shows an in-progress message, not Published!", 
   await mockChunkedUpload(page, { video: video({ state: "processing" }) });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("My clip");
@@ -617,7 +625,7 @@ test("a slow upload shows a determinate progress bar and can be cancelled", asyn
       .catch(() => {});
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("My clip");
@@ -704,7 +712,7 @@ test("a re-picked file offers Resume and finishes the interrupted upload", async
   });
   await page.route(COMPLETE, (route) => route.fulfill({ status: 201, json: { video: video() } }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   // Re-pick the same 10-byte clip.mp4 on the pick stage → the resume banner
   // appears (resume reuses the existing draft, so no title/details entry).
@@ -745,7 +753,7 @@ test("a 422 field error from the draft renders inline on the title field", async
   });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
   await page.getByLabel("Video title").fill("My clip");
@@ -785,7 +793,7 @@ test("a 422 url field error from the import renders inline on the URL field", as
   );
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickUrl(page, "https://example.com/clip.mp4");
   await page.getByLabel("Video title").fill("My clip");
@@ -823,7 +831,7 @@ test("a creator can publish a video by importing from a URL", async ({ page }) =
   await page.route(VIDEO, (route) => route.fulfill({ json: video() }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   // Switch the source to URL, provide a link, then add details and publish.
   await pickUrl(page, "https://example.com/clip.mp4");
@@ -854,7 +862,7 @@ test("a creator can edit a video's title and privacy", async ({ page }) => {
   });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   // Scope privacy assertions to the video row — "Public"/"Unlisted" also appear as
   // <option>s in the upload form's privacy <select>.
   const row = page.getByRole("listitem").filter({ hasText: "Old title" });
@@ -902,7 +910,7 @@ test("the edit surface lists the ready HLS renditions for a transcoded video", a
   );
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   // Scope to the video row — the channel row has its own Edit button.
   const row = page.getByRole("listitem").filter({ hasText: "My clip" });
   await row.getByRole("button", { name: "Edit", exact: true }).click();
@@ -922,7 +930,7 @@ test("the edit surface notes when a published video's HD versions are not ready"
   await page.route(VIDEO, (route) => route.fulfill({ json: video() }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   // Scope to the video row — the channel row has its own Edit button.
   const row = page.getByRole("listitem").filter({ hasText: "My clip" });
   await row.getByRole("button", { name: "Edit", exact: true }).click();
@@ -960,7 +968,7 @@ test("a creator can add and remove a caption from a video's edit surface", async
   await page.route(VIDEO, (route) => route.fulfill({ json: video({ title: "Captioned clip" }) }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   const row = page.getByRole("listitem").filter({ hasText: "Captioned clip" });
   await row.getByRole("button", { name: "Edit" }).click();
 
@@ -1026,7 +1034,7 @@ test("a creator can add, validate, and save chapters from the edit surface", asy
     return route.fulfill({ json: { chapters: [] } });
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   const row = page.getByRole("listitem").filter({ hasText: "Chaptered clip" });
   await row.getByRole("button", { name: "Edit", exact: true }).click();
 
@@ -1092,7 +1100,7 @@ test("a creator can replace a video's thumbnail from the edit surface", async ({
     return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from([137, 80, 78, 71]) });
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   const row = page.getByRole("listitem").filter({ hasText: "Poster clip" });
   await row.getByRole("button", { name: "Edit" }).click();
   await expect(page.getByText("No thumbnail yet.")).toBeVisible();
@@ -1142,7 +1150,9 @@ test("a creator can create a live stream and manage its key", async ({ page }) =
     route.request().method() === "DELETE" ? route.fulfill({ status: 204, body: "" }) : route.continue(),
   );
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Live");
+  // The create form is now a launched Modal (opened by "Go live").
+  await page.getByRole("button", { name: "Go live" }).click();
   await page.getByLabel("Live stream title").fill("My Show");
   await page.getByRole("button", { name: "Create live stream" }).click();
 
@@ -1186,7 +1196,7 @@ test("the live streams list reloads state", async ({ page }) => {
     });
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Live");
   const row = page.getByRole("listitem").filter({ hasText: "My Show" });
   await expect(row.getByText("offline")).toBeVisible();
   // Reload re-reads the state → the badge flips to live.
@@ -1225,7 +1235,8 @@ test("a creator can enable 'save replay as a video' when creating a live stream"
     return route.fulfill({ json: { live_streams: [] } });
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Live");
+  await page.getByRole("button", { name: "Go live" }).click();
   await page.getByLabel("Live stream title").fill("Replay Show");
   // Save replay is now a Toggle (role=switch); click it on (not .check(), which
   // Playwright reserves for checkbox/radio inputs).
@@ -1276,7 +1287,7 @@ test("a creator toggles replay on an existing stream (PATCH)", async ({ page }) 
     return route.continue();
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Live");
   const row = page.getByRole("listitem").filter({ hasText: "Toggle Show" });
   const toggle = row.getByLabel("Save replay as a video for Toggle Show");
   await expect(toggle).not.toBeChecked();
@@ -1304,7 +1315,7 @@ async function openVideoEditForCaptions(page: Page) {
   await page.route(VIDEO, (route) => route.fulfill({ json: video({ title: "Autocap clip" }) }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   const row = page.getByRole("listitem").filter({ hasText: "Autocap clip" });
   await row.getByRole("button", { name: "Edit" }).click();
 }
@@ -1425,7 +1436,7 @@ test("a creator can delete a video", async ({ page }) => {
     return route.continue();
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await expect(page.getByRole("link", { name: "Doomed clip" })).toBeVisible();
 
   // Scope to the video row — the channel row also has a Delete control now.
@@ -1479,7 +1490,7 @@ test("the upload form prefills from the instance publish defaults and sends the 
   await mockChunkedUpload(page, { video: video() });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
+  await gotoStudioTab(page, "Content");
   await openUpload(page);
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
 

@@ -319,7 +319,7 @@ test("the playback settings page passes axe (grouped toggles + selects)", async 
   await expectNoSevereViolations(page);
 });
 
-test("the studio page passes axe (signed in, channels + create form)", async ({ page }) => {
+test("the studio dashboard and channel create form pass axe (signed in)", async ({ page }) => {
   await signIn(page, "user");
   await page.route(/\/api\/v1\/me\/channels$/, (route) =>
     route.fulfill({ json: { channels: [] } }),
@@ -327,9 +327,14 @@ test("the studio page passes axe (signed in, channels + create form)", async ({ 
   await page.route(/\/api\/v1\/videos\/config$/, (route) =>
     route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
   );
+  // The dashboard (zero channels → onboarding).
   await page.getByRole("link", { name: "Studio" }).click();
   await expect(page.getByRole("heading", { name: "Studio", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your channels" })).toBeVisible();
+  await expect(page.getByText("Welcome to your studio")).toBeVisible();
+  await expectNoSevereViolations(page);
+  // The Channel tab's onboarding create form.
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
+  await expect(page.getByText("Create your first channel")).toBeVisible();
   await expectNoSevereViolations(page);
 });
 
@@ -422,7 +427,9 @@ test("the studio channel auto-sync section passes axe (list + state pills + conn
       },
     }),
   );
+  // The channel auto-sync section now lives on the Studio Channel tab.
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Auto-import from another platform" }),
   ).toBeVisible();

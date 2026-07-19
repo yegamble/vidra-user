@@ -112,6 +112,7 @@ async function openEditor(page: Page, detail: Record<string, unknown>) {
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   const row = page.getByRole("listitem").filter({ hasText: "Poster clip" });
   await row.getByRole("button", { name: "Edit", exact: true }).click();
 }

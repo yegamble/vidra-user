@@ -63,9 +63,19 @@ async function signIn(page: Page) {
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
-test("the stats page prompts anonymous viewers to sign in", async ({ page }) => {
+// Creator stats now live in the Studio Analytics tab. Reaching it is a two-step
+// client nav (preserving the in-memory session): sidebar "Studio" → dashboard,
+// then the StudioNav tab strip → Analytics.
+async function gotoAnalytics(page: Page) {
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Analytics", exact: true }).click();
+}
+
+test("the old /studio/stats link redirects into the Analytics tab", async ({ page }) => {
   await page.goto("/studio/stats");
-  await expect(page.getByText("Sign in to see your stats")).toBeVisible();
+  await expect(page).toHaveURL(/\/studio\/analytics$/);
+  // Anonymous: the shared studio shell gates the whole surface.
+  await expect(page.getByText("Sign in to use the studio")).toBeVisible();
 });
 
 test("a creator sees channel totals, the 30-day chart, and drills into a video", async ({
@@ -109,12 +119,10 @@ test("a creator sees channel totals, the 30-day chart, and drills into a video",
     }),
   );
 
-  // The studio header links to the stats page (client-side nav keeps the session).
-  await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByRole("link", { name: "Creator stats" }).click();
+  await gotoAnalytics(page);
 
-  // Channel selector + totals + the accessible SVG chart.
-  await expect(page.getByLabel("Stats channel")).toBeVisible();
+  // The scope switcher + the current channel's totals + the accessible SVG chart.
+  await expect(page.getByRole("group", { name: "Analytics scope" })).toBeVisible();
   const channelSection = page.getByRole("region", { name: "Stats for @ada_makes" });
   await expect(channelSection.getByText("1.2K")).toBeVisible(); // views total, compact
   await expect(channelSection.getByText("Followers")).toBeVisible();
@@ -131,25 +139,27 @@ test("a creator sees channel totals, the 30-day chart, and drills into a video",
   await expect(page.getByText("Comments")).toHaveCount(2); // channel + video grids
 });
 
-test("a creator with no channels is pointed at the studio", async ({ page }) => {
+test("a creator with no channels sees the analytics onboarding", async ({ page }) => {
   await signIn(page);
   await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [] } }));
 
-  await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByRole("link", { name: "Creator stats" }).click();
+  await gotoAnalytics(page);
 
   await expect(page.getByText("No channels yet")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Create a channel in the studio" })).toBeVisible();
 });
 
 test("a failed channel-stats load shows an error with retry", async ({ page }) => {
   await signIn(page);
   await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [channel()] } }));
   await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
-  let calls = 0;
+  // Flag-based (not call-count based): the dashboard's quick-stats strip also
+  // calls getChannelStats on the way through, so a "fail the Nth call" mock would
+  // be racy. All calls fail while `failing` is set (dashboard + the analytics
+  // ChannelScope's initial load → the error state); the test flips it off before
+  // the retry.
+  let failing = true;
   await page.route(CHANNEL_STATS, (route) => {
-    calls += 1;
-    if (calls === 1) {
+    if (failing) {
       return route.fulfill({
         status: 500,
         json: { error: { code: "internal", message: "boom" } },
@@ -168,10 +178,10 @@ test("a failed channel-stats load shows an error with retry", async ({ page }) =
     });
   });
 
-  await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByRole("link", { name: "Creator stats" }).click();
+  await gotoAnalytics(page);
 
   await expect(page.getByText("Could not load this channel's stats.")).toBeVisible();
+  failing = false;
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(
     page.getByRole("img", { name: "Daily views for @ada_makes: 9 views over the last 30 days" }),

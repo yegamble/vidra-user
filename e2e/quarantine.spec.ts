@@ -173,6 +173,7 @@ test("the studio row badges a quarantined upload with explanatory copy", async (
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   const row = page.getByRole("listitem").filter({ hasText: "My clip" });
   await expect(row.getByText("quarantined", { exact: true })).toBeVisible();
   await expect(
@@ -239,6 +240,7 @@ test("a quarantined publish outcome is reported as held for review, not failed o
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   // Upload now opens in the stepped sheet: pick the file, Continue, add title, publish.
   await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
