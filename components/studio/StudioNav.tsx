@@ -113,34 +113,49 @@ function ChannelSwitcher() {
 
   // More than one channel: a Dropdown switcher (channel rows + a "New channel"
   // entry). Switching a channel updates the studio scope without navigating;
-  // "New channel" routes to the Channel tab's create dialog.
-  const items: DropdownItem[] = [
-    ...channels.map((c) => ({
-      label: (
-        <span className="flex items-center gap-2.5">
-          <Avatar
-            src={c.has_avatar ? channelAvatarUrl(c.handle) : null}
-            name={c.display_name || c.handle}
-            alt=""
-            className="h-7 w-7 shrink-0"
-          />
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate font-semibold text-fg">{c.display_name}</span>
-            <span className="truncate text-[12px] text-fg-muted">@{c.handle}</span>
-            <ChannelProtocolBadges channel={c} className="mt-0.5" />
-          </span>
-          {c.handle === currentHandle ? (
-            <span className="ml-auto text-[12px] font-semibold text-accent-text">Current</span>
-          ) : null}
+  // "New channel" routes to the Channel tab's create dialog. Owned and
+  // shared-with-you (editor) channels are grouped by `role` when both exist.
+  const channelRow = (c: (typeof channels)[number]): DropdownItem => ({
+    label: (
+      <span className="flex items-center gap-2.5">
+        <Avatar
+          src={c.has_avatar ? channelAvatarUrl(c.handle) : null}
+          name={c.display_name || c.handle}
+          alt=""
+          className="h-7 w-7 shrink-0"
+        />
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate font-semibold text-fg">{c.display_name}</span>
+          <span className="truncate text-[12px] text-fg-muted">@{c.handle}</span>
+          <ChannelProtocolBadges channel={c} className="mt-0.5" />
         </span>
-      ),
-      onSelect: () => setCurrentHandle(c.handle),
-    })),
-    {
-      label: <span className="font-semibold text-accent-text">+ New channel</span>,
-      onSelect: () => router.push("/studio/channel?create=1"),
-    },
-  ];
+        {c.handle === currentHandle ? (
+          <span className="ml-auto text-[12px] font-semibold text-accent-text">Current</span>
+        ) : null}
+      </span>
+    ),
+    onSelect: () => setCurrentHandle(c.handle),
+  });
+
+  const owned = channels.filter((c) => c.role !== "editor");
+  const shared = channels.filter((c) => c.role === "editor");
+  const newChannel: DropdownItem = {
+    label: <span className="font-semibold text-accent-text">+ New channel</span>,
+    onSelect: () => router.push("/studio/channel?create=1"),
+  };
+
+  const items: DropdownItem[] =
+    owned.length > 0 && shared.length > 0
+      ? [
+          { type: "label", label: "Your channels" },
+          ...owned.map(channelRow),
+          { type: "separator" },
+          { type: "label", label: "Shared with you" },
+          ...shared.map(channelRow),
+          { type: "separator" },
+          newChannel,
+        ]
+      : [...channels.map(channelRow), { type: "separator" }, newChannel];
 
   return (
     <div className="flex items-center justify-between gap-2 px-1">

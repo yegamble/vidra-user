@@ -249,8 +249,11 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
   live wears the `live` token; New channel stays neutral. The shared `Dropdown`
   primitive supports this via optional `DropdownItem.href` (renders a `role=
   menuitem` `next/link`; Space/Enter activate it), `DropdownItem.icon` (a leading
-  glyph slot), and `{ type: "separator" }` divider entries — separators are
-  skipped in the arrow-key focus ring.
+  glyph slot), `{ type: "separator" }` dividers, and `{ type: "label" }` group
+  headings (decorative `role="presentation"`) — separators and labels are skipped
+  in the arrow-key focus ring. The channel switcher uses the label + separator
+  entries to group **Your channels** vs **Shared with you** (by the caller's
+  `role`) when the caller both owns and collaborates on channels.
 - **Studio Distribution card** (per-channel protocol control): the Channel tab
   and dashboard both render `DistributionCard`, driven by the channel's real
   fields (`activitypub_enabled`, `atproto_enabled`, `atproto_active`). Two rows —
@@ -266,6 +269,17 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
   The same compact protocol chips (`ChannelProtocolBadges`) appear on the
   StudioNav identity + switcher rows. Protocol color stays inside these badges
   only; a channel that federates nowhere reads as a neutral "Local only" chip.
+- **Studio Collaborators card + editor role** (channel collaborators, first-class
+  where PeerTube shipped it late): the Channel tab's `CollaboratorsCard` lists a
+  channel's editors (display name, `@username`, role); owners get an invite-by-
+  handle form (role Editor; 404 "No such user" / 409 "already manages this
+  channel" surfaced inline) and a confirm-gated remove. A channel **shared with
+  you as editor** (`role: "editor"` on `GET /me/channels`) renders a read-only
+  Channel tab — the edit form, avatar/banner managers, sync section, distribution
+  toggles (badges still shown), and danger zone are all hidden — while keeping
+  full Content/Live/Analytics/Dashboard access. Analytics' **All channels** scope
+  is owner-scoped (`GET /me/stats`): it is labeled "All my channels" and hidden
+  entirely for a pure editor (zero owned channels).
 
 ## Typography
 

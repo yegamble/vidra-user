@@ -21,6 +21,8 @@ import type { Channel } from "@/lib/api";
 import { invalidateVideoActionPermissionCache } from "@/lib/use-video-action-permissions";
 
 import { ROW_ACTION } from "./shared";
+import { ChannelProtocolBadges } from "./ChannelProtocolBadges";
+import { CollaboratorsCard } from "./CollaboratorsCard";
 import { DistributionCard } from "./DistributionCard";
 import { useStudio } from "./StudioContext";
 
@@ -99,11 +101,64 @@ function CreateChannelForm({
   );
 }
 
-// CurrentChannelPanel manages the studio's CURRENT channel: edit its display name
-// + description (PATCH), avatar/banner, and delete it (which cascades to its
-// videos). The server result is the source of truth (fed back into the studio
-// context).
+// CurrentChannelPanel routes the studio's CURRENT channel to the owner or editor
+// view based on the caller's role (owners manage everything; editors get a
+// read-only channel surface but keep full content access elsewhere).
 function CurrentChannelPanel({ channel }: { channel: Channel }) {
+  // `role` is set on GET /me/channels; an editor manages content but not the
+  // channel itself. Absent role → treat as owner (owned channels always carry it).
+  const isOwner = channel.role !== "editor";
+  if (!isOwner) return <EditorChannelPanel channel={channel} />;
+  return <OwnerChannelPanel channel={channel} />;
+}
+
+// EditorChannelPanel — the Channel tab for a channel shared WITH the caller as an
+// editor: a read-only identity, the distribution status as read-only badges, and
+// the collaborator list (read-only). No channel edit form, avatar/banner
+// managers, sync section, distribution toggles, or danger zone — those are
+// owner-only. The editor still has full Content/Live/Analytics/Dashboard access.
+function EditorChannelPanel({ channel }: { channel: Channel }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <section aria-labelledby="channel-details-heading" className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="channel-details-heading" className="text-[15px] font-bold tracking-tight">
+            Channel details
+          </h2>
+          <Link
+            href={`/channels/${channel.handle}`}
+            className="focus-ring rounded-full text-[13px] font-semibold text-accent-text hover:underline"
+          >
+            View public page
+          </Link>
+        </div>
+        <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-fg">{channel.display_name}</p>
+            <ChannelProtocolBadges channel={channel} />
+          </div>
+          <p className="text-[13px] text-fg-muted">@{channel.handle}</p>
+          {channel.description ? (
+            <p className="whitespace-pre-line text-sm text-fg">{channel.description}</p>
+          ) : null}
+          <p className="text-[12.5px] text-fg-muted">
+            You&rsquo;re an editor of this channel. Only the owner can change its settings.
+          </p>
+        </div>
+      </section>
+
+      <DistributionCard channel={channel} />
+
+      <CollaboratorsCard channel={channel} />
+    </div>
+  );
+}
+
+// OwnerChannelPanel manages the studio's CURRENT channel: edit its display name
+// + description (PATCH), avatar/banner, distribution, collaborators, and delete it
+// (which cascades to its videos). The server result is the source of truth (fed
+// back into the studio context).
+function OwnerChannelPanel({ channel }: { channel: Channel }) {
   const { updateChannel, removeChannel } = useStudio();
   const [displayName, setDisplayName] = useState(channel.display_name);
   const [description, setDescription] = useState(channel.description);
@@ -210,6 +265,8 @@ function CurrentChannelPanel({ channel }: { channel: Channel }) {
       </section>
 
       <DistributionCard channel={channel} canManage onChange={updateChannel} />
+
+      <CollaboratorsCard channel={channel} canManage />
 
       <ChannelSyncSection channels={[channel]} />
 

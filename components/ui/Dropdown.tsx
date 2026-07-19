@@ -36,10 +36,17 @@ export type DropdownMenuItem = {
 /** A non-interactive divider between groups of items (`role="separator"`). */
 export type DropdownSeparator = { type: "separator" };
 
-export type DropdownItem = DropdownMenuItem | DropdownSeparator;
+/** A non-interactive group heading (decorative; skipped in the focus ring). */
+export type DropdownLabel = { type: "label"; label: ReactNode };
+
+export type DropdownItem = DropdownMenuItem | DropdownSeparator | DropdownLabel;
 
 function isSeparator(item: DropdownItem): item is DropdownSeparator {
   return "type" in item && item.type === "separator";
+}
+
+function isLabel(item: DropdownItem): item is DropdownLabel {
+  return "type" in item && item.type === "label";
 }
 
 export type DropdownProps = {
@@ -219,6 +226,17 @@ export function Dropdown({
                     role="separator"
                     className="my-1 h-px bg-border-subtle"
                   />
+                );
+              }
+              if (isLabel(item)) {
+                return (
+                  <div
+                    key={`label-${index}`}
+                    role="presentation"
+                    className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-muted"
+                  >
+                    {item.label}
+                  </div>
                 );
               }
               const rowIndex = (focusIndex += 1);
