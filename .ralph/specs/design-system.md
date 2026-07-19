@@ -251,6 +251,21 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
   menuitem` `next/link`; Space/Enter activate it), `DropdownItem.icon` (a leading
   glyph slot), and `{ type: "separator" }` divider entries — separators are
   skipped in the arrow-key focus ring.
+- **Studio Distribution card** (per-channel protocol control): the Channel tab
+  and dashboard both render `DistributionCard`, driven by the channel's real
+  fields (`activitypub_enabled`, `atproto_enabled`, `atproto_active`). Two rows —
+  **ActivityPub** (federation) and **ATProto** (Bluesky cross-posting) — each led
+  by the guardrail-correct colored `Badge variant="protocol"` (brand tint + dot +
+  neutral label; NOT the monochrome `ProtocolBadge`, and NEVER a ribbon). Owners
+  (`canManage`) get instant-effect `Toggle`s that `PATCH` the channel; the ATProto
+  toggle only shows once a Bluesky account is linked (an unlinked owner sees a
+  "Link your Bluesky account" CTA → `/settings/connections`), and the whole row is
+  hidden when the instance extension is off (probed via `GET /me/atproto` 503,
+  mirroring `/settings/connections`). Editors and the dashboard summary see
+  read-only status badges (`atproto_active` drives the ATProto "Active" state).
+  The same compact protocol chips (`ChannelProtocolBadges`) appear on the
+  StudioNav identity + switcher rows. Protocol color stays inside these badges
+  only; a channel that federates nowhere reads as a neutral "Local only" chip.
 
 ## Typography
 
