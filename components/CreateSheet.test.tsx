@@ -40,25 +40,27 @@ describe("CreateSheet", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders a dialog named 'Create' with the three entry rows", () => {
+  it("renders a dialog named 'Create' with the four entry rows", () => {
     render(<CreateSheet open onClose={() => {}} />);
     expect(screen.getByRole("dialog", { name: "Create" })).toBeTruthy();
 
-    const upload = screen.getByRole("link", { name: /Upload a video/ });
+    const upload = screen.getByRole("link", { name: /Upload video/ });
     const golive = screen.getByRole("link", { name: /Go live/ });
+    const newChannel = screen.getByRole("link", { name: /New channel/ });
     const studio = screen.getByRole("link", { name: /Open Studio/ });
 
-    // Each row deep-links into the creator surfaces that exist today: upload and
-    // live are anchors on /studio, Open Studio is the dashboard itself.
-    expect(upload.getAttribute("href")).toBe("/studio#upload");
-    expect(golive.getAttribute("href")).toBe("/studio#go-live");
+    // Each primary row deep-links into the studio surface that auto-opens the
+    // flow; New channel opens the create dialog; Open Studio is the dashboard.
+    expect(upload.getAttribute("href")).toBe("/studio/content?upload=1");
+    expect(golive.getAttribute("href")).toBe("/studio/live?new=1");
+    expect(newChannel.getAttribute("href")).toBe("/studio/channel?create=1");
     expect(studio.getAttribute("href")).toBe("/studio");
   });
 
   it("closes when a row is chosen (dismiss on navigate)", () => {
     const onClose = vi.fn();
     render(<CreateSheet open onClose={onClose} />);
-    fireEvent.click(screen.getByRole("link", { name: /Upload a video/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Upload video/ }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
