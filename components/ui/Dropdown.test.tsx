@@ -93,6 +93,26 @@ describe("Dropdown", () => {
     expect(screen.getByRole("separator")).toBeTruthy();
   });
 
+  it("renders a group label that is not a menuitem", () => {
+    render(
+      <Dropdown
+        trigger="Menu"
+        triggerLabel="Menu"
+        items={[
+          { type: "label", label: "Your channels" },
+          { label: "A", onSelect: () => {} },
+          { type: "separator" },
+          { type: "label", label: "Shared with you" },
+          { label: "B", onSelect: () => {} },
+        ]}
+      />,
+    );
+    open();
+    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+    expect(screen.getByText("Your channels")).toBeTruthy();
+    expect(screen.getByText("Shared with you")).toBeTruthy();
+  });
+
   it("arrow keys move focus and wrap, skipping the separator", () => {
     render(
       <Dropdown

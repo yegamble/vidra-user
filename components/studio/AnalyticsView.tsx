@@ -37,27 +37,39 @@ export function AnalyticsView() {
     );
   }
 
-  const scopeHandles = scope === "channel" ? [currentHandle] : channels.map((c) => c.handle);
+  // The "All channels" rollup (GET /me/stats) is owner-scoped by construction —
+  // it only spans channels the caller OWNS. A pure editor (zero owned channels)
+  // never sees that scope; the label makes the ownership boundary explicit.
+  const owned = channels.filter((c) => c.role !== "editor");
+  const showAll = owned.length > 0;
+  const effectiveScope: Scope = showAll ? scope : "channel";
+  const scopeHandles = effectiveScope === "channel" ? [currentHandle] : owned.map((c) => c.handle);
 
   return (
     <div className="flex flex-col gap-6">
-      <SegmentedControl<Scope>
-        label="Analytics scope"
-        value={scope}
-        onChange={setScope}
-        options={[
-          { value: "channel", label: "This channel" },
-          { value: "all", label: "All channels", count: channels.length },
-        ]}
-      />
+      {showAll ? (
+        <SegmentedControl<Scope>
+          label="Analytics scope"
+          value={effectiveScope}
+          onChange={setScope}
+          options={[
+            { value: "channel", label: "This channel" },
+            { value: "all", label: "All my channels", count: owned.length },
+          ]}
+        />
+      ) : null}
 
-      {scope === "channel" ? (
+      {effectiveScope === "channel" ? (
         <ChannelScope handle={currentHandle} name={currentChannel?.display_name ?? currentHandle} />
       ) : (
-        <AllChannelsScope channels={channels} />
+        <AllChannelsScope channels={owned} />
       )}
 
-      <VideoStatsSection key={scope + currentHandle} handles={scopeHandles} channels={channels} />
+      <VideoStatsSection
+        key={effectiveScope + currentHandle}
+        handles={scopeHandles}
+        channels={channels}
+      />
     </div>
   );
 }
