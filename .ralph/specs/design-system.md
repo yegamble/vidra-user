@@ -157,7 +157,10 @@ none touches chrome:
   indigo `#5856d6`/`#5e5ce6`) — never ad-hoc per-component hexes. Suggested
   mapping (brief): Profile blue · Security gray · Notifications red · Playback
   purple · Search orange · Devices teal · Connections green · Donations pink ·
-  Privacy indigo. Use `<IconTile color="blue">`; the white glyph is decorative.
+  Privacy indigo. Within Privacy & safety the two list destinations split by
+  severity: **Mutes = indigo, Blocked = red** (blocking is a harder boundary than
+  muting) — one hue per destination. Use `<IconTile color="blue">`; the white
+  glyph is decorative. (Catalog: `components/settings/sections.tsx`.)
 - **Protocol colors inside badges**: federation/protocol identity is colored
   *inside* `Badge`-shaped elements only — the `Badge` `protocol` variant paints
   a ~12% brand tint + a full-strength brand **dot**, keeping an `fg` label (the
@@ -166,6 +169,20 @@ none touches chrome:
   colors NEVER appear on chrome, buttons, or text outside a badge; the Bluesky
   blue must never be a general interactive color (that is the accent's job, and
   the two must stay visually distinct).
+- **Network-page scope (the one screen where protocol color may breathe).** On
+  the **whole Network / about-network page** — not just its hero — protocol color
+  is sanctioned beyond badges: the tri-protocol ribbon divider (ribbon placement
+  b), and per-protocol tinted glyph tiles/cards (`bg-protocol-*/12` +
+  `text-protocol-*`) naming each network. This is the brief's
+  "badges/wordmark ribbon/Network page" allowance. It applies ONLY to this page;
+  every other surface keeps protocol color inside badges + the two other pinned
+  ribbon placements.
+- **Sanctioned OAuth-brand exception — the Bluesky glyph on auth buttons.** On
+  the login / connected-accounts provider buttons, the Bluesky provider mark may
+  render in its brand blue as an **OAuth brand glyph only** (the icon, never the
+  button fill or its text). This is the standard "sign in with <provider>"
+  brand-mark carve-out, not a second interactive hue — the button chrome and
+  label stay monochrome/accent.
 - **Signature element — the tri-protocol ribbon** (`ProtocolRibbon`): a 2.5px
   gradient rule `linear-gradient(90deg,#6364ff,#0085ff,#65c2cb)` — the one
   sanctioned decorative use of protocol color. The gradient is defined once
@@ -254,6 +271,16 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   active `bg-accent text-accent-fg border-accent`, inactive `border-border
   text-fg-muted` with `hover:bg-surface-muted`. Group carries
   `role="group"` + `aria-label`; buttons use `aria-pressed`.
+  **Two distinct chip recipes — do not mix them:**
+  - **Content filter / sort chips** (they narrow or reorder the *content* below
+    — Recent/Popular/Trending, feed scope, a pending/all filter): **solid accent
+    fill when active** (`bg-accent text-accent-fg`), outlined when inactive. The
+    accent means "this filter is applied."
+  - **Section-navigation pills** (they switch which *section* you are viewing —
+    About sub-tabs, in-page section rails, the About top tabs): the **tint pill**
+    active recipe (`bg-accent/12 text-accent-text` + semibold), muted-hover when
+    inactive — the same active-nav language as the sidebar/bottom-tabs. Never an
+    underline tab-rail and never a solid accent fill; navigation is not a filter.
 - **Segmented switcher** — the `SegmentedControl` primitive
   (`components/ui/SegmentedControl.tsx`), the app-wide single-select switcher
   (Inbox Notifications | Messages, ThemeToggle Light/System/Dark, FeedScope
@@ -284,10 +311,20 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   Apple-system-color square with a white 16px glyph, leading grouped
   Settings/Admin/Moderation rows (one hue per destination; see the tile palette
   above).
-- **Grouped settings rows** (mobile settings): a `bg-surface-muted rounded-2xl
-  overflow-hidden` group, rows `divide-y divide-border-subtle`, each row
-  label + optional `text-fg-muted` sub-line + chevron; group headers
-  `text-xs font-bold uppercase tracking-[0.06em] text-fg-muted`.
+- **Grouped settings rows** (mobile settings): a `rounded-2xl overflow-hidden`
+  group, rows `divide-y divide-border-subtle`, each row label + optional
+  `text-fg-muted` sub-line + chevron; group headers `text-xs font-bold uppercase
+  tracking-[0.06em] text-fg-muted`.
+- **Grouped-card fill rule (surface on the gray canvas).** On the soft gray
+  canvas (`#f5f5f7`), a standalone item card or a grouped row/list is a **white
+  (`bg-surface`) elevated surface** — `border border-border-subtle` (hairline) or
+  `shadow-soft`. `surface-muted` is **not** a card fill on the canvas; it reads as
+  gray-on-gray and flattens the elevation the redesign is built on. Reserve
+  `surface-muted` for **insets inside an already-white card** (a nested form
+  block, a read-only field) and for **hover fills** (`hover:bg-surface-muted`).
+  Grouped settings lists, moderation comment/blocked-video cards, watched-word
+  rows, playback rows: all white `bg-surface`. (A muted list nested *inside* a
+  white card is fine — it is an inset, not the top-level card.)
 - **Channel header**: banner block, overlapping `rounded-full` avatar with
   `border-canvas` ring, name `font-bold tracking-tight`, pill actions
   (Follow = accent fill when not following; outlined "Following" when

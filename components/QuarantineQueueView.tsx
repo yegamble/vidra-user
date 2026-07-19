@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ShieldIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -72,6 +73,7 @@ function Queue() {
   if (videos.length === 0) {
     return (
       <EmptyState
+        icon={<ShieldIcon size={24} />}
         title="No uploads waiting for review"
         message="When this instance holds a new upload for review, it appears here for approval or rejection."
       />

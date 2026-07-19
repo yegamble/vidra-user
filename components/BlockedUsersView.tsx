@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { SlashCircleIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -81,6 +82,8 @@ function BlockList() {
   if (users.length === 0) {
     return (
       <EmptyState
+        icon={<SlashCircleIcon size={24} />}
+        tint="red"
         title="No blocked accounts"
         message="When you block an account, neither of you can send the other a direct message. Blocked accounts appear here."
       />

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { GlobeIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -71,6 +72,7 @@ function RequestQueue() {
         <ErrorState message="Could not load follower requests." onRetry={retry} />
       ) : requests.length === 0 ? (
         <EmptyState
+          icon={<GlobeIcon size={24} />}
           title="No pending follower requests"
           message="Nothing to review right now. While follower approval is on, new remote followers of local channels appear here."
         />

@@ -21,6 +21,17 @@ export function formatCount(n: number): string {
   return String(Math.floor(n));
 }
 
+/**
+ * pluralize returns `singular` when `count` is exactly 1 (English one-vs-many),
+ * otherwise `plural` (defaults to `${singular}s`). Pair it with `formatCount`
+ * for the label: `${formatCount(n)} ${pluralize(n, "follower")}` → "1 follower",
+ * "0 followers", "1.2K followers". Pass the RAW count (not the formatted string)
+ * so the abbreviation never fools the singular check.
+ */
+export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return Math.abs(count) === 1 ? singular : plural;
+}
+
 /** formatBytes renders a byte count compactly: 512 B, 1.4 KB, 24.0 MB, 1.2 GB (SI, 1024-step). */
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "0 B";

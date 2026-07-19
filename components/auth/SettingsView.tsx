@@ -362,10 +362,13 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
             className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg"
           />
         </div>
+        {/* Deactivate is the reversible action, so it takes the lower-emphasis
+            danger-OUTLINE treatment; permanent deletion below carries the solid
+            fill (danger-zone hierarchy — design-review). */}
         <button
           type="submit"
           disabled={submitting || password === ""}
-          className="focus-ring self-start rounded-[10px] bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
+          className="focus-ring self-start rounded-[10px] border border-danger/45 px-4 py-2 text-sm font-semibold text-danger transition-colors hover:bg-danger/10 disabled:opacity-60"
         >
           {submitting ? "Deactivating…" : "Deactivate account"}
         </button>
@@ -426,7 +429,7 @@ function DeleteAccountSection({
         <button
           type="button"
           onClick={() => setArmed(true)}
-          className="focus-ring self-start rounded-[10px] border border-danger-border px-4 py-2 text-sm font-semibold text-danger transition-colors hover:bg-danger-surface"
+          className="focus-ring self-start rounded-[10px] bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90"
         >
           Delete account permanently
         </button>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { LockIcon } from "@/components/icons";
+import { LockIcon, SmartphoneIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -122,6 +122,8 @@ function DeviceList() {
   if (devices.length === 0) {
     return (
       <EmptyState
+        icon={<SmartphoneIcon size={24} />}
+        tint="teal"
         title="No encrypted-messaging devices"
         message="Devices appear here the first time you use encrypted messaging on a browser."
       />

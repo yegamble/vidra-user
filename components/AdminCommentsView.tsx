@@ -133,7 +133,7 @@ function CommentRow({
   }
 
   return (
-    <article className="rounded-2xl bg-surface-muted p-4">
+    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg-muted">
         <span className="font-semibold text-fg">
           {comment.author_display_name || comment.author_username}

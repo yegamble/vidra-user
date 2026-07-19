@@ -114,7 +114,7 @@ function BlockedRow({
   }
 
   return (
-    <article className="rounded-2xl bg-surface-muted p-4">
+    <article className="rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link

@@ -36,11 +36,22 @@ const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Rejected uploads",
     help: "A moderator rejects one of your held uploads.",
   },
+  caption_ready: {
+    label: "Captions ready",
+    help: "Auto-captions finish for one of your videos.",
+  },
 };
 
 // A stable display order for the known types; unknown-but-returned types sort
 // after them, alphabetically.
-const TYPE_ORDER = ["comment", "follow", "message", "report_resolved", "video_rejected"];
+const TYPE_ORDER = [
+  "comment",
+  "follow",
+  "message",
+  "report_resolved",
+  "video_rejected",
+  "caption_ready",
+];
 
 function orderedTypes(prefs: Record<string, boolean>): string[] {
   return Object.keys(prefs).sort((a, b) => {

@@ -7,8 +7,24 @@ import {
   formatDuration,
   formatMonthYear,
   formatUptime,
+  pluralize,
   relativeTime,
 } from "./format";
+
+describe("pluralize", () => {
+  it("uses the singular only for exactly one", () => {
+    expect(pluralize(1, "follower")).toBe("follower");
+    expect(pluralize(0, "follower")).toBe("followers");
+    expect(pluralize(2, "follower")).toBe("followers");
+    expect(pluralize(1200, "follower")).toBe("followers");
+    expect(pluralize(-1, "follower")).toBe("follower");
+  });
+
+  it("honors an explicit irregular plural", () => {
+    expect(pluralize(1, "entry", "entries")).toBe("entry");
+    expect(pluralize(3, "entry", "entries")).toBe("entries");
+  });
+});
 
 describe("formatCount", () => {
   it("formats small, thousands, millions, billions", () => {

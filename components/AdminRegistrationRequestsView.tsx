@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { UsersIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -112,6 +113,7 @@ function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
         <ErrorState message="Could not load registration requests." onRetry={retry} />
       ) : requests.length === 0 ? (
         <EmptyState
+          icon={<UsersIcon size={24} />}
           title={pendingOnly ? "No pending requests" : "No registration requests yet"}
           message={
             pendingOnly

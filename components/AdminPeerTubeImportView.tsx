@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { DownloadIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -414,7 +415,11 @@ function HistorySection({
     return (
       <section aria-label="Import history">
         <h2 className="mb-2 text-[15px] font-bold tracking-tight text-fg">Recent runs</h2>
-        <EmptyState title="No import runs yet" message="Launch a dry run to preview a migration." />
+        <EmptyState
+          icon={<DownloadIcon size={24} />}
+          title="No import runs yet"
+          message="Launch a dry run to preview a migration."
+        />
       </section>
     );
   }
