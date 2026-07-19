@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { PlaylistIcon } from "@/components/icons";
 import { PlaylistThumbnailManager } from "@/components/PlaylistThumbnailManager";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -118,6 +119,8 @@ export function PlaylistDetailView({ id }: { id: string }) {
   if (status === "notfound") {
     return (
       <EmptyState
+        icon={<PlaylistIcon size={24} />}
+        tint="gray"
         title="Playlist not found"
         message="This playlist does not exist, or it is private."
       />
@@ -178,6 +181,7 @@ export function PlaylistDetailView({ id }: { id: string }) {
 
       {playlist.videos.length === 0 ? (
         <EmptyState
+          icon={<PlaylistIcon size={24} />}
           title="This playlist is empty"
           message="Add videos to it from any watch page with “Save to playlist”."
         />

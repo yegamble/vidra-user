@@ -10,9 +10,7 @@ export default function LibraryPage() {
   return (
     <PageShell className="py-6 sm:py-8">
       <div className="w-full max-w-5xl">
-        <h1 className="mb-6 text-[26px] font-bold tracking-[-0.04em] sm:text-2xl sm:tracking-tight">
-          Library
-        </h1>
+        <h1 className="mb-6 text-title sm:text-large-title">Library</h1>
         <LibraryView />
       </div>
     </PageShell>

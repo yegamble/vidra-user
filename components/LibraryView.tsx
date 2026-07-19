@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { ChevronRightIcon, PlaylistIcon, PlusIcon } from "@/components/icons";
+import { ChevronRightIcon, LibraryIcon, PlaylistIcon, PlusIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
@@ -44,6 +44,7 @@ export function LibraryView() {
           <PlaylistsLink />
         </div>
         <EmptyState
+          icon={<LibraryIcon size={24} />}
           title="Sign in to see your library"
           message={
             <>
@@ -391,6 +392,7 @@ function SavedSection() {
         <p className="py-3 text-[13px] text-fg-muted">Could not load your saved videos.</p>
       ) : videos.length === 0 ? (
         <EmptyState
+          icon={<LibraryIcon size={24} />}
           title="Your library is empty"
           message="Save videos with the Save button and they will show up here."
         />

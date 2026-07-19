@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ClockIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -24,6 +25,7 @@ export function WatchHistoryView() {
   if (status !== "authed") {
     return (
       <EmptyState
+        icon={<ClockIcon size={24} />}
         title="Sign in to see your history"
         message={
           <>
@@ -107,6 +109,7 @@ function History() {
   if (items.length === 0) {
     return (
       <EmptyState
+        icon={<ClockIcon size={24} />}
         title="No watch history yet"
         message="Videos you watch will show up here so you can pick up where you left off."
       />
