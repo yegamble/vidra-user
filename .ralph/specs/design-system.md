@@ -1,20 +1,38 @@
 # Vidra User — Design System
 
 > Status: **PREMIUM REDESIGN LANDED** (template-faithful shell + tokens + theme
-> switching). Visual source of truth: the Vidra design templates
+> switching); **COLOR DIRECTION REVISED 2026-07-19** (accent + semantic color —
+> see "Design philosophy" and "Semantic color & protocol identity"). Visual
+> source of truth: the Vidra design templates
 > (`Vidra App.dc.html`, `Vidra Desktop.dc.html`, `Vidra Admin.dc.html`,
-> `Vidra Desktop Admin.dc.html`) and this spec. Every UI change MUST conform to
-> this document — it is a Ralph guardrail, not a suggestion.
+> `Vidra Desktop Admin.dc.html`) and this spec; where this spec's 2026-07-19
+> color revision diverges from the templates, the spec wins. Every UI change
+> MUST conform to this document — it is a Ralph guardrail, not a suggestion.
 
 ## Design philosophy — Apple HIG, quiet luxury
 
 The design follows Apple's Human Interface Guidelines
 (https://developer.apple.com/design/): **clarity** (type and spacing carry the
-hierarchy), **deference** (monochrome chrome defers to the content —
-thumbnails and video are the only saturated things on screen), and **depth**
-(hairline borders + subtle elevation, never heavy shadows). The palette is a
-zinc monochrome with a near-black accent; status colors are reserved for
-status. If a change adds a new saturated color to chrome, it is wrong.
+hierarchy), **deference** (neutral chrome defers to the content), and **depth**
+(hairline borders + subtle elevation, never heavy shadows).
+
+Deference means *restraint*, not *absence*. Real Apple software is neutral
+chrome plus **one confident accent** plus **color used semantically** — think
+System Settings' colored icon squares, or Finder's blue selection. The earlier
+rule here ("if a change adds a new saturated color to chrome, it is wrong")
+executed deference as absence and made the app read gray-on-gray; it is
+**overturned**. The current color contract:
+
+- **Chrome and surfaces stay monochrome zinc.** Headers, sidebars, tab bars,
+  cards, inputs: no color washes, no gradients, no tinted panels.
+- **One accent: systemIndigo** (`accent` token below). It is THE interactive
+  color — primary actions, active states, links, selection, focus. Chosen to
+  echo the indigo the CTAs already leaned toward while staying clearly distinct
+  from Bluesky's brand blue. Never introduce a second interactive hue.
+- **Color beyond the accent must be semantic**, never decorative: status
+  tokens for status, protocol colors inside badges, colored icon tiles in
+  settings-style lists (see "Semantic color & protocol identity"). A color that
+  doesn't *mean* something is still wrong.
 
 Hard rules:
 - **Mobile-first.** Phone layout (390px) is designed first; wider viewports
@@ -62,8 +80,9 @@ Rules for components:
 | `fg-subtle` | **decorative only** (never meaningful text) | `#a1a1aa` | `#71717a` |
 | `border` | inputs, outlined buttons | `#d4d4d8` | `#3f3f46` |
 | `border-subtle` | hairline dividers | `#e8e8ea` | `#26262a` |
-| `accent` / `accent-fg` | primary action (monochrome) | `#18181b` / `#ffffff` | `#f4f4f5` / `#18181b` |
-| `focus` | focus ring | `#71717a` | `#a1a1aa` |
+| `accent` / `accent-fg` | primary action (**systemIndigo**) | `#5856d6` / `#ffffff` | `#5e5ce6` / `#ffffff` |
+| `accent-text` | accent as free-standing text (links, active labels) | `#5856d6` | `#7d7aff` |
+| `focus` | focus ring (follows the accent, HIG-style) | `#5856d6` | `#5e5ce6` |
 | `danger` | danger **text/icons** | `#c81e1e` | `#f87171` |
 | `danger-solid` / `danger-fg` | danger **fills** (buttons) | `#dc2626` / white | same |
 | `danger-surface` / `danger-border` | danger panels | `#fef2f2` / `#fecaca` | `#450a0a` / `#7f1d1d` |
@@ -80,12 +99,70 @@ verifies this, so never lighten these tokens without recomputing the tinted
 pairs. Use `text-danger` for danger text and `bg-danger-solid text-danger-fg`
 for danger fills — never `bg-danger`.
 
+Accent contract: `accent-fg` on `accent` passes AA in both schemes (≈5.6:1
+light, ≈5.1:1 dark). `accent` itself passes AA as text on light surfaces, but
+in dark mode it only clears the 3:1 UI-component threshold — so free-standing
+accent **text** (links, active nav labels, selected-state captions) MUST use
+`accent-text` (the dark value is lightened for ≈5:1 on canvas/surface), while
+fills, focus rings, and large/bold accents use `accent`. Tinted accent chips
+follow the status-pill recipe (`bg-accent/12 text-accent-text`). axe remains
+the authority — recompute on any token change.
+
 **Documented exceptions** (the only allowed non-token colors):
 - **Media overlays** — badges/scrims painted ON TOP of thumbnails or video are
   theme-invariant: `bg-black/60 text-white` (duration), `bg-black/55
   backdrop-blur` pills (LIVE, IPFS), `bg-black/45` dialog scrim, white progress
   bars on media. They sit on imagery, not on themed surfaces.
 - **QR codes** — always dark modules on a white padded tile (scanability).
+
+## Semantic color & protocol identity (2026-07-19)
+
+Color beyond the accent is allowed ONLY in these forms — each carries meaning,
+none touches chrome:
+
+- **Settings icon tiles** (System Settings pattern): grouped settings /
+  admin / moderation rows may lead with a `rounded-lg` colored tile
+  (~28×28) holding a white glyph. The tile is *supporting*, never the sole
+  carrier of meaning (the adjacent label is); one hue per destination, drawn
+  from a small fixed tile palette defined in `globals.css` when implemented —
+  not ad-hoc per-component hexes. Tiles are theme-tuned via `light-dark()`
+  like every other token.
+- **Protocol colors inside badges**: federation/protocol identity may be
+  colored *inside* `Badge`-shaped elements only — a tinted pill or dot+label
+  (status-pill recipe: ~12–15% tint fill + full-strength text/dot). Families:
+  ActivityPub violet, Bluesky blue, IPFS teal. Indicative values (pin exact
+  tokens + AA-verify the tinted pairs at implementation): AP `#7c5cff`-family,
+  Bluesky `#1185fe`, IPFS `#5bc4cf`-family. Protocol colors NEVER appear on
+  chrome, buttons, or text outside a badge; the Bluesky blue must never be
+  used as a general interactive color (that is the accent's job, and the two
+  must stay visually distinct).
+- **Signature element — the tri-protocol ribbon**: a thin gradient rule
+  (AP violet → Bluesky blue → IPFS teal), the one sanctioned decorative use of
+  protocol color — Vidra's differentiator made visible without polluting the
+  chrome. HARD CAP: **at most three placements app-wide**, pinned in this doc
+  when the redesign lands (candidates: the About/network hero, the auth pages,
+  the instance About footer). Anywhere else it appears is a review defect.
+
+## Sanctioned macro-patterns (2026-07-19)
+
+The following workflow-level patterns are sanctioned; guardrails must not be
+read as blocking them. Each keeps the existing nav rules (BottomTabBar/Sidebar
+primary nav, no hamburgers, one `<main>`, 44pt targets):
+
+- **Split-view settings** (macOS System Settings): Settings, Admin, and
+  Moderation replace their long horizontal tab strips with a section sidebar
+  (≥ `md`) + detail pane; on phones the section list is the page and sections
+  drill in (grouped-rows pattern below stays the mobile idiom).
+- **Mail-style triage for Moderation**: queue list left, detail + action bar
+  right; single-key archive/act affordances may follow.
+- **Shelves on Home** (Apple TV pattern): horizontally scrolling themed rows
+  (Continue watching, Following, Trending…) instead of one undifferentiated
+  grid; shelf headers use the section-heading type ramp.
+- **Studio storage bar** (iCloud pattern): a single segmented capacity bar
+  summarizing quota by media kind.
+- **Stepped upload sheet**: upload becomes a staged sheet (pick → details →
+  publish) with a persistent minimized progress pill; the pill is chrome-level
+  UI and therefore stays monochrome + accent.
 
 ## Typography
 
