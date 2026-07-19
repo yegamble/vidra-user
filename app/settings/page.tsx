@@ -9,7 +9,7 @@ export default function SettingsPage() {
           outside SettingsView so signed-out visitors can use it too. */}
       <section
         aria-label="Appearance"
-        className="mt-6 rounded-2xl border border-border-subtle p-4"
+        className="mt-6 max-w-xl rounded-2xl border border-border-subtle bg-surface p-4"
       >
         <ThemeToggle />
       </section>
