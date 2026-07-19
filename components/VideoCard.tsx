@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { IpfsIcon } from "@/components/icons";
-import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
 import {
@@ -124,7 +124,10 @@ export function VideoCard({
 
   return (
     <div className="group/card flex flex-col gap-3">
-      <div className="overflow-hidden rounded-2xl transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-px hover:shadow-[0_10px_24px_rgba(0,0,0,0.10)] active:translate-y-0 active:scale-[0.995]">
+      {/* Apple TV shelf-tile lift: the whole media surface scales 1.02 on hover
+          (transition-transform, globally neutralized under reduced-motion) and
+          picks up a quiet soft shadow — no heavy elevation. */}
+      <div className="overflow-hidden rounded-xl transition-[transform,box-shadow] duration-200 ease-out group-hover/card:scale-[1.02] group-hover/card:shadow-soft active:scale-[0.995]">
         {/* Card payloads omit the storyboard detail flag. The VTT is only
             probed lazily when the timeline is used; a 404 degrades to time. */}
         <VideoCardPreview
@@ -143,10 +146,10 @@ export function VideoCard({
           hasStoryboard={previewEligible}
           previewEnabled={previewEligible}
           posterPriority={priority}
-          className="rounded-2xl"
+          className="rounded-xl"
           posterClassName={cn(
             "transition-transform duration-200",
-            blurSensitive ? "scale-110 blur-2xl" : "group-hover/preview:scale-[1.02]",
+            blurSensitive && "scale-110 blur-2xl",
           )}
           fallback={
             <div className="media-placeholder absolute inset-0">
@@ -201,7 +204,7 @@ export function VideoCard({
           />
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h3 className="text-[15.5px] font-semibold leading-snug tracking-[-0.01em] lg:text-sm">
+          <h3 className="text-subhead font-semibold leading-snug tracking-[-0.01em]">
             {/* line-clamp lives on the Link so the anchor fills the title block
                 (its own width, not just the text run): the whole two-line title
                 is the click/tap target, matching the card thumbnail link. */}
@@ -209,7 +212,7 @@ export function VideoCard({
               {video.title}
             </Link>
           </h3>
-          <div className="flex flex-wrap items-center gap-x-1.5 text-[13px] leading-snug text-fg-muted">
+          <div className="flex flex-wrap items-center gap-x-1.5 text-footnote text-fg-muted">
             {video.channel_handle ? (
               isRemote ? (
                 // Remote channel identity ("name@domain") — not a local route.
@@ -231,10 +234,15 @@ export function VideoCard({
             ) : null}
           </div>
           {isRemote && video.domain ? (
-            <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-1">
-              <span
-                className="inline-flex w-fit max-w-full items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted"
+            // Federated origin badge — the third and final sanctioned placement
+            // of the tri-protocol ribbon (Badge `federated` wears it on its top
+            // edge). The neutral capsule keeps an `fg-muted` domain label; the
+            // ribbon carries the "this is remote/federated" signal.
+            <span className="mt-1 flex max-w-full">
+              <Badge
+                variant="federated"
                 title={`Federated video from ${video.domain}`}
+                className="max-w-full text-[11px]"
               >
                 <svg
                   aria-hidden
@@ -251,8 +259,7 @@ export function VideoCard({
                 </svg>
                 <span className="sr-only">From </span>
                 <span className="truncate">{video.domain}</span>
-              </span>
-              <ProtocolBadge protocol="activitypub" />
+              </Badge>
             </span>
           ) : null}
         </div>

@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export function VideoCardSkeleton() {
   return (
     <div className="flex flex-col gap-3">
-      <Skeleton className="aspect-video w-full rounded-2xl" />
+      <Skeleton className="aspect-video w-full rounded-xl" />
       <div className="flex gap-3">
         <Skeleton className="mt-0.5 h-9 w-9 shrink-0 rounded-full" />
         <div className="flex min-w-0 flex-1 flex-col gap-2 pt-0.5">

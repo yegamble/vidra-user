@@ -92,7 +92,7 @@ function RecommendationRail({
   return (
     <section aria-label={heading} className="mt-10">
       <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-bold tracking-[-0.025em]">{heading}</h2>
+        <h2 className="text-title2 text-fg">{heading}</h2>
       </div>
       <ul
         ref={listRef}
