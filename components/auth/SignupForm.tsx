@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
+import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
+import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
 import { InfoIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -50,6 +51,7 @@ export function SignupForm({
     initialInstance?.registration_disabled_reason ?? "",
   );
   const [providers, setProviders] = useState<string[]>(initialInstance?.oauth_providers ?? []);
+  const [atprotoEnabled, setAtprotoEnabled] = useState(initialInstance?.atproto_login === true);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -92,6 +94,7 @@ export function SignupForm({
         setMinimumAge(instance.registration_minimum_age ?? 0);
         setClosedReason(instance.registration_disabled_reason ?? "");
         setProviders(instance.oauth_providers ?? []);
+        setAtprotoEnabled(instance.atproto_login ?? false);
         setRegState(instance.registration_enabled ? "open" : "closed");
       })
       .catch(() => {
@@ -328,7 +331,12 @@ export function SignupForm({
         </p>
       ) : null}
 
+      {/* Single "or" rule for the alternative-auth group (see LoginForm). The
+          ATProto callback appends ?oauth=1 to a BARE return_to itself, so the
+          Bluesky button passes "/signup" (not "/signup?oauth=1"). */}
+      {providers.length === 0 && atprotoEnabled ? <AuthOrDivider /> : null}
       <OAuthButtons providers={providers} returnTo="/signup?oauth=1" />
+      <BlueskyLoginButton enabled={atprotoEnabled} returnTo="/signup" />
 
       <p className="text-center text-sm text-fg-muted">
         Already have an account?{" "}

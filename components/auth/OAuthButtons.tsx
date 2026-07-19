@@ -21,11 +21,7 @@ export function OAuthButtons({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="my-1 flex items-center gap-3" aria-hidden>
-        <span className="h-px flex-1 bg-border-subtle" />
-        <span className="text-xs text-fg-muted">or</span>
-        <span className="h-px flex-1 bg-border-subtle" />
-      </div>
+      <AuthOrDivider />
       <ul className="flex flex-col gap-2">
         {providers.map((provider) => (
           <li key={provider}>
@@ -55,6 +51,23 @@ export function OAuthButtons({
   );
 }
 
+/**
+ * The "— or —" rule that separates the primary credentials form from the
+ * alternative sign-in methods. Shared so the OIDC list and the ATProto/Bluesky
+ * affordance never render two competing dividers: OAuthButtons draws it above
+ * its provider list, and the auth forms draw it once for the Bluesky-only case
+ * (no OIDC providers configured).
+ */
+export function AuthOrDivider() {
+  return (
+    <div className="my-1 flex items-center gap-3" aria-hidden>
+      <span className="h-px flex-1 bg-border-subtle" />
+      <span className="text-xs text-fg-muted">or</span>
+      <span className="h-px flex-1 bg-border-subtle" />
+    </div>
+  );
+}
+
 /** "google" -> "Google" — provider names are configured lowercase identifiers. */
 export function providerDisplayName(provider: string): string {
   return provider.charAt(0).toUpperCase() + provider.slice(1);
@@ -76,6 +89,13 @@ export function oauthErrorMessage(code: string): string {
       return "This account is disabled.";
     case "conflict":
       return "An account could not be created — the username or email is already taken.";
+    // ATProto identity-login callback failures (Bluesky / any PDS).
+    case "atproto_identity_mismatch":
+      return "Bluesky sign-in could not be verified. Try again.";
+    case "atproto_upstream":
+      return "Could not reach your Bluesky server. Try again shortly.";
+    case "atproto_disabled":
+      return "Bluesky sign-in is not enabled on this instance.";
     default:
       return "Signing in with the provider failed. Please try again.";
   }

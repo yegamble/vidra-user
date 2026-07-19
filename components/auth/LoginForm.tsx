@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
 
 import { AuthBrandLink } from "@/components/auth/AuthPage";
 import { useSession } from "@/components/auth/AuthProvider";
-import { OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
+import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
+import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
 import { LockIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -29,6 +30,7 @@ export function LoginForm({
   oauthPending = false,
   oauthError = "",
   initialProviders,
+  initialAtprotoLogin,
 }: {
   /** True when the URL carried the ?oauth=1 return_to marker. */
   oauthPending?: boolean;
@@ -36,6 +38,8 @@ export function LoginForm({
   oauthError?: string;
   /** SSR snapshot; undefined means the server could not reach the instance API. */
   initialProviders?: string[];
+  /** SSR snapshot of GET /instance atproto_login (Bluesky / any PDS handle login). */
+  initialAtprotoLogin?: boolean;
 }) {
   const router = useRouter();
   const { status, login, completeMfaChallenge } = useSession();
@@ -63,6 +67,7 @@ export function LoginForm({
   const completingOAuth = oauthLanding && !landingDismissed && status === "restoring";
   const oauthSilentFailure = oauthLanding && !landingDismissed && status === "anon";
   const [providers, setProviders] = useState<string[]>(initialProviders ?? []);
+  const [atprotoEnabled, setAtprotoEnabled] = useState(initialAtprotoLogin ?? false);
 
   // Clean the one-shot OAuth markers out of the URL (they must not survive a
   // reload/bookmark); the outcome already lives in state.
@@ -82,7 +87,10 @@ export function LoginForm({
     const controller = new AbortController();
     api
       .getInstance(controller.signal)
-      .then((instance) => setProviders(instance.oauth_providers ?? []))
+      .then((instance) => {
+        setProviders(instance.oauth_providers ?? []);
+        setAtprotoEnabled(instance.atproto_login ?? false);
+      })
       .catch(() => {
         // No instance document — the password form still works without buttons.
       });
@@ -304,7 +312,13 @@ export function LoginForm({
         {submitting ? "Signing in…" : "Sign in"}
       </Button>
 
+      {/* One "or" rule for the whole alternative-auth group: OAuthButtons draws
+          it above the provider list; when only Bluesky is enabled we draw it
+          here instead. The ATProto callback appends ?oauth=1 to a BARE return_to
+          itself, so the Bluesky button passes "/login" (not "/login?oauth=1"). */}
+      {providers.length === 0 && atprotoEnabled ? <AuthOrDivider /> : null}
       <OAuthButtons providers={providers} returnTo="/login?oauth=1" />
+      <BlueskyLoginButton enabled={atprotoEnabled} returnTo="/login" />
 
       <p className="text-center text-sm text-fg-muted">
         No account?{" "}

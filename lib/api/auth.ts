@@ -240,3 +240,27 @@ export function oauthBeginUrl(provider: string, returnTo?: string): string {
   const base = `${apiBaseUrl}/api/v1/auth/oauth/${encodeURIComponent(provider)}`;
   return returnTo ? `${base}?return_to=${encodeURIComponent(returnTo)}` : base;
 }
+
+/**
+ * POST /api/v1/auth/atproto/start — begin the ATProto (Bluesky / any PDS)
+ * identity login for a handle. Runs with credentials included so the backend
+ * can seal the attempt (incl. its ephemeral DPoP key) into a signed httpOnly
+ * `vidra_atproto_state` cookie (never in JS-readable state), and returns the
+ * authorization URL. The caller MUST hand off by a TOP-LEVEL browser navigation
+ * (window.location.assign) — never fetch `authorization_url`. `returnTo` is a
+ * BARE same-origin relative path ("/login" / "/signup"): the backend callback
+ * appends the ?oauth=1 landing marker itself (or ?oauth_error=<code> on
+ * failure), unlike the OIDC flow where the frontend embeds the marker. A 401 is
+ * a real answer here, never a stale access token, so the retry is disabled.
+ */
+export function beginATProtoLogin(
+  handle: string,
+  returnTo: string,
+): Promise<{ authorization_url: string }> {
+  return apiRequest<{ authorization_url: string }>("/api/v1/auth/atproto/start", {
+    method: "POST",
+    body: { handle, return_to: returnTo },
+    credentials: "include",
+    retryOn401: false,
+  });
+}

@@ -22,6 +22,7 @@ export default async function LoginPage({
         oauthPending={sp.oauth === "1"}
         oauthError={sp.oauth_error ?? ""}
         initialProviders={instance?.oauth_providers}
+        initialAtprotoLogin={instance?.atproto_login}
       />
     </AuthPage>
   );
