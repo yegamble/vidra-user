@@ -113,8 +113,10 @@ test("the subscriptions feed renders remote cards with an origin badge linking t
   const remoteItem = page.locator("li", { hasText: "Remote Documentary" });
   await expect(remoteItem.getByText("videos.example")).toBeVisible();
   await expect(remoteItem.getByText("Films")).toBeVisible();
-  // Remote cards carry the shared ActivityPub protocol label (fix_plan P11).
-  await expect(remoteItem.getByText("ActivityPub")).toBeVisible();
+  // Remote cards carry the federated-origin badge (fix_plan P11, redesigned:
+  // the ribbon-topped Badge `federated` variant names the origin domain and
+  // titles itself as federated instead of the old "ActivityPub" text pill).
+  await expect(remoteItem.getByTitle("Federated video from videos.example")).toBeVisible();
   // The card exposes two links to the same watch surface (the media thumbnail,
   // aria-labelled by the title, and the visible title link); either proves the
   // remote card points at /remote/[id], so assert the first.
@@ -127,7 +129,7 @@ test("the subscriptions feed renders remote cards with an origin badge linking t
     localItem.getByRole("link", { name: /Local Video/ }).first(),
   ).toHaveAttribute("href", "/videos/v1");
   await expect(localItem.getByText("videos.example")).toHaveCount(0);
-  await expect(localItem.getByText("ActivityPub")).toHaveCount(0);
+  await expect(localItem.getByTitle(/Federated video from/)).toHaveCount(0);
 });
 
 test("search results render remote cards with the origin badge and remote watch link", async ({
