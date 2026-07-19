@@ -1,26 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
 import { useSession } from "@/components/auth/AuthProvider";
+import { ChevronLeftIcon, FlagIcon } from "@/components/icons";
+import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
+import { cn } from "@/lib/cn";
 import { api, errorMessage } from "@/lib/api";
 import type { Report, ReportStatus } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
 const MAX_NOTE_LEN = 2000;
+// The mail-triage two-pane opens at `lg`; below that a report drills in over the
+// queue. Auto-selecting the first report only makes sense in the two-pane view.
+const WIDE_QUERY = "(min-width: 1024px)";
+
+function isWideViewport(): boolean {
+  return typeof window !== "undefined" && window.matchMedia(WIDE_QUERY).matches;
+}
 
 type Status = "loading" | "error" | "ready";
 
-// ModerationQueue is the moderator/admin view of the abuse-report queue,
-// role-gated by RoleGate (an under-privileged/anonymous viewer sees the shared
-// permission prompt and nothing fetches). Privileged viewers see the queue +
-// resolve actions.
+// ModerationQueue is the moderator/admin abuse-report triage, styled as a Mail
+// split view: a queue list (left) selects a report into a detail pane (right).
+// Role-gated by RoleGate — an under-privileged/anonymous viewer sees the shared
+// permission prompt and nothing fetches.
 export function ModerationQueue() {
   return (
     <RoleGate minRole="moderator" action="review reports">
@@ -34,6 +44,7 @@ function Queue() {
   const [reports, setReports] = useState<Report[]>([]);
   const [openOnly, setOpenOnly] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -42,6 +53,17 @@ function Queue() {
       .then((res) => {
         setReports(res.reports);
         setStatus("ready");
+        // Keep a report selected on the two-pane view so the detail pane is
+        // never blank (initial load / filter switch); narrow viewports stay on
+        // the queue until the moderator taps in.
+        const vis = openOnly ? res.reports.filter((r) => r.status === "open") : res.reports;
+        setSelectedId((cur) =>
+          cur && vis.some((r) => r.id === cur)
+            ? cur
+            : isWideViewport()
+              ? (vis[0]?.id ?? null)
+              : null,
+        );
       })
       .catch((err: unknown) => {
         void err;
@@ -67,21 +89,47 @@ function Queue() {
     [openOnly],
   );
 
+  const visible = useMemo(
+    () => (openOnly ? reports.filter((r) => r.status === "open") : reports),
+    [openOnly, reports],
+  );
+  const selected = useMemo(
+    () => visible.find((r) => r.id === selectedId) ?? null,
+    [visible, selectedId],
+  );
+
   // After a resolve, update the row's status locally so it drops out of the
-  // open-only view immediately; a later refetch confirms persistence.
-  const onResolved = useCallback((id: string, newStatus: ReportStatus) => {
-    setReports((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r)),
-    );
-  }, []);
+  // open-only view immediately; a later refetch confirms persistence. In the
+  // open-only view the resolved report leaves the queue, so advance the detail
+  // pane to the next open report (two-pane view only).
+  const onResolved = useCallback(
+    (id: string, newStatus: ReportStatus) => {
+      setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
+      if (!openOnly) return;
+      setSelectedId((cur) => {
+        if (cur !== id) return cur;
+        const next = reports.find((r) => r.status === "open" && r.id !== id);
+        return isWideViewport() ? (next?.id ?? null) : null;
+      });
+    },
+    [openOnly, reports],
+  );
 
-  // After an admin hard-delete the row is gone for good — drop it locally; a
-  // later refetch confirms the purge persisted.
-  const onDeleted = useCallback((id: string) => {
-    setReports((prev) => prev.filter((r) => r.id !== id));
-  }, []);
-
-  const visible = openOnly ? reports.filter((r) => r.status === "open") : reports;
+  // After an admin hard-delete the row is gone for good — drop it locally and
+  // advance the detail pane to the next visible report; a later refetch confirms
+  // the purge persisted.
+  const onDeleted = useCallback(
+    (id: string) => {
+      setReports((prev) => prev.filter((r) => r.id !== id));
+      setSelectedId((cur) => {
+        if (cur !== id) return cur;
+        const pool = openOnly ? reports.filter((r) => r.status === "open") : reports;
+        const next = pool.find((r) => r.id !== id);
+        return isWideViewport() ? (next?.id ?? null) : null;
+      });
+    },
+    [openOnly, reports],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -102,6 +150,7 @@ function Queue() {
         <ErrorState message="Could not load the moderation queue." onRetry={retry} />
       ) : visible.length === 0 ? (
         <EmptyState
+          icon={<FlagIcon size={24} />}
           title={openOnly ? "No open reports" : "No reports yet"}
           message={
             openOnly
@@ -110,13 +159,44 @@ function Queue() {
           }
         />
       ) : (
-        <ul className="flex flex-col gap-3">
-          {visible.map((report) => (
-            <li key={report.id}>
-              <ReportRow report={report} onResolved={onResolved} onDeleted={onDeleted} />
-            </li>
-          ))}
-        </ul>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)] lg:items-start">
+          {/* Queue list — hidden on narrow viewports once a report is open. */}
+          <ul
+            aria-label="Report queue"
+            className={cn("flex-col gap-1.5", selected ? "hidden lg:flex" : "flex")}
+          >
+            {visible.map((report) => (
+              <li key={report.id}>
+                <ReportRow
+                  report={report}
+                  active={report.id === selectedId}
+                  onSelect={() => setSelectedId(report.id)}
+                />
+              </li>
+            ))}
+          </ul>
+
+          {/* Detail pane — the report drills in here on narrow viewports. */}
+          <div className={cn(selected ? "block" : "hidden lg:block")}>
+            {selected ? (
+              <ReportDetail
+                key={selected.id}
+                report={selected}
+                onBack={() => setSelectedId(null)}
+                onResolved={onResolved}
+                onDeleted={onDeleted}
+              />
+            ) : (
+              <div className="hidden rounded-2xl bg-surface-muted lg:block">
+                <EmptyState
+                  icon={<FlagIcon size={24} />}
+                  title="No report selected"
+                  message="Choose a report from the queue to review it."
+                />
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -147,20 +227,104 @@ function FilterButton({
   );
 }
 
-const STATUS_STYLE: Record<ReportStatus, string> = {
-  open: "bg-warning/15 text-warning",
-  accepted: "bg-success/15 text-success",
-  rejected: "bg-surface-strong text-fg-muted",
+// Status pills: OPEN warning-tinted, accepted success-tinted, rejected neutral.
+const STATUS_BADGE: Record<ReportStatus, BadgeVariant> = {
+  open: "warning",
+  accepted: "success",
+  rejected: "strong",
+};
+// Queue-row status dot (Apple system fills). Decorative — the row's accessible
+// name carries the status in words.
+const STATUS_DOT: Record<ReportStatus, string> = {
+  open: "bg-warning-solid",
+  accepted: "bg-success-solid",
+  rejected: "bg-fg-subtle",
 };
 
-type RowState = "idle" | "submitting";
+// "remote_video" reads as "remote video"; used for the detail type pill.
+function typeLabel(report: Report): string {
+  return report.target_type.replace("_", " ");
+}
+
+// A short subject line for the queue row (never the reported body itself — that
+// lives in the detail pane).
+function reportSubject(report: Report): string {
+  switch (report.target_type) {
+    case "video":
+      return report.video_title || "Untitled video";
+    case "remote_video":
+      return report.remote_video_title || "Remote video report";
+    case "comment":
+      return "Comment report";
+    case "message":
+      return "Message report";
+    case "account":
+      return report.reported_username || "Account report";
+    default:
+      return "Report";
+  }
+}
+
+// A deterministic accessible name for the queue row (also announces the status,
+// which the colored dot conveys visually).
+function reportRowLabel(report: Report): string {
+  const type = typeLabel(report);
+  const capitalized = type.charAt(0).toUpperCase() + type.slice(1);
+  return `${capitalized} report by ${report.reporter.username}, ${report.status}`;
+}
 
 function ReportRow({
   report,
+  active,
+  onSelect,
+}: {
+  report: Report;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={reportRowLabel(report)}
+      aria-current={active ? "true" : undefined}
+      onClick={onSelect}
+      className={cn(
+        "focus-ring flex w-full flex-col gap-1 rounded-[10px] px-3 py-2.5 text-left transition-colors",
+        active ? "bg-accent/12" : "hover:bg-surface-muted",
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[report.status])}
+        />
+        <span
+          className={cn(
+            "truncate text-subhead font-semibold",
+            active ? "text-accent-text" : "text-fg",
+          )}
+        >
+          {reportSubject(report)}
+        </span>
+      </span>
+      <span className="truncate text-footnote text-fg-muted">
+        {report.reporter.username} · {relativeTime(report.created_at)}
+      </span>
+      <span className="truncate text-footnote text-fg-muted">{report.reason}</span>
+    </button>
+  );
+}
+
+type RowState = "idle" | "submitting";
+
+function ReportDetail({
+  report,
+  onBack,
   onResolved,
   onDeleted,
 }: {
   report: Report;
+  onBack: () => void;
   onResolved: (id: string, status: ReportStatus) => void;
   onDeleted: (id: string) => void;
 }) {
@@ -231,46 +395,124 @@ function ReportRow({
     }
   }
 
+  const isOpen = report.status === "open";
+
   return (
-    <article className="rounded-2xl bg-surface-muted p-4">
-      <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg-muted">
-        <span
-          className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] ${STATUS_STYLE[report.status]}`}
+    <section
+      aria-label="Report detail"
+      className="overflow-hidden rounded-2xl bg-surface shadow-soft"
+    >
+      <div className="flex flex-col gap-3 p-4 sm:p-5">
+        <button
+          type="button"
+          onClick={onBack}
+          className="focus-ring -ml-1 inline-flex items-center gap-1 self-start rounded-lg py-1 pr-2 text-footnote font-semibold text-accent-text transition-colors hover:bg-surface-muted lg:hidden"
         >
-          {report.status}
-        </span>
-        <span className="rounded-full bg-surface-strong px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted">
-          {/* "remote_video" reads as "remote video". */}
-          {report.target_type.replace("_", " ")}
-        </span>
-        <span>
-          by <span className="font-medium text-fg">{report.reporter.username}</span>
-        </span>
-        <span aria-hidden>·</span>
-        <span>{relativeTime(report.created_at)}</span>
+          <ChevronLeftIcon size={16} aria-hidden />
+          Queue
+        </button>
+
+        <div className="flex flex-wrap items-center gap-2 text-footnote text-fg-muted">
+          <Badge variant={STATUS_BADGE[report.status]} status>
+            {report.status}
+          </Badge>
+          <Badge variant="strong" status>
+            {typeLabel(report)}
+          </Badge>
+          <span>
+            Reported by <span className="font-medium text-fg">{report.reporter.username}</span>
+          </span>
+          <span aria-hidden>·</span>
+          <span>{relativeTime(report.created_at)}</span>
+        </div>
+
+        <ReportTarget report={report} />
+
+        <p className="text-sm text-fg-muted">
+          <span className="font-semibold text-fg">Reason:</span> {report.reason}
+        </p>
+
+        {!isOpen && report.moderator_note ? (
+          <p className="text-footnote text-fg-muted">
+            <span className="font-semibold text-fg">Note:</span> {report.moderator_note}
+          </p>
+        ) : null}
+
+        {isOpen ? (
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-fg-muted">Internal note (optional)</span>
+            <textarea
+              aria-label="Internal moderator note"
+              rows={2}
+              maxLength={MAX_NOTE_LEN}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
+            />
+          </label>
+        ) : null}
+
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {blockError ? <p className="text-sm text-danger">{blockError}</p> : null}
+        {deleteError ? <p className="text-sm text-danger">{deleteError}</p> : null}
       </div>
 
-      <ReportTarget report={report} />
-
-      <p className="mt-2 text-sm text-fg-muted">
-        <span className="font-semibold text-fg">Reason:</span> {report.reason}
-      </p>
-
-      {report.status !== "open" && report.moderator_note ? (
-        <p className="mt-1 text-[13px] text-fg-muted">
-          <span className="font-semibold text-fg">Note:</span> {report.moderator_note}
-        </p>
-      ) : null}
-
-      {/* Hard-delete is an admin-only purge of a RESOLVED report (moderators
-          resolve but cannot delete; open reports must be resolved first). */}
-      {report.status !== "open" && user?.role === "admin" ? (
-        <div className="mt-3 flex flex-col gap-1">
+      {/* Action bar — sticky to the viewport bottom while the report scrolls. */}
+      {isOpen ? (
+        <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border-subtle bg-surface/85 px-4 py-3 backdrop-blur sm:px-5">
+          <Button
+            size="sm"
+            disabled={rowState === "submitting"}
+            onClick={() => void resolve("accepted")}
+          >
+            Accept
+          </Button>
+          <Button
+            variant="tonal"
+            size="sm"
+            disabled={rowState === "submitting"}
+            onClick={() => void resolve("rejected")}
+          >
+            Reject
+          </Button>
+          {report.target_type === "video" && report.video_id ? (
+            blockState === "blocked" ? (
+              <BlockedNote manageHref="/moderation/blocked" />
+            ) : (
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={blockState === "blocking"}
+                onClick={() => void blockVideo(report.video_id as string)}
+              >
+                {blockState === "blocking" ? "Blocking…" : "Block video"}
+              </Button>
+            )
+          ) : null}
+          {report.target_type === "remote_video" && report.remote_video_id ? (
+            blockState === "blocked" ? (
+              <BlockedNote manageHref="/moderation/blocked/remote" />
+            ) : (
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={blockState === "blocking"}
+                onClick={() => void blockRemoteVideo(report.remote_video_id as string)}
+              >
+                {blockState === "blocking" ? "Blocking…" : "Block video"}
+              </Button>
+            )
+          ) : null}
+        </div>
+      ) : user?.role === "admin" ? (
+        // Hard-delete is an admin-only purge of a RESOLVED report (moderators
+        // resolve but cannot delete; open reports must be resolved first).
+        <div className="sticky bottom-0 flex flex-col gap-1 border-t border-border-subtle bg-surface/85 px-4 py-3 backdrop-blur sm:px-5">
           {deleteState === "idle" ? (
             <Button
-              variant="danger"
+              variant="danger-outline"
               size="sm"
-              aria-label={`Delete this ${report.target_type.replace("_", " ")} report`}
+              aria-label={`Delete this ${typeLabel(report)} report`}
               onClick={() => setDeleteState("confirm")}
               className="self-start"
             >
@@ -299,91 +541,23 @@ function ReportRow({
               </button>
             </div>
           )}
-          {deleteError ? <p className="text-sm text-danger">{deleteError}</p> : null}
         </div>
       ) : null}
+    </section>
+  );
+}
 
-      {report.status === "open" ? (
-        <div className="mt-3 flex flex-col gap-2">
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-fg-muted">
-              Internal note (optional)
-            </span>
-            <textarea
-              aria-label="Internal moderator note"
-              rows={2}
-              maxLength={MAX_NOTE_LEN}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
-            />
-          </label>
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={rowState === "submitting"}
-              onClick={() => void resolve("accepted")}
-            >
-              Accept
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={rowState === "submitting"}
-              onClick={() => void resolve("rejected")}
-            >
-              Reject
-            </Button>
-            {report.target_type === "video" && report.video_id ? (
-              blockState === "blocked" ? (
-                <span className="inline-flex items-center gap-1 text-sm text-fg-muted">
-                  Video blocked ·{" "}
-                  <Link
-                    href="/moderation/blocked"
-                    className="focus-ring rounded-sm underline transition-colors hover:text-fg"
-                  >
-                    Manage
-                  </Link>
-                </span>
-              ) : (
-                <Button
-                  variant="danger"
-                  size="sm"
-                  disabled={blockState === "blocking"}
-                  onClick={() => void blockVideo(report.video_id as string)}
-                >
-                  {blockState === "blocking" ? "Blocking…" : "Block video"}
-                </Button>
-              )
-            ) : null}
-            {report.target_type === "remote_video" && report.remote_video_id ? (
-              blockState === "blocked" ? (
-                <span className="inline-flex items-center gap-1 text-sm text-fg-muted">
-                  Video blocked ·{" "}
-                  <Link
-                    href="/moderation/blocked/remote"
-                    className="focus-ring rounded-sm underline transition-colors hover:text-fg"
-                  >
-                    Manage
-                  </Link>
-                </span>
-              ) : (
-                <Button
-                  variant="danger"
-                  size="sm"
-                  disabled={blockState === "blocking"}
-                  onClick={() => void blockRemoteVideo(report.remote_video_id as string)}
-                >
-                  {blockState === "blocking" ? "Blocking…" : "Block video"}
-                </Button>
-              )
-            ) : null}
-          </div>
-          {blockError ? <p className="text-sm text-danger">{blockError}</p> : null}
-        </div>
-      ) : null}
-    </article>
+function BlockedNote({ manageHref }: { manageHref: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-sm text-fg-muted">
+      Video blocked ·{" "}
+      <Link
+        href={manageHref}
+        className="focus-ring rounded-sm underline transition-colors hover:text-fg"
+      >
+        Manage
+      </Link>
+    </span>
   );
 }
 
@@ -394,7 +568,7 @@ function ReportRow({
 function ReportTarget({ report }: { report: Report }) {
   if (report.target_type === "video" && report.video_id) {
     return (
-      <p className="mt-2 text-sm">
+      <p className="text-sm">
         <Link
           href={`/videos/${report.video_id}`}
           className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
@@ -406,7 +580,7 @@ function ReportTarget({ report }: { report: Report }) {
   }
   if (report.target_type === "remote_video") {
     return (
-      <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+      <p className="flex flex-wrap items-center gap-2 text-sm">
         {report.remote_video_id ? (
           <Link
             href={`/remote/${report.remote_video_id}`}
@@ -430,7 +604,7 @@ function ReportTarget({ report }: { report: Report }) {
   }
   if (report.target_type === "comment") {
     return (
-      <blockquote className="mt-2 border-l-2 border-border pl-3 text-sm text-fg-muted italic">
+      <blockquote className="border-l-2 border-border pl-3 text-sm text-fg-muted italic">
         {report.comment_body || "(comment unavailable)"}
       </blockquote>
     );
@@ -440,7 +614,7 @@ function ReportTarget({ report }: { report: Report }) {
     // survives a sender tombstone. The conversation stays private (no link) —
     // moderators act on the snapshot, resolve/reject, or report-purge (admin).
     return (
-      <div className="mt-2">
+      <div>
         <blockquote className="border-l-2 border-border pl-3 text-sm text-fg-muted italic">
           {report.message_body || "(message unavailable)"}
         </blockquote>
@@ -450,7 +624,7 @@ function ReportTarget({ report }: { report: Report }) {
   }
   if (report.target_type === "account") {
     return (
-      <p className="mt-2 text-sm text-fg-muted">
+      <p className="text-sm text-fg-muted">
         Reported account:{" "}
         <span className="font-semibold text-fg">
           {report.reported_username || "(account unavailable)"}
