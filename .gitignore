@@ -33,6 +33,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# pnpm local content-addressable store (created when installing with pnpm)
+.pnpm-store/
+
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
