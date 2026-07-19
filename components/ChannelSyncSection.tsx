@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { LoaderIcon } from "@/components/icons";
+import { DownloadIcon, LoaderIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -133,6 +133,8 @@ export function ChannelSyncSection({ channels }: { channels: Channel[] }) {
             // Auto-sync is turned off on this instance — an honest empty state,
             // never a dead connect form that would only 503 on submit.
             <EmptyState
+              icon={<DownloadIcon size={24} />}
+              tint="gray"
               title="Auto-import is disabled on this instance"
               message="The operator has turned off cross-platform channel auto-sync here. Check back later, or upload and import videos directly."
             />

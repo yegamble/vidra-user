@@ -16,7 +16,7 @@ import {
   userBannerUrl,
 } from "@/lib/api";
 import type { Channel, PublicUserProfile } from "@/lib/api";
-import { formatCount, formatMonthYear } from "@/lib/format";
+import { formatCount, formatMonthYear, pluralize } from "@/lib/format";
 
 export function UserProfileLoader({ username }: { username: string }) {
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
@@ -120,7 +120,7 @@ function ProfileChannelCard({ channel }: { channel: Channel }) {
       <span className="min-w-0">
         <span className="block truncate text-subhead font-semibold text-fg">{name}</span>
         <span className="block truncate text-footnote text-fg-muted">@{channel.handle}</span>
-        <span className="mt-1 block text-footnote tabular-nums text-fg-muted">{formatCount(channel.follower_count)} followers</span>
+        <span className="mt-1 block text-footnote tabular-nums text-fg-muted">{formatCount(channel.follower_count)} {pluralize(channel.follower_count, "follower")}</span>
       </span>
     </Link>
   );

@@ -128,7 +128,7 @@ function Settings() {
           {error}
         </p>
       ) : null}
-      <ul className="flex flex-col divide-y divide-border-subtle rounded-2xl bg-surface-muted">
+      <ul className="flex flex-col divide-y divide-border-subtle rounded-2xl border border-border-subtle bg-surface">
         <SettingRow
           title="Autoplay next"
           desc="Automatically play the next related video when one ends."

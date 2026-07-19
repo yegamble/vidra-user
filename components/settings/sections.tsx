@@ -31,7 +31,7 @@ export type SettingsSection = {
   short: string;
   /** Muted sub-line under the title (mobile rows). */
   desc: string;
-  /** Apple system-color tile hue — one per destination (Privacy shares indigo). */
+  /** Apple system-color tile hue — one per destination (Mutes = indigo, Blocked = red). */
   color: TileColor;
   Icon: (props: IconProps) => ReactElement;
   /** Extra route prefixes that also light this rail item (e.g. sub-tabs). */
@@ -136,7 +136,9 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Blocked accounts",
         short: "Blocked",
         desc: "Accounts you have blocked. Neither of you can direct-message the other.",
-        color: "indigo",
+        // Blocked reads as a harder boundary than Mute, so it wears the red tile
+        // (Mutes keeps indigo) — one hue per destination (design-system.md).
+        color: "red",
         Icon: SlashCircleIcon,
       },
     ],

@@ -170,7 +170,7 @@ function VideoRow({ video, onChanged, onRemoved }: {
       </td>
       <td className="px-4 py-3">
         <div className="flex max-w-[19rem] flex-wrap gap-1.5">
-          <Pill className={video.is_local ? "bg-accent/15 text-accent" : "bg-surface-strong text-fg-muted"}>
+          <Pill className="bg-surface-strong text-fg-muted">
             {video.is_local ? "Local" : "Federated"}
           </Pill>
           <Pill className={video.privacy === "public" ? "bg-success/15 text-success" : "bg-surface-strong text-fg-muted"}>
@@ -188,10 +188,10 @@ function VideoRow({ video, onChanged, onRemoved }: {
       <td className="px-4 py-3">
         {video.is_local ? (
           <div className="flex max-w-[22rem] flex-wrap items-center gap-1.5">
-            {video.has_original ? <Pill className="bg-accent/15 text-accent">Original</Pill> : null}
-            {video.hls_count > 0 ? <Pill className="bg-accent/15 text-accent">HLS ({video.hls_count})</Pill> : null}
-            {video.web_video_count > 0 ? <Pill className="bg-accent/15 text-accent">Web Videos ({video.web_video_count})</Pill> : null}
-            {video.object_storage ? <Pill className="bg-accent/15 text-accent">Object storage</Pill> : null}
+            {video.has_original ? <Pill className="bg-surface-strong text-fg-muted">Original</Pill> : null}
+            {video.hls_count > 0 ? <Pill className="bg-surface-strong text-fg-muted">HLS ({video.hls_count})</Pill> : null}
+            {video.web_video_count > 0 ? <Pill className="bg-surface-strong text-fg-muted">Web Videos ({video.web_video_count})</Pill> : null}
+            {video.object_storage ? <Pill className="bg-surface-strong text-fg-muted">Object storage</Pill> : null}
             <span className="ml-1 whitespace-nowrap text-xs tabular-nums text-fg-muted">{formatBytes(video.size_bytes)}</span>
           </div>
         ) : <span className="text-xs text-fg-muted">Hosted by origin</span>}

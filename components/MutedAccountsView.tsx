@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { EyeOffIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -81,6 +82,8 @@ function MuteList() {
   if (accounts.length === 0) {
     return (
       <EmptyState
+        icon={<EyeOffIcon size={24} />}
+        tint="indigo"
         title="No muted accounts"
         message="When you mute an account its comments are hidden from you. Muted accounts appear here."
       />

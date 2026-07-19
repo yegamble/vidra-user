@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { SlashCircleIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -72,6 +73,7 @@ function BlockList() {
   if (videos.length === 0) {
     return (
       <EmptyState
+        icon={<SlashCircleIcon size={24} />}
         title="No blocked remote videos"
         message="When a moderator blocks a federated video it is hidden from all local surfaces and listed here."
       />

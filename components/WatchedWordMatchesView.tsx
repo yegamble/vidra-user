@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { FlagIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -67,6 +68,7 @@ function MatchesList() {
   if (matches.length === 0) {
     return (
       <EmptyState
+        icon={<FlagIcon size={24} />}
         title="No flagged content"
         message="No comments or videos have matched a watched term yet."
       />

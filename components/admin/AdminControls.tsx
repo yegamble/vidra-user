@@ -74,9 +74,10 @@ export function AdminSearch({
 }
 
 const ROLE_PILL: Record<UserRole, string> = {
-  // Admin is the emphasised role: a solid accent chip (inverted), matching the
-  // template's filled ADMIN badge.
-  admin: "bg-accent text-accent-fg",
+  // Admin is the emphasised role: the documented `inverse` Badge chip
+  // (`bg-fg text-canvas` — a black/near-black pill). Accent is reserved for
+  // interactive/selected state, not decorative role labels (design-system.md).
+  admin: "bg-fg text-canvas",
   // Moderator is a quiet neutral chip.
   moderator: "bg-surface-strong text-fg-muted",
   // Regular user: an outlined chip so the list reads calmly (most rows).

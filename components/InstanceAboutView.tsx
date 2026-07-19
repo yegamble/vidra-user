@@ -194,7 +194,7 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
       <div className="min-w-0">
         <nav
           aria-label="About categories"
-          className="flex gap-6 overflow-x-auto border-b border-border px-1"
+          className="flex gap-2 overflow-x-auto px-1"
         >
           <AboutPrimaryLink
             href="/about/instance/home"
@@ -361,10 +361,10 @@ function AboutPrimaryLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`focus-ring relative shrink-0 px-1 pb-3 text-sm font-bold transition-colors after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full ${
+      className={`focus-ring shrink-0 rounded-full px-3.5 py-2 text-[13px] font-semibold transition-colors ${
         active
-          ? "text-fg after:bg-accent"
-          : "text-fg-muted after:bg-transparent hover:text-fg"
+          ? "bg-accent/12 text-accent-text"
+          : "text-fg-muted hover:bg-surface-muted hover:text-fg"
       }`}
     >
       {label}

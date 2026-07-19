@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ServerIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -84,6 +85,8 @@ function InstanceMuteList() {
   if (instances.length === 0) {
     return (
       <EmptyState
+        icon={<ServerIcon size={24} />}
+        tint="indigo"
         title="No muted instances"
         message="Mute a federated instance from one of its videos and it will appear here. Content from muted instances is hidden from you."
       />

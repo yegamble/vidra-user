@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ServerIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -74,6 +75,7 @@ function InstancesList() {
         <ErrorState message="Could not load the instance blocklist." onRetry={retry} />
       ) : instances.length === 0 ? (
         <EmptyState
+          icon={<ServerIcon size={24} />}
           title="No blocked instances"
           message="Block a federated instance above and its content disappears from every surface on this server."
         />

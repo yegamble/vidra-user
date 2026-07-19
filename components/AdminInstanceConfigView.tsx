@@ -437,11 +437,15 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
           />
         ) : (
           <>
-            {model.map(renderSection)}
+            {/* pb-8 (on top of the form's gap-8) keeps a full save-bar height of
+                clearance below the last section, so the sticky bar never covers
+                the final field as you scroll (design-review). */}
+            <div className="flex min-w-0 flex-col gap-8 pb-8">{model.map(renderSection)}</div>
 
             {/* Sticky save bar (HIG): the dirty-diff count and the whole-page
                 save stay in reach however long the page is. In-flow on the
-                smallest screens so it never fights the bottom tab bar. */}
+                smallest screens so it never fights the bottom tab bar. Opaque
+                bg-canvas so scrolled content never bleeds through. */}
             <div className="z-10 flex flex-wrap items-center gap-3 border-t border-border-subtle bg-canvas py-3 sm:sticky sm:bottom-0">
               <Button type="submit" disabled={!dirty || saving || invalid}>
                 {saving ? "Saving…" : "Save changes"}

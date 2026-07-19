@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import { CheckIcon, CopyIcon, WarningIcon } from "@/components/icons";
+import { CheckIcon, CopyIcon, TvIcon, WarningIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -222,7 +223,11 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
           }}
         />
       ) : streams.length === 0 ? (
-        <p className="text-sm text-fg-muted">No live streams yet.</p>
+        <EmptyState
+          icon={<TvIcon size={24} />}
+          title="No live streams yet"
+          message="Create a live stream above to get a stream key and go live."
+        />
       ) : (
         <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
           {streams.map((s) => (

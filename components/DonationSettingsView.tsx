@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { DonationBadge } from "@/components/DonationBadge";
-import { PlusIcon } from "@/components/icons";
+import { HeartIcon, PlusIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -103,6 +103,8 @@ function Donations() {
     <div className="flex max-w-xl flex-col gap-4">
       {addresses.length === 0 ? (
         <EmptyState
+          icon={<HeartIcon size={24} />}
+          tint="pink"
           title="No donation addresses yet"
           message="Add an address below to display it on your profile or a channel."
         />
@@ -131,10 +133,11 @@ function Donations() {
   );
 }
 
-// AddAddress is the design's dashed "+ Add address" affordance: collapsed to a
-// single dashed button until opened, then the full add form. Keeping it
-// collapsed by default matches the mockup (a quiet call-to-action beneath the
-// list) and keeps the surface calm when the user is just reviewing addresses.
+// AddAddress is the "+ Add address" affordance: collapsed to a single tonal
+// button until opened, then the full add form. Keeping it collapsed by default
+// is a quiet call-to-action beneath the list and keeps the surface calm when
+// the user is just reviewing addresses. (Redesign: the dashed border is retired
+// — tonal fills are the design's dominant quiet-action treatment.)
 function AddAddress({
   channels,
   onAdded,
@@ -149,7 +152,7 @@ function AddAddress({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-xl border-[1.5px] border-dashed border-border bg-transparent py-3 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted"
+        className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-[10px] bg-surface-muted py-3 text-sm font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         <PlusIcon size={17} strokeWidth={2.2} />
         Add address
