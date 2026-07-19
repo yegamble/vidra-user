@@ -5,7 +5,7 @@
 # node_modules is baked here ONLY to seed the compose named volume that shadows
 # the host's (macOS-arch) node_modules; scripts/dev-entrypoint.sh re-runs
 # `npm ci` inside the container whenever package-lock.json changes.
-FROM node:22-alpine
+FROM node:26-alpine
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
