@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
     FakeApiError,
     getInstance: vi.fn(),
     cancelUploadSession: vi.fn(),
+    createVideoDraft: vi.fn(),
     resumableUpload: vi.fn(),
   };
 });
@@ -25,6 +26,7 @@ vi.mock("@/lib/api", () => ({
   api: {
     getInstance: mocks.getInstance,
     cancelUploadSession: mocks.cancelUploadSession,
+    createVideoDraft: mocks.createVideoDraft,
   },
   channelAvatarUrl: () => "",
   channelBannerUrl: () => "",
@@ -79,10 +81,28 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+// The upload form now lives inside the stepped "Upload video" sheet (design's
+// Upload sheet): a launcher button opens a Modal staging pick → details →
+// publish. These helpers drive that flow so the prefill/accept coverage below
+// exercises the same fields it always did, just reached through the sheet.
+function openSheet() {
+  fireEvent.click(screen.getByRole("button", { name: "Upload video" }));
+}
+
+function pickFileAndContinue() {
+  fireEvent.change(screen.getByLabelText("Video file"), {
+    target: { files: [new File(["v"], "clip.mp4", { type: "video/mp4" })] },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+}
+
 describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
   it("prefills untouched fields once /instance resolves", async () => {
     render(<UploadSection channels={[channel]} config={null} />);
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+    // Reach the details stage: open the sheet, pick a file, Continue.
+    openSheet();
+    pickFileAndContinue();
     // Untouched form: every defaults.publish field applies.
     await waitFor(() => {
       expect(screen.getByLabelText("Privacy")).toHaveProperty("value", "private");
@@ -98,6 +118,8 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
   it("never clobbers a field the creator touched before /instance resolved", async () => {
     const resolveInstance = deferredInstance();
     render(<UploadSection channels={[channel]} config={null} />);
+    openSheet();
+    pickFileAndContinue();
 
     // The creator picks values while GET /instance is still in flight…
     fireEvent.change(screen.getByLabelText("Privacy"), { target: { value: "unlisted" } });
@@ -123,6 +145,7 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
       features: { imports: true, upload_additional_extensions: false },
     });
     render(<UploadSection channels={[channel]} config={null} />);
+    openSheet();
     await waitFor(() => {
       expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe(
         ".mp4,.webm,.ogv,.ogg,video/mp4,video/webm,video/ogg",
@@ -132,9 +155,34 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
 
   it("keeps the permissive accept while the flag is on or unknown", async () => {
     render(<UploadSection channels={[channel]} config={null} />);
+    openSheet();
     expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*");
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
     expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*");
+  });
+
+  it("stages pick → details → publish and reuses the resumable upload logic", async () => {
+    // A full drive through the sheet: open, pick a file, Continue to details,
+    // fill the title, Publish — the same createVideoDraft → resumableUpload path,
+    // now reached through the staged sheet. On success the sheet minimizes and
+    // the section shows the honest published outcome.
+    mocks.resumableUpload.mockResolvedValue({
+      video: { id: "v1", title: "Sheet clip", state: "published" },
+      file: { kind: "original" },
+    });
+    mocks.createVideoDraft.mockResolvedValue({ id: "v1", state: "draft" });
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFileAndContinue();
+    fireEvent.change(screen.getByLabelText("Video title"), { target: { value: "Sheet clip" } });
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+
+    await waitFor(() => expect(mocks.resumableUpload).toHaveBeenCalled());
+    // Success surfaces at the section level (the sheet closed on publish).
+    await waitFor(() => expect(screen.getByText("Published!")).toBeTruthy());
+    expect(mocks.createVideoDraft).toHaveBeenCalledWith("ada", expect.objectContaining({ title: "Sheet clip" }));
   });
 });
 

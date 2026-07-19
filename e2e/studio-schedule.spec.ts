@@ -132,13 +132,16 @@ test("publishing with a schedule sends publish_at and reports the scheduled outc
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByLabel("Video title").fill("My clip");
-  await page.getByLabel("Schedule publish").fill("2030-01-02T12:30");
+  // Upload now opens in the stepped sheet: pick the file, Continue, add details, publish.
+  await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from("test"),
   });
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Video title").fill("My clip");
+  await page.getByLabel("Schedule publish").fill("2030-01-02T12:30");
   await page.getByRole("button", { name: "Publish" }).click();
 
   // The scheduled outcome is its own honest message — not "Published!".
