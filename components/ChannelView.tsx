@@ -16,7 +16,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, channelAvatarUrl, channelBannerUrl } from "@/lib/api";
 import type { Channel, Video } from "@/lib/api";
-import { formatCount, formatMonthYear } from "@/lib/format";
+import { formatCount, formatMonthYear, pluralize } from "@/lib/format";
 
 type Status = "loading" | "notfound" | "error" | "ready";
 type Section = "videos" | "about";
@@ -119,9 +119,11 @@ export function ChannelView({ handle }: { handle: string }) {
             {channel.has_banner ? <ChannelBanner handle={channel.handle} /> : null}
           </div>
           {/* Overlapping 96px avatar + name/meta + action cluster on one
-              baseline-aligned row. It wraps on phones so the name drops to its
-              own line below the avatar/cluster; on sm+ the name takes the middle
-              and the cluster right-aligns. */}
+              baseline-aligned row. On phones it stacks: the avatar overlaps the
+              banner on its own line, then the name/meta, then the action cluster
+              — so Follow/Support/Message anchor to the name block and never float
+              over the banner seam. On sm+ the name takes the middle and the
+              cluster right-aligns on the avatar's baseline. */}
           <div className="-mt-12 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-2 sm:flex-nowrap sm:gap-5 sm:px-4">
             <Avatar
               src={channel.has_avatar ? channelAvatarUrl(channel.handle) : null}
@@ -131,11 +133,12 @@ export function ChannelView({ handle }: { handle: string }) {
             <div className="order-last w-full min-w-0 pb-1 sm:order-none sm:w-auto sm:flex-1">
               <h1 className="text-title sm:text-large-title">{name}</h1>
               <p className="mt-1 text-subhead tabular-nums text-fg-muted">
-                @{channel.handle} · {formatCount(channel.follower_count)} followers ·{" "}
+                @{channel.handle} · {formatCount(channel.follower_count)}{" "}
+                {pluralize(channel.follower_count, "follower")} ·{" "}
                 {videos.length} {videos.length === 1 ? "video" : "videos"}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 pb-1 sm:shrink-0">
+            <div className="order-last flex w-full flex-wrap items-center gap-2 pb-1 sm:order-none sm:w-auto sm:shrink-0">
               <ChannelLiveBadge handle={channel.handle} ownerId={channel.owner_id} />
               {isOwner ? null : (
                 <>

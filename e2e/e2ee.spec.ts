@@ -201,16 +201,23 @@ test("the encrypted affordance appears on a comment only when the backend advert
   page,
 }) => {
   await signInToWatch(page, "advertised");
-  await expect(page.getByRole("button", { name: "Message" }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Encrypted message" })).toBeVisible();
+  // The comment's contact actions now live behind a "Comment actions" menu.
+  const commentRow = page.locator("li", { hasText: "nice video" });
+  await commentRow.getByRole("button", { name: "Comment actions" }).click();
+  await expect(commentRow.getByRole("menuitem", { name: "Message", exact: true })).toBeVisible();
+  await expect(commentRow.getByRole("menuitem", { name: "Encrypted message" })).toBeVisible();
 });
 
 test("the encrypted affordance is hidden when the backend does not advertise E2EE", async ({
   page,
 }) => {
   await signInToWatch(page, "absent");
-  await expect(page.getByRole("button", { name: "Message" }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Encrypted message" })).toHaveCount(0);
+  // Open the comment's overflow menu: Message stays, but with no E2EE advertised
+  // the encrypted option is absent.
+  const commentRow = page.locator("li", { hasText: "nice video" });
+  await commentRow.getByRole("button", { name: "Comment actions" }).click();
+  await expect(commentRow.getByRole("menuitem", { name: "Message", exact: true })).toBeVisible();
+  await expect(commentRow.getByRole("menuitem", { name: "Encrypted message" })).toHaveCount(0);
 
   // The same contract gate applies to the inbox composer: an older backend must
   // not get an encrypted-mode option that it cannot honor.

@@ -27,6 +27,7 @@ import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
 import { SupportButton } from "@/components/SupportButton";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
+import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
 import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
@@ -685,28 +686,15 @@ function Player({
     setResumeAt(null);
   }
 
-  // Ambient glow (Watch signature): a blurred, scaled, saturated copy of the
-  // poster bleeds vertically behind the player for a soft halo — strongest in
-  // dark mode. Decorative (aria-hidden). Clipped to the player's own width
-  // (inset-x-0 + overflow-hidden) so the blur never bleeds sideways into
-  // horizontal page overflow (the responsive gate). Absent when the video has
-  // no thumbnail.
+  // Ambient glow (Watch signature): a blurred copy of the poster bleeds behind
+  // the player for a soft halo (see AmbientGlow). Absent when the video has no
+  // thumbnail — there is no imagery to bloom from.
   const posterUrl = video.has_thumbnail ? videoThumbnailUrl(video.id, playbackToken) : null;
 
   return (
     <div className="flex flex-col gap-2">
       <div className="relative isolate">
-        {posterUrl ? (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 -inset-y-6 -z-10 overflow-hidden"
-          >
-            <div
-              className="h-full w-full scale-105 bg-cover bg-center opacity-45 blur-[52px] saturate-150"
-              style={{ backgroundImage: `url("${posterUrl}")` }}
-            />
-          </div>
-        ) : null}
+        <AmbientGlow posterUrl={posterUrl} />
         <VideoPlayer
           video={video}
           videoRef={videoRef}

@@ -1,22 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { ChevronDownIcon } from "@/components/icons";
-import { StartEncryptedButton } from "@/components/e2ee/StartEncryptedButton";
-import { MessageButton } from "@/components/MessageButton";
+import { ChevronDownIcon, MoreVerticalIcon } from "@/components/icons";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
-import { ReportButton } from "@/components/ReportButton";
+import { ReportDialog, type ReportKind } from "@/components/ReportButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
-import { api, errorMessage, userAvatarUrl } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
+import { ApiError, api, errorMessage, userAvatarUrl } from "@/lib/api";
 import type { Comment } from "@/lib/api";
 import { buildCommentTree, replyMention } from "@/lib/comments";
+import { useE2EEAvailable } from "@/lib/e2ee/availability";
 import { relativeTime } from "@/lib/format";
 
 const MAX_COMMENT_LEN = 2000;
@@ -330,6 +332,8 @@ function CommentItem({
   onMutedInstance: (domain: string) => void;
 }) {
   const { user, status } = useSession();
+  const router = useRouter();
+  const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [muting, setMuting] = useState(false);
   const [blocking, setBlocking] = useState(false);
@@ -339,6 +343,9 @@ function CommentItem({
   const [draft, setDraft] = useState(comment.body);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // The open report dialog, if any: "account" reports the comment's author,
+  // "comment" reports the comment itself. Launched from the overflow menu.
+  const [reporting, setReporting] = useState<ReportKind | null>(null);
   // Reply threads are collapsed by default (design): a "View N replies" toggle
   // reveals them. Posting a reply from this thread auto-expands it so the new
   // reply is visible.
@@ -349,6 +356,9 @@ function CommentItem({
   // A remote author-name snapshot can collide with a local username — never
   // treat a remote comment as the viewer's own.
   const isAuthor = !isRemote && user?.username === comment.author_username;
+  // The "Encrypted message" action only exists when the backend advertises E2EE
+  // (no-pretending rule) — probe only when the local-account controls apply.
+  const e2eeAvailable = useE2EEAvailable(status === "authed" && !isAuthor && authorId !== null);
   const when = relativeTime(comment.created_at);
 
   function startEdit() {
@@ -419,6 +429,34 @@ function CommentItem({
       // Leave things as-is on failure.
     } finally {
       setBlocking(false);
+    }
+  }
+
+  // Open (or reopen) the 1:1 conversation with this comment's author and route
+  // to it. A block between the two users answers 403 — surfaced as a toast
+  // (the overflow menu has no inline error slot). `encrypted` starts the E2EE
+  // thread, threading the recipient through ?to= so it can fan out.
+  async function openConversation(encrypted: boolean) {
+    if (!authorId) return;
+    try {
+      const conv = await api.startConversation(authorId, encrypted ? { encrypted: true } : undefined);
+      router.push(
+        encrypted
+          ? `/messages/${conv.id}?to=${encodeURIComponent(authorId)}`
+          : `/messages/${conv.id}`,
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        toast({ message: "You can't message this user.", variant: "error" });
+      } else {
+        toast({
+          message: errorMessage(
+            err,
+            encrypted ? "Could not start an encrypted conversation." : "Could not open a conversation.",
+          ),
+          variant: "error",
+        });
+      }
     }
   }
 
@@ -497,6 +535,40 @@ function CommentItem({
       </li>
     );
   }
+
+  // Secondary moderation/contact actions collapse into a single overflow menu
+  // (the row keeps only Reply, plus Edit/Delete on your own comment). Remote
+  // comments (no local account) offer Mute instance + Report; local ones offer
+  // the full account controls. Each menu item keeps the label the standalone
+  // control carried, so the accessible name is unchanged inside the menu.
+  const actionItems: DropdownItem[] = [];
+  if (isRemote) {
+    if (comment.author_domain) {
+      actionItems.push({
+        label: "Mute instance",
+        disabled: muting,
+        onSelect: () => void muteInstance(),
+      });
+    }
+    actionItems.push({ label: "Report", onSelect: () => setReporting("comment") });
+  } else if (authorId) {
+    actionItems.push({ label: "Mute", disabled: muting, onSelect: () => void mute() });
+    actionItems.push({ label: "Message", onSelect: () => void openConversation(false) });
+    if (e2eeAvailable === true) {
+      actionItems.push({
+        label: "Encrypted message",
+        onSelect: () => void openConversation(true),
+      });
+    }
+    actionItems.push({
+      label: blocked ? "Blocked" : "Block",
+      disabled: blocking || blocked,
+      onSelect: () => void block(),
+    });
+    actionItems.push({ label: "Report user", onSelect: () => setReporting("account") });
+    actionItems.push({ label: "Report", onSelect: () => setReporting("comment") });
+  }
+  const showActionsMenu = status === "authed" && !isAuthor && actionItems.length > 0;
 
   return (
     <li className="flex flex-col gap-3">
@@ -577,46 +649,17 @@ function CommentItem({
                     Delete
                   </button>
                 </>
-              ) : status === "authed" && isRemote ? (
-                // Remote author: no local account to message/mute/block/report —
-                // the viewer can mute the whole origin instance or report the comment.
-                <>
-                  {comment.author_domain ? (
-                    <button
-                      type="button"
-                      disabled={muting}
-                      aria-label={`Mute instance ${comment.author_domain}`}
-                      onClick={() => void muteInstance()}
-                      className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
-                    >
-                      {muting ? "Muting…" : "Mute instance"}
-                    </button>
-                  ) : null}
-                  <ReportButton kind="comment" targetId={comment.id} variant="link" />
-                </>
-              ) : status === "authed" && authorId ? (
-                <>
-                  <button
-                    type="button"
-                    disabled={muting}
-                    onClick={() => void mute()}
-                    className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
-                  >
-                    {muting ? "Muting…" : "Mute"}
-                  </button>
-                  <MessageButton recipientId={authorId} />
-                  <StartEncryptedButton recipientId={authorId} />
-                  <button
-                    type="button"
-                    disabled={blocking || blocked}
-                    onClick={() => void block()}
-                    className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
-                  >
-                    {blocked ? "Blocked" : blocking ? "Blocking…" : "Block"}
-                  </button>
-                  <ReportButton kind="account" targetId={authorId} variant="link" />
-                  <ReportButton kind="comment" targetId={comment.id} variant="link" />
-                </>
+              ) : showActionsMenu ? (
+                // Secondary contact/moderation actions live behind a kebab so the
+                // row stays uncluttered (Reply inline). The account controls
+                // (remote: Mute instance + Report) each keep their prior label.
+                <Dropdown
+                  trigger={<MoreVerticalIcon size={18} />}
+                  triggerLabel="Comment actions"
+                  items={actionItems}
+                  align="end"
+                  triggerClassName="h-8 w-8 justify-center rounded-full border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-muted hover:text-fg"
+                />
               ) : null}
             </span>
           </div>
@@ -683,6 +726,17 @@ function CommentItem({
             </p>
           )}
         </div>
+      ) : null}
+
+      {/* Report dialog launched from the overflow menu ("account" reports the
+          author, "comment" the comment). The Modal's accessible name resolves to
+          "Report this user" / "Report this comment" via its title. */}
+      {reporting ? (
+        <ReportDialog
+          kind={reporting}
+          targetId={reporting === "account" && authorId ? authorId : comment.id}
+          onClose={() => setReporting(null)}
+        />
       ) : null}
 
       {/* Flattened replies (one visual level, PeerTube-style), collapsed behind
