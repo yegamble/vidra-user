@@ -3,19 +3,20 @@
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { CheckIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { api } from "@/lib/api";
 
 // FollowButton toggles a follow on a channel for the signed-in user, in the
-// template's follow affordance: an accent-filled "Follow" when not following, an
-// outlined "Following" once followed (design-system channel-header / watch-row
-// pattern, matching the app's FOLLOWING vocabulary and the follow/unfollow API).
-// The public channel endpoint carries no "is following" flag, so the button
-// starts at "Follow" and tracks state locally (follow/unfollow are idempotent
-// server-side); `onDelta` nudges a displayed follower count optimistically.
-// Anonymous visitors get a sign-in link instead. Shared by the channel page and
-// the watch-page channel row.
+// Apple-redesign follow affordance: a solid-accent "Follow" when not following,
+// a tonal "Following" (with a leading check glyph) once followed — the two
+// visual states the channel-header spec pins. The public channel endpoint
+// carries no "is following" flag, so the button starts at "Follow" and tracks
+// state locally (follow/unfollow are idempotent server-side); wiring the initial
+// state to a real is_following flag is a backend follow-up. `onDelta` nudges a
+// displayed follower count optimistically. Anonymous visitors get a sign-in link
+// instead. Shared by the channel page and the watch-page channel row.
 export function FollowButton({
   handle,
   onDelta,
@@ -31,7 +32,7 @@ export function FollowButton({
 
   if (status !== "authed") {
     return (
-      <LinkButton href="/login" variant="secondary" className={className}>
+      <LinkButton href="/login" variant="tonal" className={className}>
         Sign in to follow
       </LinkButton>
     );
@@ -57,11 +58,12 @@ export function FollowButton({
 
   return (
     <Button
-      variant={following ? "secondary" : "primary"}
+      variant={following ? "tonal" : "primary"}
       disabled={busy}
       onClick={() => void toggle()}
       className={className}
     >
+      {following ? <CheckIcon size={16} /> : null}
       {following ? "Following" : "Follow"}
     </Button>
   );
