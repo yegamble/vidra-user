@@ -25,7 +25,7 @@ type Scope = "channel" | "all";
 // scope. Owner-only endpoints, so the whole surface is session-gated by the
 // studio shell.
 export function AnalyticsView() {
-  const { channels, currentHandle, currentChannel } = useStudio();
+  const { channels, currentHandle, currentChannel, setCurrentHandle } = useStudio();
   const [scope, setScope] = useState<Scope>("channel");
 
   if (channels.length === 0) {
@@ -62,7 +62,13 @@ export function AnalyticsView() {
       {effectiveScope === "channel" ? (
         <ChannelScope handle={currentHandle} name={currentChannel?.display_name ?? currentHandle} />
       ) : (
-        <AllChannelsScope channels={owned} />
+        <AllChannelsScope
+          channels={owned}
+          onPickChannel={(handle) => {
+            setCurrentHandle(handle);
+            setScope("channel");
+          }}
+        />
       )}
 
       <VideoStatsSection
@@ -139,16 +145,24 @@ function ChannelScope({ handle, name }: { handle: string; name: string }) {
   );
 }
 
-// AllChannelsScope — the client-side rollup across all owned channels: summed
-// totals, a merged daily chart, and a per-channel breakdown table.
-function AllChannelsScope({ channels }: { channels: Channel[] }) {
+// AllChannelsScope — the owner-scoped account rollup (GET /me/stats): summed
+// totals, the aggregated daily chart, and a per-channel breakdown table whose
+// rows switch the studio scope to that channel. `channels` is only used to
+// refetch when the owned set changes.
+function AllChannelsScope({
+  channels,
+  onPickChannel,
+}: {
+  channels: Channel[];
+  onPickChannel: (handle: string) => void;
+}) {
   const [status, setStatus] = useState<Status>("loading");
   const [stats, setStats] = useState<AllChannelsStats | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    getAllChannelsStats(channels, controller.signal)
+    getAllChannelsStats(controller.signal)
       .then((res) => {
         setStats(res);
         setStatus("ready");
@@ -197,17 +211,19 @@ function AllChannelsScope({ channels }: { channels: Channel[] }) {
       <StatsChart series={stats.daily_views} label="Daily views across all channels" />
       <div className="overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
         <table className="w-full min-w-[32rem] text-sm">
-          <caption className="sr-only">Per-channel breakdown</caption>
+          <caption className="sr-only">
+            Per-channel breakdown — select a channel to view its analytics.
+          </caption>
           <thead>
             <tr className="border-b border-border-subtle text-left text-[12px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
               <th scope="col" className="px-4 py-2.5 font-semibold">
                 Channel
               </th>
               <th scope="col" className="px-4 py-2.5 text-right font-semibold">
-                Views · 28d
+                Views
               </th>
               <th scope="col" className="px-4 py-2.5 text-right font-semibold">
-                Views
+                Views · 28d
               </th>
               <th scope="col" className="px-4 py-2.5 text-right font-semibold">
                 Followers
@@ -219,16 +235,22 @@ function AllChannelsScope({ channels }: { channels: Channel[] }) {
           </thead>
           <tbody className="divide-y divide-border-subtle">
             {stats.channels.map((c) => (
-              <tr key={c.id}>
+              <tr key={c.id} className="transition-colors hover:bg-surface-muted">
                 <th scope="row" className="px-4 py-2.5 text-left font-medium text-fg">
-                  {c.display_name}
-                  <span className="ml-1 font-normal text-fg-muted">@{c.handle}</span>
+                  <button
+                    type="button"
+                    onClick={() => onPickChannel(c.handle)}
+                    className="focus-ring rounded text-left hover:underline"
+                  >
+                    {c.display_name}
+                    <span className="ml-1 font-normal text-fg-muted">@{c.handle}</span>
+                  </button>
                 </th>
                 <td className="px-4 py-2.5 text-right tabular-nums text-fg">
-                  {formatCount(c.views_28d)}
+                  {formatCount(c.views)}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-fg">
-                  {formatCount(c.views)}
+                  {formatCount(c.views_28d)}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-fg">
                   {formatCount(c.followers)}
