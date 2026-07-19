@@ -187,7 +187,9 @@ test("a creator can set the channel banner from the studio row editor", async ({
   });
 
   await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByRole("button", { name: "Edit ada_makes" }).click();
+  // Channel avatar/banner editing now lives on the Studio Channel tab (the
+  // current channel edits directly, no per-row "Edit" toggle).
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
 
   const bannerSection = page.getByRole("region", { name: "Channel banner" });
   await expect(bannerSection.getByText("No banner yet.")).toBeVisible();

@@ -211,6 +211,30 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
 - **Stepped upload sheet**: upload becomes a staged sheet (pick → details →
   publish) with a persistent minimized progress pill; the pill is chrome-level
   UI and therefore stays monochrome + accent.
+- **Studio tabbed IA + channel switcher** (YouTube Studio pattern): the creator
+  Studio is split into per-surface tabs — **Dashboard / Content / Live /
+  Analytics / Channel** — under one shared shell (`app/studio/layout.tsx` mounting
+  `StudioProvider` + `StudioNav` above the active surface), replacing the single
+  long scroll. The Studio is scoped to ONE **current channel** (loaded once via
+  `api.getMyChannels`, persisted in `localStorage["vidra.studio.channel"]`,
+  validated against the list with a `channels[0]` fallback); every surface reads
+  it from context, so the old per-section channel `<select>`s are gone (the
+  upload form keeps its in-form channel picker, PeerTube-style, shown only when
+  >1 channel and defaulted to the current one). The switcher sits in `StudioNav`:
+  avatar + display name + a compact protocol badge, rendered as a `Dropdown`
+  (channel rows + a "New channel" entry) when the caller has more than one
+  channel, a static label when exactly one, and a quiet "no channel yet" hint at
+  zero (the tab strip still renders — each surface shows its own onboarding
+  state). The tab strip is the **section-navigation pill** idiom (tint-pill
+  active `bg-accent/12 text-accent-text`, muted-hover inactive, 44px targets,
+  horizontal scroll on phones), never an underline rail. The `/studio?video=<id>`
+  single-video management deep link (moderator/owner) renders full-page with the
+  studio nav hidden. Analytics carries **two scopes** — "This channel" and
+  "All channels" (a client-side rollup today, one-function-swappable to a backend
+  endpoint) — via `SegmentedControl`. Live's create form and the create-channel
+  form are launched `Modal`s (dialog on desktop / `variant="sheet"` on mobile),
+  consistent with the stepped upload sheet. Keeps the nav rules
+  (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger, 44pt targets).
 
 ## Typography
 

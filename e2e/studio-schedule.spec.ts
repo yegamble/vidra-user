@@ -132,6 +132,7 @@ test("publishing with a schedule sends publish_at and reports the scheduled outc
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   // Upload now opens in the stepped sheet: pick the file, Continue, add details, publish.
   await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
@@ -178,6 +179,7 @@ test("a scheduled row shows the badge + publish time, and the edit form can move
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   const row = page.getByRole("listitem").filter({ hasText: "My clip" });
   // The Scheduled state badge + the human publish time are on the row.
   await expect(row.getByText("scheduled", { exact: true })).toBeVisible();
@@ -217,6 +219,7 @@ test("an unchanged schedule is not re-sent on save", async ({ page }) => {
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   const row = page.getByRole("listitem").filter({ hasText: "My clip" });
   await row.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Edit title").fill("Renamed");
@@ -239,6 +242,7 @@ test("a published video's edit surface has no schedule field", async ({ page }) 
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   const row = page.getByRole("listitem").filter({ hasText: "My clip" });
   await row.getByRole("button", { name: "Edit", exact: true }).click();
   // The edit form is open (title field visible) but scheduling is absent — the

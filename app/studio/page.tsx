@@ -1,25 +1,15 @@
-import { PageShell } from "@/components/PageShell";
-import { StudioView } from "@/components/StudioView";
-import { LinkButton } from "@/components/ui/LinkButton";
+import { Suspense } from "react";
 
-export default async function StudioPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ video?: string | string[] }>;
-}) {
-  const requested = (await searchParams).video;
-  const managedVideoId = typeof requested === "string" && requested !== "" ? requested : undefined;
+import { DashboardRoute } from "@/components/studio/DashboardRoute";
+
+// The Studio dashboard. The shared studio layout provides the page title, the
+// session gate, the channel provider, and the tab strip; this route renders the
+// dashboard (or the `?video=` single-video management surface). Wrapped in
+// Suspense because DashboardRoute reads the URL search params.
+export default function StudioPage() {
   return (
-    <PageShell className="overflow-x-clip py-8">
-      <div className="w-full max-w-5xl">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <h1 className="text-title sm:text-large-title">Studio</h1>
-          <LinkButton href="/studio/stats" variant="tonal" size="sm">
-            Creator stats
-          </LinkButton>
-        </div>
-        <StudioView managedVideoId={managedVideoId} />
-      </div>
-    </PageShell>
+    <Suspense fallback={null}>
+      <DashboardRoute />
+    </Suspense>
   );
 }
