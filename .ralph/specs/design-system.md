@@ -23,8 +23,11 @@ rule here ("if a change adds a new saturated color to chrome, it is wrong")
 executed deference as absence and made the app read gray-on-gray; it is
 **overturned**. The current color contract:
 
-- **Chrome and surfaces stay monochrome zinc.** Headers, sidebars, tab bars,
-  cards, inputs: no color washes, no gradients, no tinted panels.
+- **Chrome and surfaces stay monochrome.** A soft gray canvas (`#f5f5f7`),
+  white/near-black surfaces, neutral grays (redesign 2026-07-19 — the earlier
+  pure-white canvas is retired so white cards read as elevated). Headers,
+  sidebars, tab bars, cards, inputs: no color washes, no gradients, no tinted
+  panels.
 - **One accent: systemIndigo** (`accent` token below). It is THE interactive
   color — primary actions, active states, links, selection, focus. Chosen to
   echo the indigo the CTAs already leaned toward while staying clearly distinct
@@ -68,45 +71,68 @@ Rules for components:
 
 ## Color tokens (`app/globals.css`)
 
+Apple-ecosystem redesign (2026-07-19): the canvas is now a soft systemGray-6
+gray (`#f5f5f7`) so white cards read as elevated surfaces; the accent is
+systemIndigo; status/protocol/tile hues are Apple system colors. Every value
+below is axe-verified against the redesign (see the contrast contract).
+
 | Token utility | Meaning | Light | Dark |
 |---|---|---|---|
-| `canvas` | page background | `#ffffff` | `#0a0a0a` |
-| `surface` | cards, panels | `#ffffff` | `#18181b` |
-| `surface-muted` | hover fills, subtle panels, chips | `#f4f4f5` | `#1f1f23` |
-| `surface-strong` | progress tracks, pressed fills | `#e9e9eb` | `#2b2b30` |
+| `canvas` | page background (soft gray) | `#f5f5f7` | `#0a0a0a` |
+| `surface` | cards, panels | `#ffffff` | `#1c1c1e` |
+| `surface-muted` | hover fills, subtle panels, chips | `#ebebed` | `#1f1f23` |
+| `surface-strong` | progress tracks, pressed fills | `#e1e1e3` | `#2b2b30` |
 | `surface-raised` | popovers, menus, sheets | `#ffffff` | `#1f1f23` |
 | `fg` | primary text | `#18181b` | `#f4f4f5` |
-| `fg-muted` | secondary text — **AA on every surface** | `#65656e` | `#a1a1aa` |
+| `fg-muted` | secondary text — **AA on every surface** | `#5f5f68` | `#a1a1aa` |
 | `fg-subtle` | **decorative only** (never meaningful text) | `#a1a1aa` | `#71717a` |
 | `border` | inputs, outlined buttons | `#d4d4d8` | `#3f3f46` |
 | `border-subtle` | hairline dividers | `#e8e8ea` | `#26262a` |
 | `accent` / `accent-fg` | primary action (**systemIndigo**) | `#5856d6` / `#ffffff` | `#5e5ce6` / `#ffffff` |
-| `accent-text` | accent as free-standing text (links, active labels) | `#5856d6` | `#7d7aff` |
+| `accent-text` | accent as free-standing text (links, active labels) | `#4f4dcb` | `#8a87ff` |
 | `focus` | focus ring (follows the accent, HIG-style) | `#5856d6` | `#5e5ce6` |
-| `danger` | danger **text/icons** | `#c81e1e` | `#f87171` |
-| `danger-solid` / `danger-fg` | danger **fills** (buttons) | `#dc2626` / white | same |
-| `danger-surface` / `danger-border` | danger panels | `#fef2f2` / `#fecaca` | `#450a0a` / `#7f1d1d` |
-| `success` | positive text/icons/badges | `#166534` | `#22c55e` |
-| `warning` | caution text/icons/badges | `#92400e` | `#f59e0b` |
+| `danger` | danger **text/icons** (Apple accessible red) | `#d70015` | `#ff453a` |
+| `danger-solid` / `danger-fg` | danger **fills under white text** (buttons, count badges) | `#dc2626` / white | same |
+| `danger-surface` / `danger-border` | danger panels / danger status pill | `#fef2f2` / `#fecaca` | `#450a0a` / `#7f1d1d` |
+| `success` | positive text/badges | `#0f5f27` | `#30d158` |
+| `success-solid` | Apple systemGreen **fill** (dots/health/tiles) | `#34c759` | `#30d158` |
+| `warning` | caution text/badges | `#6f4a00` | `#ff9f0a` |
+| `warning-solid` | Apple systemOrange **fill** (dots/tiles) | `#ff9500` | `#ff9f0a` |
 | `live` | the LIVE pulse dot (sits on media) | `#ff453a` | `#ff453a` |
+| `protocol-activitypub` / `-bluesky` / `-ipfs` | tri-protocol identity (badges + ribbon only) | `#6364ff` / `#0085ff` / `#65c2cb` | same |
+| `tile-{blue,gray,red,purple,orange,teal,green,pink,indigo}` | Settings/Admin icon-tile squares | Apple system colors | theme-tuned |
 
-Contrast contract (verified): `fg`/`fg-muted` pass AA (≥4.5:1) on `canvas`,
-`surface`, `surface-muted`, and `surface-strong` in both schemes; `danger`
-passes as text on `canvas`/`surface`/`danger-surface`; `success`/`warning`
-pass on `canvas`/`surface`/`surface-muted` AND inside their own 15% tint
-pills (`bg-success/15 text-success`, `bg-warning/15 text-warning`) — axe
-verifies this, so never lighten these tokens without recomputing the tinted
-pairs. Use `text-danger` for danger text and `bg-danger-solid text-danger-fg`
-for danger fills — never `bg-danger`.
+Contrast contract (axe-verified, redesign):
+- `fg`/`fg-muted` pass AA (≥4.5:1) on `canvas`, `surface`, `surface-muted`, and
+  `surface-strong` in both schemes. `fg-muted` was **darkened to `#5f5f68`**
+  (light) because the gray canvas + darker `surface-strong` dropped the old
+  `#65656e` under 4.5:1 on `surface-strong` (was 4.4:1 → now 4.84:1).
+- **Status TEXT** (`danger`/`success`/`warning`) passes on
+  `canvas`/`surface`/`surface-muted` AND inside its `/15` tint pill over
+  `surface-muted` (the app's real pill backing — e.g. the channel-sync state
+  pills). Apple's brighter status hues (`#248a3d`, `#9a6a00`) fail that pill, so
+  the light text tokens are **deepened** (`success #0f5f27`, `warning #6f4a00`)
+  to clear it. `danger` (`#d70015`) is used as free-standing text and inside
+  the `danger-surface` pill (not a `/15` fill — Apple systemRed can't clear AA
+  on 15% pink); the `Badge` `danger` variant therefore uses
+  `bg-danger-surface text-danger`.
+- **`-solid` tokens are FILL/DOT/ICON colors only** (Apple hues), never a
+  background under text. Exception: `danger-solid` stays `#dc2626` (not Apple
+  `#ff3b30`) because it backs **white-text** destructive buttons and unread
+  count badges — white on `#ff3b30` is only 3.55:1. The Apple systemRed lives
+  in `tile-red`/`live`, where no text sits on it.
+- **Protocol hues never carry text** (the teal/blue fail AA as text): protocol
+  badges tint the pill and colour the dot, but keep an `fg` label.
 
-Accent contract: `accent-fg` on `accent` passes AA in both schemes (≈5.6:1
-light, ≈5.1:1 dark). `accent` itself passes AA as text on light surfaces, but
-in dark mode it only clears the 3:1 UI-component threshold — so free-standing
-accent **text** (links, active nav labels, selected-state captions) MUST use
-`accent-text` (the dark value is lightened for ≈5:1 on canvas/surface), while
-fills, focus rings, and large/bold accents use `accent`. Tinted accent chips
-follow the status-pill recipe (`bg-accent/12 text-accent-text`). axe remains
-the authority — recompute on any token change.
+Accent contract: `accent-fg` (white) on `accent` passes AA in both schemes
+(≈5.6:1 light, ≈5.1:1 dark). Free-standing accent **text** (links, active nav
+labels, selected captions) and the tinted `bg-accent/12` active-pill recipe use
+`accent-text`, tuned (`#4f4dcb` light / `#8a87ff` dark) so `bg-accent/12
+text-accent-text` clears AA even over the gray canvas (≈5.0:1) — fills, focus
+rings, and large/bold accents use `accent`. axe remains the authority —
+recompute on any token change. (Operator custom-accent overrides only set
+`--accent`/`--accent-fg`; extending them to `--accent-text` is a config-wave
+follow-up.)
 
 **Documented exceptions** (the only allowed non-token colors):
 - **Media overlays** — badges/scrims painted ON TOP of thumbnails or video are
@@ -121,27 +147,32 @@ Color beyond the accent is allowed ONLY in these forms — each carries meaning,
 none touches chrome:
 
 - **Settings icon tiles** (System Settings pattern): grouped settings /
-  admin / moderation rows may lead with a `rounded-lg` colored tile
-  (~28×28) holding a white glyph. The tile is *supporting*, never the sole
-  carrier of meaning (the adjacent label is); one hue per destination, drawn
-  from a small fixed tile palette defined in `globals.css` when implemented —
-  not ad-hoc per-component hexes. Tiles are theme-tuned via `light-dark()`
-  like every other token.
-- **Protocol colors inside badges**: federation/protocol identity may be
-  colored *inside* `Badge`-shaped elements only — a tinted pill or dot+label
-  (status-pill recipe: ~12–15% tint fill + full-strength text/dot). Families:
-  ActivityPub violet, Bluesky blue, IPFS teal. Indicative values (pin exact
-  tokens + AA-verify the tinted pairs at implementation): AP `#7c5cff`-family,
-  Bluesky `#1185fe`, IPFS `#5bc4cf`-family. Protocol colors NEVER appear on
-  chrome, buttons, or text outside a badge; the Bluesky blue must never be
-  used as a general interactive color (that is the accent's job, and the two
-  must stay visually distinct).
-- **Signature element — the tri-protocol ribbon**: a thin gradient rule
-  (AP violet → Bluesky blue → IPFS teal), the one sanctioned decorative use of
-  protocol color — Vidra's differentiator made visible without polluting the
-  chrome. HARD CAP: **at most three placements app-wide**, pinned in this doc
-  when the redesign lands (candidates: the About/network hero, the auth pages,
-  the instance About footer). Anywhere else it appears is a review defect.
+  admin / moderation rows lead with a `rounded-lg` colored tile (28×28,
+  `IconTile` primitive) holding a white 16px glyph. The tile is *supporting*,
+  never the sole carrier of meaning (the adjacent label is); one hue per
+  destination, drawn from the fixed `--tile-*` palette in `globals.css` (blue
+  `#007aff`/`#0a84ff`, gray `#8e8e93`/`#98989d`, red `#ff3b30`/`#ff453a`,
+  purple `#af52de`/`#bf5af2`, orange `#ff9500`/`#ff9f0a`, teal
+  `#30b0c7`/`#40c8e0`, green `#34c759`/`#30d158`, pink `#ff2d55`/`#ff375f`,
+  indigo `#5856d6`/`#5e5ce6`) — never ad-hoc per-component hexes. Suggested
+  mapping (brief): Profile blue · Security gray · Notifications red · Playback
+  purple · Search orange · Devices teal · Connections green · Donations pink ·
+  Privacy indigo. Use `<IconTile color="blue">`; the white glyph is decorative.
+- **Protocol colors inside badges**: federation/protocol identity is colored
+  *inside* `Badge`-shaped elements only — the `Badge` `protocol` variant paints
+  a ~12% brand tint + a full-strength brand **dot**, keeping an `fg` label (the
+  IPFS teal and Bluesky blue fail AA as text, so the dot carries the colour).
+  Tokens: ActivityPub `#6364ff`, Bluesky `#0085ff`, IPFS `#65c2cb`. Protocol
+  colors NEVER appear on chrome, buttons, or text outside a badge; the Bluesky
+  blue must never be a general interactive color (that is the accent's job, and
+  the two must stay visually distinct).
+- **Signature element — the tri-protocol ribbon** (`ProtocolRibbon`): a 2.5px
+  gradient rule `linear-gradient(90deg,#6364ff,#0085ff,#65c2cb)` — the one
+  sanctioned decorative use of protocol color. The gradient is defined once
+  (`.protocol-ribbon` in globals.css). HARD CAP — **exactly three placements
+  app-wide, PINNED**: (a) under the header wordmark, (b) the Network /
+  about-network page hero divider, (c) the top edge of federated-origin badges
+  (the `Badge` `federated` variant). Anywhere else is a review defect.
 
 ## Sanctioned macro-patterns (2026-07-19)
 
@@ -171,6 +202,26 @@ Text", …` — SF Pro on Apple platforms, native elsewhere, zero webfont cost.
 Mono (`--font-mono`): `ui-monospace, "SF Mono", …` for stream keys, wallet
 addresses, code.
 
+**Apple HIG type ramp** (redesign, `@theme` tokens in `globals.css` — Tailwind
+v4 emits one utility per token with its line-height / tracking / weight baked
+in):
+
+| Utility | Size | Weight | Tracking |
+|---|---|---|---|
+| `text-large-title` | 34px | bold (700) | −0.4px |
+| `text-title` | 28px | bold (700) | −0.3px |
+| `text-title2` | 22px | semibold (600) | −0.2px |
+| `text-headline` | 17px | semibold (600) | — |
+| `text-body` | 17px | regular | — |
+| `text-subhead` | 15px | regular | — |
+| `text-footnote` | 13px | regular | — |
+| `text-caption` | 12px | regular | — |
+
+Page H1s use `text-large-title` on desktop / `text-title` on mobile (e.g.
+`text-title sm:text-large-title`). Shelf/section headers use `text-headline`.
+Keep `tabular-nums` on updating numbers. The legacy scale below still applies
+where the ramp is not adopted:
+
 Scale (Tailwind defaults; the premium look comes from weight + tracking):
 - Page titles: `text-2xl font-bold tracking-tight` (mobile large-title feel).
 - Brand wordmark: `text-xl font-bold tracking-[-0.045em]`.
@@ -185,12 +236,16 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
 
 | Element | Radius |
 |---|---|
-| Buttons, chips, pills, search field, avatars, badges | `rounded-full` |
+| **Buttons, `LinkButton`** (all variants/sizes) | `rounded-[10px]` |
+| Chips, sort pills, `Badge`, avatars, search field, `IconButton` | `rounded-full` |
 | Inputs, textareas, selects | `rounded-xl` |
 | Thumbnails | `rounded-xl` (dense lists: `rounded-lg`) |
-| Cards, panels, modals, grouped settings lists | `rounded-2xl` |
+| Cards, panels, player | `rounded-2xl` (16) |
+| Grouped settings rows/lists | `rounded-2xl`; row radius 12 |
+| Modals (dialog) | `rounded-[20px]` |
 | Feature thumbnails / hero media (feed) | `rounded-2xl` |
-| Bottom sheets | `rounded-t-3xl` |
+| Bottom sheets | `rounded-t-[22px]` |
+| Icon tiles (`IconTile`) | `rounded-lg` |
 | Menu items inside popovers | `rounded-lg` |
 
 ## Component patterns (from the templates)
@@ -216,8 +271,19 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   pill top area); below: 36px avatar + `font-semibold` 2-line-clamped title +
   `text-fg-muted` meta line (`channel · views · age`).
 - **Status badges** (Published / Processing / Draft / In review / Failed):
-  `Badge` primitive or uppercase micro-label pills — success/warning/danger
-  tokens at `/15` fill with token text, e.g. `bg-success/15 text-success`.
+  `Badge` primitive or uppercase micro-label pills — success/warning at `/15`
+  fill with token text (`bg-success/15 text-success`); **danger** is the one
+  exception — `Badge variant="danger"` uses `bg-danger-surface text-danger`
+  (Apple systemRed can't clear AA on a 15% pink tint).
+- **Protocol / federation badges**: `Badge variant="protocol" protocol="…"` —
+  a ~12% brand tint + full-strength dot + `fg` label. `Badge
+  variant="federated"` marks a remote origin with the tri-protocol ribbon on
+  its top edge (the third pinned ribbon placement). The standalone ribbon is
+  `<ProtocolRibbon>` (placements a + b).
+- **Icon tiles**: `<IconTile color="blue">…</IconTile>` — a 28×28 `rounded-lg`
+  Apple-system-color square with a white 16px glyph, leading grouped
+  Settings/Admin/Moderation rows (one hue per destination; see the tile palette
+  above).
 - **Grouped settings rows** (mobile settings): a `bg-surface-muted rounded-2xl
   overflow-hidden` group, rows `divide-y divide-border-subtle`, each row
   label + optional `text-fg-muted` sub-line + chevron; group headers
@@ -226,13 +292,14 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   `border-canvas` ring, name `font-bold tracking-tight`, pill actions
   (Follow = accent fill when not following; outlined "Following" when
   following).
-- **Empty/error states**: the `EmptyState` / `ErrorState` primitives (dashed
-  `rounded-2xl` panel; danger-surface panel).
+- **Empty/error states**: `EmptyState` leads with an icon in a 48px tinted
+  circle (`bg-accent/12` + accent glyph; `tint` prop for a themed hue) — the
+  dashed border is retired. `ErrorState` keeps its danger-surface panel.
 - **Dialogs**: `Modal` primitive (`rounded-2xl`, `bg-black/45` scrim). Bottom
   sheets on mobile may extend it later — same a11y contract.
 - **Notifications popover** (header bell, `NotificationsBell`): a disclosure
   button (`aria-expanded`/`aria-controls`, unread badge) opening a
-  `rounded-2xl border-border-subtle bg-surface-raised shadow-lg` panel — recent
+  `rounded-2xl border-border-subtle bg-surface-raised shadow-soft-strong` panel — recent
   items (icon chip + lead/rest text + age + unread dot, reusing
   `describeNotification`) above a full-width "See all notifications" footer
   link to `/notifications`. Focus moves into the panel on open and back to the
@@ -243,8 +310,14 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
 
 Fast and quiet: `transition-colors` on interactive fills (~150ms default),
 `live-pulse` keyframes for LIVE dots, spinners for progress. No parallax, no
-bounce, nothing longer than ~200ms. `prefers-reduced-motion` is neutralized
-globally in `globals.css` — components never branch on it.
+bounce, nothing longer than **300ms** (redesign: 200–300ms is the range; the
+old ~200ms cap is lifted to 300ms). Cards and shelf tiles get a subtle hover
+lift — `hover:scale-[1.02]` with `transition-transform` (~200ms). `soft` /
+`soft-strong` shadows (`shadow-soft`, `shadow-soft-strong`) replace heavy
+popover shadows: `0 8px 30px rgb(0 0 0 / .06)` for raised cards, `/.10` for
+floating popovers/menus/dialogs. `prefers-reduced-motion` is neutralized
+globally in `globals.css` (it zeroes transition/animation durations, so the
+hover-lift transform is neutralized too) — components never branch on it.
 
 ## Navigation material
 
@@ -259,7 +332,8 @@ transient controls; content cards remain on standard canvas/surface materials.
 
 Import from the barrel `@/components/ui`. All primitives are token-driven and
 carry the a11y contract (see their doc comments): `Button`/`LinkButton`
-(pill, variants primary/secondary/danger/ghost + **`tonal`** = borderless
+(**`rounded-[10px]`**, primary = solid `accent` + accent focus ring; variants
+primary/secondary/danger/ghost + **`tonal`** = borderless
 `bg-surface-muted text-fg hover:bg-surface-strong`, the design's dominant
 secondary action; + **`danger-outline`** = `border-danger/45 text-danger`
 using the AA-safe danger *text* token, not the solid fill), `IconButton`
@@ -273,8 +347,12 @@ safe-area), `Dropdown` (menu-button pattern), `Tabs` (WAI-ARIA tabs), `Toast`
 (live regions), `Card`, `Badge` (default sentence pill + **`status`** =
 `text-[10.5px] font-bold uppercase tracking-[0.04em]` micro-label, + role
 pills **`inverse`** `bg-fg text-canvas` (ADMIN) / **`strong`**
-`bg-surface-strong text-fg-muted` (MOD)), `Avatar`, `Skeleton`, `Spinner`,
-`EmptyState`, `ErrorState`, `LoadMoreButton`.
+`bg-surface-strong text-fg-muted` (MOD), + **`protocol`** (brand tint + dot +
+`fg` label, `protocol` prop) / **`federated`** (remote origin, tri-protocol
+ribbon top edge)), `IconTile` (28×28 Apple-color tile + white glyph, `color`
+prop), `Avatar`, `Skeleton`, `Spinner`, `EmptyState` (icon-in-tinted-circle),
+`ErrorState`, `LoadMoreButton`. `ProtocolRibbon` (components/) is the standalone
+tri-protocol gradient rule.
 Custom components, not UI-kit wrappers. Do not fork these patterns locally.
 
 ## Iconography (`components/icons`)
