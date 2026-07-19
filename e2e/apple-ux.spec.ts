@@ -51,6 +51,19 @@ async function mockHome(page: Page) {
     route.fulfill({ json: { categories: [], languages: [], licenses: [] } }),
   );
   await page.route(LIVE, (route) => route.fulfill({ json: { live_streams: [] } }));
+  // The /about destination needs the instance details to render (otherwise the
+  // About surface shows its error state instead of the "About" heading).
+  await page.route(INSTANCE, (route) =>
+    route.fulfill({
+      json: {
+        name: "Vidra",
+        description: "",
+        software: { name: "vidra", version: "0.1.0" },
+        registration_enabled: true,
+        oauth_providers: [],
+      },
+    }),
+  );
 }
 
 async function expectNoHorizontalScroll(page: Page) {

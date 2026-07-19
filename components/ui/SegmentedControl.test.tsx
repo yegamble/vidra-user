@@ -91,6 +91,9 @@ describe("SegmentedControl", () => {
       />,
     );
     // The count is part of the button text, so the accessible name includes it.
-    expect(screen.getByRole("button", { name: "Reports 3" })).toBeTruthy();
+    // Match with/without the inter-node space — jsdom's accessible-name
+    // computation stopped inserting one after the jsdom 29 upgrade (browsers
+    // still render the visual gap via the count's margin).
+    expect(screen.getByRole("button", { name: /Reports\s*3/ })).toBeTruthy();
   });
 });
