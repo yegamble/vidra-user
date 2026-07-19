@@ -9,6 +9,9 @@ const MY_CHANNELS = /\/api\/v1\/me\/channels$/;
 const CREATE_CHANNEL = /\/api\/v1\/channels$/;
 const CHANNEL_BY_HANDLE = /\/api\/v1\/channels\/ada_makes$/;
 const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
+const CHANNEL_MEMBERS = /\/api\/v1\/channels\/ada_makes\/members$/;
+const CHANNEL_MEMBER_ONE = /\/api\/v1\/channels\/ada_makes\/members\/[^/]+$/;
+const ATPROTO = /\/api\/v1\/me\/atproto$/;
 // Resumable (chunked) upload protocol endpoints.
 const UPLOAD_SESSION = /\/api\/v1\/videos\/v1\/upload-session$/;
 const CHUNK = /\/api\/v1\/uploads\/up1\/chunks\/\d+$/;
@@ -218,6 +221,10 @@ test("a creator can create a channel", async ({ page }) => {
   });
   // The new "Your videos" section loads the new channel's (empty) video list.
   await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(CHANNEL_MEMBERS, (route) => route.fulfill({ json: { members: [] } }));
+  await page.route(ATPROTO, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
 
   await gotoStudioTab(page, "Channel");
   // Zero channels → the Channel tab's onboarding create form.
@@ -238,6 +245,10 @@ test("a creator can edit a channel's name and description", async ({ page }) => 
   );
   await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  await page.route(CHANNEL_MEMBERS, (route) => route.fulfill({ json: { members: [] } }));
+  await page.route(ATPROTO, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
   let patchBody: unknown;
   await page.route(CHANNEL_BY_HANDLE, (route) => {
     patchBody = route.request().postDataJSON();
@@ -264,6 +275,10 @@ test("a creator can delete a channel", async ({ page }) => {
   );
   await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  await page.route(CHANNEL_MEMBERS, (route) => route.fulfill({ json: { members: [] } }));
+  await page.route(ATPROTO, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
   let deleteMethod: string | undefined;
   await page.route(CHANNEL_BY_HANDLE, (route) => {
     deleteMethod = route.request().method();
@@ -277,6 +292,145 @@ test("a creator can delete a channel", async ({ page }) => {
   // The only channel is gone → back to the create-your-first-channel onboarding.
   await expect(page.getByText("Create your first channel")).toBeVisible();
   expect(deleteMethod).toBe("DELETE");
+});
+
+// A channel carrying the per-channel protocol flags + the caller's owner role.
+function ownedChannel(overrides: Record<string, unknown> = {}) {
+  return {
+    ...channel("ada_makes", "Ada Makes"),
+    role: "owner",
+    activitypub_enabled: true,
+    atproto_enabled: true,
+    atproto_active: false,
+    ...overrides,
+  };
+}
+
+test("an owner toggles ActivityPub federation on the Channel tab (PATCH)", async ({ page }) => {
+  await signIn(page);
+  const ch = ownedChannel();
+  await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [ch] } }));
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  await page.route(CHANNEL_MEMBERS, (route) => route.fulfill({ json: { members: [] } }));
+  // A linked Bluesky account → the ATProto row shows a live toggle (not the CTA).
+  await page.route(ATPROTO, (route) => route.fulfill({ json: { handle: "ada.bsky.social" } }));
+  let patchBody: unknown;
+  await page.route(CHANNEL_BY_HANDLE, (route) => {
+    if (route.request().method() === "PATCH") {
+      patchBody = route.request().postDataJSON();
+      return route.fulfill({ json: { ...ch, activitypub_enabled: false } });
+    }
+    return route.fulfill({ json: ch });
+  });
+
+  await gotoStudioTab(page, "Channel");
+  const dist = page.getByRole("region", { name: "Distribution" });
+  const ap = dist.getByRole("switch", { name: "Federate this channel over ActivityPub" });
+  await expect(ap).toHaveAttribute("aria-checked", "true");
+  // The linked account exposes the ATProto toggle too.
+  await expect(dist.getByRole("switch", { name: "Cross-post this channel to Bluesky" })).toBeVisible();
+
+  await ap.click();
+  await expect(ap).toHaveAttribute("aria-checked", "false");
+  expect(patchBody).toMatchObject({ activitypub_enabled: false });
+});
+
+test("an owner without a linked Bluesky account sees the connect CTA", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [ownedChannel()] } }));
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  await page.route(CHANNEL_MEMBERS, (route) => route.fulfill({ json: { members: [] } }));
+  await page.route(ATPROTO, (route) =>
+    route.fulfill({ status: 404, json: { error: { code: "not_found", message: "no account" } } }),
+  );
+
+  await gotoStudioTab(page, "Channel");
+  const dist = page.getByRole("region", { name: "Distribution" });
+  await expect(dist.getByRole("link", { name: "Link your Bluesky account" })).toHaveAttribute(
+    "href",
+    "/settings/connections",
+  );
+  await expect(dist.getByRole("switch", { name: "Cross-post this channel to Bluesky" })).toHaveCount(0);
+});
+
+test("an owner invites and removes a channel collaborator", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [ownedChannel()] } }));
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  // The instance ATProto extension is off → the distribution ATProto row is hidden.
+  await page.route(ATPROTO, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
+  let members: Array<Record<string, unknown>> = [];
+  await page.route(CHANNEL_MEMBERS, (route) => {
+    if (route.request().method() === "POST") {
+      const m = {
+        user_id: "u2",
+        username: "bob",
+        display_name: "Bob",
+        role: "editor",
+        created_at: new Date().toISOString(),
+      };
+      members = [m];
+      return route.fulfill({ status: 201, json: m });
+    }
+    return route.fulfill({ json: { members } });
+  });
+  await page.route(CHANNEL_MEMBER_ONE, (route) =>
+    route.request().method() === "DELETE" ? route.fulfill({ status: 204, body: "" }) : route.continue(),
+  );
+
+  await gotoStudioTab(page, "Channel");
+  const collab = page.getByRole("region", { name: "Collaborators" });
+  await expect(collab.getByText("No collaborators yet.")).toBeVisible();
+
+  await collab.getByLabel("Collaborator handle").fill("bob");
+  await collab.getByRole("button", { name: "Add editor" }).click();
+  await expect(collab.getByText(/@bob/)).toBeVisible();
+
+  await collab.getByRole("button", { name: "Remove bob" }).click();
+  await collab.getByRole("button", { name: "Confirm" }).click();
+  await expect(collab.getByText("No collaborators yet.")).toBeVisible();
+});
+
+test("an editor sees a read-only Channel tab and read-only collaborators", async ({ page }) => {
+  await signIn(page);
+  const shared = ownedChannel({ role: "editor" });
+  await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [shared] } }));
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  await page.route(ATPROTO, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
+  await page.route(CHANNEL_MEMBERS, (route) =>
+    route.fulfill({
+      json: {
+        members: [
+          {
+            user_id: "u1",
+            username: "ada",
+            display_name: "Ada",
+            role: "editor",
+            created_at: new Date().toISOString(),
+          },
+        ],
+      },
+    }),
+  );
+
+  await gotoStudioTab(page, "Channel");
+  // Read-only identity note; no edit form, no distribution toggles, no danger zone.
+  await expect(page.getByText("You’re an editor of this channel.", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("Edit channel name")).toHaveCount(0);
+  await expect(page.getByRole("switch", { name: "Federate this channel over ActivityPub" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Delete ada_makes" })).toHaveCount(0);
+  // The collaborator list is visible but read-only (no invite form / remove).
+  const collab = page.getByRole("region", { name: "Collaborators" });
+  await expect(collab.getByText(/@ada/)).toBeVisible();
+  await expect(collab.getByLabel("Collaborator handle")).toHaveCount(0);
 });
 
 test("a creator can upload and publish a video", async ({ page }) => {

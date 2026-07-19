@@ -175,6 +175,13 @@ test("a creator can set the channel banner from the studio row editor", async ({
   await page.route(/\/api\/v1\/channels\/ada_makes\/live$/, (route) =>
     route.fulfill({ json: { live_streams: [] } }),
   );
+  // The Studio Channel tab also mounts the collaborators + distribution cards.
+  await page.route(/\/api\/v1\/channels\/ada_makes\/members$/, (route) =>
+    route.fulfill({ json: { members: [] } }),
+  );
+  await page.route(/\/api\/v1\/me\/atproto$/, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
   await page.route(VIDEO_CONFIG, (route) =>
     route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
   );

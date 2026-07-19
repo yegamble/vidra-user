@@ -354,6 +354,11 @@ test("the studio channel auto-sync section passes axe (list + state pills + conn
             description: "",
             follower_count: 0,
             created_at: new Date().toISOString(),
+            // Required on the Channel contract; the Channel tab's distribution
+            // toggles read them (an absent flag would drop aria-checked).
+            activitypub_enabled: true,
+            atproto_enabled: true,
+            role: "owner",
           },
         ],
       },
@@ -384,6 +389,13 @@ test("the studio channel auto-sync section passes axe (list + state pills + conn
   );
   await page.route(/\/api\/v1\/channels\/ada\/live$/, (route) =>
     route.fulfill({ json: { live_streams: [] } }),
+  );
+  // The Channel tab also mounts the collaborators + distribution cards.
+  await page.route(/\/api\/v1\/channels\/ada\/members$/, (route) =>
+    route.fulfill({ json: { members: [] } }),
+  );
+  await page.route(/\/api\/v1\/me\/atproto$/, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
   );
   await page.route(/\/api\/v1\/channel-syncs$/, (route) =>
     route.fulfill({

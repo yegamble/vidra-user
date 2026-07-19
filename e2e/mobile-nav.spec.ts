@@ -118,4 +118,27 @@ test.describe("desktop", () => {
         .getByRole("link", { name: "History" }),
     ).toBeVisible();
   });
+
+  test("the header + Create menu deep-links into the studio flows", async ({ page }) => {
+    await page.goto("/");
+    const create = page.getByRole("button", { name: "Create" });
+    await expect(create).toBeVisible();
+    await create.click();
+
+    // The menu's rows are real deep links into the studio surfaces that auto-open
+    // each flow (mirrors the mobile CreateSheet).
+    const menu = page.getByRole("menu", { name: "Create" });
+    await expect(menu.getByRole("menuitem", { name: "Upload video" })).toHaveAttribute(
+      "href",
+      "/studio/content?upload=1",
+    );
+    await expect(menu.getByRole("menuitem", { name: "Go live" })).toHaveAttribute(
+      "href",
+      "/studio/live?new=1",
+    );
+    await expect(menu.getByRole("menuitem", { name: "New channel" })).toHaveAttribute(
+      "href",
+      "/studio/channel?create=1",
+    );
+  });
 });

@@ -113,7 +113,7 @@ export function DistributionCard({
           {canManage ? (
             <Toggle
               label="Federate this channel over ActivityPub"
-              checked={channel.activitypub_enabled}
+              checked={channel.activitypub_enabled === true}
               disabled={busy !== null}
               onChange={(next) => void toggle("activitypub_enabled", next)}
             />
@@ -147,7 +147,7 @@ export function DistributionCard({
             ) : canManage ? (
               <Toggle
                 label="Cross-post this channel to Bluesky"
-                checked={channel.atproto_enabled}
+                checked={channel.atproto_enabled === true}
                 disabled={busy !== null}
                 onChange={(next) => void toggle("atproto_enabled", next)}
               />
