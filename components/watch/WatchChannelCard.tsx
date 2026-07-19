@@ -33,11 +33,11 @@ export function WatchChannelCard({
       >
         <Avatar src={channelAvatarUrl(handle)} name={name} className="h-10 w-10 text-[15px]" />
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-fg transition-colors group-hover:text-fg-muted">
+          <div className="truncate text-subhead font-semibold text-fg transition-colors group-hover:text-fg-muted">
             {name}
           </div>
           {followerCount !== null ? (
-            <div className="text-xs tabular-nums text-fg-muted">
+            <div className="text-footnote tabular-nums text-fg-muted">
               {formatCount(followerCount)} followers
             </div>
           ) : null}

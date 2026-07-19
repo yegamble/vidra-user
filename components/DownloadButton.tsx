@@ -9,7 +9,7 @@ import { formatBytes } from "@/lib/format";
 import { useVideoActionPermissions } from "@/lib/use-video-action-permissions";
 
 const PILL =
-  "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
+  "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
 
 type DownloadMode = "video" | "audio" | "subtitles";
 

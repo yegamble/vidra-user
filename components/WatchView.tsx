@@ -34,7 +34,14 @@ import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { WatchSkeleton } from "@/components/watch/WatchSkeleton";
-import { ApiError, api, ipfsHlsMasterUrl, isSensitiveVideo, videoCaptionUrl } from "@/lib/api";
+import {
+  ApiError,
+  api,
+  ipfsHlsMasterUrl,
+  isSensitiveVideo,
+  videoCaptionUrl,
+  videoThumbnailUrl,
+} from "@/lib/api";
 import {
   clearPlaybackToken,
   setPlaybackToken as storePlaybackToken,
@@ -446,7 +453,7 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
               <button
                 type="button"
                 onClick={() => setSensitiveAccepted(true)}
-                className="focus-ring mt-1 inline-flex items-center rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-black transition-opacity hover:opacity-90"
+                className="focus-ring mt-1 inline-flex items-center rounded-[10px] bg-white px-4 py-2 text-[13px] font-semibold text-black transition-opacity hover:opacity-90"
               >
                 Watch anyway
               </button>
@@ -475,11 +482,9 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
         </div>
 
         <div className="flex flex-col gap-3">
-          <h1 className="text-xl font-bold leading-snug tracking-tight sm:text-[22px]">
-            {video.title}
-          </h1>
+          <h1 className="text-balance text-title2 sm:text-title">{video.title}</h1>
           {/* views · age (+ owner-facing privacy badge). */}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-muted">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-footnote text-fg-muted">
             {/* Owner-facing badge: a private video only ever loads for its
                 owner; an unlisted one tells anyone with the link how it is
                 shared. Public renders nothing. */}
@@ -549,7 +554,7 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
             </ul>
           ) : null}
           {video.description ? (
-            <p className="whitespace-pre-wrap rounded-2xl bg-surface-muted p-4 text-[13.5px] leading-relaxed text-fg">
+            <p className="whitespace-pre-wrap rounded-2xl border border-border-subtle bg-surface p-4 text-subhead leading-relaxed text-fg shadow-soft">
               {video.description}
             </p>
           ) : null}
@@ -680,21 +685,42 @@ function Player({
     setResumeAt(null);
   }
 
+  // Ambient glow (Watch signature): a blurred, scaled, saturated copy of the
+  // poster bleeds vertically behind the player for a soft halo — strongest in
+  // dark mode. Decorative (aria-hidden). Clipped to the player's own width
+  // (inset-x-0 + overflow-hidden) so the blur never bleeds sideways into
+  // horizontal page overflow (the responsive gate). Absent when the video has
+  // no thumbnail.
+  const posterUrl = video.has_thumbnail ? videoThumbnailUrl(video.id, playbackToken) : null;
+
   return (
     <div className="flex flex-col gap-2">
-      <VideoPlayer
-        video={video}
-        videoRef={videoRef}
-        startAt={startAt}
-        tracks={tracks}
-        nextVideo={nextVideo}
-        hlsMasterOverride={hlsMasterOverride}
-        playbackToken={playbackToken}
-        overlay={overlay}
-        onPlay={recordThrottled}
-        onTimeUpdate={recordThrottled}
-        onPause={record}
-      />
+      <div className="relative isolate">
+        {posterUrl ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 -inset-y-6 -z-10 overflow-hidden"
+          >
+            <div
+              className="h-full w-full scale-105 bg-cover bg-center opacity-45 blur-[52px] saturate-150"
+              style={{ backgroundImage: `url("${posterUrl}")` }}
+            />
+          </div>
+        ) : null}
+        <VideoPlayer
+          video={video}
+          videoRef={videoRef}
+          startAt={startAt}
+          tracks={tracks}
+          nextVideo={nextVideo}
+          hlsMasterOverride={hlsMasterOverride}
+          playbackToken={playbackToken}
+          overlay={overlay}
+          onPlay={recordThrottled}
+          onTimeUpdate={recordThrottled}
+          onPause={record}
+        />
+      </div>
       {/* Quiet under-player row: Resume (when known) left, the shortcuts
           disclosure ghosted right. The whole row disappears on touch-size
           screens when Resume is absent — keyboard help means nothing there. */}
@@ -708,7 +734,7 @@ function Player({
           <button
             type="button"
             onClick={resume}
-            className="focus-ring inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold tabular-nums text-fg transition-colors hover:bg-surface-strong"
+            className="focus-ring inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold tabular-nums text-fg transition-colors hover:bg-surface-strong"
           >
             Resume from {formatDuration(resumeAt)}
           </button>

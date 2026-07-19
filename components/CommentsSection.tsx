@@ -511,8 +511,8 @@ function CommentItem({
           className="mt-0.5 h-[34px] w-[34px] text-[13px]"
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2 text-[13px]">
-            <span className="font-semibold text-fg">
+          <div className="flex flex-wrap items-center gap-2 text-footnote">
+            <span className="text-subhead font-semibold text-fg">
               {comment.author_display_name || comment.author_username}
             </span>
             {isRemote && comment.author_domain ? (

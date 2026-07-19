@@ -12,7 +12,7 @@ export function WatchSkeleton() {
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <Skeleton className="aspect-video w-full rounded-2xl" />
         <div className="flex flex-col gap-3">
-          <Skeleton className="h-6 w-3/4 rounded" />
+          <Skeleton className="h-7 w-3/4 rounded-lg" />
           <Skeleton className="h-3.5 w-40" />
           <div className="flex items-center gap-3 py-1">
             <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
@@ -22,10 +22,12 @@ export function WatchSkeleton() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* The joined like/dislike rating pill stays capsule; the single
+                action buttons (Save/Share/Download) are rounded-[10px]. */}
             <Skeleton className="h-9 w-28 rounded-full" />
-            <Skeleton className="h-9 w-20 rounded-full" />
-            <Skeleton className="h-9 w-24 rounded-full" />
-            <Skeleton className="hidden h-9 w-24 rounded-full sm:block" />
+            <Skeleton className="h-9 w-20 rounded-[10px]" />
+            <Skeleton className="h-9 w-24 rounded-[10px]" />
+            <Skeleton className="hidden h-9 w-24 rounded-[10px] sm:block" />
           </div>
         </div>
       </div>
