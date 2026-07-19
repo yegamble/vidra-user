@@ -5,9 +5,9 @@ import { LoaderIcon, WarningIcon } from "@/components/icons";
 // A media-overlay pill button (white / translucent-white on the black scrim —
 // the sanctioned theme-invariant exception, matching the design's IPFS state).
 const SOLID_PILL =
-  "focus-ring rounded-full bg-white px-4 py-2 text-[13px] font-bold text-black transition-opacity hover:opacity-90";
+  "focus-ring rounded-[10px] bg-white px-4 py-2 text-[13px] font-bold text-black transition-opacity hover:opacity-90";
 const GHOST_PILL =
-  "focus-ring rounded-full bg-white/15 px-4 py-2 text-[13px] font-bold text-white transition-colors hover:bg-white/25";
+  "focus-ring rounded-[10px] bg-white/15 px-4 py-2 text-[13px] font-bold text-white transition-colors hover:bg-white/25";
 
 /**
  * IpfsPlayerOverlay — the fetching / error surface painted over the watch player

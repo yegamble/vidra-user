@@ -24,7 +24,7 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
     return (
       <Link
         href="/login"
-        className="focus-ring inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
+        className="focus-ring inline-flex shrink-0 items-center whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         Sign in to save to a playlist
       </Link>
@@ -89,13 +89,13 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
         type="button"
         aria-expanded={open}
         onClick={() => void toggle()}
-        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
+        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         <PlusIcon size={16} />
         <span>Save to playlist</span>
       </button>
       {open ? (
-        <div className="absolute left-0 z-20 mt-2 w-64 rounded-xl border border-border-subtle bg-surface-raised p-2 shadow-lg">
+        <div className="absolute left-0 z-20 mt-2 w-64 rounded-xl border border-border-subtle bg-surface-raised p-2 shadow-soft-strong">
           {playlists === null ? (
             <p className="px-2 py-1.5 text-sm text-fg-muted">Loading…</p>
           ) : playlists.length === 0 ? (
@@ -135,7 +135,7 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
             <button
               type="submit"
               disabled={creating || newTitle.trim() === ""}
-              className="focus-ring shrink-0 rounded-full bg-accent px-3 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-50"
+              className="focus-ring shrink-0 rounded-[10px] bg-accent px-3 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-50"
             >
               Create
             </button>

@@ -64,7 +64,7 @@ export function IpfsSourceBar({
       <button
         type="button"
         onClick={onToggle}
-        className={`focus-ring shrink-0 rounded-full bg-surface-muted px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-strong ${
+        className={`focus-ring shrink-0 rounded-[10px] bg-surface-muted px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-strong ${
           showRefetch ? "" : "ml-auto"
         }`}
       >

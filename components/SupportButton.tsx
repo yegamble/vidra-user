@@ -80,7 +80,7 @@ export function SupportButton({
         onClick={() => setOpen(true)}
         aria-label={compact ? label : undefined}
         className={cn(
-          "focus-ring flex shrink-0 items-center justify-center whitespace-nowrap rounded-full text-[13px] font-semibold transition-colors",
+          "focus-ring flex shrink-0 items-center justify-center whitespace-nowrap rounded-[10px] text-[13px] font-semibold transition-colors",
           variant === "accent"
             ? "bg-accent text-accent-fg hover:bg-accent/90"
             : "border border-border bg-transparent text-fg hover:bg-surface-muted",
