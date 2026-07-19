@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { Select } from "@/components/ui/Select";
 
 const TABS = [
   { href: "/admin", label: "Overview" },
@@ -18,44 +18,42 @@ const TABS = [
   { href: "/admin/system", label: "System" },
 ];
 
-// AdminTabs is the sub-navigation shared by the admin surfaces. It self-hides for
-// anonymous/regular viewers so it never appears above an "Administrators only" gate.
+// AdminTabs is the admin section switcher below `lg`, where the desktop
+// AdminConsole rail is hidden. The old ten-item horizontal tab strip is retired
+// (redesign 2026-07-19: no 5+ horizontal tab strips); on phones the sections
+// drill in from a single compact `Select` — the sanctioned mobile idiom — while
+// the console rail carries the nav at `lg`. Self-hides for anonymous/regular
+// viewers so it never appears above an "Administrators only" gate.
 export function AdminTabs() {
   const { user } = useSession();
   const pathname = usePathname();
+  const router = useRouter();
 
   if (user?.role !== "admin") return null;
 
+  // Which section owns the current path. Sub-routes resolve to their parent
+  // (Config is a layout route, e.g. /admin/config/general); Overview stays exact
+  // so it never shadows the others.
+  const current =
+    TABS.find((tab) =>
+      tab.href === "/admin"
+        ? pathname === tab.href
+        : pathname === tab.href || pathname?.startsWith(`${tab.href}/`) === true,
+    )?.href ?? "/admin";
+
   return (
-    <nav
-      className="-mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0 lg:hidden"
-      aria-label="Admin sections"
-    >
-      <div className="flex min-w-max items-center gap-1 border-b border-border-subtle">
-        {TABS.map((tab) => {
-          // Sub-routes light their tab too (Config is a layout route with
-          // per-page children, e.g. /admin/config/general). The Overview tab
-          // stays exact so it never shadows the others.
-          const active =
-            tab.href === "/admin"
-              ? pathname === tab.href
-              : pathname === tab.href || pathname?.startsWith(`${tab.href}/`) === true;
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              aria-current={active ? "page" : undefined}
-              className={
-                active
-                  ? "focus-ring whitespace-nowrap border-b-2 border-accent px-3 py-3 text-sm font-semibold text-fg"
-                  : "focus-ring whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-medium text-fg-muted transition-colors hover:text-fg"
-              }
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </div>
+    <nav aria-label="Admin sections" className="mb-6 lg:hidden">
+      <Select
+        label="Admin section"
+        value={current}
+        onChange={(e) => router.push(e.target.value)}
+      >
+        {TABS.map((tab) => (
+          <option key={tab.href} value={tab.href}>
+            {tab.label}
+          </option>
+        ))}
+      </Select>
     </nav>
   );
 }

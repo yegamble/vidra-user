@@ -117,7 +117,7 @@ export function AdminConsole() {
       </ul>
 
       <div className="mt-5">
-        <h2 className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-fg-muted">
+        <h2 className="px-3 pb-1.5 text-[12px] font-bold uppercase tracking-[0.06em] text-fg-muted">
           More
         </h2>
         <ul className="flex flex-col gap-0.5">
@@ -129,9 +129,9 @@ export function AdminConsole() {
                   href={item.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "focus-ring flex items-center rounded-[9px] px-3 py-2 text-[13px] transition-colors",
+                    "focus-ring flex h-9 items-center rounded-[10px] px-3 text-[13px] transition-colors",
                     active
-                      ? "bg-surface-muted font-semibold text-fg"
+                      ? "bg-accent/12 font-semibold text-accent-text"
                       : "font-medium text-fg-muted hover:bg-surface-muted hover:text-fg",
                   )}
                 >
@@ -171,8 +171,8 @@ function ConsoleLink({
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "focus-ring flex items-center gap-3 rounded-[9px] px-3 py-2 text-[13.5px] font-semibold transition-colors",
-        active ? "bg-surface-muted text-fg" : "text-fg-muted hover:bg-surface-muted hover:text-fg",
+        "focus-ring flex h-9 items-center gap-3 rounded-[10px] px-3 text-[13.5px] font-semibold transition-colors",
+        active ? "bg-accent/12 text-accent-text" : "text-fg-muted hover:bg-surface-muted hover:text-fg",
       )}
     >
       <Icon size={16} strokeWidth={1.9} className="shrink-0" />

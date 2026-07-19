@@ -34,9 +34,9 @@ export function AdminConfigNav() {
                 aria-current={active ? "page" : undefined}
                 title={page.description}
                 className={cn(
-                  "focus-ring flex items-center whitespace-nowrap rounded-[9px] px-3 py-2 text-[13.5px] transition-colors",
+                  "focus-ring flex items-center whitespace-nowrap rounded-[10px] px-3 py-2 text-[13.5px] transition-colors",
                   active
-                    ? "bg-surface-muted font-semibold text-fg"
+                    ? "bg-accent/12 font-semibold text-accent-text"
                     : "font-medium text-fg-muted hover:bg-surface-muted hover:text-fg",
                 )}
               >

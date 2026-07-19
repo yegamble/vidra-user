@@ -89,7 +89,7 @@ function OverviewBody() {
     <div className="flex flex-col gap-6">
       <Dashboard />
       <section aria-label="Admin sections">
-        <h2 className="px-0.5 pb-2 text-[12px] font-bold uppercase tracking-[0.06em] text-fg-subtle">
+        <h2 className="px-0.5 pb-2 text-[12px] font-bold uppercase tracking-[0.06em] text-fg-muted">
           Manage
         </h2>
         <ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
@@ -258,37 +258,48 @@ function StatsRow({
     );
   }
   const loading = status === "loading" || stats === null;
-  const cards: Array<{ label: string; value: string; title?: string }> = stats
+  // Each stat leads with a small Apple-system-color dot (users blue, videos
+  // indigo, storage teal, peers green) — the design's chip cue; the dot is
+  // supporting, the label carries the meaning.
+  const cards: Array<{ label: string; value: string; title?: string; dot: string }> = stats
     ? [
-        { label: "Users", value: formatCount(stats.users), title: String(stats.users) },
+        {
+          label: "Users",
+          value: formatCount(stats.users),
+          title: String(stats.users),
+          dot: "bg-tile-blue",
+        },
         {
           label: "Published videos",
           value: formatCount(stats.published_videos),
           title: String(stats.published_videos),
+          dot: "bg-tile-indigo",
         },
-        { label: "Media stored", value: formatBytes(stats.media_stored_bytes) },
+        { label: "Media stored", value: formatBytes(stats.media_stored_bytes), dot: "bg-tile-teal" },
         {
           label: "Federated peers",
           value: formatCount(stats.federated_peers),
           title: String(stats.federated_peers),
+          dot: "bg-tile-green",
         },
       ]
     : [
-        { label: "Users", value: "—" },
-        { label: "Published videos", value: "—" },
-        { label: "Media stored", value: "—" },
-        { label: "Federated peers", value: "—" },
+        { label: "Users", value: "—", dot: "bg-tile-blue" },
+        { label: "Published videos", value: "—", dot: "bg-tile-indigo" },
+        { label: "Media stored", value: "—", dot: "bg-tile-teal" },
+        { label: "Federated peers", value: "—", dot: "bg-tile-green" },
       ];
   return (
     <section aria-label="Instance overview">
       <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy={loading || undefined}>
         {cards.map((c) => (
-          <div key={c.label} className="flex flex-col gap-1.5 rounded-2xl bg-surface-muted p-4">
-            <dt className="text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
+          <div key={c.label} className="flex flex-col gap-2 rounded-2xl bg-surface p-4 shadow-soft">
+            <dt className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
+              <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${c.dot}`} />
               {c.label}
             </dt>
             <dd
-              className={`text-2xl font-bold tracking-tight tabular-nums ${loading ? "text-fg-subtle" : "text-fg"}`}
+              className={`text-title tabular-nums ${loading ? "text-fg-subtle" : "text-fg"}`}
               title={c.title}
             >
               {c.value}
@@ -318,7 +329,7 @@ function HealthCard({
       ) : status === "error" || system === null ? (
         <ErrorState message="Could not load the system health." onRetry={onRetry} />
       ) : (
-        <div className="overflow-hidden rounded-2xl bg-surface-muted">
+        <div className="overflow-hidden rounded-2xl bg-surface shadow-soft">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border-subtle px-4 py-3">
             <Badge variant={system.status === "degraded" ? "danger" : "success"}>
               {system.status === "degraded" ? "Degraded" : "Healthy"}
@@ -347,7 +358,11 @@ function HealthCard({
                 <span
                   aria-hidden
                   className={`h-2 w-2 flex-none rounded-full ${
-                    down ? "bg-danger-solid" : c.status === "not_configured" ? "bg-border" : "bg-success"
+                    down
+                      ? "bg-danger-solid"
+                      : c.status === "not_configured"
+                        ? "bg-border"
+                        : "bg-success-solid"
                   }`}
                 />
                 <span className="text-sm font-medium text-fg">{prettyComponent(name)}</span>
@@ -386,22 +401,30 @@ function QueuesCard({
           No background-work queues are being tracked.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-2xl bg-surface-muted">
+        <div className="overflow-hidden rounded-2xl bg-surface shadow-soft">
           {[...jobs.queues]
             .sort((a, b) => a.queue.localeCompare(b.queue))
-            .map((q, i) => (
-              <div
-                key={q.queue}
-                className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-border-subtle" : ""}`}
-              >
-                <span className="text-sm font-medium text-fg">{prettyComponent(q.queue)}</span>
-                <span
-                  className={`ml-auto text-[12.5px] tabular-nums ${q.failed > 0 ? "text-danger" : "text-fg-muted"}`}
+            .map((q, i) => {
+              // Failed queues read danger-tinted, backed-up (pending) queues
+              // warning-tinted; healthy queues stay on the plain surface.
+              // danger-surface (not a solid/10 fill) is the AA-safe backing for
+              // the danger meta text (design-system contrast contract).
+              const tint =
+                q.failed > 0 ? "bg-danger-surface" : q.pending > 0 ? "bg-warning-solid/10" : "";
+              const metaTone =
+                q.failed > 0 ? "text-danger" : q.pending > 0 ? "text-warning" : "text-fg-muted";
+              return (
+                <div
+                  key={q.queue}
+                  className={`flex items-center gap-3 px-4 py-3 ${tint} ${i > 0 ? "border-t border-border-subtle" : ""}`}
                 >
-                  {queueMeta(q)}
-                </span>
-              </div>
-            ))}
+                  <span className="text-sm font-medium text-fg">{prettyComponent(q.queue)}</span>
+                  <span className={`ml-auto text-[12.5px] tabular-nums ${metaTone}`}>
+                    {queueMeta(q)}
+                  </span>
+                </div>
+              );
+            })}
         </div>
       )}
     </CardShell>
@@ -431,7 +454,7 @@ function AuditCard({
         <ul className="flex flex-col">
           {entries.map((e) => (
             <li key={e.id} className="flex gap-3 border-b border-border-subtle py-2.5">
-              <span className="flex-none pt-0.5 font-mono text-[11px] font-bold text-fg-subtle tabular-nums">
+              <span className="flex-none pt-0.5 font-mono text-[11px] font-bold text-fg-muted tabular-nums">
                 {relativeTime(e.occurred_at)}
               </span>
               <div className="min-w-0">
@@ -439,7 +462,7 @@ function AuditCard({
                   <span className="font-semibold">{e.actor_username || e.actor_id || "system"}</span>{" "}
                   <span className="text-fg-muted">{e.result === "failure" ? "failed to run" : "ran"}</span>
                 </div>
-                <div className="mt-0.5 font-mono text-[11.5px] text-fg-subtle">{e.action}</div>
+                <div className="mt-0.5 font-mono text-[13px] text-fg-muted">{e.action}</div>
               </div>
             </li>
           ))}
