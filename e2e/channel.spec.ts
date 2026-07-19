@@ -171,21 +171,23 @@ test("the owner sees no follow/support/message cluster on their own channel", as
   await expect(page.getByRole("button", { name: "Support" })).toHaveCount(0);
 });
 
-test("the About tab shows the channel's real facts", async ({ page }) => {
+test("the About section shows the channel's real facts", async ({ page }) => {
   await page.route(CHANNEL, (route) => route.fulfill({ json: channel }));
   await page.route(CHANNEL_VIDEOS, (route) =>
     route.fulfill({ json: { videos: [video("v1", "Building a Desk")] } }),
   );
 
   await page.goto("/channels/ada");
-  // Videos is the default tab; the grid is visible, the About panel is not.
+  // Videos is the default section; the grid is visible, the About facts are not.
   await expect(page.getByRole("heading", { name: "Building a Desk" })).toBeVisible();
 
-  await page.getByRole("tab", { name: "About" }).click();
+  // The redesigned section switcher is a SegmentedControl (aria-pressed
+  // buttons), not a tab strip.
+  await page.getByRole("button", { name: "About" }).click();
   // Facts drawn only from the real Channel payload + the listed-video count.
-  // Scoped to the active panel: the header meta also says "followers" and the
-  // tablist carries a "Videos" tab.
-  const about = page.getByRole("tabpanel");
+  // Scoped to the facts list so the "Videos" segment button and the header's
+  // "followers" meta don't collide with the About row labels.
+  const about = page.locator("dl");
   await expect(about.getByText("Joined")).toBeVisible();
   await expect(about.getByText("Followers")).toBeVisible();
   await expect(about.getByText("Videos")).toBeVisible();

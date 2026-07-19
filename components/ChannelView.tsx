@@ -12,13 +12,14 @@ import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
-import { Tabs } from "@/components/ui/Tabs";
 import { ApiError, api, channelAvatarUrl, channelBannerUrl } from "@/lib/api";
 import type { Channel, Video } from "@/lib/api";
 import { formatCount, formatMonthYear } from "@/lib/format";
 
 type Status = "loading" | "notfound" | "error" | "ready";
+type Section = "videos" | "about";
 
 // Channel-grid sort. Both keys ride on `created_at`, the one card field the
 // channel-videos contract always carries (views is detail-only), so the chips
@@ -45,6 +46,7 @@ export function ChannelView({ handle }: { handle: string }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [reloadKey, setReloadKey] = useState(0);
   const [sort, setSort] = useState<ChannelSort>("latest");
+  const [section, setSection] = useState<Section>("videos");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,27 +109,28 @@ export function ChannelView({ handle }: { handle: string }) {
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-4">
         <div>
-          {/* Banner strip: the channel image when one exists, a quiet muted
-              block otherwise — the avatar always has something to overlap. */}
+          {/* Apple Music-style banner: the channel image when one exists, a
+              soft monochrome gradient otherwise — the avatar always has an
+              elevated surface to overlap. */}
           <div
             aria-hidden="true"
-            className="h-[150px] w-full overflow-hidden rounded-2xl bg-surface-muted sm:h-[190px]"
+            className="h-[160px] w-full overflow-hidden rounded-2xl bg-gradient-to-br from-surface-strong via-surface-muted to-surface-muted sm:h-[220px]"
           >
             {channel.has_banner ? <ChannelBanner handle={channel.handle} /> : null}
           </div>
-          {/* Avatar + name + action cluster on one baseline-aligned row (design
-              overlaps the avatar over the banner). It wraps on phones so the
-              name drops to its own line below the avatar/cluster; on sm+ the name
-              takes the middle and the cluster right-aligns. */}
-          <div className="-mt-9 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-2 sm:-mt-10 sm:flex-nowrap sm:gap-5 sm:px-4">
+          {/* Overlapping 96px avatar + name/meta + action cluster on one
+              baseline-aligned row. It wraps on phones so the name drops to its
+              own line below the avatar/cluster; on sm+ the name takes the middle
+              and the cluster right-aligns. */}
+          <div className="-mt-12 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-2 sm:flex-nowrap sm:gap-5 sm:px-4">
             <Avatar
               src={channel.has_avatar ? channelAvatarUrl(channel.handle) : null}
               name={name}
-              className="relative z-[1] h-18 w-18 shrink-0 border-[3px] border-canvas text-[26px] shadow-md sm:h-26 sm:w-26 sm:border-4 sm:text-[38px]"
+              className="relative z-[1] h-24 w-24 shrink-0 border-4 border-canvas text-[36px] shadow-soft"
             />
             <div className="order-last w-full min-w-0 pb-1 sm:order-none sm:w-auto sm:flex-1">
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{name}</h1>
-              <p className="mt-0.5 text-[13px] tabular-nums text-fg-muted">
+              <h1 className="text-title sm:text-large-title">{name}</h1>
+              <p className="mt-1 text-subhead tabular-nums text-fg-muted">
                 @{channel.handle} · {formatCount(channel.follower_count)} followers ·{" "}
                 {videos.length} {videos.length === 1 ? "video" : "videos"}
               </p>
@@ -162,57 +165,59 @@ export function ChannelView({ handle }: { handle: string }) {
           </div>
         </div>
         {channel.description ? (
-          <p className="whitespace-pre-wrap px-2 text-sm leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4">
+          <p className="whitespace-pre-wrap px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4">
             {channel.description}
           </p>
         ) : null}
       </header>
 
-      <Tabs
-        label="Channel sections"
-        tabs={[
-          {
-            id: "videos",
-            label: "Videos",
-            panel:
-              videos.length === 0 ? (
-                <EmptyState
-                  title="No videos yet"
-                  message="This channel has not published anything."
-                />
-              ) : (
-                <div className="flex flex-col gap-5">
-                  {/* Sort chips in the shared template pill language (filled =
-                      active), above the dense channel grid. */}
-                  <ChannelSortChips sort={sort} onChange={changeSort} />
-                  <ul
-                    aria-label={`Videos by ${name}`}
-                    className="grid grid-cols-2 gap-x-4 gap-y-6 lg:grid-cols-4 lg:gap-x-[18px]"
-                  >
-                    {sortedVideos.slice(0, visibleCount).map((video) => (
-                      <li key={video.id}>
-                        <ChannelVideoCard
-                          video={video}
-                          onDeleted={() =>
-                            setVideos((cur) => cur.filter((v) => v.id !== video.id))
-                          }
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                  {sortedVideos.length > visibleCount ? (
-                    <LoadMoreButton onClick={() => setVisibleCount((c) => c + PAGE_SIZE)} />
-                  ) : null}
-                </div>
-              ),
-          },
-          {
-            id: "about",
-            label: "About",
-            panel: <ChannelAbout channel={channel} videoCount={videos.length} />,
-          },
-        ]}
-      />
+      {/* Section switcher in the app's segmented-control language (not a tab
+          strip). The panel below swaps with the selected section. */}
+      <div className="flex flex-col gap-5">
+        <SegmentedControl
+          label="Channel sections"
+          value={section}
+          onChange={setSection}
+          options={[
+            { value: "videos", label: "Videos" },
+            { value: "about", label: "About" },
+          ]}
+        />
+        {section === "videos" ? (
+          videos.length === 0 ? (
+            <EmptyState
+              title="No videos yet"
+              message="This channel has not published anything."
+            />
+          ) : (
+            <div className="flex flex-col gap-5">
+              {/* Sort chips in the shared template pill language (filled =
+                  active), above the dense channel grid. */}
+              <ChannelSortChips sort={sort} onChange={changeSort} />
+              <ul
+                aria-label={`Videos by ${name}`}
+                className="grid grid-cols-2 gap-x-4 gap-y-6 lg:grid-cols-4 lg:gap-x-[18px]"
+              >
+                {sortedVideos.slice(0, visibleCount).map((video) => (
+                  <li key={video.id}>
+                    <ChannelVideoCard
+                      video={video}
+                      onDeleted={() =>
+                        setVideos((cur) => cur.filter((v) => v.id !== video.id))
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+              {sortedVideos.length > visibleCount ? (
+                <LoadMoreButton onClick={() => setVisibleCount((c) => c + PAGE_SIZE)} />
+              ) : null}
+            </div>
+          )
+        ) : (
+          <ChannelAbout channel={channel} videoCount={videos.length} />
+        )}
+      </div>
     </div>
   );
 }
@@ -231,11 +236,11 @@ function ChannelAbout({ channel, videoCount }: { channel: Channel; videoCount: n
   ];
   return (
     <div className="max-w-2xl">
-      <dl className="divide-y divide-border-subtle overflow-hidden rounded-[14px] bg-surface-muted">
+      <dl className="divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
         {facts.map((f) => (
           <div key={f.label} className="flex items-center justify-between gap-4 px-4 py-3">
-            <dt className="text-sm text-fg-muted">{f.label}</dt>
-            <dd className="text-sm font-semibold tabular-nums text-fg">{f.value}</dd>
+            <dt className="text-subhead text-fg-muted">{f.label}</dt>
+            <dd className="text-subhead font-semibold tabular-nums text-fg">{f.value}</dd>
           </div>
         ))}
       </dl>
