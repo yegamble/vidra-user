@@ -9,8 +9,10 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { ConnectedLogins } from "@/components/auth/ConnectedLogins";
 import { ChevronRightIcon } from "@/components/icons";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
+import { SETTINGS_GROUPS, type SettingsSection } from "@/components/settings/sections";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { IconTile } from "@/components/ui/IconTile";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, authApi, errorMessage, userAvatarUrl, userBannerUrl } from "@/lib/api";
 import type { UpdateProfileRequest, User } from "@/lib/api";
@@ -33,31 +35,26 @@ function SettingsGroup({ label, children }: { label: string; children: ReactNode
   );
 }
 
-// SettingsNavRow is one navigation row: a full-row link (title + muted sub-line
-// + trailing chevron). The exact "Manage …" name each sub-page's e2e navigates
-// by is carried as sr-only text INSIDE the link, so the link's name-from-content
-// includes it (keeps every getByRole("link", { name: "Manage …" }) green)
-// without an aria-label — an aria-label would trip axe's
-// label-content-name-mismatch against the visible sub-line.
-function SettingsNavRow({
-  href,
-  action,
-  title,
-  desc,
-}: {
-  href: string;
-  action: string;
-  title: string;
-  desc: string;
-}) {
+// SettingsNavRow is one navigation row: a leading colored IconTile (System
+// Settings pattern), a Subhead title + Footnote sub-line, and a trailing
+// chevron. The exact "Manage …" name each sub-page's e2e navigates by is carried
+// as sr-only text INSIDE the link, so the link's name-from-content includes it
+// (keeps every getByRole("link", { name: "Manage …" }) green) without an
+// aria-label — an aria-label would trip axe's label-content-name-mismatch
+// against the visible sub-line. Both this row and the desktop SettingsRail are
+// fed by the shared section catalog, so their hue/route/name never diverge.
+function SettingsNavRow({ href, action, title, desc, color, Icon }: SettingsSection) {
   return (
     <li>
       <Link
         href={href}
-        className="focus-ring flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-surface-strong"
+        className="focus-ring flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-strong"
       >
+        <IconTile color={color}>
+          <Icon size={16} />
+        </IconTile>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-fg">{title}</span>
+          <span className="block text-[15px] font-semibold text-fg">{title}</span>
           <span className="mt-0.5 block text-[13px] text-fg-muted">{desc}</span>
         </span>
         <span className="sr-only">{action}</span>
@@ -127,7 +124,7 @@ export function SettingsView() {
           (real image, else initial fallback) beside the display name and the
           "@handle · email · verified" identity line (verified in success). */}
       <header className="flex flex-col gap-4 border-b border-border-subtle pb-5">
-        <h1 className="text-2xl font-bold tracking-tight">Account settings</h1>
+        <h1 className="text-title sm:text-large-title">Account settings</h1>
         <div className="flex items-center gap-3.5">
           <Avatar
             src={userAvatarUrl(user.id)}
@@ -162,67 +159,19 @@ export function SettingsView() {
         user={user}
         onChanged={() => void reloadUser().catch(() => {})}
       />
-      {/* Account & privacy navigation — iOS-style grouped rows (design-system
-          "grouped settings rows"): a surface-muted card of hairline-divided
-          full-row links, each a title + muted sub-line + trailing chevron. */}
-      <SettingsGroup label="Account">
-        <SettingsNavRow
-          href="/settings/playback"
-          action="Manage playback settings"
-          title="Playback"
-          desc="Autoplay, default speed and quality, captions and theater defaults."
-        />
-        <SettingsNavRow
-          href="/settings/security"
-          action="Manage security settings"
-          title="Security"
-          desc="Two-factor authentication and recovery codes."
-        />
-        <SettingsNavRow
-          href="/settings/connections"
-          action="Manage connected accounts"
-          title="Connected accounts"
-          desc="Connect Bluesky to cross-post your new public videos (ATProto)."
-        />
-        <SettingsNavRow
-          href="/settings/devices"
-          action="Manage encrypted-messaging devices"
-          title="Encrypted-messaging devices"
-          desc="Devices that can read your encrypted messages, and their safety numbers."
-        />
-        <SettingsNavRow
-          href="/settings/notifications"
-          action="Manage notification preferences"
-          title="Notifications"
-          desc="Choose which notifications you receive."
-        />
-        <SettingsNavRow
-          href="/settings/donations"
-          action="Manage donation addresses"
-          title="Donation addresses"
-          desc="Public crypto addresses shown on your profile and channels (display only)."
-        />
-      </SettingsGroup>
-      <SettingsGroup label="Privacy & safety">
-        <SettingsNavRow
-          href="/settings/search"
-          action="Manage search and recommendations"
-          title="Search & recommendations"
-          desc="Personalization, and your search history."
-        />
-        <SettingsNavRow
-          href="/settings/mutes"
-          action="Manage muted accounts"
-          title="Mutes"
-          desc="Accounts and federated instances whose content is hidden from you."
-        />
-        <SettingsNavRow
-          href="/settings/blocks"
-          action="Manage blocked accounts"
-          title="Blocked accounts"
-          desc="Accounts you have blocked. Neither of you can direct-message the other."
-        />
-      </SettingsGroup>
+      {/* Section navigation — the iOS grouped-rows drill-in (System Settings
+          pattern): surface-muted cards of hairline-divided full-row links, each
+          led by a colored IconTile. On ≥ lg the SettingsRail (left) is the
+          section nav, so these collapse to avoid a duplicate nav. */}
+      <div className="flex flex-col gap-6 lg:hidden">
+        {SETTINGS_GROUPS.map((group) => (
+          <SettingsGroup key={group.label} label={group.label}>
+            {group.items.map((item) => (
+              <SettingsNavRow key={item.href} {...item} />
+            ))}
+          </SettingsGroup>
+        ))}
+      </div>
       <ConnectedLogins />
       <AccountDataSection />
       {/* Header sign-out is hidden on phones (the avatar is the only account
@@ -234,7 +183,7 @@ export function SettingsView() {
         onClick={() => {
           void logout();
         }}
-        className="focus-ring w-full rounded-xl border border-border bg-transparent py-3 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted"
+        className="focus-ring w-full rounded-[10px] border border-border bg-transparent py-3 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted"
       >
         Sign out<span className="sr-only"> of this device</span>
       </button>
@@ -311,7 +260,7 @@ function EmailVerificationSection({ email }: { email: string }) {
   }
 
   return (
-    <section className="flex max-w-xl flex-col gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4">
+    <section className="flex max-w-xl flex-col gap-3 rounded-2xl border border-warning-solid/25 bg-warning-solid/12 p-4">
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold tracking-tight text-warning">
           Verify your email
@@ -341,7 +290,7 @@ function EmailVerificationSection({ email }: { email: string }) {
           type="button"
           onClick={() => void resend()}
           disabled={state === "sending"}
-          className="focus-ring self-start rounded-full border border-warning/40 bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-warning transition-colors hover:bg-warning/10 disabled:opacity-60"
+          className="focus-ring self-start rounded-[10px] border border-warning-solid/40 bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-warning transition-colors hover:bg-warning-solid/12 disabled:opacity-60"
         >
           {state === "sending" ? "Sending…" : "Resend verification email"}
         </button>
@@ -416,7 +365,7 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
         <button
           type="submit"
           disabled={submitting || password === ""}
-          className="focus-ring self-start rounded-full bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
+          className="focus-ring self-start rounded-[10px] bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
         >
           {submitting ? "Deactivating…" : "Deactivate account"}
         </button>
@@ -477,7 +426,7 @@ function DeleteAccountSection({
         <button
           type="button"
           onClick={() => setArmed(true)}
-          className="focus-ring self-start rounded-full border border-danger-border px-4 py-2 text-sm font-semibold text-danger transition-colors hover:bg-danger-surface"
+          className="focus-ring self-start rounded-[10px] border border-danger-border px-4 py-2 text-sm font-semibold text-danger transition-colors hover:bg-danger-surface"
         >
           Delete account permanently
         </button>
@@ -540,7 +489,7 @@ function DeleteAccountSection({
             <button
               type="submit"
               disabled={submitting || password === "" || confirmName !== username}
-              className="focus-ring rounded-full bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
+              className="focus-ring rounded-[10px] bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
             >
               {submitting ? "Deleting…" : "Permanently delete my account"}
             </button>
@@ -553,7 +502,7 @@ function DeleteAccountSection({
                 setConfirmName("");
                 setError(null);
               }}
-              className="focus-ring rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
+              className="focus-ring rounded-[10px] border border-border bg-surface px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
             >
               Cancel
             </button>
@@ -765,7 +714,7 @@ function ProfileForm({
       <button
         type="submit"
         disabled={state === "saving"}
-        className="focus-ring self-start rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
+        className="focus-ring self-start rounded-[10px] bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
       >
         {state === "saving" ? "Saving…" : "Save"}
       </button>
