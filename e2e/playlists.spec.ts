@@ -107,7 +107,9 @@ test("creating a playlist adds it to the list", async ({ page }) => {
   await goToPlaylists(page);
   await expect(page.getByText("No playlists yet")).toBeVisible();
   await page.getByLabel("Playlist title").fill("My Mix");
-  await page.getByRole("button", { name: "Create" }).click();
+  // Scope to <main>: the header's "+ Create" menu trigger is also a button
+  // named "Create".
+  await page.getByRole("main").getByRole("button", { name: "Create" }).click();
   await expect(page.getByRole("link", { name: /My Mix/ })).toBeVisible();
 });
 
