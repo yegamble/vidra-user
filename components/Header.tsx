@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { PlusIcon } from "@/components/icons";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { ProtocolRibbon } from "@/components/ProtocolRibbon";
 import { SearchAutocomplete, SearchAutocompleteFallback } from "@/components/SearchAutocomplete";
 import { isStandaloneRoute } from "@/lib/app-shell";
 import { brandingAssetUrl } from "@/lib/branding";
@@ -54,25 +55,31 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
       <div className="glass-chrome mx-auto flex h-16 w-full items-center gap-3 rounded-[22px] px-4 sm:h-14 sm:gap-5 sm:px-5">
         <Link
           href="/"
-          className="focus-ring flex min-h-11 items-center gap-2.5 rounded-lg text-2xl font-bold tracking-tight text-fg sm:gap-2 sm:text-xl sm:tracking-[-0.045em]"
+          className="focus-ring flex min-h-11 flex-col justify-center gap-1 rounded-lg"
         >
-          {phoneLogo !== null ? (
-            // eslint-disable-next-line @next/next/no-img-element -- operator-uploaded image served by the backend, not a static asset
-            <img
-              src={phoneLogo}
-              alt={hideName ? name : ""}
-              className="h-9 w-auto max-w-40 object-contain sm:hidden"
-            />
-          ) : null}
-          {desktopLogo !== null ? (
-            // eslint-disable-next-line @next/next/no-img-element -- operator-uploaded image served by the backend, not a static asset
-            <img
-              src={desktopLogo}
-              alt={hideName ? name : ""}
-              className="hidden h-8 w-auto max-w-48 object-contain sm:block"
-            />
-          ) : null}
-          {hideName ? null : <span>{name}</span>}
+          {/* The SF wordmark (or operator logo). The tri-protocol ribbon sits
+              directly under it — placement (a) of the three sanctioned ribbon
+              uses; decorative (aria-hidden) so the link name stays the brand. */}
+          <span className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-fg sm:gap-2 sm:text-xl sm:tracking-[-0.045em]">
+            {phoneLogo !== null ? (
+              // eslint-disable-next-line @next/next/no-img-element -- operator-uploaded image served by the backend, not a static asset
+              <img
+                src={phoneLogo}
+                alt={hideName ? name : ""}
+                className="h-9 w-auto max-w-40 object-contain sm:hidden"
+              />
+            ) : null}
+            {desktopLogo !== null ? (
+              // eslint-disable-next-line @next/next/no-img-element -- operator-uploaded image served by the backend, not a static asset
+              <img
+                src={desktopLogo}
+                alt={hideName ? name : ""}
+                className="hidden h-8 w-auto max-w-48 object-contain sm:block"
+              />
+            ) : null}
+            {hideName ? null : <span>{name}</span>}
+          </span>
+          <ProtocolRibbon />
         </Link>
         {/* The single site-search box: a centered pill at sm+, a search icon
             button that expands to a full-screen sheet on phones. It renders its
@@ -86,7 +93,7 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
         </Suspense>
         <Link
           href="/studio"
-          className="focus-ring hidden min-h-10 items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-raised/80 sm:flex"
+          className="focus-ring hidden min-h-10 items-center gap-1.5 rounded-[10px] border border-border px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-raised/80 sm:flex"
         >
           <PlusIcon size={14} strokeWidth={2.2} />
           Create
