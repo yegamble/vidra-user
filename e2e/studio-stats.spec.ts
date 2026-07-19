@@ -9,6 +9,10 @@ const MY_CHANNELS = /\/api\/v1\/me\/channels$/;
 const CHANNEL_STATS = /\/api\/v1\/channels\/ada_makes\/stats$/;
 const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
 const VIDEO_STATS = /\/api\/v1\/videos\/v1\/stats$/;
+const ME_STATS = /\/api\/v1\/me\/stats$/;
+const ANY_CHANNEL_STATS = /\/api\/v1\/channels\/[^/]+\/stats$/;
+const ANY_CHANNEL_VIDEOS = /\/api\/v1\/channels\/[^/]+\/videos$/;
+const ATPROTO = /\/api\/v1\/me\/atproto$/;
 
 // A dense 30-day series, oldest first, matching the contract's shape.
 function dailyViews(totalOnLastDay: number) {
@@ -137,6 +141,82 @@ test("a creator sees channel totals, the 30-day chart, and drills into a video",
   ).toBeVisible();
   // The per-video totals grid shows its comment count.
   await expect(page.getByText("Comments")).toHaveCount(2); // channel + video grids
+});
+
+test("the All channels scope shows the account rollup and a row switches scope", async ({
+  page,
+}) => {
+  await signIn(page);
+  const chans = [
+    {
+      ...channel(),
+      id: "c1",
+      handle: "ada_makes",
+      display_name: "Ada Makes",
+      role: "owner",
+      activitypub_enabled: true,
+      atproto_enabled: true,
+      atproto_active: false,
+    },
+    {
+      id: "c2",
+      owner_id: "u1",
+      handle: "ada_live",
+      display_name: "Ada Live",
+      description: "",
+      follower_count: 1,
+      created_at: new Date().toISOString(),
+      role: "owner",
+      activitypub_enabled: true,
+      atproto_enabled: true,
+      atproto_active: false,
+    },
+  ];
+  await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: chans } }));
+  // The extension is off on this instance → the dashboard/channel ATProto row is hidden.
+  await page.route(ATPROTO, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
+  await page.route(ANY_CHANNEL_STATS, (route) =>
+    route.fulfill({
+      json: {
+        views: 10,
+        likes: 0,
+        dislikes: 0,
+        comments: 0,
+        followers: 3,
+        videos: 1,
+        daily_views: dailyViews(10),
+      },
+    }),
+  );
+  await page.route(ANY_CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(ME_STATS, (route) =>
+    route.fulfill({
+      json: {
+        totals: { views: 30, likes: 1, dislikes: 0, comments: 2, followers: 4, videos: 3 },
+        daily_views: dailyViews(30),
+        channels: [
+          { id: "c1", handle: "ada_makes", display_name: "Ada Makes", views: 20, followers: 3, videos: 2, views_28d: 20 },
+          { id: "c2", handle: "ada_live", display_name: "Ada Live", views: 10, followers: 1, videos: 1, views_28d: 10 },
+        ],
+      },
+    }),
+  );
+
+  await gotoAnalytics(page);
+
+  // Switch to the owner-scoped account rollup.
+  await page.getByRole("button", { name: /All my channels/ }).click();
+  const allSection = page.getByRole("region", { name: "Stats across all channels" });
+  await expect(allSection).toBeVisible();
+  // The per-channel breakdown table lists both owned channels.
+  await expect(page.getByRole("button", { name: /Ada Live/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Ada Makes/ })).toBeVisible();
+
+  // Clicking a channel row switches the studio scope to that channel.
+  await page.getByRole("button", { name: /Ada Live/ }).click();
+  await expect(page.getByRole("region", { name: "Stats for @ada_live" })).toBeVisible();
 });
 
 test("a creator with no channels sees the analytics onboarding", async ({ page }) => {
