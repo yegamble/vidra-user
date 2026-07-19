@@ -167,7 +167,7 @@ export function Dropdown({
           role="menu"
           aria-label={triggerLabel}
           className={cn(
-            "absolute z-40 min-w-52 overflow-y-auto rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg",
+            "absolute z-40 min-w-52 overflow-y-auto rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-soft-strong",
             "max-h-[min(60vh,480px)]",
             placement.up ? "bottom-full mb-1" : "top-full mt-1",
             placement.end ? "right-0" : "left-0",

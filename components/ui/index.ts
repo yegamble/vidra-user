@@ -1,7 +1,7 @@
 // Barrel for the component-primitive layer. New surfaces should import from
 // here (`@/components/ui`); the individual files remain importable too.
 export { Avatar } from "./Avatar";
-export { Badge, type BadgeProps, type BadgeVariant } from "./Badge";
+export { Badge, type BadgeProps, type BadgeVariant, type ProtocolColor } from "./Badge";
 export {
   Button,
   buttonClasses,
@@ -12,9 +12,10 @@ export {
 export { Card, type CardProps } from "./Card";
 export { Checkbox, type CheckboxProps } from "./Checkbox";
 export { Dropdown, type DropdownItem, type DropdownProps } from "./Dropdown";
-export { EmptyState } from "./EmptyState";
+export { EmptyState, type EmptyStateTint } from "./EmptyState";
 export { ErrorState } from "./ErrorState";
 export { IconButton, type IconButtonProps } from "./IconButton";
+export { IconTile, type TileColor } from "./IconTile";
 export { Input, type InputProps } from "./Input";
 export { LinkButton, type LinkButtonProps } from "./LinkButton";
 export { LoadMoreButton, PAGE_SIZE } from "./LoadMoreButton";
