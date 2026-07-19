@@ -92,6 +92,13 @@ async function openStudio(page: Page) {
   await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [channel()] } }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig }));
   await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  // The Studio Channel tab also mounts the collaborators + distribution cards.
+  await page.route(/\/api\/v1\/channels\/ada_makes\/members$/, (route) =>
+    route.fulfill({ json: { members: [] } }),
+  );
+  await page.route(/\/api\/v1\/me\/atproto$/, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
 
   await page.goto("/login");
   await page.getByLabel("Email").fill("ada@example.test");

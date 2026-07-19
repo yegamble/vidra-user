@@ -210,12 +210,13 @@ test("the All channels scope shows the account rollup and a row switches scope",
   await page.getByRole("button", { name: /All my channels/ }).click();
   const allSection = page.getByRole("region", { name: "Stats across all channels" });
   await expect(allSection).toBeVisible();
-  // The per-channel breakdown table lists both owned channels.
-  await expect(page.getByRole("button", { name: /Ada Live/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Ada Makes/ })).toBeVisible();
+  // The per-channel breakdown table lists both owned channels (scoped to the
+  // table region — the channel name also appears in the StudioNav switcher).
+  await expect(allSection.getByRole("button", { name: /Ada Live/ })).toBeVisible();
+  await expect(allSection.getByRole("button", { name: /Ada Makes/ })).toBeVisible();
 
   // Clicking a channel row switches the studio scope to that channel.
-  await page.getByRole("button", { name: /Ada Live/ }).click();
+  await allSection.getByRole("button", { name: /Ada Live/ }).click();
   await expect(page.getByRole("region", { name: "Stats for @ada_live" })).toBeVisible();
 });
 
