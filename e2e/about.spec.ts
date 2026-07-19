@@ -159,6 +159,10 @@ test("the PeerTube-style about pages expose branding and paginate each section",
   await expect(page.getByRole("heading", { name: "Network" })).toBeVisible();
 
   await page.getByRole("link", { name: "Platform", exact: true }).click();
+  // Anchor on the completed navigation before opening the Support dialog: a
+  // Support click landing mid-transition opens the dialog on the outgoing page
+  // and the remount silently closes it again.
+  await expect(page).toHaveURL(/\/about\/instance\/home$/);
 
   await page.getByRole("button", { name: "Support" }).click();
   const support = page.getByRole("dialog", { name: "Support Vidra Test" });
