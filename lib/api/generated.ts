@@ -616,6 +616,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/atproto/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an ATProto identity login
+         * @description Begins the ATProto (Bluesky / any PDS) identity-login flow for a handle: resolves and bidirectionally verifies the handle, discovers the account's authorization server, performs a Pushed Authorization Request (PAR) with PKCE + DPoP, seals the attempt (including the ephemeral DPoP key) into a short-lived, signed, httpOnly `vidra_atproto_state` cookie, and returns the authorization URL. Call this with fetch (credentials included), then top-level-navigate the browser to `authorization_url`. The redirect_uri and client_id are always derived server-side from PUBLIC_BASE_URL — never from request parameters.
+         */
+        post: operations["startATProtoLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/atproto/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ATProto identity-login callback
+         * @description The redirect target the authorization server sends the browser back to. Verifies the signed attempt cookie against the returned `state`, enforces the RFC 9207 `iss`, the token `sub` (which must equal the DID resolved at start), and the `atproto` scope, then logs in: a known identity signs its account in, otherwise a new passwordless account is created (username derived from the handle). The session is always issued in cookie mode — the rotating refresh token is set as the httpOnly `vidra_refresh` cookie and the SPA obtains an access token via POST /api/v1/auth/refresh with credentials — and the browser is redirected (302) to the validated `return_to` with `?oauth=1`. User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `atproto_identity_mismatch`, `atproto_upstream`, `account_disabled`, `conflict`); protocol violations (missing/forged/expired state, missing code) are 400.
+         */
+        get: operations["completeATProtoLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/atproto/client-metadata.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ATProto OAuth client metadata document
+         * @description The public OAuth client-metadata document for this instance's ATProto public client (production hosted-client mode). Served unauthenticated so the authorization server can fetch it during the flow.
+         */
+        get: operations["getATProtoClientMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/oauth-identities": {
         parameters: {
             query?: never;
@@ -4111,7 +4171,7 @@ export interface paths {
         };
         /**
          * IPFS mirror status (admin)
-         * @description Reports the hybrid IPFS media mirror's status (fix_plan P19, .ralph/specs/ipfs-media.md): whether it is enabled, node reachability, the public gateway URL in use, whether an IPFS Cluster is configured, and pin counts overall and per media class. IPFS is a MIRROR SIDECAR — local/S3 stays authoritative — so this never reflects on the readiness of media serving. Returns 503 ipfs_disabled when IPFS_ENABLED=false. Restricted to admins. (Status aggregation is delivered in P19.2; until then an enabled instance answers 501 not_implemented.)
+         * @description Reports the hybrid IPFS media mirror's status (fix_plan P19, .ralph/specs/ipfs-media.md): whether it is enabled, node reachability, the public gateway URL in use, whether an IPFS Cluster is configured, and pin counts overall and per media class. IPFS is a MIRROR SIDECAR — local/S3 stays authoritative — so this never reflects on the readiness of media serving. Returns 503 ipfs_disabled when both IPFS_ENABLED=false and IPFS_MIRROR_PRIVATE=false. Restricted to admins. (Status aggregation is delivered in P19.2; until then an enabled instance answers 501 not_implemented.)
          */
         get: operations["getIPFSStatus"];
         put?: never;
@@ -4133,7 +4193,7 @@ export interface paths {
         put?: never;
         /**
          * Kick an IPFS reconciliation/backfill scan (admin)
-         * @description Triggers an immediate reconciliation scan of the IPFS mirror: re-enqueue failed pins and upsert pin intents for eligible ALREADY-PUBLIC objects that have no ledger row yet (the outage-backfill path). Idempotent — a second run enqueues nothing new. Returns 503 ipfs_disabled when IPFS_ENABLED=false. Restricted to admins; audited. (The real scan is delivered in P19.6; until then an enabled instance answers 501 not_implemented.)
+         * @description Triggers an immediate reconciliation scan of the IPFS mirror: re-enqueue failed pins and upsert pin intents for eligible ALREADY-PUBLIC objects that have no ledger row yet (the outage-backfill path). Idempotent — a second run enqueues nothing new. Returns 503 ipfs_disabled when both IPFS_ENABLED=false and IPFS_MIRROR_PRIVATE=false. Restricted to admins; audited. (The real scan is delivered in P19.6; until then an enabled instance answers 501 not_implemented.)
          */
         post: operations["reconcileIPFS"];
         delete?: never;
@@ -4458,6 +4518,8 @@ export interface components {
              *     ]
              */
             oauth_providers: string[];
+            /** @description Whether ATProto identity login (Bluesky / any self-hosted PDS) is enabled (ATPROTO_LOGIN_ENABLED). When true, render a "sign in with a handle" affordance that POSTs to /api/v1/auth/atproto/start. Independent of oauth_providers above. */
+            atproto_login?: boolean;
             /** @description Whether ActivityPub federation is enabled on this instance (gates remote-content surfaces such as remote follows and remote videos). */
             federation_enabled: boolean;
             /** @description Link to the instance terms of service; may be empty. */
@@ -8777,6 +8839,129 @@ export interface operations {
             };
         };
     };
+    startATProtoLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The ATProto handle to sign in with (e.g. alice.bsky.social). */
+                    handle: string;
+                    /** @description Same-origin relative path to return to after login (`/...`); absolute URLs and `//...` are rejected. Defaults to `/`. */
+                    return_to?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The authorization URL to navigate the browser to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        authorization_url?: string;
+                    };
+                };
+            };
+            /** @description Invalid handle or return_to. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Identity resolution or authorization-server discovery / PAR failed upstream. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description ATProto login is not enabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    completeATProtoLogin: {
+        parameters: {
+            query?: {
+                /** @description Authorization code from the authorization server. */
+                code?: string;
+                /** @description Must match the state sealed in the attempt cookie. */
+                state?: string;
+                /** @description RFC 9207 issuer identifier; must exactly match the issuer bound at start. */
+                iss?: string;
+                /** @description Auth-server-reported error (e.g. the user denied consent). */
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to return_to. On success the `vidra_refresh` session cookie is set and `?oauth=1` is appended; on user-actionable failure the location carries `?oauth_error=<code>` instead. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing/forged/expired state or missing authorization code. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description ATProto login is not enabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getATProtoClientMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The client-metadata document. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
     listOAuthIdentities: {
         parameters: {
             query?: never;
@@ -9766,6 +9951,14 @@ export interface operations {
                     "image/*": string;
                 };
             };
+            /** @description The public avatar is pinned; redirect to its immutable public IPFS gateway URL. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No channel with that handle, or no avatar set. */
             404: {
                 headers: {
@@ -9902,6 +10095,14 @@ export interface operations {
                 content: {
                     "image/*": string;
                 };
+            };
+            /** @description The public banner is pinned; redirect to its immutable public IPFS gateway URL. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No channel with that handle, or no banner set. */
             404: {
@@ -10226,6 +10427,14 @@ export interface operations {
                     "image/*": string;
                 };
             };
+            /** @description The public avatar is pinned; redirect to its immutable public IPFS gateway URL. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No such user, or no avatar set. */
             404: {
                 headers: {
@@ -10256,6 +10465,14 @@ export interface operations {
                 content: {
                     "image/*": string;
                 };
+            };
+            /** @description The public banner is pinned; redirect to its immutable public IPFS gateway URL. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No such user, or no banner set. */
             404: {
@@ -11308,6 +11525,14 @@ export interface operations {
                     "image/jpeg": string;
                 };
             };
+            /** @description The public poster is pinned; redirect to its immutable public IPFS gateway URL. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No such video (or private and not yours), or no thumbnail. */
             404: {
                 headers: {
@@ -11440,6 +11665,14 @@ export interface operations {
                 content: {
                     "image/jpeg": string;
                 };
+            };
+            /** @description The public sprite sheet is pinned; redirect to its immutable public IPFS gateway URL. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No such video (or not visible), or no storyboard. */
             404: {
@@ -14571,6 +14804,14 @@ export interface operations {
                     "image/png": string;
                     "image/webp": string;
                 };
+            };
+            /** @description The public playlist cover is pinned; redirect to its immutable public IPFS gateway URL. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No such playlist (or not visible), or no cover. */
             404: {

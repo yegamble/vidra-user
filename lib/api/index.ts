@@ -70,6 +70,6 @@ export type {
   SensitiveContentPolicy,
   SensitiveVideoFields,
 } from "./instance-platform";
-export { authApi, oauthBeginUrl } from "./auth";
+export { authApi, beginATProtoLogin, oauthBeginUrl } from "./auth";
 export { getAccessToken, setAccessToken, setSessionExpiredHandler } from "./auth-store";
 export type * from "./types";
