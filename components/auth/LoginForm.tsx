@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { AuthBrandLink } from "@/components/auth/AuthPage";
+import { AuthWordmark } from "@/components/auth/AuthPage";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
 import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
@@ -180,15 +180,15 @@ export function LoginForm({
         }}
         className="flex flex-col gap-4"
       >
-        <div className="mb-2 flex flex-col items-center gap-1.5 text-center">
+        <div className="mb-2 flex flex-col items-center gap-2 text-center">
           <div
             aria-hidden
-            className="mb-2 flex h-13 w-13 items-center justify-center rounded-full bg-surface-muted"
+            className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-accent/12"
           >
-            <LockIcon size={22} className="text-fg" />
+            <LockIcon size={24} className="text-accent" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Two-factor authentication</h1>
-          <p className="text-sm text-fg-muted">
+          <h1 className="text-title text-fg">Two-factor authentication</h1>
+          <p className="text-subhead text-fg-muted">
             {recoveryMode
               ? "Enter one of your recovery codes."
               : "Enter the 6-digit code from your authenticator app."}
@@ -208,6 +208,7 @@ export function LoginForm({
             required
             value={code}
             onChange={(e) => setCode(e.target.value)}
+            className="min-h-12 text-base"
           />
         ) : (
           <OtpInput
@@ -237,7 +238,7 @@ export function LoginForm({
             setError(null);
             setOtpKey((k) => k + 1);
           }}
-          className="focus-ring self-center rounded-sm text-sm font-semibold text-fg-muted hover:text-fg"
+          className="focus-ring self-center rounded-sm text-subhead font-semibold text-accent-text transition-opacity hover:opacity-80"
         >
           {recoveryMode ? "Enter a code from your app instead" : "Use a recovery code instead"}
         </button>
@@ -252,7 +253,7 @@ export function LoginForm({
             setRecoveryMode(false);
             setError(null);
           }}
-          className="focus-ring self-center rounded-sm text-sm font-semibold text-fg hover:underline"
+          className="focus-ring self-center rounded-sm text-subhead font-semibold text-fg-muted transition-colors hover:text-fg"
         >
           Back to sign in
         </button>
@@ -269,11 +270,11 @@ export function LoginForm({
       }}
       className="flex flex-col gap-4"
     >
-      <div className="mb-4 flex flex-col gap-1.5 text-center">
+      <div className="mb-6 flex flex-col items-center gap-3 text-center">
         <h1>
-          <AuthBrandLink className="text-[34px]" />
+          <AuthWordmark brandClassName="text-[30px]" />
         </h1>
-        <p className="text-sm text-fg-muted">The quiet home for independent video</p>
+        <p className="text-title2 text-fg">Sign in to Vidra</p>
       </div>
 
       {errorBanner}
@@ -287,9 +288,10 @@ export function LoginForm({
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
+        className="min-h-12 text-base"
       />
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         <Input
           id="login-password"
           name="password"
@@ -299,10 +301,11 @@ export function LoginForm({
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          className="min-h-12 text-base"
         />
         <Link
           href="/reset-password"
-          className="focus-ring self-start rounded-sm text-[13px] font-semibold text-fg-muted hover:text-fg"
+          className="focus-ring self-start rounded-sm text-footnote font-semibold text-accent-text transition-opacity hover:opacity-80"
         >
           Forgot your password?
         </Link>
@@ -320,9 +323,12 @@ export function LoginForm({
       <OAuthButtons providers={providers} returnTo="/login?oauth=1" />
       <BlueskyLoginButton enabled={atprotoEnabled} returnTo="/login" />
 
-      <p className="text-center text-sm text-fg-muted">
+      <p className="text-center text-subhead text-fg-muted">
         No account?{" "}
-        <Link href="/signup" className="focus-ring rounded-sm font-semibold text-fg hover:underline">
+        <Link
+          href="/signup"
+          className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80"
+        >
           Create one
         </Link>
       </p>

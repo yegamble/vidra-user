@@ -35,12 +35,13 @@ export function BlueskyLoginButton({
     return (
       <Button
         type="button"
-        variant="secondary"
+        variant="tonal"
         size="lg"
         className="w-full"
         onClick={() => setExpanded(true)}
       >
-        <BlueskyIcon size={18} aria-hidden />
+        {/* Brand blue lives INSIDE the glyph only; the button label stays fg. */}
+        <BlueskyIcon size={18} className="text-protocol-bluesky" aria-hidden />
         Continue with Bluesky
       </Button>
     );
@@ -94,6 +95,7 @@ export function BlueskyLoginButton({
         autoComplete="username"
         spellCheck={false}
         maxLength={253}
+        className="min-h-12 text-base"
         value={handle}
         onChange={(e) => {
           setHandle(e.target.value);
