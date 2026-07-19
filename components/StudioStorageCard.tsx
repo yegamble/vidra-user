@@ -6,14 +6,18 @@ import { api } from "@/lib/api";
 import type { QuotaStatus } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 
-// StudioStorageCard — the design's Studio "Storage" card, bound to the REAL
-// GET /api/v1/me/quota contract ({ used_bytes, quota_bytes|null, daily_used_bytes,
-// daily_quota_bytes|null }). Borderless surface-muted card: "Storage" label +
-// "X of Y" (or "X used" when unlimited) + a 5px progress bar (surface-strong
-// track, fg fill), plus a "Daily uploads" footnote with the remaining rolling-24h
-// headroom when the instance sets a daily quota (config-parity W7). Purely
-// informational, so a load failure hides it rather than showing a broken/faked
-// meter (the frontend truthfulness rule — never invent numbers).
+// StudioStorageCard — the design's Studio "Storage" card (iCloud pattern),
+// bound to the REAL GET /api/v1/me/quota contract ({ used_bytes,
+// quota_bytes|null, daily_used_bytes, daily_quota_bytes|null }). Elevated
+// surface card (soft shadow): "Storage" label + "X of Y" (or "X used" when
+// unlimited) + a rounded capacity bar (surface-strong track, accent used
+// segment) with a Used/Free legend, plus a "Daily uploads" footnote with the
+// remaining rolling-24h headroom when the instance sets a daily quota
+// (config-parity W7). The quota contract reports one aggregate `used_bytes`
+// (no per-media-kind breakdown), so the bar is a truthful two-tone used/free
+// meter rather than a fabricated per-kind split — never invent numbers.
+// Purely informational, so a load failure hides it rather than showing a
+// broken/faked meter.
 export function StudioStorageCard() {
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
 
@@ -44,7 +48,7 @@ export function StudioStorageCard() {
   return (
     <section
       aria-label="Storage"
-      className="flex flex-col gap-2.5 rounded-2xl bg-surface-muted px-4 py-3.5"
+      className="flex flex-col gap-2.5 rounded-2xl bg-surface px-4 py-3.5 shadow-soft"
     >
       <div className="flex items-center justify-between gap-3 text-[13px]">
         <span className="font-semibold text-fg">Storage</span>
@@ -55,16 +59,28 @@ export function StudioStorageCard() {
       {unlimited ? (
         <p className="text-[12.5px] text-fg-muted">Unlimited on this instance.</p>
       ) : (
-        <div
-          role="progressbar"
-          aria-label="Storage used"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percent}
-          className="h-[5px] overflow-hidden rounded-full bg-surface-strong"
-        >
-          <div className="h-full rounded-full bg-fg" style={{ width: `${percent}%` }} />
-        </div>
+        <>
+          <div
+            role="progressbar"
+            aria-label="Storage used"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+            className="h-2.5 overflow-hidden rounded-full bg-surface-strong"
+          >
+            <div className="h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
+          </div>
+          <div className="flex items-center gap-4 text-[12px] text-fg-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-accent" />
+              Used
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-surface-strong" />
+              Free
+            </span>
+          </div>
+        </>
       )}
       {dailyRemaining !== null && dailyQuota !== null ? (
         <div className="flex items-center justify-between gap-3 text-[12.5px]">

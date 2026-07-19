@@ -323,15 +323,12 @@ function TotalsGrid({ items }: { items: Array<{ label: string; value: number }> 
       {items.map((item) => (
         <div
           key={item.label}
-          className="flex flex-col gap-1.5 rounded-2xl bg-surface-muted p-4"
+          className="flex flex-col gap-2 rounded-2xl bg-surface p-4 shadow-soft"
         >
-          <dt className="text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
+          <dt className="text-[12px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
             {item.label}
           </dt>
-          <dd
-            className="text-2xl font-bold tracking-tight tabular-nums"
-            title={String(item.value)}
-          >
+          <dd className="text-title tabular-nums text-fg" title={String(item.value)}>
             {formatCount(item.value)}
           </dd>
         </div>

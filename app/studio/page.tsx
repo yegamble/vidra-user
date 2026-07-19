@@ -13,8 +13,8 @@ export default async function StudioPage({
     <PageShell className="overflow-x-clip py-8">
       <div className="w-full max-w-5xl">
         <div className="mb-6 flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">Studio</h1>
-          <LinkButton href="/studio/stats" variant="secondary" size="sm">
+          <h1 className="text-title sm:text-large-title">Studio</h1>
+          <LinkButton href="/studio/stats" variant="tonal" size="sm">
             Creator stats
           </LinkButton>
         </div>
