@@ -8,6 +8,7 @@ import {
   ExternalLinkIcon,
   GlobeIcon,
   InfoIcon,
+  IpfsIcon,
   MastodonIcon,
   ServerIcon,
   ShieldIcon,
@@ -20,10 +21,13 @@ import { InstanceAboutSkeleton } from "@/components/InstanceAboutSkeleton";
 import { InstanceContactModal } from "@/components/InstanceContactModal";
 import { Markdown } from "@/components/Markdown";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
+import { ProtocolRibbon } from "@/components/ProtocolRibbon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Modal } from "@/components/ui/Modal";
+import { cn } from "@/lib/cn";
 import {
   EMPTY_INSTANCE_ABOUT,
   api,
@@ -170,7 +174,7 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
 
   return (
     <div className="flex min-w-0 flex-col gap-7">
-      <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-fg sm:text-3xl">
+      <h1 className="flex items-center gap-2 text-title text-fg sm:text-large-title">
         <InfoIcon size={24} />
         About
       </h1>
@@ -217,7 +221,7 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
                 aria-current={section === item.id ? "page" : undefined}
                 className={`focus-ring shrink-0 rounded-full px-3.5 py-2 text-[13px] font-semibold transition-colors ${
                   section === item.id
-                    ? "bg-surface-strong text-fg"
+                    ? "bg-accent/12 text-accent-text"
                     : "text-fg-muted hover:bg-surface-muted hover:text-fg"
                 }`}
               >
@@ -313,7 +317,7 @@ function InstanceIdentityHero({
           )}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="break-words text-2xl font-bold tracking-tight text-fg sm:text-3xl">
+              <h2 className="break-words text-title text-fg sm:text-large-title">
                 {name}
               </h2>
               <ProtocolBadge protocol={federationEnabled ? "activitypub" : "local"} />
@@ -608,7 +612,7 @@ function VidraSection({ instance }: { instance: ExtendedInstanceResponse }) {
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-muted text-fg">
           <VideoIcon size={32} />
         </div>
-        <h2 id="about-vidra-heading" className="mt-4 text-2xl font-bold tracking-tight text-fg">
+        <h2 id="about-vidra-heading" className="mt-4 text-title text-fg">
           This platform is powered by Vidra
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted sm:text-base">
@@ -641,25 +645,56 @@ function VidraSection({ instance }: { instance: ExtendedInstanceResponse }) {
   );
 }
 
+// The Network page is the brand surface for Vidra's tri-protocol identity — the
+// one screen where protocol color may breathe (design-system.md). Its hero
+// carries the sanctioned ProtocolRibbon placement (b): the gradient divider
+// under the intro copy. Three tinted protocol cards name the networks Vidra
+// speaks; the federation-behaviour cards and the channel-level peers note keep
+// the honest architecture (Vidra has no instance-wide peer graph).
 function NetworkSection({ instance }: { instance: ExtendedInstanceResponse }) {
+  const federated = instance.federation_enabled;
   return (
-    <section aria-labelledby="about-network-heading" className="flex flex-col gap-6">
-      <div>
-        <h2 id="about-network-heading" className="text-xl font-bold tracking-tight text-fg">
+    <section aria-labelledby="about-network-heading" className="flex flex-col gap-9">
+      <div className="max-w-2xl">
+        <h2 id="about-network-heading" className="text-title text-fg">
           Network
         </h2>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-fg-muted">
-          {instance.federation_enabled
-            ? `${instance.name} connects to compatible services through ActivityPub.`
-            : `${instance.name} currently operates as a local-only video platform.`}
+        <p className="mt-3 text-body leading-relaxed text-fg-muted">
+          {federated
+            ? `${instance.name} is part of the open social web. Vidra speaks three open protocols, so channels and videos are not locked to one company's servers.`
+            : `${instance.name} runs as a local-only video platform today. Vidra is built to speak three open protocols, so the operator can join the wider network whenever they choose.`}
         </p>
+        {/* Sanctioned ProtocolRibbon placement (b): the Network hero divider. */}
+        <ProtocolRibbon className="mt-6" />
       </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <ProtocolCard
+          color="activitypub"
+          Icon={GlobeIcon}
+          name="ActivityPub"
+          copy="The fediverse standard. Public channels and videos federate to Mastodon, PeerTube, and other ActivityPub software."
+        />
+        <ProtocolCard
+          color="bluesky"
+          Icon={BlueskyIcon}
+          name="Bluesky"
+          copy="Published videos can cross-post to the ATProto network, reaching the Bluesky community from the same upload."
+        />
+        <ProtocolCard
+          color="ipfs"
+          Icon={IpfsIcon}
+          name="IPFS"
+          copy="Content-addressed storage lets videos be served and verified from a distributed network rather than one origin."
+        />
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <AboutFeatureCard
           Icon={GlobeIcon}
-          title={instance.federation_enabled ? "Federation enabled" : "Federation disabled"}
+          title={federated ? "Federation enabled" : "Federation disabled"}
           copy={
-            instance.federation_enabled
+            federated
               ? "Public content can reach compatible Fediverse software, and remote content can appear on this instance when its policies allow it."
               : "Content stays on this server and remote ActivityPub discovery is unavailable."
           }
@@ -680,7 +715,58 @@ function NetworkSection({ instance }: { instance: ExtendedInstanceResponse }) {
           copy={`${instance.name} owns its availability, registration policy, data, and publishing defaults.`}
         />
       </div>
+
+      {federated ? (
+        <div>
+          <h3 className="text-headline text-fg">Peers</h3>
+          <div className="mt-2">
+            <EmptyState
+              icon={<ServerIcon size={24} />}
+              tint="green"
+              title="No instance-wide peer list"
+              message="Vidra federates at the channel level, so remote connections live on individual channel pages rather than in a single peers directory."
+            />
+          </div>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+const PROTOCOL_TINT: Record<"activitypub" | "bluesky" | "ipfs", string> = {
+  activitypub: "bg-protocol-activitypub/12 text-protocol-activitypub",
+  bluesky: "bg-protocol-bluesky/12 text-protocol-bluesky",
+  ipfs: "bg-protocol-ipfs/12 text-protocol-ipfs",
+};
+
+// A tinted protocol card for the Network hero — the sanctioned place where a
+// protocol hue may color both the tile and its glyph (elsewhere the dot carries
+// the color). The glyph is decorative; the adjacent name carries the meaning.
+function ProtocolCard({
+  color,
+  Icon,
+  name,
+  copy,
+}: {
+  color: "activitypub" | "bluesky" | "ipfs";
+  Icon: typeof GlobeIcon;
+  name: string;
+  copy: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-5 shadow-soft">
+      <span
+        aria-hidden
+        className={cn(
+          "inline-flex h-11 w-11 items-center justify-center rounded-2xl",
+          PROTOCOL_TINT[color],
+        )}
+      >
+        <Icon size={22} />
+      </span>
+      <h3 className="text-headline text-fg">{name}</h3>
+      <p className="text-footnote leading-relaxed text-fg-muted">{copy}</p>
+    </div>
   );
 }
 
@@ -694,10 +780,15 @@ function AboutFeatureCard({
   copy: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border-subtle bg-surface-muted p-5">
-      <Icon size={24} className="text-fg-muted" />
-      <h3 className="mt-4 text-base font-bold tracking-tight text-fg">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-fg-muted">{copy}</p>
+    <div className="rounded-2xl border border-border-subtle bg-surface p-5 shadow-soft">
+      <span
+        aria-hidden
+        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-muted text-fg-muted"
+      >
+        <Icon size={22} />
+      </span>
+      <h3 className="mt-4 text-headline text-fg">{title}</h3>
+      <p className="mt-2 text-footnote leading-relaxed text-fg-muted">{copy}</p>
     </div>
   );
 }
@@ -713,11 +804,7 @@ function AboutBlock({ title, text }: { title: string; text: string }) {
 }
 
 function EmptyAboutCopy({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-2xl border border-dashed border-border bg-surface-muted px-5 py-8 text-center text-sm text-fg-muted">
-      {children}
-    </p>
-  );
+  return <EmptyState icon={<InfoIcon size={24} />} tint="gray" title="Nothing here yet" message={children} />;
 }
 
 function ExternalDocumentLink({ href, label }: { href: string; label: string }) {

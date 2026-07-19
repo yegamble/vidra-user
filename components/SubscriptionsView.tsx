@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { UsersIcon } from "@/components/icons";
 import { RemoteFollowsSection } from "@/components/RemoteFollowsSection";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -26,6 +27,7 @@ export function SubscriptionsView() {
   if (status !== "authed") {
     return (
       <EmptyState
+        icon={<UsersIcon size={24} />}
         title="Sign in to see your subscriptions"
         message={
           <>
@@ -89,6 +91,7 @@ function Feed() {
   if (videos.length === 0) {
     return (
       <EmptyState
+        icon={<UsersIcon size={24} />}
         title="No videos from your subscriptions yet"
         message="Subscribe to channels and their latest videos will show up here."
       />

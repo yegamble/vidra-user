@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { PlaylistIcon } from "@/components/icons";
 import { PlaylistCard } from "@/components/PlaylistCard";
 import { Button, Input, Select } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -22,6 +23,7 @@ export function PlaylistsView() {
   if (status !== "authed") {
     return (
       <EmptyState
+        icon={<PlaylistIcon size={24} />}
         title="Sign in to see your playlists"
         message={
           <>
@@ -135,6 +137,7 @@ function Playlists() {
 
       {playlists.length === 0 ? (
         <EmptyState
+          icon={<PlaylistIcon size={24} />}
           title="No playlists yet"
           message="Create a playlist above, then add videos to it from any watch page."
         />
