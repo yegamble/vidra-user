@@ -55,13 +55,10 @@ export default async function TrendingPage({
           <p className="mb-1 text-xs font-bold uppercase tracking-[0.09em] text-fg-muted">
             Explore
           </p>
-          <h1
-            id="trending-feed-heading"
-            className="text-[28px] font-bold leading-tight tracking-[-0.035em] text-fg sm:text-[32px]"
-          >
+          <h1 id="trending-feed-heading" className="text-title text-fg sm:text-large-title">
             Trending videos
           </h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-fg-muted">
+          <p className="mt-2 text-subhead text-fg-muted">
             What viewers are discovering right now.
           </p>
         </div>

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useOptionalSession } from "@/components/auth/AuthProvider";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
+import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
@@ -190,15 +191,18 @@ function SearchResultRow({
           onClick={onSelect}
           className="focus-ring rounded-md"
         >
-          <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-fg transition-colors group-hover/card:text-fg-muted">
+          <h3 className="line-clamp-2 text-subhead font-semibold leading-snug text-fg transition-colors group-hover/card:text-fg-muted">
             {video.title}
           </h3>
         </Link>
         {isRemote && video.domain ? (
-          <span className="relative flex max-w-full flex-wrap items-center gap-1">
-            <span
-              className="inline-flex w-fit max-w-full items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted"
+          // Federated origin badge (the tri-protocol ribbon's third pinned
+          // placement — Badge `federated` wears it on the top edge).
+          <span className="relative flex max-w-full">
+            <Badge
+              variant="federated"
               title={`Federated video from ${video.domain}`}
+              className="relative z-10 max-w-full text-[11px]"
             >
               <svg
                 aria-hidden
@@ -215,24 +219,25 @@ function SearchResultRow({
               </svg>
               <span className="sr-only">From </span>
               <span className="truncate">{video.domain}</span>
-            </span>
-            <ProtocolBadge protocol="activitypub" />
+            </Badge>
           </span>
         ) : null}
         {video.channel_handle ? (
           isRemote ? (
             // Remote channel identity ("name@domain") — not a local channel route.
-            <span className="truncate text-xs text-fg-muted">{attributionName}</span>
+            <span className="truncate text-footnote text-fg-muted">{attributionName}</span>
           ) : (
             <Link
               href={`/channels/${video.channel_handle}`}
-              className="focus-ring relative z-10 w-fit max-w-full truncate rounded text-xs text-fg-muted transition-colors hover:text-fg"
+              className="focus-ring relative z-10 w-fit max-w-full truncate rounded text-footnote text-fg-muted transition-colors hover:text-fg"
             >
               {attributionName}
             </Link>
           )
         ) : null}
-        {meta.length > 0 ? <p className="text-xs text-fg-muted">{meta.join(" · ")}</p> : null}
+        {meta.length > 0 ? (
+          <p className="text-footnote text-fg-muted">{meta.join(" · ")}</p>
+        ) : null}
       </div>
       <div className="relative z-20 -mr-1 shrink-0 self-end opacity-0 transition-opacity duration-150 group-hover/card:opacity-100 group-focus-within/card:opacity-100 [@media(hover:none)]:opacity-100">
         <VideoActionsMenu video={video} compact onDeleted={onDeleted} />

@@ -40,7 +40,7 @@ export function LiveNowRail() {
   return (
     <section aria-label="Live now" className="mt-10">
       <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-bold tracking-[-0.025em]">Live now</h2>
+        <h2 className="text-title2 text-fg">Live now</h2>
         <span className="shrink-0 text-[13px] tabular-nums text-fg-muted">
           {streams.length} {streams.length === 1 ? "stream" : "streams"}
         </span>
@@ -75,10 +75,10 @@ export function LiveNowRail() {
                     Live
                   </span>
                 </div>
-                <div className="mt-2 line-clamp-1 px-0.5 text-sm font-semibold leading-snug tracking-[-0.01em] text-fg">
+                <div className="mt-2 line-clamp-1 px-0.5 text-subhead font-semibold leading-snug tracking-[-0.01em] text-fg">
                   {stream.title}
                 </div>
-                <div className="mt-0.5 line-clamp-1 px-0.5 text-[12.5px] text-fg-muted">
+                <div className="mt-0.5 line-clamp-1 px-0.5 text-footnote text-fg-muted">
                   {channel}
                 </div>
               </Link>
