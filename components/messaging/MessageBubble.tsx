@@ -7,37 +7,8 @@ import { MessageAttachments } from "@/components/messaging/MessageAttachments";
 import { ReportButton } from "@/components/ReportButton";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import type { RunPosition, TimelineRunMessage } from "@/lib/messaging/grouping";
+import type { TimelineRunMessage } from "@/lib/messaging/grouping";
 import { absoluteTime } from "@/lib/messaging/time";
-
-// The tail-corner radii per run position: the base bubble is rounded-[18px] and
-// the corner(s) on the SENDER's side collapse to 6px within a run, so a run of
-// bubbles reads as one grouped cluster with a single small "tail" corner on the
-// last bubble (spec §4). Own = right side, other = left side.
-function radiusClass(mine: boolean, position: RunPosition): string {
-  if (mine) {
-    switch (position) {
-      case "single":
-        return "rounded-br-md";
-      case "first":
-        return "rounded-br-[6px]";
-      case "middle":
-        return "rounded-tr-[6px] rounded-br-[6px]";
-      case "last":
-        return "rounded-tr-[6px] rounded-br-md";
-    }
-  }
-  switch (position) {
-    case "single":
-      return "rounded-bl-md";
-    case "first":
-      return "rounded-bl-[6px]";
-    case "middle":
-      return "rounded-tl-[6px] rounded-bl-[6px]";
-    case "last":
-      return "rounded-tl-[6px] rounded-bl-md";
-  }
-}
 
 // DeleteAction soft-deletes (tombstones) one of the caller's own messages.
 function DeleteAction({ id, onDeleted }: { id: string; onDeleted: (id: string) => void }) {
@@ -65,8 +36,9 @@ function DeleteAction({ id, onDeleted }: { id: string; onDeleted: (id: string) =
   );
 }
 
-// MessageBubble renders one message: the bubble (run-position radii, own/other
-// colours), its inline attachments/link-preview, a hover/focus-revealed action
+// MessageBubble renders one message: the bubble (uniform rounded-2xl, tail-less
+// iMessage look — own = solid accent, other = surface-muted), its inline
+// attachments/link-preview, a hover/focus-revealed action
 // (Delete own / Report peer), and — under the LAST own message only — the quiet
 // "Seen" / optimistic "Sending…" / "Not sent · Retry" status row. The visible
 // bubble carries NO timestamp; the exact time lives in a visually-hidden
@@ -84,7 +56,7 @@ export function MessageBubble({
   onRetry: (clientId: string) => void;
   onDiscard: (clientId: string) => void;
 }) {
-  const { message: m, position, seen } = rm;
+  const { message: m, seen } = rm;
   const senderName = mine
     ? "You"
     : m.sender_display_name || m.sender_username || "They";
@@ -100,10 +72,8 @@ export function MessageBubble({
     <div
       title={abs}
       className={cn(
-        "max-w-full px-3.5 py-2.5 text-[14.5px] leading-normal",
-        mediaOnly ? "overflow-hidden rounded-2xl p-0" : "rounded-[18px]",
-        !mediaOnly && radiusClass(mine, position),
-        !mediaOnly && (mine ? "bg-accent text-accent-fg" : "bg-surface-muted text-fg"),
+        "max-w-full rounded-2xl px-3.5 py-2.5 text-[14.5px] leading-normal",
+        mediaOnly ? "overflow-hidden p-0" : mine ? "bg-accent text-accent-fg" : "bg-surface-muted text-fg",
         pending && "opacity-60",
       )}
     >

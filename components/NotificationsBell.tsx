@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BellIcon } from "@/components/icons";
 import {
-  NotificationTypeIcon,
+  NotificationIconChip,
   describeNotification,
 } from "@/components/NotificationsView";
 import { Spinner } from "@/components/ui/Spinner";
@@ -189,12 +189,7 @@ export function NotificationsBell() {
                           (n.read ? "" : "bg-surface-muted")
                         }
                       >
-                        <span
-                          aria-hidden
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-strong/60 text-fg-muted"
-                        >
-                          <NotificationTypeIcon type={n.type} />
-                        </span>
+                        <NotificationIconChip type={n.type} />
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="line-clamp-2 text-sm leading-normal text-fg">
                             <span className="font-semibold">{lead}</span>
@@ -207,7 +202,7 @@ export function NotificationsBell() {
                         {n.read ? null : (
                           <span
                             aria-hidden
-                            className="mt-2 h-[7px] w-[7px] shrink-0 rounded-full bg-fg"
+                            className="mt-2 h-[7px] w-[7px] shrink-0 rounded-full bg-accent"
                           />
                         )}
                       </Link>

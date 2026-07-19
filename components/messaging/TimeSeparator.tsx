@@ -6,7 +6,7 @@ export function TimeSeparator({ label, iso }: { label: string; iso: string }) {
     <li className="my-5 flex justify-center">
       <time
         dateTime={iso}
-        className="text-[11px] font-semibold tabular-nums text-fg-muted"
+        className="text-footnote font-semibold tabular-nums text-fg-muted"
       >
         {label}
       </time>
