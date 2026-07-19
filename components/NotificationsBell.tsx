@@ -156,7 +156,7 @@ export function NotificationsBell() {
           id={panelId}
           ref={panelRef}
           aria-label="Notifications"
-          className="fixed inset-x-3 top-16 z-30 flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-border-subtle bg-surface-raised shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96"
+          className="fixed inset-x-3 top-16 z-30 flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-border-subtle bg-surface-raised shadow-soft-strong sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96"
         >
           <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
             <span className="text-[15px] font-bold tracking-tight text-fg">Notifications</span>

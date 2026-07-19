@@ -652,7 +652,7 @@ function HeaderSearchField({ suggestionsEnabled }: { suggestionsEnabled: boolean
           optionRefs={optionRefs}
           hidden={!c.showPanel}
           className={cn(
-            "scrollbar-none absolute left-0 right-0 z-50 max-h-[28rem] overflow-y-auto rounded-2xl border border-border-subtle bg-surface-raised p-1.5 shadow-lg",
+            "scrollbar-none absolute left-0 right-0 z-50 max-h-[28rem] overflow-y-auto rounded-2xl border border-border-subtle bg-surface-raised p-1.5 shadow-soft-strong",
             c.flipUp ? "bottom-full mb-2" : "top-full mt-2",
           )}
         />

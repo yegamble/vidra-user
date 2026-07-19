@@ -149,9 +149,9 @@ function SidebarLink({
       href={item.href}
       aria-current={active ? "page" : undefined}
       title={collapsed ? item.label : undefined}
-      className={`focus-ring flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2 text-sm transition-[background-color,color,box-shadow] ${
+      className={`focus-ring flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2 text-sm transition-colors ${
         active
-          ? "bg-surface-raised font-semibold text-fg shadow-[0_1px_5px_rgba(0,0,0,0.10)]"
+          ? "bg-accent/12 font-semibold text-accent-text"
           : "font-medium text-fg-muted hover:bg-surface-muted hover:text-fg"
       }`}
     >

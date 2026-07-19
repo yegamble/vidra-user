@@ -79,7 +79,7 @@ export function AccountMenu() {
     return <span role="status" aria-label="Checking your session" className="inline-block h-9 w-9 animate-pulse rounded-full bg-surface-muted"><span className="sr-only">Checking your session…</span></span>;
   }
   if (status !== "authed" || !user) {
-    return <Link href="/login" className="focus-ring inline-flex min-h-11 items-center rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted sm:min-h-9">Sign in</Link>;
+    return <Link href="/login" className="focus-ring inline-flex min-h-11 items-center rounded-[10px] border border-border px-4 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted sm:min-h-9">Sign in</Link>;
   }
 
   const profileHref = `/users/${encodeURIComponent(user.username)}${user.profile_public ? "" : "?preview=1"}`;
@@ -117,7 +117,7 @@ export function AccountMenu() {
             const next = event.key === "ArrowDown" ? (current + 1) % actions.length : (current - 1 + actions.length) % actions.length;
             event.preventDefault(); actions[next]?.focus();
           }}
-          className="absolute right-0 top-[calc(100%+0.5rem)] z-50 max-h-[min(720px,calc(100vh-6rem))] w-[min(360px,calc(100vw-1rem))] overflow-y-auto rounded-[20px] border border-border-subtle bg-canvas py-2 shadow-[0_20px_55px_rgba(0,0,0,0.24)]"
+          className="absolute right-0 top-[calc(100%+0.5rem)] z-50 max-h-[min(720px,calc(100vh-6rem))] w-[min(360px,calc(100vw-1rem))] overflow-y-auto rounded-[20px] border border-border-subtle bg-surface-raised py-2 shadow-soft-strong"
         >
           <div className="flex items-center gap-3 px-4 py-3">
             <Avatar src={user.has_avatar ? userAvatarUrl(user.id) : null} name={name} className="h-12 w-12 shrink-0" />

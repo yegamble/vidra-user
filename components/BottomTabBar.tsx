@@ -102,9 +102,9 @@ export function BottomTabBar() {
         <ul className="glass-chrome flex items-stretch justify-around rounded-[24px] p-1">
           {TABS.map((tab) => {
             const active = isTabActive(tab, pathname);
-            const cellClass = `focus-ring relative mx-auto flex h-14 w-full max-w-20 flex-col items-center justify-center gap-1 rounded-[18px] transition-[background-color,color,box-shadow] ${
+            const cellClass = `focus-ring relative mx-auto flex h-14 w-full max-w-20 flex-col items-center justify-center gap-1 rounded-[18px] transition-colors ${
               active
-                ? "bg-surface-raised text-fg shadow-[0_1px_5px_rgba(0,0,0,0.10)]"
+                ? "bg-accent/12 text-accent-text"
                 : "text-fg-muted hover:bg-surface-muted/70 hover:text-fg"
             }`;
 
