@@ -1,0 +1,1142 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+
+import { BatchUploadQueue } from "@/components/BatchUploadQueue";
+import { TagsInput } from "@/components/TagsInput";
+import { CheckIcon, ChevronDownIcon, LoaderIcon, UploadIcon } from "@/components/icons";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Modal } from "@/components/ui/Modal";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Toggle } from "@/components/ui/Toggle";
+import {
+  ApiError,
+  api,
+  findResumableUploadSession,
+  forgetUploadSession,
+  isUploadCancelled,
+  resumableUpload,
+} from "@/lib/api";
+import type {
+  Channel,
+  ImportJob,
+  StoredUploadSession,
+  UploadVideoResult,
+  Video,
+  VideoConfigResponse,
+  VideoPrivacy,
+} from "@/lib/api";
+import { formatBytes, formatDateTime } from "@/lib/format";
+import { videoAcceptAttr } from "@/lib/upload-accept";
+import {
+  IMPORT_STAGES,
+  importActiveStage,
+  importResolved,
+  isImportsDisabledError,
+} from "@/lib/import-status";
+
+import {
+  FIELD,
+  FieldErrorText,
+  IMPORT_POLL_INTERVAL_MS,
+  PUBLISH_FIELDS,
+  SELECT_FIELD,
+  TaxonomySelect,
+  type UploadState,
+  discardSession,
+  failedStateError,
+  importOrUploadError,
+  scheduleToIso,
+  sleep,
+  taxonomyFields,
+} from "./shared";
+
+// Exported for tests (the W9 prefill-race regression coverage renders it directly).
+export function UploadSection({
+  channels,
+  config,
+  defaultHandle,
+  autoOpen = false,
+  onAutoOpenConsumed,
+  onUploaded,
+}: {
+  channels: Channel[];
+  config: VideoConfigResponse | null;
+  /** Studio current channel — the in-form picker starts here (falls back to channels[0]). */
+  defaultHandle?: string;
+  /** When true (a `?upload=1` deep link), the stepped sheet opens on mount. */
+  autoOpen?: boolean;
+  /** Called once after an autoOpen fires so the caller can strip the URL param. */
+  onAutoOpenConsumed?: () => void;
+  onUploaded?: () => void;
+}) {
+  const [handle, setHandle] = useState(defaultHandle ?? channels[0]?.handle ?? "");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
+  const [language, setLanguage] = useState("");
+  const [license, setLicense] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [privacy, setPrivacy] = useState<VideoPrivacy>("public");
+  // Sensitive-content flag (spec: instance-platform-info.md): travels as
+  // is_sensitive on the create-draft body so the instance policy (hide/warn/
+  // blur/display) can apply to the published video.
+  const [sensitive, setSensitive] = useState(false);
+  // Per-video publish policies (config-parity W9), prefilled from the
+  // instance's defaults.publish block once GET /instance resolves.
+  const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">("enabled");
+  const [downloadEnabled, setDownloadEnabled] = useState(true);
+  const [publishAt, setPublishAt] = useState("");
+  const [source, setSource] = useState<"file" | "url">("file");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [state, setState] = useState<UploadState>("idle");
+  const [result, setResult] = useState<Video | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Whether URL import is accepted on this instance (GET /instance features).
+  // null = unknown/not-yet-loaded → the form stays enabled (fail open); false →
+  // the URL tab renders the honest disabled state instead of a dead form.
+  const [importsEnabled, setImportsEnabled] = useState<boolean | null>(null);
+  // Whether the extended upload container set is accepted
+  // (features.upload_additional_extensions, config-parity W10) — narrows the
+  // file picker's accept list in lock-step with the server's extension gate.
+  // null = unknown → permissive (fail open).
+  const [additionalExts, setAdditionalExts] = useState<boolean | null>(null);
+  // The in-flight URL-import job, refreshed on every poll tick so the stage rail
+  // (queued → fetching metadata → downloading → scanning & processing) tracks the
+  // backend's `import_job.stage`. Cleared between attempts.
+  const [importJob, setImportJob] = useState<ImportJob | null>(null);
+  // The videoId+url of the last failed import, so Retry can re-enqueue against
+  // the same draft (the draft survives a failed import) via the same endpoint.
+  const [retryCtx, setRetryCtx] = useState<{
+    videoId: string;
+    url: string;
+  } | null>(null);
+  // Guards the one-shot metadata prefill so it fires once per import, right after
+  // the resolving stage, and never clobbers a field the user has since edited.
+  const prefillDoneRef = useRef(false);
+  // Fields the creator has ALREADY touched before GET /instance resolved: the
+  // defaults.publish prefill below must never clobber them (W9 review's
+  // prefill-race fix). A ref, not state — reads happen inside the fetch
+  // callback and must see the latest set without re-running the effect.
+  const publishTouchedRef = useRef<Set<"privacy" | "license" | "comments" | "download">>(new Set());
+  // Chunk-accurate progress percent (0–100) for the in-flight file upload.
+  const [progress, setProgress] = useState(0);
+  // Bytes transferred so far / total, for the "X of Y" detail under the bar
+  // (real loaded/total from the resumable-upload progress callback).
+  const [bytes, setBytes] = useState<{ loaded: number; total: number } | null>(null);
+  // The picked file's name, shown in the dropzone once a file is chosen.
+  const [fileName, setFileName] = useState<string | null>(null);
+  // A resumable session found for the currently-picked file (matched by
+  // filename + size in localStorage) — offers "Resume upload" after a refresh.
+  const [resumeCandidate, setResumeCandidate] = useState<StoredUploadSession | null>(null);
+  // When the creator picks more than one file at once, the single-file form gives
+  // way to the batch upload queue (UPLOAD-10). null = single-file mode.
+  const [batchFiles, setBatchFiles] = useState<File[] | null>(null);
+  // The picked File, captured in state so the upload survives the pick→details
+  // step change (the file <input> only lives on the pick step; capturing the
+  // File here means publish/resume never depend on that input staying mounted).
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  // Stepped upload sheet (design "Upload sheet"): a launched Modal staging
+  // pick → details → publish, with a persistent minimized progress pill. `open`
+  // drives the Modal; `step` the wizard stage; `sheet` picks the bottom-sheet
+  // skin on phones (matchMedia guarded for non-browser test envs).
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<"pick" | "details">("pick");
+  const [sheet] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
+  const fileRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const publishRef = useRef<HTMLButtonElement>(null);
+  // The in-flight chunked-upload session id, captured as soon as it opens so a
+  // Cancel can DELETE the session (dropping its chunk blobs) before cleanup.
+  const sessionIdRef = useRef<string | null>(null);
+  // Guards the `?upload=1` autoOpen so it fires once per APPEARANCE of the param
+  // (reset when the param is stripped), not once per mount — so re-triggering
+  // "+ Create → Upload video" while already on /studio/content reopens the sheet.
+  const autoOpenedRef = useRef(false);
+
+  // After a cancel the in-flight controls (progress + Cancel) disappear — put
+  // focus back on the Publish button so keyboard users are not dropped on body.
+  useEffect(() => {
+    if (state === "cancelled") publishRef.current?.focus();
+  }, [state]);
+
+  // Read the instance's effective feature toggles so the "Import from URL" tab
+  // reflects whether imports are accepted here (lock-step with the backend's
+  // enforcement). A failed/blocked fetch leaves it null → the form stays enabled
+  // and a stray 503 at submit is the defensive fallback.
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .getInstance(controller.signal)
+      .then((res) => {
+        setImportsEnabled(res.features.imports);
+        setAdditionalExts(res.features.upload_additional_extensions ?? null);
+        // Prefill the publish form from the operator's defaults.publish block
+        // (config-parity W9). Absent fields (older backend) leave the shipped
+        // form defaults; Licence 0 = "no default" keeps the empty selection.
+        // The prefill only fills fields the creator has NOT touched yet — a
+        // slow /instance response must never clobber an explicit choice made
+        // while it was in flight (the W9 review's prefill race).
+        const touched = publishTouchedRef.current;
+        const publish = res.defaults?.publish;
+        if (!publish) return;
+        if (publish.privacy && !touched.has("privacy")) setPrivacy(publish.privacy as VideoPrivacy);
+        if (publish.licence && !touched.has("license")) setLicense(String(publish.licence));
+        if (
+          (publish.comment_policy === "enabled" || publish.comment_policy === "disabled") &&
+          !touched.has("comments")
+        ) {
+          setCommentsPolicy(publish.comment_policy);
+        }
+        if (typeof publish.download_enabled === "boolean" && !touched.has("download")) {
+          setDownloadEnabled(publish.download_enabled);
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  // Cancel the in-flight upload: aborts the chunk transfer (the upload promise
+  // rejects as a cancellation, handled in the catch blocks below).
+  function cancelUpload() {
+    abortRef.current?.abort();
+  }
+
+  // finishWithVideo applies the state-based outcome: a returned video may be
+  // state="failed" (a probe/scan rejected it after the HTTP call succeeded) —
+  // that is an honest error, never "Published!". A published/scheduled/
+  // quarantined/processing result clears the form.
+  function finishWithVideo(video: Video, from: "file" | "url") {
+    if (video.state === "failed") {
+      setError(failedStateError(from));
+      setState("error");
+      return;
+    }
+    setResult(video);
+    setState("done");
+    setTitle("");
+    setDescription("");
+    setCategory("");
+    setLanguage("");
+    setLicense("");
+    setTags([]);
+    setPublishAt("");
+    setVideoUrl("");
+    setResumeCandidate(null);
+    setFileName(null);
+    setPickedFile(null);
+    setBytes(null);
+    setImportJob(null);
+    setRetryCtx(null);
+    if (fileRef.current) fileRef.current.value = "";
+    // Publish succeeded — minimize the sheet so the section's success message
+    // (and the "View" link) is visible; the next open starts a fresh pick.
+    setOpen(false);
+    setStep("pick");
+  }
+
+  // applyFieldErrors maps a 422's field errors inline onto the matching form
+  // fields (aria-invalid + aria-describedby); returns true when it handled them.
+  function applyFieldErrors(err: unknown): boolean {
+    if (err instanceof ApiError && err.status === 422 && err.fields && err.fields.length > 0) {
+      const map: Record<string, string> = {};
+      for (const f of err.fields) {
+        if (PUBLISH_FIELDS.has(f.field)) map[f.field] = f.message;
+      }
+      if (Object.keys(map).length > 0) {
+        setFieldErrors(map);
+        setState("error");
+        // The URL field lives on the pick step; a 422 targeting it bounces the
+        // sheet back so the inline error is visible next to the input.
+        if (map.url) setStep("pick");
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // importAndPoll enqueues the async URL import (202, always resolver "auto" — the
+  // UI never guesses direct vs platform) then polls the job until it is done or
+  // failed, calling onJob after each response so the caller can drive the stage
+  // rail + metadata prefill. On done it reads the finalised video; on failed it
+  // returns the surfaced, safe error message.
+  async function importAndPoll(
+    videoId: string,
+    url: string,
+    signal: AbortSignal,
+    onJob: (job: ImportJob) => void,
+  ): Promise<{ ok: true; video: Video } | { ok: false; error: string }> {
+    let job = (await api.importVideoFile(videoId, url, "auto")).import_job;
+    onJob(job);
+    while (job.state === "pending" || job.state === "running") {
+      await sleep(IMPORT_POLL_INTERVAL_MS, signal);
+      job = (await api.getVideoImport(videoId, signal)).import_job;
+      onJob(job);
+    }
+    if (job.state === "failed") {
+      return {
+        ok: false,
+        error: job.error && job.error.trim() !== "" ? job.error : failedStateError("url"),
+      };
+    }
+    const video = await api.getVideo(videoId, undefined, signal);
+    return { ok: true, video };
+  }
+
+  // maybePrefill fires once per import, right after the resolving stage, refetching
+  // the draft so any yt-dlp-resolved title/description the worker applied to it
+  // shows in the form. User edits win: a field the creator has already typed into
+  // is never overwritten (only an empty field is filled). Poster is intentionally
+  // not shown — the backend derives it from the downloaded original during
+  // processing, not from the resolver.
+  function maybePrefill(videoId: string, job: ImportJob, signal: AbortSignal) {
+    if (prefillDoneRef.current || !importResolved(job)) return;
+    prefillDoneRef.current = true;
+    void api
+      .getVideo(videoId, undefined, signal)
+      .then((v) => {
+        setTitle((t) => (t.trim() === "" ? v.title : t));
+        setDescription((d) => (d.trim() === "" ? v.description : d));
+      })
+      .catch(() => {});
+  }
+
+  // runImport enqueues + polls an import for an EXISTING draft video, driving the
+  // stage rail, the one-shot metadata prefill, and the honest terminal outcome.
+  // Shared by the initial URL publish and the Retry affordance (both target the
+  // same draft — it survives a failed import). The caller owns the AbortController
+  // (and clears abortRef in its finally).
+  async function runImport(videoId: string, url: string, controller: AbortController) {
+    prefillDoneRef.current = false;
+    setImportJob(null);
+    try {
+      const outcome = await importAndPoll(videoId, url, controller.signal, (job) => {
+        setImportJob(job);
+        maybePrefill(videoId, job, controller.signal);
+      });
+      if (!outcome.ok) {
+        setError(outcome.error);
+        setRetryCtx({ videoId, url });
+        setState("error");
+        return;
+      }
+      finishWithVideo(outcome.video, "url");
+    } catch (err) {
+      if (isUploadCancelled(err)) {
+        setState("cancelled");
+        return;
+      }
+      // Imports turned off after the tab rendered (or an explicitly-disabled
+      // resolver): drop to the honest disabled state, never a stuck spinner.
+      if (isImportsDisabledError(err)) {
+        setImportsEnabled(false);
+        setImportJob(null);
+        setState("idle");
+        return;
+      }
+      // A 422 with a url field error renders inline on the URL input (not a retry).
+      if (applyFieldErrors(err)) return;
+      setError(importOrUploadError(err, "url"));
+      setRetryCtx({ videoId, url });
+      setState("error");
+    }
+  }
+
+  // retryImport re-enqueues the last failed import against the same draft via the
+  // same endpoint (the backend returns/replaces the job for that video).
+  async function retryImport() {
+    const ctx = retryCtx;
+    if (!ctx || state === "uploading") return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setState("uploading");
+    setError(null);
+    setFieldErrors({});
+    setResult(null);
+    setRetryCtx(null);
+    try {
+      await runImport(ctx.videoId, ctx.url, controller);
+    } finally {
+      abortRef.current = null;
+    }
+  }
+
+  // changeSource switches the upload/import tab, clearing any transient outcome
+  // of the other source (a stray URL-import error must not linger on the file tab,
+  // and vice versa). No-op mid-upload (the control is disabled then anyway).
+  function changeSource(next: "file" | "url") {
+    if (next === source || state === "uploading") return;
+    setSource(next);
+    setError(null);
+    setFieldErrors({});
+    setRetryCtx(null);
+    setImportJob(null);
+    if (state === "error" || state === "cancelled") setState("idle");
+  }
+
+  // onFilePicked routes the picked file(s). More than one file switches to the
+  // batch upload queue (UPLOAD-10); a single file keeps the rich single-file form
+  // and offers a resume when it matches an unfinished session (same filename +
+  // size) left by an interrupted upload.
+  function onFilePicked() {
+    setError(null);
+    const files = [...(fileRef.current?.files ?? [])];
+    if (files.length > 1) {
+      // Hand the files to the batch queue and reset the single-file input so the
+      // form returns clean when the batch is cleared.
+      setBatchFiles(files);
+      if (fileRef.current) fileRef.current.value = "";
+      setFileName(null);
+      setPickedFile(null);
+      setResumeCandidate(null);
+      return;
+    }
+    const file = files[0];
+    setFileName(file ? file.name : null);
+    setPickedFile(file ?? null);
+    setResumeCandidate(file ? findResumableUploadSession(file) : null);
+  }
+
+  // openSheet launches the stepped upload Modal. A fresh (idle/done) open starts
+  // at the pick step; reopening while an upload is in flight — or after an
+  // error/cancel — lands on the details step where the progress/outcome lives.
+  function openSheet() {
+    if (state === "uploading" || state === "error" || state === "cancelled") {
+      setStep("details");
+    } else {
+      if (state === "done") {
+        setState("idle");
+        setResult(null);
+      }
+      setStep("pick");
+    }
+    setOpen(true);
+  }
+
+  // A `?upload=1` deep link opens the sheet, then reports back so the caller can
+  // strip the param (router.replace). Fires on every false→true transition of the
+  // param — not just the first mount — so re-triggering "+ Create → Upload video"
+  // while ALREADY on /studio/content reopens the sheet (and re-strips the param).
+  // The guard resets whenever the param is stripped (autoOpen back to false).
+  useEffect(() => {
+    if (!autoOpen) {
+      autoOpenedRef.current = false;
+      return;
+    }
+    if (autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    openSheet();
+    onAutoOpenConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen]);
+
+  async function upload(e: React.FormEvent) {
+    e.preventDefault();
+    const file = pickedFile;
+    const url = videoUrl.trim();
+    if (state === "uploading" || title.trim() === "" || handle === "") return;
+    if (source === "file" && !file) return;
+    if (source === "url" && url === "") return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    sessionIdRef.current = null;
+    setState("uploading");
+    setProgress(0);
+    setError(null);
+    setFieldErrors({});
+    setResult(null);
+    setRetryCtx(null);
+    let draftId: string | null = null;
+    try {
+      // A fresh publish for a file that still has a lingering resumable session
+      // discards it first, so a new upload never leaves an orphan behind.
+      if (source === "file" && file) {
+        const stale = findResumableUploadSession(file);
+        if (stale) await discardSession(stale);
+        setResumeCandidate(null);
+      }
+      const scheduleIso = scheduleToIso(publishAt);
+      const draft = await api.createVideoDraft(handle, {
+        title: title.trim(),
+        description: description.trim(),
+        privacy,
+        ...taxonomyFields(category, language, license),
+        ...(tags.length > 0 ? { tags } : {}),
+        ...(scheduleIso ? { publish_at: scheduleIso } : {}),
+        ...(sensitive ? { is_sensitive: true } : {}),
+        // Per-video publish policies (W9): the visible form state is what is
+        // saved (it was prefilled from defaults.publish, so an untouched form
+        // still matches the instance defaults).
+        comments_policy: commentsPolicy,
+        download_enabled: downloadEnabled,
+      });
+      draftId = draft.id;
+      // Cancel clicked while the draft POST was still in flight: stop before the
+      // upload starts and clean up the just-created draft.
+      if (controller.signal.aborted) {
+        void api.deleteVideo(draft.id).catch(() => {});
+        setState("cancelled");
+        return;
+      }
+      if (source === "url") {
+        // runImport owns the URL outcome (rail, prefill, retry, disabled) and its
+        // own error handling, so it never falls through to the file-upload catch.
+        await runImport(draft.id, url, controller);
+        return;
+      }
+      // File source: the resumable (chunked) protocol — create session → PUT
+      // chunks sequentially (per-chunk retry) → complete.
+      const res: UploadVideoResult = await resumableUpload(draft.id, file as File, {
+        onProgress: (p) => {
+          setProgress(p.percent);
+          setBytes({ loaded: p.loaded, total: p.total });
+        },
+        signal: controller.signal,
+        onSessionOpened: (id) => {
+          sessionIdRef.current = id;
+        },
+      });
+      finishWithVideo(res.video, "file");
+    } catch (err) {
+      // A local cancellation is not an error: DELETE the session (dropping its
+      // chunk blobs) and the orphaned draft, then return the form to editable.
+      if (isUploadCancelled(err)) {
+        if (sessionIdRef.current) {
+          void api.cancelUploadSession(sessionIdRef.current).catch(() => {});
+          forgetUploadSession(sessionIdRef.current);
+        }
+        if (draftId) void api.deleteVideo(draftId).catch(() => {});
+        setState("cancelled");
+        return;
+      }
+      if (applyFieldErrors(err)) return;
+      setError(importOrUploadError(err, source));
+      setState("error");
+    } finally {
+      abortRef.current = null;
+    }
+  }
+
+  // resumeUpload continues an interrupted upload for the re-picked file: read the
+  // session's received chunks, then PUT only the missing ones and complete. The
+  // draft already carries the original metadata, so nothing is re-created.
+  async function resumeUpload() {
+    const file = pickedFile;
+    const cand = resumeCandidate;
+    if (!cand || !file || state === "uploading") return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    sessionIdRef.current = cand.uploadId;
+    // Move to the details step so the in-flight progress + Cancel are visible.
+    setStep("details");
+    setState("uploading");
+    setProgress(0);
+    setError(null);
+    setFieldErrors({});
+    setResult(null);
+    try {
+      const status = await api.getUploadSession(cand.uploadId, controller.signal);
+      if (status.state !== "active") {
+        forgetUploadSession(cand.uploadId);
+        setResumeCandidate(null);
+        setError("That unfinished upload is no longer available — publish to start a new one.");
+        setState("error");
+        return;
+      }
+      const res = await resumableUpload(status.video_id, file, {
+        resume: status,
+        onProgress: (p) => {
+          setProgress(p.percent);
+          setBytes({ loaded: p.loaded, total: p.total });
+        },
+        signal: controller.signal,
+        onSessionOpened: (id) => {
+          sessionIdRef.current = id;
+        },
+      });
+      finishWithVideo(res.video, "file");
+    } catch (err) {
+      if (isUploadCancelled(err)) {
+        if (sessionIdRef.current) {
+          void api.cancelUploadSession(sessionIdRef.current).catch(() => {});
+          forgetUploadSession(sessionIdRef.current);
+        }
+        void api.deleteVideo(cand.videoId).catch(() => {});
+        setResumeCandidate(null);
+        setState("cancelled");
+        return;
+      }
+      if (err instanceof ApiError && err.status === 404) {
+        forgetUploadSession(cand.uploadId);
+        setResumeCandidate(null);
+        setError("That unfinished upload is no longer available — publish to start a new one.");
+        setState("error");
+        return;
+      }
+      setError(importOrUploadError(err, "file"));
+      setState("error");
+    } finally {
+      abortRef.current = null;
+    }
+  }
+
+  // Whether the pick step has enough to advance to details: a chosen file, or a
+  // non-empty URL on an instance that accepts imports.
+  const canContinue =
+    source === "file" ? fileName !== null : videoUrl.trim() !== "" && importsEnabled !== false;
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-[15px] font-bold tracking-tight">Upload a video</h2>
+        <Button onClick={openSheet}>Upload video</Button>
+      </div>
+      {/* Section-level outcome: a successful publish minimizes the sheet and
+          surfaces the honest result here (with a "View" link) so it stays
+          visible after the sheet closes. */}
+      {state === "done" && result ? (
+        result.state === "published" ? (
+          <p role="status" className="text-sm text-success">
+            Published!{" "}
+            <Link href={`/videos/${result.id}`} className="font-semibold underline">
+              View “{result.title}”
+            </Link>
+          </p>
+        ) : result.state === "scheduled" ? (
+          <p role="status" className="text-sm text-fg-muted">
+            “{result.title}” is scheduled — it will publish automatically
+            {result.publish_at
+              ? ` on ${formatDateTime(result.publish_at)}`
+              : " at the scheduled time"}
+            .
+          </p>
+        ) : result.state === "quarantined" ? (
+          <p role="status" className="text-sm text-warning">
+            “{result.title}” was received and is held for review — this instance reviews new uploads
+            before they go public. It will publish once a moderator approves it.
+          </p>
+        ) : (
+          <p role="status" className="text-sm text-warning">
+            “{result.title}” was received and is still processing — it will appear in Your videos
+            once it’s ready.
+          </p>
+        )
+      ) : null}
+      {open ? (
+        <Modal
+          title="Upload video"
+          onClose={() => setOpen(false)}
+          variant={sheet ? "sheet" : "dialog"}
+          className="max-h-[85vh] overflow-y-auto sm:max-w-xl"
+        >
+          {batchFiles ? (
+            <BatchUploadQueue
+              initialFiles={batchFiles}
+              channels={channels}
+              defaultHandle={handle}
+              defaultPrivacy={privacy}
+              onUploaded={onUploaded}
+              onClearBatch={() => setBatchFiles(null)}
+            />
+          ) : (
+            <form onSubmit={(e) => void upload(e)} className="flex flex-col gap-4">
+              {step === "pick" ? (
+                // Stage 1 — pick: choose the source and the file/URL. `Continue`
+                // advances to the details stage once something is chosen.
+                <>
+                  <div className="flex flex-col gap-1.5 text-sm">
+                    <span id="video-source-label" className="font-medium text-fg">
+                      Source
+                    </span>
+                    <SegmentedControl
+                      value={source}
+                      onChange={changeSource}
+                      labelledBy="video-source-label"
+                      disabled={state === "uploading"}
+                      fullWidth
+                      options={[
+                        { value: "file", label: "Upload file" },
+                        { value: "url", label: "Import from URL" },
+                      ]}
+                    />
+                  </div>
+                  {source === "file" ? (
+                    // Design's dashed dropzone: the file input is a full-bleed
+                    // transparent overlay (still labelled "Video file" for
+                    // pickers + tests + keyboard), with the visual chrome painted
+                    // underneath and a keyboard focus ring off `peer-focus-visible`.
+                    <div className="flex flex-col gap-2 text-sm">
+                      <span className="font-medium text-fg">Video file</span>
+                      <div className="relative">
+                        <input
+                          ref={fileRef}
+                          type="file"
+                          // The accept list narrows to the base containers when the
+                          // admin turns the extended set off (W10) — the server's
+                          // 415 gate stays the enforcement truth.
+                          accept={videoAcceptAttr(additionalExts)}
+                          multiple
+                          aria-label="Video file"
+                          onChange={onFilePicked}
+                          className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                        />
+                        <div className="pointer-events-none flex flex-col items-center gap-3 rounded-[18px] border-[1.5px] border-dashed border-border px-6 py-9 text-center transition-colors peer-hover:border-fg-muted peer-focus-visible:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--focus)]">
+                          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent/12">
+                            <UploadIcon size={24} className="text-accent" />
+                          </span>
+                          <span className="max-w-full truncate text-[15px] font-semibold text-fg">
+                            {fileName ?? "Choose a video"}
+                          </span>
+                          <span className="text-[13px] leading-relaxed text-fg-muted">
+                            MP4, MOV, WebM, MKV · up to 8 GB
+                            <br />
+                            Resumable — leave and come back · pick several to upload a batch
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-center text-xs text-fg-muted">
+                        New uploads are scanned and may be held briefly for review.
+                      </span>
+                    </div>
+                  ) : importsEnabled === false ? (
+                    // Imports are turned off on this instance — an honest empty
+                    // state, never a dead form the creator can submit into a 503.
+                    <EmptyState
+                      title="Imports are disabled on this instance"
+                      message="The operator has turned off URL video import here. Upload a file instead, or check back later."
+                    />
+                  ) : (
+                    <label className="flex flex-col gap-1 text-sm">
+                      <span className="font-medium text-fg">Video URL</span>
+                      <input
+                        value={videoUrl}
+                        onChange={(e) => setVideoUrl(e.target.value)}
+                        onPaste={(e) => {
+                          // Paste-detect: a pasted http(s) URL is trimmed of the
+                          // stray whitespace/newlines that ride along a copied link.
+                          const text = e.clipboardData.getData("text").trim();
+                          if (text !== "" && /^https?:\/\//i.test(text)) {
+                            e.preventDefault();
+                            setVideoUrl(text);
+                          }
+                        }}
+                        type="url"
+                        placeholder="https://example.com/clip.mp4"
+                        aria-label="Video URL"
+                        aria-invalid={fieldErrors.url ? true : undefined}
+                        aria-describedby={fieldErrors.url ? "publish-url-error" : undefined}
+                        className={FIELD}
+                      />
+                      <FieldErrorText id="publish-url-error" message={fieldErrors.url} />
+                      <span className="text-xs text-fg-muted">
+                        A public link to a video file or a supported platform watch page. We fetch,
+                        scan, and publish it.
+                      </span>
+                    </label>
+                  )}
+                  {source === "file" && resumeCandidate && state !== "uploading" ? (
+                    // A resumable session was left by an interrupted upload of this
+                    // exact file — offer to resume from the chunks that landed.
+                    <div
+                      role="status"
+                      className="flex flex-col gap-3 rounded-2xl bg-surface-muted p-4 text-sm"
+                    >
+                      <p className="text-fg">
+                        Unfinished upload found for “{resumeCandidate.filename}
+                        ”. Resume where you left off, or start a new upload.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => void resumeUpload()}>
+                          Resume upload
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            void discardSession(resumeCandidate);
+                            setResumeCandidate(null);
+                          }}
+                        >
+                          Discard
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <Button
+                      type="button"
+                      onClick={() => setStep("details")}
+                      disabled={!canContinue}
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                // Stage 2 — details → publish: the metadata form, then Publish (and
+                // the in-flight progress / outcome for the third, "publish" stage).
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-fg-muted">
+                    <span className="tabular-nums font-medium text-fg-muted">
+                      Step 2 of 2 · Details
+                    </span>
+                    <span className="truncate">
+                      {source === "url"
+                        ? videoUrl.trim() || "Import from URL"
+                        : (fileName ?? "Selected file")}
+                    </span>
+                  </div>
+                  {channels.length > 1 ? (
+                    <label className="flex flex-col gap-1 text-sm">
+                      <span className="font-medium text-fg">Channel</span>
+                      <span className="relative">
+                        <select
+                          value={handle}
+                          onChange={(e) => setHandle(e.target.value)}
+                          aria-label="Channel"
+                          className={SELECT_FIELD}
+                        >
+                          {channels.map((ch) => (
+                            <option key={ch.id} value={ch.handle}>
+                              {ch.display_name} (@{ch.handle})
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDownIcon
+                          size={16}
+                          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted"
+                        />
+                      </span>
+                    </label>
+                  ) : null}
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-fg">Title</span>
+                    <input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="My video"
+                      aria-label="Video title"
+                      maxLength={200}
+                      aria-invalid={fieldErrors.title ? true : undefined}
+                      aria-describedby={fieldErrors.title ? "publish-title-error" : undefined}
+                      className={FIELD}
+                    />
+                    <FieldErrorText id="publish-title-error" message={fieldErrors.title} />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-fg">Description</span>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Tell viewers about your video (optional)"
+                      aria-label="Video description"
+                      rows={3}
+                      maxLength={5000}
+                      aria-invalid={fieldErrors.description ? true : undefined}
+                      aria-describedby={
+                        fieldErrors.description ? "publish-description-error" : undefined
+                      }
+                      className={`resize-y ${FIELD}`}
+                    />
+                    <FieldErrorText
+                      id="publish-description-error"
+                      message={fieldErrors.description}
+                    />
+                  </label>
+                  <TaxonomySelect
+                    label="Category"
+                    ariaLabel="Video category"
+                    value={category}
+                    onChange={setCategory}
+                    options={config?.categories ?? []}
+                    error={fieldErrors.category}
+                    errorId="publish-category-error"
+                  />
+                  <TaxonomySelect
+                    label="Language"
+                    ariaLabel="Video language"
+                    value={language}
+                    onChange={setLanguage}
+                    options={config?.languages ?? []}
+                    error={fieldErrors.language}
+                    errorId="publish-language-error"
+                  />
+                  <TaxonomySelect
+                    label="License"
+                    ariaLabel="Video license"
+                    value={license}
+                    onChange={(v) => {
+                      publishTouchedRef.current.add("license");
+                      setLicense(v);
+                    }}
+                    options={config?.licenses ?? []}
+                    error={fieldErrors.license}
+                    errorId="publish-license-error"
+                  />
+                  <TagsInput value={tags} onChange={setTags} ariaLabel="Video tags" />
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-fg">Privacy</span>
+                    <span className="relative">
+                      <select
+                        value={privacy}
+                        onChange={(e) => {
+                          publishTouchedRef.current.add("privacy");
+                          setPrivacy(e.target.value as VideoPrivacy);
+                        }}
+                        aria-label="Privacy"
+                        aria-invalid={fieldErrors.privacy ? true : undefined}
+                        aria-describedby={fieldErrors.privacy ? "publish-privacy-error" : undefined}
+                        className={SELECT_FIELD}
+                      >
+                        <option value="public">Public</option>
+                        <option value="unlisted">Unlisted</option>
+                        <option value="private">Private</option>
+                      </select>
+                      <ChevronDownIcon
+                        size={16}
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted"
+                      />
+                    </span>
+                    <FieldErrorText id="publish-privacy-error" message={fieldErrors.privacy} />
+                  </label>
+                  <div className="flex items-center justify-between gap-4 text-sm">
+                    <div className="min-w-0">
+                      <span className="block font-medium text-fg">Contains sensitive content</span>
+                      <span className="block text-xs text-fg-muted">
+                        Some instances hide, blur, or warn before playing sensitive videos.
+                      </span>
+                    </div>
+                    <Toggle
+                      checked={sensitive}
+                      onChange={setSensitive}
+                      label="Contains sensitive content"
+                      disabled={state === "uploading"}
+                    />
+                  </div>
+                  {/* Per-video publish policies (config-parity W9), prefilled from the
+            instance defaults.publish block. */}
+                  <div className="flex items-center justify-between gap-4 text-sm">
+                    <div className="min-w-0">
+                      <span className="block font-medium text-fg">Allow comments</span>
+                      <span className="block text-xs text-fg-muted">
+                        Viewers can comment on this video. Existing comments stay visible if turned
+                        off later.
+                      </span>
+                    </div>
+                    <Toggle
+                      checked={commentsPolicy === "enabled"}
+                      onChange={(on) => {
+                        publishTouchedRef.current.add("comments");
+                        setCommentsPolicy(on ? "enabled" : "disabled");
+                      }}
+                      label="Allow comments"
+                      disabled={state === "uploading"}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 text-sm">
+                    <div className="min-w-0">
+                      <span className="block font-medium text-fg">Allow downloads</span>
+                      <span className="block text-xs text-fg-muted">
+                        Viewers can download this video&apos;s files — only while the instance
+                        allows downloads at all.
+                      </span>
+                    </div>
+                    <Toggle
+                      checked={downloadEnabled}
+                      onChange={(on) => {
+                        publishTouchedRef.current.add("download");
+                        setDownloadEnabled(on);
+                      }}
+                      label="Allow downloads"
+                      disabled={state === "uploading"}
+                    />
+                  </div>
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-fg">Schedule publish (optional)</span>
+                    <input
+                      type="datetime-local"
+                      value={publishAt}
+                      onChange={(e) => setPublishAt(e.target.value)}
+                      aria-label="Schedule publish"
+                      aria-invalid={fieldErrors.publish_at ? true : undefined}
+                      aria-describedby={
+                        fieldErrors.publish_at ? "publish-schedule-error" : undefined
+                      }
+                      className={FIELD}
+                    />
+                    <FieldErrorText id="publish-schedule-error" message={fieldErrors.publish_at} />
+                    <span className="text-xs text-fg-muted">
+                      Leave empty to publish as soon as processing finishes. A scheduled video stays
+                      hidden from public surfaces until this time (must be in the future).
+                    </span>
+                  </label>
+                  {source === "url" && state === "uploading" ? (
+                    <ImportStageRail job={importJob} />
+                  ) : null}
+                  {state === "cancelled" ? (
+                    <p role="status" className="text-sm text-fg-muted">
+                      Upload cancelled — nothing was published. Your details are kept so you can try
+                      again.
+                    </p>
+                  ) : null}
+                  {error ? (
+                    <div className="flex flex-col items-start gap-2">
+                      <p role="alert" className="text-sm text-danger">
+                        {error}
+                      </p>
+                      {retryCtx ? (
+                        // A failed URL import keeps its draft, so Retry re-enqueues against
+                        // the same video via the same endpoint — no re-entry of the form.
+                        <Button variant="secondary" size="sm" onClick={() => void retryImport()}>
+                          Retry import
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <Button
+                      type="button"
+                      variant="tonal"
+                      onClick={() => setStep("pick")}
+                      disabled={state === "uploading"}
+                    >
+                      Back
+                    </Button>
+                    <button
+                      ref={publishRef}
+                      type="submit"
+                      disabled={
+                        state === "uploading" || (source === "url" && importsEnabled === false)
+                      }
+                      className={buttonClasses("primary", "md")}
+                    >
+                      {state === "uploading"
+                        ? source === "url"
+                          ? "Importing…"
+                          : "Uploading…"
+                        : "Publish"}
+                    </button>
+                    {state === "uploading" && source === "file" ? (
+                      // Determinate byte-level progress for the in-flight file upload
+                      // (the URL import has no local bytes to measure) + a Cancel that
+                      // aborts the transfer and cleans up the orphaned draft.
+                      <>
+                        <div
+                          role="progressbar"
+                          aria-label="Upload progress"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={progress}
+                          className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-surface-strong"
+                        >
+                          <div
+                            className="h-full rounded-full bg-fg transition-[width] duration-300"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                        <span
+                          aria-hidden="true"
+                          className="text-xs font-semibold tabular-nums text-fg-muted"
+                        >
+                          {progress}%
+                        </span>
+                        <Button
+                          variant="secondary"
+                          aria-label="Cancel upload"
+                          onClick={cancelUpload}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                  {state === "uploading" && source === "file" && bytes ? (
+                    // Real byte-level detail (loaded/total from the resumable-upload
+                    // progress callback) — the design's "X of Y" chunk line, peer-free.
+                    <p className="text-[12.5px] tabular-nums text-fg-muted">
+                      {formatBytes(bytes.loaded)} of {formatBytes(bytes.total)} · resumes from the
+                      last completed chunk if interrupted
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </form>
+          )}
+        </Modal>
+      ) : null}
+      {/* Minimized progress pill (design): a persistent bottom-right capsule that
+          keeps the in-flight upload reachable while the sheet is minimized —
+          click to reopen. Chrome-level, so monochrome surface + accent spinner. */}
+      {state === "uploading" && !open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="focus-ring fixed bottom-24 right-4 z-40 flex items-center gap-2.5 rounded-full bg-surface-raised px-4 py-2.5 shadow-soft-strong sm:bottom-6"
+        >
+          <LoaderIcon size={16} className="animate-spin text-accent" aria-hidden="true" />
+          <span className="text-[13px] font-semibold tabular-nums text-fg">
+            {source === "url" ? "Importing…" : `Uploading ${progress}%`}
+          </span>
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+// ImportStageRail renders the URL-import progress rail (UPLOAD-09): the four
+// coarse stages the backend reports on `import_job` (queued → fetching metadata →
+// downloading → scanning & processing). The active stage spins, completed stages
+// check off, and later stages sit muted — the same spinner + pill vocabulary the
+// studio uses elsewhere. `job` is null for the brief window before the enqueue
+// POST returns; the rail then reads as "Queued".
+function ImportStageRail({ job }: { job: ImportJob | null }) {
+  const active = job ? importActiveStage(job) : 0;
+  return (
+    <ol
+      aria-label="Import progress"
+      className="flex flex-col gap-2 rounded-2xl bg-surface-muted p-4"
+    >
+      {IMPORT_STAGES.map((stage, i) => {
+        const done = active < 0 || i < active;
+        const current = i === active;
+        return (
+          <li
+            key={stage.key}
+            aria-current={current ? "step" : undefined}
+            className="flex items-center gap-2.5 text-sm"
+          >
+            <span
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+                done
+                  ? "bg-success/15 text-success"
+                  : current
+                    ? "text-accent"
+                    : "bg-surface-strong text-fg-muted"
+              }`}
+            >
+              {done ? (
+                <CheckIcon size={13} aria-hidden="true" />
+              ) : current ? (
+                <LoaderIcon size={15} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-fg-muted" aria-hidden="true" />
+              )}
+            </span>
+            <span className={current ? "font-semibold text-fg" : "text-fg-muted"}>
+              {stage.label}
+            </span>
+            {current ? <span className="sr-only">— in progress</span> : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}

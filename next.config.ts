@@ -9,6 +9,18 @@ const nextConfig: NextConfig = {
   // Playwright webServer keeps using it outside Docker.
   output: "standalone",
   poweredByHeader: false,
+  async redirects() {
+    return [
+      // Creator stats moved into the Studio Analytics tab; keep old links working.
+      // A framework-level redirect fires before the (auth-gated) studio layout, so
+      // it works for anonymous and signed-in visitors alike.
+      {
+        source: "/studio/stats",
+        destination: "/studio/analytics",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {

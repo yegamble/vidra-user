@@ -124,7 +124,8 @@ for (const vp of VIEWPORTS) {
       );
       await page.goto("/studio");
       await expect(page.getByRole("heading", { name: "Studio", level: 1 })).toBeVisible();
-      await expect(page.getByRole("heading", { name: "Your channels" })).toBeVisible();
+      // Zero channels → the dashboard onboarding.
+      await expect(page.getByText("Welcome to your studio")).toBeVisible();
       await assertNoHorizontalScroll(page);
     });
 

@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CheckIcon, CopyIcon, TvIcon, WarningIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
-import type { Channel, CreateLiveStreamRequest, LiveStream } from "@/lib/api";
+import type { CreateLiveStreamRequest, LiveStream } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
 // Live streams accept only public/unlisted/private (the create contract has no
@@ -25,11 +26,23 @@ type Status = "loading" | "error" | "ready";
 type RevealedKey = { id: string; key: string; rtmp?: string };
 
 // LiveStreamsSection lets a channel owner create live streams and manage their
-// stream keys. The key is shown once on create/regenerate (copy-it-now), then
-// only its hash lives server-side. RTMP ingestion is a later boundary — streams
-// start "offline".
-export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
-  const [handle, setHandle] = useState(channels[0]?.handle ?? "");
+// stream keys. Scoped to the studio's current channel (`handle`); the create
+// form lives in a launched Modal (dialog on desktop / sheet on mobile) for
+// consistency with the stepped upload sheet, opened by "Go live" or a `?new=1`
+// deep link. The key is shown once on create/regenerate (copy-it-now), then only
+// its hash lives server-side. RTMP ingestion is a later boundary — streams start
+// "offline".
+export function LiveStreamsSection({
+  handle,
+  autoOpen = false,
+  onAutoOpenConsumed,
+}: {
+  handle: string;
+  /** When true (a `?new=1` deep link), the create-live form opens on mount. */
+  autoOpen?: boolean;
+  /** Called once after an autoOpen fires so the caller can strip the URL param. */
+  onAutoOpenConsumed?: () => void;
+}) {
   const [status, setStatus] = useState<Status>("loading");
   const [streams, setStreams] = useState<LiveStream[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
@@ -41,6 +54,16 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<RevealedKey | null>(null);
+  // Create-live Modal: launched by "Go live" or the `?new=1` deep link. The
+  // sheet skin applies on phones (matchMedia guarded for non-browser test envs).
+  const [open, setOpen] = useState(false);
+  const [sheet] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
+  const autoOpenedRef = useRef(false);
 
   useEffect(() => {
     if (handle === "") return;
@@ -59,6 +82,23 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
     return () => controller.abort();
   }, [handle, reloadKey]);
 
+  // A `?new=1` deep link opens the create form, then reports back so the caller
+  // can strip the param (router.replace). Fires on every false→true transition of
+  // the param — not just the first mount — so re-triggering "+ Create → Go live"
+  // while ALREADY on /studio/live reopens the modal (and re-strips the param). The
+  // guard resets whenever the param is stripped (autoOpen back to false).
+  useEffect(() => {
+    if (!autoOpen) {
+      autoOpenedRef.current = false;
+      return;
+    }
+    if (autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    setOpen(true);
+    onAutoOpenConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen]);
+
   async function create(e: React.FormEvent) {
     e.preventDefault();
     if (busy || title.trim() === "" || handle === "") return;
@@ -76,6 +116,7 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
       setTitle("");
       setPermanent(false);
       setReplayEnabled(false);
+      setOpen(false);
     } catch (err) {
       setError(errorMessage(err, "Could not create the live stream."));
     } finally {
@@ -126,87 +167,22 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[15px] font-bold tracking-tight">Live streams</h2>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            setStatus("loading");
-            setReloadKey((k) => k + 1);
-          }}
-        >
-          Reload
-        </Button>
-      </div>
-
-      <form
-        onSubmit={(e) => void create(e)}
-        className="flex flex-col gap-4 rounded-2xl border border-border-subtle bg-surface p-4"
-      >
-        {channels.length > 1 ? (
-          <Select
-            label="Channel"
-            value={handle}
-            onChange={(e) => setHandle(e.target.value)}
-            aria-label="Live channel"
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setStatus("loading");
+              setReloadKey((k) => k + 1);
+            }}
           >
-            {channels.map((ch) => (
-              <option key={ch.id} value={ch.handle}>
-                {ch.display_name} (@{ch.handle})
-              </option>
-            ))}
-          </Select>
-        ) : null}
-        <Input
-          label="Title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="My live show"
-          aria-label="Live stream title"
-          maxLength={200}
-        />
-        <Select
-          label="Privacy"
-          value={privacy}
-          onChange={(e) => setPrivacy(e.target.value as LivePrivacy)}
-          aria-label="Live privacy"
-        >
-          <option value="public">Public</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="private">Private</option>
-        </Select>
-        {/* The design's Go-live create form: Permanent + Save-replay as toggle
-            switches in an iOS-style divider list (no card border of their own). */}
-        <div className="flex flex-col">
-          <div className="flex items-center justify-between gap-4 border-t border-border-subtle py-3.5">
-            <div className="min-w-0">
-              <p className="text-[14.5px] font-semibold text-fg">Permanent stream</p>
-              <p className="mt-0.5 text-[12.5px] text-fg-muted">
-                Reuse the same stream and key between sessions
-              </p>
-            </div>
-            <Toggle checked={permanent} onChange={setPermanent} label="Permanent stream" />
-          </div>
-          <div className="flex items-center justify-between gap-4 border-t border-border-subtle py-3.5">
-            <div className="min-w-0">
-              <p className="text-[14.5px] font-semibold text-fg">Save replay</p>
-              <p className="mt-0.5 text-[12.5px] text-fg-muted">
-                Publish the recording as a video (same privacy) after the stream ends
-              </p>
-            </div>
-            <Toggle
-              checked={replayEnabled}
-              onChange={setReplayEnabled}
-              label="Save replay as a video"
-            />
-          </div>
-        </div>
-        <div>
-          <Button type="submit" disabled={busy || title.trim() === ""}>
-            {busy ? "Creating…" : "Create live stream"}
+            Reload
+          </Button>
+          <Button size="sm" onClick={() => setOpen(true)}>
+            Go live
           </Button>
         </div>
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
-      </form>
+      </div>
 
       {revealed ? <StreamKeyReveal revealed={revealed} onDismiss={() => setRevealed(null)} /> : null}
 
@@ -226,7 +202,7 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
         <EmptyState
           icon={<TvIcon size={24} />}
           title="No live streams yet"
-          message="Create a live stream above to get a stream key and go live."
+          message="Go live to get a stream key and start broadcasting."
         />
       ) : (
         <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
@@ -272,6 +248,69 @@ export function LiveStreamsSection({ channels }: { channels: Channel[] }) {
           ))}
         </ul>
       )}
+
+      {open ? (
+        <Modal
+          title="Go live"
+          onClose={() => setOpen(false)}
+          variant={sheet ? "sheet" : "dialog"}
+          className="sm:max-w-lg"
+        >
+          <form onSubmit={(e) => void create(e)} className="flex flex-col gap-4">
+            <Input
+              label="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="My live show"
+              aria-label="Live stream title"
+              autoFocus
+              maxLength={200}
+            />
+            <Select
+              label="Privacy"
+              value={privacy}
+              onChange={(e) => setPrivacy(e.target.value as LivePrivacy)}
+              aria-label="Live privacy"
+            >
+              <option value="public">Public</option>
+              <option value="unlisted">Unlisted</option>
+              <option value="private">Private</option>
+            </Select>
+            {/* The design's Go-live create form: Permanent + Save-replay as toggle
+                switches in an iOS-style divider list (no card border of their own). */}
+            <div className="flex flex-col">
+              <div className="flex items-center justify-between gap-4 border-t border-border-subtle py-3.5">
+                <div className="min-w-0">
+                  <p className="text-[14.5px] font-semibold text-fg">Permanent stream</p>
+                  <p className="mt-0.5 text-[12.5px] text-fg-muted">
+                    Reuse the same stream and key between sessions
+                  </p>
+                </div>
+                <Toggle checked={permanent} onChange={setPermanent} label="Permanent stream" />
+              </div>
+              <div className="flex items-center justify-between gap-4 border-t border-border-subtle py-3.5">
+                <div className="min-w-0">
+                  <p className="text-[14.5px] font-semibold text-fg">Save replay</p>
+                  <p className="mt-0.5 text-[12.5px] text-fg-muted">
+                    Publish the recording as a video (same privacy) after the stream ends
+                  </p>
+                </div>
+                <Toggle
+                  checked={replayEnabled}
+                  onChange={setReplayEnabled}
+                  label="Save replay as a video"
+                />
+              </div>
+            </div>
+            <div>
+              <Button type="submit" disabled={busy || title.trim() === ""}>
+                {busy ? "Creating…" : "Create live stream"}
+              </Button>
+            </div>
+            {error ? <p className="text-sm text-danger">{error}</p> : null}
+          </form>
+        </Modal>
+      ) : null}
     </section>
   );
 }

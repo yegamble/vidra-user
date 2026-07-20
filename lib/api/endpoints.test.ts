@@ -415,6 +415,35 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("getMyStats targets the account stats endpoint", async () => {
+    await api.getMyStats();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/stats");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  it("listChannelMembers GETs the channel's members with the handle encoded", async () => {
+    await api.listChannelMembers("ada makes");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channels/ada%20makes/members");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  it("addChannelMember POSTs the target handle + role to the members endpoint", async () => {
+    await api.addChannelMember("ada_makes", { handle: "bob", role: "editor" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channels/ada_makes/members");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ handle: "bob", role: "editor" });
+  });
+
+  it("removeChannelMember DELETEs the member by channel handle + user id", async () => {
+    await api.removeChannelMember("ada_makes", "u 1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/channels/ada_makes/members/u%201");
+    expect(init.method).toBe("DELETE");
+  });
+
   it("listChannelSyncs GETs the caller's channel-syncs", async () => {
     await api.listChannelSyncs();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

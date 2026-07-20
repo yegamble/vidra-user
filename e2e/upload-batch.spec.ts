@@ -149,6 +149,7 @@ test("picking several files switches the studio to a batch queue with per-file r
   await wireStudio(page);
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles(threeFiles());
 
@@ -168,6 +169,7 @@ test("a batch of 3 files all upload to done (bounded parallelism drains the queu
   await wireStudio(page);
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles(threeFiles());
   await page.getByRole("button", { name: "Upload 3 videos" }).click();
@@ -227,6 +229,7 @@ test("an edited per-file title is sent on that file's draft", async ({ page }) =
   });
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   await page.getByRole("button", { name: "Upload video" }).click();
   // Two files, private privacy, and a retitled first row.
   await page.getByLabel("Video file").setInputFiles([
@@ -249,6 +252,7 @@ test("over-quota files are marked before any bytes move", async ({ page }) => {
   await wireStudio(page, { quota: { used_bytes: 0, quota_bytes: 6 } });
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles([
     { name: "fits.mp4", mimeType: "video/mp4", buffer: Buffer.from("aaaa") }, // 4 bytes → fits (0+4<=6)

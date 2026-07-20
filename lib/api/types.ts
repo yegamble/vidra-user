@@ -215,6 +215,13 @@ export type Channel = Schemas["Channel"];
 export type ChannelListResponse = Schemas["ChannelListResponse"];
 export type FollowedChannel = Schemas["FollowedChannel"];
 export type FollowedChannelsResponse = Schemas["FollowedChannelsResponse"];
+// The caller's role on a channel (GET /me/channels only): "owner" or "editor".
+export type ChannelRole = NonNullable<Schemas["Channel"]["role"]>;
+
+// --- Channel collaborators (editors, migration 0097) ------------------------
+export type ChannelMember = Schemas["ChannelMember"];
+export type ChannelMembersResponse = Schemas["ChannelMembersResponse"];
+export type AddChannelMemberRequest = Schemas["AddChannelMemberRequest"];
 
 // --- Channel auto-sync (UPLOAD-13, backport W2.U5) --------------------------
 export type ChannelSync = Schemas["ChannelSync"];
@@ -381,6 +388,10 @@ export type UpdatePlaylistRequest = Schemas["UpdatePlaylistRequest"];
 export type DailyViews = Schemas["DailyViews"];
 export type VideoStatsResponse = Schemas["VideoStatsResponse"];
 export type ChannelStatsResponse = Schemas["ChannelStatsResponse"];
+// Account-level rollup (GET /me/stats): totals summed across all OWNED channels,
+// the aggregated 30-day daily series, and a per-channel breakdown row per channel.
+export type AccountStatsResponse = Schemas["AccountStatsResponse"];
+export type AccountChannelStats = Schemas["AccountChannelStats"];
 
 // --- Storage quota ----------------------------------------------------------
 export type QuotaStatus = Schemas["QuotaStatus"];

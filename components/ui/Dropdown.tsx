@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useEffect,
   useId,
@@ -11,15 +12,42 @@ import {
 
 import { cn } from "@/lib/cn";
 
-export type DropdownItem = {
+/** A selectable menu row. */
+export type DropdownMenuItem = {
   /** Item label. */
   label: ReactNode;
-  /** Invoked on select (click / Enter / Space); the menu closes afterward. */
-  onSelect: () => void;
+  /**
+   * Invoked on select (click / Enter / Space); the menu closes afterward.
+   * Optional when `href` is set (navigation is the action).
+   */
+  onSelect?: () => void;
+  /**
+   * When set the row is a real navigation link (`next/link`, `role="menuitem"`):
+   * selecting it navigates. `onSelect` still fires first (e.g. to close a sheet).
+   */
+  href?: string;
+  /** Leading icon rendered before the label (16–18px glyph). */
+  icon?: ReactNode;
   disabled?: boolean;
   /** Style the item as destructive (e.g. Delete). */
   danger?: boolean;
 };
+
+/** A non-interactive divider between groups of items (`role="separator"`). */
+export type DropdownSeparator = { type: "separator" };
+
+/** A non-interactive group heading (decorative; skipped in the focus ring). */
+export type DropdownLabel = { type: "label"; label: ReactNode };
+
+export type DropdownItem = DropdownMenuItem | DropdownSeparator | DropdownLabel;
+
+function isSeparator(item: DropdownItem): item is DropdownSeparator {
+  return "type" in item && item.type === "separator";
+}
+
+function isLabel(item: DropdownItem): item is DropdownLabel {
+  return "type" in item && item.type === "label";
+}
 
 export type DropdownProps = {
   /** Trigger contents (text and/or icon). */
@@ -53,7 +81,10 @@ export function Dropdown({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Refs to the FOCUSABLE rows only (separators are skipped), indexed by their
+  // position among focusable rows so arrow navigation walks a dense list. Holds
+  // both buttons (action rows) and anchors (href rows).
+  const itemRefs = useRef<(HTMLElement | null)[]>([]);
   const menuId = useId();
   // Viewport-aware placement, measured pre-paint each time the menu opens:
   // flip above the trigger when the space below can't fit the menu, and flip
@@ -98,7 +129,7 @@ export function Dropdown({
     setOpen(true);
     // Focus after the menu renders.
     requestAnimationFrame(() => {
-      const list = itemRefs.current.filter(Boolean) as HTMLButtonElement[];
+      const list = itemRefs.current.filter(Boolean) as HTMLElement[];
       const target = focus === "first" ? list[0] : list[list.length - 1];
       target?.focus();
     });
@@ -120,7 +151,7 @@ export function Dropdown({
   }
 
   function onItemKeyDown(e: React.KeyboardEvent, index: number) {
-    const list = itemRefs.current.filter(Boolean) as HTMLButtonElement[];
+    const list = itemRefs.current.filter(Boolean) as HTMLElement[];
     const last = list.length - 1;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -137,6 +168,15 @@ export function Dropdown({
     } else if (e.key === "Escape") {
       e.preventDefault();
       closeAndRefocus();
+    } else if (e.key === "Enter" || e.key === " ") {
+      // Buttons activate natively on Enter/Space; anchors only on Enter, so we
+      // trigger the click ourselves (preventing the native Enter to avoid a
+      // double navigation) to give href rows Space activation too.
+      const el = list[index];
+      if (el instanceof HTMLAnchorElement) {
+        e.preventDefault();
+        el.click();
+      }
     } else if (e.key === "Tab") {
       setOpen(false);
     }
@@ -173,29 +213,91 @@ export function Dropdown({
             placement.end ? "right-0" : "left-0",
           )}
         >
-          {items.map((item, index) => (
-            <button
-              key={index}
-              ref={(el) => {
-                itemRefs.current[index] = el;
-              }}
-              type="button"
-              role="menuitem"
-              tabIndex={-1}
-              disabled={item.disabled}
-              onKeyDown={(e) => onItemKeyDown(e, index)}
-              onClick={() => {
-                item.onSelect();
-                closeAndRefocus();
-              }}
-              className={cn(
-                "block w-full whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors focus-ring disabled:opacity-50",
+          {(() => {
+            // Walk the items, assigning each focusable row a dense index (so
+            // separators don't leave gaps in the arrow-key ring) and rendering
+            // href rows as links, the rest as buttons.
+            let focusIndex = -1;
+            return items.map((item, index) => {
+              if (isSeparator(item)) {
+                return (
+                  <div
+                    key={`sep-${index}`}
+                    role="separator"
+                    className="my-1 h-px bg-border-subtle"
+                  />
+                );
+              }
+              if (isLabel(item)) {
+                return (
+                  <div
+                    key={`label-${index}`}
+                    role="presentation"
+                    className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-muted"
+                  >
+                    {item.label}
+                  </div>
+                );
+              }
+              const rowIndex = (focusIndex += 1);
+              const rowClass = cn(
+                "flex w-full items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors focus-ring disabled:opacity-50",
                 item.danger ? "text-danger hover:bg-danger/10" : "text-fg hover:bg-surface-muted",
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
+              );
+              const body = (
+                <>
+                  {item.icon ? (
+                    <span aria-hidden="true" className="flex shrink-0 items-center justify-center">
+                      {item.icon}
+                    </span>
+                  ) : null}
+                  <span className="min-w-0 flex-1">{item.label}</span>
+                </>
+              );
+              if (item.href) {
+                return (
+                  <Link
+                    key={index}
+                    ref={(el) => {
+                      itemRefs.current[rowIndex] = el;
+                    }}
+                    href={item.href}
+                    role="menuitem"
+                    tabIndex={-1}
+                    aria-disabled={item.disabled || undefined}
+                    onKeyDown={(e) => onItemKeyDown(e, rowIndex)}
+                    onClick={() => {
+                      item.onSelect?.();
+                      closeAndRefocus();
+                    }}
+                    className={rowClass}
+                  >
+                    {body}
+                  </Link>
+                );
+              }
+              return (
+                <button
+                  key={index}
+                  ref={(el) => {
+                    itemRefs.current[rowIndex] = el;
+                  }}
+                  type="button"
+                  role="menuitem"
+                  tabIndex={-1}
+                  disabled={item.disabled}
+                  onKeyDown={(e) => onItemKeyDown(e, rowIndex)}
+                  onClick={() => {
+                    item.onSelect?.();
+                    closeAndRefocus();
+                  }}
+                  className={rowClass}
+                >
+                  {body}
+                </button>
+              );
+            });
+          })()}
         </div>
       ) : null}
     </div>

@@ -40,7 +40,8 @@ vi.mock("@/lib/api", () => ({
   videoThumbnailUrl: () => "",
 }));
 
-import { ReplaceVideoManager, UploadSection } from "@/components/StudioView";
+import { UploadSection } from "@/components/studio/UploadSection";
+import { ReplaceVideoManager } from "@/components/studio/VideoRow";
 import type { Channel, Video } from "@/lib/api";
 
 const channel = {

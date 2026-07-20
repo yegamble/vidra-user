@@ -127,6 +127,7 @@ async function openStudio(page: Page, opts: { importsEnabled?: boolean } = {}) {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Upload a video" })).toBeVisible();
 }
 

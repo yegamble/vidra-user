@@ -5,6 +5,16 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Pin the React version for eslint-plugin-react instead of "detect" (the Next
+  // preset default). Under ESLint 10 the plugin's filesystem-based version
+  // detection calls the removed `context.getFilename()` and crashes the whole
+  // lint run; an explicit version skips detection entirely. Keep in step with
+  // the `react` dependency in package.json.
+  {
+    settings: {
+      react: { version: "19.2" },
+    },
+  },
   // Observability: a single logger module is the only place console.* is allowed
   // (see .ralph/specs/observability.md). Everywhere else it is an error.
   {

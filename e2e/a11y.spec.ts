@@ -319,7 +319,7 @@ test("the playback settings page passes axe (grouped toggles + selects)", async 
   await expectNoSevereViolations(page);
 });
 
-test("the studio page passes axe (signed in, channels + create form)", async ({ page }) => {
+test("the studio dashboard and channel create form pass axe (signed in)", async ({ page }) => {
   await signIn(page, "user");
   await page.route(/\/api\/v1\/me\/channels$/, (route) =>
     route.fulfill({ json: { channels: [] } }),
@@ -327,9 +327,81 @@ test("the studio page passes axe (signed in, channels + create form)", async ({ 
   await page.route(/\/api\/v1\/videos\/config$/, (route) =>
     route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
   );
+  // The dashboard (zero channels → onboarding).
   await page.getByRole("link", { name: "Studio" }).click();
   await expect(page.getByRole("heading", { name: "Studio", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your channels" })).toBeVisible();
+  await expect(page.getByText("Welcome to your studio")).toBeVisible();
+  await expectNoSevereViolations(page);
+  // The Channel tab's onboarding create form.
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
+  await expect(page.getByText("Create your first channel")).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
+test("the populated studio dashboard passes axe (stat links, latest video, distribution)", async ({
+  page,
+}) => {
+  await signIn(page, "user");
+  const dailyViews = Array.from({ length: 30 }, (_, i) => ({
+    day: `2026-06-${String(i + 1).padStart(2, "0")}`,
+    views: i,
+  }));
+  await page.route(/\/api\/v1\/me\/channels$/, (route) =>
+    route.fulfill({
+      json: {
+        channels: [
+          {
+            id: "c1",
+            owner_id: "u1",
+            handle: "ada_makes",
+            display_name: "Ada Makes",
+            description: "",
+            follower_count: 12,
+            created_at: new Date().toISOString(),
+            role: "owner",
+            activitypub_enabled: true,
+            atproto_enabled: false,
+          },
+        ],
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada_makes\/stats$/, (route) =>
+    route.fulfill({
+      json: {
+        views: 1234,
+        likes: 56,
+        dislikes: 2,
+        comments: 8,
+        followers: 12,
+        videos: 3,
+        daily_views: dailyViews,
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada_makes\/videos$/, (route) =>
+    route.fulfill({ json: { videos: [video("v1", "Latest clip", 999)] } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/stats$/, (route) =>
+    route.fulfill({ json: { views: 999, likes: 10, dislikes: 0, comments: 4, daily_views: dailyViews } }),
+  );
+  await page.route(/\/api\/v1\/me\/quota$/, (route) =>
+    route.fulfill({
+      json: { used_bytes: 5368709120, quota_bytes: 21474836480, daily_used_bytes: 0, daily_quota_bytes: null },
+    }),
+  );
+  // The ATProto extension is off → the distribution ATProto row is hidden.
+  await page.route(/\/api\/v1\/me\/atproto$/, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await expect(page.getByRole("heading", { name: "Studio", level: 1 })).toBeVisible();
+  // The QuickStatsStrip stat links render (the dl→list restructure), and the
+  // latest-video card resolves — then axe verifies the surface is clean (the old
+  // <a>-inside-<dl> tripped the serious definition-list / dlitem rules).
+  await expect(page.getByRole("link", { name: /Views · 28d/ })).toBeVisible();
+  await expect(page.getByText("Latest video")).toBeVisible();
   await expectNoSevereViolations(page);
 });
 
@@ -349,6 +421,11 @@ test("the studio channel auto-sync section passes axe (list + state pills + conn
             description: "",
             follower_count: 0,
             created_at: new Date().toISOString(),
+            // Required on the Channel contract; the Channel tab's distribution
+            // toggles read them (an absent flag would drop aria-checked).
+            activitypub_enabled: true,
+            atproto_enabled: true,
+            role: "owner",
           },
         ],
       },
@@ -379,6 +456,13 @@ test("the studio channel auto-sync section passes axe (list + state pills + conn
   );
   await page.route(/\/api\/v1\/channels\/ada\/live$/, (route) =>
     route.fulfill({ json: { live_streams: [] } }),
+  );
+  // The Channel tab also mounts the collaborators + distribution cards.
+  await page.route(/\/api\/v1\/channels\/ada\/members$/, (route) =>
+    route.fulfill({ json: { members: [] } }),
+  );
+  await page.route(/\/api\/v1\/me\/atproto$/, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
   );
   await page.route(/\/api\/v1\/channel-syncs$/, (route) =>
     route.fulfill({
@@ -422,7 +506,9 @@ test("the studio channel auto-sync section passes axe (list + state pills + conn
       },
     }),
   );
+  // The channel auto-sync section now lives on the Studio Channel tab.
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Auto-import from another platform" }),
   ).toBeVisible();

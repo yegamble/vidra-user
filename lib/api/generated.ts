@@ -795,11 +795,58 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the authenticated user's channels */
+        /**
+         * List the channels the authenticated user can manage
+         * @description The channels the caller OWNS plus the channels shared with them as an editor collaborator (migration 0097), owned first. Each channel carries a `role` of "owner" or "editor".
+         */
         get: operations["listMyChannels"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{handle}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a channel's collaborators
+         * @description The channel's editor collaborators. Visible to the channel owner and to existing members; anyone else gets 403 (unknown handle → 404).
+         */
+        get: operations["listChannelMembers"];
+        put?: never;
+        /**
+         * Invite a collaborator to a channel
+         * @description Adds a local user as an editor of the channel. Owner only. The target is identified by their handle (username). 404 when the channel or the target user is unknown; 409 when the target already manages the channel (owner or existing member).
+         */
+        post: operations["addChannelMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{handle}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a collaborator from a channel
+         * @description Removes a member from the channel. Owner only. Idempotent — removing someone who is not a member is a 204. Unknown handle → 404.
+         */
+        delete: operations["removeChannelMember"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1419,6 +1466,26 @@ export interface paths {
          * @description Aggregated engagement totals across all the channel's videos (views, likes, dislikes, comments), the follower and video counts, and a 30-day daily-views series (zero-filled, oldest first, UTC days). Owner only: a non-owner or unknown handle is reported as 404.
          */
         get: operations["getChannelStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Creator statistics across all channels the caller owns
+         * @description Account-level analytics rollup for the authenticated user: engagement totals summed across every channel they OWN, the aggregated 30-day daily-views series (zero-filled, oldest first, UTC days), and a per-channel breakdown (each with all-time views, follower count, video count, and trailing-28-day views). Owner-scoped by construction — only the caller's own channels are included. Powers the studio "All channels" analytics scope.
+         */
+        get: operations["getAccountStats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4850,6 +4917,17 @@ export interface components {
             has_avatar?: boolean;
             /** @description Whether a banner is set (served at GET /channels/{handle}/banner). */
             has_banner?: boolean;
+            /** @description Whether this channel publishes over ActivityPub. When false the channel does not federate: inbound Follows are ignored and outbound Create/Update/Delete are skipped. Owner-editable via PATCH. */
+            activitypub_enabled: boolean;
+            /** @description Whether this channel's published videos are cross-posted to ATProto/Bluesky (subject to the owner having a linked account and the instance ATProto extension being on). Owner-editable via PATCH. */
+            atproto_enabled: boolean;
+            /** @description Effective ATProto distribution status: atproto_enabled AND the channel owner has a linked Bluesky account AND the instance ATProto extension is on. Computed only where cheap (single-channel GET and /me/channels); omitted in bulk listings and when the extension is not enabled on the instance. */
+            atproto_active?: boolean;
+            /**
+             * @description The caller's role on this channel, set only on GET /me/channels (which spans owned + collaborated channels); omitted on public and single-channel views.
+             * @enum {string}
+             */
+            role?: "owner" | "editor";
         };
         CreateChannelRequest: {
             /**
@@ -4865,9 +4943,44 @@ export interface components {
         UpdateChannelRequest: {
             display_name?: string;
             description?: string;
+            /** @description Toggle ActivityPub federation for this channel (owner only). Absent leaves it unchanged. */
+            activitypub_enabled?: boolean;
+            /** @description Toggle ATProto/Bluesky cross-posting for this channel (owner only). Absent leaves it unchanged. */
+            atproto_enabled?: boolean;
         };
         ChannelListResponse: {
             channels: components["schemas"]["Channel"][];
+        };
+        /** @description A channel collaborator (migration 0097). */
+        ChannelMember: {
+            /** Format: uuid */
+            user_id: string;
+            /** @example bob */
+            username: string;
+            /** @example Bob */
+            display_name: string;
+            /**
+             * @description The member's role. Today only "editor".
+             * @enum {string}
+             */
+            role: "editor";
+            /** Format: date-time */
+            created_at: string;
+        };
+        ChannelMembersResponse: {
+            members: components["schemas"]["ChannelMember"][];
+        };
+        AddChannelMemberRequest: {
+            /**
+             * @description The handle (username) of the local user to invite.
+             * @example bob
+             */
+            handle: string;
+            /**
+             * @description The role to grant. Defaults to "editor" when omitted.
+             * @enum {string}
+             */
+            role?: "editor";
         };
         /** @description A channel the caller follows, with the follow timestamp. */
         FollowedChannel: components["schemas"]["Channel"] & {
@@ -5145,6 +5258,53 @@ export interface components {
             videos: number;
             /** @description Dense 30-day series aggregated across the channel's videos. */
             daily_views: components["schemas"]["DailyViews"][];
+        };
+        /** @description Owner-only account-level rollup (GET /me/stats): totals summed across all owned channels, the aggregated 30-day daily series, and a per-channel breakdown. */
+        AccountStatsResponse: {
+            totals: {
+                /** Format: int64 */
+                views: number;
+                /** Format: int64 */
+                likes: number;
+                /** Format: int64 */
+                dislikes: number;
+                /** Format: int64 */
+                comments: number;
+                /**
+                 * Format: int64
+                 * @description Sum of follower counts across all owned channels.
+                 */
+                followers: number;
+                /** Format: int64 */
+                videos: number;
+            };
+            /** @description Dense 30-day series aggregated across every video of every owned channel (zero-filled, oldest first, UTC days). */
+            daily_views: components["schemas"]["DailyViews"][];
+            /** @description Per-channel breakdown, oldest channel first. */
+            channels: components["schemas"]["AccountChannelStats"][];
+        };
+        /** @description One owned channel's row in the account stats breakdown. */
+        AccountChannelStats: {
+            /** Format: uuid */
+            id: string;
+            /** @example ada_makes */
+            handle: string;
+            /** @example Ada Makes */
+            display_name: string;
+            /**
+             * Format: int64
+             * @description All-time views across the channel's videos.
+             */
+            views: number;
+            /** Format: int64 */
+            followers: number;
+            /** Format: int64 */
+            videos: number;
+            /**
+             * Format: int64
+             * @description Views over the trailing 28 days.
+             */
+            views_28d: number;
         };
         /** @description One downloadable single-file representation: original, progressive VP9/WebM, packaged HLS-quality MP4, audio-only M4A, or WebVTT subtitle. */
         VideoDownloadFile: {
@@ -9314,7 +9474,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The user's channels (possibly empty). */
+            /** @description The user's owned + collaborated channels (possibly empty). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9325,6 +9485,174 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listChannelMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel's members (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelMembersResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller neither owns nor is a member of the channel. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No channel with that handle. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    addChannelMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddChannelMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description The added member. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelMember"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller does not own the channel. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such channel, or no such target user. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The target is already the owner or a member. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation error. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    removeChannelMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The member was removed (or was not a member). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller does not own the channel. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No channel with that handle. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11045,6 +11373,35 @@ export interface operations {
             };
             /** @description No such channel, or not owned by the caller. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAccountStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's account-level statistics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountStatsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

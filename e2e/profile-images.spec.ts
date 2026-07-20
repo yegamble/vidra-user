@@ -175,6 +175,13 @@ test("a creator can set the channel banner from the studio row editor", async ({
   await page.route(/\/api\/v1\/channels\/ada_makes\/live$/, (route) =>
     route.fulfill({ json: { live_streams: [] } }),
   );
+  // The Studio Channel tab also mounts the collaborators + distribution cards.
+  await page.route(/\/api\/v1\/channels\/ada_makes\/members$/, (route) =>
+    route.fulfill({ json: { members: [] } }),
+  );
+  await page.route(/\/api\/v1\/me\/atproto$/, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
   await page.route(VIDEO_CONFIG, (route) =>
     route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
   );
@@ -187,7 +194,9 @@ test("a creator can set the channel banner from the studio row editor", async ({
   });
 
   await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByRole("button", { name: "Edit ada_makes" }).click();
+  // Channel avatar/banner editing now lives on the Studio Channel tab (the
+  // current channel edits directly, no per-row "Edit" toggle).
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
 
   const bannerSection = page.getByRole("region", { name: "Channel banner" });
   await expect(bannerSection.getByText("No banner yet.")).toBeVisible();
