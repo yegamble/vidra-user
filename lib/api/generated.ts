@@ -5066,10 +5066,10 @@ export interface components {
              */
             privacy?: "public" | "unlisted" | "private" | "password";
             /**
-             * @description Publish lifecycle. "scheduled" means the upload finished processing but publish_at lies in the future; public surfaces (feed, search, channel lists) only show "published", while direct links behave like any non-published video. "quarantined" means the instance holds new uploads for moderator review (QUARANTINE_NEW_UPLOADS): only the owner (studio badge) and moderators can see the video until it is approved (published) or rejected (failed). Present on every local video; omitted on remote cards.
+             * @description Publish lifecycle. "scheduled" means the upload finished processing but publish_at lies in the future; public surfaces (feed, search, channel lists) only show "published", while direct links behave like any non-published video. "quarantined" means the instance holds new uploads for moderator review (QUARANTINE_NEW_UPLOADS): only the owner (studio badge) and moderators can see the video until it is approved (published) or rejected (failed). "transcoding" means the video opted into publish_after_transcode and is held off every public surface until its HLS transcode completes; like quarantine, only the owner and moderators can see it meanwhile, and the release publishes it through the normal publish transition. Present on every local video; omitted on remote cards.
              * @enum {string}
              */
-            state?: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
+            state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
             /** @description Whether the owner flagged the video as sensitive content. Always present; false on remote cards (no local flag exists for them). When the instance sensitive_content_policy is "hide", flagged videos are excluded from the public feed and search server-side; under warn/blur the frontend applies the matching presentation. */
             is_sensitive: boolean;
             /**
@@ -5120,6 +5120,10 @@ export interface components {
             comments_enabled?: boolean;
             /** @description The per-video download policy (config-parity W9). Present on the create/update/detail views; omitted on list/feed views. Effective availability for regular viewers is this flag AND the instance downloads feature (GET /instance features.downloads); moderators/admins bypass both. */
             download_enabled?: boolean;
+            /** @description The per-video publish-timing opt-in. When true, a processed video is held (state "transcoding") off every public surface until its HLS transcode completes, instead of publishing while it transcodes (default false). Present on the create/update/detail (owner-facing) views; omitted on list/feed views and remote cards. */
+            publish_after_transcode?: boolean;
+            /** @description DETAIL view only. True while a transcode job is still live for this video — the "still processing" signal shown under the player. It becomes false once the last job finishes, at which point hls_url appears. Independent of publish_after_transcode: it is true for any video with a running transcode. Omitted (absent = false) elsewhere. */
+            transcoding?: boolean;
             /** @description The video's free-form tags (lowercased, alphabetical; at most 5). Present on the create/update/detail views; omitted when empty and on list/feed views. */
             tags?: string[];
             /**
@@ -5379,6 +5383,8 @@ export interface components {
             comments_policy?: "enabled" | "disabled";
             /** @description Per-video download policy (config-parity W9), layered on the instance-wide downloads_enabled gate (both must be on for regular viewers). Omitted (null) seeds the instance's default_download_enabled setting. */
             download_enabled?: boolean;
+            /** @description Opt into publish-after-transcode (default false). When true, the video is held (state "transcoding") off every public surface until its HLS transcode completes, then publishes automatically. Ignored when transcoding is disabled/unavailable (the video publishes immediately) and when publish_at is set (time-gating takes precedence). */
+            publish_after_transcode?: boolean;
         };
         /** @description Partial update; provide at least one field. */
         UpdateVideoRequest: {
@@ -5408,6 +5414,8 @@ export interface components {
             comments_policy?: "enabled" | "disabled";
             /** @description Set the per-video download policy (omit to leave unchanged), layered on the instance-wide downloads_enabled gate. */
             download_enabled?: boolean;
+            /** @description Set the publish-after-transcode opt-in (omit to leave unchanged). Setting it true on an already-published video that has never been publicly visible and still has a live transcode job holds the video (state "transcoding") until that transcode completes; a publicly-visible video is never pulled back to hidden. */
+            publish_after_transcode?: boolean;
         };
         /** @description A WebVTT caption track's metadata (the file is fetched separately). */
         Caption: {
