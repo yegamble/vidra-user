@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Modal } from "./Modal";
@@ -80,6 +81,37 @@ describe("Modal", () => {
     expect(dialog.className).toContain("rounded-t-[22px]");
     // A decorative grab handle sits at the top of the sheet.
     expect(container.querySelector('[aria-hidden="true"].rounded-full')).toBeTruthy();
+  });
+
+  it("keeps focus in a typed-into field even when the parent passes a fresh onClose each render", () => {
+    // Regression: the focus-management effect used to depend on `onClose`. A
+    // parent that passes a new inline `onClose={() => …}` on every render (the
+    // common case) re-ran the effect on each keystroke-driven re-render, which
+    // re-focused the header close button and yanked focus out of the input the
+    // user was typing in. The effect is now mount-only, so focus stays put.
+    function Harness() {
+      const [value, setValue] = useState("");
+      return (
+        // A NEW onClose identity every render is the whole point.
+        <Modal title="Upload" onClose={() => {}}>
+          <input
+            aria-label="Title"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </Modal>
+      );
+    }
+    render(<Harness />);
+    const input = screen.getByLabelText("Title") as HTMLInputElement;
+    input.focus();
+    // Simulate typing: each change re-renders the parent with a fresh onClose.
+    fireEvent.change(input, { target: { value: "h" } });
+    fireEvent.change(input, { target: { value: "he" } });
+    fireEvent.change(input, { target: { value: "hel" } });
+    // Focus never jumped to the close (X) button.
+    expect(document.activeElement).toBe(input);
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "Close" }));
   });
 
   it("traps Tab from the last focusable back to the first", () => {
