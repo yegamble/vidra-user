@@ -230,8 +230,8 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
   horizontal scroll on phones), never an underline rail. The `/studio?video=<id>`
   single-video management deep link (moderator/owner) renders full-page with the
   studio nav hidden. Analytics carries **two scopes** — "This channel" and
-  "All channels" (a client-side rollup today, one-function-swappable to a backend
-  endpoint) — via `SegmentedControl`. Live's create form and the create-channel
+  "All my channels" (an owner-scoped rollup from the backend `GET /me/stats`,
+  hidden for a pure editor) — via `SegmentedControl`. Live's create form and the create-channel
   form are launched `Modal`s (dialog on desktop / `variant="sheet"` on mobile),
   consistent with the stepped upload sheet. Keeps the nav rules
   (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger, 44pt targets).

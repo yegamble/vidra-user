@@ -82,10 +82,17 @@ export function LiveStreamsSection({
     return () => controller.abort();
   }, [handle, reloadKey]);
 
-  // A `?new=1` deep link opens the create form immediately on mount, then reports
-  // back so the caller can strip the param (router.replace).
+  // A `?new=1` deep link opens the create form, then reports back so the caller
+  // can strip the param (router.replace). Fires on every false→true transition of
+  // the param — not just the first mount — so re-triggering "+ Create → Go live"
+  // while ALREADY on /studio/live reopens the modal (and re-strips the param). The
+  // guard resets whenever the param is stripped (autoOpen back to false).
   useEffect(() => {
-    if (!autoOpen || autoOpenedRef.current) return;
+    if (!autoOpen) {
+      autoOpenedRef.current = false;
+      return;
+    }
+    if (autoOpenedRef.current) return;
     autoOpenedRef.current = true;
     setOpen(true);
     onAutoOpenConsumed?.();
