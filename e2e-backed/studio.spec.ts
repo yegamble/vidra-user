@@ -9,6 +9,7 @@ import {
   loginToken,
   publishViaStudioUI,
   seedPublishedChannel,
+  startStudioUpload,
   uniqueId,
   videoChapters,
 } from "./fixtures";
@@ -42,20 +43,14 @@ test("a creator can create a channel and publish a video (chunked upload)", asyn
   await page.getByRole("button", { name: "Create channel" }).click();
   await channelCreated;
 
-  // Upload a real (tiny) video via the chunked protocol; the backend assembles
-  // the chunks, runs ffprobe (which accepts it), and publishes it. `complete`
-  // (POST /uploads/:id/complete) is the terminal call that finalises the video.
-  await page.getByLabel("Video title").fill(videoTitle);
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
+  // Upload a real (tiny) video via the chunked protocol; selecting the file
+  // auto-starts it (create session → PUT chunks → complete) and Publish applies
+  // the metadata (PATCH), moving it out of the private draft to public.
+  await startStudioUpload(page, {
+    title: videoTitle,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
-  await uploaded;
+  await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
 
   // The published video appears on the public channel page (a fresh refetch).
@@ -92,17 +87,11 @@ test("a creator can edit and delete their video", async ({ page, request }) => {
   await page.getByRole("button", { name: "Create channel" }).click();
   await channelCreated;
 
-  await page.getByLabel("Video title").fill(videoTitle);
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
+  await startStudioUpload(page, {
+    title: videoTitle,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
-  await uploaded;
+  await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
 
   // Refresh "Your videos" to pick up the just-published video, then edit its title
@@ -171,10 +160,8 @@ test("a creator can add chapters that persist and show on the watch page", async
   await page.getByRole("button", { name: "Create channel" }).click();
   await channelCreated;
 
-  await page.getByLabel("Video title").fill(videoTitle);
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
+  await startStudioUpload(page, {
+    title: videoTitle,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
   await publishViaStudioUI(page);
@@ -236,17 +223,11 @@ test("a creator can replace their video's thumbnail", async ({ page, request }) 
   await page.getByRole("button", { name: "Create channel" }).click();
   await channelCreated;
 
-  await page.getByLabel("Video title").fill(videoTitle);
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
+  await startStudioUpload(page, {
+    title: videoTitle,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
-  await uploaded;
+  await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
 
   // Open the edit surface for the just-published video and upload a PNG poster.
@@ -312,9 +293,12 @@ test("a creator can publish a video by importing from a URL (async job)", async 
 
   // Import the source's own /original via the compose service name (reachable
   // inside the docker network; the frontend only submits the URL as a string).
-  await page.getByLabel("Video title").fill(videoTitle);
+  // URL path (unchanged): open the sheet, switch to the URL tab, Continue, title.
+  await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByRole("button", { name: "Import from URL" }).click();
   await page.getByLabel("Video URL").fill(`http://api:8080/api/v1/videos/${src.videoId}/original`);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Video title").fill(videoTitle);
   // The POST enqueues the job (202); the studio then polls until it is done.
   const enqueued = page.waitForResponse(
     (r) => /\/videos\/[^/]+\/import$/.test(r.url()) && r.request().method() === "POST" && r.status() === 202,
@@ -357,17 +341,17 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
   await channelCreated;
 
   // A .mp4 extension gets past the container allow-list, but the bytes are not a
-  // video — the real ffprobe rejects them and the video is finalised as failed.
-  await page.getByLabel("Video title").fill(videoTitle);
+  // video — the real ffprobe rejects them and the auto-started upload finalises as
+  // "failed" on select, so the honest error surfaces before any Publish.
+  const uploaded = page.waitForResponse(
+    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from("these bytes are not a real video container"),
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
   await uploaded;
 
   await expect(
@@ -404,9 +388,13 @@ test("a non-http import URL shows an inline url field error", async ({ page }) =
   await page.getByRole("button", { name: "Create channel" }).click();
   await channelCreated;
 
-  await page.getByLabel("Video title").fill(`Bad import ${id}`);
+  // The URL path is unchanged: switch to the URL tab, Continue to the details
+  // stage, add a title, and Publish (which creates the draft + enqueues the import).
+  await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByRole("button", { name: "Import from URL" }).click();
   await page.getByLabel("Video URL").fill("ftp://example.com/clip.mp4");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Video title").fill(`Bad import ${id}`);
   const attempted = page.waitForResponse(
     (r) =>
       /\/videos\/[^/]+\/import$/.test(r.url()) &&

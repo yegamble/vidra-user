@@ -112,7 +112,6 @@ export function Modal({
       // Restore focus to whatever opened the modal.
       previouslyFocused?.focus?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isSheet = variant === "sheet";
