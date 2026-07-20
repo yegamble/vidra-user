@@ -80,13 +80,24 @@ test("the Create tab opens the Create sheet, whose rows lead into the studio", a
   await expect(create).toHaveAttribute("aria-expanded", "false");
   await create.click();
 
-  // A dialog labeled "Create" with the three entry points (Upload / Go live /
-  // Open Studio) — none is stubbed; each deep-links into surfaces that exist.
+  // A dialog labeled "Create" with the entry points (Upload video / Go live /
+  // New channel / Open Studio) — none is stubbed; each deep-links into a studio
+  // surface that auto-opens the flow.
   const sheet = page.getByRole("dialog", { name: "Create" });
   await expect(sheet).toBeVisible();
   await expect(create).toHaveAttribute("aria-expanded", "true");
-  await expect(sheet.getByRole("link", { name: /Upload a video/ })).toBeVisible();
-  await expect(sheet.getByRole("link", { name: /Go live/ })).toBeVisible();
+  await expect(sheet.getByRole("link", { name: /Upload video/ })).toHaveAttribute(
+    "href",
+    "/studio/content?upload=1",
+  );
+  await expect(sheet.getByRole("link", { name: /Go live/ })).toHaveAttribute(
+    "href",
+    "/studio/live?new=1",
+  );
+  await expect(sheet.getByRole("link", { name: /New channel/ })).toHaveAttribute(
+    "href",
+    "/studio/channel?create=1",
+  );
 
   await sheet.getByRole("link", { name: /Open Studio/ }).click();
   await expect(page).toHaveURL(/\/studio$/);
@@ -106,5 +117,28 @@ test.describe("desktop", () => {
         .getByRole("navigation", { name: "Primary" })
         .getByRole("link", { name: "History" }),
     ).toBeVisible();
+  });
+
+  test("the header + Create menu deep-links into the studio flows", async ({ page }) => {
+    await page.goto("/");
+    const create = page.getByRole("button", { name: "Create" });
+    await expect(create).toBeVisible();
+    await create.click();
+
+    // The menu's rows are real deep links into the studio surfaces that auto-open
+    // each flow (mirrors the mobile CreateSheet).
+    const menu = page.getByRole("menu", { name: "Create" });
+    await expect(menu.getByRole("menuitem", { name: "Upload video" })).toHaveAttribute(
+      "href",
+      "/studio/content?upload=1",
+    );
+    await expect(menu.getByRole("menuitem", { name: "Go live" })).toHaveAttribute(
+      "href",
+      "/studio/live?new=1",
+    );
+    await expect(menu.getByRole("menuitem", { name: "New channel" })).toHaveAttribute(
+      "href",
+      "/studio/channel?create=1",
+    );
   });
 });

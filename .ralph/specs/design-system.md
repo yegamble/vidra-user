@@ -211,6 +211,75 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
 - **Stepped upload sheet**: upload becomes a staged sheet (pick → details →
   publish) with a persistent minimized progress pill; the pill is chrome-level
   UI and therefore stays monochrome + accent.
+- **Studio tabbed IA + channel switcher** (YouTube Studio pattern): the creator
+  Studio is split into per-surface tabs — **Dashboard / Content / Live /
+  Analytics / Channel** — under one shared shell (`app/studio/layout.tsx` mounting
+  `StudioProvider` + `StudioNav` above the active surface), replacing the single
+  long scroll. The Studio is scoped to ONE **current channel** (loaded once via
+  `api.getMyChannels`, persisted in `localStorage["vidra.studio.channel"]`,
+  validated against the list with a `channels[0]` fallback); every surface reads
+  it from context, so the old per-section channel `<select>`s are gone (the
+  upload form keeps its in-form channel picker, PeerTube-style, shown only when
+  >1 channel and defaulted to the current one). The switcher sits in `StudioNav`:
+  avatar + display name + a compact protocol badge, rendered as a `Dropdown`
+  (channel rows + a "New channel" entry) when the caller has more than one
+  channel, a static label when exactly one, and a quiet "no channel yet" hint at
+  zero (the tab strip still renders — each surface shows its own onboarding
+  state). The tab strip is the **section-navigation pill** idiom (tint-pill
+  active `bg-accent/12 text-accent-text`, muted-hover inactive, 44px targets,
+  horizontal scroll on phones), never an underline rail. The `/studio?video=<id>`
+  single-video management deep link (moderator/owner) renders full-page with the
+  studio nav hidden. Analytics carries **two scopes** — "This channel" and
+  "All my channels" (an owner-scoped rollup from the backend `GET /me/stats`,
+  hidden for a pure editor) — via `SegmentedControl`. Live's create form and the create-channel
+  form are launched `Modal`s (dialog on desktop / `variant="sheet"` on mobile),
+  consistent with the stepped upload sheet. Keeps the nav rules
+  (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger, 44pt targets).
+- **"+ Create" dropdown** (YouTube two-tier Create pattern): a single global
+  creator entry that fans out into the flows rather than dumping the user on the
+  dashboard. Desktop lives in `Header` as a `Dropdown` (the outline "+ Create"
+  pill trigger, right-aligned menu, `hidden sm:flex`); phones use the
+  bottom-tab `CreateSheet`, whose rows mirror it. Both list the two primary
+  flows — **Upload video** → `/studio/content?upload=1`, **Go live** →
+  `/studio/live?new=1` — then a divider, then **New channel** →
+  `/studio/channel?create=1` (the sheet also keeps **Open Studio** → `/studio`
+  as its Studio entry). Each item is a real deep link into the studio surface
+  that auto-opens the flow (`?upload=1` / `?new=1` / `?create=1`, param stripped
+  after open). Glyphs carry the only color: the upload arrow wears `accent`, Go
+  live wears the `live` token; New channel stays neutral. The shared `Dropdown`
+  primitive supports this via optional `DropdownItem.href` (renders a `role=
+  menuitem` `next/link`; Space/Enter activate it), `DropdownItem.icon` (a leading
+  glyph slot), `{ type: "separator" }` dividers, and `{ type: "label" }` group
+  headings (decorative `role="presentation"`) — separators and labels are skipped
+  in the arrow-key focus ring. The channel switcher uses the label + separator
+  entries to group **Your channels** vs **Shared with you** (by the caller's
+  `role`) when the caller both owns and collaborates on channels.
+- **Studio Distribution card** (per-channel protocol control): the Channel tab
+  and dashboard both render `DistributionCard`, driven by the channel's real
+  fields (`activitypub_enabled`, `atproto_enabled`, `atproto_active`). Two rows —
+  **ActivityPub** (federation) and **ATProto** (Bluesky cross-posting) — each led
+  by the guardrail-correct colored `Badge variant="protocol"` (brand tint + dot +
+  neutral label; NOT the monochrome `ProtocolBadge`, and NEVER a ribbon). Owners
+  (`canManage`) get instant-effect `Toggle`s that `PATCH` the channel; the ATProto
+  toggle only shows once a Bluesky account is linked (an unlinked owner sees a
+  "Link your Bluesky account" CTA → `/settings/connections`), and the whole row is
+  hidden when the instance extension is off (probed via `GET /me/atproto` 503,
+  mirroring `/settings/connections`). Editors and the dashboard summary see
+  read-only status badges (`atproto_active` drives the ATProto "Active" state).
+  The same compact protocol chips (`ChannelProtocolBadges`) appear on the
+  StudioNav identity + switcher rows. Protocol color stays inside these badges
+  only; a channel that federates nowhere reads as a neutral "Local only" chip.
+- **Studio Collaborators card + editor role** (channel collaborators, first-class
+  where PeerTube shipped it late): the Channel tab's `CollaboratorsCard` lists a
+  channel's editors (display name, `@username`, role); owners get an invite-by-
+  handle form (role Editor; 404 "No such user" / 409 "already manages this
+  channel" surfaced inline) and a confirm-gated remove. A channel **shared with
+  you as editor** (`role: "editor"` on `GET /me/channels`) renders a read-only
+  Channel tab — the edit form, avatar/banner managers, sync section, distribution
+  toggles (badges still shown), and danger zone are all hidden — while keeping
+  full Content/Live/Analytics/Dashboard access. Analytics' **All channels** scope
+  is owner-scoped (`GET /me/stats`): it is labeled "All my channels" and hidden
+  entirely for a pure editor (zero owned channels).
 
 ## Typography
 

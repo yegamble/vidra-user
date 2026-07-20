@@ -103,6 +103,10 @@ import type {
   VideoListResponse,
   VideoDownloadResponse,
   ChannelStatsResponse,
+  AccountStatsResponse,
+  ChannelMember,
+  ChannelMembersResponse,
+  AddChannelMemberRequest,
   QuotaStatus,
   CreatePlaylistRequest,
   NotificationListResponse,
@@ -452,6 +456,16 @@ export const api = {
     apiRequest<QuotaStatus>("/api/v1/me/quota", { signal }),
 
   /**
+   * GET /api/v1/me/stats — account-level analytics rollup across every channel
+   * the caller OWNS (auth, owner-scoped by construction): engagement totals, the
+   * aggregated 30-day daily-views series (field `day`, zero-filled, oldest
+   * first), and a per-channel breakdown (views, followers, videos, views_28d).
+   * Drives the studio "All channels" analytics scope.
+   */
+  getMyStats: (signal?: AbortSignal) =>
+    apiRequest<AccountStatsResponse>("/api/v1/me/stats", { signal }),
+
+  /**
    * GET /api/v1/me/player-settings — the caller's effective player defaults
    * (PLAY-07, auth): autoplay_next, default_speed, default_quality,
    * captions_default, theater_default, and video_card_previews_enabled. Always
@@ -544,6 +558,39 @@ export const api = {
   /** DELETE /api/v1/channels/{handle} — delete a channel and its videos (auth, owner; 204). */
   deleteChannel: (handle: string) =>
     apiRequest<void>(`/api/v1/channels/${encodeURIComponent(handle)}`, { method: "DELETE" }),
+
+  /**
+   * GET /api/v1/channels/{handle}/members — the channel's editor collaborators
+   * (auth; visible to the owner and existing members, else 403; unknown handle
+   * 404). Powers the Studio Channel-tab collaborators list.
+   */
+  listChannelMembers: (handle: string, signal?: AbortSignal) =>
+    apiRequest<ChannelMembersResponse>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/members`,
+      { signal },
+    ),
+
+  /**
+   * POST /api/v1/channels/{handle}/members — invite a local user as an editor of
+   * the channel (auth, owner only). The target is identified by their handle
+   * (username). 404 when the channel or the target user is unknown; 409 when the
+   * target already owns or is a member of the channel.
+   */
+  addChannelMember: (handle: string, body: AddChannelMemberRequest) =>
+    apiRequest<ChannelMember>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/members`,
+      { method: "POST", body },
+    ),
+
+  /**
+   * DELETE /api/v1/channels/{handle}/members/{userId} — remove a collaborator
+   * (auth, owner only; idempotent 204). Unknown handle 404.
+   */
+  removeChannelMember: (handle: string, userId: string) =>
+    apiRequest<void>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/members/${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    ),
 
   /**
    * GET /api/v1/channel-syncs — the caller's channel auto-syncs, newest first

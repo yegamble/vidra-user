@@ -92,6 +92,13 @@ async function openStudio(page: Page) {
   await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [channel()] } }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig }));
   await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  // The Studio Channel tab also mounts the collaborators + distribution cards.
+  await page.route(/\/api\/v1\/channels\/ada_makes\/members$/, (route) =>
+    route.fulfill({ json: { members: [] } }),
+  );
+  await page.route(/\/api\/v1\/me\/atproto$/, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
 
   await page.goto("/login");
   await page.getByLabel("Email").fill("ada@example.test");
@@ -99,6 +106,8 @@ async function openStudio(page: Page) {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await page.getByRole("link", { name: "Studio" }).click();
+  // The channel auto-sync section now lives on the Studio Channel tab.
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
   // This first paint of the studio is provably CPU-bound, not an event race:
   // the click loads + executes the code-split studio chunk, mounts the page,
   // resolves the (mocked) channels fetch, and only then mounts this section.

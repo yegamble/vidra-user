@@ -83,10 +83,24 @@ test("selecting category and language filters the feed and lands in the URL", as
   await expect(page).toHaveURL(/\/\?category=7$/);
   await expect(main.getByLabel("Filter by category")).toHaveValue("7");
 
+  // The feed lives in a URL-keyed <Suspense> fed by an async server segment, so
+  // its refetch rides on the remount that lands AFTER the URL updates — the
+  // filter row (outside that boundary) reflects the new param first. Wait for
+  // the category refetch to actually land before changing language: a second
+  // navigation fired into the still-pending first one is coalesced by React's
+  // navigation transition, which drops the intermediate remount (and thus its
+  // refetch) entirely. This settle-then-act step is what makes the sequence
+  // deterministic; without it the intermediate refetch is racily lost.
+  await expect
+    .poll(() => calls)
+    .toEqual([
+      { sort: "recent", tag: null, category: null, language: null },
+      { sort: "recent", tag: null, category: "7", language: null },
+    ]);
+
   await main.getByLabel("Filter by language").selectOption("en");
   await expect(page).toHaveURL(/\/\?category=7&language=en$/);
 
-  // Poll: the URL updates before the remounted feed's refetch lands.
   await expect
     .poll(() => calls)
     .toEqual([

@@ -112,6 +112,7 @@ test("password-protecting a video reveals the manager, blocks an empty-set save,
   });
 
   await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
   const row = page.getByRole("listitem").filter({ hasText: "My clip" });
   await row.getByRole("button", { name: "Edit" }).click();
 
