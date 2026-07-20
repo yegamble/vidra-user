@@ -105,8 +105,17 @@ test("publishing with a schedule sends publish_at and reports the scheduled outc
       json: { upload_id: "up1", chunk_size: 1_048_576, total_chunks: 1, size: 4, expires_at: FUTURE },
     }),
   );
-  await page.route(CHUNK, (route) =>
-    route.fulfill({
+  // Gate the chunk so the upload is still in flight when the creator schedules +
+  // Publishes — that is the realistic ordering: publish_at must be PATCHed before
+  // the video reaches "published", so the metadata (with the schedule) lands
+  // first, then the upload finishes and the video parks as "scheduled".
+  let releaseChunk!: () => void;
+  const chunkGate = new Promise<void>((r) => {
+    releaseChunk = r;
+  });
+  await page.route(CHUNK, async (route) => {
+    await chunkGate;
+    await route.fulfill({
       status: 200,
       json: {
         upload_id: "up1",
@@ -119,36 +128,56 @@ test("publishing with a schedule sends publish_at and reports the scheduled outc
         bytes_received: 4,
         expires_at: FUTURE,
       },
-    }),
-  );
+    });
+  });
   await page.route(COMPLETE, (route) =>
     route.fulfill({
       status: 201,
       json: { video: video({ state: "scheduled", publish_at: isoOf("2030-01-02T12:30") }) },
     }),
   );
+  // Publish PATCHes the schedule (+ title) onto the still-uploading draft.
+  let publishBody: Record<string, unknown> | undefined;
+  await page.route(VIDEO, (route) => {
+    if (route.request().method() === "PATCH") {
+      publishBody = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({
+        json: video({ state: "scheduled", publish_at: isoOf("2030-01-02T12:30") }),
+      });
+    }
+    return route.continue();
+  });
   await page.route(VIDEO_CONFIG, (route) =>
     route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
   await page.getByRole("link", { name: "Content", exact: true }).click();
-  // Upload now opens in the stepped sheet: pick the file, Continue, add details, publish.
+  // Selecting the file auto-starts the upload (a title-only private draft); the
+  // gated chunk keeps it uploading while the creator adds a schedule and Publishes.
   await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from("test"),
   });
-  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Video title").fill("My clip");
   await page.getByLabel("Schedule publish").fill("2030-01-02T12:30");
+  const patched = page.waitForRequest(
+    (r) => VIDEO.test(r.url()) && r.method() === "PATCH",
+  );
   await page.getByRole("button", { name: "Publish" }).click();
+  await patched;
+  // The PATCH is in — let the upload finish so the video finalises as scheduled.
+  releaseChunk();
 
   // The scheduled outcome is its own honest message — not "Published!".
   await expect(page.getByText("is scheduled — it will publish automatically", { exact: false })).toBeVisible();
   await expect(page.getByText("Published!")).toHaveCount(0);
-  expect(draftBody).toMatchObject({ title: "My clip", publish_at: isoOf("2030-01-02T12:30") });
+  // The auto-create carried only the filename title + explicit private; the
+  // schedule travelled on the Publish PATCH.
+  expect(draftBody).toEqual({ title: "clip", privacy: "private" });
+  expect(publishBody).toMatchObject({ title: "My clip", publish_at: isoOf("2030-01-02T12:30") });
 });
 
 test("a scheduled row shows the badge + publish time, and the edit form can move the schedule", async ({
