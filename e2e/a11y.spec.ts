@@ -338,6 +338,73 @@ test("the studio dashboard and channel create form pass axe (signed in)", async 
   await expectNoSevereViolations(page);
 });
 
+test("the populated studio dashboard passes axe (stat links, latest video, distribution)", async ({
+  page,
+}) => {
+  await signIn(page, "user");
+  const dailyViews = Array.from({ length: 30 }, (_, i) => ({
+    day: `2026-06-${String(i + 1).padStart(2, "0")}`,
+    views: i,
+  }));
+  await page.route(/\/api\/v1\/me\/channels$/, (route) =>
+    route.fulfill({
+      json: {
+        channels: [
+          {
+            id: "c1",
+            owner_id: "u1",
+            handle: "ada_makes",
+            display_name: "Ada Makes",
+            description: "",
+            follower_count: 12,
+            created_at: new Date().toISOString(),
+            role: "owner",
+            activitypub_enabled: true,
+            atproto_enabled: false,
+          },
+        ],
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada_makes\/stats$/, (route) =>
+    route.fulfill({
+      json: {
+        views: 1234,
+        likes: 56,
+        dislikes: 2,
+        comments: 8,
+        followers: 12,
+        videos: 3,
+        daily_views: dailyViews,
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/channels\/ada_makes\/videos$/, (route) =>
+    route.fulfill({ json: { videos: [video("v1", "Latest clip", 999)] } }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/stats$/, (route) =>
+    route.fulfill({ json: { views: 999, likes: 10, dislikes: 0, comments: 4, daily_views: dailyViews } }),
+  );
+  await page.route(/\/api\/v1\/me\/quota$/, (route) =>
+    route.fulfill({
+      json: { used_bytes: 5368709120, quota_bytes: 21474836480, daily_used_bytes: 0, daily_quota_bytes: null },
+    }),
+  );
+  // The ATProto extension is off → the distribution ATProto row is hidden.
+  await page.route(/\/api\/v1\/me\/atproto$/, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
+
+  await page.getByRole("link", { name: "Studio" }).click();
+  await expect(page.getByRole("heading", { name: "Studio", level: 1 })).toBeVisible();
+  // The QuickStatsStrip stat links render (the dl→list restructure), and the
+  // latest-video card resolves — then axe verifies the surface is clean (the old
+  // <a>-inside-<dl> tripped the serious definition-list / dlitem rules).
+  await expect(page.getByRole("link", { name: /Views · 28d/ })).toBeVisible();
+  await expect(page.getByText("Latest video")).toBeVisible();
+  await expectNoSevereViolations(page);
+});
+
 test("the studio channel auto-sync section passes axe (list + state pills + connect form)", async ({
   page,
 }) => {
