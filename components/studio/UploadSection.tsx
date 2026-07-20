@@ -14,6 +14,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import {
   ApiError,
   api,
+  errorMessage,
   findResumableUploadSession,
   forgetUploadSession,
   isUploadCancelled,
@@ -92,6 +93,14 @@ export function UploadSection({
   // instance's defaults.publish block once GET /instance resolves.
   const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">("enabled");
   const [downloadEnabled, setDownloadEnabled] = useState(true);
+  // Publish-timing opt-in (publish_after_transcode): hold the video (state
+  // "transcoding") off every public surface until its HLS transcode completes.
+  // Default off = current behavior (go live immediately; viewers watch the
+  // original while transcoding runs). Server-side, publish_at takes precedence,
+  // so the toggle disables while a schedule is set.
+  const [publishAfterTranscode, setPublishAfterTranscode] = useState(false);
+  // Inline error for a failed publish-timing sync PATCH (the flip reverts).
+  const [publishTimingError, setPublishTimingError] = useState<string | null>(null);
   const [publishAt, setPublishAt] = useState("");
   const [source, setSource] = useState<"file" | "url">("file");
   const [videoUrl, setVideoUrl] = useState("");
@@ -553,10 +562,13 @@ export function UploadSection({
 
       // Title only + EXPLICIT private: the instance default privacy is ambiguous,
       // and privacy is the one thing keeping an auto-published upload out of
-      // public view until the creator presses Publish.
+      // public view until the creator presses Publish. The publish-timing opt-in
+      // rides along when set (sticky from a previous attempt) so the flag is on
+      // the video BEFORE upload completion — that is what makes the server hold it.
       const draft = await api.createVideoDraft(handle, {
         title: draftTitle,
         privacy: "private",
+        ...(publishAfterTranscode ? { publish_after_transcode: true } : {}),
       });
       createdId = draft.id;
       setDraftId(draft.id);
@@ -662,6 +674,9 @@ export function UploadSection({
       is_sensitive: sensitive,
       comments_policy: commentsPolicy,
       download_enabled: downloadEnabled,
+      // Harmless when unchanged (the flip already synced it) — keeps the final
+      // metadata PATCH the complete picture of the form.
+      publish_after_transcode: publishAfterTranscode,
     };
     try {
       const patched = await api.updateVideo(id, body);
@@ -684,6 +699,28 @@ export function UploadSection({
       if (applyFieldErrors(err)) return;
       setError(importOrUploadError(err, "file"));
       setState("error");
+    }
+  }
+
+  // togglePublishTiming flips the publish-after-transcode opt-in. Once the
+  // auto-created draft exists the flip is synced IMMEDIATELY with a
+  // single-field PATCH — the server's hold decision happens at
+  // upload-completion time, so the flag must be on the video before the bytes
+  // finish, not only at Publish. A failed sync reverts the toggle and surfaces
+  // an inline error; before the draft exists (URL tab, or a create still in
+  // flight) the state alone carries it into the create/Publish bodies.
+  async function togglePublishTiming(next: boolean) {
+    setPublishTimingError(null);
+    setPublishAfterTranscode(next);
+    const id = draftIdRef.current;
+    if (!id) return;
+    try {
+      await api.updateVideo(id, { publish_after_transcode: next });
+    } catch (err) {
+      setPublishAfterTranscode(!next);
+      setPublishTimingError(
+        errorMessage(err, "Couldn’t update the publish timing. Please try again."),
+      );
     }
   }
 
@@ -797,6 +834,7 @@ export function UploadSection({
         ...(tags.length > 0 ? { tags } : {}),
         ...(scheduleIso ? { publish_at: scheduleIso } : {}),
         ...(sensitive ? { is_sensitive: true } : {}),
+        ...(publishAfterTranscode ? { publish_after_transcode: true } : {}),
         // Per-video publish policies (W9): the visible form state is what is
         // saved (it was prefilled from defaults.publish, so an untouched form
         // still matches the instance defaults).
@@ -1376,6 +1414,28 @@ export function UploadSection({
                       label="Allow downloads"
                       disabled={formLocked}
                     />
+                  </div>
+                  {/* Publish timing (publish_after_transcode): hold until the HLS
+                      transcode completes. Disabled under a schedule — server-side,
+                      publish_at takes precedence. */}
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-4 text-sm">
+                      <div className="min-w-0">
+                        <span className="block font-medium text-fg">Publish after transcoding</span>
+                        <span className="block text-xs text-fg-muted">
+                          {publishAt.trim() !== ""
+                            ? "Scheduled videos publish at the scheduled time."
+                            : "Your video stays hidden until processing finishes. Otherwise it goes live immediately and viewers watch the original file while processing completes."}
+                        </span>
+                      </div>
+                      <Toggle
+                        checked={publishAfterTranscode}
+                        onChange={(on) => void togglePublishTiming(on)}
+                        label="Publish after transcoding"
+                        disabled={formLocked || publishAt.trim() !== ""}
+                      />
+                    </div>
+                    <FieldErrorText id="publish-timing-error" message={publishTimingError ?? undefined} />
                   </div>
                   <label className="flex flex-col gap-1 text-sm">
                     <span className="font-medium text-fg">Schedule publish (optional)</span>

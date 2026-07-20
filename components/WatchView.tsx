@@ -31,6 +31,7 @@ import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
 import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
+import { TranscodingNote } from "@/components/watch/TranscodingNote";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -476,6 +477,16 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
                   state={ipfsState}
                   onToggle={toggleSource}
                   onRefetch={tryIpfs}
+                />
+              ) : null}
+              {/* Still-transcoding note (publish-timing): shown while the detail
+                  reports a live transcode job; self-removes once a poll says the
+                  transcode finished. Keyed by id so navigation resets it. */}
+              {video.transcoding === true ? (
+                <TranscodingNote
+                  key={video.id}
+                  videoId={video.id}
+                  playbackToken={playbackToken}
                 />
               ) : null}
             </>
