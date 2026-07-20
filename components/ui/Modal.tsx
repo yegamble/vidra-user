@@ -50,6 +50,21 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
+  // The latest onClose, read by the keydown handler through a ref so the
+  // focus/trap effect below can stay MOUNT-ONLY. Callers routinely pass a fresh
+  // inline `onClose={() => …}` on every render (e.g. UploadSection's sheet); if
+  // the effect depended on `onClose` it would re-run on every keystroke-driven
+  // re-render, re-focusing the first focusable (the header close button) and
+  // stealing focus out of whatever the user is typing in. The ref decouples the
+  // handler's identity from the effect's lifecycle.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  // Initial focus + focus trap + Escape — set up ONCE on mount and torn down on
+  // unmount. Re-running this on a parent re-render is exactly the focus-steal bug
+  // (see onCloseRef above), so its dependency list is intentionally empty.
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
@@ -65,7 +80,7 @@ export function Modal({
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !panel) return;
@@ -97,7 +112,8 @@ export function Modal({
       // Restore focus to whatever opened the modal.
       previouslyFocused?.focus?.();
     };
-  }, [onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isSheet = variant === "sheet";
   return (
