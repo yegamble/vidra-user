@@ -85,11 +85,11 @@ function QuickStatsStrip({ handle }: { handle: string }) {
 
   if (status === "loading") {
     return (
-      <dl className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-[86px] rounded-2xl" />
         ))}
-      </dl>
+      </div>
     );
   }
   if (status === "error" || !stats) return null;
@@ -100,23 +100,27 @@ function QuickStatsStrip({ handle }: { handle: string }) {
     { label: "Videos", value: stats.videos },
   ];
 
+  // A list of stat links (not a <dl>): each card is a whole <Link>, and an <a>
+  // is not a valid child of <dl> (it would trip axe's definition-list/dlitem
+  // rules). The label/value read as a semibold caption over a large number.
   return (
-    <dl className="grid grid-cols-3 gap-3">
+    <ul className="grid grid-cols-3 gap-3">
       {cards.map((c) => (
-        <Link
-          key={c.label}
-          href="/studio/analytics"
-          className="focus-ring flex flex-col gap-2 rounded-2xl bg-surface p-4 shadow-soft transition-transform hover:scale-[1.02]"
-        >
-          <dt className="text-[12px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
-            {c.label}
-          </dt>
-          <dd className="text-title tabular-nums text-fg" title={String(c.value)}>
-            {formatCount(c.value)}
-          </dd>
-        </Link>
+        <li key={c.label} className="flex">
+          <Link
+            href="/studio/analytics"
+            className="focus-ring flex flex-1 flex-col gap-2 rounded-2xl bg-surface p-4 shadow-soft transition-transform hover:scale-[1.02]"
+          >
+            <span className="text-[12px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
+              {c.label}
+            </span>
+            <span className="text-title tabular-nums text-fg" title={String(c.value)}>
+              {formatCount(c.value)}
+            </span>
+          </Link>
+        </li>
       ))}
-    </dl>
+    </ul>
   );
 }
 

@@ -330,6 +330,14 @@ export function ChannelManageView({
 }) {
   const { channels, currentChannel, addChannel } = useStudio();
   const [manualOpen, setManualOpen] = useState(false);
+  // The create-channel dialog is a bottom sheet on phones (matchMedia guarded for
+  // non-browser test envs), matching the stepped upload + go-live sheets.
+  const [sheet] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
   // The dialog is open when opened manually OR when the `?create=1` deep link is
   // present and there is at least one channel (with none, the inline onboarding
   // form is the primary UI). Derived, not an effect — so no setState-in-effect.
@@ -372,7 +380,12 @@ export function ChannelManageView({
       </div>
 
       {dialogOpen ? (
-        <Modal title="Create a channel" onClose={closeDialog} className="sm:max-w-lg">
+        <Modal
+          title="Create a channel"
+          onClose={closeDialog}
+          variant={sheet ? "sheet" : "dialog"}
+          className="sm:max-w-lg"
+        >
           <CreateChannelForm
             autoFocus
             onCreated={(ch) => {

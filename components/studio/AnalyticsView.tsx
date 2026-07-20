@@ -44,6 +44,11 @@ export function AnalyticsView() {
   const showAll = owned.length > 0;
   const effectiveScope: Scope = showAll ? scope : "channel";
   const scopeHandles = effectiveScope === "channel" ? [currentHandle] : owned.map((c) => c.handle);
+  // GET /videos/{id}/stats is owner-only. When the active channel is one shared
+  // with the caller as an editor, the per-video panel would 403 on every pick, so
+  // we show a quiet note instead (the channel totals + chart above still load).
+  // The "all" scope only ever spans owned channels, so it never hits this.
+  const editorScoped = effectiveScope === "channel" && currentChannel?.role === "editor";
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,11 +76,20 @@ export function AnalyticsView() {
         />
       )}
 
-      <VideoStatsSection
-        key={effectiveScope + currentHandle}
-        handles={scopeHandles}
-        channels={channels}
-      />
+      {editorScoped ? (
+        <section className="flex flex-col gap-3 border-t border-border-subtle pt-6">
+          <h2 className="text-[15px] font-bold tracking-tight">Per-video stats</h2>
+          <p className="text-sm text-fg-muted">
+            Per-video stats are available to channel owners.
+          </p>
+        </section>
+      ) : (
+        <VideoStatsSection
+          key={effectiveScope + currentHandle}
+          handles={scopeHandles}
+          channels={channels}
+        />
+      )}
     </div>
   );
 }

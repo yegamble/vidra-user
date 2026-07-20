@@ -157,7 +157,9 @@ export function UploadSection({
   // The in-flight chunked-upload session id, captured as soon as it opens so a
   // Cancel can DELETE the session (dropping its chunk blobs) before cleanup.
   const sessionIdRef = useRef<string | null>(null);
-  // One-shot guard so a `?upload=1` autoOpen fires exactly once per mount.
+  // Guards the `?upload=1` autoOpen so it fires once per APPEARANCE of the param
+  // (reset when the param is stripped), not once per mount — so re-triggering
+  // "+ Create → Upload video" while already on /studio/content reopens the sheet.
   const autoOpenedRef = useRef(false);
 
   // After a cancel the in-flight controls (progress + Cancel) disappear — put
@@ -419,11 +421,17 @@ export function UploadSection({
     setOpen(true);
   }
 
-  // A `?upload=1` deep link opens the sheet immediately on mount, then reports
-  // back so the caller can strip the param (router.replace) — reopening a fresh
-  // pick each visit, never re-triggering on re-render.
+  // A `?upload=1` deep link opens the sheet, then reports back so the caller can
+  // strip the param (router.replace). Fires on every false→true transition of the
+  // param — not just the first mount — so re-triggering "+ Create → Upload video"
+  // while ALREADY on /studio/content reopens the sheet (and re-strips the param).
+  // The guard resets whenever the param is stripped (autoOpen back to false).
   useEffect(() => {
-    if (!autoOpen || autoOpenedRef.current) return;
+    if (!autoOpen) {
+      autoOpenedRef.current = false;
+      return;
+    }
+    if (autoOpenedRef.current) return;
     autoOpenedRef.current = true;
     openSheet();
     onAutoOpenConsumed?.();
