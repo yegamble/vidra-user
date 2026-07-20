@@ -207,6 +207,15 @@ async function gotoStudioTab(page: Page, tab: "Dashboard" | "Content" | "Live" |
   await page.getByRole("link", { name: tab, exact: true }).click();
 }
 
+// The desktop header "+ Create" menu is the real creator entry point: each row is
+// a deep link into the studio surface that auto-opens the flow (?upload=1 /
+// ?new=1 / ?create=1). Clicking it client-navigates (preserving the in-memory
+// session), so createMenu exercises the actual auto-open, not just the href.
+async function createMenu(page: Page, item: "Upload video" | "Go live" | "New channel") {
+  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("menu", { name: "Create" }).getByRole("menuitem", { name: item }).click();
+}
+
 test("the studio prompts anonymous viewers to sign in", async ({ page }) => {
   await page.goto("/studio");
   await expect(page.getByText("Sign in to use the studio")).toBeVisible();
@@ -431,6 +440,91 @@ test("an editor sees a read-only Channel tab and read-only collaborators", async
   const collab = page.getByRole("region", { name: "Collaborators" });
   await expect(collab.getByText(/@ada/)).toBeVisible();
   await expect(collab.getByLabel("Collaborator handle")).toHaveCount(0);
+});
+
+// The "+ Create" deep links auto-open their flow on the target surface, then
+// strip the query param — the behavior the header menu / mobile sheet / dashboard
+// quick actions all rely on. These assert the real modal appears (not just the
+// href), navigating client-side from the header menu.
+test("the Create menu opens the upload sheet on the content tab and strips ?upload=1", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await createMenu(page, "Upload video");
+
+  // The stepped upload sheet is up…
+  await expect(page.getByRole("dialog", { name: "Upload video" })).toBeVisible();
+  await expect(page.getByLabel("Video file")).toBeVisible();
+  // …and the deep-link param is stripped once consumed.
+  await expect(page).toHaveURL(/\/studio\/content$/);
+});
+
+test("the Create menu opens the go-live modal on the live tab and strips ?new=1", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_LIVE, (route) => route.fulfill({ json: { live_streams: [] } }));
+
+  await createMenu(page, "Go live");
+
+  await expect(page.getByRole("dialog", { name: "Go live" })).toBeVisible();
+  await expect(page.getByLabel("Live stream title")).toBeVisible();
+  await expect(page).toHaveURL(/\/studio\/live$/);
+});
+
+test("the Create menu opens the create-channel dialog on the channel tab (?create=1)", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [ownedChannel()] } }));
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  await page.route(CHANNEL_MEMBERS, (route) => route.fulfill({ json: { members: [] } }));
+  await page.route(ATPROTO, (route) =>
+    route.fulfill({ status: 503, json: { error: { code: "disabled", message: "off" } } }),
+  );
+
+  await createMenu(page, "New channel");
+
+  await expect(page.getByRole("dialog", { name: "Create a channel" })).toBeVisible();
+  await expect(page.getByLabel("Channel handle")).toBeVisible();
+});
+
+// Regression: the upload auto-open used a one-shot-per-mount guard, so triggering
+// "+ Create → Upload video" while ALREADY on /studio/content did nothing and left
+// ?upload=1 stuck. Every fresh appearance of the param must reopen the sheet.
+test("re-triggering Upload video while already on the content tab reopens the sheet", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  // Land on the content tab with the sheet auto-opened, then close it.
+  await createMenu(page, "Upload video");
+  const sheet = page.getByRole("dialog", { name: "Upload video" });
+  await expect(sheet).toBeVisible();
+  await expect(page).toHaveURL(/\/studio\/content$/);
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+
+  // Re-trigger the same deep link from the header while already on the tab — the
+  // sheet must reopen and the param strip again.
+  await createMenu(page, "Upload video");
+  await expect(page.getByRole("dialog", { name: "Upload video" })).toBeVisible();
+  await expect(page).toHaveURL(/\/studio\/content$/);
 });
 
 test("a creator can upload and publish a video", async ({ page }) => {
