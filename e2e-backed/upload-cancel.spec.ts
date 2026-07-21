@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { channelVideos, loginToken, uniqueId } from "./fixtures";
+import { channelVideos, createChannelViaStudioUI, loginToken, uniqueId } from "./fixtures";
 
 // Proves CHUNKED-upload cancellation against a real vidra-core + PostgreSQL:
 // selecting a file AUTO-STARTS the resumable upload (create private draft →
@@ -28,14 +28,7 @@ test("a cancelled chunked upload leaves no session and no published video", asyn
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
   // Throttle the page's upload throughput so the 16 MB body stays in flight.
   const cdp = await page.context().newCDPSession(page);

@@ -27,7 +27,10 @@ test("posting a comment then replying to it persists the thread", async ({ page,
 
   // Reach the seeded video's watch page from the home feed (client-side nav keeps
   // the session).
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // The home page may render the same video in BOTH the browse grid and the
+  // "Trending now" recommendations rail (content-dependent), so take the first
+  // matching card — every match links to the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
 
   // Post a top-level comment.
@@ -98,7 +101,8 @@ test("a reply-to-reply attributes the replied-to author across three accounts", 
     await p.getByLabel("Password").fill("supersecret-e2e");
     await p.getByRole("button", { name: "Create account" }).click();
     await expect(p.getByRole("button", { name: "Open account menu" })).toBeVisible();
-    await p.getByRole("heading", { name: videoTitle }).click();
+    // First match: the same video may also sit in the recommendations rail.
+    await p.getByRole("heading", { name: videoTitle }).first().click();
     await expect(p.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
   }
 
