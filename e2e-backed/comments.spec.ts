@@ -20,7 +20,10 @@ test("posting a comment from the watch page persists it", async ({ page, request
 
   // Reach the seeded video's watch page from the home feed (client-side nav keeps
   // the session) and post a comment.
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // The home page may render the same video in BOTH the browse grid and the
+  // "Trending now" recommendations rail (content-dependent), so take the first
+  // matching card — every match links to the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
 
   const body = `lovely clip ${id}`;
@@ -52,7 +55,7 @@ test("an author can edit their own comment, and it persists", async ({ page, req
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("heading", { name: videoTitle }).click();
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
 
   // Post a comment, then edit it.

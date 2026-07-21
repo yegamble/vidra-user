@@ -4,6 +4,7 @@ import {
   API_URL,
   TINY_MP4_BASE64,
   channelVideos,
+  createChannelViaStudioUI,
   liveIngest,
   liveStreams,
   loginToken,
@@ -34,14 +35,7 @@ test("a creator can create a channel and publish a video (chunked upload)", asyn
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the studio (client-side nav) and create a channel.
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(channelName);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, channelName);
 
   // Upload a real (tiny) video via the chunked protocol; selecting the file
   // auto-starts it (create session → PUT chunks → complete) and Publish applies
@@ -49,12 +43,15 @@ test("a creator can create a channel and publish a video (chunked upload)", asyn
   await startStudioUpload(page, {
     title: videoTitle,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+    privacy: "public",
   });
   await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
 
-  // The published video appears on the public channel page (a fresh refetch).
-  await page.getByRole("link", { name: new RegExp(channelName) }).first().click();
+  // The published video appears on the public channel page. A fresh full load
+  // (goto) drops the in-memory session, so this asserts the PUBLIC view — the
+  // redesigned studio Content tab no longer links the public channel page.
+  await page.goto(`/channels/${handle}`);
   await expect(page.getByRole("heading", { name: videoTitle })).toBeVisible();
 });
 
@@ -78,18 +75,12 @@ test("a creator can edit and delete their video", async ({ page, request }) => {
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(channelName);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, channelName);
 
   await startStudioUpload(page, {
     title: videoTitle,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+    privacy: "public",
   });
   await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
@@ -151,18 +142,12 @@ test("a creator can add chapters that persist and show on the watch page", async
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(channelName);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, channelName);
 
   await startStudioUpload(page, {
     title: videoTitle,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+    privacy: "public",
   });
   await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
@@ -214,18 +199,12 @@ test("a creator can replace their video's thumbnail", async ({ page, request }) 
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(channelName);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, channelName);
 
   await startStudioUpload(page, {
     title: videoTitle,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+    privacy: "public",
   });
   await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
@@ -282,14 +261,7 @@ test("a creator can publish a video by importing from a URL (async job)", async 
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(channelName);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, channelName);
 
   // Import the source's own /original via the compose service name (reachable
   // inside the docker network; the frontend only submits the URL as a string).
@@ -299,6 +271,9 @@ test("a creator can publish a video by importing from a URL (async job)", async 
   await page.getByLabel("Video URL").fill(`http://api:8080/api/v1/videos/${src.videoId}/original`);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Video title").fill(videoTitle);
+  // Explicit Public: the form prefills Privacy from the instance defaults
+  // (compose default "private"), and this test asserts PUBLIC visibility.
+  await page.getByLabel("Privacy", { exact: true }).selectOption("public");
   // The POST enqueues the job (202); the studio then polls until it is done.
   const enqueued = page.waitForResponse(
     (r) => /\/videos\/[^/]+\/import$/.test(r.url()) && r.request().method() === "POST" && r.status() === 202,
@@ -322,7 +297,6 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
   const handle = `ch${id}`;
   const email = `e2e-fan-${id}@example.test`;
   const password = "supersecret-e2e";
-  const videoTitle = `Broken clip ${id}`;
 
   await page.goto("/signup");
   await page.getByLabel("Username").fill(`fan${id}`);
@@ -331,14 +305,7 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
   // A .mp4 extension gets past the container allow-list, but the bytes are not a
   // video — the real ffprobe rejects them and the auto-started upload finalises as
@@ -359,10 +326,14 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
   ).toBeVisible();
   await expect(page.getByText("Published!")).toHaveCount(0);
 
-  // Persisted: the owner's channel list shows the video in state "failed".
+  // Persisted: the owner's channel list shows the video in state "failed". The
+  // rejection happened BEFORE any Publish, so the auto-created draft still
+  // carries its filename-derived title ("clip"), never the form title.
   const token = await loginToken(request, email, password);
-  const mine = (await channelVideos(request, handle, token)).find((v) => v.title === videoTitle);
-  expect(mine?.state).toBe("failed");
+  const mine = await channelVideos(request, handle, token);
+  expect(mine).toHaveLength(1);
+  expect(mine[0].title).toBe("clip");
+  expect(mine[0].state).toBe("failed");
 });
 
 // A malformed import URL comes back 422 with a `url` field error from the real
@@ -379,14 +350,7 @@ test("a non-http import URL shows an inline url field error", async ({ page }) =
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
   // The URL path is unchanged: switch to the URL tab, Continue to the details
   // stage, add a title, and Publish (which creates the draft + enqueues the import).
@@ -427,16 +391,12 @@ test("a creator can create, rekey, and delete a live stream", async ({ page, req
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
   // Create a live stream → the key is shown once.
+  // Live streams live on the Live tab; "Go live" opens the create modal.
+  await page.getByRole("link", { name: "Live", exact: true }).click();
+  await page.getByRole("button", { name: "Go live" }).click();
   await page.getByLabel("Live stream title").fill(streamTitle);
   const created = page.waitForResponse(
     (r) => /\/channels\/[^/]+\/live$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
@@ -490,15 +450,11 @@ test("a live stream shows LIVE after the ingest hook flips it", async ({ page, r
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
+  // Live streams live on the Live tab; "Go live" opens the create modal.
+  await page.getByRole("link", { name: "Live", exact: true }).click();
+  await page.getByRole("button", { name: "Go live" }).click();
   await page.getByLabel("Live stream title").fill(streamTitle);
   const created = page.waitForResponse(
     (r) => /\/channels\/[^/]+\/live$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
