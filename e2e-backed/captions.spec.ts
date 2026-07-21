@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-import { TINY_MP4_BASE64, captions, channelVideos, publishViaStudioUI, uniqueId } from "./fixtures";
+import {
+  TINY_MP4_BASE64,
+  captions,
+  channelVideos,
+  createChannelViaStudioUI,
+  publishViaStudioUI,
+  startStudioUpload,
+  uniqueId,
+} from "./fixtures";
 
 const VTT = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n";
 
@@ -22,20 +30,12 @@ test("a creator uploads and removes a caption in the studio", async ({ page, req
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(channelName);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, channelName);
 
-  await page.getByLabel("Video title").fill(videoTitle);
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
+  await startStudioUpload(page, {
+    title: videoTitle,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+    privacy: "public",
   });
   await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();

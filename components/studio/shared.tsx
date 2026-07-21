@@ -10,7 +10,11 @@ import type { StoredUploadSession, VideoConfigOption, VideoState } from "@/lib/a
 // verbatim from the pre-split StudioView so behaviour is unchanged.
 
 export type Status = "loading" | "error" | "ready";
-export type UploadState = "idle" | "uploading" | "done" | "cancelled" | "error";
+// Upload lifecycle. "uploaded" is the file-path-only phase between a finished
+// (auto-started) chunk upload and the creator pressing Publish: the bytes are on
+// the server as a PRIVATE draft, the metadata form is still editable, and no
+// public outcome has been produced yet.
+export type UploadState = "idle" | "uploading" | "uploaded" | "done" | "cancelled" | "error";
 export type RowMode = "view" | "edit" | "confirm-delete";
 
 // Token recipes for the hand-written form fields in the upload/video forms (they
@@ -108,6 +112,9 @@ export function StateBadge({ state }: { state: VideoState }) {
     processing: "bg-warning/15 text-warning",
     scheduled: "bg-surface-strong text-fg-muted",
     quarantined: "bg-warning/15 text-warning",
+    // Held by publish_after_transcode until the HLS transcode completes —
+    // owner/moderator-only visibility, so an informational accent tone.
+    transcoding: "bg-accent/15 text-accent",
     published: "bg-success/15 text-success",
     failed: "bg-danger-surface text-danger",
   };

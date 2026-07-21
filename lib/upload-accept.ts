@@ -18,3 +18,32 @@ export const BASE_VIDEO_ACCEPT = ".mp4,.webm,.ogv,.ogg,video/mp4,video/webm,vide
 export function videoAcceptAttr(additionalExtensions: boolean | undefined | null): string {
   return additionalExtensions === false ? BASE_VIDEO_ACCEPT : "video/*";
 }
+
+// The base container extensions the server always takes (mirrors BASE_VIDEO_ACCEPT).
+const BASE_VIDEO_EXTS = [".mp4", ".webm", ".ogv", ".ogg"];
+const BASE_VIDEO_TYPES = ["video/mp4", "video/webm", "video/ogg"];
+
+/**
+ * isAcceptedVideoFile decides whether a dropped file should be routed into the
+ * upload flow, honoring the SAME extension gate as videoAcceptAttr. Real
+ * drag-and-drop bypasses the file input's `accept` filter (which only applies to
+ * the OS picker), so a manual check keeps the dropzone from swallowing a
+ * non-video the server would just 415. With the extended set on/unknown any
+ * video/* MIME (or a video-ish extension when the OS gives no type) passes; once
+ * an admin narrows to the base containers, only those are accepted client-side.
+ */
+export function isAcceptedVideoFile(
+  file: { name: string; type: string },
+  additionalExtensions: boolean | undefined | null,
+): boolean {
+  const type = (file.type || "").toLowerCase();
+  const name = file.name.toLowerCase();
+  if (additionalExtensions === false) {
+    return BASE_VIDEO_TYPES.includes(type) || BASE_VIDEO_EXTS.some((e) => name.endsWith(e));
+  }
+  // Permissive (matches the "video/*" accept): trust an explicit video MIME, or
+  // fall back to a common video extension when the OS reports no type.
+  if (type.startsWith("video/")) return true;
+  if (type !== "") return false;
+  return /\.(mp4|webm|ogv|ogg|mov|mkv|avi|m4v|flv|wmv|mpg|mpeg|3gp)$/i.test(name);
+}

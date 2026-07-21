@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { BatchUploadQueue } from "@/components/BatchUploadQueue";
 import { TagsInput } from "@/components/TagsInput";
-import { CheckIcon, ChevronDownIcon, LoaderIcon, UploadIcon } from "@/components/icons";
+import { CheckIcon, ChevronDownIcon, LoaderIcon, UploadIcon, VideoIcon } from "@/components/icons";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
@@ -23,13 +23,17 @@ import type {
   Channel,
   ImportJob,
   StoredUploadSession,
+  UpdateVideoRequest,
   UploadVideoResult,
   Video,
   VideoConfigResponse,
   VideoPrivacy,
 } from "@/lib/api";
-import { formatBytes, formatDateTime } from "@/lib/format";
-import { videoAcceptAttr } from "@/lib/upload-accept";
+import { cn } from "@/lib/cn";
+import { formatBytes, formatDateTime, formatDuration } from "@/lib/format";
+import { logger } from "@/lib/logger";
+import { isAcceptedVideoFile, videoAcceptAttr } from "@/lib/upload-accept";
+import { titleFromFilename } from "@/lib/upload-queue";
 import {
   IMPORT_STAGES,
   importActiveStage,
@@ -139,6 +143,39 @@ export function UploadSection({
   // step change (the file <input> only lives on the pick step; capturing the
   // File here means publish/resume never depend on that input staying mounted).
   const [pickedFile, setPickedFile] = useState<File | null>(null);
+  // The auto-created PRIVATE draft's id for the file path (created the instant a
+  // single file is selected, before any bytes move). Publish PATCHes it; Cancel
+  // deletes it. A ref shadows the state so the async upload callbacks read the
+  // latest id without re-closing over a stale render.
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const draftIdRef = useRef<string | null>(null);
+  // The finalised video once the auto-started chunk upload completes (file path).
+  // null while bytes are still moving; drives whether Publish finishes at once or
+  // parks as "publishing when the upload completes". A ref (not state) because the
+  // Publish handler and the upload's completion race — both must read the LATEST
+  // value, and the `state` machine ("uploading"→"uploaded") already re-renders.
+  const uploadedVideoRef = useRef<Video | null>(null);
+  // The creator pressed Publish while the upload was still in flight and the
+  // metadata PATCH already succeeded — we are now just waiting for the bytes to
+  // finish. Disables Publish (no double-submit) and shows the pending status. The
+  // ref lets the upload's completion callback see the request without a re-render.
+  const [publishPending, setPublishPending] = useState(false);
+  const publishPendingRef = useRef(false);
+  // Client-side, display-only technical metadata read from a hidden <video>
+  // element (duration/resolution) plus the File's own size/type. Never sent to
+  // the API — the server probes authoritatively. null until (and if) it resolves.
+  const [fileMeta, setFileMeta] = useState<{
+    duration: number | null;
+    width: number | null;
+    height: number | null;
+  } | null>(null);
+  // Drag-over highlight for the real drag-and-drop dropzone.
+  const [dragOver, setDragOver] = useState(false);
+  // Whether the creator has edited the Title, so the filename prefill never
+  // clobbers a typed value (mirrors publishTouchedRef's "don't clobber" rule).
+  const titleTouchedRef = useRef(false);
+  // Cleanup for the in-flight client-side metadata probe (revoke the object URL).
+  const metaProbeCleanupRef = useRef<(() => void) | null>(null);
   // Stepped upload sheet (design "Upload sheet"): a launched Modal staging
   // pick → details → publish, with a persistent minimized progress pill. `open`
   // drives the Modal; `step` the wizard stage; `sheet` picks the bottom-sheet
@@ -223,6 +260,7 @@ export function UploadSection({
     setResult(video);
     setState("done");
     setTitle("");
+    titleTouchedRef.current = false;
     setDescription("");
     setCategory("");
     setLanguage("");
@@ -233,6 +271,12 @@ export function UploadSection({
     setResumeCandidate(null);
     setFileName(null);
     setPickedFile(null);
+    setFileMeta(null);
+    setDraftId(null);
+    draftIdRef.current = null;
+    uploadedVideoRef.current = null;
+    setPublishPending(false);
+    publishPendingRef.current = false;
     setBytes(null);
     setImportJob(null);
     setRetryCtx(null);
@@ -382,13 +426,15 @@ export function UploadSection({
     if (state === "error" || state === "cancelled") setState("idle");
   }
 
-  // onFilePicked routes the picked file(s). More than one file switches to the
-  // batch upload queue (UPLOAD-10); a single file keeps the rich single-file form
-  // and offers a resume when it matches an unfinished session (same filename +
-  // size) left by an interrupted upload.
-  function onFilePicked() {
+  // handleFiles routes picked/dropped file(s). More than one file switches to the
+  // batch upload queue (UPLOAD-10, untouched). A single file now AUTO-STARTS: it
+  // prefills the title from the filename (unless the creator typed one), reads
+  // display-only technical metadata, advances to the details step, and kicks off
+  // the resumable upload against a fresh private draft — no separate Continue.
+  // The one exception is a matching resumable session (same filename + size) left
+  // by an interrupted upload: that keeps the pick step's Resume/Discard banner.
+  function handleFiles(files: File[]) {
     setError(null);
-    const files = [...(fileRef.current?.files ?? [])];
     if (files.length > 1) {
       // Hand the files to the batch queue and reset the single-file input so the
       // form returns clean when the batch is cleared.
@@ -400,16 +446,295 @@ export function UploadSection({
       return;
     }
     const file = files[0];
-    setFileName(file ? file.name : null);
-    setPickedFile(file ?? null);
-    setResumeCandidate(file ? findResumableUploadSession(file) : null);
+    if (!file) {
+      // The picker was dismissed / cleared — return to the empty pick state.
+      setFileName(null);
+      setPickedFile(null);
+      setResumeCandidate(null);
+      setFileMeta(null);
+      return;
+    }
+    setFieldErrors({});
+    setFileName(file.name);
+    setPickedFile(file);
+    const resume = findResumableUploadSession(file);
+    setResumeCandidate(resume);
+
+    // Prefill the title from the filename only when it is still empty AND
+    // untouched — a typed title is never clobbered (the required regression).
+    const willPrefill = title.trim() === "" && !titleTouchedRef.current;
+    const derivedTitle = willPrefill
+      ? titleFromFilename(file.name).slice(0, 200)
+      : title;
+    if (willPrefill) setTitle(derivedTitle);
+
+    // Display-only technical metadata (duration/resolution) via a hidden <video>.
+    probeFileMetadata(file);
+
+    // A matching unfinished session takes precedence: stay on the pick step and
+    // let the Resume/Discard banner drive (auto-starting would orphan its chunks).
+    if (resume) return;
+
+    // Advance immediately and auto-start the upload against a private draft. Pass
+    // the derived title explicitly (a setTitle above has not flushed into `title`
+    // yet within this tick).
+    setStep("details");
+    void startAutoUpload(file, derivedTitle.trim() || titleFromFilename(file.name).slice(0, 200));
+  }
+
+  // onFileInputChange bridges the transparent file <input> to handleFiles.
+  function onFileInputChange() {
+    handleFiles([...(fileRef.current?.files ?? [])]);
+  }
+
+  // probeFileMetadata reads duration + intrinsic resolution from a throwaway
+  // <video preload="metadata"> pointed at an object URL, purely for the file
+  // card's chips. It degrades silently (no chips) on any error, and always
+  // revokes the object URL. This is display-only — nothing here reaches the API.
+  function probeFileMetadata(file: File) {
+    setFileMeta(null);
+    metaProbeCleanupRef.current?.();
+    metaProbeCleanupRef.current = null;
+    if (typeof document === "undefined" || typeof URL.createObjectURL !== "function") return;
+    const url = URL.createObjectURL(file);
+    const el = document.createElement("video");
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      el.removeAttribute("src");
+      el.load();
+      URL.revokeObjectURL(url);
+      metaProbeCleanupRef.current = null;
+    };
+    metaProbeCleanupRef.current = cleanup;
+    el.preload = "metadata";
+    el.onloadedmetadata = () => {
+      setFileMeta({
+        duration: Number.isFinite(el.duration) ? el.duration : null,
+        width: el.videoWidth || null,
+        height: el.videoHeight || null,
+      });
+      cleanup();
+    };
+    el.onerror = cleanup;
+    el.src = url;
+  }
+
+  // startAutoUpload creates the private draft (title only + explicit private) and
+  // runs the resumable upload for the file path. On completion it stores the
+  // finished video; if the creator has already pressed Publish (publishPending)
+  // it finalises the outcome, otherwise it parks in the "uploaded" phase awaiting
+  // Publish. A cancel deletes the draft; a draft-create/upload failure keeps the
+  // picked file and surfaces a retryable error.
+  async function startAutoUpload(file: File, draftTitle: string) {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    sessionIdRef.current = null;
+    publishPendingRef.current = false;
+    setPublishPending(false);
+    uploadedVideoRef.current = null;
+    setDraftId(null);
+    draftIdRef.current = null;
+    setState("uploading");
+    setProgress(0);
+    setBytes(null);
+    setError(null);
+    setFieldErrors({});
+    setResult(null);
+    setRetryCtx(null);
+    let createdId: string | null = null;
+    try {
+      // Clear any lingering resumable session for this exact file first, so the
+      // fresh upload never leaves an orphan behind.
+      const stale = findResumableUploadSession(file);
+      if (stale) await discardSession(stale);
+      setResumeCandidate(null);
+
+      // Title only + EXPLICIT private: the instance default privacy is ambiguous,
+      // and privacy is the one thing keeping an auto-published upload out of
+      // public view until the creator presses Publish.
+      const draft = await api.createVideoDraft(handle, {
+        title: draftTitle,
+        privacy: "private",
+      });
+      createdId = draft.id;
+      setDraftId(draft.id);
+      draftIdRef.current = draft.id;
+      // Cancel clicked while the draft POST was still in flight: stop before the
+      // upload starts and clean up the just-created draft.
+      if (controller.signal.aborted) {
+        void api.deleteVideo(draft.id).catch(() => {});
+        setState("cancelled");
+        resetFileToPick();
+        return;
+      }
+      const res: UploadVideoResult = await resumableUpload(draft.id, file, {
+        onProgress: (p) => {
+          setProgress(p.percent);
+          setBytes({ loaded: p.loaded, total: p.total });
+        },
+        signal: controller.signal,
+        onSessionOpened: (id) => {
+          sessionIdRef.current = id;
+        },
+      });
+      uploadedVideoRef.current = res.video;
+      if (res.video.state === "failed") {
+        // A probe/scan rejected the file: nothing to publish, surface it honestly.
+        setError(failedStateError("file"));
+        setState("error");
+        return;
+      }
+      if (publishPendingRef.current) {
+        // Publish was pressed mid-upload (metadata already PATCHed) — finalise now.
+        finishWithVideo(res.video, "file");
+      } else {
+        setState("uploaded");
+      }
+    } catch (err) {
+      // A local cancellation is not an error: DELETE the session (dropping its
+      // chunk blobs) and the orphaned draft, then return to the pick step.
+      if (isUploadCancelled(err)) {
+        if (sessionIdRef.current) {
+          void api.cancelUploadSession(sessionIdRef.current).catch(() => {});
+          forgetUploadSession(sessionIdRef.current);
+        }
+        const idToDelete = createdId ?? draftIdRef.current;
+        // Best-effort cleanup: a failed delete just leaves a private draft that
+        // the draft-recovery flow can still reach — log it, never surface it.
+        if (idToDelete) {
+          void api
+            .deleteVideo(idToDelete)
+            .catch(() => logger.warn("cancelled upload: draft delete failed", { video_id: idToDelete }));
+        }
+        setState("cancelled");
+        resetFileToPick();
+        return;
+      }
+      // Draft-create (422 quota / 403 feature_disabled / 429) or upload failure:
+      // keep the picked file, map the error inline, and offer a retry.
+      if (applyFieldErrors(err)) return;
+      setError(importOrUploadError(err, "file"));
+      setState("error");
+    } finally {
+      abortRef.current = null;
+    }
+  }
+
+  // resetFileToPick returns to the pick step after a cancel, keeping the metadata
+  // form intact (title, description, …) but dropping the file-specific state so a
+  // fresh pick starts clean.
+  function resetFileToPick() {
+    setStep("pick");
+    setPickedFile(null);
+    setFileName(null);
+    setFileMeta(null);
+    setDraftId(null);
+    draftIdRef.current = null;
+    uploadedVideoRef.current = null;
+    setPublishPending(false);
+    publishPendingRef.current = false;
+    setProgress(0);
+    setBytes(null);
+    metaProbeCleanupRef.current?.();
+    metaProbeCleanupRef.current = null;
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  // publishFileMetadata is Publish for the file path: apply the form metadata to
+  // the auto-created draft (PATCH) and go live. If the upload has finished, the
+  // outcome is derived at once; if it is still in flight, the PATCH lands now and
+  // completion (in startAutoUpload) finalises when the bytes arrive.
+  async function publishFileMetadata() {
+    const id = draftIdRef.current ?? draftId;
+    if (!id || publishPendingRef.current) return;
+    setError(null);
+    setFieldErrors({});
+    const scheduleIso = scheduleToIso(publishAt);
+    const body: UpdateVideoRequest = {
+      title: title.trim(),
+      description: description.trim(),
+      privacy,
+      ...taxonomyFields(category, language, license),
+      ...(tags.length > 0 ? { tags } : {}),
+      ...(scheduleIso ? { publish_at: scheduleIso } : {}),
+      is_sensitive: sensitive,
+      comments_policy: commentsPolicy,
+      download_enabled: downloadEnabled,
+    };
+    try {
+      const patched = await api.updateVideo(id, body);
+      // Read the LATEST upload status (ref, not the closure) — the upload may have
+      // completed while the PATCH was in flight.
+      if (uploadedVideoRef.current) {
+        // Bytes already landed: the PATCH result carries the authoritative final
+        // state (published / scheduled / quarantined / failed) + new metadata.
+        finishWithVideo(patched, "file");
+      } else {
+        // Still uploading: remember the intent; completion will finalise. The ref
+        // is set before the state so the completion handler (which reads the ref)
+        // never misses it.
+        publishPendingRef.current = true;
+        setPublishPending(true);
+      }
+    } catch (err) {
+      // A 422 (e.g. publish_at on an already-published video, or a bad title)
+      // renders inline; anything else is a mapped form-level error.
+      if (applyFieldErrors(err)) return;
+      setError(importOrUploadError(err, "file"));
+      setState("error");
+    }
+  }
+
+  // retryUpload re-runs the auto-start after a draft-create/upload failure, using
+  // the already-picked file and the current (possibly typed) title.
+  function retryUpload() {
+    const file = pickedFile;
+    if (!file || state === "uploading") return;
+    const draftTitle = title.trim() || titleFromFilename(file.name).slice(0, 200);
+    void startAutoUpload(file, draftTitle);
+  }
+
+  // Drag-and-drop: the transparent file input only covers the OS picker; real
+  // drops need explicit handlers (with a visible drag-over state) that route the
+  // dropped video(s) through the same handleFiles path. preventDefault on drop
+  // stops the browser also populating the input (which would double-handle).
+  function onDropZoneDragOver(e: React.DragEvent) {
+    e.preventDefault();
+  }
+  function onDropZoneDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    if (state !== "uploading") setDragOver(true);
+  }
+  function onDropZoneDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+  }
+  function onDropZoneDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = [...(e.dataTransfer?.files ?? [])];
+    if (dropped.length === 0) return;
+    // Keep only accepted video files (the server's 415 stays the final authority).
+    const videos = dropped.filter((f) => isAcceptedVideoFile(f, additionalExts));
+    if (videos.length === 0) {
+      setError("That is not a supported video type.");
+      return;
+    }
+    handleFiles(videos);
   }
 
   // openSheet launches the stepped upload Modal. A fresh (idle/done) open starts
   // at the pick step; reopening while an upload is in flight — or after an
   // error/cancel — lands on the details step where the progress/outcome lives.
   function openSheet() {
-    if (state === "uploading" || state === "error" || state === "cancelled") {
+    if (
+      state === "uploading" ||
+      state === "uploaded" ||
+      state === "error" ||
+      state === "cancelled"
+    ) {
       setStep("details");
     } else {
       if (state === "done") {
@@ -438,13 +763,20 @@ export function UploadSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpen]);
 
+  // upload is the form's submit (Publish). The file path's bytes already started
+  // on select, so Publish there just applies metadata (publishFileMetadata). The
+  // URL path is unchanged: it creates the draft with the full metadata on submit,
+  // then enqueues + polls the import.
   async function upload(e: React.FormEvent) {
     e.preventDefault();
-    const file = pickedFile;
+    if (title.trim() === "" || handle === "") return;
+    if (source === "file") {
+      void publishFileMetadata();
+      return;
+    }
+    // ---- URL import path (create draft with full metadata → import) ----
     const url = videoUrl.trim();
-    if (state === "uploading" || title.trim() === "" || handle === "") return;
-    if (source === "file" && !file) return;
-    if (source === "url" && url === "") return;
+    if (state === "uploading" || url === "") return;
     const controller = new AbortController();
     abortRef.current = controller;
     sessionIdRef.current = null;
@@ -454,15 +786,8 @@ export function UploadSection({
     setFieldErrors({});
     setResult(null);
     setRetryCtx(null);
-    let draftId: string | null = null;
+    let createdDraftId: string | null = null;
     try {
-      // A fresh publish for a file that still has a lingering resumable session
-      // discards it first, so a new upload never leaves an orphan behind.
-      if (source === "file" && file) {
-        const stale = findResumableUploadSession(file);
-        if (stale) await discardSession(stale);
-        setResumeCandidate(null);
-      }
       const scheduleIso = scheduleToIso(publishAt);
       const draft = await api.createVideoDraft(handle, {
         title: title.trim(),
@@ -478,47 +803,25 @@ export function UploadSection({
         comments_policy: commentsPolicy,
         download_enabled: downloadEnabled,
       });
-      draftId = draft.id;
+      createdDraftId = draft.id;
       // Cancel clicked while the draft POST was still in flight: stop before the
-      // upload starts and clean up the just-created draft.
+      // import starts and clean up the just-created draft.
       if (controller.signal.aborted) {
         void api.deleteVideo(draft.id).catch(() => {});
         setState("cancelled");
         return;
       }
-      if (source === "url") {
-        // runImport owns the URL outcome (rail, prefill, retry, disabled) and its
-        // own error handling, so it never falls through to the file-upload catch.
-        await runImport(draft.id, url, controller);
-        return;
-      }
-      // File source: the resumable (chunked) protocol — create session → PUT
-      // chunks sequentially (per-chunk retry) → complete.
-      const res: UploadVideoResult = await resumableUpload(draft.id, file as File, {
-        onProgress: (p) => {
-          setProgress(p.percent);
-          setBytes({ loaded: p.loaded, total: p.total });
-        },
-        signal: controller.signal,
-        onSessionOpened: (id) => {
-          sessionIdRef.current = id;
-        },
-      });
-      finishWithVideo(res.video, "file");
+      // runImport owns the URL outcome (rail, prefill, retry, disabled) and its
+      // own error handling, so it never falls through to this catch.
+      await runImport(draft.id, url, controller);
     } catch (err) {
-      // A local cancellation is not an error: DELETE the session (dropping its
-      // chunk blobs) and the orphaned draft, then return the form to editable.
       if (isUploadCancelled(err)) {
-        if (sessionIdRef.current) {
-          void api.cancelUploadSession(sessionIdRef.current).catch(() => {});
-          forgetUploadSession(sessionIdRef.current);
-        }
-        if (draftId) void api.deleteVideo(draftId).catch(() => {});
+        if (createdDraftId) void api.deleteVideo(createdDraftId).catch(() => {});
         setState("cancelled");
         return;
       }
       if (applyFieldErrors(err)) return;
-      setError(importOrUploadError(err, source));
+      setError(importOrUploadError(err, "url"));
       setState("error");
     } finally {
       abortRef.current = null;
@@ -593,6 +896,22 @@ export function UploadSection({
   const canContinue =
     source === "file" ? fileName !== null : videoUrl.trim() !== "" && importsEnabled !== false;
 
+  // The metadata form stays editable while a FILE uploads (the creator fills in
+  // details in parallel); it locks only for a URL import in flight or once the
+  // file's Publish has been committed (publishPending).
+  const formLocked = (source === "url" && state === "uploading") || publishPending;
+
+  // Display-only technical chips for the file card (size + container are always
+  // known from the File; duration + resolution appear once the probe resolves).
+  const fileChips: string[] = [];
+  if (pickedFile) {
+    fileChips.push(formatBytes(pickedFile.size));
+    const container = pickedFile.type.split("/")[1]?.toUpperCase();
+    if (container) fileChips.push(container);
+    if (fileMeta?.duration != null) fileChips.push(formatDuration(fileMeta.duration));
+    if (fileMeta?.width && fileMeta?.height) fileChips.push(`${fileMeta.width}×${fileMeta.height}`);
+  }
+
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -649,9 +968,17 @@ export function UploadSection({
           ) : (
             <form onSubmit={(e) => void upload(e)} className="flex flex-col gap-4">
               {step === "pick" ? (
-                // Stage 1 — pick: choose the source and the file/URL. `Continue`
-                // advances to the details stage once something is chosen.
+                // Stage 1 — pick: choose the source and the file/URL. A single file
+                // auto-advances + auto-uploads; the URL path uses an explicit Continue.
                 <>
+                  {state === "cancelled" ? (
+                    // A cancelled file upload lands back here — the metadata form is
+                    // kept; choosing (or dropping) a file starts a fresh upload.
+                    <p role="status" className="text-sm text-fg-muted">
+                      Upload cancelled — nothing was published. Your details are kept, so choose a
+                      file to start again.
+                    </p>
+                  ) : null}
                   <div className="flex flex-col gap-1.5 text-sm">
                     <span id="video-source-label" className="font-medium text-fg">
                       Source
@@ -660,7 +987,7 @@ export function UploadSection({
                       value={source}
                       onChange={changeSource}
                       labelledBy="video-source-label"
-                      disabled={state === "uploading"}
+                      disabled={state === "uploading" || state === "uploaded"}
                       fullWidth
                       options={[
                         { value: "file", label: "Upload file" },
@@ -673,9 +1000,17 @@ export function UploadSection({
                     // transparent overlay (still labelled "Video file" for
                     // pickers + tests + keyboard), with the visual chrome painted
                     // underneath and a keyboard focus ring off `peer-focus-visible`.
+                    // Real drag-and-drop is layered on the wrapper (the input's
+                    // accept only filters the OS picker), with an accent drag-over.
                     <div className="flex flex-col gap-2 text-sm">
                       <span className="font-medium text-fg">Video file</span>
-                      <div className="relative">
+                      <div
+                        className="relative"
+                        onDragEnter={onDropZoneDragEnter}
+                        onDragOver={onDropZoneDragOver}
+                        onDragLeave={onDropZoneDragLeave}
+                        onDrop={onDropZoneDrop}
+                      >
                         <input
                           ref={fileRef}
                           type="file"
@@ -685,20 +1020,25 @@ export function UploadSection({
                           accept={videoAcceptAttr(additionalExts)}
                           multiple
                           aria-label="Video file"
-                          onChange={onFilePicked}
+                          onChange={onFileInputChange}
                           className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                         />
-                        <div className="pointer-events-none flex flex-col items-center gap-3 rounded-[18px] border-[1.5px] border-dashed border-border px-6 py-9 text-center transition-colors peer-hover:border-fg-muted peer-focus-visible:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--focus)]">
+                        <div
+                          className={cn(
+                            "pointer-events-none flex flex-col items-center gap-3 rounded-[18px] border-[1.5px] border-dashed px-6 py-9 text-center transition-colors peer-hover:border-fg-muted peer-focus-visible:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--focus)]",
+                            dragOver ? "border-accent bg-accent/8" : "border-border",
+                          )}
+                        >
                           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent/12">
                             <UploadIcon size={24} className="text-accent" />
                           </span>
                           <span className="max-w-full truncate text-[15px] font-semibold text-fg">
-                            {fileName ?? "Choose a video"}
+                            {dragOver ? "Drop to upload" : (fileName ?? "Choose or drop a video")}
                           </span>
                           <span className="text-[13px] leading-relaxed text-fg-muted">
                             MP4, MOV, WebM, MKV · up to 8 GB
                             <br />
-                            Resumable — leave and come back · pick several to upload a batch
+                            Starts uploading as soon as you choose · pick several for a batch
                           </span>
                         </div>
                       </div>
@@ -761,39 +1101,117 @@ export function UploadSection({
                           variant="secondary"
                           size="sm"
                           onClick={() => {
+                            // Discard the old session, then start fresh: advance to
+                            // details and auto-upload the re-picked file.
+                            const file = pickedFile;
                             void discardSession(resumeCandidate);
                             setResumeCandidate(null);
+                            if (file) {
+                              const draftTitle =
+                                title.trim() || titleFromFilename(file.name).slice(0, 200);
+                              setStep("details");
+                              void startAutoUpload(file, draftTitle);
+                            }
                           }}
                         >
-                          Discard
+                          Discard &amp; start over
                         </Button>
                       </div>
                     </div>
                   ) : null}
-                  <div className="flex flex-wrap items-center gap-3 pt-1">
-                    <Button
-                      type="button"
-                      onClick={() => setStep("details")}
-                      disabled={!canContinue}
-                    >
-                      Continue
-                    </Button>
-                  </div>
+                  {source === "url" ? (
+                    // The URL path still uses an explicit Continue (there is nothing
+                    // to auto-start before submit); the file path advances on select.
+                    <div className="flex flex-wrap items-center gap-3 pt-1">
+                      <Button type="button" onClick={() => setStep("details")} disabled={!canContinue}>
+                        Continue
+                      </Button>
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 // Stage 2 — details → publish: the metadata form, then Publish (and
                 // the in-flight progress / outcome for the third, "publish" stage).
                 <>
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-fg-muted">
-                    <span className="tabular-nums font-medium text-fg-muted">
-                      Step 2 of 2 · Details
-                    </span>
-                    <span className="truncate">
-                      {source === "url"
-                        ? videoUrl.trim() || "Import from URL"
-                        : (fileName ?? "Selected file")}
-                    </span>
-                  </div>
+                  {source === "url" ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-fg-muted">
+                      <span className="tabular-nums font-medium text-fg-muted">
+                        Step 2 of 2 · Details
+                      </span>
+                      <span className="truncate">{videoUrl.trim() || "Import from URL"}</span>
+                    </div>
+                  ) : pickedFile ? (
+                    // File card: filename, technical chips, and the live upload
+                    // progress / uploaded state, with a Cancel affordance while the
+                    // bytes are still moving.
+                    <div className="flex flex-col gap-2.5 rounded-2xl bg-surface-muted p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-strong">
+                            <VideoIcon size={18} className="text-fg-muted" />
+                          </span>
+                          <span className="min-w-0 truncate text-sm font-semibold text-fg">
+                            {fileName}
+                          </span>
+                        </div>
+                        {state === "uploading" && !publishPending ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            aria-label="Cancel upload"
+                            onClick={cancelUpload}
+                          >
+                            Cancel
+                          </Button>
+                        ) : state === "uploaded" ? (
+                          <span className="inline-flex shrink-0 items-center gap-1 text-[13px] font-semibold text-success">
+                            <CheckIcon size={14} aria-hidden="true" /> Uploaded
+                          </span>
+                        ) : null}
+                      </div>
+                      {fileChips.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {fileChips.map((chip) => (
+                            <span
+                              key={chip}
+                              className="rounded-full bg-surface-strong px-2 py-0.5 text-[11px] font-medium tabular-nums text-fg-muted"
+                            >
+                              {chip}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {state === "uploading" ? (
+                        <div className="flex items-center gap-2">
+                          <div
+                            role="progressbar"
+                            aria-label="Upload progress"
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={progress}
+                            className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-surface-strong"
+                          >
+                            <div
+                              className="h-full rounded-full bg-fg transition-[width] duration-300"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <span
+                            aria-hidden="true"
+                            className="text-xs font-semibold tabular-nums text-fg-muted"
+                          >
+                            {progress}%
+                          </span>
+                        </div>
+                      ) : null}
+                      {state === "uploading" && bytes ? (
+                        <p className="text-[12.5px] tabular-nums text-fg-muted">
+                          {formatBytes(bytes.loaded)} of {formatBytes(bytes.total)} · resumes from the
+                          last completed chunk if interrupted
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {channels.length > 1 ? (
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="font-medium text-fg">Channel</span>
@@ -918,7 +1336,7 @@ export function UploadSection({
                       checked={sensitive}
                       onChange={setSensitive}
                       label="Contains sensitive content"
-                      disabled={state === "uploading"}
+                      disabled={formLocked}
                     />
                   </div>
                   {/* Per-video publish policies (config-parity W9), prefilled from the
@@ -938,7 +1356,7 @@ export function UploadSection({
                         setCommentsPolicy(on ? "enabled" : "disabled");
                       }}
                       label="Allow comments"
-                      disabled={state === "uploading"}
+                      disabled={formLocked}
                     />
                   </div>
                   <div className="flex items-center justify-between gap-4 text-sm">
@@ -956,7 +1374,7 @@ export function UploadSection({
                         setDownloadEnabled(on);
                       }}
                       label="Allow downloads"
-                      disabled={state === "uploading"}
+                      disabled={formLocked}
                     />
                   </div>
                   <label className="flex flex-col gap-1 text-sm">
@@ -981,6 +1399,14 @@ export function UploadSection({
                   {source === "url" && state === "uploading" ? (
                     <ImportStageRail job={importJob} />
                   ) : null}
+                  {publishPending ? (
+                    // File path: the metadata PATCH landed while the bytes are still
+                    // moving — the video goes live automatically once the upload
+                    // finishes (branching on its final state).
+                    <p role="status" className="text-sm text-fg-muted">
+                      Publishing when the upload completes…
+                    </p>
+                  ) : null}
                   {state === "cancelled" ? (
                     <p role="status" className="text-sm text-fg-muted">
                       Upload cancelled — nothing was published. Your details are kept so you can try
@@ -998,74 +1424,45 @@ export function UploadSection({
                         <Button variant="secondary" size="sm" onClick={() => void retryImport()}>
                           Retry import
                         </Button>
+                      ) : source === "file" && pickedFile ? (
+                        // A failed draft-create/upload keeps the picked file — retry
+                        // restarts the auto-upload without re-choosing the file.
+                        <Button variant="secondary" size="sm" onClick={retryUpload}>
+                          Retry upload
+                        </Button>
                       ) : null}
                     </div>
                   ) : null}
                   <div className="flex flex-wrap items-center gap-3 pt-1">
-                    <Button
-                      type="button"
-                      variant="tonal"
-                      onClick={() => setStep("pick")}
-                      disabled={state === "uploading"}
-                    >
-                      Back
-                    </Button>
+                    {source === "url" ? (
+                      <Button
+                        type="button"
+                        variant="tonal"
+                        onClick={() => setStep("pick")}
+                        disabled={state === "uploading"}
+                      >
+                        Back
+                      </Button>
+                    ) : null}
                     <button
                       ref={publishRef}
                       type="submit"
                       disabled={
-                        state === "uploading" || (source === "url" && importsEnabled === false)
+                        source === "url"
+                          ? state === "uploading" || importsEnabled === false
+                          : draftId === null || publishPending
                       }
                       className={buttonClasses("primary", "md")}
                     >
-                      {state === "uploading"
-                        ? source === "url"
+                      {source === "url"
+                        ? state === "uploading"
                           ? "Importing…"
-                          : "Uploading…"
-                        : "Publish"}
+                          : "Publish"
+                        : publishPending
+                          ? "Publishing…"
+                          : "Publish"}
                     </button>
-                    {state === "uploading" && source === "file" ? (
-                      // Determinate byte-level progress for the in-flight file upload
-                      // (the URL import has no local bytes to measure) + a Cancel that
-                      // aborts the transfer and cleans up the orphaned draft.
-                      <>
-                        <div
-                          role="progressbar"
-                          aria-label="Upload progress"
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={progress}
-                          className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-surface-strong"
-                        >
-                          <div
-                            className="h-full rounded-full bg-fg transition-[width] duration-300"
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                        <span
-                          aria-hidden="true"
-                          className="text-xs font-semibold tabular-nums text-fg-muted"
-                        >
-                          {progress}%
-                        </span>
-                        <Button
-                          variant="secondary"
-                          aria-label="Cancel upload"
-                          onClick={cancelUpload}
-                        >
-                          Cancel
-                        </Button>
-                      </>
-                    ) : null}
                   </div>
-                  {state === "uploading" && source === "file" && bytes ? (
-                    // Real byte-level detail (loaded/total from the resumable-upload
-                    // progress callback) — the design's "X of Y" chunk line, peer-free.
-                    <p className="text-[12.5px] tabular-nums text-fg-muted">
-                      {formatBytes(bytes.loaded)} of {formatBytes(bytes.total)} · resumes from the
-                      last completed chunk if interrupted
-                    </p>
-                  ) : null}
                 </>
               )}
             </form>
