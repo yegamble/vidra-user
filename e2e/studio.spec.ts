@@ -1797,3 +1797,103 @@ test("the upload form prefills from the instance publish defaults and sends the 
     download_enabled: false,
   });
 });
+
+// Publish-timing (publish_after_transcode): the details-step toggle. Flipping it
+// with a live draft syncs an immediate single-field PATCH (the server's hold
+// decision happens at upload completion, so the flag must land before the bytes
+// finish); the sticky value then rides the auto-create body of the next upload.
+test("the publish-timing toggle PATCHes immediately and rides the next auto-create body", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  const draftBodies: Array<Record<string, unknown>> = [];
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    if (route.request().method() === "POST") {
+      draftBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    return route.fulfill({ json: { videos: [] } });
+  });
+  // The session opens; the chunk is held so the upload stays in flight while
+  // the toggle is flipped and the upload cancelled.
+  const FUTURE2 = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  await page.route(UPLOAD_SESSION, (route) =>
+    route.fulfill({
+      status: 201,
+      json: { upload_id: "up1", chunk_size: 1_048_576, total_chunks: 1, size: 4, expires_at: FUTURE2 },
+    }),
+  );
+  await page.route(CHUNK, async (route) => {
+    await new Promise((r) => setTimeout(r, 5_000));
+    await route
+      .fulfill({
+        status: 200,
+        json: {
+          upload_id: "up1",
+          video_id: "v1",
+          state: "active",
+          size: 4,
+          chunk_size: 1_048_576,
+          total_chunks: 1,
+          received_chunks: [0],
+          bytes_received: 4,
+          expires_at: FUTURE2,
+        },
+      })
+      .catch(() => {});
+  });
+  await page.route(SESSION, (route) =>
+    route.request().method() === "DELETE" ? route.fulfill({ status: 204, body: "" }) : route.continue(),
+  );
+  let timingPatch: Record<string, unknown> | undefined;
+  await page.route(VIDEO, (route) => {
+    if (route.request().method() === "PATCH") {
+      timingPatch = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({ json: video({ state: "draft" }) });
+    }
+    if (route.request().method() === "DELETE") return route.fulfill({ status: 204, body: "" });
+    return route.continue();
+  });
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await gotoStudioTab(page, "Content");
+  await openUpload(page);
+  await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
+  // First auto-create: default off — no publish_after_transcode key at all.
+  await expect.poll(() => draftBodies.length).toBe(1);
+  expect(draftBodies[0]).toEqual({ title: "clip", privacy: "private" });
+
+  // Flip the toggle → an immediate single-field PATCH onto the draft.
+  const patched = page.waitForRequest((r) => VIDEO.test(r.url()) && r.method() === "PATCH");
+  await page.getByRole("switch", { name: "Publish after transcoding" }).click();
+  await patched;
+  expect(timingPatch).toEqual({ publish_after_transcode: true });
+
+  // Cancel back to the pick step, re-pick: the sticky opt-in rides the create.
+  await page.getByRole("button", { name: "Cancel upload" }).click();
+  await expect(page.getByLabel("Video file")).toBeVisible();
+  await pickFile(page, { name: "clip2.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
+  await expect.poll(() => draftBodies.length).toBe(2);
+  expect(draftBodies[1]).toMatchObject({ privacy: "private", publish_after_transcode: true });
+});
+
+// The held (publish-after-transcode) state is owner/moderator-visible only —
+// the studio content list badges it like scheduled/quarantined.
+test("a held video shows the Transcoding badge in the studio content list", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) =>
+    route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
+  );
+  await page.route(CHANNEL_VIDEOS, (route) =>
+    route.fulfill({ json: { videos: [video({ title: "Held clip", state: "transcoding" })] } }),
+  );
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+
+  await gotoStudioTab(page, "Content");
+  const row = page.getByRole("listitem").filter({ hasText: "Held clip" });
+  await expect(row).toBeVisible();
+  await expect(row.getByText("transcoding", { exact: true })).toBeVisible();
+});
