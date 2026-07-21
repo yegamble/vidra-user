@@ -112,6 +112,9 @@ export function StateBadge({ state }: { state: VideoState }) {
     processing: "bg-warning/15 text-warning",
     scheduled: "bg-surface-strong text-fg-muted",
     quarantined: "bg-warning/15 text-warning",
+    // Held by publish_after_transcode until the HLS transcode completes —
+    // owner/moderator-only visibility, so an informational accent tone.
+    transcoding: "bg-accent/15 text-accent",
     published: "bg-success/15 text-success",
     failed: "bg-danger-surface text-danger",
   };
