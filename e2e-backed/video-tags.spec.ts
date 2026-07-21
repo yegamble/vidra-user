@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-import { TINY_MP4_BASE64, channelVideos, publishViaStudioUI, uniqueId, videoDetail } from "./fixtures";
+import {
+  TINY_MP4_BASE64,
+  channelVideos,
+  createChannelViaStudioUI,
+  publishViaStudioUI,
+  startStudioUpload,
+  uniqueId,
+  videoDetail,
+} from "./fixtures";
 
 // Proves the free-form tags round trip against a real vidra-core + PostgreSQL:
 // a creator enters tags in the studio publish form (Enter/comma commit, chips),
@@ -27,27 +35,19 @@ test("a creator sets and edits a video's tags, and the tag filter finds it", asy
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
   // Publish with two tags (mixed case + comma commit → normalized chips).
-  await page.getByLabel("Video title").fill(title);
+  await startStudioUpload(page, {
+    title,
+    buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+    privacy: "public",
+  });
   const tagsField = page.getByLabel("Video tags");
   await tagsField.fill(`${tagA.toUpperCase()}, ${tagB}`);
   await tagsField.press("Enter");
   await expect(page.getByRole("button", { name: `Remove tag ${tagA}` })).toBeVisible();
   await expect(page.getByRole("button", { name: `Remove tag ${tagB}` })).toBeVisible();
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
-    buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
-  });
   await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
 
@@ -84,5 +84,6 @@ test("a creator sets and edits a video's tags, and the tag filter finds it", asy
   await tagList.getByRole("link", { name: `Browse videos tagged ${tagC}` }).click();
   await expect(page).toHaveURL(new RegExp(`/\\?tag=${tagC}$`));
   await expect(page.getByRole("main").getByText(`#${tagC}`)).toBeVisible();
-  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  // First match: the video may also appear in the "Trending now" rail.
+  await expect(page.getByRole("heading", { name: title }).first()).toBeVisible();
 });

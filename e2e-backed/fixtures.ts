@@ -71,6 +71,32 @@ export async function liveIngest(
 }
 
 /**
+ * createChannelViaStudioUI creates the signed-in user's first channel through
+ * the redesigned tabbed studio: Studio (dashboard) → Channel tab → the
+ * "Create your first channel" form → then over to the Content tab, where the
+ * upload sheet ("Upload video") and the "Your videos" list live. The old
+ * single-page choreography (fill "Channel handle" right on the studio landing)
+ * predates the tabbed IA and no longer matches the UI.
+ */
+export async function createChannelViaStudioUI(
+  page: Page,
+  handle: string,
+  displayName: string,
+): Promise<void> {
+  await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
+  await page.getByLabel("Channel handle").fill(handle);
+  await page.getByLabel("Channel display name").fill(displayName);
+  const created = page.waitForResponse(
+    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create channel" }).click();
+  await created;
+  // Uploads + the video list live on the Content tab.
+  await page.getByRole("link", { name: "Content", exact: true }).click();
+}
+
+/**
  * startStudioUpload opens the "Upload video" sheet, selects the file (which now
  * AUTO-STARTS the resumable upload — create session → PUT chunks → complete — the
  * instant a single file is chosen), and fills the title on the details stage. The
@@ -80,7 +106,19 @@ export async function liveIngest(
  */
 export async function startStudioUpload(
   page: Page,
-  opts: { title: string; name?: string; buffer: Buffer; mimeType?: string },
+  opts: {
+    title: string;
+    name?: string;
+    buffer: Buffer;
+    mimeType?: string;
+    /**
+     * Explicit Privacy selection on the details step. The form PREFILLS from the
+     * instance defaults.publish block (the compose default is "private"), so a
+     * spec that later asserts PUBLIC visibility must select "public" here — the
+     * untouched form would publish a private video.
+     */
+    privacy?: "public" | "unlisted" | "private";
+  },
 ): Promise<void> {
   const uploaded = page.waitForResponse(
     (r) =>
@@ -96,6 +134,9 @@ export async function startStudioUpload(
   // The title prefilled from the filename on the (now-visible) details stage —
   // overwrite it with the caller's title.
   await page.getByLabel("Video title").fill(opts.title);
+  if (opts.privacy) {
+    await page.getByLabel("Privacy", { exact: true }).selectOption(opts.privacy);
+  }
 }
 
 /**

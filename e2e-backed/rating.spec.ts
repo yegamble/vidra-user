@@ -19,8 +19,10 @@ test("liking a video from the watch page persists it", async ({ page, request })
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the seeded video's watch page from the home feed (client-side nav keeps
-  // the session) and like it.
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // the session) and like it. The home page may render the same video in BOTH the
+  // browse grid and the "Trending now" recommendations rail (content-dependent),
+  // so take the first matching card — every match links to the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
 
   const like = page.getByRole("button", { name: "Like", exact: true });
