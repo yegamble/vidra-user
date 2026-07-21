@@ -250,6 +250,121 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
     expect(lastDraft?.[1]).toMatchObject({ title: "My Own Title", privacy: "private" });
   });
 
+  // A resumableUpload mock that stays in flight until the abort signal fires —
+  // keeps the details step live so the publish-timing toggle can be exercised.
+  function heldUpload() {
+    mocks.resumableUpload.mockImplementation(
+      (_id: string, _file: File, opts: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          opts.signal.addEventListener("abort", () =>
+            reject(new mocks.FakeApiError({ status: 0, code: "upload_cancelled", message: "x" })),
+          );
+        }),
+    );
+  }
+
+  it("flipping Publish after transcoding syncs an immediate single-field PATCH", async () => {
+    mocks.createVideoDraft.mockResolvedValue({ id: "v1", state: "draft" });
+    heldUpload();
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFile();
+    await waitFor(() => expect(mocks.createVideoDraft).toHaveBeenCalled());
+    // The default-off create body carries NO publish_after_transcode.
+    expect(mocks.createVideoDraft.mock.calls[0][1]).toEqual({
+      title: "clip",
+      privacy: "private",
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "Publish after transcoding" }));
+    // The flip PATCHes the draft immediately (the hold decision happens at
+    // upload completion — the flag must land before the bytes finish).
+    await waitFor(() =>
+      expect(mocks.updateVideo).toHaveBeenCalledWith("v1", { publish_after_transcode: true }),
+    );
+    expect(
+      screen
+        .getByRole("switch", { name: "Publish after transcoding" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  it("a failed publish-timing sync reverts the toggle and shows an inline error", async () => {
+    mocks.createVideoDraft.mockResolvedValue({ id: "v1", state: "draft" });
+    heldUpload();
+    mocks.updateVideo.mockRejectedValue(
+      new mocks.FakeApiError({ status: 500, code: "internal", message: "boom" }),
+    );
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFile();
+    await waitFor(() => expect(mocks.createVideoDraft).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("switch", { name: "Publish after transcoding" }));
+    await waitFor(() =>
+      // The mocked errorMessage returns the fallback copy verbatim.
+      expect(
+        screen.getByText("Couldn’t update the publish timing. Please try again."),
+      ).toBeTruthy(),
+    );
+    expect(
+      screen
+        .getByRole("switch", { name: "Publish after transcoding" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+  });
+
+  it("carries the sticky publish-timing opt-in on the auto-create draft body", async () => {
+    // The toggle lives on the details step (reached after the first select), so
+    // the create-body path is: flip → cancel → re-pick — the sticky value then
+    // rides the fresh auto-create call.
+    mocks.createVideoDraft.mockResolvedValue({ id: "v1", state: "draft" });
+    heldUpload();
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFile();
+    await waitFor(() => expect(mocks.createVideoDraft).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("switch", { name: "Publish after transcoding" }));
+    await waitFor(() => expect(mocks.updateVideo).toHaveBeenCalled());
+
+    // Cancel back to the pick step, then re-pick: the create body carries the flag.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
+    await waitFor(() => expect(screen.getByLabelText("Video file")).toBeTruthy());
+    pickFile("clip2.mp4");
+    await waitFor(() => expect(mocks.createVideoDraft).toHaveBeenCalledTimes(2));
+    expect(mocks.createVideoDraft.mock.calls[1][1]).toMatchObject({
+      publish_after_transcode: true,
+      privacy: "private",
+    });
+  });
+
+  it("disables the publish-timing toggle while a schedule is set (publish_at wins)", async () => {
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFile();
+    await waitFor(() => expect(screen.getByLabelText("Schedule publish")).toBeTruthy());
+
+    const toggle = () =>
+      screen.getByRole("switch", { name: "Publish after transcoding" }) as HTMLButtonElement;
+    expect(toggle().disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText("Schedule publish"), {
+      target: { value: "2030-01-02T12:30" },
+    });
+    expect(toggle().disabled).toBe(true);
+    expect(screen.getByText("Scheduled videos publish at the scheduled time.")).toBeTruthy();
+    // Clearing the schedule re-enables it.
+    fireEvent.change(screen.getByLabelText("Schedule publish"), { target: { value: "" } });
+    expect(toggle().disabled).toBe(false);
+  });
+
   it("cancelling an in-flight upload deletes the auto-created draft", async () => {
     mocks.createVideoDraft.mockResolvedValue({ id: "draft-9", state: "draft" });
     mocks.resumableUpload.mockImplementation(
