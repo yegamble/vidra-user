@@ -21,8 +21,11 @@ test("saving a video from the watch page persists it and shows in the library", 
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  // Reach the seeded video's watch page from the home feed and save it.
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // Reach the seeded video's watch page from the home feed and save it. The home
+  // page may render the same video in BOTH the browse grid and the "Trending now"
+  // recommendations rail (content-dependent), so take the first matching card —
+  // every match links to the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
   const save = page.getByRole("button", { name: "Save", exact: true });
   await expect(save).toBeEnabled();
@@ -30,7 +33,9 @@ test("saving a video from the watch page persists it and shows in the library", 
   await expect(page.getByRole("button", { name: "Saved", exact: true })).toBeVisible();
 
   // The saved video appears in the library after a fresh refetch (the library
-  // page issues its own GET /me/saved against the real backend).
+  // page issues its own GET /me/saved against the real backend). It was also
+  // just WATCHED, so the library hub may show it in the history rail AND the
+  // saved section — assert the first match.
   await page.getByRole("link", { name: "Library" }).click();
-  await expect(page.getByRole("heading", { name: videoTitle })).toBeVisible();
+  await expect(page.getByRole("heading", { name: videoTitle }).first()).toBeVisible();
 });

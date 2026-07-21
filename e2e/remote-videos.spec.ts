@@ -197,8 +197,13 @@ test("the home feed scope toggle is URL-reflected and requests scope=all", async
     "aria-pressed",
     "true",
   );
-  // The default local fetch carried no scope param; the All fetch did.
-  expect(feedRequests.some((q) => !q.includes("scope="))).toBe(true);
+  // Since config-parity W5 (139a42e) the page RESOLVES the effective scope and
+  // the browser fetch always carries it explicitly — that is what lets an
+  // operator default of feed_scope="all" apply to a bare "/". With no instance
+  // snapshot (mocked e2e) the effective default resolves to the shipped
+  // "local"; flipping the toggle fetches scope=all. Only the URL stays
+  // default-elided (asserted above), never the API request.
+  expect(feedRequests.some((q) => q.includes("scope=local"))).toBe(true);
   expect(feedRequests.some((q) => q.includes("scope=all"))).toBe(true);
 
   // Back to Local: the scope leaves the URL.

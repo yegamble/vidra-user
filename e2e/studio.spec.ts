@@ -181,16 +181,15 @@ async function signIn(page: Page) {
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
-// The upload form now opens in the stepped "Upload video" sheet (design's Upload
-// sheet: pick → details → publish). openUpload launches it; pickFile / pickUrl
-// complete the pick stage and Continue to the details stage where title, taxonomy
-// and Publish live.
+// The upload form opens in the stepped "Upload video" sheet. openUpload launches
+// it. Selecting a FILE now auto-advances to the details stage AND auto-starts the
+// upload (no Continue) — pickFile just sets the input. The URL path still uses an
+// explicit Continue.
 async function openUpload(page: Page) {
   await page.getByRole("button", { name: "Upload video" }).click();
 }
 async function pickFile(page: Page, file: { name: string; mimeType: string; buffer: Buffer }) {
   await page.getByLabel("Video file").setInputFiles(file);
-  await page.getByRole("button", { name: "Continue" }).click();
 }
 async function pickUrl(page: Page, url: string) {
   await page.getByRole("button", { name: "Import from URL" }).click();
@@ -532,7 +531,8 @@ test("a creator can upload and publish a video", async ({ page }) => {
   await page.route(MY_CHANNELS, (route) =>
     route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
   );
-  // GET lists the channel's videos (the "Your videos" section); POST creates a draft.
+  // GET lists the channel's videos; POST auto-creates the private draft on file
+  // select (title only); PATCH applies the metadata at Publish.
   let draftBody: unknown;
   await page.route(CHANNEL_VIDEOS, (route) => {
     if (route.request().method() === "POST") {
@@ -541,12 +541,26 @@ test("a creator can upload and publish a video", async ({ page }) => {
     }
     return route.fulfill({ json: { videos: [] } });
   });
+  let patchBody: unknown;
+  await page.route(VIDEO, (route) => {
+    if (route.request().method() === "PATCH") {
+      patchBody = route.request().postDataJSON();
+      return route.fulfill({ json: video() });
+    }
+    return route.continue();
+  });
   await mockChunkedUpload(page, { video: video() });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await gotoStudioTab(page, "Content");
   await openUpload(page);
+  // Selecting the file auto-starts the upload: a title-only, explicitly private
+  // draft, then the resumable transfer. It finalises to the "Uploaded" file-card
+  // state (the mocked chunk completes at once), all before any Publish.
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
+  await expect(page.getByText("Uploaded", { exact: true })).toBeVisible();
+  // The title prefilled from the filename; the creator overrides it + fills the rest.
+  await expect(page.getByLabel("Video title")).toHaveValue("clip");
   await page.getByLabel("Video title").fill("My clip");
   await page.getByLabel("Video description").fill("A short description.");
   await page.getByLabel("Video category").selectOption("7");
@@ -557,7 +571,10 @@ test("a creator can upload and publish a video", async ({ page }) => {
 
   await expect(page.getByText("Published!")).toBeVisible();
   await expect(page.getByRole("link", { name: /View .*My clip/ })).toBeVisible();
-  expect(draftBody).toMatchObject({
+  // The auto-create carried ONLY the filename title + explicit private.
+  expect(draftBody).toEqual({ title: "clip", privacy: "private" });
+  // The typed metadata travelled on the Publish PATCH.
+  expect(patchBody).toMatchObject({
     title: "My clip",
     description: "A short description.",
     category: "7",
@@ -597,15 +614,12 @@ test("an upload the backend rejects as too large shows a friendly size message",
 
   await gotoStudioTab(page, "Content");
   await openUpload(page);
+  // The auto-started upload opens the session, which the backend refuses (413) —
+  // the friendly size error surfaces on select, with a Retry (no Publish needed).
   await pickFile(page, { name: "huge.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
-  await page.getByLabel("Video title").fill("Huge clip");
-  await page.getByLabel("Video description").fill("A short description.");
-  await page.getByLabel("Video category").selectOption("7");
-  await page.getByLabel("Video language").selectOption("en");
-  await page.getByLabel("Video license").selectOption("1");
-  await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("That file is too large.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry upload" })).toBeVisible();
   await expect(page.getByText("Published!")).toHaveCount(0);
 });
 
@@ -614,13 +628,19 @@ test("publish sends the entered tags, normalized, on the draft", async ({ page }
   await page.route(MY_CHANNELS, (route) =>
     route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
   );
-  let draftBody: unknown;
   await page.route(CHANNEL_VIDEOS, (route) => {
     if (route.request().method() === "POST") {
-      draftBody = route.request().postDataJSON();
       return route.fulfill({ json: video({ state: "draft" }) });
     }
     return route.fulfill({ json: { videos: [] } });
+  });
+  let patchBody: unknown;
+  await page.route(VIDEO, (route) => {
+    if (route.request().method() === "PATCH") {
+      patchBody = route.request().postDataJSON();
+      return route.fulfill({ json: video() });
+    }
+    return route.continue();
   });
   await mockChunkedUpload(page, { video: video() });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
@@ -645,7 +665,7 @@ test("publish sends the entered tags, normalized, on the draft", async ({ page }
 
   await page.getByRole("button", { name: "Publish" }).click();
   await expect(page.getByText("Published!")).toBeVisible();
-  expect(draftBody).toMatchObject({ title: "Tagged clip", tags: ["retro", "gaming"] });
+  expect(patchBody).toMatchObject({ title: "Tagged clip", tags: ["retro", "gaming"] });
 });
 
 test("editing tags sends the replaced set on the PATCH", async ({ page }) => {
@@ -703,20 +723,20 @@ test("a failed upload is reported as a processing failure, not Published!", asyn
 
   await gotoStudioTab(page, "Content");
   await openUpload(page);
+  // The upload auto-completes as state="failed" (probe/scan rejected it) — the
+  // honest error surfaces right after select, never "Published!".
   await pickFile(page, {
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from("not really a video"),
   });
-  await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(
     page.getByText("Processing failed — the file could not be published", { exact: false }),
   ).toBeVisible();
   await expect(page.getByText("Published!")).toHaveCount(0);
-  // The form keeps its values so the creator can fix the file and retry.
-  await expect(page.getByLabel("Video title")).toHaveValue("My clip");
+  // The picked file + its prefilled title are kept for a retry.
+  await expect(page.getByLabel("Video title")).toHaveValue("clip");
 });
 
 // The same false-success guard on the URL-import path.
@@ -797,6 +817,11 @@ test("an upload still processing shows an in-progress message, not Published!", 
     return route.fulfill({ json: { videos: [] } });
   });
   await mockChunkedUpload(page, { video: video({ state: "processing" }) });
+  await page.route(VIDEO, (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({ json: video({ state: "processing" }) })
+      : route.continue(),
+  );
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await gotoStudioTab(page, "Content");
@@ -875,23 +900,23 @@ test("a slow upload shows a determinate progress bar and can be cancelled", asyn
 
   await gotoStudioTab(page, "Content");
   await openUpload(page);
+  // Selecting the file auto-starts the upload — the determinate progress bar +
+  // percent + Cancel are up while the held chunk keeps it in flight.
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
-  await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("button", { name: "Publish" }).click();
 
-  // The determinate progress bar + percent + Cancel are up while in flight.
   const bar = page.getByRole("progressbar", { name: "Upload progress" });
   await expect(bar).toBeVisible();
   await expect(bar).toHaveAttribute("aria-valuenow", /^\d+$/);
-  await expect(page.getByRole("button", { name: "Uploading…" })).toBeDisabled();
+  // Publish stays enabled during the upload (metadata can be queued) — it does not
+  // read "Uploading…" anymore.
+  await expect(page.getByRole("button", { name: "Publish" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Cancel upload" }).click();
 
-  // Back to an editable form: values kept, no progress bar, no success claim.
+  // Back to the pick step with the cancelled note, no progress bar, no success.
   await expect(page.getByText("Upload cancelled", { exact: false })).toBeVisible();
   await expect(bar).toHaveCount(0);
-  await expect(page.getByLabel("Video title")).toHaveValue("My clip");
-  await expect(page.getByRole("button", { name: "Publish" })).toBeEnabled();
+  await expect(page.getByLabel("Video file")).toBeVisible();
   await expect(page.getByText("Published!")).toHaveCount(0);
 
   // The session was cancelled and the orphaned draft best-effort deleted.
@@ -1003,9 +1028,9 @@ test("a 422 field error from the draft renders inline on the title field", async
 
   await gotoStudioTab(page, "Content");
   await openUpload(page);
+  // The auto draft-create is rejected 422 — its field error maps inline onto the
+  // title field right after select (no Publish needed).
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
-  await page.getByLabel("Video title").fill("My clip");
-  await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(page.getByText("must be at most 200 characters")).toBeVisible();
   const title = page.getByLabel("Video title");
@@ -1727,13 +1752,19 @@ test("the upload form prefills from the instance publish defaults and sends the 
   await page.route(MY_CHANNELS, (route) =>
     route.fulfill({ json: { channels: [channel("ada_makes", "Ada Makes")] } }),
   );
-  let draftBody: Record<string, unknown> | undefined;
   await page.route(CHANNEL_VIDEOS, (route) => {
     if (route.request().method() === "POST") {
-      draftBody = route.request().postDataJSON() as Record<string, unknown>;
       return route.fulfill({ json: video({ state: "draft" }) });
     }
     return route.fulfill({ json: { videos: [] } });
+  });
+  let patchBody: Record<string, unknown> | undefined;
+  await page.route(VIDEO, (route) => {
+    if (route.request().method() === "PATCH") {
+      patchBody = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({ json: video() });
+    }
+    return route.continue();
   });
   await mockChunkedUpload(page, { video: video() });
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
@@ -1754,11 +1785,11 @@ test("the upload form prefills from the instance publish defaults and sends the 
     "false",
   );
 
-  // The (untouched) form publishes with the seeded policies on the draft body.
+  // The (untouched) form publishes with the seeded policies — now on the PATCH.
   await page.getByLabel("Video title").fill("Seeded clip");
   await page.getByRole("button", { name: "Publish" }).click();
   await expect(page.getByText("Published!")).toBeVisible();
-  expect(draftBody).toMatchObject({
+  expect(patchBody).toMatchObject({
     title: "Seeded clip",
     privacy: "unlisted",
     license: "7",

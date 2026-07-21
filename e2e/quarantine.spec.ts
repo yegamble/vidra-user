@@ -15,6 +15,7 @@ const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
 const UPLOAD_SESSION = /\/api\/v1\/videos\/v1\/upload-session$/;
 const CHUNK = /\/api\/v1\/uploads\/up1\/chunks\/\d+$/;
 const COMPLETE = /\/api\/v1\/uploads\/up1\/complete$/;
+const VIDEO = /\/api\/v1\/videos\/v1$/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 const NOTIFICATIONS = /\/api\/v1\/me\/notifications(\?|$)/;
 
@@ -235,20 +236,26 @@ test("a quarantined publish outcome is reported as held for review, not failed o
   await page.route(COMPLETE, (route) =>
     route.fulfill({ status: 201, json: { video: video({ state: "quarantined" }) } }),
   );
+  // Publish PATCHes the metadata; the video is already held for review.
+  await page.route(VIDEO, (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({ json: video({ state: "quarantined" }) })
+      : route.continue(),
+  );
   await page.route(VIDEO_CONFIG, (route) =>
     route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),
   );
 
   await page.getByRole("link", { name: "Studio" }).click();
   await page.getByRole("link", { name: "Content", exact: true }).click();
-  // Upload now opens in the stepped sheet: pick the file, Continue, add title, publish.
+  // Selecting the file auto-starts + finalises the upload as "quarantined"; Publish
+  // applies the metadata and surfaces the held-for-review outcome.
   await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from("test"),
   });
-  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Video title").fill("My clip");
   await page.getByRole("button", { name: "Publish" }).click();
 

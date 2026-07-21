@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => {
     getInstance: vi.fn(),
     cancelUploadSession: vi.fn(),
     createVideoDraft: vi.fn(),
+    updateVideo: vi.fn(),
+    deleteVideo: vi.fn(),
     resumableUpload: vi.fn(),
   };
 });
@@ -27,6 +29,8 @@ vi.mock("@/lib/api", () => ({
     getInstance: mocks.getInstance,
     cancelUploadSession: mocks.cancelUploadSession,
     createVideoDraft: mocks.createVideoDraft,
+    updateVideo: mocks.updateVideo,
+    deleteVideo: mocks.deleteVideo,
   },
   channelAvatarUrl: () => "",
   channelBannerUrl: () => "",
@@ -75,6 +79,16 @@ const instanceWithDefaults = {
 
 beforeEach(() => {
   mocks.getInstance.mockResolvedValue(instanceWithDefaults);
+  // Auto-start defaults: selecting a single file now immediately creates a
+  // private draft and runs the resumable upload, so every file-path test needs
+  // these wired even when it only cares about the metadata form.
+  mocks.createVideoDraft.mockResolvedValue({ id: "v1", state: "draft" });
+  mocks.resumableUpload.mockResolvedValue({
+    video: { id: "v1", title: "clip", state: "published" },
+    file: { kind: "original" },
+  });
+  mocks.updateVideo.mockResolvedValue({ id: "v1", title: "clip", state: "published" });
+  mocks.deleteVideo.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -82,28 +96,26 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// The upload form now lives inside the stepped "Upload video" sheet (design's
-// Upload sheet): a launcher button opens a Modal staging pick → details →
-// publish. These helpers drive that flow so the prefill/accept coverage below
-// exercises the same fields it always did, just reached through the sheet.
+// The upload form lives inside the stepped "Upload video" sheet. Selecting a
+// single file now AUTO-ADVANCES to the details stage and AUTO-STARTS the upload
+// (no separate Continue), so these helpers reach the metadata form by selecting.
 function openSheet() {
   fireEvent.click(screen.getByRole("button", { name: "Upload video" }));
 }
 
-function pickFileAndContinue() {
+function pickFile(name = "clip.mp4") {
   fireEvent.change(screen.getByLabelText("Video file"), {
-    target: { files: [new File(["v"], "clip.mp4", { type: "video/mp4" })] },
+    target: { files: [new File(["v"], name, { type: "video/mp4" })] },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 }
 
 describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
   it("prefills untouched fields once /instance resolves", async () => {
     render(<UploadSection channels={[channel]} config={null} />);
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
-    // Reach the details stage: open the sheet, pick a file, Continue.
+    // Reach the details stage: open the sheet and pick a file (auto-advances).
     openSheet();
-    pickFileAndContinue();
+    pickFile();
     // Untouched form: every defaults.publish field applies.
     await waitFor(() => {
       expect(screen.getByLabelText("Privacy")).toHaveProperty("value", "private");
@@ -120,7 +132,9 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
     const resolveInstance = deferredInstance();
     render(<UploadSection channels={[channel]} config={null} />);
     openSheet();
-    pickFileAndContinue();
+    pickFile();
+    // Wait for the details stage (the auto-advance) before touching fields.
+    await waitFor(() => expect(screen.getByLabelText("Privacy")).toBeTruthy());
 
     // The creator picks values while GET /instance is still in flight…
     fireEvent.change(screen.getByLabelText("Privacy"), { target: { value: "unlisted" } });
@@ -162,28 +176,99 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
     expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*");
   });
 
-  it("stages pick → details → publish and reuses the resumable upload logic", async () => {
-    // A full drive through the sheet: open, pick a file, Continue to details,
-    // fill the title, Publish — the same createVideoDraft → resumableUpload path,
-    // now reached through the staged sheet. On success the sheet minimizes and
-    // the section shows the honest published outcome.
+  it("auto-starts the upload on file select (title-only private draft) and Publish PATCHes metadata", async () => {
+    // The new contract: selecting a file immediately creates a PRIVATE draft with
+    // just the title (from the filename) and runs resumableUpload; Publish then
+    // PATCHes the typed metadata and derives the outcome. On success the sheet
+    // minimizes and the section shows the honest published result.
     mocks.resumableUpload.mockResolvedValue({
-      video: { id: "v1", title: "Sheet clip", state: "published" },
+      video: { id: "v1", title: "clip", state: "published" },
       file: { kind: "original" },
     });
     mocks.createVideoDraft.mockResolvedValue({ id: "v1", state: "draft" });
+    mocks.updateVideo.mockResolvedValue({ id: "v1", title: "Sheet clip", state: "published" });
     render(<UploadSection channels={[channel]} config={null} />);
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
 
     openSheet();
-    pickFileAndContinue();
+    pickFile();
+
+    // The upload started on select — title-only draft, explicit private, no other
+    // metadata; resumableUpload ran for it.
+    await waitFor(() =>
+      expect(mocks.createVideoDraft).toHaveBeenCalledWith("ada", {
+        title: "clip",
+        privacy: "private",
+      }),
+    );
+    await waitFor(() => expect(mocks.resumableUpload).toHaveBeenCalled());
+
+    // The creator overrides the prefilled title, then Publishes.
     fireEvent.change(screen.getByLabelText("Video title"), { target: { value: "Sheet clip" } });
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
 
-    await waitFor(() => expect(mocks.resumableUpload).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.updateVideo).toHaveBeenCalled());
+    const [patchedId, patchBody] = mocks.updateVideo.mock.calls[0];
+    expect(patchedId).toBe("v1");
+    expect(patchBody).toMatchObject({ title: "Sheet clip", privacy: "private" });
     // Success surfaces at the section level (the sheet closed on publish).
     await waitFor(() => expect(screen.getByText("Published!")).toBeTruthy());
-    expect(mocks.createVideoDraft).toHaveBeenCalledWith("ada", expect.objectContaining({ title: "Sheet clip" }));
+  });
+
+  it("prefills the title from the filename but never clobbers a typed title", async () => {
+    // resumableUpload rejects on abort so Cancel returns to the pick step.
+    mocks.resumableUpload.mockImplementation(
+      (_id: string, _file: File, opts: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          opts.signal.addEventListener("abort", () =>
+            reject(new mocks.FakeApiError({ status: 0, code: "upload_cancelled", message: "x" })),
+          );
+        }),
+    );
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFile("first-clip.mp4");
+    // The title prefilled from the filename.
+    const title = () => screen.getByLabelText("Video title") as HTMLInputElement;
+    await waitFor(() => expect(title().value).toBe("first-clip"));
+
+    // The creator types their own title (marks it touched)…
+    fireEvent.change(title(), { target: { value: "My Own Title" } });
+    // …and cancels the in-flight upload, returning to the pick step with the
+    // metadata (title) kept.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
+    await waitFor(() => expect(screen.getByLabelText("Video file")).toBeTruthy());
+
+    // Selecting a DIFFERENT file must NOT overwrite the typed title.
+    pickFile("second-clip.mp4");
+    await waitFor(() => expect(screen.getByLabelText("Video title")).toBeTruthy());
+    expect(title().value).toBe("My Own Title");
+    // The re-created draft still carries the typed title, not the new filename.
+    const lastDraft = mocks.createVideoDraft.mock.calls.at(-1);
+    expect(lastDraft?.[1]).toMatchObject({ title: "My Own Title", privacy: "private" });
+  });
+
+  it("cancelling an in-flight upload deletes the auto-created draft", async () => {
+    mocks.createVideoDraft.mockResolvedValue({ id: "draft-9", state: "draft" });
+    mocks.resumableUpload.mockImplementation(
+      (_id: string, _file: File, opts: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          opts.signal.addEventListener("abort", () =>
+            reject(new mocks.FakeApiError({ status: 0, code: "upload_cancelled", message: "x" })),
+          );
+        }),
+    );
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFile();
+    await waitFor(() => expect(mocks.createVideoDraft).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
+    await waitFor(() => expect(mocks.deleteVideo).toHaveBeenCalledWith("draft-9"));
   });
 });
 

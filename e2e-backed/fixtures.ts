@@ -71,20 +71,88 @@ export async function liveIngest(
 }
 
 /**
- * publishViaStudioUI clicks the studio Publish button and waits for the file
- * upload to finalise. The studio drives a RESUMABLE (chunked) upload — create
- * session (POST /videos/:id/upload-session) → PUT chunks → complete
- * (POST /uploads/:id/complete) — so tests wait on the terminal `complete` call,
- * not the legacy single-shot POST /videos/:id/file. Works for both immediate and
- * scheduled publishes (the file is uploaded either way; the outcome differs).
+ * createChannelViaStudioUI creates the signed-in user's first channel through
+ * the redesigned tabbed studio: Studio (dashboard) → Channel tab → the
+ * "Create your first channel" form → then over to the Content tab, where the
+ * upload sheet ("Upload video") and the "Your videos" list live. The old
+ * single-page choreography (fill "Channel handle" right on the studio landing)
+ * predates the tabbed IA and no longer matches the UI.
  */
-export async function publishViaStudioUI(page: Page): Promise<void> {
+export async function createChannelViaStudioUI(
+  page: Page,
+  handle: string,
+  displayName: string,
+): Promise<void> {
+  await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
+  await page.getByLabel("Channel handle").fill(handle);
+  await page.getByLabel("Channel display name").fill(displayName);
+  const created = page.waitForResponse(
+    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Create channel" }).click();
+  await created;
+  // Uploads + the video list live on the Content tab.
+  await page.getByRole("link", { name: "Content", exact: true }).click();
+}
+
+/**
+ * startStudioUpload opens the "Upload video" sheet, selects the file (which now
+ * AUTO-STARTS the resumable upload — create session → PUT chunks → complete — the
+ * instant a single file is chosen), and fills the title on the details stage. The
+ * bytes are already uploading (or done) by the time it returns; Publish then only
+ * applies the metadata. Waits for the terminal `complete` call so the finished
+ * video exists before the caller Publishes.
+ */
+export async function startStudioUpload(
+  page: Page,
+  opts: {
+    title: string;
+    name?: string;
+    buffer: Buffer;
+    mimeType?: string;
+    /**
+     * Explicit Privacy selection on the details step. The form PREFILLS from the
+     * instance defaults.publish block (the compose default is "private"), so a
+     * spec that later asserts PUBLIC visibility must select "public" here — the
+     * untouched form would publish a private video.
+     */
+    privacy?: "public" | "unlisted" | "private";
+  },
+): Promise<void> {
   const uploaded = page.waitForResponse(
     (r) =>
       /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.getByRole("button", { name: "Publish" }).click();
+  await page.getByRole("button", { name: "Upload video" }).click();
+  await page.getByLabel("Video file").setInputFiles({
+    name: opts.name ?? "clip.mp4",
+    mimeType: opts.mimeType ?? "video/mp4",
+    buffer: opts.buffer,
+  });
   await uploaded;
+  // The title prefilled from the filename on the (now-visible) details stage —
+  // overwrite it with the caller's title.
+  await page.getByLabel("Video title").fill(opts.title);
+  if (opts.privacy) {
+    await page.getByLabel("Privacy", { exact: true }).selectOption(opts.privacy);
+  }
+}
+
+/**
+ * publishViaStudioUI clicks the studio Publish button and waits for the metadata
+ * PATCH that applies it. In the auto-start flow the file upload already finished
+ * (startStudioUpload waited on `complete`), so Publish just PATCHes the form and
+ * derives the outcome. Works for both immediate and scheduled publishes (the
+ * outcome differs; the PATCH is the shared signal).
+ */
+export async function publishViaStudioUI(page: Page): Promise<void> {
+  const patched = page.waitForResponse(
+    (r) =>
+      /\/api\/v1\/videos\/[^/]+$/.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Publish" }).click();
+  await patched;
 }
 
 /** loginToken logs in with the given credentials and returns the access token. */

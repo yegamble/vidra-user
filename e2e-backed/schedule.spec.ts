@@ -4,6 +4,7 @@ import {
   API_URL,
   TINY_MP4_BASE64,
   channelVideos,
+  createChannelViaStudioUI,
   loginToken,
   ownerVideoDetail,
   publishViaStudioUI,
@@ -37,24 +38,37 @@ test("a scheduled publish persists publish_at and parks the video as scheduled",
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
-  // Publish a real (tiny) video with a future schedule.
-  await page.getByLabel("Video title").fill(videoTitle);
-  await page.getByLabel("Schedule publish").fill(scheduleLocal);
+  // Publish a real (tiny) video with a future schedule. Selecting the file
+  // AUTO-STARTS the upload, and completion server-side publishes the (private)
+  // draft — after which publish_at is rejected (422). So HOLD the browser's
+  // final `complete` POST until the schedule PATCH has landed on the still-draft
+  // video, then release it to the real backend: the processed video then parks
+  // as "scheduled". This is the deterministic equivalent of scheduling while a
+  // real (slow) upload is still in flight.
+  let releaseComplete!: () => void;
+  const completeGate = new Promise<void>((r) => {
+    releaseComplete = r;
+  });
+  await page.route(/\/api\/v1\/uploads\/[^/]+\/complete$/, async (route) => {
+    await completeGate;
+    await route.continue();
+  });
+  const completed = page.waitForResponse(
+    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
+  await page.getByLabel("Video title").fill(videoTitle);
+  await page.getByLabel("Schedule publish").fill(scheduleLocal);
   await publishViaStudioUI(page);
+  releaseComplete();
+  await completed;
 
   // The honest outcome: scheduled, never "Published!".
   await expect(
@@ -106,23 +120,33 @@ test("moving a schedule from the edit surface persists the new publish_at", asyn
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
-  await page.getByLabel("Video title").fill(videoTitle);
-  await page.getByLabel("Schedule publish").fill("2030-01-02T12:30");
+  // Same gated-complete choreography as above: the schedule PATCH must land
+  // while the auto-started upload's finalization is held (a completed upload
+  // publishes the draft, after which publish_at is rejected).
+  let releaseComplete!: () => void;
+  const completeGate = new Promise<void>((r) => {
+    releaseComplete = r;
+  });
+  await page.route(/\/api\/v1\/uploads\/[^/]+\/complete$/, async (route) => {
+    await completeGate;
+    await route.continue();
+  });
+  const completed = page.waitForResponse(
+    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
+  await page.getByLabel("Video title").fill(videoTitle);
+  await page.getByLabel("Schedule publish").fill("2030-01-02T12:30");
   await publishViaStudioUI(page);
+  releaseComplete();
+  await completed;
   await expect(
     page.getByText("is scheduled — it will publish automatically", { exact: false }),
   ).toBeVisible();
