@@ -1552,6 +1552,18 @@ export const api = {
       body: { position_seconds: positionSeconds },
     }),
 
+  /**
+   * POST /api/v1/videos/{id}/view — count a view for a video (optional auth;
+   * always 204). The server owns the policy: it dedups per viewer and no-ops for
+   * a non-published video, so there is no client-side threshold. Fired once per
+   * watched video from the player's first play signal (see WatchView); it is
+   * best-effort telemetry, so callers swallow failures.
+   */
+  recordVideoView: (id: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/view`, {
+      method: "POST",
+    }),
+
   /** DELETE /api/v1/me/history/{id} — remove one video from history (auth, idempotent). */
   deleteHistoryEntry: (id: string) =>
     apiRequest<void>(`/api/v1/me/history/${encodeURIComponent(id)}`, { method: "DELETE" }),
