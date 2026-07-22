@@ -286,6 +286,18 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/v1/watch-progress");
   });
 
+  it("recordVideoView POSTs to the video view endpoint", async () => {
+    await api.recordVideoView("v1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/view");
+    expect(init.method).toBe("POST");
+  });
+
+  it("recordVideoView encodes the video id in the path", async () => {
+    await api.recordVideoView("a/b");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/a%2Fb/view");
+  });
+
   it("deleteHistoryEntry DELETEs a single history entry", async () => {
     await api.deleteHistoryEntry("v1");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
