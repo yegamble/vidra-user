@@ -1,146 +1,145 @@
 # Vidra User
 
 The TypeScript **Next.js** frontend for **Vidra** — a clean-room, PeerTube-inspired
-federated video platform. This project (`vidra-user`) consumes the HTTP API served by
-the sibling **`vidra-core`** Go backend.
+federated video platform. This project (`vidra-user`) is the full user-facing app: watch
+and browse, search, the creator studio, admin, playlists, direct messages, live, settings,
+and moderation.
 
-> Status: scaffolded (P1 foundation). Next 16 (app router) · React 19 · strict
-> TypeScript · Tailwind v4 · ESLint 9 (`no-console`) · Vitest · Playwright. The
-> canonical gate `npm run ci` (typecheck + lint + unit + build + e2e smoke) is green.
-> Remaining work is tracked in `.ralph/fix_plan.md` and the parity ledgers under
-> `.ralph/specs/`.
+It consumes the HTTP API served by the sibling **`vidra-core`** Go backend at runtime; the
+frontend ships no database of its own. The two repos are tied together by the **`vidra`**
+meta-repo, which describes how to run the whole platform.
+
+- Backend: https://github.com/yegamble/vidra-core
+- Meta-repo: https://github.com/yegamble/vidra
+
+Stack: Next.js 16 (app router) · React 19 · strict TypeScript · Tailwind v4 · ESLint 10
+(`no-console`) · Vitest · Playwright.
+
+## Prerequisites
+
+| Need | Why |
+|------|-----|
+| Node.js 24 + npm | Runtime and package manager (CI runs Node 24) |
+| `npx playwright install chromium` | Required before running any Playwright suite |
+| Docker (optional) | For the production image or a local backend stack |
+| A running `vidra-core` stack | Only for the backend-backed e2e suite |
 
 ## Quick start
+
 ```bash
-cp .env.example .env.local   # set NEXT_PUBLIC_API_BASE_URL to a vidra-core instance
+cp .env.example .env.local   # set NEXT_PUBLIC_API_BASE_URL (default http://localhost:8080)
 npm install
 npm run dev                  # http://localhost:3000
 ```
 
-## Commands
-```bash
-npm run ci         # canonical gate: typecheck + lint + unit + build + e2e smoke
-npm run typecheck  # tsc --noEmit (strict)
-npm run lint       # eslint (no-console enforced; logger module is the only exception)
-npm run test       # vitest unit/component tests
-npm run build      # next build
-npm run analyze    # write Turbopack bundle report to .next/diagnostics/analyze
-npm run e2e        # playwright (needs: npx playwright install chromium)
-```
-The single structured logger is `lib/logger.ts` (raw `console.*` is banned elsewhere).
+## Scripts
 
-The bundle report is opt-in and stays out of normal builds and CI. Open
-`.next/diagnostics/analyze/index.html` after `npm run analyze` to inspect client/server
-modules by route and trace why a dependency is included.
+| Script | What |
+|--------|------|
+| `npm run dev` | Next dev server on http://localhost:3000 |
+| `npm run build` | `next build` (a `prebuild` hook auto-copies the olm wasm for E2EE) |
+| `npm run start` | Serve the built standalone output |
+| `npm run typecheck` | `tsc --noEmit` (strict) |
+| `npm run lint` | ESLint (`no-console`; `lib/logger.ts` is the only exception) |
+| `npm run lint:icons` | Bans emoji/glyph icons (`scripts/check-no-emoji.mjs`) |
+| `npm run test` | Vitest unit/component tests |
+| `npm run e2e` | Mocked Playwright suite — no backend needed |
+| `npm run e2e:backed` | Backend-backed Playwright suite — requires a live `vidra-core` |
+| `npm run codegen` | Regenerate `lib/api/generated.ts` from vidra-core's OpenAPI spec |
+| `npm run analyze` | Opt-in bundle report to `.next/diagnostics/analyze` |
+| `npm run ci` | The canonical gate (see below) |
 
-React Compiler remains deliberately disabled. On Next 16.2.9, the Tier 3 comparison
-raised the same production build from 18.19s to 47.18s and increased sampled routes'
-uncompressed first-load JavaScript by 34–68 KB. Re-run the comparison after meaningful
-compiler or framework upgrades rather than enabling it as an unmeasured default.
-Likewise, loading fallbacks remain route-specific: a root `app/loading.tsx` was tested
-and rejected because it painted a misleading catch-all skeleton while navigating from
-the video feed to unrelated destinations such as Login.
-
-## API client
-`lib/api/` is the typed client over the `vidra-core` contract: `apiRequest<T>` (a fetch
-wrapper that sends `X-Correlation-ID`, maps the `{error:{code,message,…}}` envelope to a
-typed `ApiError`, and parses JSON) plus `api.*` functions for the public read endpoints
-(instance, feed, video detail, search, channel, channel videos) and
-`videoOriginalUrl`/`videoThumbnailUrl` helpers. Types in `lib/api/types.ts` are
-hand-maintained against the backend OpenAPI and marked provisional. Configure the target
-with `NEXT_PUBLIC_API_BASE_URL` (`lib/config.ts`).
-
-## UI
-`components/Header.tsx` is the app-shell header; `components/VideoFeed.tsx` hydrates the
-server-streamed first home page and owns client pagination, retry, and fallback states using
-`components/VideoCard.tsx` and the `components/ui/*` primitives. The home route
-(`app/page.tsx`) is the discovery grid. Playwright keeps server reads backend-less while
-route-mocking browser API calls; the backend-backed profile points both paths at the real
-stack. The watch page
-(`app/videos/[id]` → `components/WatchView.tsx`) plays a video's original via a native
-Range-capable `<video>` and shows its metadata, with loading / not-found / error states.
-
-Auth is wired client-side: `components/auth/AuthProvider.tsx` (`useSession`) holds the
-session, the access token lives in-memory (`lib/api/auth-store.ts`, auto-attached by the API
-client, never persisted to `localStorage`), and the refresh token lives only in the
-backend-set httpOnly `vidra_refresh` cookie. Login/signup/MFA completion use cookie mode via
-`lib/api/auth.ts`; on boot the provider silently restores from the cookie, and while signed
-in it schedules a cookie-mode `/api/v1/auth/refresh` before the access token expires so idle
-browsing does not leave the UI holding a stale bearer token. The API client still performs a
-single silent refresh + retry after an authenticated request returns 401. The header
-`AccountMenu` shows Sign in / username + Sign out. These flows are covered by API/client unit
-tests, an `AuthProvider` timer test, and mocked Playwright session specs; proving real cookie
-persistence still requires the backend-backed e2e profile.
-
-Search: the header `SearchBox` navigates to `/search?q=` (`app/search` →
-`components/SearchResults.tsx`), a client title search reusing the video card and
-loading / empty / error / results states.
-
-The public channel page (`app/channels/[handle]` → `components/ChannelView.tsx`) loads a
-channel and its videos client-side and renders the channel header (display name, handle,
-follower count, description) over a video-card grid, with loading / not-found / error /
-empty states.
-
-## Monorepo layout
-This is one project inside the Vidra monorepo (a single git repository):
+**`npm run ci` is the canonical gate** and runs:
 
 ```
-vidra/
-├── vidra-core/   # Go backend / HTTP API
-└── vidra-user/   # this project — Next.js frontend
+typecheck && lint && lint:icons && test && build && e2e
 ```
 
-## Tech direction
-Next.js · TypeScript (strict) · Tailwind CSS · custom components (no UI framework) ·
-minified inline SVG icons · heavy Playwright coverage.
+## Environment variables
+
+App vars are read once, typed, in `lib/config.ts` (`LOG_LEVEL` in `lib/logger.ts`;
+the `E2E_*` vars in `playwright.config.ts`). Never commit a real `.env` or any secret.
+
+| Var | Scope | Meaning |
+|-----|-------|---------|
+| `NEXT_PUBLIC_API_BASE_URL` | build + browser | Backend URL the browser calls. **Baked at build time** — one image/build per backend. Default `http://localhost:8080` |
+| `INTERNAL_API_BASE_URL` | server only | Override for server-side fetches (compose/service DNS); falls back to the public URL |
+| `LOG_LEVEL` | server | `debug \| info \| warn \| error` (default `info`) |
+| `OTEL_ENABLED` | server | `true` registers the OTel SDK and injects W3C `traceparent` on server-side calls |
+| `OTEL_SERVICE_NAME` | server | OTel service identity (default `vidra-user`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | server | OTLP exporter target |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | server | OTLP protocol (e.g. `http/protobuf`) |
+| `E2E_PORT` | test | Playwright app port, default `3000`. **Set it when 3000 is taken** — `reuseExistingServer` is deliberately false, so an occupied port fails loudly |
+| `E2E_API_URL` | test | Points the backed suite's server reads at a real `vidra-core` |
+
+## Testing
+
+Three layers:
+
+- **Unit / component** — `npm run test` runs Vitest against the `*.test.ts(x)` files
+  colocated in `lib/`, `components/`, and `app/`.
+- **Mocked e2e** — `npm run e2e` runs the Playwright `chromium` project over `e2e/`
+  (~90 specs). Every network call is intercepted; **no backend is required**. This is the
+  suite `npm run ci` runs.
+- **Backend-backed e2e** — `npm run e2e:backed` runs the `backend-backed` project over
+  `e2e-backed/` (~68 specs). It needs a live `vidra-core` stack and an app built against
+  it, and seeds a deterministic admin via a `backed-setup` project (`admin.setup.ts`). See
+  `.ralph/AGENT.md` for the full recipe.
+
+Accessibility is asserted with `@axe-core/playwright` in the mocked suite (`e2e/a11y.spec.ts`
+and `e2e/search-discovery.spec.ts`).
+
+## The API contract
+
+`vidra-core/api/openapi.yaml` is the single source of truth. `npm run codegen` regenerates
+`lib/api/generated.ts` from it (resolution: `$OPENAPI_PATH`, else the sibling `../vidra-core`
+checkout). `lib/api/types.ts` is **derived from `generated.ts` — never hand-edit shapes there**;
+change the spec in vidra-core, re-run `npm run codegen`, and commit the refreshed `generated.ts`.
+
+`contract-ci` guards twice: `scripts/check-contract.mjs` asserts every `/api/` path the
+frontend calls exists in the spec, and a freshness step fails if `generated.ts` is stale
+against the spec.
+
+The typed client lives in `lib/api/` (`endpoints.ts`, `client.ts`, plus SSE and
+resumable-upload helpers).
+
+## Project structure
+
+```
+app/            # 20+ route groups: videos (watch), search, studio, admin, playlists,
+                #   messages, live, settings, moderation, channels, library, trending…
+components/     # UI: app-shell, video cards/feed, player, auth, ui/* primitives
+lib/            # api/  — typed client + OpenAPI contract (generated.ts, types.ts)
+                # config.ts — typed env
+                # logger.ts — the ONLY place raw console.* is allowed
+e2e/            # mocked Playwright specs (network intercepted, no backend)
+e2e-backed/     # backend-backed Playwright specs (real vidra-core + Postgres)
+scripts/        # codegen, contract check, icon lint, olm-wasm copy
+.ralph/         # agent instructions + specs (design-system, frontend-architecture, testing)
+```
 
 ## Docker
-A multi-stage `Dockerfile` builds a minimal production image from Next's standalone
-output (`next.config.ts` sets `output: "standalone"`; the runtime stage runs
-`node server.js` as a non-root user on port 3000).
 
-**Build args — `NEXT_PUBLIC_API_BASE_URL` is baked at BUILD time.** `NEXT_PUBLIC_*`
-values are inlined into the client JavaScript bundle when `next build` runs, so the
-backend URL the browser calls cannot be changed at `docker run` time. Build one image
-per target backend:
+Multi-stage build on Next's standalone output. `NEXT_PUBLIC_API_BASE_URL` is baked at build
+time, so build one image per target backend:
 
 ```bash
-# Build (bake the backend the browser should call; default http://localhost:8080)
 docker build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com -t vidra-user .
-
-# Run
 docker run --rm -p 3000:3000 vidra-user
 ```
 
-Compose service snippet (e.g. alongside the `vidra-core` stack, which serves the API
-on host port 8080 — note the browser, not the container, calls the API, so the baked
-URL must be reachable from the user's machine):
+The runtime image runs `node server.js` as a non-root user on port 3000. Releases publish a
+GHCR image via `publish-container`, baking the URL from the `NEXT_PUBLIC_API_BASE_URL` repo
+variable.
 
-```yaml
-services:
-  frontend:
-    build:
-      context: ./vidra-user
-      args:
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
-    ports:
-      - "3000:3000"
-    restart: unless-stopped
-```
+## CI
 
-Running without Docker is unchanged: `npm run dev` against `.env.local`, or
-`npm run build && npm run start` (standalone output does not break `next start`).
-
-## Backend
-Set `NEXT_PUBLIC_API_BASE_URL` to a running `vidra-core` instance. For features that
-change data, verification must run against a real backend + PostgreSQL (see
-`.ralph/AGENT.md`), not mocks.
-
-## Running Ralph for this project
-```bash
-cd vidra-user
-ralph --live   # uses vidra-user/.ralphrc and vidra-user/.ralph/
-```
+- **frontend-ci** — runs `npm run ci`.
+- **contract-ci** — path check + `generated.ts` codegen-freshness against vidra-core's spec.
+- **frontend-e2e-backed** — spins up a `vidra-core` stack and runs the backed suite.
+- **ci-guard** — repository CI guardrail.
+- **publish-container** — builds and pushes the GHCR image on release.
 
 ## License
+
 TBD.
