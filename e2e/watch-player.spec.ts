@@ -476,3 +476,113 @@ test("the related rail lists same-channel videos first, then same-category", asy
   await expect(rail.getByRole("heading", { name: "Watch Me" })).toHaveCount(0);
   await expect(rail.getByRole("heading", { name: "Unrelated Clip" })).toHaveCount(0);
 });
+
+// View counting (CORE): the player reports a view exactly once per watched
+// video from its first play signal. The backend owns dedup + the non-published
+// no-op, so the client just fires once per loaded id (fire-and-forget, no
+// threshold). These specs mute before playing so the play event fires without a
+// user gesture, and count the POSTs to /videos/{id}/view.
+test("records a view once on first play and not again on pause, seek, or replay", async ({
+  page,
+}) => {
+  let viewPosts = 0;
+  await page.route(/\/api\/v1\/videos\/v1\/view$/, (route) => {
+    if (route.request().method() === "POST") viewPosts += 1;
+    return route.fulfill({ status: 204, body: "" });
+  });
+  await mockWatchPage(page, { realVideo: true });
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
+
+  const media = page.locator("video");
+  // Track play events so the "no re-fire" assertion can wait for the replay's
+  // play event to actually land before checking the count did not move.
+  await media.evaluate((el: HTMLVideoElement) => {
+    (window as unknown as { __plays: number }).__plays = 0;
+    el.addEventListener("play", () => {
+      (window as unknown as { __plays: number }).__plays += 1;
+    });
+  });
+  const plays = () => page.evaluate(() => (window as unknown as { __plays: number }).__plays);
+
+  // First play → exactly one view recorded.
+  await media.evaluate((el: HTMLVideoElement) => {
+    el.muted = true;
+    return el.play().catch(() => {});
+  });
+  await expect.poll(plays).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => viewPosts).toBe(1);
+
+  // Pause, seek to the start, and replay the SAME video. The replay's play event
+  // is a genuine second play signal — the per-id guard must not re-fire the view.
+  await media.evaluate((el: HTMLVideoElement) => el.pause());
+  await media.evaluate((el: HTMLVideoElement) => {
+    el.currentTime = 0;
+  });
+  await media.evaluate((el: HTMLVideoElement) => el.play().catch(() => {}));
+  // Once a second play event has landed we know the guard was exercised.
+  await expect.poll(plays).toBeGreaterThanOrEqual(2);
+  expect(viewPosts).toBe(1);
+});
+
+// Mock every watch route a single video needs, plus a recommendations rail that
+// links to `related` (so the rail renders without the heuristic fallback firing
+// extra requests). Real mp4 bytes on /original so playback truly starts.
+async function mockVideoWatchRoutes(
+  page: Page,
+  id: string,
+  title: string,
+  related: ReturnType<typeof video>,
+) {
+  await page.route(new RegExp(`/api/v1/videos/${id}$`), (route) =>
+    route.fulfill({ json: video(id, title) }),
+  );
+  await page.route(new RegExp(`/api/v1/videos/${id}/original`), (route) =>
+    route.fulfill({ contentType: "video/mp4", body: Buffer.from(TINY_MP4_BASE64, "base64") }),
+  );
+  await page.route(new RegExp(`/api/v1/videos/${id}/captions$`), (route) =>
+    route.fulfill({ json: { captions: [] } }),
+  );
+  await page.route(new RegExp(`/api/v1/videos/${id}/comments`), (route) =>
+    route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }),
+  );
+  await page.route(new RegExp(`/api/v1/videos/${id}/rating`), (route) =>
+    route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
+  );
+  await page.route(new RegExp(`/api/v1/videos/${id}/recommendations`), (route) =>
+    route.fulfill({ json: { items: [related] } }),
+  );
+}
+
+test("re-arms and records a fresh view after navigating to another video", async ({ page }) => {
+  const viewPosts: string[] = [];
+  await page.route(/\/api\/v1\/videos\/(v1|v2)\/view$/, (route) => {
+    if (route.request().method() === "POST") viewPosts.push(route.request().url());
+    return route.fulfill({ status: 204, body: "" });
+  });
+  // v1 recommends v2 and v2 recommends v1 — both rails render from the
+  // recommendations endpoint alone (no heuristic fallback requests).
+  await mockVideoWatchRoutes(page, "v1", "Watch Me", video("v2", "Second Video"));
+  await mockVideoWatchRoutes(page, "v2", "Second Video", video("v1", "Watch Me"));
+  const countFor = (id: string) => viewPosts.filter((u) => u.endsWith(`/${id}/view`)).length;
+
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Watch Me", level: 1 })).toBeVisible();
+  await page.locator("video").evaluate((el: HTMLVideoElement) => {
+    el.muted = true;
+    return el.play().catch(() => {});
+  });
+  await expect.poll(() => countFor("v1")).toBe(1);
+
+  // Client-side navigation to the related video keeps WatchView/Player mounted,
+  // so a fresh view on v2 proves the per-id guard re-armed on the id change.
+  await page.getByRole("link", { name: "Second Video" }).first().click();
+  await expect(page.getByRole("heading", { name: "Second Video", level: 1 })).toBeVisible();
+  await page.locator("video").evaluate((el: HTMLVideoElement) => {
+    el.muted = true;
+    return el.play().catch(() => {});
+  });
+  await expect.poll(() => countFor("v2")).toBe(1);
+  // The first video was still only counted once.
+  expect(countFor("v1")).toBe(1);
+});

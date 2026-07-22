@@ -55,6 +55,7 @@ import { feedDefaultsForLanding, resolveLandingPage } from "@/lib/feed-defaults"
 import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
+import { logger } from "@/lib/logger";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { trackSearchEvent } from "@/lib/search-events";
 import { parseStartTime } from "@/lib/start-time";
@@ -631,6 +632,26 @@ function Player({
     record();
   }, [record]);
 
+  // Count a view exactly once per loaded video, on the player's first play
+  // signal. The play event fires for HLS and original-file playback alike (both
+  // surface through the shell's onPlay), so hooking it here covers every source.
+  // The backend (optional auth) owns dedup and no-ops for a non-published video,
+  // so this fires for signed-out viewers too and needs no client-side threshold.
+  // Keyed by video id so navigating to another video re-arms it, while a
+  // pause/replay/seek of the same video never re-fires.
+  const viewCountedForRef = useRef<string | null>(null);
+  const handlePlay = useCallback(() => {
+    if (viewCountedForRef.current !== video.id) {
+      viewCountedForRef.current = video.id;
+      // Fire-and-forget: a failed view count is best-effort telemetry the viewer
+      // must never see; log it quietly for diagnostics only.
+      void api.recordVideoView(video.id).catch((err: unknown) => {
+        logger.debug("failed to record video view", { video_id: video.id, error: String(err) });
+      });
+    }
+    recordThrottled();
+  }, [video.id, recordThrottled]);
+
   // Load the saved resume position once (signed in only, and not when the URL
   // carries an explicit ?t= start).
   useEffect(() => {
@@ -715,7 +736,7 @@ function Player({
           hlsMasterOverride={hlsMasterOverride}
           playbackToken={playbackToken}
           overlay={overlay}
-          onPlay={recordThrottled}
+          onPlay={handlePlay}
           onTimeUpdate={recordThrottled}
           onPause={record}
         />
