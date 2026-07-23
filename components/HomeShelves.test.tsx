@@ -159,6 +159,18 @@ describe("HomeShelves", () => {
     expect(mocks.progressFractions).toContain(0.4);
   });
 
+  it("asks the server for only the in-progress history subset (Wave C5)", async () => {
+    render(<HomeShelves />);
+
+    await waitFor(() => expect(mocks.getWatchHistory).toHaveBeenCalled());
+    // The Continue-watching fetch narrows to the server-side filter; the client
+    // `resumable` filter stays as belt-and-braces on top of it.
+    expect(mocks.getWatchHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 20, progress: "in_progress" }),
+      expect.anything(),
+    );
+  });
+
   it("reserves skeleton shelves while restoring for a returning signed-in viewer", async () => {
     // Last visit remembered two shelves; the pre-paint hint reserves that space.
     localStorage.setItem("vidra:home-shelves-count", "2");
