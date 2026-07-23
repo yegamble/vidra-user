@@ -265,7 +265,7 @@ export function ArrowUpIcon(props: IconProps) {
 export function CaptionsIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M4 5h16v12H8l-4 4z" />
+      <path d="M4 4h16v12H8l-4 4z" />
     </Icon>
   );
 }
@@ -382,7 +382,7 @@ export function MoreVerticalIcon(props: IconProps) {
 export function PlayIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M7 4.5v15l13-7.5z" fill="currentColor" stroke="none" />
+      <path d="M8 4.5v15l13-7.5z" fill="currentColor" stroke="none" />
     </Icon>
   );
 }

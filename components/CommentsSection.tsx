@@ -654,11 +654,12 @@ function CommentItem({
                 // row stays uncluttered (Reply inline). The account controls
                 // (remote: Mute instance + Report) each keep their prior label.
                 <Dropdown
-                  trigger={<MoreVerticalIcon size={18} />}
+                  trigger={<MoreVerticalIcon size={20} />}
                   triggerLabel="Comment actions"
                   items={actionItems}
                   align="end"
-                  triggerClassName="h-8 w-8 justify-center rounded-full border-0 bg-transparent p-0 text-fg-muted hover:bg-surface-muted hover:text-fg"
+                  triggerVariant="icon"
+                  triggerClassName="h-9 w-9 text-fg-muted hover:text-fg"
                 />
               ) : null}
             </span>
