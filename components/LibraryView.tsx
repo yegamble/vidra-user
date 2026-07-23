@@ -236,7 +236,7 @@ function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: ()
         }
       />
       <Link href={href} className="focus-ring mt-2 block rounded-sm">
-        <p className="line-clamp-2 pr-8 text-[13px] font-semibold leading-snug text-fg transition-colors group-hover/card:text-fg-muted">
+        <p className="line-clamp-2 pr-9 text-[13px] font-semibold leading-snug text-fg transition-colors group-hover/card:text-fg-muted">
           {item.title}
         </p>
       </Link>
