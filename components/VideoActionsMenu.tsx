@@ -176,11 +176,11 @@ export function VideoActionsMenu({
         triggerLabel={`Actions for ${video.title}`}
         items={items}
         align="end"
-        triggerClassName={
-          compact
-            ? "h-9 w-9 justify-center border-0 bg-transparent p-0 text-fg hover:bg-surface-muted"
-            : "h-10 w-10 justify-center border-0 bg-transparent p-0 text-fg hover:bg-surface-muted"
-        }
+        triggerVariant="icon"
+        // ≥44px touch target on the standard card (design-system.md:44), a
+        // deliberate 40px dense-list exception when compact (matches YouTube).
+        // Sizing lives here alone; the icon variant sets no padding to fight it.
+        triggerClassName={compact ? "h-10 w-10" : "h-11 w-11"}
       />
 
       {dialog === "playlist" ? (

@@ -145,9 +145,11 @@ export function EmbedPrivacyManager({ videoId }: { videoId: string }) {
                       type="button"
                       aria-label={`Remove ${host}`}
                       onClick={() => removeDomain(host)}
-                      className="flex h-4 w-4 items-center justify-center rounded-full text-fg-muted hover:text-fg focus-ring"
+                      // 24×24 hit area (WCAG 2.5.8); -m-1 keeps the chip's
+                      // original 16px footprint (no layout shift).
+                      className="-m-1 flex h-6 w-6 items-center justify-center rounded-full text-fg-muted hover:text-fg focus-ring"
                     >
-                      <CloseIcon size={12} />
+                      <CloseIcon size={14} />
                     </button>
                   </span>
                 </li>

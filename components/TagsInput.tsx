@@ -60,9 +60,11 @@ export function TagsInput({
               type="button"
               aria-label={`Remove tag ${tag}`}
               onClick={() => remove(tag)}
-              className="flex h-4 w-4 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg focus-ring"
+              // 24×24 hit area (WCAG 2.5.8); the -m-1 cancels the extra 8px so
+              // the chip keeps its old 16px footprint (no layout shift).
+              className="-m-1 flex h-6 w-6 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg focus-ring"
             >
-              <CloseIcon size={12} strokeWidth={2} />
+              <CloseIcon size={14} strokeWidth={2} />
             </button>
           </span>
         ))}
