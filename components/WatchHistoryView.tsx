@@ -13,6 +13,7 @@ import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { HistoryItem } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
+import { resumeFraction } from "@/lib/resume-progress";
 
 type Status = "loading" | "error" | "ready";
 
@@ -134,11 +135,7 @@ function History() {
             <VideoCard
               video={item}
               progressFraction={
-                typeof item.duration_seconds === "number" &&
-                item.duration_seconds > 0 &&
-                item.position_seconds > 0
-                  ? item.position_seconds / item.duration_seconds
-                  : undefined
+                resumeFraction(item.position_seconds, item.duration_seconds) ?? undefined
               }
               onDeleted={() => setItems((list) => list.filter((it) => it.id !== item.id))}
             />
