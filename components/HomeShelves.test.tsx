@@ -135,6 +135,27 @@ describe("HomeShelves", () => {
     expect(screen.queryByText("No Position")).toBeNull();
   });
 
+  it("drops finished (>= 95% watched) videos from Continue watching", async () => {
+    mocks.getWatchHistory.mockResolvedValue({
+      videos: [
+        historyItem("h1", "Still Watching", 40, 100), // 40% → resumable
+        historyItem("h2", "Basically Done", 96, 100), // 96% → finished, hidden
+        historyItem("h3", "Watched To End", 100, 100), // 100% → finished, hidden
+      ],
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<HomeShelves />);
+
+    await screen.findByText("Continue watching");
+    expect(screen.getByText("Still Watching")).toBeTruthy();
+    expect(screen.queryByText("Basically Done")).toBeNull();
+    expect(screen.queryByText("Watched To End")).toBeNull();
+    // The one surviving tile carries only its own (non-finished) fraction.
+    expect(mocks.progressFractions).toContain(0.4);
+  });
+
   it("omits a shelf whose fetch fails but still renders the other", async () => {
     mocks.getWatchHistory.mockRejectedValue(new Error("boom"));
     mocks.getSubscriptionVideos.mockResolvedValue({

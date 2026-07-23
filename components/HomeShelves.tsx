@@ -6,6 +6,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { HomeShelf } from "@/components/HomeShelf";
 import { api } from "@/lib/api";
 import type { HistoryItem, Video } from "@/lib/api";
+import { isFinished, resumeFraction } from "@/lib/resume-progress";
 
 // HomeShelves is the signed-in personalization band that leads the home page
 // (design-system.md "Shelves on Home", Apple-TV pattern): a "Continue watching"
@@ -19,22 +20,13 @@ import type { HistoryItem, Video } from "@/lib/api";
 // structurally unchanged.
 
 // A history item belongs on "Continue watching" only when the caller has a
-// real resume position to return to (position 0 / missing is a fresh watch).
+// real resume position to return to (position 0 / missing is a fresh watch) AND
+// the video is not already finished. A video watched to >= FINISHED_FRACTION
+// (~95%) is done — YouTube drops it from Continue watching (Wave C also filters
+// it out server-side; this keeps the client honest for already-fetched cards).
 function resumable(item: HistoryItem): boolean {
-  return typeof item.position_seconds === "number" && item.position_seconds > 0;
-}
-
-// The resume progress bar fraction (0..1) for a Continue-watching tile, matching
-// the watch-history view's math. Undefined (no bar) when the duration is unknown.
-function resumeFraction(item: HistoryItem): number | undefined {
-  if (
-    typeof item.duration_seconds === "number" &&
-    item.duration_seconds > 0 &&
-    item.position_seconds > 0
-  ) {
-    return item.position_seconds / item.duration_seconds;
-  }
-  return undefined;
+  if (typeof item.position_seconds !== "number" || item.position_seconds <= 0) return false;
+  return !isFinished(item.position_seconds, item.duration_seconds);
 }
 
 export function HomeShelves() {
@@ -78,7 +70,10 @@ export function HomeShelves() {
         <HomeShelf
           heading="Continue watching"
           items={continueWatching}
-          progressFor={(_video, index) => resumeFraction(continueWatching[index])}
+          progressFor={(_video, index) => {
+            const item = continueWatching[index];
+            return resumeFraction(item.position_seconds, item.duration_seconds) ?? undefined;
+          }}
         />
       ) : null}
       {following.length > 0 ? <HomeShelf heading="Following" items={following} /> : null}
