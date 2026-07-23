@@ -80,6 +80,28 @@ export type InstanceHomepageBlock = {
 };
 
 /**
+ * Featured-banner block (Wave A). The RAW admin knobs — the frontend resolves
+ * the picked video itself (lib/featured.server.ts) and renders the banner only
+ * when `enabled` AND `video_id` resolves to a public, published video; any empty
+ * override string falls back to the video's own field (or the frontend default).
+ * The block is always present on /instance, so every field is populated (empty
+ * strings mean "unset"); it stays optional here for a pre-Wave-A backend.
+ */
+export type InstanceFeaturedBlock = {
+  enabled?: boolean;
+  /** Picked video UUID; "" when no video is selected. */
+  video_id?: string;
+  /** Title override; "" falls back to the video's title. */
+  title?: string;
+  /** Description override; "" falls back to the video's description. */
+  description?: string;
+  /** CTA button label override; "" uses the frontend default ("Watch now"). */
+  cta_label?: string;
+  /** Chip shown on the banner (editorial pick vs paid placement). */
+  label?: "featured" | "sponsored";
+};
+
+/**
  * W13 + search-service W4. The `search` block carries two families of gates:
  *
  * - W13 EFFECTIVE remote-URI gates (runtime setting AND federation wired):
@@ -121,6 +143,7 @@ export type InstanceConfigSnapshot = InstanceResponse & {
   customization?: InstanceCustomizationBlock;
   social?: InstanceSocialBlock;
   homepage?: InstanceHomepageBlock;
+  featured?: InstanceFeaturedBlock;
   search?: InstanceSearchBlock;
 };
 

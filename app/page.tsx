@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import { FeaturedBanner } from "@/components/FeaturedBanner";
 import { FeedFilters } from "@/components/FeedFilters";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
@@ -21,6 +22,7 @@ import {
 import { readFeedFilters } from "@/lib/feed-url";
 import type { FeedFilters as FeedFilterValues } from "@/lib/feed-url";
 import { getPublicFeed } from "@/lib/feed.server";
+import { resolveFeatured } from "@/lib/featured.server";
 import { buildHomeShelvesHintScript } from "@/lib/home-shelves-hint";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { getInstanceHomepage } from "@/lib/instance-homepage.server";
@@ -83,6 +85,12 @@ export default async function Home({
     filters.language ?? "",
     filters.tag ?? "",
   ].join("|");
+  // The admin featured banner (WAVE C): resolved server-side, BEFORE the HTML
+  // streams, so it never pops in. Null unless an admin enabled it AND the pick
+  // resolves to a public, published video — any failure is a silently absent
+  // banner (fail-safe), including in the mocked e2e where server reads have no
+  // backend at all.
+  const featured = await resolveFeatured(instance?.featured);
   return (
     <PageShell className="pb-12 pt-7 sm:pb-16 sm:pt-10">
       {/* Pre-paint hint (mirrors the broadcast dismiss script): stamps the
@@ -90,6 +98,21 @@ export default async function Home({
           shelves band below can reserve that many skeleton shelves and never
           shove the chips + grid down when it resolves. */}
       <script dangerouslySetInnerHTML={{ __html: buildHomeShelvesHintScript() }} />
+      {/* Admin featured banner (item 1, OUTSIDE the feed Suspense): server-
+          resolved above, so it is present in the first paint or not at all. It
+          leads the page above the shelves, holds a strict size budget, and stays
+          absent unless an admin enabled it with a video that resolves. */}
+      {featured ? (
+        <div className="mb-8 sm:mb-10">
+          <FeaturedBanner
+            video={featured.video}
+            title={featured.title}
+            description={featured.description}
+            ctaLabel={featured.ctaLabel}
+            label={featured.label}
+          />
+        </div>
+      ) : null}
       {/* Signed-in personalization band (Apple-TV shelves): "Continue watching"
           + "Following" rails ABOVE the browse feed. Client-fetched and authed-
           only, so it renders nothing for a signed-out viewer or a route-mocked
