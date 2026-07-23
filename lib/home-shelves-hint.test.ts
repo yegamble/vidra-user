@@ -5,6 +5,7 @@ import {
   HOME_SHELVES_HINT_ATTRIBUTE,
   HOME_SHELVES_HINT_EVENT,
   HOME_SHELVES_HINT_STORAGE_KEY,
+  HOME_SHELVES_SLOT_ATTRIBUTE,
   buildHomeShelvesHintScript,
   readHomeShelvesHint,
   subscribeHomeShelvesHint,
@@ -85,5 +86,14 @@ describe("buildHomeShelvesHintScript", () => {
 
   it("exposes the event name used for same-tab coordination", () => {
     expect(HOME_SHELVES_HINT_EVENT).toBe("vidra:home-shelves-hint");
+  });
+});
+
+describe("HOME_SHELVES_SLOT_ATTRIBUTE", () => {
+  it("names the slot attribute the reservation CSS consumes", () => {
+    // The globals.css reservation selector and the app/page.tsx slot wrapper
+    // both depend on this exact name — the pre-paint reservation is dead if
+    // it drifts from `html[data-home-shelves] [data-home-shelves-slot]:empty`.
+    expect(HOME_SHELVES_SLOT_ATTRIBUTE).toBe("data-home-shelves-slot");
   });
 });

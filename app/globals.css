@@ -315,6 +315,61 @@ body {
   );
 }
 
+/*
+ * Pre-paint reservation for the signed-in "Shelves on Home" band.
+ * ---------------------------------------------------------------
+ * HomeShelves (Continue watching + Following) is a client, authed-only surface:
+ * the SSR'd HTML — and the whole hydration pass — render its slot EMPTY, so
+ * without a reservation the sort chips + grid paint high and then jump down when
+ * the shelves resolve (above-the-fold CLS). The inline script in app/page.tsx
+ * (buildHomeShelvesHintScript) stamps data-home-shelves="1|2" on <html> from
+ * localStorage BEFORE first paint — how many shelves this browser saw last
+ * visit — and these rules give the still-empty slot the exact height of that
+ * many skeleton shelf bands (heading + one rail row of tiles + the band's own
+ * bottom margin). The `:empty` guard drops the reservation the instant
+ * HomeShelves fills the slot with its skeleton (or the real band), which then
+ * holds the identical height — so the reservation → skeleton → content swap
+ * never shifts anything below it. No attribute (signed-out / first-ever visit)
+ * reserves nothing; the anonymous home is structurally unchanged.
+ *
+ * The heights are MEASURED against the real skeleton band's offsetHeight at each
+ * breakpoint (tile widths per HomeShelves.tsx: w-[min(82vw,20rem)] base, sm:w-72
+ * 288px, lg:w-64 256px, xl:w-72 288px; thumb = tileWidth×9/16) plus the band
+ * margin (mb-8 32px base / sm:mb-10 40px ≥640). In-between widths only risk a
+ * small upward settle (never a downward jump), which the equal-height skeleton
+ * swap makes imperceptible.
+ */
+html[data-home-shelves="1"] [data-home-shelves-slot]:empty {
+  min-height: 314px;
+}
+html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
+  min-height: 628px;
+}
+@media (min-width: 640px) {
+  html[data-home-shelves="1"] [data-home-shelves-slot]:empty {
+    min-height: 304px;
+  }
+  html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
+    min-height: 608px;
+  }
+}
+@media (min-width: 1024px) {
+  html[data-home-shelves="1"] [data-home-shelves-slot]:empty {
+    min-height: 286px;
+  }
+  html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
+    min-height: 572px;
+  }
+}
+@media (min-width: 1280px) {
+  html[data-home-shelves="1"] [data-home-shelves-slot]:empty {
+    min-height: 304px;
+  }
+  html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
+    min-height: 608px;
+  }
+}
+
 /* A quiet, dimensional fallback for media that has no server thumbnail. */
 .media-placeholder {
   background: var(--surface-muted);
