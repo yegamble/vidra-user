@@ -191,3 +191,61 @@ test("shows the error state when the feed fails", async ({ page }) => {
   await expect(page.getByText("Something went wrong")).toBeVisible();
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
 });
+
+// WAVE D regression: a video-card kebab inside a horizontal rail used to be
+// clipped by the rail's `overflow-x-auto` (whose computed `overflow-y: auto`
+// clips vertically), and opening it scrolled the rail a few pixels ("tiles
+// raise up"). Fix: Dropdown portals the open menu to <body> and positions it
+// `fixed`, so no ancestor overflow can clip it and no focus scroll leaks.
+test("a rail card's kebab menu is portaled, fully in view, and does not scroll the rail", async ({
+  page,
+}) => {
+  // A minimal primary grid, plus a materialized "Trending now" rail (the
+  // anonymous recommendations fallback). The rail is the clipping context.
+  await page.route(FEED_URL, (route) =>
+    route.fulfill({
+      json: { videos: [video("g1", "Grid Video", 3)], sort: "recent", limit: 20, offset: 0 },
+    }),
+  );
+  await page.route(/\/api\/v1\/recommendations\/home(\?|$)/, (route) =>
+    route.fulfill({
+      json: {
+        items: Array.from({ length: 8 }, (_, i) =>
+          video(`r${i}`, `Rail Video ${i + 1}`, 10 * (i + 1)),
+        ),
+        personalized: false,
+        source: "fallback",
+      },
+    }),
+  );
+
+  await page.goto("/");
+  const rail = page.locator('section[aria-label="Trending now"] ul');
+  await expect(rail).toBeVisible();
+
+  // Open the first rail card's kebab (reveal it by hovering the card first).
+  const card = page.locator('section[aria-label="Trending now"] li').first();
+  await card.hover();
+  const kebab = page.getByRole("button", { name: "Actions for Rail Video 1" });
+  const scrollTopBefore = await rail.evaluate((el) => el.scrollTop);
+  await kebab.click();
+
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  // Portaled out of the rail's clipping context, straight onto <body>.
+  expect(await menu.evaluate((el) => el.parentElement === document.body)).toBe(true);
+
+  // The LAST item ("Report") is fully within the viewport — not clipped away.
+  const report = page.getByRole("menuitem", { name: "Report" });
+  await expect(report).toBeVisible();
+  const box = await report.boundingBox();
+  expect(box).not.toBeNull();
+  const vp = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(vp.w);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(vp.h);
+
+  // Opening the menu did not scroll the rail ("tiles raise up" regression).
+  expect(await rail.evaluate((el) => el.scrollTop)).toBe(scrollTopBefore);
+});
