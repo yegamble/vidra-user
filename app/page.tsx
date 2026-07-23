@@ -21,6 +21,7 @@ import {
 import { readFeedFilters } from "@/lib/feed-url";
 import type { FeedFilters as FeedFilterValues } from "@/lib/feed-url";
 import { getPublicFeed } from "@/lib/feed.server";
+import { buildHomeShelvesHintScript } from "@/lib/home-shelves-hint";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { getInstanceHomepage } from "@/lib/instance-homepage.server";
 import { PAGE_SIZE } from "@/components/ui/LoadMoreButton";
@@ -84,6 +85,11 @@ export default async function Home({
   ].join("|");
   return (
     <PageShell className="pb-12 pt-7 sm:pb-16 sm:pt-10">
+      {/* Pre-paint hint (mirrors the broadcast dismiss script): stamps the
+          remembered shelf count onto <html> before first paint so the signed-in
+          shelves band below can reserve that many skeleton shelves and never
+          shove the chips + grid down when it resolves. */}
+      <script dangerouslySetInnerHTML={{ __html: buildHomeShelvesHintScript() }} />
       {/* Signed-in personalization band (Apple-TV shelves): "Continue watching"
           + "Following" rails ABOVE the browse feed. Client-fetched and authed-
           only, so it renders nothing for a signed-out viewer or a route-mocked

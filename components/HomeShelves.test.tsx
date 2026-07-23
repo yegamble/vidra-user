@@ -55,6 +55,9 @@ beforeEach(() => {
   mocks.getWatchHistory.mockResolvedValue({ videos: [], limit: 20, offset: 0 });
   mocks.getSubscriptionVideos.mockResolvedValue({ videos: [], limit: 20, offset: 0 });
   mocks.progressFractions.length = 0;
+  // The pre-paint reservation reads/writes a real localStorage hint; isolate it
+  // so no prior test's remembered shelf count leaks into this one.
+  localStorage.clear();
 });
 
 afterEach(cleanup);
@@ -154,6 +157,56 @@ describe("HomeShelves", () => {
     expect(screen.queryByText("Watched To End")).toBeNull();
     // The one surviving tile carries only its own (non-finished) fraction.
     expect(mocks.progressFractions).toContain(0.4);
+  });
+
+  it("reserves skeleton shelves while restoring for a returning signed-in viewer", async () => {
+    // Last visit remembered two shelves; the pre-paint hint reserves that space.
+    localStorage.setItem("vidra:home-shelves-count", "2");
+    mocks.status = "restoring";
+
+    render(<HomeShelves />);
+
+    // Skeleton band is present with the remembered number of shelf skeletons…
+    expect(screen.getByTestId("home-shelves-skeleton")).toBeTruthy();
+    expect(screen.getAllByTestId("home-shelf-skeleton")).toHaveLength(2);
+    // …and the auth-only endpoints are never probed while restoring.
+    await Promise.resolve();
+    expect(mocks.getWatchHistory).not.toHaveBeenCalled();
+    expect(screen.queryByText("Continue watching")).toBeNull();
+  });
+
+  it("reserves nothing on a first-ever visit (no remembered shelves)", async () => {
+    mocks.status = "restoring";
+    render(<HomeShelves />);
+    expect(screen.queryByTestId("home-shelves-skeleton")).toBeNull();
+  });
+
+  it("remembers the resolved shelf count for next visit", async () => {
+    mocks.getWatchHistory.mockResolvedValue({
+      videos: [historyItem("h1", "Half-watched Doc", 30, 100)],
+      limit: 20,
+      offset: 0,
+    });
+    mocks.getSubscriptionVideos.mockResolvedValue({
+      videos: [video("f1", "Latest From Ada")],
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<HomeShelves />);
+
+    await screen.findByText("Continue watching");
+    await waitFor(() =>
+      expect(localStorage.getItem("vidra:home-shelves-count")).toBe("2"),
+    );
+  });
+
+  it("remembers zero shelves for a signed-out viewer", async () => {
+    mocks.status = "anon";
+    render(<HomeShelves />);
+    await waitFor(() =>
+      expect(localStorage.getItem("vidra:home-shelves-count")).toBe("0"),
+    );
   });
 
   it("omits a shelf whose fetch fails but still renders the other", async () => {
