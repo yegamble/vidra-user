@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 
-import { FeaturedHero } from "@/components/FeaturedHero";
 import { FeedFilters } from "@/components/FeedFilters";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
@@ -83,13 +82,6 @@ export default async function Home({
     filters.language ?? "",
     filters.tag ?? "",
   ].join("|");
-  // The Apple-TV hero leads only the pristine default browse view — the newest
-  // (recent, unfiltered) video. Sorted/filtered/deep-linked views keep the
-  // clean grid so a "featured" tile never contradicts the active query. Seeded
-  // server-side, so with no snapshot (mocked e2e / backend down) there is no
-  // hero and the grid renders exactly as before.
-  const showHero =
-    active === "recent" && !filters.category && !filters.language && !filters.tag;
   return (
     <PageShell className="pb-12 pt-7 sm:pb-16 sm:pt-10">
       {/* Signed-in personalization band (Apple-TV shelves): "Continue watching"
@@ -122,12 +114,7 @@ export default async function Home({
         <FeedFilters sort={active} filters={filters} urlDefaults={landingDefaults} />
       </div>
       <Suspense key={feedKey} fallback={<StreamedFeedFallback />}>
-        <StreamedVideoFeed
-          sort={active}
-          filters={{ ...filters, scope }}
-          feedKey={feedKey}
-          showHero={showHero}
-        />
+        <StreamedVideoFeed sort={active} filters={{ ...filters, scope }} feedKey={feedKey} />
       </Suspense>
       {/* Optional discovery rails resolve independently in the browser. Keep
           them after the stable primary feed so a slow live/recommendation
@@ -143,12 +130,10 @@ async function StreamedVideoFeed({
   sort,
   filters,
   feedKey,
-  showHero,
 }: {
   sort: FeedSort;
   filters: FeedFilterValues;
   feedKey: string;
-  showHero: boolean;
 }) {
   const initialPage = await getPublicFeed({
     sort,
@@ -159,20 +144,14 @@ async function StreamedVideoFeed({
     limit: PAGE_SIZE,
     offset: 0,
   });
-  const hero =
-    showHero && initialPage && initialPage.videos.length > 0 ? initialPage.videos[0] : null;
   return (
-    <div className="flex flex-col gap-8 sm:gap-10">
-      {hero ? <FeaturedHero video={hero} /> : null}
-      <VideoFeed
-        key={feedKey}
-        sort={sort}
-        filters={filters}
-        initialPage={initialPage}
-        prioritizeFirstRow
-        excludeVideoId={hero?.id}
-      />
-    </div>
+    <VideoFeed
+      key={feedKey}
+      sort={sort}
+      filters={filters}
+      initialPage={initialPage}
+      prioritizeFirstRow
+    />
   );
 }
 

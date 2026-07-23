@@ -23,19 +23,11 @@ export function VideoFeed({
   filters = {},
   initialPage,
   prioritizeFirstRow = false,
-  excludeVideoId,
 }: {
   sort: FeedSort;
   filters?: FeedFilters;
   initialPage?: VideoFeedResponse | null;
   prioritizeFirstRow?: boolean;
-  /**
-   * A video id to omit from the rendered grid — the home page passes its
-   * featured-hero id so the newest video is not shown twice (hero + first
-   * grid tile). Pagination/offset math stays on the full server list; only the
-   * rendered tiles are filtered.
-   */
-  excludeVideoId?: string;
 }) {
   const seeded = initialPage !== undefined && initialPage !== null;
   const [status, setStatus] = useState<Status>(seeded ? "ready" : "loading");
@@ -120,22 +112,19 @@ export function VideoFeed({
       <EmptyState title="No videos yet" message="Published videos will appear here." />
     );
   }
-  const shown = excludeVideoId ? videos.filter((v) => v.id !== excludeVideoId) : videos;
   return (
     <div className="flex flex-col gap-6">
-      {shown.length > 0 ? (
-        <VideoGrid>
-          {shown.map((video, index) => (
-            <li key={video.id}>
-              <VideoCard
-                video={video}
-                priority={prioritizeFirstRow && index < 3}
-                onDeleted={() => setVideos((cur) => cur.filter((v) => v.id !== video.id))}
-              />
-            </li>
-          ))}
-        </VideoGrid>
-      ) : null}
+      <VideoGrid>
+        {videos.map((video, index) => (
+          <li key={video.id}>
+            <VideoCard
+              video={video}
+              priority={prioritizeFirstRow && index < 3}
+              onDeleted={() => setVideos((cur) => cur.filter((v) => v.id !== video.id))}
+            />
+          </li>
+        ))}
+      </VideoGrid>
       {hasMore ? (
         <LoadMoreButton
           busy={more === "loading"}
