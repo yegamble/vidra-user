@@ -20,6 +20,7 @@ test("a creator can edit and delete their channel", async ({ page, request }) =>
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
   await page.getByLabel("Channel display name").fill(`Channel ${id}`);
   const created = page.waitForResponse(
@@ -28,19 +29,20 @@ test("a creator can edit and delete their channel", async ({ page, request }) =>
   await page.getByRole("button", { name: "Create channel" }).click();
   await created;
 
-  // Edit the display name + description inline in the studio channel row.
-  await page.getByRole("button", { name: `Edit ${handle}` }).click();
+  // Edit the display name + description. The redesigned owner panel shows the
+  // edit form inline on the Channel tab (no per-row "Edit" gate); Save is
+  // "Save changes".
   await page.getByLabel("Edit channel name").fill(`Renamed ${id}`);
   await page.getByLabel("Edit channel description").fill("A fresh description.");
   const patched = page.waitForResponse(
     (r) => byHandle.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
   );
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
   await patched;
 
-  // Persisted: the UI shows the renamed channel and the public API carries the
-  // new name + description.
-  await expect(page.getByRole("link", { name: `Renamed ${id}` })).toBeVisible();
+  // Persisted: the studio channel switcher reflects the renamed channel and the
+  // public API carries the new name + description.
+  await expect(page.getByText(`Renamed ${id}`).first()).toBeVisible();
   expect(await channelDetail(request, handle)).toMatchObject({
     status: 200,
     display_name: `Renamed ${id}`,
@@ -56,6 +58,7 @@ test("a creator can edit and delete their channel", async ({ page, request }) =>
   await deleted;
 
   // Persisted: the channel is gone from the studio UI and the public API (404).
-  await expect(page.getByText("Create your first channel to start publishing.")).toBeVisible();
+  // With no channels left, the Channel tab shows the onboarding empty state.
+  await expect(page.getByText("Create your first channel")).toBeVisible();
   expect((await channelDetail(request, handle)).status).toBe(404);
 });
