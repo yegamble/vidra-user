@@ -66,7 +66,11 @@ export function HomeShelves() {
       if (settled === 2 && !controller.signal.aborted) setLoaded(true);
     };
     api
-      .getWatchHistory({ limit: 20 }, controller.signal)
+      // Server-side "Continue watching" filter (Wave C5): only started, not-yet-
+      // finished entries come back. The client `resumable` filter below stays as
+      // belt-and-braces — it still governs already-fetched cards and an older
+      // backend that ignores the param.
+      .getWatchHistory({ limit: 20, progress: "in_progress" }, controller.signal)
       .then((res) => setContinueWatching((res.videos ?? []).filter(resumable)))
       .catch(() => {
         if (!controller.signal.aborted) setContinueWatching([]);

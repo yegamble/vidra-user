@@ -1534,10 +1534,18 @@ export const api = {
   unsaveVideo: (id: string) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/save`, { method: "DELETE" }),
 
-  /** GET /api/v1/me/history — the caller's watch history as cards, newest-watched first (auth). */
-  getWatchHistory: (params: SearchParams = {}, signal?: AbortSignal) =>
+  /**
+   * GET /api/v1/me/history — the caller's watch history as cards, newest-watched
+   * first (auth). `progress: "in_progress"` narrows the list to the
+   * "Continue watching" subset server-side (started, not effectively finished);
+   * omitting it returns the full history (Wave A3 / Wave C5).
+   */
+  getWatchHistory: (
+    params: SearchParams & { progress?: "in_progress" } = {},
+    signal?: AbortSignal,
+  ) =>
     apiRequest<WatchHistoryResponse>("/api/v1/me/history", {
-      query: { limit: params.limit, offset: params.offset },
+      query: { limit: params.limit, offset: params.offset, progress: params.progress },
       signal,
     }),
 
