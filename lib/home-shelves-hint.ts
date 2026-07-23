@@ -19,6 +19,19 @@ export const HOME_SHELVES_HINT_STORAGE_KEY = "vidra:home-shelves-count";
 export const HOME_SHELVES_HINT_ATTRIBUTE = "data-home-shelves";
 
 /**
+ * The marker attribute on the server-rendered slot that wraps <HomeShelves> in
+ * app/page.tsx. The reservation CSS (app/globals.css) targets
+ * `html[data-home-shelves="1"|"2"] [data-home-shelves-slot]:empty` to give the
+ * slot the height of that many skeleton shelf bands at FIRST PAINT — before the
+ * client-only HomeShelves hydrates and paints its own skeleton. The `:empty`
+ * guard makes the reservation self-release the instant the slot fills, so the
+ * skeleton (then the real band) holds the identical height with no shift. Kept
+ * here beside HOME_SHELVES_HINT_ATTRIBUTE so the JSX, the CSS selector, and this
+ * contract stay documented in one place.
+ */
+export const HOME_SHELVES_SLOT_ATTRIBUTE = "data-home-shelves-slot";
+
+/**
  * Fired on window after a same-tab write ("storage" only fires in OTHER tabs),
  * so the useSyncExternalStore reader re-reads.
  */

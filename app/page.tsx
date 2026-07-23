@@ -23,7 +23,7 @@ import { readFeedFilters } from "@/lib/feed-url";
 import type { FeedFilters as FeedFilterValues } from "@/lib/feed-url";
 import { getPublicFeed } from "@/lib/feed.server";
 import { resolveFeatured } from "@/lib/featured.server";
-import { buildHomeShelvesHintScript } from "@/lib/home-shelves-hint";
+import { buildHomeShelvesHintScript, HOME_SHELVES_SLOT_ATTRIBUTE } from "@/lib/home-shelves-hint";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { getInstanceHomepage } from "@/lib/instance-homepage.server";
 import { PAGE_SIZE } from "@/components/ui/LoadMoreButton";
@@ -116,8 +116,18 @@ export default async function Home({
       {/* Signed-in personalization band (Apple-TV shelves): "Continue watching"
           + "Following" rails ABOVE the browse feed. Client-fetched and authed-
           only, so it renders nothing for a signed-out viewer or a route-mocked
-          e2e — the browse section below then leads exactly as before. */}
-      <HomeShelves />
+          e2e — the browse section below then leads exactly as before.
+
+          The slot is server-rendered and starts EMPTY (HomeShelves is a client
+          component that renders null through SSR + hydration). The pre-paint
+          script above stamps data-home-shelves on <html>, and the reservation
+          CSS (globals.css) sizes this empty slot to the remembered shelf count
+          so the chips + grid below never jump down when the band resolves. The
+          `:empty` selector releases the reservation the moment HomeShelves fills
+          the slot with its (equal-height) skeleton. */}
+      <div {...{ [HOME_SHELVES_SLOT_ATTRIBUTE]: "" }}>
+        <HomeShelves />
+      </div>
       {/* The browse feed reframed as the final shelf-consistent section: a
           Title2 header (matching the shelves above and the discovery rails
           below) over the URL-backed sort control. The sort remains URL-backed,
