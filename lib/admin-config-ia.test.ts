@@ -133,6 +133,12 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["registration_minimum_age", "general", "signup"],
   ["new_user_history_enabled", "general", "signup"],
   ["default_user_daily_quota_bytes", "vod", "uploads"],
+  ["featured_enabled", "homepage", "featured"],
+  ["featured_video_id", "homepage", "featured"],
+  ["featured_title", "homepage", "featured"],
+  ["featured_description", "homepage", "featured"],
+  ["featured_cta_label", "homepage", "featured"],
+  ["featured_label", "homepage", "featured"],
 ];
 
 describe("config pages", () => {
