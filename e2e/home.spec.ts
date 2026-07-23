@@ -96,6 +96,28 @@ test("feed cards show the IPFS badge only for pinned videos", async ({ page }) =
   await expect(badges.first()).toBeVisible();
 });
 
+test("renders no featured banner in the default mocked view (grid stays uniform)", async ({
+  page,
+}) => {
+  // The admin featured banner is resolved SERVER-side (config + video fetched
+  // before the HTML streams). The mocked suite runs the server reads against a
+  // dead backend by design, so `resolveFeatured` fails safe to null — the home
+  // page shows no masthead, just the uniform grid.
+  await page.route(FEED_URL, (route) =>
+    route.fulfill({
+      json: {
+        videos: [video("v1", "First Test Video", 1500), video("v2", "Second Test Video", 0)],
+        sort: "recent",
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "First Test Video" })).toBeVisible();
+  await expect(page.getByTestId("featured-banner")).toHaveCount(0);
+});
+
 test("shows the empty state when there are no videos", async ({ page }) => {
   await page.route(FEED_URL, (route) =>
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
