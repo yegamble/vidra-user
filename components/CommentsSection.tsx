@@ -8,6 +8,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronDownIcon, MoreVerticalIcon } from "@/components/icons";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ReportDialog, type ReportKind } from "@/components/ReportButton";
+import { TimestampedText } from "@/components/TimestampedText";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
@@ -39,6 +40,8 @@ type Status = "loading" | "error" | "ready";
 export function CommentsSection({
   videoId,
   commentsEnabled = true,
+  durationSeconds = null,
+  onSeekToTimestamp,
 }: {
   videoId: string;
   /**
@@ -48,6 +51,13 @@ export function CommentsSection({
    * existing comments keep rendering (reading stays open server-side too).
    */
   commentsEnabled?: boolean;
+  /** The watch video's duration, so body timestamps clamp to it (Wave F). */
+  durationSeconds?: number | null;
+  /**
+   * Seek the watch player for a clicked (h:)mm:ss timestamp in a comment body.
+   * Absent when comments render outside a watch context → plain `?t=` links.
+   */
+  onSeekToTimestamp?: (seconds: number) => void;
 }) {
   const [status, setStatus] = useState<Status>("loading");
   const [comments, setComments] = useState<Comment[]>([]);
@@ -126,6 +136,8 @@ export function CommentsSection({
               replies={replies}
               byId={byId}
               videoId={videoId}
+              durationSeconds={durationSeconds}
+              onSeekToTimestamp={onSeekToTimestamp}
               onReplied={onReplied}
               onDeleted={onDeleted}
               onEdited={onEdited}
@@ -310,6 +322,8 @@ function CommentItem({
   byId,
   mentionUsername,
   videoId,
+  durationSeconds = null,
+  onSeekToTimestamp,
   onReplied,
   onDeleted,
   onEdited,
@@ -325,6 +339,8 @@ function CommentItem({
   // reply — plain leading text; unset for a top-level comment or a direct reply.
   mentionUsername?: string;
   videoId: string;
+  durationSeconds?: number | null;
+  onSeekToTimestamp?: (seconds: number) => void;
   onReplied: (c: Comment) => void;
   onDeleted: (id: string) => void;
   onEdited: (updated: Comment) => void;
@@ -504,6 +520,8 @@ function CommentItem({
                 byId={byId}
                 mentionUsername={replyMention(r, byId)?.username}
                 videoId={videoId}
+                durationSeconds={durationSeconds}
+                onSeekToTimestamp={onSeekToTimestamp}
                 onReplied={handleReplied}
                 onDeleted={onDeleted}
                 onEdited={onEdited}
@@ -697,7 +715,12 @@ function CommentItem({
                 // (username ≠ channel handle), matching the non-link author name.
                 <span className="font-semibold text-fg">@{mentionUsername} </span>
               ) : null}
-              {comment.body}
+              <TimestampedText
+                text={comment.body}
+                durationSeconds={durationSeconds}
+                onSeek={onSeekToTimestamp}
+                keyPrefix={`c-${comment.id}`}
+              />
             </p>
           )}
         </div>

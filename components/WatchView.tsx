@@ -26,6 +26,7 @@ import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
 import { SupportButton } from "@/components/SupportButton";
+import { TimestampedText } from "@/components/TimestampedText";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
@@ -112,6 +113,15 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   const playbackQueue = useVideoQueue();
   // The player element, owned here so the Share dialog can read currentTime.
   const playerRef = useRef<HTMLVideoElement | null>(null);
+  // Seek the player in place for a clicked timestamp (comment/description links).
+  // The media element clamps currentTime to its own [0, duration]; the tokenizer
+  // already bounds tokens to the known duration before they ever reach here.
+  const seekToTimestamp = useCallback((seconds: number) => {
+    const el = playerRef.current;
+    if (!el) return;
+    el.currentTime = seconds;
+    void el.play?.().catch(() => {});
+  }, []);
   // An explicit ?t=<seconds> start position from the URL, parsed once. The
   // <video> only renders after the client-side fetch resolves, so reading
   // window here cannot cause a hydration mismatch.
@@ -568,7 +578,12 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
           ) : null}
           {video.description ? (
             <p className="whitespace-pre-wrap rounded-2xl border border-border-subtle bg-surface p-4 text-subhead leading-relaxed text-fg shadow-soft">
-              {video.description}
+              <TimestampedText
+                text={video.description}
+                durationSeconds={video.duration_seconds ?? null}
+                onSeek={seekToTimestamp}
+                keyPrefix="desc"
+              />
             </p>
           ) : null}
         </div>
@@ -577,7 +592,12 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
       {/* comments_enabled is the server's EFFECTIVE value (instance toggle AND
           this video's comments_policy, config-parity W9); absent (older
           payloads) fails open — the server still gates posting. */}
-      <CommentsSection videoId={video.id} commentsEnabled={video.comments_enabled !== false} />
+      <CommentsSection
+        videoId={video.id}
+        commentsEnabled={video.comments_enabled !== false}
+        durationSeconds={video.duration_seconds ?? null}
+        onSeekToTimestamp={seekToTimestamp}
+      />
       </div>
 
       <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setRelatedNextVideo} />
