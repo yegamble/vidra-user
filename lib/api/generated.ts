@@ -2417,7 +2417,7 @@ export interface paths {
         };
         /**
          * List the caller's watch history
-         * @description Returns the caller's watch history as discovery cards, most-recently watched first, each carrying the saved resume position (position_seconds) and the time last watched (watched_at). Only public, published videos are returned. Paginated via limit (1–100, default 20) and offset.
+         * @description Returns the caller's watch history as discovery cards, most-recently watched first, each carrying the saved resume position (position_seconds) and the time last watched (watched_at). Only public, published videos are returned. Paginated via limit (1–100, default 20) and offset. The optional progress filter restricts the list to the "Continue watching" subset.
          */
         get: operations["listWatchHistory"];
         put?: never;
@@ -4682,6 +4682,23 @@ export interface components {
                 /** @enum {string} */
                 level: "info" | "warning" | "error";
                 dismissable: boolean;
+            };
+            /** @description Admin featured-banner slot on the homepage (YouTube-masthead-style). The frontend fetches the picked video server-side and renders the banner only when enabled AND video_id resolves to a public, published video; otherwise the banner is silently absent. This block reports the raw admin knobs, not a resolved video. */
+            featured: {
+                enabled: boolean;
+                /** @description Picked video UUID; "" when no video is selected. */
+                video_id: string;
+                /** @description Title override; "" falls back to the video's title. */
+                title: string;
+                /** @description Description override; "" falls back to the video's description. */
+                description: string;
+                /** @description CTA button label override; "" uses the frontend default. */
+                cta_label: string;
+                /**
+                 * @description Chip shown on the banner (editorial pick vs paid placement).
+                 * @enum {string}
+                 */
+                label: "featured" | "sponsored";
             };
             /** @description Custom CSS/JS references by content hash (never inlined; fetch /api/v1/instance/custom.css?v={css_hash}) plus the primary-color override. */
             customization: {
@@ -14360,6 +14377,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                /** @description When set to in_progress, returns only "Continue watching" entries: videos the caller has started (position_seconds >= 5) but not effectively finished (< 95% of a known duration). Any other value or omission returns the full history. */
+                progress?: "in_progress";
             };
             header?: never;
             path?: never;

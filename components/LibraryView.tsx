@@ -22,6 +22,7 @@ import { cn } from "@/lib/cn";
 import { useRestrictedMode } from "@/lib/device-preferences";
 import { useInstanceFeatures } from "@/lib/instance-features";
 import { usePlayerSettings } from "@/lib/player-settings";
+import { resumeFraction } from "@/lib/resume-progress";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 
 // LibraryView is the design's Library hub (Vidra App template): a History rail
@@ -169,11 +170,11 @@ function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: ()
     typeof item.duration_seconds === "number" && item.duration_seconds > 0
       ? item.duration_seconds
       : null;
+  // Shared finished-aware math: no bar below the resume floor or at >= ~95%
+  // watched (finished videos read as unwatched here too).
+  const resumeFrac = resumeFraction(item.position_seconds, item.duration_seconds);
   const progressPct =
-    duration !== null &&
-    item.position_seconds > 0
-      ? Math.min(100, Math.round((item.position_seconds / duration) * 1000) / 10)
-      : null;
+    resumeFrac === null ? null : Math.min(100, Math.round(resumeFrac * 1000) / 10);
 
   if (sensitive && restrictedMode) {
     return (
@@ -235,7 +236,7 @@ function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: ()
         }
       />
       <Link href={href} className="focus-ring mt-2 block rounded-sm">
-        <p className="line-clamp-2 pr-8 text-[13px] font-semibold leading-snug text-fg transition-colors group-hover/card:text-fg-muted">
+        <p className="line-clamp-2 pr-9 text-[13px] font-semibold leading-snug text-fg transition-colors group-hover/card:text-fg-muted">
           {item.title}
         </p>
       </Link>
