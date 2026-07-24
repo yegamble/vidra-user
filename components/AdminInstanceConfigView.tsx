@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { AdminVideoPicker } from "@/components/AdminVideoPicker";
 import { InstanceBrandingManager } from "@/components/InstanceBrandingManager";
 import { InstanceDocumentEditor } from "@/components/InstanceDocumentEditor";
 import { Markdown } from "@/components/Markdown";
@@ -775,6 +776,16 @@ function SettingRow({
           label={label}
           value={list}
           options={meta?.options}
+          onChange={onChange}
+          error={error}
+          disabled={inactive}
+        />
+      ) : null}
+
+      {control === "video-picker" ? (
+        <AdminVideoPicker
+          label={label}
+          value={text}
           onChange={onChange}
           error={error}
           disabled={inactive}
