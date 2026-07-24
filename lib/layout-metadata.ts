@@ -31,6 +31,11 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 export const FALLBACK_TITLE = "Vidra";
 export const FALLBACK_DESCRIPTION = "A federated, PeerTube-inspired video platform.";
 export const FALLBACK_ICON = "/icon.svg";
+// The committed PWA apple-touch icon (Wave F, scripts/generate-icons.mjs). It is
+// a SEPARATE metadata slot from `icon`, so wiring it never masks an operator's
+// uploaded favicon — there is no operator apple-touch slot, so the product mark
+// is the floor for the iOS home-screen icon regardless of branding.
+export const APPLE_TOUCH_ICON = "/apple-touch-icon.png";
 
 export function buildRootMetadata(instance: InstanceConfigSnapshot | null): Metadata {
   const name = typeof instance?.name === "string" ? instance.name.trim() : "";
@@ -45,7 +50,7 @@ export function buildRootMetadata(instance: InstanceConfigSnapshot | null): Meta
   // public asset otherwise. Keep this config-based: an app/icon file would
   // take precedence over generateMetadata and hide the uploaded favicon.
   const favicon = brandingAssetUrl(instance?.branding?.logos?.favicon);
-  metadata.icons = { icon: favicon ?? FALLBACK_ICON };
+  metadata.icons = { icon: favicon ?? FALLBACK_ICON, apple: APPLE_TOUCH_ICON };
 
   // Social cards: the opengraph logo slot is the instance-wide og:image /
   // twitter:image default (a page-supplied image wins via segment merging,
