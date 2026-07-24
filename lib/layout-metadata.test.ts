@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { InstanceConfigSnapshot } from "./instance-config.server";
 import {
+  APPLE_TOUCH_ICON,
   FALLBACK_DESCRIPTION,
   FALLBACK_ICON,
   FALLBACK_TITLE,
@@ -32,7 +33,7 @@ describe("buildRootMetadata", () => {
     expect(buildRootMetadata(null)).toEqual({
       title: FALLBACK_TITLE,
       description: FALLBACK_DESCRIPTION,
-      icons: { icon: FALLBACK_ICON },
+      icons: { icon: FALLBACK_ICON, apple: APPLE_TOUCH_ICON },
     });
   });
 
@@ -50,7 +51,7 @@ describe("buildRootMetadata", () => {
 
   it("uses the built-in icon and no social entries when branding is absent", () => {
     const meta = buildRootMetadata(snapshot());
-    expect(meta.icons).toEqual({ icon: FALLBACK_ICON });
+    expect(meta.icons).toEqual({ icon: FALLBACK_ICON, apple: APPLE_TOUCH_ICON });
     expect(meta.openGraph).toBeUndefined();
     expect(meta.twitter).toBeUndefined();
   });
@@ -62,7 +63,7 @@ describe("buildRootMetadata", () => {
         social: { twitter_username: "" },
       }),
     );
-    expect(meta.icons).toEqual({ icon: FALLBACK_ICON });
+    expect(meta.icons).toEqual({ icon: FALLBACK_ICON, apple: APPLE_TOUCH_ICON });
     expect(meta.openGraph).toBeUndefined();
     expect(meta.twitter).toBeUndefined();
   });
@@ -71,7 +72,19 @@ describe("buildRootMetadata", () => {
     const meta = buildRootMetadata(
       snapshot({ branding: { logos: { favicon: set("/api/v1/instance/logo/favicon") } } }),
     );
-    expect(meta.icons).toEqual({ icon: `${API}/api/v1/instance/logo/favicon` });
+    expect(meta.icons).toEqual({
+      icon: `${API}/api/v1/instance/logo/favicon`,
+      apple: APPLE_TOUCH_ICON,
+    });
+  });
+
+  it("always wires the product apple-touch icon, independent of the operator favicon", () => {
+    expect(buildRootMetadata(snapshot()).icons).toMatchObject({ apple: APPLE_TOUCH_ICON });
+    expect(
+      buildRootMetadata(
+        snapshot({ branding: { logos: { favicon: set("/api/v1/instance/logo/favicon") } } }),
+      ).icons,
+    ).toMatchObject({ apple: APPLE_TOUCH_ICON });
   });
 
   it("wires a SET opengraph slot into og:image and twitter:image", () => {
