@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { FeaturedBanner } from "@/components/FeaturedBanner";
@@ -12,6 +13,7 @@ import { PageShell } from "@/components/PageShell";
 import { VideoFeed } from "@/components/VideoFeed";
 import { VideoGridSkeleton } from "@/components/VideoCardSkeleton";
 import type { FeedSort } from "@/lib/api";
+import { apiBaseUrl } from "@/lib/config";
 import {
   feedDefaultsForLanding,
   resolveFeedScope,
@@ -27,6 +29,17 @@ import { buildHomeShelvesHintScript, HOME_SHELVES_SLOT_ATTRIBUTE } from "@/lib/h
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { getInstanceHomepage } from "@/lib/instance-homepage.server";
 import { PAGE_SIZE } from "@/components/ui/LoadMoreButton";
+
+// RSS auto-discovery (Wave F F3): the public videos feed lives on vidra-core at
+// {apiBaseUrl}/feeds/videos.xml. A page-level `alternates` merges with the root
+// layout's title/description/icons (Next merges metadata per key).
+export const metadata: Metadata = {
+  alternates: {
+    types: {
+      "application/rss+xml": [{ url: `${apiBaseUrl}/feeds/videos.xml`, title: "Videos" }],
+    },
+  },
+};
 
 const HEADINGS: Record<FeedSort, string> = {
   recent: "Recent videos",

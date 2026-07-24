@@ -37,9 +37,17 @@ export function metaDescription(raw: string | undefined | null): string {
   return `${firstLine.slice(0, DESCRIPTION_MAX - 1).trimEnd()}…`;
 }
 
+/** The oembed discovery href for a local watch URL (Wave F F3), or null. */
+export function oembedDiscoveryUrl(video: Video, origin: string | null | undefined): string | null {
+  if (!origin) return null;
+  const canonical = `${origin}/videos/${encodeURIComponent(video.id)}`;
+  return `${apiBaseUrl}/services/oembed?url=${encodeURIComponent(canonical)}&format=json`;
+}
+
 export function buildWatchMetadata(
   video: Video | null,
   instance: InstanceConfigSnapshot | null,
+  origin?: string | null,
 ): Metadata {
   if (video === null) return {};
 
@@ -51,6 +59,14 @@ export function buildWatchMetadata(
 
   const metadata: Metadata = { title };
   if (description !== "") metadata.description = description;
+
+  // oembed auto-discovery (rel="alternate" type="application/json+oembed"): only
+  // when we know the request origin AND the video resolved public (a null video
+  // returned {} above, so private/unknown videos never advertise an oembed).
+  const oembed = oembedDiscoveryUrl(video, origin);
+  if (oembed !== null) {
+    metadata.alternates = { types: { "application/json+oembed": [{ url: oembed, title }] } };
+  }
 
   metadata.openGraph = {
     title,
