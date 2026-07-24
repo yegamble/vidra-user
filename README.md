@@ -142,4 +142,4 @@ variable.
 
 ## License
 
-TBD.
+vidra-user is free software licensed under the [GNU Affero General Public License v3.0](LICENSE).
