@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { Video } from "@/lib/api/types";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
-import { buildWatchMetadata, metaDescription, watchThumbnailUrl } from "@/lib/watch-metadata";
+import {
+  buildWatchMetadata,
+  metaDescription,
+  oembedDiscoveryUrl,
+  watchThumbnailUrl,
+} from "@/lib/watch-metadata";
 
 // apiBaseUrl's test-environment default (lib/config.ts).
 const API = "http://localhost:8080";
@@ -127,5 +132,43 @@ describe("buildWatchMetadata", () => {
       }),
     );
     expect(md.openGraph).not.toHaveProperty("images");
+  });
+
+  it("adds an oembed discovery alternate pointing at the canonical watch URL", () => {
+    const md = buildWatchMetadata(video(), instance(), "https://tube.example");
+    expect(md.alternates).toEqual({
+      types: {
+        "application/json+oembed": [
+          {
+            url: `${API}/services/oembed?url=${encodeURIComponent(
+              "https://tube.example/videos/v1",
+            )}&format=json`,
+            title: "Launch Day",
+          },
+        ],
+      },
+    });
+  });
+
+  it("omits the oembed alternate when the request origin is unknown", () => {
+    expect(buildWatchMetadata(video(), instance())).not.toHaveProperty("alternates");
+    expect(buildWatchMetadata(video(), instance(), null)).not.toHaveProperty("alternates");
+  });
+
+  it("never advertises oembed for a missing (private/unknown) video", () => {
+    expect(buildWatchMetadata(null, instance(), "https://tube.example")).toEqual({});
+  });
+});
+
+describe("oembedDiscoveryUrl", () => {
+  it("encodes the canonical watch URL into the oembed url parameter", () => {
+    expect(oembedDiscoveryUrl(video({ id: "a b" } as Partial<Video>), "https://tube.example")).toBe(
+      `${API}/services/oembed?url=${encodeURIComponent("https://tube.example/videos/a%20b")}&format=json`,
+    );
+  });
+
+  it("is null without an origin", () => {
+    expect(oembedDiscoveryUrl(video(), null)).toBeNull();
+    expect(oembedDiscoveryUrl(video(), undefined)).toBeNull();
   });
 });
