@@ -13,6 +13,7 @@
     "lint:icons": "node scripts/check-no-emoji.mjs",
     "typecheck": "tsc --noEmit",
     "codegen": "node scripts/codegen.mjs",
+    "generate:icons": "node scripts/generate-icons.mjs",
     "design:shots": "node scripts/design-shots.mjs",
     "test": "vitest run",
     "e2e": "playwright test --project=chromium",
@@ -44,6 +45,7 @@
     "jsdom": "^29.1.1",
     "jsqr": "^1.4.0",
     "openapi-typescript": "^7.13.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3.0.0"
