@@ -311,6 +311,37 @@ export function HeartIcon(props: IconProps) {
   );
 }
 
+/**
+ * Creator-heart — the SAME bespoke heart, FILLED (fill-by-design convention:
+ * `fill="currentColor" stroke="none"` on its own path). Marks a comment the
+ * video's creator hearted; the outline HeartIcon stays the donate/support glyph.
+ */
+export function HeartFilledIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path
+        d="M12 21s-7.5-4.6-9.5-8.6C.9 9 2.7 5.5 6.2 5.5c2 0 3.3 1 4 2.1.7-1.1 2-2.1 4-2.1 3.5 0 5.3 3.5 3.7 6.9-2 4-9.9 8.6-9.9 8.6z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </Icon>
+  );
+}
+
+/**
+ * Pin — the creator-pinned-comment glyph (a pushpin). Feather has no pushpin;
+ * this outline draw follows Lucide's "pin" (MIT, same lineage as the credited
+ * Feather set) and the set's 24×24 / round-cap convention.
+ */
+export function PinIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 17v5" />
+      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+    </Icon>
+  );
+}
+
 /** Report — pennant-style flag. */
 export function FlagIcon(props: IconProps) {
   return (
