@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Video } from "@/lib/api";
 import {
+  clearQueue,
   dequeueVideo,
   enqueueVideo,
+  removeVideo,
   resetVideoQueueForTests,
   useVideoQueue,
 } from "@/lib/video-queue";
@@ -107,5 +109,42 @@ describe("video playback queue", () => {
 
     render(<QueueProbe />);
     expect(screen.getByLabelText("queue").textContent).toBe("valid:false");
+  });
+
+  it("removeVideo drops the matching entry, persists, and notifies subscribers", () => {
+    render(<QueueProbe />);
+    act(() => {
+      enqueueVideo(video("a"));
+      enqueueVideo(video("b"));
+      enqueueVideo(video("b", true));
+    });
+    expect(screen.getByLabelText("queue").textContent).toBe("a:false,b:false,b:true");
+
+    // Removes only the local "b" (the remote "b" is a distinct entry) and
+    // rewrites storage — the subscriber (QueueProbe) re-renders from the store.
+    act(() => removeVideo("b", false));
+    expect(screen.getByLabelText("queue").textContent).toBe("a:false,b:true");
+    expect(
+      (JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]") as Video[]).map(
+        (v) => `${v.id}:${Boolean(v.remote)}`,
+      ),
+    ).toEqual(["a:false", "b:true"]);
+
+    // A no-op removal (absent id) leaves the queue untouched.
+    act(() => removeVideo("missing"));
+    expect(screen.getByLabelText("queue").textContent).toBe("a:false,b:true");
+  });
+
+  it("clearQueue empties the queue, persists [], and notifies subscribers", () => {
+    render(<QueueProbe />);
+    act(() => {
+      enqueueVideo(video("a"));
+      enqueueVideo(video("b"));
+    });
+    expect(screen.getByLabelText("queue").textContent).toBe("a:false,b:false");
+
+    act(() => clearQueue());
+    expect(screen.getByLabelText("queue").textContent).toBe("");
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null")).toEqual([]);
   });
 });

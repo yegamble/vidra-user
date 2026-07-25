@@ -33,6 +33,7 @@ import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
 import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
 import { TranscodingNote } from "@/components/watch/TranscodingNote";
+import { UpNextQueue } from "@/components/UpNextQueue";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -600,7 +601,14 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
       />
       </div>
 
-      <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setRelatedNextVideo} />
+      {/* Right rail: the viewer's up-next queue (renders nothing when empty)
+          stacked above the related list. The wrapper takes no fixed width — each
+          child carries the rail's lg width — so an empty queue + empty related
+          leaves nothing occupying the column, preserving today's layout. */}
+      <div className={cn("flex flex-col gap-4", theater ? null : "shrink-0")}>
+        <UpNextQueue currentVideo={video} belowLayout={theater} />
+        <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setRelatedNextVideo} />
+      </div>
     </div>
   );
 }
