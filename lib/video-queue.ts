@@ -59,6 +59,22 @@ export function dequeueVideo(videoId: string, remote = false): void {
   if (next.length !== current.length) emit(next);
 }
 
+/** Remove one queued video the viewer explicitly dropped from the up-next panel.
+ * Same persistence + cross-tab broadcast as the other mutators; a no-op (no
+ * write, no notify) when the id/locality pair is not present. */
+export function removeVideo(videoId: string, remote = false): void {
+  const current = readQueue();
+  const next = current.filter((item) => item.id !== videoId || Boolean(item.remote) !== remote);
+  if (next.length !== current.length) emit(next);
+}
+
+/** Empty the whole playback queue (the up-next panel's Clear-all). A no-op when
+ * the queue is already empty, so it never rewrites storage or renotifies. */
+export function clearQueue(): void {
+  if (readQueue().length === 0) return;
+  emit([]);
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
 
