@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Comment } from "@/lib/api";
@@ -33,11 +33,19 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const getVideoComments = vi.fn();
 const postComment = vi.fn();
+const pinComment = vi.fn();
+const unpinComment = vi.fn();
+const heartComment = vi.fn();
+const unheartComment = vi.fn();
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
   api: {
     getVideoComments: (...args: unknown[]) => getVideoComments(...args),
     postComment: (...args: unknown[]) => postComment(...args),
+    pinComment: (...args: unknown[]) => pinComment(...args),
+    unpinComment: (...args: unknown[]) => unpinComment(...args),
+    heartComment: (...args: unknown[]) => heartComment(...args),
+    unheartComment: (...args: unknown[]) => unheartComment(...args),
   },
   errorMessage: (_err: unknown, fallback: string) => fallback,
   userAvatarUrl: (id: string) => `/avatar/${id}`,
@@ -59,6 +67,8 @@ function mk(id: string, overrides: Partial<Comment> = {}): Comment {
     updated_at: "2026-01-01T00:00:00.000Z",
     edited: false,
     deleted: false,
+    pinned: false,
+    hearted: false,
     ...overrides,
   };
 }
@@ -174,5 +184,134 @@ describe("CommentsSection per-video comment policy (config-parity W9)", () => {
 
     expect(await screen.findByLabelText("Add a comment")).toBeTruthy();
     expect(screen.queryByText("Comments are turned off for this video.")).toBeNull();
+  });
+});
+
+describe("CommentsSection creator pin + heart", () => {
+  // Open a specific comment row's overflow menu by its body text. The trigger
+  // lives inside the row; the menu itself portals to <body>, so menu items are
+  // queried at the document (screen) level once open.
+  async function openMenuFor(body: string) {
+    const row = (await screen.findByText(body)).closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Comment actions" }));
+    return row;
+  }
+
+  it("renders the Pinned badge and the creator-heart badge (all viewers)", async () => {
+    session = { status: "anon" };
+    resolveComments([
+      mk("c1", { body: "pinned one", pinned: true }),
+      mk("c2", { body: "hearted one", hearted: true }),
+    ]);
+    render(<CommentsSection videoId="v1" />);
+
+    // Pinned marker: visible text + an accessible title.
+    const pinnedBadge = await screen.findByTitle("Pinned by creator");
+    expect(pinnedBadge.textContent).toContain("Pinned");
+    // Hearted marker: a filled heart carrying its own accessible name.
+    expect(screen.getByRole("img", { name: "Hearted by creator" })).toBeTruthy();
+    // The un-pinned / un-hearted comment carries neither marker.
+    const heartedRow = screen.getByText("hearted one").closest("li") as HTMLElement;
+    expect(within(heartedRow).queryByTitle("Pinned by creator")).toBeNull();
+  });
+
+  it("suppresses both badges on a tombstoned (deleted) comment", async () => {
+    session = { status: "anon" };
+    // A tombstone the backend would never actually flag pinned/hearted; assert
+    // the [deleted] row shows neither marker regardless.
+    resolveComments([mk("c1", { body: "[deleted]", deleted: true, pinned: true, hearted: true })]);
+    render(<CommentsSection videoId="v1" />);
+
+    expect(await screen.findByText("[deleted]")).toBeTruthy();
+    expect(screen.queryByTitle("Pinned by creator")).toBeNull();
+    expect(screen.queryByRole("img", { name: "Hearted by creator" })).toBeNull();
+  });
+
+  it("does NOT offer creator actions when the viewer cannot manage comments", async () => {
+    // An authed non-owner viewer still gets the moderation kebab, but no Pin/Heart.
+    resolveComments([mk("c1", { body: "someone's comment", author_username: "bob" })]);
+    render(<CommentsSection videoId="v1" canManageComments={false} />);
+
+    await openMenuFor("someone's comment");
+    expect(screen.queryByRole("menuitem", { name: "Pin" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Heart" })).toBeNull();
+    // The existing moderation actions are still there ("Report" matches exactly,
+    // not "Report user", since a role name string is a full match).
+    expect(screen.getByRole("menuitem", { name: "Report" })).toBeTruthy();
+  });
+
+  it("offers Pin + Heart to a viewer who can manage comments", async () => {
+    resolveComments([mk("c1", { body: "top level", author_username: "bob" })]);
+    render(<CommentsSection videoId="v1" canManageComments />);
+
+    await openMenuFor("top level");
+    expect(screen.getByRole("menuitem", { name: "Pin" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Heart" })).toBeTruthy();
+  });
+
+  it("pins a comment: calls the client, hoists it to the front, and swaps the badge", async () => {
+    // c1 first, c2 second (API newest-first order). The owner pins c2.
+    resolveComments([
+      mk("c1", { body: "first comment", author_username: "bob" }),
+      mk("c2", { body: "second comment", author_username: "cat" }),
+    ]);
+    pinComment.mockResolvedValue(mk("c2", { body: "second comment", author_username: "cat", pinned: true }));
+    render(<CommentsSection videoId="v1" canManageComments />);
+
+    await openMenuFor("second comment");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
+
+    await waitFor(() => expect(pinComment).toHaveBeenCalledWith("c2"));
+    // The pinned comment now carries the badge…
+    const pinnedRow = (await screen.findByTitle("Pinned by creator")).closest("li") as HTMLElement;
+    expect(pinnedRow.textContent).toContain("second comment");
+    // …and it is hoisted to the front so the derived order matches the server's
+    // pinned-first ordering (no refetch).
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem")[0].textContent).toContain("second comment"),
+    );
+  });
+
+  it("hearts a comment: calls the client and shows the creator-heart badge", async () => {
+    resolveComments([mk("c1", { body: "nice comment", author_username: "bob" })]);
+    heartComment.mockResolvedValue(mk("c1", { body: "nice comment", author_username: "bob", hearted: true }));
+    render(<CommentsSection videoId="v1" canManageComments />);
+
+    await openMenuFor("nice comment");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Heart" }));
+
+    await waitFor(() => expect(heartComment).toHaveBeenCalledWith("c1"));
+    expect(await screen.findByRole("img", { name: "Hearted by creator" })).toBeTruthy();
+    // The menu now offers Unheart on the hearted comment.
+    await openMenuFor("nice comment");
+    expect(screen.getByRole("menuitem", { name: "Unheart" })).toBeTruthy();
+  });
+
+  it("offers no Pin on a reply, but still allows Heart there", async () => {
+    resolveComments([
+      mk("c1", { body: "root comment", author_username: "bob" }),
+      mk("r1", {
+        parent_id: "c1",
+        body: "a reply",
+        author_username: "cat",
+        created_at: "2026-01-01T00:00:01.000Z",
+      }),
+    ]);
+    render(<CommentsSection videoId="v1" canManageComments />);
+
+    // Expand the reply thread, then open the reply's own menu.
+    fireEvent.click(await screen.findByRole("button", { name: "View 1 reply" }));
+    await openMenuFor("a reply");
+    expect(screen.queryByRole("menuitem", { name: "Pin" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Heart" })).toBeTruthy();
+  });
+
+  it("offers no controls at all on a deleted comment", async () => {
+    resolveComments([mk("c1", { body: "[deleted]", deleted: true })]);
+    render(<CommentsSection videoId="v1" canManageComments />);
+
+    expect(await screen.findByText("[deleted]")).toBeTruthy();
+    // A tombstone renders no action menu, so no Pin/Heart path exists.
+    expect(screen.queryByRole("button", { name: "Comment actions" })).toBeNull();
   });
 });

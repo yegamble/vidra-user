@@ -88,6 +88,10 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   // as the operator's default sort. null (defaults not landed / no backend)
   // reproduces the shipped recent/local baseline, i.e. the pre-W5 URLs.
   const instanceDefaults = useInstanceDefaults();
+  // The signed-in viewer, so the comments section can offer the creator
+  // pin/heart controls when this is the video owner's own channel (owner-only
+  // client gating; the server independently authorizes editors/moderators too).
+  const { user } = useSession();
   const tagFeedDefaults = feedDefaultsForLanding(
     resolveLandingPage(instanceDefaults),
     instanceDefaults,
@@ -598,6 +602,7 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
         commentsEnabled={video.comments_enabled !== false}
         durationSeconds={video.duration_seconds ?? null}
         onSeekToTimestamp={seekToTimestamp}
+        canManageComments={Boolean(user && channel && user.id === channel.owner_id)}
       />
       </div>
 
