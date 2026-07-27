@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import { API_URL, adminToken, seedPublishedChannel, uniqueId } from "./fixtures";
+import { API_URL, adminToken, seedPublishedChannel, uniqueId, waitForPublished } from "./fixtures";
 
 // Proves the admin featured banner end to end against a real vidra-core +
 // PostgreSQL: the deterministic admin enables the banner (with an explicit title
@@ -31,8 +31,14 @@ test("admin featured banner shows on home within the size budget, then disappear
   page,
   request,
 }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const { videoId } = await seedPublishedChannel(request);
+  // The banner's server-side gate only renders a PUBLISHED video, and the home
+  // page data-caches its video read for ~60s. Enabling the banner while the
+  // upload is still in the shared transcode queue lets a "not published yet"
+  // read get cached and outlive the 90s banner poll below — so wait for the
+  // video to actually be live BEFORE turning the banner on.
+  await waitForPublished(request, videoId);
   const token = await adminToken(request);
   const bannerTitle = `Featured ${uniqueId()}`;
 
