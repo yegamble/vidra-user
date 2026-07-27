@@ -24,15 +24,20 @@ test("muting a commenter hides their comment and unmuting restores it", async ({
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the watch page from the home feed (client-side nav keeps the session).
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // The home page may render the same video in BOTH the browse grid and the
+  // "Trending now" recommendations rail (content-dependent), so take the first
+  // matching card — every match links to the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
   await expect(page.getByText(body)).toBeVisible();
 
-  // Mute the commenter from their comment → the comment disappears.
+  // Mute the commenter from their comment's kebab ("Comment actions") menu → the
+  // comment disappears.
   const muted = page.waitForResponse(
     (r) => /\/me\/mutes\/accounts\/[^/]+$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.locator("li", { hasText: body }).getByRole("button", { name: "Mute" }).click();
+  await page.locator("li", { hasText: body }).getByRole("button", { name: "Comment actions" }).click();
+  await page.getByRole("menuitem", { name: "Mute", exact: true }).click();
   await muted;
   await expect(page.getByText(body)).toHaveCount(0);
 
@@ -56,6 +61,6 @@ test("muting a commenter hides their comment and unmuting restores it", async ({
 
   // Back on the watch page (a fresh authed refetch), the comment is visible again.
   await page.getByRole("link", { name: "Home" }).click();
-  await page.getByRole("heading", { name: videoTitle }).click();
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByText(body)).toBeVisible();
 });

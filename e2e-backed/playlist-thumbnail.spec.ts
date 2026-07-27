@@ -45,7 +45,9 @@ test("a playlist cover uploaded on the detail page survives a refetch (no 404)",
   const created = page.waitForResponse(
     (r) => /\/api\/v1\/playlists$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.getByRole("button", { name: "Create" }).click();
+  // Scope to the page content: the global header also carries a "Create" menu
+  // button, so an unscoped getByRole would be a strict-mode violation.
+  await page.locator("#main-content").getByRole("button", { name: "Create" }).click();
   await created;
 
   // Open the detail page and upload a PNG cover from the owner cover manager.

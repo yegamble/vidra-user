@@ -46,7 +46,9 @@ test("a published video is transcoded to HLS and the watch page streams it with 
   expect(variant.status()).toBe(200);
   const variantBody = await variant.text();
   expect(variantBody).toContain("#EXTM3U");
-  const segment = variantBody.split("\n").find((l) => /^seg_\d+\.ts$/.test(l.trim()));
+  // Segment URIs carry a `?v=` cache-buster (matching the master/variant URLs),
+  // e.g. `seg_00000.ts?v=dk5lp39mvmig` — match the name with an optional query.
+  const segment = variantBody.split("\n").find((l) => /^seg_\d+\.ts(\?|$)/.test(l.trim()));
   expect(segment).toBeTruthy();
   const seg = await request.get(
     `${API_URL}/api/v1/videos/${videoId}/hls/${heights[0]}p/${segment?.trim()}`,

@@ -1,6 +1,16 @@
 import { expect, test } from "@playwright/test";
 
-import { API_URL, SAMPLE_MP4_4S_BASE64, channelVideos, loginToken, uniqueId, waitForHls } from "./fixtures";
+import {
+  API_URL,
+  SAMPLE_MP4_4S_BASE64,
+  channelVideos,
+  createChannelViaStudioUI,
+  loginToken,
+  publishViaStudioUI,
+  startStudioUpload,
+  uniqueId,
+  waitForHls,
+} from "./fixtures";
 
 // Proves the thumbnail FRAME-PICK (UPLOAD-04 / vidra-core W2.C5) end to end against
 // a real vidra-core + PostgreSQL + ffmpeg: a creator publishes a real (tiny) video,
@@ -29,28 +39,17 @@ test("a creator sets the poster from a video frame (frame-pick)", async ({ page,
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(channelName);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, channelName);
 
   // Publish a real (4s) video via the chunked upload; ffprobe accepts it and
-  // records the positive duration required by the frame-picker.
-  await page.getByLabel("Video title").fill(videoTitle);
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
+  // records the positive duration required by the frame-picker. Public so the
+  // HLS pipeline's public detail (waitForHls) is reachable.
+  await startStudioUpload(page, {
+    title: videoTitle,
     buffer: Buffer.from(SAMPLE_MP4_4S_BASE64, "base64"),
+    privacy: "public",
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
-  await uploaded;
+  await publishViaStudioUI(page);
   await expect(page.getByText("Published!")).toBeVisible();
 
   // Resolve the video id and wait for the pipeline to finish processing the
