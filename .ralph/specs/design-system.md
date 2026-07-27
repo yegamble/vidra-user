@@ -502,13 +502,18 @@ never substitute a library's variant when the design's path differs. Typed
   codepoints in `components/` and `app/` JSX. Non-icon glyphs it deliberately
   allows: `·` separators, `…`, `×` multipliers/dimensions, `←/→` keycaps, `—`
   placeholders, `→` in prose.
-- **Kebab / overflow triggers** (`VideoActionsMenu`, comment + admin menus)
-  reuse the shared `Dropdown` and neutralise its default pill trigger through
-  `triggerClassName` — there is no `triggerVariant` prop. The kebab passes
-  `h-9 w-9`/`h-10 w-10 justify-center border-0 bg-transparent p-0 text-fg
-  hover:bg-surface-muted` (`VideoActionsMenu.tsx`), so the call site's own
-  `h-`/`w-` box plus the glyph's explicit `size` are the size authority
-  (`MoreVertical` 24–26 on cards, `MoreHorizontal` in admin).
+- **Kebab / overflow triggers** (`VideoActionsMenu`, comment + admin menus) use
+  `Dropdown`'s `triggerVariant="icon"`, never the default pill. The icon variant
+  emits an unpadded, borderless, transparent round button so the call site's own
+  `h-`/`w-` classes are the sole size authority. Spec: glyph 24–26 (`MoreVertical`
+  on cards, `MoreHorizontal` in admin), filled dots `r=2.2` (render ~4.4–4.8px
+  once unsqueezed, YouTube-comparable); button targets 44×44 standard, 40×40 the
+  deliberate dense-list exception (comment kebab 36×36 floor). **Never neutralise
+  the default trigger's `px-3.5 py-1.5` with a `p-0`/`px-0` in `triggerClassName`:**
+  same-group Tailwind utilities resolve by stylesheet order, and this repo's
+  `cn()` is a plain concat with no `tailwind-merge`, so the base padding wins and
+  flex-shrinks the SVG's content box (the kebab regressed to a 12/8px-wide glyph
+  this way). Use `triggerVariant="icon"` instead.
 - **Menu placement is portal + fixed (Wave D).** The open menu is portaled to
   `document.body` (`createPortal`) and positioned `fixed` from the trigger's
   `getBoundingClientRect()`, then flipped up/down + start/end and clamped inside

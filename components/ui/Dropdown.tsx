@@ -61,6 +61,20 @@ export type DropdownProps = {
   align?: "start" | "end";
   className?: string;
   triggerClassName?: string;
+  /**
+   * Trigger chrome:
+   *  - `"default"` — the labelled pill (border + surface bg + `px-3.5 py-1.5`
+   *    text padding). Unchanged for existing text/icon-plus-label triggers.
+   *  - `"icon"` — a borderless, transparent, round icon button with **no
+   *    padding class at all**, so the call site's own `h-` / `w-` sizing fully
+   *    controls the hit area and the glyph is never flex-shrunk.
+   *
+   * Use `"icon"` for kebab / overflow triggers. Never try to neutralise the
+   * default pill's `px-3.5 py-1.5` with a `p-0` in `triggerClassName`: same-group
+   * Tailwind utilities resolve by stylesheet order (this repo's `cn()` is a plain
+   * concat, no tailwind-merge), so the base padding wins and the SVG collapses.
+   */
+  triggerVariant?: "default" | "icon";
 };
 
 /**
@@ -78,6 +92,7 @@ export function Dropdown({
   align = "start",
   className,
   triggerClassName,
+  triggerVariant = "default",
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -228,7 +243,12 @@ export function Dropdown({
         onClick={() => (open ? setOpen(false) : openMenu("first"))}
         onKeyDown={onTriggerKeyDown}
         className={cn(
-          "inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3.5 py-1.5 text-sm font-semibold text-fg transition-colors focus-ring hover:bg-surface-muted",
+          triggerVariant === "icon"
+            ? // Icon-button chrome mirroring IconButton: no border, transparent
+              // bg, and — critically — NO padding utility, so call-site h-*/w-*
+              // sizing is the sole size authority and the glyph never shrinks.
+              "inline-flex items-center justify-center rounded-full text-fg transition-colors focus-ring hover:bg-surface-muted"
+            : "inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3.5 py-1.5 text-sm font-semibold text-fg transition-colors focus-ring hover:bg-surface-muted",
           triggerClassName,
         )}
       >

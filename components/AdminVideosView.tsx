@@ -293,11 +293,12 @@ function ModerationActions({ video, onChanged, onRemoved }: {
 
   return (
     <Dropdown
-      trigger={<MoreHorizontalIcon size={20} />}
+      trigger={<MoreHorizontalIcon size={24} />}
       triggerLabel={`Actions for ${video.title}`}
       items={items}
       align="end"
-      triggerClassName="h-10 w-10 justify-center px-0"
+      triggerVariant="icon"
+      triggerClassName="h-10 w-10"
     />
   );
 }
