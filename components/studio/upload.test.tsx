@@ -385,6 +385,44 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
     await waitFor(() => expect(mocks.deleteVideo).toHaveBeenCalledWith("draft-9"));
   });
+
+  it("reveals the content-warning field only when sensitive is on, and sends it on Publish", async () => {
+    mocks.createVideoDraft.mockResolvedValue({ id: "v1", state: "draft" });
+    mocks.resumableUpload.mockResolvedValue({
+      video: { id: "v1", title: "clip", state: "published" },
+      file: { kind: "original" },
+    });
+    mocks.updateVideo.mockResolvedValue({ id: "v1", title: "clip", state: "published" });
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFile();
+    await waitFor(() => expect(mocks.resumableUpload).toHaveBeenCalled());
+
+    const toggle = () => screen.getByRole("switch", { name: "Contains sensitive content" });
+
+    // The reason input is hidden until the sensitive flag is turned on.
+    expect(screen.queryByLabelText("Content warning")).toBeNull();
+
+    // On → the field appears; off again → it disappears.
+    fireEvent.click(toggle());
+    expect(await screen.findByLabelText("Content warning")).toBeTruthy();
+    fireEvent.click(toggle());
+    expect(screen.queryByLabelText("Content warning")).toBeNull();
+
+    // On once more, type a reason (with surrounding whitespace), then Publish.
+    fireEvent.click(toggle());
+    fireEvent.change(await screen.findByLabelText("Content warning"), {
+      target: { value: "  brief nudity  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+
+    await waitFor(() => expect(mocks.updateVideo).toHaveBeenCalled());
+    const [, patchBody] = mocks.updateVideo.mock.calls[0];
+    // Paired with the flag and trimmed (client trims; server also trims/caps).
+    expect(patchBody).toMatchObject({ is_sensitive: true, sensitive_reason: "brief nudity" });
+  });
 });
 
 describe("ReplaceVideoManager (W14)", () => {

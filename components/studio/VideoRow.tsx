@@ -77,6 +77,9 @@ export function VideoRow({
   // Sensitive-content flag; the authoritative value arrives with the detail
   // fetch (list rows omit it), mirroring how tags are handled.
   const [sensitive, setSensitive] = useState(isSensitiveVideo(video));
+  // The paired creator content-warning text (sensitive_reason, ≤280 chars). Like
+  // the flag above, the authoritative value arrives with the detail fetch.
+  const [sensitiveReason, setSensitiveReason] = useState(video.sensitive_reason ?? "");
   // Per-video publish policies (config-parity W9); like tags/sensitive, the
   // authoritative values arrive with the detail fetch (list rows omit them).
   const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">(
@@ -133,8 +136,11 @@ export function VideoRow({
         // from list-row data, which omits tags entirely.
         ...(detail ? { tags } : {}),
         // Same rule for the sensitive flag: only sent once the detail supplied
-        // the real current value (list rows omit it).
-        ...(detail ? { is_sensitive: sensitive } : {}),
+        // the real current value (list rows omit it). The paired content-warning
+        // rides with it — cleared (empty string) when the flag is off.
+        ...(detail
+          ? { is_sensitive: sensitive, sensitive_reason: sensitive ? sensitiveReason.trim() : "" }
+          : {}),
         // Same rule for the per-video publish policies (W9).
         ...(detail
           ? {
@@ -163,6 +169,7 @@ export function VideoRow({
     setTags(detail?.tags ?? video.tags ?? []);
     setPrivacy(video.privacy ?? "private");
     setSensitive(isSensitiveVideo(detail ?? video));
+    setSensitiveReason((detail ?? video).sensitive_reason ?? "");
     setCommentsPolicy((detail ?? video).comments_policy === "disabled" ? "disabled" : "enabled");
     setDownloadEnabled((detail ?? video).download_enabled !== false);
     setPublishAt(toLocalInputValue((detail ?? video).publish_at));
@@ -185,6 +192,7 @@ export function VideoRow({
       setTags(full.tags ?? []);
       setPrivacy(full.privacy ?? "private");
       setSensitive(isSensitiveVideo(full));
+      setSensitiveReason(full.sensitive_reason ?? "");
       setCommentsPolicy(full.comments_policy === "disabled" ? "disabled" : "enabled");
       setDownloadEnabled(full.download_enabled !== false);
       setPublishAt(toLocalInputValue(full.publish_at));
@@ -279,6 +287,19 @@ export function VideoRow({
               disabled={busy}
             />
           </div>
+        ) : null}
+        {/* Paired content-warning, revealed only while the flag is on; clearing
+            it (empty) removes the reason on save. */}
+        {detail && sensitive ? (
+          <Input
+            label="Content warning (optional)"
+            value={sensitiveReason}
+            onChange={(e) => setSensitiveReason(e.target.value)}
+            aria-label="Edit content warning"
+            placeholder="Briefly describe what viewers will see"
+            maxLength={280}
+            disabled={busy}
+          />
         ) : null}
         {/* Per-video publish policies (config-parity W9): same detail-gated
             rule as the sensitive flag. */}
