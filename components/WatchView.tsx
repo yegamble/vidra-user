@@ -154,9 +154,11 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   // channel-scoped read alone. Never fabricated.
   const [channel, setChannel] = useState<Channel | null>(null);
   // Sensitive-content gate (spec: instance-platform-info.md): under the
-  // instance blur/warn policy a sensitive video's playback is held behind a
-  // confirmation scrim until the viewer explicitly proceeds. `display` (or an
-  // absent policy — `hide` is enforced server-side) plays normally.
+  // effective blur/warn/hide policy (per-user override else instance) a
+  // sensitive video's playback is held behind a confirmation scrim until the
+  // viewer explicitly proceeds. `hide` normally drops flagged videos from
+  // listings server-side, but a direct link can still reach this watch page, so
+  // it is gated here too. `display` (or an absent policy) plays normally.
   const sensitivePolicy = useSensitiveContentPolicy();
   const restrictedMode = useRestrictedMode();
   const [sensitiveAccepted, setSensitiveAccepted] = useState(false);
@@ -456,7 +458,9 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
         <div className="flex flex-col">
           {isSensitiveVideo(video) &&
           !sensitiveAccepted &&
-          (sensitivePolicy === "blur" || sensitivePolicy === "warn") ? (
+          (sensitivePolicy === "blur" ||
+            sensitivePolicy === "warn" ||
+            sensitivePolicy === "hide") ? (
             // Confirmation scrim (media-overlay exception: theme-invariant dark
             // stage in the player's slot) — playback only starts after an
             // explicit choice.
@@ -468,6 +472,11 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
               <p className="max-w-md text-[13px] text-white/70">
                 The administrators of this instance flag such videos before playback.
               </p>
+              {/* The creator's optional content-warning text, shown below the
+                  generic line only when set. */}
+              {video.sensitive_reason ? (
+                <p className="max-w-md text-[13px] text-white/60">{video.sensitive_reason}</p>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setSensitiveAccepted(true)}
