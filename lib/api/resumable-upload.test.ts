@@ -77,6 +77,7 @@ describe("resumableUpload", () => {
         state: "published",
         created_at: FUTURE,
         is_sensitive: false,
+        sensitive_reason: "",
       },
       file: { id: "f1", kind: "original", content_type: "video/mp4", original_name: "clip.mp4", size_bytes: 1024, created_at: FUTURE },
     });

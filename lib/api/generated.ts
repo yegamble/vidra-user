@@ -4908,6 +4908,11 @@ export interface components {
             personalized_search_enabled?: boolean;
             /** @description Per-user personalized-recommendations preference (search-service W4). Default true. */
             personalized_recommendations_enabled?: boolean;
+            /**
+             * @description Per-user override of the instance sensitive_content_policy. Omitted when the account inherits the instance policy (the default). When set, "hide" is enforced server-side for this user (flagged videos drop out of their feed/search); warn/blur/display are presentation-only. Set or clear it via PATCH /auth/me.
+             * @enum {string}
+             */
+            sensitive_content_policy?: "hide" | "warn" | "blur" | "display";
             /** Format: date-time */
             created_at: string;
             /** @description Whether an avatar is set (served at GET /users/{id}/avatar). Present on GET/PATCH /auth/me; omitted elsewhere. */
@@ -4947,6 +4952,8 @@ export interface components {
             personalized_search_enabled?: boolean;
             /** @description Toggle the per-user personalized-recommendations preference (search-service W4). */
             personalized_recommendations_enabled?: boolean;
+            /** @description Set the per-user sensitive-content policy override: one of hide, warn, blur, display, or an empty string to clear the override (inherit the instance policy). Any other value -> 422. */
+            sensitive_content_policy?: string;
         };
         PublicUserProfile: {
             /** Format: uuid */
@@ -5137,6 +5144,8 @@ export interface components {
             state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
             /** @description Whether the owner flagged the video as sensitive content. Always present; false on remote cards (no local flag exists for them). When the instance sensitive_content_policy is "hide", flagged videos are excluded from the public feed and search server-side; under warn/blur the frontend applies the matching presentation. */
             is_sensitive: boolean;
+            /** @description The creator's optional content-warning text, paired with is_sensitive by the frontend. Always present (empty string when unset, and on remote cards). At most 280 characters. */
+            sensitive_reason: string;
             /**
              * Format: date-time
              * @description Creation time. On a remote card this is the origin's published time (falling back to when the video was fetched).
@@ -5441,6 +5450,8 @@ export interface components {
             publish_at?: string;
             /** @description Mark the video as sensitive content (defaults to false). See the Video schema for how the instance policy treats flagged videos. */
             is_sensitive?: boolean;
+            /** @description Optional creator content-warning text, trimmed and capped at 280 characters (-> 422 over the cap). Storable regardless of is_sensitive; the frontend pairs them. */
+            sensitive_reason?: string;
             /**
              * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting. PeerTube's requires_approval tier is deliberately not supported -> 422.
              * @enum {string}
@@ -5472,6 +5483,8 @@ export interface components {
             publish_at?: string;
             /** @description Set or clear the sensitive-content flag (omit to leave unchanged). */
             is_sensitive?: boolean;
+            /** @description Set the creator content-warning text (omit to leave unchanged; an empty string clears it). Trimmed and capped at 280 characters -> 422 over the cap. */
+            sensitive_reason?: string;
             /**
              * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open.
              * @enum {string}

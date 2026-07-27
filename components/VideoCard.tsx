@@ -170,7 +170,10 @@ export function VideoCard({
                 </span>
               ) : null}
               {markSensitive ? (
-                <span className="absolute bottom-2 left-2 inline-flex items-center rounded-full bg-black/55 px-2.5 py-[3px] text-[10.5px] font-semibold leading-none tracking-[0.03em] text-white/90 backdrop-blur group-data-[preview-active=true]/preview:bottom-10">
+                <span
+                  title={video.sensitive_reason || undefined}
+                  className="absolute bottom-2 left-2 inline-flex items-center rounded-full bg-black/55 px-2.5 py-[3px] text-[10.5px] font-semibold leading-none tracking-[0.03em] text-white/90 backdrop-blur group-data-[preview-active=true]/preview:bottom-10"
+                >
                   Sensitive
                 </span>
               ) : null}
