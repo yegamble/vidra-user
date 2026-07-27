@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -9,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/cn";
 
@@ -101,23 +103,24 @@ export function Dropdown({
   // both buttons (action rows) and anchors (href rows).
   const itemRefs = useRef<(HTMLElement | null)[]>([]);
   const menuId = useId();
-  // Viewport-aware placement, measured pre-paint each time the menu opens:
-  // flip above the trigger when the space below can't fit the menu, and flip
-  // the horizontal alignment when the preferred side would leave the viewport.
-  const [placement, setPlacement] = useState<{ up: boolean; end: boolean }>({
-    up: false,
-    end: align === "end",
-  });
+  // Fixed viewport coordinates for the portaled menu, measured pre-paint each
+  // time it opens (and on scroll/resize while open). Because the menu lives at
+  // the document body — not inside the `overflow-x-auto` rails — it can never be
+  // clipped; the rects come straight from the trigger. `null` until measured.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  useLayoutEffect(() => {
-    if (!open) return;
+  // Measure the trigger, flip up/down + start/end to stay on-screen, and emit
+  // fixed top/left. Same flip heuristics as before, now feeding coordinates
+  // instead of Tailwind top-full/right-0 classes.
+  const measure = useCallback(() => {
     const trigger = triggerRef.current;
     const menu = menuRef.current;
     if (!trigger || !menu) return;
     const t = trigger.getBoundingClientRect();
     const menuH = menu.offsetHeight;
     const menuW = menu.offsetWidth;
-    const margin = 8;
+    const margin = 8; // viewport edge keep-out
+    const gap = 4; // trigger↔menu gap (matches the old mt-1/mb-1)
     const spaceBelow = window.innerHeight - t.bottom - margin;
     const spaceAbove = t.top - margin;
     const up = spaceBelow < menuH && spaceAbove > spaceBelow;
@@ -127,14 +130,43 @@ export function Dropdown({
     } else if (!end && t.left + menuW > window.innerWidth - margin && t.right - menuW >= margin) {
       end = true;
     }
-    setPlacement({ up, end });
-  }, [open, align, items.length]);
+    const rawTop = up ? t.top - menuH - gap : t.bottom + gap;
+    const rawLeft = end ? t.right - menuW : t.left;
+    // Clamp fully inside the viewport so a trigger near an edge can't push the
+    // menu (or its last item) off-screen.
+    const top = Math.max(margin, Math.min(rawTop, window.innerHeight - menuH - margin));
+    const left = Math.max(margin, Math.min(rawLeft, window.innerWidth - menuW - margin));
+    setPos({ top, left });
+  }, [align]);
 
-  // Close on outside click / focus leaving the widget.
+  useLayoutEffect(() => {
+    if (!open) return;
+    measure();
+  }, [open, items.length, measure]);
+
+  // Keep the fixed menu pinned to the trigger while open: capture-phase scroll
+  // catches the rail's own scroll (the bug repro), and resize re-runs the flip.
+  useEffect(() => {
+    if (!open) return;
+    const onReflow = () => measure();
+    window.addEventListener("scroll", onReflow, true);
+    window.addEventListener("resize", onReflow);
+    return () => {
+      window.removeEventListener("scroll", onReflow, true);
+      window.removeEventListener("resize", onReflow);
+    };
+  }, [open, measure]);
+
+  // Close on outside click / focus leaving the widget. The menu is portaled out
+  // of `rootRef`, so a click inside it must still count as inside: treat clicks
+  // within EITHER the trigger root or the portaled menu as inside.
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -146,13 +178,15 @@ export function Dropdown({
     requestAnimationFrame(() => {
       const list = itemRefs.current.filter(Boolean) as HTMLElement[];
       const target = focus === "first" ? list[0] : list[list.length - 1];
-      target?.focus();
+      // preventScroll: opening must not scroll the rail to bring the focused row
+      // into view (the "tiles raise up" bug) — the fixed menu is already visible.
+      target?.focus({ preventScroll: true });
     });
   }
 
   function closeAndRefocus() {
     setOpen(false);
-    triggerRef.current?.focus();
+    triggerRef.current?.focus({ preventScroll: true });
   }
 
   function onTriggerKeyDown(e: React.KeyboardEvent) {
@@ -220,19 +254,33 @@ export function Dropdown({
       >
         {trigger}
       </button>
-      {open ? (
-        <div
-          id={menuId}
-          ref={menuRef}
-          role="menu"
-          aria-label={triggerLabel}
-          className={cn(
-            "absolute z-40 min-w-52 overflow-y-auto rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-soft-strong",
-            "max-h-[min(60vh,480px)]",
-            placement.up ? "bottom-full mb-1" : "top-full mt-1",
-            placement.end ? "right-0" : "left-0",
-          )}
-        >
+      {/* The menu is portaled to <body> and positioned `fixed`, so it escapes
+          the rails' `overflow` clipping context. `open` only flips true from a
+          client-side event, so this branch never runs during SSR / hydration
+          (open is false there); the `typeof document` guard is belt-and-braces
+          so `createPortal(..., document.body)` can never see an undefined DOM. */}
+      {open && typeof document !== "undefined" ? (
+        createPortal(
+          <div
+            id={menuId}
+            ref={menuRef}
+            role="menu"
+            aria-label={triggerLabel}
+            style={{
+              position: "fixed",
+              top: pos?.top ?? -9999,
+              left: pos?.left ?? -9999,
+            }}
+            className={cn(
+              // Body-level z-50 layer (Header z-30, Modal z-50, search sheet
+              // z-[60]); fixed to the viewport so the rails' `overflow-y: auto`
+              // can never clip it. Kept invisible until the first pre-paint
+              // measurement lands, so it is never painted at the -9999 seed.
+              "z-50 min-w-52 overflow-y-auto rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-soft-strong",
+              "max-h-[min(60vh,480px)]",
+              pos ? "visible" : "invisible",
+            )}
+          >
           {(() => {
             // Walk the items, assigning each focusable row a dense index (so
             // separators don't leave gaps in the arrow-key ring) and rendering
@@ -318,7 +366,9 @@ export function Dropdown({
               );
             });
           })()}
-        </div>
+          </div>,
+          document.body,
+        )
       ) : null}
     </div>
   );

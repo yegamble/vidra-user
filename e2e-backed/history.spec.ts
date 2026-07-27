@@ -23,8 +23,11 @@ test("watching a video records it to history and removing it persists", async ({
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the seeded video's watch page from the home feed (client-side nav so
-  // the in-memory session survives).
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // the in-memory session survives). The home page may render the same video in
+  // BOTH the browse grid and the "Trending now" recommendations rail
+  // (content-dependent), so take the first matching card — every match links to
+  // the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
 
   // Drive playback so the watch page reports progress (the PUT that enters the

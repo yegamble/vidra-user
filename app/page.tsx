@@ -1,6 +1,7 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { FeaturedHero } from "@/components/FeaturedHero";
+import { FeaturedBanner } from "@/components/FeaturedBanner";
 import { FeedFilters } from "@/components/FeedFilters";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
@@ -12,6 +13,7 @@ import { PageShell } from "@/components/PageShell";
 import { VideoFeed } from "@/components/VideoFeed";
 import { VideoGridSkeleton } from "@/components/VideoCardSkeleton";
 import type { FeedSort } from "@/lib/api";
+import { apiBaseUrl } from "@/lib/config";
 import {
   feedDefaultsForLanding,
   resolveFeedScope,
@@ -22,9 +24,22 @@ import {
 import { readFeedFilters } from "@/lib/feed-url";
 import type { FeedFilters as FeedFilterValues } from "@/lib/feed-url";
 import { getPublicFeed } from "@/lib/feed.server";
+import { resolveFeatured } from "@/lib/featured.server";
+import { buildHomeShelvesHintScript, HOME_SHELVES_SLOT_ATTRIBUTE } from "@/lib/home-shelves-hint";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { getInstanceHomepage } from "@/lib/instance-homepage.server";
 import { PAGE_SIZE } from "@/components/ui/LoadMoreButton";
+
+// RSS auto-discovery (Wave F F3): the public videos feed lives on vidra-core at
+// {apiBaseUrl}/feeds/videos.xml. A page-level `alternates` merges with the root
+// layout's title/description/icons (Next merges metadata per key).
+export const metadata: Metadata = {
+  alternates: {
+    types: {
+      "application/rss+xml": [{ url: `${apiBaseUrl}/feeds/videos.xml`, title: "Videos" }],
+    },
+  },
+};
 
 const HEADINGS: Record<FeedSort, string> = {
   recent: "Recent videos",
@@ -83,20 +98,49 @@ export default async function Home({
     filters.language ?? "",
     filters.tag ?? "",
   ].join("|");
-  // The Apple-TV hero leads only the pristine default browse view — the newest
-  // (recent, unfiltered) video. Sorted/filtered/deep-linked views keep the
-  // clean grid so a "featured" tile never contradicts the active query. Seeded
-  // server-side, so with no snapshot (mocked e2e / backend down) there is no
-  // hero and the grid renders exactly as before.
-  const showHero =
-    active === "recent" && !filters.category && !filters.language && !filters.tag;
+  // The admin featured banner (WAVE C): resolved server-side, BEFORE the HTML
+  // streams, so it never pops in. Null unless an admin enabled it AND the pick
+  // resolves to a public, published video — any failure is a silently absent
+  // banner (fail-safe), including in the mocked e2e where server reads have no
+  // backend at all.
+  const featured = await resolveFeatured(instance?.featured);
   return (
     <PageShell className="pb-12 pt-7 sm:pb-16 sm:pt-10">
+      {/* Pre-paint hint (mirrors the broadcast dismiss script): stamps the
+          remembered shelf count onto <html> before first paint so the signed-in
+          shelves band below can reserve that many skeleton shelves and never
+          shove the chips + grid down when it resolves. */}
+      <script dangerouslySetInnerHTML={{ __html: buildHomeShelvesHintScript() }} />
+      {/* Admin featured banner (item 1, OUTSIDE the feed Suspense): server-
+          resolved above, so it is present in the first paint or not at all. It
+          leads the page above the shelves, holds a strict size budget, and stays
+          absent unless an admin enabled it with a video that resolves. */}
+      {featured ? (
+        <div className="mb-8 sm:mb-10">
+          <FeaturedBanner
+            video={featured.video}
+            title={featured.title}
+            description={featured.description}
+            ctaLabel={featured.ctaLabel}
+            label={featured.label}
+          />
+        </div>
+      ) : null}
       {/* Signed-in personalization band (Apple-TV shelves): "Continue watching"
           + "Following" rails ABOVE the browse feed. Client-fetched and authed-
           only, so it renders nothing for a signed-out viewer or a route-mocked
-          e2e — the browse section below then leads exactly as before. */}
-      <HomeShelves />
+          e2e — the browse section below then leads exactly as before.
+
+          The slot is server-rendered and starts EMPTY (HomeShelves is a client
+          component that renders null through SSR + hydration). The pre-paint
+          script above stamps data-home-shelves on <html>, and the reservation
+          CSS (globals.css) sizes this empty slot to the remembered shelf count
+          so the chips + grid below never jump down when the band resolves. The
+          `:empty` selector releases the reservation the moment HomeShelves fills
+          the slot with its (equal-height) skeleton. */}
+      <div {...{ [HOME_SHELVES_SLOT_ATTRIBUTE]: "" }}>
+        <HomeShelves />
+      </div>
       {/* The browse feed reframed as the final shelf-consistent section: a
           Title2 header (matching the shelves above and the discovery rails
           below) over the URL-backed sort control. The sort remains URL-backed,
@@ -122,12 +166,7 @@ export default async function Home({
         <FeedFilters sort={active} filters={filters} urlDefaults={landingDefaults} />
       </div>
       <Suspense key={feedKey} fallback={<StreamedFeedFallback />}>
-        <StreamedVideoFeed
-          sort={active}
-          filters={{ ...filters, scope }}
-          feedKey={feedKey}
-          showHero={showHero}
-        />
+        <StreamedVideoFeed sort={active} filters={{ ...filters, scope }} feedKey={feedKey} />
       </Suspense>
       {/* Optional discovery rails resolve independently in the browser. Keep
           them after the stable primary feed so a slow live/recommendation
@@ -143,12 +182,10 @@ async function StreamedVideoFeed({
   sort,
   filters,
   feedKey,
-  showHero,
 }: {
   sort: FeedSort;
   filters: FeedFilterValues;
   feedKey: string;
-  showHero: boolean;
 }) {
   const initialPage = await getPublicFeed({
     sort,
@@ -159,20 +196,14 @@ async function StreamedVideoFeed({
     limit: PAGE_SIZE,
     offset: 0,
   });
-  const hero =
-    showHero && initialPage && initialPage.videos.length > 0 ? initialPage.videos[0] : null;
   return (
-    <div className="flex flex-col gap-8 sm:gap-10">
-      {hero ? <FeaturedHero video={hero} /> : null}
-      <VideoFeed
-        key={feedKey}
-        sort={sort}
-        filters={filters}
-        initialPage={initialPage}
-        prioritizeFirstRow
-        excludeVideoId={hero?.id}
-      />
-    </div>
+    <VideoFeed
+      key={feedKey}
+      sort={sort}
+      filters={filters}
+      initialPage={initialPage}
+      prioritizeFirstRow
+    />
   );
 }
 

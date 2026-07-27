@@ -22,6 +22,8 @@ function mk(id: string, overrides: Partial<Comment> = {}): Comment {
     updated_at: "2026-01-01T00:00:00.000Z",
     edited: false,
     deleted: false,
+    pinned: false,
+    hearted: false,
     ...overrides,
   };
 }

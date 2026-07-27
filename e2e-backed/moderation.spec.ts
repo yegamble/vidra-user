@@ -31,26 +31,33 @@ test("an admin resolves a queued report and the resolution persists", async ({ p
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  // Open the moderation queue (client-side nav keeps the in-memory session).
+  // Open the moderation queue (client-side nav keeps the in-memory session). The
+  // redesigned queue is a Mail-style split view: the "Report queue" list selects a
+  // report into the "Report detail" pane, where the note + resolve actions live.
   await page.getByRole("link", { name: "Moderation" }).click();
-  const row = page.locator("article", { hasText: reason });
-  await expect(row).toBeVisible();
+  const queue = page.getByRole("list", { name: "Report queue" });
+  const queueRow = queue.getByRole("button").filter({ hasText: reason });
+  await expect(queueRow).toBeVisible();
+  await queueRow.click();
 
-  // Resolve it (accept) with an internal note.
-  await row.getByLabel("Internal moderator note").fill("confirmed abuse");
+  // Resolve it (accept) with an internal note, from the detail pane.
+  const detail = page.getByRole("region", { name: "Report detail" });
+  await detail.getByLabel("Internal moderator note").fill("confirmed abuse");
   const resolved = page.waitForResponse(
     (r) => /\/admin\/reports\/[^/]+\/resolve$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await row.getByRole("button", { name: "Accept" }).click();
+  await detail.getByRole("button", { name: "Accept" }).click();
   await resolved;
 
-  // It drops out of the open view immediately…
-  await expect(page.locator("article", { hasText: reason })).toHaveCount(0);
+  // It drops out of the open queue immediately…
+  await expect(queue.getByRole("button").filter({ hasText: reason })).toHaveCount(0);
 
   // …and stays out after a fresh refetch (navigate away + back).
   await page.getByRole("link", { name: "Home" }).click();
   await page.getByRole("link", { name: "Moderation" }).click();
-  await expect(page.locator("article", { hasText: reason })).toHaveCount(0);
+  await expect(
+    page.getByRole("list", { name: "Report queue" }).getByRole("button").filter({ hasText: reason }),
+  ).toHaveCount(0);
 
   // Persisted: the report's status is now "accepted" in the database (admin API read).
   const after = (await reportsQueue(request, token)).find((r) => r.reason === reason);
@@ -70,13 +77,16 @@ test("rejecting a report persists the rejected status", async ({ page, request }
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Moderation" }).click();
-  const row = page.locator("article", { hasText: reason });
-  await expect(row).toBeVisible();
+  const queue = page.getByRole("list", { name: "Report queue" });
+  const queueRow = queue.getByRole("button").filter({ hasText: reason });
+  await expect(queueRow).toBeVisible();
+  await queueRow.click();
 
+  const detail = page.getByRole("region", { name: "Report detail" });
   const resolved = page.waitForResponse(
     (r) => /\/admin\/reports\/[^/]+\/resolve$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await row.getByRole("button", { name: "Reject" }).click();
+  await detail.getByRole("button", { name: "Reject" }).click();
   await resolved;
 
   const after = (await reportsQueue(request, token)).find((r) => r.reason === reason);

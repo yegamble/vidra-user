@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { liveStreams, loginToken, uniqueId } from "./fixtures";
+import { createChannelViaStudioUI, liveStreams, loginToken, uniqueId } from "./fixtures";
 
 // Backend-backed proof that the studio "Save replay as a video" toggle persists.
 // This is a DATA-MUTATING flow, so it is verified against a real vidra-core +
@@ -25,16 +25,12 @@ test("creating a live stream with replay enabled persists replay_enabled = true"
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
-  // Create a live stream WITH "Save replay as a video" checked.
+  // Create a live stream WITH "Save replay as a video" checked. Live streams live
+  // on the Live tab; "Go live" opens the create modal.
+  await page.getByRole("link", { name: "Live", exact: true }).click();
+  await page.getByRole("button", { name: "Go live" }).click();
   await page.getByLabel("Live stream title").fill(streamTitle);
   await page.getByLabel("Save replay as a video").check();
   const created = page.waitForResponse(

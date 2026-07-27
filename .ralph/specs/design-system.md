@@ -205,7 +205,17 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
   right; single-key archive/act affordances may follow.
 - **Shelves on Home** (Apple TV pattern): horizontally scrolling themed rows
   (Continue watching, Following, Trending…) instead of one undifferentiated
-  grid; shelf headers use the section-heading type ramp.
+  grid; shelf headers use the section-heading type ramp. Continue watching
+  excludes finished videos (position ≥ ~95% of duration — the shared
+  `lib/resume-progress.ts` threshold, which also hides the resume bar). The
+  authed-only shelves band reserves its space before first paint via a
+  remembered shelf count (`lib/home-shelves-hint.ts`: localStorage
+  `vidra:home-shelves-count` → `<html data-home-shelves>`, mirroring the
+  broadcast dismiss pre-paint script) so it never shoves the chips + grid down
+  on a returning signed-in visit. The home page no longer promotes the newest
+  upload to a large hero (that accidental "featured" tile is gone); an explicit
+  admin-controlled **Featured banner** (YouTube masthead pattern) is the only
+  featured slot, size-budgeted so the grid stays visible below it.
 - **Studio storage bar** (iCloud pattern): a single segmented capacity bar
   summarizing quota by media kind.
 - **Stepped upload sheet**: upload becomes a staged sheet (pick → details →
@@ -365,7 +375,11 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   fallback) with overlay badges (duration bottom-right `bg-black/60`; LIVE
   top-left pill with `bg-live animate-[live-pulse_1.6s_infinite]` dot; IPFS
   pill top area); below: 36px avatar + `font-semibold` 2-line-clamped title +
-  `text-fg-muted` meta line (`channel · views · age`).
+  `text-fg-muted` meta that STACKS two lines (YouTube-familiar): the channel
+  link, then a `views · age` line beneath it (same footnote/muted tokens — the
+  change is structure, not a reskin). A history card adds a thin white
+  resume-progress bar on the thumbnail, hidden once the video is finished
+  (≥ ~95%) via `lib/resume-progress.ts`.
 - **Status badges** (Published / Processing / Draft / In review / Failed):
   `Badge` primitive or uppercase micro-label pills — success/warning at `/15`
   fill with token text (`bg-success/15 text-success`); **danger** is the one
@@ -500,6 +514,18 @@ never substitute a library's variant when the design's path differs. Typed
   `cn()` is a plain concat with no `tailwind-merge`, so the base padding wins and
   flex-shrinks the SVG's content box (the kebab regressed to a 12/8px-wide glyph
   this way). Use `triggerVariant="icon"` instead.
+- **Menu placement is portal + fixed (Wave D).** The open menu is portaled to
+  `document.body` (`createPortal`) and positioned `fixed` from the trigger's
+  `getBoundingClientRect()`, then flipped up/down + start/end and clamped inside
+  the viewport, with a capture-phase `scroll` + `resize` reposition and
+  `focus({ preventScroll: true })` on open/refocus. That is what lets a kebab
+  open fully visible from inside a horizontal rail (`HomeShelf`, home
+  recommendations, `LibraryView`, admin video table) — the rails are
+  `overflow-x-auto`, whose computed `overflow-y: auto` would otherwise clip a
+  same-context `absolute` menu — and opening it no longer scrolls the rail. The
+  menu sits in the `z-50` band (Header `z-30`, Modal `z-50`); full menu-button
+  ARIA (arrows / Home / End / Escape-refocus / Tab, `aria-controls` linkage) is
+  preserved across the portal.
 
 ## App shell
 

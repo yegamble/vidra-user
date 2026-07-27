@@ -27,8 +27,9 @@ import { useRestrictedMode } from "@/lib/device-preferences";
 
 // Grid video card in the template's language (specs/design/{app,desktop}-template):
 // a borderless rounded-2xl thumbnail on the page background, then a row with the
-// channel avatar on the left and a title-first block on the right whose second,
-// muted line reads `channel · views · age`. The IPFS thumbnail badge (top-left on
+// channel avatar on the left and a title-first block on the right whose muted
+// meta STACKS the channel link over a `views · age` line (YouTube-familiar
+// structure, same footnote/muted tokens). The IPFS thumbnail badge (top-left on
 // mobile with the cube glyph, top-right on desktop) reflects the REAL `ipfs_pinned`
 // field the feed/card contract carries (vidra-core P19) — shown only when true
 // (public+published videos the IPFS mirror has pinned; absent ⇒ treated as false,
@@ -169,7 +170,10 @@ export function VideoCard({
                 </span>
               ) : null}
               {markSensitive ? (
-                <span className="absolute bottom-2 left-2 inline-flex items-center rounded-full bg-black/55 px-2.5 py-[3px] text-[10.5px] font-semibold leading-none tracking-[0.03em] text-white/90 backdrop-blur group-data-[preview-active=true]/preview:bottom-10">
+                <span
+                  title={video.sensitive_reason || undefined}
+                  className="absolute bottom-2 left-2 inline-flex items-center rounded-full bg-black/55 px-2.5 py-[3px] text-[10.5px] font-semibold leading-none tracking-[0.03em] text-white/90 backdrop-blur group-data-[preview-active=true]/preview:bottom-10"
+                >
                   Sensitive
                 </span>
               ) : null}
@@ -212,7 +216,10 @@ export function VideoCard({
               {video.title}
             </Link>
           </h3>
-          <div className="flex flex-wrap items-center gap-x-1.5 text-footnote text-fg-muted">
+          {/* YouTube-familiar stacked meta: the channel link on its own line,
+              then `views · age` beneath it (both in the same footnote/muted
+              tokens as before — structure, not a reskin). */}
+          <div className="flex min-w-0 flex-col gap-0.5 text-footnote text-fg-muted">
             {video.channel_handle ? (
               isRemote ? (
                 // Remote channel identity ("name@domain") — not a local route.
@@ -225,9 +232,6 @@ export function VideoCard({
                   {channelName}
                 </Link>
               )
-            ) : null}
-            {video.channel_handle && meta.length > 0 ? (
-              <span aria-hidden>·</span>
             ) : null}
             {meta.length > 0 ? (
               <span className="tabular-nums">{meta.join(" · ")}</span>

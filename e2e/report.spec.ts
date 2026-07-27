@@ -125,10 +125,11 @@ test("an authenticated viewer can report a comment author's account", async ({ p
 
   await page.getByRole("heading", { name: "Watch Me" }).click();
   await expect(page.getByText("Rude behaviour")).toBeVisible();
-  // The comment's Report actions now live behind a "Comment actions" menu.
+  // The comment's Report actions now live behind a "Comment actions" menu
+  // (portaled to <body>, so menuitems are looked up at page level).
   const commentRow = page.locator("li", { hasText: "Rude behaviour" });
   await commentRow.getByRole("button", { name: "Comment actions" }).click();
-  await commentRow.getByRole("menuitem", { name: "Report user" }).click();
+  await page.getByRole("menuitem", { name: "Report user" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Report this user" });
   await expect(dialog).toBeVisible();
@@ -150,10 +151,11 @@ test("an authenticated viewer can report a comment", async ({ page }) => {
 
   await page.getByRole("heading", { name: "Watch Me" }).click();
   await expect(page.getByText("Buy cheap stuff at example.com")).toBeVisible();
-  // The comment's Report actions now live behind a "Comment actions" menu.
+  // The comment's Report actions now live behind a "Comment actions" menu
+  // (portaled to <body>, so menuitems are looked up at page level).
   const commentRow = page.locator("li", { hasText: "Buy cheap stuff at example.com" });
   await commentRow.getByRole("button", { name: "Comment actions" }).click();
-  await commentRow.getByRole("menuitem", { name: "Report", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Report", exact: true }).click();
 
   const dialog = page.getByRole("dialog", { name: "Report this comment" });
   await expect(dialog).toBeVisible();

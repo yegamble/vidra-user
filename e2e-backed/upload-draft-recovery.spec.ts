@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-import { API_URL, channelVideos, loginToken, TINY_MP4_BASE64, uniqueId } from "./fixtures";
+import {
+  API_URL,
+  channelVideos,
+  createChannelViaStudioUI,
+  loginToken,
+  TINY_MP4_BASE64,
+  uniqueId,
+} from "./fixtures";
 
 // Proves server-side draft recovery (W2.U1 / UPLOAD-02/03) against a REAL
 // vidra-core + PostgreSQL. A resumable upload session is opened + partially
@@ -34,14 +41,10 @@ test("a server-side upload session appears in the recovery card after reload and
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
+  // The server-side upload recovery card lives on the studio Dashboard, so make
+  // it the current route — the hard reload below must land there.
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
 
   // 2. Seed a HALF-FINISHED resumable upload directly via the API — a real video
   //    file, a draft, an opened session, and one chunk PUT — none of which the

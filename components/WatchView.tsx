@@ -26,12 +26,14 @@ import { ReportButton } from "@/components/ReportButton";
 import { SaveButton } from "@/components/SaveButton";
 import { ShareButton } from "@/components/ShareButton";
 import { SupportButton } from "@/components/SupportButton";
+import { TimestampedText } from "@/components/TimestampedText";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
 import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
 import { TranscodingNote } from "@/components/watch/TranscodingNote";
+import { UpNextQueue } from "@/components/UpNextQueue";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -86,6 +88,10 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   // as the operator's default sort. null (defaults not landed / no backend)
   // reproduces the shipped recent/local baseline, i.e. the pre-W5 URLs.
   const instanceDefaults = useInstanceDefaults();
+  // The signed-in viewer, so the comments section can offer the creator
+  // pin/heart controls when this is the video owner's own channel (owner-only
+  // client gating; the server independently authorizes editors/moderators too).
+  const { user } = useSession();
   const tagFeedDefaults = feedDefaultsForLanding(
     resolveLandingPage(instanceDefaults),
     instanceDefaults,
@@ -112,6 +118,15 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   const playbackQueue = useVideoQueue();
   // The player element, owned here so the Share dialog can read currentTime.
   const playerRef = useRef<HTMLVideoElement | null>(null);
+  // Seek the player in place for a clicked timestamp (comment/description links).
+  // The media element clamps currentTime to its own [0, duration]; the tokenizer
+  // already bounds tokens to the known duration before they ever reach here.
+  const seekToTimestamp = useCallback((seconds: number) => {
+    const el = playerRef.current;
+    if (!el) return;
+    el.currentTime = seconds;
+    void el.play?.().catch(() => {});
+  }, []);
   // An explicit ?t=<seconds> start position from the URL, parsed once. The
   // <video> only renders after the client-side fetch resolves, so reading
   // window here cannot cause a hydration mismatch.
@@ -139,9 +154,11 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   // channel-scoped read alone. Never fabricated.
   const [channel, setChannel] = useState<Channel | null>(null);
   // Sensitive-content gate (spec: instance-platform-info.md): under the
-  // instance blur/warn policy a sensitive video's playback is held behind a
-  // confirmation scrim until the viewer explicitly proceeds. `display` (or an
-  // absent policy — `hide` is enforced server-side) plays normally.
+  // effective blur/warn/hide policy (per-user override else instance) a
+  // sensitive video's playback is held behind a confirmation scrim until the
+  // viewer explicitly proceeds. `hide` normally drops flagged videos from
+  // listings server-side, but a direct link can still reach this watch page, so
+  // it is gated here too. `display` (or an absent policy) plays normally.
   const sensitivePolicy = useSensitiveContentPolicy();
   const restrictedMode = useRestrictedMode();
   const [sensitiveAccepted, setSensitiveAccepted] = useState(false);
@@ -441,7 +458,9 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
         <div className="flex flex-col">
           {isSensitiveVideo(video) &&
           !sensitiveAccepted &&
-          (sensitivePolicy === "blur" || sensitivePolicy === "warn") ? (
+          (sensitivePolicy === "blur" ||
+            sensitivePolicy === "warn" ||
+            sensitivePolicy === "hide") ? (
             // Confirmation scrim (media-overlay exception: theme-invariant dark
             // stage in the player's slot) — playback only starts after an
             // explicit choice.
@@ -453,6 +472,11 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
               <p className="max-w-md text-[13px] text-white/70">
                 The administrators of this instance flag such videos before playback.
               </p>
+              {/* The creator's optional content-warning text, shown below the
+                  generic line only when set. */}
+              {video.sensitive_reason ? (
+                <p className="max-w-md text-[13px] text-white/60">{video.sensitive_reason}</p>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setSensitiveAccepted(true)}
@@ -568,7 +592,12 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
           ) : null}
           {video.description ? (
             <p className="whitespace-pre-wrap rounded-2xl border border-border-subtle bg-surface p-4 text-subhead leading-relaxed text-fg shadow-soft">
-              {video.description}
+              <TimestampedText
+                text={video.description}
+                durationSeconds={video.duration_seconds ?? null}
+                onSeek={seekToTimestamp}
+                keyPrefix="desc"
+              />
             </p>
           ) : null}
         </div>
@@ -577,10 +606,23 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
       {/* comments_enabled is the server's EFFECTIVE value (instance toggle AND
           this video's comments_policy, config-parity W9); absent (older
           payloads) fails open — the server still gates posting. */}
-      <CommentsSection videoId={video.id} commentsEnabled={video.comments_enabled !== false} />
+      <CommentsSection
+        videoId={video.id}
+        commentsEnabled={video.comments_enabled !== false}
+        durationSeconds={video.duration_seconds ?? null}
+        onSeekToTimestamp={seekToTimestamp}
+        canManageComments={Boolean(user && channel && user.id === channel.owner_id)}
+      />
       </div>
 
-      <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setRelatedNextVideo} />
+      {/* Right rail: the viewer's up-next queue (renders nothing when empty)
+          stacked above the related list. The wrapper takes no fixed width — each
+          child carries the rail's lg width — so an empty queue + empty related
+          leaves nothing occupying the column, preserving today's layout. */}
+      <div className={cn("flex flex-col gap-4", theater ? null : "shrink-0")}>
+        <UpNextQueue currentVideo={video} belowLayout={theater} />
+        <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setRelatedNextVideo} />
+      </div>
     </div>
   );
 }

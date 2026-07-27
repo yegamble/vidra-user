@@ -150,3 +150,39 @@ describe("VideoCard preview integration", () => {
     expect(wrapper?.className).toContain("group-focus-within/card:opacity-100");
   });
 });
+
+describe("VideoCard metadata", () => {
+  it("stacks the channel link over a separate views/age line", () => {
+    render(<VideoCard video={video({ views: 3 })} />);
+
+    // The channel is its own link to the channel route…
+    const channel = screen.getByRole("link", { name: "Films" });
+    expect(channel.getAttribute("href")).toBe("/channels/films");
+
+    // …and the views/age line is a DISTINCT element, not concatenated onto the
+    // channel line (the two are stacked, YouTube-style).
+    const meta = screen.getByText(/3 views/);
+    expect(meta.textContent).not.toContain("Films");
+    expect(meta).not.toBe(channel);
+  });
+
+  it("shows the local channel name as a link, remote identity as plain text", () => {
+    const { rerender } = render(<VideoCard video={video()} />);
+    expect(screen.getByRole("link", { name: "Films" })).toBeTruthy();
+
+    rerender(
+      <VideoCard
+        video={video({
+          remote: true,
+          channel_id: undefined,
+          channel_handle: "ada@remote.example",
+          channel_display_name: "Ada Remote",
+          domain: "remote.example",
+        })}
+      />,
+    );
+    // A federated card credits the "name@domain" identity without a local link.
+    expect(screen.getByText("Ada Remote")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Ada Remote" })).toBeNull();
+  });
+});

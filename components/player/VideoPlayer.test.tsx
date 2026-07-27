@@ -303,6 +303,40 @@ describe("VideoPlayer shell", () => {
     expect(screen.queryByText("Intro")).toBeNull();
   });
 
+  it("shows an autoplay-next toggle whose pressed state follows the store and flips on click", () => {
+    render(<Harness />);
+    // Baked default is ON (serverAutoplay + unset session both read on).
+    const on = screen.getByRole("button", { name: "Autoplay next is on" });
+    expect(on.getAttribute("aria-pressed")).toBe("true");
+    // A click flips the session preference the end card honours.
+    fireEvent.click(on);
+    const off = screen.getByRole("button", { name: "Autoplay next is off" });
+    expect(off.getAttribute("aria-pressed")).toBe("false");
+    expect(window.sessionStorage.getItem("vidra.autoplay-next")).toBe("0");
+  });
+
+  it("mirrors the autoplay change to the account when a signed-in user's settings are loaded", () => {
+    const put = vi.spyOn(api, "updatePlayerSettings").mockResolvedValue(DEFAULT_PLAYER_SETTINGS);
+    // A signed-in user's server-backed settings are hydrated (autoplay on).
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, autoplay_next: true });
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Autoplay next is on" }));
+    // Fire-and-forget merge-PUT with just the flipped field.
+    expect(put).toHaveBeenCalledWith({ autoplay_next: false });
+  });
+
+  it("does not touch the account when no signed-in settings are loaded (anonymous / unsettled)", () => {
+    const put = vi.spyOn(api, "updatePlayerSettings").mockResolvedValue(DEFAULT_PLAYER_SETTINGS);
+    render(<Harness />); // settings not hydrated → no account to write to
+    fireEvent.click(screen.getByRole("button", { name: "Autoplay next is on" }));
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("does not render the autoplay toggle on the embed variant", () => {
+    render(<Harness variant="embed" />);
+    expect(screen.queryByRole("button", { name: /Autoplay next/ })).toBeNull();
+  });
+
   it("shows a replay-only end card (no next) when there is nothing queued", () => {
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;

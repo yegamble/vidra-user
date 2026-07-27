@@ -360,6 +360,14 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
   ],
   homepage: [
     {
+      // Server section "featured" on PageHomepage (Wave A). The admin featured
+      // banner: a toggle, a video picker, and presentation overrides.
+      id: "featured",
+      title: "Featured banner",
+      description:
+        "A YouTube-masthead-style banner at the top of the home page. It appears only when it is turned on and the selected video is public and published.",
+    },
+    {
       id: "homepage",
       title: "Homepage document",
       description:
@@ -440,6 +448,7 @@ export type ControlKind =
   | "number" // bounded integer input (limit keys)
   | "bytes" // like number, with a human-readable size hint
   | "color" // hex input + swatch + live WCAG contrast warnings (W6 primary color)
+  | "video-picker" // debounced admin-video search → stores a video UUID (featured banner)
   | "list"; // editable string-array (token chips + free-text add); optional suggestions via META options
 
 /**
@@ -1469,6 +1478,61 @@ export const META: Record<string, SettingMeta> = {
     page: "advanced",
     section: "user-data",
     parent: "user_export_enabled",
+  },
+  // HOMEPAGE / Featured banner (Wave A/C). The master toggle discloses the pick +
+  // overrides; the banner only renders when a video is selected, public, and
+  // published (the frontend resolves it — an unset/private/unpublished pick shows
+  // nothing). The picker searches this instance's admin video list.
+  featured_enabled: {
+    label: "Show the featured banner",
+    help: "Display a featured banner at the top of the home page. It only appears once you select a video below that is public and published.",
+    control: "toggle",
+    page: "homepage",
+    section: "featured",
+  },
+  featured_video_id: {
+    label: "Featured video",
+    help: "Search your instance's videos and pick one. The banner links to it and, unless you override the text below, uses its title and description. The banner stays hidden unless the chosen video is public and published.",
+    control: "video-picker",
+    page: "homepage",
+    section: "featured",
+    parent: "featured_enabled",
+  },
+  featured_title: {
+    label: "Title override",
+    help: "Optional. Replaces the video's title on the banner. Leave empty to use the video's own title.",
+    control: "text",
+    page: "homepage",
+    section: "featured",
+    parent: "featured_enabled",
+  },
+  featured_description: {
+    label: "Description override",
+    help: "Optional. Replaces the video's description on the banner. Leave empty to use the video's own description.",
+    control: "textarea",
+    page: "homepage",
+    section: "featured",
+    parent: "featured_enabled",
+  },
+  featured_cta_label: {
+    label: "Button label",
+    help: "Optional. The call-to-action button text. Leave empty for the default (“Watch now”).",
+    control: "text",
+    page: "homepage",
+    section: "featured",
+    parent: "featured_enabled",
+  },
+  featured_label: {
+    label: "Banner label",
+    help: "The chip shown on the banner: an editorial pick, or a paid placement.",
+    control: "enum-segmented",
+    options: [
+      { value: "featured", label: "Featured" },
+      { value: "sponsored", label: "Sponsored" },
+    ],
+    page: "homepage",
+    section: "featured",
+    parent: "featured_enabled",
   },
 };
 

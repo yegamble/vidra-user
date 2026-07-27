@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-import { API_URL, channelVideos, loginToken, seedPublishedChannel, uniqueId } from "./fixtures";
+import {
+  API_URL,
+  channelVideos,
+  createChannelViaStudioUI,
+  loginToken,
+  seedPublishedChannel,
+  uniqueId,
+} from "./fixtures";
 
 // Import-from-URL (UPLOAD-09, backport W2.U2) against a real vidra-core +
 // PostgreSQL. A creator imports a DIRECT file URL (no yt-dlp needed in CI — the
@@ -34,18 +41,11 @@ test("a creator imports a video from a direct URL — rail runs, import_job tran
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(channelName);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  await createChannelViaStudioUI(page, handle, channelName);
 
-  // Switch to the Import-from-URL tab (segmented source control) and submit the
-  // source's own /original via the compose service name.
-  await page.getByLabel("Video title").fill(videoTitle);
+  // Open the upload sheet and switch to the Import-from-URL tab (segmented source
+  // control), then submit the source's own /original via the compose service name.
+  await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByRole("button", { name: "Import from URL" }).click();
   // The URL must be reachable FROM the backend container, so it uses the compose
   // service name `api:8080` (not the host-facing API_URL) — matching the existing
@@ -53,6 +53,9 @@ test("a creator imports a video from a direct URL — rail runs, import_job tran
   await page
     .getByLabel("Video URL")
     .fill(`http://api:8080/api/v1/videos/${src.videoId}/original`);
+  // The URL path advances to the details step via an explicit Continue.
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Video title").fill(videoTitle);
 
   // The POST enqueues the job (202, resolver "auto"); the studio then polls
   // GET /videos/:id/import and drives the stage rail.
