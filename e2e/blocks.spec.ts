@@ -104,17 +104,18 @@ test("blocking a comment's author posts the block and reflects it", async ({ pag
     (r) => BLOCK_ONE.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   // The per-comment contact/moderation actions now live behind a "Comment
-  // actions" overflow menu; open it, then pick Block.
+  // actions" overflow menu; open it, then pick Block. The menu itself is
+  // portaled to <body>, so menuitems are looked up at page level.
   const bobRow = page.locator("li", { hasText: "hi from bob" });
   await bobRow.getByRole("button", { name: "Comment actions" }).click();
-  await bobRow.getByRole("menuitem", { name: "Block", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Block", exact: true }).click();
   await blocked;
   expect(blockedId).toBe("u-bob");
   // The comment stays (a block doesn't hide content); reopening the menu shows
   // the control now reflects the blocked state.
   await expect(page.getByText("hi from bob")).toBeVisible();
   await bobRow.getByRole("button", { name: "Comment actions" }).click();
-  await expect(bobRow.getByRole("menuitem", { name: "Blocked" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Blocked" })).toBeVisible();
 });
 
 test("the blocked-accounts page lists blocked accounts and unblocks them", async ({ page }) => {
