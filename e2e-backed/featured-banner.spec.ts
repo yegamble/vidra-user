@@ -53,20 +53,27 @@ test("admin featured banner shows on home within the size budget, then disappear
 
   const banner = page.getByTestId("featured-banner");
 
-  // Ride out the ≤60s instance-config cache: reload until the banner appears.
+  // Ride out the ≤60s instance-config cache: reload until the banner appears
+  // WITH THIS RUN's override title — a retry (or an earlier failed run against
+  // the same stack) can have left a previous banner enabled, so a bare
+  // visibility check could pass on a stale masthead before our PATCH surfaces.
   await expect(async () => {
     await page.goto("/");
-    await expect(banner).toBeVisible({ timeout: 3_000 });
+    await expect(banner.getByRole("heading", { name: bannerTitle })).toBeVisible({
+      timeout: 3_000,
+    });
   }).toPass({ timeout: 90_000 });
 
-  // The banner carries a visible Featured chip and the override title.
-  await expect(banner.getByText("Featured")).toBeVisible();
-  await expect(banner.getByRole("heading", { name: bannerTitle })).toBeVisible();
+  // The banner carries a visible Featured chip. exact: the override title also
+  // starts with "Featured", so a substring match would resolve to both the chip
+  // and the heading.
+  await expect(banner.getByText("Featured", { exact: true })).toBeVisible();
 
-  // Size budget: a grid card (VideoCard titles are <h3>; the banner title is <h2>,
-  // and a fresh admin has no shelves) is visible in the SAME viewport — the
-  // masthead did not shove the grid off-screen.
-  const firstGridCard = page.getByRole("heading", { level: 3 }).first();
+  // Size budget: the first grid card's thumbnail starts inside the SAME
+  // viewport — the masthead did not shove the grid off-screen. Measured on the
+  // card's preview block (its own <h3> title sits ~180px further down and can
+  // legitimately fall just below the fold on a 720px viewport).
+  const firstGridCard = page.getByTestId("video-card-preview").first();
   await expect(firstGridCard).toBeVisible();
   const box = await firstGridCard.boundingBox();
   const viewport = page.viewportSize();
