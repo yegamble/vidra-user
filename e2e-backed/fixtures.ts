@@ -529,6 +529,38 @@ export async function videoDetail(
 }
 
 /**
+ * waitForPublished polls a video's public detail until state === "published".
+ * With TRANSCODING_ENABLED=true a fresh upload sits in the shared worker queue
+ * (processing → transcoding → published), which under a full-suite run can take
+ * tens of seconds — seedPublishedChannel returns as soon as the file is
+ * uploaded, NOT when the video is live. Callers that need the video publicly
+ * resolvable (e.g. the featured banner's server-side gate) must wait on this
+ * first, or a "not published yet" read can get data-cached and outlive the
+ * caller's own polling budget.
+ */
+export async function waitForPublished(
+  request: APIRequestContext,
+  videoId: string,
+  timeoutMs = 90_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const res = await request.get(`${API_URL}/api/v1/videos/${videoId}`);
+    if (res.ok()) {
+      const detail = (await res.json()) as { state?: string };
+      if (detail.state === "published") return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `video ${videoId} did not reach state "published" within ${timeoutMs}ms — ` +
+          "shared transcode queue backlog, or the pipeline failed?",
+      );
+    }
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+}
+
+/**
  * waitForHls polls a video's public detail until the transcoding pipeline has
  * published its HLS ladder (hls_url present), returning the detail. Requires
  * the backed stack to run with TRANSCODING_ENABLED=true (frontend-e2e-backed.yml
