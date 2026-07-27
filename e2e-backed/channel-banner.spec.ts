@@ -36,8 +36,10 @@ test("a channel banner uploaded in the studio renders on the public channel page
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  // Studio → create a channel, then open its row editor.
+  // Studio → Channel tab → create a channel. The redesigned owner panel shows the
+  // banner manager inline on the Channel tab (no per-row "Edit" gate).
   await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
   await page.getByLabel("Channel display name").fill(`Channel ${id}`);
   const created = page.waitForResponse(
@@ -46,8 +48,7 @@ test("a channel banner uploaded in the studio renders on the public channel page
   await page.getByRole("button", { name: "Create channel" }).click();
   await created;
 
-  // Upload the banner from the studio row editor.
-  await page.getByRole("button", { name: `Edit ${handle}` }).click();
+  // Upload the banner from the inline channel manager.
   const bannerPosted = page.waitForResponse(
     (r) =>
       new RegExp(`/api/v1/channels/${handle}/banner$`).test(r.url()) &&

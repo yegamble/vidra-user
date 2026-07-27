@@ -34,8 +34,11 @@ test("reporting a video from the watch page persists to the moderation queue", a
 
   await signUpViewer(page, id);
 
-  // Reach the seeded video's watch page from the home feed (client-side nav).
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // Reach the seeded video's watch page from the home feed (client-side nav). The
+  // same video may also render in the "Trending now" recommendations rail
+  // (content-dependent), so take the first matching card — every match links to
+  // the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
 
   await page.getByRole("button", { name: "Report this video" }).click();
@@ -70,10 +73,12 @@ test("reporting a comment from the watch page persists to the moderation queue",
 
   await signUpViewer(page, id);
 
-  await page.getByRole("heading", { name: videoTitle }).click();
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByText(commentBody)).toBeVisible();
 
-  await page.getByRole("button", { name: "Report this comment" }).click();
+  // The comment's report action is behind its "Comment actions" kebab menu.
+  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Comment actions" }).click();
+  await page.getByRole("menuitem", { name: "Report", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Report this comment" });
   await dialog.getByLabel("Reason for report").fill(reason);
   const reported = page.waitForResponse(
@@ -105,10 +110,12 @@ test("reporting an account from a comment persists to the moderation queue", asy
 
   await signUpViewer(page, id);
 
-  await page.getByRole("heading", { name: videoTitle }).click();
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByText(commentBody)).toBeVisible();
 
-  await page.getByRole("button", { name: "Report this user" }).click();
+  // Reporting the comment author's account is behind the comment's kebab menu.
+  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Comment actions" }).click();
+  await page.getByRole("menuitem", { name: "Report user", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Report this user" });
   await dialog.getByLabel("Reason for report").fill(reason);
   const reported = page.waitForResponse(

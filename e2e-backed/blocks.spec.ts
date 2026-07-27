@@ -24,20 +24,29 @@ test("blocking a user refuses direct messages until unblocked", async ({ page, r
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the watch page from the home feed (client-side nav keeps the session).
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // The home page may render the same video in BOTH the browse grid and the
+  // "Trending now" recommendations rail (content-dependent), so take the first
+  // matching card — every match links to the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
   const row = page.locator("li", { hasText: commentBody });
   await expect(row).toBeVisible();
+
+  // The comment's secondary actions (Block/Message/Report) now live behind the
+  // per-comment "Comment actions" kebab overflow menu, not inline buttons.
+  const openCommentActions = () => row.getByRole("button", { name: "Comment actions" }).click();
 
   // Block the commenter (awaited POST /me/blocks/:id).
   const blocked = page.waitForResponse(
     (r) => /\/api\/v1\/me\/blocks\/[^/]+$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await row.getByRole("button", { name: "Block" }).click();
+  await openCommentActions();
+  await page.getByRole("menuitem", { name: "Block", exact: true }).click();
   await blocked;
 
-  // A direct message to the blocked user is now refused (403 surfaced inline).
-  await row.getByRole("button", { name: "Message", exact: true }).click();
+  // A direct message to the blocked user is now refused (403 surfaced as a toast).
+  await openCommentActions();
+  await page.getByRole("menuitem", { name: "Message", exact: true }).click();
   await expect(page.getByText("You can't message this user.")).toBeVisible();
   await expect(page).toHaveURL(/\/videos\/[^/]+$/); // did NOT navigate to a thread
 
@@ -60,11 +69,13 @@ test("blocking a user refuses direct messages until unblocked", async ({ page, r
 
   // Back on the watch page, messaging works again → lands on the real thread.
   await page.getByRole("link", { name: "Home" }).click();
-  await page.getByRole("heading", { name: videoTitle }).click();
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   const started = page.waitForResponse(
     (r) => /\/api\/v1\/conversations$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Message", exact: true }).click();
+  const row2 = page.locator("li", { hasText: commentBody });
+  await row2.getByRole("button", { name: "Comment actions" }).click();
+  await page.getByRole("menuitem", { name: "Message", exact: true }).click();
   await started;
   await expect(page).toHaveURL(/\/messages\/[0-9a-f-]+$/);
 });

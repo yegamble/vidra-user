@@ -59,8 +59,11 @@ test("account and channel avatars persist and render after refetch", async ({ pa
   expect(me.has_avatar).toBe(true);
   expect((await request.get(`${API_URL}/api/v1/users/${me.id}/avatar`)).status()).toBe(200);
 
-  // Studio → create a channel and set its avatar + banner from the row editor.
+  // Studio → Channel tab → create a channel and set its avatar + banner. The
+  // redesigned owner panel shows the avatar + banner managers inline on the
+  // Channel tab (no per-row "Edit" gate).
   await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
   await page.getByLabel("Channel display name").fill(`Channel ${id}`);
   const created = page.waitForResponse(
@@ -69,7 +72,6 @@ test("account and channel avatars persist and render after refetch", async ({ pa
   await page.getByRole("button", { name: "Create channel" }).click();
   await created;
 
-  await page.getByRole("button", { name: `Edit ${handle}` }).click();
   const chAvatarPosted = page.waitForResponse(
     (r) =>
       new RegExp(`/api/v1/channels/${handle}/avatar$`).test(r.url()) &&

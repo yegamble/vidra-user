@@ -40,7 +40,10 @@ test("create a playlist, add a video from the watch page, then remove it", async
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Open the seeded video's watch page (client-side nav so the session survives).
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // The home page may render the same video in BOTH the browse grid and the
+  // "Trending now" recommendations rail (content-dependent), so take the first
+  // matching card — every match links to the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
 
   // Create a playlist AND add this video in one go via "Save to playlist".
@@ -52,7 +55,9 @@ test("create a playlist, add a video from the watch page, then remove it", async
   const added = page.waitForResponse(
     (r) => /\/playlists\/[^/]+\/videos$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.getByRole("button", { name: "Create" }).click();
+  // Scope to the page content: the global header also carries a "Create" menu
+  // button, so an unscoped getByRole would be a strict-mode violation.
+  await page.locator("#main-content").getByRole("button", { name: "Create" }).click();
   await created;
   await added;
 
@@ -90,7 +95,9 @@ test("an owner can edit a playlist's title and visibility, and it persists", asy
   const created = page.waitForResponse(
     (r) => /\/api\/v1\/playlists$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.getByRole("button", { name: "Create" }).click();
+  // Scope to the page content: the global header also carries a "Create" menu
+  // button, so an unscoped getByRole would be a strict-mode violation.
+  await page.locator("#main-content").getByRole("button", { name: "Create" }).click();
   await created;
 
   await page.getByRole("link", { name: new RegExp(`Mix ${id}`) }).click();
@@ -202,7 +209,9 @@ test("a playlist cover uploaded from the detail page persists", async ({ page, r
   const created = page.waitForResponse(
     (r) => /\/api\/v1\/playlists$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.getByRole("button", { name: "Create" }).click();
+  // Scope to the page content: the global header also carries a "Create" menu
+  // button, so an unscoped getByRole would be a strict-mode violation.
+  await page.locator("#main-content").getByRole("button", { name: "Create" }).click();
   await created;
 
   // Open the detail page and upload a PNG cover from the owner cover manager.

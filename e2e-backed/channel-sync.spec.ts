@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { channelSyncs, loginToken, uniqueId } from "./fixtures";
+import { API_URL, channelSyncs, loginToken, uniqueId } from "./fixtures";
 
 // Channel auto-sync (UPLOAD-13, backport W2.U5) against a real vidra-core +
 // PostgreSQL. A creator binds a local channel to an external channel URL through
@@ -33,6 +33,7 @@ test("a creator connects, syncs, and removes a channel auto-sync — the DB row 
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.getByRole("link", { name: "Channel", exact: true }).click();
   await page.getByLabel("Channel handle").fill(handle);
   await page.getByLabel("Channel display name").fill(channelName);
   const channelCreated = page.waitForResponse(
@@ -41,10 +42,23 @@ test("a creator connects, syncs, and removes a channel auto-sync — the DB row 
   await page.getByRole("button", { name: "Create channel" }).click();
   await channelCreated;
 
-  // The auto-sync section is below the channel cards.
+  // The auto-sync section is on the Channel tab, below the channel manager.
   await expect(
     page.getByRole("heading", { name: "Auto-import from another platform" }),
   ).toBeVisible();
+
+  // The connect form only renders when the instance advertises channel auto-sync
+  // (features.channel_sync — true only with YTDLP_IMPORT_ENABLED AND
+  // CHANNEL_SYNC_ENABLED, i.e. the dedicated channel-sync CI job). The MAIN backed
+  // job runs with those OFF, so the section proactively shows its honest disabled
+  // empty state — there is no connect form to drive. Skip there rather than fail;
+  // this flow is exercised by the dedicated channel-sync job.
+  const instRes = await request.get(`${API_URL}/api/v1/instance`);
+  const features = ((await instRes.json()) as { features?: { channel_sync?: boolean } }).features;
+  if (features?.channel_sync === false) {
+    test.skip(true, "channel auto-sync is disabled on this backed stack (YTDLP_IMPORT_ENABLED off)");
+    return;
+  }
 
   // If the feature is off on this stack, the create 503s → honest disabled state.
   // Skip rather than fail (the workflow enables it; a local stack may not).
