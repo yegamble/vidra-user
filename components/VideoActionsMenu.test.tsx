@@ -148,13 +148,20 @@ afterEach(() => {
 });
 
 describe("VideoActionsMenu", () => {
-  it("uses the larger vertical-dot glyph while retaining a 40px action target", () => {
+  it("uses the larger vertical-dot glyph on a 44px action target with no squeeze", () => {
     renderMenu();
     const trigger = screen.getByRole("button", { name: "Actions for A carefully graded film" });
     const icon = trigger.querySelector("svg");
     expect(icon?.getAttribute("width")).toBe("26");
-    expect(trigger.className).toContain("h-10");
-    expect(trigger.className).toContain("w-10");
+    expect(trigger.className).toContain("h-11");
+    expect(trigger.className).toContain("w-11");
+    // Regression: the icon trigger must NOT carry the default pill's text
+    // padding. px-3.5/py-1.5 collapse the button's content box, flex-shrinking
+    // the 26px glyph to ~12px — the exact squeeze this fix removes. (A plain
+    // p-0 override cannot beat px-3.5 without tailwind-merge; the icon variant
+    // sets no padding at all, so nothing conflicts with the h-11/w-11 sizing.)
+    expect(trigger.className).not.toContain("px-3.5");
+    expect(trigger.className).not.toContain("py-1.5");
   });
 
   it("shows every local action in the requested order when policy allows it", () => {
