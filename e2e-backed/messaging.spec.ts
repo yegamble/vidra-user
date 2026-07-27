@@ -34,7 +34,10 @@ test("a viewer can message a commenter and the message persists", async ({ page,
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
   // Reach the watch page from the home feed (client-side nav keeps the session).
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // The home page may render the same video in BOTH the browse grid and the
+  // "Trending now" recommendations rail (content-dependent), so take the first
+  // matching card — every match links to the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
   await expect(page.getByText(commentBody)).toBeVisible();
 
@@ -42,7 +45,8 @@ test("a viewer can message a commenter and the message persists", async ({ page,
   const started = page.waitForResponse(
     (r) => /\/api\/v1\/conversations$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Message", exact: true }).click();
+  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Comment actions" }).click();
+  await page.getByRole("menuitem", { name: "Message", exact: true }).click();
   await started;
   await expect(page).toHaveURL(/\/messages\/[0-9a-f-]+$/);
 
@@ -106,14 +110,17 @@ test("a DM attachment round-trips: upload, send, appears, and the recipient sees
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("heading", { name: videoTitle }).click();
+  // The same video may also appear in the "Trending now" rail (content-dependent),
+  // so take the first matching card — every match links to the same watch page.
+  await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByText(commentBody)).toBeVisible();
 
   // Start the conversation from the comment → routed to the thread.
   const started = page.waitForResponse(
     (r) => /\/api\/v1\/conversations$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Message", exact: true }).click();
+  await page.locator("li", { hasText: commentBody }).getByRole("button", { name: "Comment actions" }).click();
+  await page.getByRole("menuitem", { name: "Message", exact: true }).click();
   await started;
   await expect(page).toHaveURL(/\/messages\/[0-9a-f-]+$/);
   const conversationId = page.url().split("/messages/")[1];
