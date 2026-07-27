@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { TINY_MP4_BASE64, channelVideos, uniqueId } from "./fixtures";
+import { TINY_MP4_BASE64, channelVideos, createChannelViaStudioUI, uniqueId } from "./fixtures";
 
 // Proves the BATCH upload round trip against a real vidra-core + PostgreSQL
 // (W2.U4 / UPLOAD-10): a creator picks THREE real (tiny) video files at once, the
@@ -25,27 +25,27 @@ test("a creator can batch-upload three videos that all persist (chunked)", async
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  // Open the studio and create a channel.
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(channelName);
-  const channelCreated = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await channelCreated;
+  // Open the studio and create a channel (lands on the Content tab).
+  await createChannelViaStudioUI(page, handle, channelName);
 
-  // Pick THREE real tiny videos at once → the batch queue takes over.
+  // Open the upload sheet, then pick THREE real tiny videos at once → the batch
+  // queue takes over.
   const clip = () => ({
     mimeType: "video/mp4",
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
+  await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles([
     { name: `batch-${id}-1.mp4`, ...clip() },
     { name: `batch-${id}-2.mp4`, ...clip() },
     { name: `batch-${id}-3.mp4`, ...clip() },
   ]);
   await expect(page.getByRole("list", { name: "Upload queue" }).getByRole("listitem")).toHaveCount(3);
+
+  // The batch prefills Privacy from the instance defaults (compose default
+  // "private"); this test asserts the videos are PUBLIC on the channel via an
+  // unauthenticated read, so pick Public for the whole batch.
+  await page.getByLabel("Batch privacy").selectOption("public");
 
   // Each row uploads through its own chunked session (terminal call: complete,
   // POST /uploads/:id/complete). Wait for all three "View video" links — one per

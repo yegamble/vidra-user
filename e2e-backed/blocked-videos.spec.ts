@@ -107,16 +107,21 @@ test("an admin blocks a reported video from the moderation queue", async ({ page
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
+  // The moderation queue is a Mail-style split view: select the report from the
+  // "Report queue" list, then act in the "Report detail" pane.
   await page.getByRole("link", { name: "Moderation" }).click();
-  const row = page.locator("article", { hasText: reason });
-  await expect(row).toBeVisible();
+  const queue = page.getByRole("list", { name: "Report queue" });
+  const queueRow = queue.getByRole("button").filter({ hasText: reason });
+  await expect(queueRow).toBeVisible();
+  await queueRow.click();
 
+  const detail = page.getByRole("region", { name: "Report detail" });
   const blocked = page.waitForResponse(
     (r) => /\/admin\/videos\/[^/]+\/block$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await row.getByRole("button", { name: "Block video" }).click();
+  await detail.getByRole("button", { name: "Block video" }).click();
   await blocked;
-  await expect(row.getByText("Video blocked")).toBeVisible();
+  await expect(detail.getByText("Video blocked")).toBeVisible();
 
   // Persisted: the video is blocked (in the block-list) and hidden from the public.
   expect((await blockedVideos(request, token)).some((v) => v.video_id === videoId)).toBe(true);

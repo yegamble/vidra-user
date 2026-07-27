@@ -70,10 +70,11 @@ test("an admin promotes then deactivates a user, and it persists", async ({ page
   await expect(desktop.getByRole("button", { name: `Reactivate ${target.username}` })).toBeVisible();
 
   // Persisted across a fresh refetch. On /admin the console rail replaces the
-  // global sidebar (no "Home" link here), so leave to the app via the console's
-  // "back to the app" wordmark, then re-enter Admin from the app sidebar — a
+  // global sidebar (no "Home" link here); the back-to-app affordance is now the
+  // global header's brand wordmark (a link to "/", named after the instance).
+  // Click it to return to the app, then re-enter Admin from the app sidebar — a
   // fresh AdminUsersView mount refetches from the DB.
-  await page.getByRole("link", { name: /back to the app/ }).click();
+  await page.getByRole("banner").locator('a[href="/"]').click();
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   await searchUsers(page, target.username);
   await desktop.getByRole("button", { name: `Open ${target.username}` }).click();
