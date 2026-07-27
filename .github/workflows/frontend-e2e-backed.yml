@@ -93,6 +93,13 @@ jobs:
         run: npm run build
 
       - name: Run backend-backed e2e
+        env:
+          # Point SERVER-side reads at the live stack. The Playwright webServer
+          # forwards this as INTERNAL_API_BASE_URL; without it the config's
+          # mock-suite default (an unroutable 127.0.0.1:1) applies and every
+          # server-component fetch fails fast — which silently disables the
+          # server-resolved featured banner in this backed run.
+          E2E_API_URL: http://localhost:8080
         run: npm run e2e:backed
 
       - name: Tail backend logs on failure
@@ -168,6 +175,9 @@ jobs:
         run: npm run build
 
       - name: Run the channel-sync backed spec only
+        env:
+          # Same server-side base URL contract as the main backed job above.
+          E2E_API_URL: http://localhost:8080
         run: npm run e2e:backed -- e2e-backed/channel-sync.spec.ts
 
       - name: Tail backend logs on failure
