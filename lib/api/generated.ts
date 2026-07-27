@@ -2272,6 +2272,54 @@ export interface paths {
         patch: operations["updateComment"];
         trace?: never;
     };
+    "/api/v1/comments/{id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Pin a comment
+         * @description Pins a top-level comment as its video's single pinned comment (a YouTube-style creator pin). The caller must be able to manage the comment's video (its channel owner or an editor) or be a moderator/admin. Pinning replaces any existing pin. Only a top-level, non-tombstoned comment can be pinned (422 otherwise). This is local metadata — it never edits the comment body and never federates.
+         */
+        put: operations["pinComment"];
+        post?: never;
+        /**
+         * Unpin a comment
+         * @description Clears the video's pin when this comment is the current pinned one (a no-op otherwise, so it never clears a different pin). Same authorization as pin. Local metadata only — no federation.
+         */
+        delete: operations["unpinComment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comments/{id}/heart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Heart a comment
+         * @description Adds the creator heart to a comment (a like from the video's uploader). The caller must be able to manage the comment's video (owner or editor) or be a moderator/admin. Works on comments at any depth, including remote-authored ones (local metadata only, no federation); a tombstoned comment cannot be hearted (422).
+         */
+        put: operations["heartComment"];
+        post?: never;
+        /**
+         * Remove a comment's heart
+         * @description Removes the creator heart from a comment. Same authorization as heart. Local metadata only — no federation.
+         */
+        delete: operations["unheartComment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/rating": {
         parameters: {
             query?: never;
@@ -2417,7 +2465,7 @@ export interface paths {
         };
         /**
          * List the caller's watch history
-         * @description Returns the caller's watch history as discovery cards, most-recently watched first, each carrying the saved resume position (position_seconds) and the time last watched (watched_at). Only public, published videos are returned. Paginated via limit (1–100, default 20) and offset.
+         * @description Returns the caller's watch history as discovery cards, most-recently watched first, each carrying the saved resume position (position_seconds) and the time last watched (watched_at). Only public, published videos are returned. Paginated via limit (1–100, default 20) and offset. The optional progress filter restricts the list to the "Continue watching" subset.
          */
         get: operations["listWatchHistory"];
         put?: never;
@@ -4683,6 +4731,23 @@ export interface components {
                 level: "info" | "warning" | "error";
                 dismissable: boolean;
             };
+            /** @description Admin featured-banner slot on the homepage (YouTube-masthead-style). The frontend fetches the picked video server-side and renders the banner only when enabled AND video_id resolves to a public, published video; otherwise the banner is silently absent. This block reports the raw admin knobs, not a resolved video. */
+            featured: {
+                enabled: boolean;
+                /** @description Picked video UUID; "" when no video is selected. */
+                video_id: string;
+                /** @description Title override; "" falls back to the video's title. */
+                title: string;
+                /** @description Description override; "" falls back to the video's description. */
+                description: string;
+                /** @description CTA button label override; "" uses the frontend default. */
+                cta_label: string;
+                /**
+                 * @description Chip shown on the banner (editorial pick vs paid placement).
+                 * @enum {string}
+                 */
+                label: "featured" | "sponsored";
+            };
             /** @description Custom CSS/JS references by content hash (never inlined; fetch /api/v1/instance/custom.css?v={css_hash}) plus the primary-color override. */
             customization: {
                 /** @description sha256 of the custom_css document; "" when unset. */
@@ -4843,6 +4908,11 @@ export interface components {
             personalized_search_enabled?: boolean;
             /** @description Per-user personalized-recommendations preference (search-service W4). Default true. */
             personalized_recommendations_enabled?: boolean;
+            /**
+             * @description Per-user override of the instance sensitive_content_policy. Omitted when the account inherits the instance policy (the default). When set, "hide" is enforced server-side for this user (flagged videos drop out of their feed/search); warn/blur/display are presentation-only. Set or clear it via PATCH /auth/me.
+             * @enum {string}
+             */
+            sensitive_content_policy?: "hide" | "warn" | "blur" | "display";
             /** Format: date-time */
             created_at: string;
             /** @description Whether an avatar is set (served at GET /users/{id}/avatar). Present on GET/PATCH /auth/me; omitted elsewhere. */
@@ -4882,6 +4952,8 @@ export interface components {
             personalized_search_enabled?: boolean;
             /** @description Toggle the per-user personalized-recommendations preference (search-service W4). */
             personalized_recommendations_enabled?: boolean;
+            /** @description Set the per-user sensitive-content policy override: one of hide, warn, blur, display, or an empty string to clear the override (inherit the instance policy). Any other value -> 422. */
+            sensitive_content_policy?: string;
         };
         PublicUserProfile: {
             /** Format: uuid */
@@ -5072,6 +5144,8 @@ export interface components {
             state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
             /** @description Whether the owner flagged the video as sensitive content. Always present; false on remote cards (no local flag exists for them). When the instance sensitive_content_policy is "hide", flagged videos are excluded from the public feed and search server-side; under warn/blur the frontend applies the matching presentation. */
             is_sensitive: boolean;
+            /** @description The creator's optional content-warning text, paired with is_sensitive by the frontend. Always present (empty string when unset, and on remote cards). At most 280 characters. */
+            sensitive_reason: string;
             /**
              * Format: date-time
              * @description Creation time. On a remote card this is the origin's published time (falling back to when the video was fetched).
@@ -5376,6 +5450,8 @@ export interface components {
             publish_at?: string;
             /** @description Mark the video as sensitive content (defaults to false). See the Video schema for how the instance policy treats flagged videos. */
             is_sensitive?: boolean;
+            /** @description Optional creator content-warning text, trimmed and capped at 280 characters (-> 422 over the cap). Storable regardless of is_sensitive; the frontend pairs them. */
+            sensitive_reason?: string;
             /**
              * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting. PeerTube's requires_approval tier is deliberately not supported -> 422.
              * @enum {string}
@@ -5407,6 +5483,8 @@ export interface components {
             publish_at?: string;
             /** @description Set or clear the sensitive-content flag (omit to leave unchanged). */
             is_sensitive?: boolean;
+            /** @description Set the creator content-warning text (omit to leave unchanged; an empty string clears it). Trimmed and capped at 280 characters -> 422 over the cap. */
+            sensitive_reason?: string;
             /**
              * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open.
              * @enum {string}
@@ -5459,6 +5537,10 @@ export interface components {
             edited: boolean;
             /** @description True for a tombstoned comment: its author's account was permanently deleted, the stored body was erased, and body renders as "[deleted]" while the reply thread stays intact. */
             deleted: boolean;
+            /** @description True when this comment is its video's creator-pinned comment. At most one top-level comment per video is pinned, and the list returns it first. */
+            pinned: boolean;
+            /** @description True when the video's creator has hearted this comment (a like from the uploader). */
+            hearted: boolean;
         };
         CommentListResponse: {
             comments: components["schemas"]["Comment"][];
@@ -14006,6 +14088,220 @@ export interface operations {
             };
         };
     };
+    pinComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pinned comment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller cannot manage this video's comments. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such comment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A reply or a tombstoned comment cannot be pinned. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unpinComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The comment, now unpinned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller cannot manage this video's comments. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such comment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    heartComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The hearted comment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller cannot manage this video's comments. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such comment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A tombstoned comment cannot be hearted. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unheartComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The comment, now unhearted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller cannot manage this video's comments. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such comment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getVideoRating: {
         parameters: {
             query?: never;
@@ -14360,6 +14656,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                /** @description When set to in_progress, returns only "Continue watching" entries: videos the caller has started (position_seconds >= 5) but not effectively finished (< 95% of a known duration). Any other value or omission returns the full history. */
+                progress?: "in_progress";
             };
             header?: never;
             path?: never;

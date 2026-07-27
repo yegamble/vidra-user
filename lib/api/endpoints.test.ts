@@ -589,6 +589,34 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ body: "hi", parent_id: "c 1" });
   });
 
+  it("pinComment PUTs to a comment's pin endpoint", async () => {
+    await api.pinComment("c1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/comments/c1/pin");
+    expect(init.method).toBe("PUT");
+  });
+
+  it("unpinComment DELETEs a comment's pin endpoint (encoding the id)", async () => {
+    await api.unpinComment("c/1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/comments/c%2F1/pin");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("heartComment PUTs to a comment's heart endpoint", async () => {
+    await api.heartComment("c1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/comments/c1/heart");
+    expect(init.method).toBe("PUT");
+  });
+
+  it("unheartComment DELETEs a comment's heart endpoint (encoding the id)", async () => {
+    await api.unheartComment("c/1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/comments/c%2F1/heart");
+    expect(init.method).toBe("DELETE");
+  });
+
   it("reportVideo POSTs the reason to the video report endpoint", async () => {
     await api.reportVideo("v1", "spam");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

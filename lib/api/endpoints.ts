@@ -1095,6 +1095,39 @@ export const api = {
   deleteComment: (id: string) =>
     apiRequest<void>(`/api/v1/comments/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
+  /**
+   * PUT /api/v1/comments/{id}/pin — pin a top-level comment as the video's
+   * single creator-pinned comment (auth; creator/editor/moderator only,
+   * enforced server-side). Pinning replaces any existing pin atomically. Only a
+   * top-level, non-tombstoned comment can be pinned (422 otherwise). Returns the
+   * updated comment.
+   */
+  pinComment: (id: string) =>
+    apiRequest<Comment>(`/api/v1/comments/${encodeURIComponent(id)}/pin`, { method: "PUT" }),
+
+  /**
+   * DELETE /api/v1/comments/{id}/pin — clear the video's pin when this comment
+   * is the current pinned one (auth; same authorization as pin; a no-op on a
+   * comment that isn't pinned). Returns the updated comment.
+   */
+  unpinComment: (id: string) =>
+    apiRequest<Comment>(`/api/v1/comments/${encodeURIComponent(id)}/pin`, { method: "DELETE" }),
+
+  /**
+   * PUT /api/v1/comments/{id}/heart — add the creator heart to a comment (auth;
+   * creator/editor/moderator only). Works at any depth, on replies and
+   * remote-authored comments too. Returns the updated comment.
+   */
+  heartComment: (id: string) =>
+    apiRequest<Comment>(`/api/v1/comments/${encodeURIComponent(id)}/heart`, { method: "PUT" }),
+
+  /**
+   * DELETE /api/v1/comments/{id}/heart — remove the creator heart from a comment
+   * (auth; same authorization as heart). Returns the updated comment.
+   */
+  unheartComment: (id: string) =>
+    apiRequest<Comment>(`/api/v1/comments/${encodeURIComponent(id)}/heart`, { method: "DELETE" }),
+
   /** POST /api/v1/me/mutes/accounts/{id} — mute an account (auth; idempotent 204). */
   muteAccount: (userId: string) =>
     apiRequest<void>(`/api/v1/me/mutes/accounts/${encodeURIComponent(userId)}`, {
@@ -1534,10 +1567,18 @@ export const api = {
   unsaveVideo: (id: string) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/save`, { method: "DELETE" }),
 
-  /** GET /api/v1/me/history — the caller's watch history as cards, newest-watched first (auth). */
-  getWatchHistory: (params: SearchParams = {}, signal?: AbortSignal) =>
+  /**
+   * GET /api/v1/me/history — the caller's watch history as cards, newest-watched
+   * first (auth). `progress: "in_progress"` narrows the list to the
+   * "Continue watching" subset server-side (started, not effectively finished);
+   * omitting it returns the full history (Wave A3 / Wave C5).
+   */
+  getWatchHistory: (
+    params: SearchParams & { progress?: "in_progress" } = {},
+    signal?: AbortSignal,
+  ) =>
     apiRequest<WatchHistoryResponse>("/api/v1/me/history", {
-      query: { limit: params.limit, offset: params.offset },
+      query: { limit: params.limit, offset: params.offset, progress: params.progress },
       signal,
     }),
 

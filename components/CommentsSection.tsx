@@ -5,9 +5,16 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { ChevronDownIcon, MoreVerticalIcon } from "@/components/icons";
+import {
+  ChevronDownIcon,
+  HeartFilledIcon,
+  HeartIcon,
+  MoreVerticalIcon,
+  PinIcon,
+} from "@/components/icons";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ReportDialog, type ReportKind } from "@/components/ReportButton";
+import { TimestampedText } from "@/components/TimestampedText";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
@@ -39,6 +46,9 @@ type Status = "loading" | "error" | "ready";
 export function CommentsSection({
   videoId,
   commentsEnabled = true,
+  durationSeconds = null,
+  onSeekToTimestamp,
+  canManageComments = false,
 }: {
   videoId: string;
   /**
@@ -48,6 +58,20 @@ export function CommentsSection({
    * existing comments keep rendering (reading stays open server-side too).
    */
   commentsEnabled?: boolean;
+  /** The watch video's duration, so body timestamps clamp to it (Wave F). */
+  durationSeconds?: number | null;
+  /**
+   * Seek the watch player for a clicked (h:)mm:ss timestamp in a comment body.
+   * Absent when comments render outside a watch context → plain `?t=` links.
+   */
+  onSeekToTimestamp?: (seconds: number) => void;
+  /**
+   * True when the signed-in viewer owns this video's channel — surfaces the
+   * creator pin/heart controls in each comment's action menu. Owner-only client
+   * gating: the server independently authorizes editors/moderators, so this
+   * being false never hides a control the server would reject anyway.
+   */
+  canManageComments?: boolean;
 }) {
   const [status, setStatus] = useState<Status>("loading");
   const [comments, setComments] = useState<Comment[]>([]);
@@ -81,6 +105,27 @@ export function CommentsSection({
   const onEdited = (updated: Comment) =>
     setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
   const onDeleted = (id: string) => setComments((prev) => prev.filter((x) => x.id !== id));
+  // A creator heart returns the updated comment: map it in place (like an edit).
+  const onHearted = (updated: Comment) =>
+    setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+  // Pinning one comment atomically replaces any existing pin (one per video) and
+  // the list serves the pinned comment first — mirror that on the flat list: set
+  // the returned comment (pinned:true) in place, clear pinned on every other
+  // comment, then hoist the newly pinned root to the front so the derived tree
+  // matches the server's pinned-first ordering (no refetch).
+  const onPinned = (updated: Comment) =>
+    setComments((prev) => {
+      const next = prev.map((x) =>
+        x.id === updated.id ? updated : x.pinned ? { ...x, pinned: false } : x,
+      );
+      const target = next.find((x) => x.id === updated.id);
+      if (!target) return next;
+      return [target, ...next.filter((x) => x.id !== updated.id)];
+    });
+  // Unpinning just clears the flag in place — position stays put (refetch-free,
+  // consistent with keeping the rest of the list stable).
+  const onUnpinned = (updated: Comment) =>
+    setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
   const onMutedAuthor = (authorId: string) =>
     setComments((prev) => prev.filter((x) => x.author_id !== authorId));
   // An instance mute hides ALL of that origin's comments for the caller.
@@ -126,9 +171,15 @@ export function CommentsSection({
               replies={replies}
               byId={byId}
               videoId={videoId}
+              durationSeconds={durationSeconds}
+              onSeekToTimestamp={onSeekToTimestamp}
+              canManageComments={canManageComments}
               onReplied={onReplied}
               onDeleted={onDeleted}
               onEdited={onEdited}
+              onHearted={onHearted}
+              onPinned={onPinned}
+              onUnpinned={onUnpinned}
               onMutedAuthor={onMutedAuthor}
               onMutedInstance={onMutedInstance}
             />
@@ -310,9 +361,15 @@ function CommentItem({
   byId,
   mentionUsername,
   videoId,
+  durationSeconds = null,
+  onSeekToTimestamp,
+  canManageComments = false,
   onReplied,
   onDeleted,
   onEdited,
+  onHearted,
+  onPinned,
+  onUnpinned,
   onMutedAuthor,
   onMutedInstance,
 }: {
@@ -325,9 +382,17 @@ function CommentItem({
   // reply — plain leading text; unset for a top-level comment or a direct reply.
   mentionUsername?: string;
   videoId: string;
+  durationSeconds?: number | null;
+  onSeekToTimestamp?: (seconds: number) => void;
+  // The viewer manages this video (owner/editor/moderator) → creator pin/heart
+  // actions appear in the action menu.
+  canManageComments?: boolean;
   onReplied: (c: Comment) => void;
   onDeleted: (id: string) => void;
   onEdited: (updated: Comment) => void;
+  onHearted: (updated: Comment) => void;
+  onPinned: (updated: Comment) => void;
+  onUnpinned: (updated: Comment) => void;
   onMutedAuthor: (authorId: string) => void;
   onMutedInstance: (domain: string) => void;
 }) {
@@ -335,6 +400,8 @@ function CommentItem({
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [heartBusy, setHeartBusy] = useState(false);
   const [muting, setMuting] = useState(false);
   const [blocking, setBlocking] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -351,6 +418,9 @@ function CommentItem({
   // reply is visible.
   const [repliesOpen, setRepliesOpen] = useState(false);
   const isRemote = comment.remote === true;
+  // Only a top-level comment can be pinned (server rule); a reply carries a
+  // parent_id, so it never offers the Pin action.
+  const isTopLevel = !comment.parent_id;
   // The local author's account id; null on federated comments (no local account).
   const authorId = !isRemote && comment.author_id ? comment.author_id : null;
   // A remote author-name snapshot can collide with a local username — never
@@ -392,6 +462,50 @@ function CommentItem({
     } catch {
       // Leave the comment in place on failure.
       setBusy(false);
+    }
+  }
+
+  // Creator pin/heart. Each endpoint returns the updated comment; the section's
+  // flat-list handlers reconcile ordering/flags. On failure the state is left
+  // untouched and the reason is surfaced as a toast (the row has no inline slot).
+  async function togglePin(pin: boolean) {
+    if (pinBusy) return;
+    setPinBusy(true);
+    try {
+      const updated = pin ? await api.pinComment(comment.id) : await api.unpinComment(comment.id);
+      if (pin) onPinned(updated);
+      else onUnpinned(updated);
+    } catch (err) {
+      toast({
+        message: errorMessage(
+          err,
+          pin ? "Could not pin this comment." : "Could not unpin this comment.",
+        ),
+        variant: "error",
+      });
+    } finally {
+      setPinBusy(false);
+    }
+  }
+
+  async function toggleHeart(heart: boolean) {
+    if (heartBusy) return;
+    setHeartBusy(true);
+    try {
+      const updated = heart
+        ? await api.heartComment(comment.id)
+        : await api.unheartComment(comment.id);
+      onHearted(updated);
+    } catch (err) {
+      toast({
+        message: errorMessage(
+          err,
+          heart ? "Could not heart this comment." : "Could not remove the heart.",
+        ),
+        variant: "error",
+      });
+    } finally {
+      setHeartBusy(false);
     }
   }
 
@@ -504,9 +618,15 @@ function CommentItem({
                 byId={byId}
                 mentionUsername={replyMention(r, byId)?.username}
                 videoId={videoId}
+                durationSeconds={durationSeconds}
+                onSeekToTimestamp={onSeekToTimestamp}
+                canManageComments={canManageComments}
                 onReplied={handleReplied}
                 onDeleted={onDeleted}
                 onEdited={onEdited}
+                onHearted={onHearted}
+                onPinned={onPinned}
+                onUnpinned={onUnpinned}
                 onMutedAuthor={onMutedAuthor}
                 onMutedInstance={onMutedInstance}
               />
@@ -536,39 +656,86 @@ function CommentItem({
     );
   }
 
-  // Secondary moderation/contact actions collapse into a single overflow menu
-  // (the row keeps only Reply, plus Edit/Delete on your own comment). Remote
-  // comments (no local account) offer Mute instance + Report; local ones offer
-  // the full account controls. Each menu item keeps the label the standalone
-  // control carried, so the accessible name is unchanged inside the menu.
+  // Secondary actions collapse into a single overflow menu (the row keeps only
+  // Reply, plus Edit/Delete on your own comment). Creator pin/heart actions lead
+  // (they apply to your own comment too, so they sit above the — non-self —
+  // moderation/contact group and never depend on authorship). Remote comments
+  // (no local account) offer Mute instance + Report; local ones offer the full
+  // account controls. Each menu item keeps the label the standalone control
+  // carried, so the accessible name is unchanged inside the menu.
   const actionItems: DropdownItem[] = [];
-  if (isRemote) {
-    if (comment.author_domain) {
-      actionItems.push({
-        label: "Mute instance",
-        disabled: muting,
-        onSelect: () => void muteInstance(),
-      });
+  if (canManageComments) {
+    // Pin only a top-level comment (server rule); heart works at any depth,
+    // replies and remote-authored comments included.
+    if (isTopLevel) {
+      actionItems.push(
+        comment.pinned
+          ? {
+              label: "Unpin",
+              icon: <PinIcon size={16} />,
+              disabled: pinBusy,
+              onSelect: () => void togglePin(false),
+            }
+          : {
+              label: "Pin",
+              icon: <PinIcon size={16} />,
+              disabled: pinBusy,
+              onSelect: () => void togglePin(true),
+            },
+      );
     }
-    actionItems.push({ label: "Report", onSelect: () => setReporting("comment") });
-  } else if (authorId) {
-    actionItems.push({ label: "Mute", disabled: muting, onSelect: () => void mute() });
-    actionItems.push({ label: "Message", onSelect: () => void openConversation(false) });
-    if (e2eeAvailable === true) {
-      actionItems.push({
-        label: "Encrypted message",
-        onSelect: () => void openConversation(true),
-      });
-    }
-    actionItems.push({
-      label: blocked ? "Blocked" : "Block",
-      disabled: blocking || blocked,
-      onSelect: () => void block(),
-    });
-    actionItems.push({ label: "Report user", onSelect: () => setReporting("account") });
-    actionItems.push({ label: "Report", onSelect: () => setReporting("comment") });
+    actionItems.push(
+      comment.hearted
+        ? {
+            label: "Unheart",
+            icon: <HeartFilledIcon size={16} />,
+            disabled: heartBusy,
+            onSelect: () => void toggleHeart(false),
+          }
+        : {
+            label: "Heart",
+            icon: <HeartIcon size={16} />,
+            disabled: heartBusy,
+            onSelect: () => void toggleHeart(true),
+          },
+    );
   }
-  const showActionsMenu = status === "authed" && !isAuthor && actionItems.length > 0;
+  // Moderation/contact actions never apply to your own comment. A separator sets
+  // them apart from the creator group above when both are present.
+  const moderationItems: DropdownItem[] = [];
+  if (!isAuthor) {
+    if (isRemote) {
+      if (comment.author_domain) {
+        moderationItems.push({
+          label: "Mute instance",
+          disabled: muting,
+          onSelect: () => void muteInstance(),
+        });
+      }
+      moderationItems.push({ label: "Report", onSelect: () => setReporting("comment") });
+    } else if (authorId) {
+      moderationItems.push({ label: "Mute", disabled: muting, onSelect: () => void mute() });
+      moderationItems.push({ label: "Message", onSelect: () => void openConversation(false) });
+      if (e2eeAvailable === true) {
+        moderationItems.push({
+          label: "Encrypted message",
+          onSelect: () => void openConversation(true),
+        });
+      }
+      moderationItems.push({
+        label: blocked ? "Blocked" : "Block",
+        disabled: blocking || blocked,
+        onSelect: () => void block(),
+      });
+      moderationItems.push({ label: "Report user", onSelect: () => setReporting("account") });
+      moderationItems.push({ label: "Report", onSelect: () => setReporting("comment") });
+    }
+  }
+  if (moderationItems.length > 0) {
+    if (actionItems.length > 0) actionItems.push({ type: "separator" });
+    actionItems.push(...moderationItems);
+  }
+  const showActionsMenu = status === "authed" && actionItems.length > 0;
 
   return (
     <li className="flex flex-col gap-3">
@@ -583,6 +750,18 @@ function CommentItem({
           className="mt-0.5 h-[34px] w-[34px] text-[13px]"
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
+          {/* Creator-pinned marker above the comment header (YouTube parity).
+              Only a top-level comment is ever pinned; a tombstone renders via the
+              early return above, so this row is always live. */}
+          {comment.pinned ? (
+            <span
+              className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted"
+              title="Pinned by creator"
+            >
+              <PinIcon size={12} className="shrink-0" />
+              Pinned
+            </span>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2 text-footnote">
             <span className="text-subhead font-semibold text-fg">
               {comment.author_display_name || comment.author_username}
@@ -618,6 +797,16 @@ function CommentItem({
             {comment.edited ? (
               <span className="text-xs text-fg-muted">(edited)</span>
             ) : null}
+            {/* Creator-heart marker: a filled heart carrying its own accessible
+                name (role=img + title), so the meaning survives without adjacent
+                text. Suppressed on tombstones via the early return above. */}
+            {comment.hearted ? (
+              <HeartFilledIcon
+                size={14}
+                label="Hearted by creator"
+                className="shrink-0 text-fg-muted"
+              />
+            ) : null}
             <span className="ml-auto flex items-center gap-3">
               {!editing ? (
                 <button
@@ -649,10 +838,11 @@ function CommentItem({
                     Delete
                   </button>
                 </>
-              ) : showActionsMenu ? (
-                // Secondary contact/moderation actions live behind a kebab so the
-                // row stays uncluttered (Reply inline). The account controls
-                // (remote: Mute instance + Report) each keep their prior label.
+              ) : null}
+              {showActionsMenu ? (
+                // Creator pin/heart + secondary contact/moderation actions live
+                // behind a kebab so the row stays uncluttered (Reply, and your own
+                // Edit/Delete, stay inline). Each menu item keeps its prior label.
                 <Dropdown
                   trigger={<MoreVerticalIcon size={20} />}
                   triggerLabel="Comment actions"
@@ -698,7 +888,12 @@ function CommentItem({
                 // (username ≠ channel handle), matching the non-link author name.
                 <span className="font-semibold text-fg">@{mentionUsername} </span>
               ) : null}
-              {comment.body}
+              <TimestampedText
+                text={comment.body}
+                durationSeconds={durationSeconds}
+                onSeek={onSeekToTimestamp}
+                keyPrefix={`c-${comment.id}`}
+              />
             </p>
           )}
         </div>

@@ -1,6 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-import { API_URL, TINY_MP4_BASE64, channelVideos, loginToken, uniqueId } from "./fixtures";
+import {
+  API_URL,
+  TINY_MP4_BASE64,
+  channelVideos,
+  createChannelViaStudioUI,
+  loginToken,
+  publishViaStudioUI,
+  startStudioUpload,
+  uniqueId,
+} from "./fixtures";
 
 // Backend-backed proof for password-protected videos + embed privacy (CORE-17 /
 // W1.7) against a real vidra-core + PostgreSQL. Runs under
@@ -24,31 +33,22 @@ async function signUpAndChannel(
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
-  await page.getByLabel("Channel handle").fill(handle);
-  await page.getByLabel("Channel display name").fill(`Channel ${id}`);
-  const created = page.waitForResponse(
-    (r) => /\/api\/v1\/channels$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Create channel" }).click();
-  await created;
+  await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 }
 
 async function publishTinyVideo(
   page: import("@playwright/test").Page,
   title: string,
 ): Promise<void> {
-  await page.getByLabel("Video title").fill(title);
-  await page.getByLabel("Video file").setInputFiles({
-    name: "clip.mp4",
-    mimeType: "video/mp4",
+  // Publish PUBLIC so a later privacy=password edit reveals the locked-but-visible
+  // gate (401 password_required, not a 404), and the embed page can enforce policy.
+  await startStudioUpload(page, {
+    title,
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+    privacy: "public",
   });
-  const uploaded = page.waitForResponse(
-    (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
-  await page.getByRole("button", { name: "Publish" }).click();
-  await uploaded;
+  await publishViaStudioUI(page);
+  await expect(page.getByText("Published!")).toBeVisible();
 }
 
 test("a set password gates the watch page: prompt, wrong password rejected, right password plays", async ({

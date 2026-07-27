@@ -89,6 +89,10 @@ export function UploadSection({
   // is_sensitive on the create-draft body so the instance policy (hide/warn/
   // blur/display) can apply to the published video.
   const [sensitive, setSensitive] = useState(false);
+  // The creator's optional content-warning text, paired with the flag above
+  // (sensitive_reason, ≤280 chars, trimmed server-side). Only revealed and sent
+  // while the sensitive flag is on.
+  const [sensitiveReason, setSensitiveReason] = useState("");
   // Per-video publish policies (config-parity W9), prefilled from the
   // instance's defaults.publish block once GET /instance resolves.
   const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">("enabled");
@@ -672,6 +676,8 @@ export function UploadSection({
       ...(tags.length > 0 ? { tags } : {}),
       ...(scheduleIso ? { publish_at: scheduleIso } : {}),
       is_sensitive: sensitive,
+      // Clear the reason when the flag is off; otherwise send the trimmed text.
+      sensitive_reason: sensitive ? sensitiveReason.trim() : "",
       comments_policy: commentsPolicy,
       download_enabled: downloadEnabled,
       // Harmless when unchanged (the flip already synced it) — keeps the final
@@ -834,6 +840,7 @@ export function UploadSection({
         ...(tags.length > 0 ? { tags } : {}),
         ...(scheduleIso ? { publish_at: scheduleIso } : {}),
         ...(sensitive ? { is_sensitive: true } : {}),
+        ...(sensitive && sensitiveReason.trim() ? { sensitive_reason: sensitiveReason.trim() } : {}),
         ...(publishAfterTranscode ? { publish_after_transcode: true } : {}),
         // Per-video publish policies (W9): the visible form state is what is
         // saved (it was prefilled from defaults.publish, so an untouched form
@@ -1377,6 +1384,22 @@ export function UploadSection({
                       disabled={formLocked}
                     />
                   </div>
+                  {/* Optional creator content-warning, revealed only while the
+                      flag is on. Shown to viewers on the sensitive-content gate. */}
+                  {sensitive ? (
+                    <label className="flex flex-col gap-1 text-sm">
+                      <span className="font-medium text-fg">Content warning (optional)</span>
+                      <input
+                        value={sensitiveReason}
+                        onChange={(e) => setSensitiveReason(e.target.value)}
+                        placeholder="Briefly describe what viewers will see"
+                        aria-label="Content warning"
+                        maxLength={280}
+                        disabled={formLocked}
+                        className={FIELD}
+                      />
+                    </label>
+                  ) : null}
                   {/* Per-video publish policies (config-parity W9), prefilled from the
             instance defaults.publish block. */}
                   <div className="flex items-center justify-between gap-4 text-sm">

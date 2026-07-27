@@ -32,30 +32,34 @@ test("an admin blocks and unblocks a video from the videos overview", async ({ p
   await page.getByLabel("Search videos by title").fill(videoTitle);
   await page.getByRole("button", { name: "Search" }).click();
 
-  const row = page.locator("article", { hasText: videoTitle });
+  // The redesigned videos overview is a table; each video is a role="row" whose
+  // block/unblock action lives in a per-row actions Dropdown (a menu button
+  // labelled "Actions for <title>"), not an inline button.
+  const row = page.getByRole("row").filter({ hasText: videoTitle });
   await expect(row).toBeVisible();
-  await expect(row.getByRole("button", { name: "Block" })).toBeVisible();
+  const openActions = () => row.getByRole("button", { name: `Actions for ${videoTitle}` }).click();
 
-  // Block it → the row flips to blocked.
+  // Block it → the row gains a "Blocked" pill and the menu action flips to Unblock.
   const blocked = page.waitForResponse(
     (r) => /\/admin\/videos\/[^/]+\/block$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  await row.getByRole("button", { name: "Block" }).click();
+  await openActions();
+  await page.getByRole("menuitem", { name: "Block", exact: true }).click();
   await blocked;
-  await expect(row.getByText("blocked")).toBeVisible();
-  await expect(row.getByRole("button", { name: "Unblock" })).toBeVisible();
+  await expect(row.getByText("Blocked")).toBeVisible();
 
   // Persisted: it's in the block-list and hidden from the public detail endpoint.
   expect((await blockedVideos(request, token)).some((v) => v.video_id === videoId)).toBe(true);
   expect(await videoIsPublic(request, videoId)).toBe(false);
 
-  // Unblock it → the row flips back and the video is public again.
+  // Unblock it → the "Blocked" pill clears and the video is public again.
   const unblocked = page.waitForResponse(
     (r) => /\/admin\/videos\/[^/]+\/block$/.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
   );
-  await row.getByRole("button", { name: "Unblock" }).click();
+  await openActions();
+  await page.getByRole("menuitem", { name: "Unblock", exact: true }).click();
   await unblocked;
-  await expect(row.getByRole("button", { name: "Block" })).toBeVisible();
+  await expect(row.getByText("Blocked")).toHaveCount(0);
 
   expect((await blockedVideos(request, token)).some((v) => v.video_id === videoId)).toBe(false);
   expect(await videoIsPublic(request, videoId)).toBe(true);

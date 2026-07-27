@@ -72,7 +72,9 @@ test("the native controls are gone and a custom overlay drives play/pause", asyn
       (window as unknown as { __played: boolean }).__played = true;
     });
   });
-  await page.getByRole("button", { name: "Play" }).click();
+  // exact: the control bar's "Autoplay next is on/off" toggle also substring-
+  // matches "Play".
+  await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __played: boolean }).__played))
     .toBe(true);
@@ -180,7 +182,7 @@ test("the overlay controls are reachable by keyboard in order with visible focus
   await page.getByRole("slider", { name: "Seek" }).focus();
   await expect(page.getByRole("slider", { name: "Seek" })).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "Play" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Play", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Mute" })).toBeFocused();
   await page.keyboard.press("Tab");

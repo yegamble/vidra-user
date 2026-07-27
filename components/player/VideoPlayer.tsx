@@ -16,7 +16,7 @@ import { SeekBar } from "@/components/player/SeekBar";
 import { VolumeControl } from "@/components/player/VolumeControl";
 import { QualityMenu } from "@/components/QualityMenu";
 import { SpeedMenu } from "@/components/SpeedMenu";
-import { videoThumbnailUrl, type Video } from "@/lib/api";
+import { api, videoThumbnailUrl, type Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
 import { primeInstanceDefaults } from "@/lib/instance-defaults";
@@ -41,7 +41,11 @@ import {
   subscribeTheater,
   toggleTheater,
 } from "@/lib/player-theater";
-import { matchQualityLevel, usePlayerSettings } from "@/lib/player-settings";
+import {
+  arePlayerSettingsHydrated,
+  matchQualityLevel,
+  usePlayerSettings,
+} from "@/lib/player-settings";
 import { AUTO_LEVEL } from "@/lib/hls";
 import { readBuffered, stepVolume } from "@/lib/player-ui";
 import {
@@ -300,6 +304,21 @@ export function VideoPlayer({
       void el.requestPictureInPicture?.().catch(() => {});
     }
   }, [videoRef]);
+
+  // In-bar autoplay-next toggle (YouTube parity). Flips the per-session
+  // preference the end card honours (toggleAutoplay); and, when a signed-in
+  // user's per-user settings are loaded (hydrated ⇒ signed in AND settled),
+  // mirrors the new value to the account with a fire-and-forget merge-PUT,
+  // exactly like PlayerSettingsView. Silent on failure — the session value has
+  // already applied, so a dropped PUT never surfaces to the viewer. Anonymous /
+  // unsettled users skip the PUT (there is no account to write to).
+  const onToggleAutoplay = useCallback(() => {
+    const next = !readStoredAutoplay();
+    toggleAutoplay();
+    if (arePlayerSettingsHydrated()) {
+      void api.updatePlayerSettings({ autoplay_next: next }).catch(() => {});
+    }
+  }, []);
 
   // End-card actions (PLAY-08). Replay restarts the finished video from the top;
   // dismiss just closes the card. Both hand focus back to the player controls.
@@ -692,6 +711,25 @@ export function VideoPlayer({
           ) : null}
 
           <div className="flex-1" />
+
+          {/* Autoplay-next toggle (YouTube parity): leads the right-hand cluster
+              (YouTube's autoplay switch sits just before captions/settings). A
+              watch-page concern — an embed must never auto-chain to another
+              video — so it is held off the embed shell. pressed = autoplay on;
+              its snapshot flows through the same useSyncExternalStore wiring as
+              the end card, so SSR/first-client render is stable. */}
+          {variant === "watch" ? (
+            <OverlayButton
+              label={autoplayEnabled ? "Autoplay next is on" : "Autoplay next is off"}
+              pressed={autoplayEnabled}
+              onClick={onToggleAutoplay}
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="M10 9.5v5l4-2.5z" fill="currentColor" stroke="none" />
+              </svg>
+            </OverlayButton>
+          ) : null}
 
           {tracks.length > 0 ? (
             <OverlayButton label="Captions" pressed={captionsOn} onClick={toggleCaptions}>

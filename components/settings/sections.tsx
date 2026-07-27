@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 
 import {
   BellIcon,
+  EyeIcon,
   EyeOffIcon,
   HeartIcon,
   type IconProps,
@@ -119,6 +120,15 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         desc: "Personalization, and your search history.",
         color: "orange",
         Icon: SearchIcon,
+      },
+      {
+        href: "/settings/content",
+        action: "Manage sensitive-content settings",
+        title: "Sensitive content",
+        short: "Content",
+        desc: "Choose whether flagged videos are shown, warned, blurred, or hidden for you.",
+        color: "purple",
+        Icon: EyeIcon,
       },
       {
         href: "/settings/mutes",

@@ -22,6 +22,7 @@ import { cn } from "@/lib/cn";
 import { useRestrictedMode } from "@/lib/device-preferences";
 import { useInstanceFeatures } from "@/lib/instance-features";
 import { usePlayerSettings } from "@/lib/player-settings";
+import { resumeFraction } from "@/lib/resume-progress";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 
 // LibraryView is the design's Library hub (Vidra App template): a History rail
@@ -169,11 +170,11 @@ function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: ()
     typeof item.duration_seconds === "number" && item.duration_seconds > 0
       ? item.duration_seconds
       : null;
+  // Shared finished-aware math: no bar below the resume floor or at >= ~95%
+  // watched (finished videos read as unwatched here too).
+  const resumeFrac = resumeFraction(item.position_seconds, item.duration_seconds);
   const progressPct =
-    duration !== null &&
-    item.position_seconds > 0
-      ? Math.min(100, Math.round((item.position_seconds / duration) * 1000) / 10)
-      : null;
+    resumeFrac === null ? null : Math.min(100, Math.round(resumeFrac * 1000) / 10);
 
   if (sensitive && restrictedMode) {
     return (
@@ -213,7 +214,10 @@ function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: ()
         overlay={
           <>
             {markSensitive ? (
-              <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10">
+              <span
+                title={item.sensitive_reason || undefined}
+                className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10"
+              >
                 Sensitive
               </span>
             ) : null}
@@ -476,7 +480,10 @@ function SavedRow({ video, onDeleted }: { video: Video; onDeleted: () => void })
           }
           overlay={
             markSensitive ? (
-              <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10">
+              <span
+                title={video.sensitive_reason || undefined}
+                className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10"
+              >
                 Sensitive
               </span>
             ) : null

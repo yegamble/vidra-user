@@ -258,7 +258,10 @@ function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void 
           overlay={
             <>
               {markSensitive ? (
-                <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10">
+                <span
+                  title={video.sensitive_reason || undefined}
+                  className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10"
+                >
                   Sensitive
                 </span>
               ) : null}

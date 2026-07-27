@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { WatchView } from "@/components/WatchView";
 import { getInstanceConfig } from "@/lib/instance-config.server";
+import { getRequestOrigin } from "@/lib/request-origin";
 import { getPublicVideo } from "@/lib/video.server";
 import { buildWatchMetadata } from "@/lib/watch-metadata";
 
@@ -16,8 +17,12 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const [video, instance] = await Promise.all([getPublicVideo(id), getInstanceConfig()]);
-  return buildWatchMetadata(video, instance);
+  const [video, instance, origin] = await Promise.all([
+    getPublicVideo(id),
+    getInstanceConfig(),
+    getRequestOrigin(),
+  ]);
+  return buildWatchMetadata(video, instance, origin);
 }
 
 // The watch page is the destination feed cards link to. Seed the client view
