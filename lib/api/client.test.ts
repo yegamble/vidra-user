@@ -272,12 +272,15 @@ describe("restoreSession", () => {
 
 describe("apiRequest 401 → silent refresh → retry", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
-  let expired: ReturnType<typeof vi.fn>;
+  // Typed with its signature rather than a bare `vi.fn()`: an untyped mock is
+  // `Mock<Constructable | Procedure>`, which setSessionExpiredHandler's
+  // `(() => void) | null` parameter does not accept.
+  let expired: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    expired = vi.fn();
+    expired = vi.fn<() => void>();
     setSessionExpiredHandler(expired);
     setAccessToken("stale");
   });
