@@ -229,20 +229,29 @@ test.describe("Apple HIG polish at desktop width", () => {
     const header = await banner.evaluate((element) => {
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
+      // Measure against the body, not documentElement.clientWidth: the page
+      // reserves a scrollbar track (`scrollbar-gutter: stable`), so where
+      // scrollbars are classic (Linux CI) clientWidth runs ~15px wider than the
+      // box the layout actually gets, while overlay scrollbars (macOS) make the
+      // two identical. The body is the same reference on both.
+      const body = document.body.getBoundingClientRect();
       return {
         radius: Number.parseFloat(style.borderRadius),
         borderBottom: Number.parseFloat(style.borderBottomWidth),
         background: style.backgroundColor,
         left: rect.left,
         width: rect.width,
-        viewportWidth: document.documentElement.clientWidth,
+        bodyLeft: body.left,
+        bodyWidth: body.width,
       };
     });
     expect(header.radius).toBe(0);
     expect(header.borderBottom).toBeGreaterThan(0);
     expect(header.background).not.toBe("rgba(0, 0, 0, 0)");
-    expect(header.left).toBe(0);
-    expect(header.width).toBe(header.viewportWidth);
+    // The material itself reaches both edges — the old inset toolbar carried it
+    // on an inner div with a gutter, so this is what the flush box adds.
+    expect(header.left).toBe(header.bodyLeft);
+    expect(header.width).toBe(header.bodyWidth);
 
     const chrome = await sidebar.evaluate((element) => {
       const style = getComputedStyle(element);
