@@ -416,3 +416,133 @@ describe("SearchAutocomplete — mobile overlay", () => {
     expect(document.activeElement).toBe(trigger);
   });
 });
+
+// ⌘K / Ctrl+K / "/" focus the site search from anywhere, and the keycap makes
+// that discoverable. jsdom has no layout, so the breakpoint the handler routes
+// on is stubbed per test (the real matchMedia is restored after each).
+describe("SearchAutocomplete — global focus shortcuts", () => {
+  const realMatchMedia = window.matchMedia;
+
+  function stubViewport(phone: boolean) {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: phone && query.includes("max-width"),
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+  }
+
+  /** A focused field elsewhere on the page (a comment box, a settings input). */
+  function otherField(): HTMLInputElement {
+    const el = document.createElement("input");
+    document.body.appendChild(el);
+    el.focus();
+    return el;
+  }
+
+  beforeEach(() => {
+    getSearchSuggestions.mockResolvedValue(response([]));
+    stubViewport(false);
+  });
+
+  afterEach(() => {
+    window.matchMedia = realMatchMedia;
+  });
+
+  it("⌘K focuses the header field from anywhere and selects the existing draft", () => {
+    renderBox();
+    const input = combobox();
+    fireEvent.change(input, { target: { value: "reactor" } });
+    const other = otherField();
+    expect(document.activeElement).toBe(other);
+
+    fireEvent.keyDown(other, { key: "k", metaKey: true });
+
+    expect(document.activeElement).toBe(input);
+    // Selected, not appended: the next keystroke replaces the old query.
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe("reactor".length);
+    other.remove();
+  });
+
+  it("Ctrl+K does the same for non-mac keyboards", () => {
+    renderBox();
+    const input = combobox();
+    const other = otherField();
+
+    fireEvent.keyDown(other, { key: "k", ctrlKey: true });
+
+    expect(document.activeElement).toBe(input);
+    other.remove();
+  });
+
+  it('"/" focuses the field, but stays a character while another field has the caret', () => {
+    renderBox();
+    const input = combobox();
+
+    const other = otherField();
+    fireEvent.keyDown(other, { key: "/" });
+    expect(document.activeElement).toBe(other);
+    other.remove();
+
+    fireEvent.keyDown(document.body, { key: "/" });
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("stays out of the way while a modal dialog owns focus", () => {
+    renderBox();
+    const input = combobox();
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    document.body.appendChild(dialog);
+
+    fireEvent.keyDown(document.body, { key: "k", metaKey: true });
+
+    expect(document.activeElement).not.toBe(input);
+    dialog.remove();
+  });
+
+  it("opens the full-screen sheet instead of the pill on phones", async () => {
+    stubViewport(true);
+    renderBox();
+
+    fireEvent.keyDown(document.body, { key: "k", metaKey: true });
+
+    const sheet = await screen.findByRole("button", { name: "Close search" });
+    expect(sheet).toBeTruthy();
+  });
+
+  it("Escape unwinds the field: clear the draft, then release focus", () => {
+    renderBox();
+    const input = combobox();
+    act(() => input.focus());
+    fireEvent.change(input, { target: { value: "reactor" } });
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.value).toBe("");
+    expect(document.activeElement).toBe(input);
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it("shows the keycap while the field is empty and swaps it for clear once typing", () => {
+    renderBox();
+    expect(screen.getByTestId("search-shortcut-hint")).toBeTruthy();
+
+    fireEvent.change(combobox(), { target: { value: "x" } });
+
+    expect(screen.queryByTestId("search-shortcut-hint")).toBeNull();
+    expect(screen.getByRole("button", { name: "Clear search" })).toBeTruthy();
+  });
+
+  it("announces the shortcut to assistive tech on the header input", () => {
+    renderBox();
+    expect(combobox().getAttribute("aria-keyshortcuts")).toBe("Meta+K Control+K /");
+  });
+});

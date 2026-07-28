@@ -9,6 +9,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
@@ -108,6 +109,17 @@ function suggestionIcon(type: string): ReactNode {
   }
 }
 
+// Elements where a bare "/" is a character the user is typing, not the
+// focus-search command. `closest` also covers a click target nested inside a
+// contenteditable region.
+const EDITABLE =
+  'input,textarea,select,[contenteditable]:not([contenteditable="false"])';
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (target === null || !(target instanceof Element)) return false;
+  return target.closest(EDITABLE) !== null;
+}
+
 function groupLabel(bucket: number): string {
   if (bucket === 1) return t("search.groupVideos");
   if (bucket === 2) return t("search.groupChannels");
@@ -144,6 +156,7 @@ type Combobox = ReturnType<typeof useSearchCombobox>;
 function useSearchCombobox({
   suggestionsEnabled,
   onCommit,
+  escapeBlurs = false,
   inputRef,
   listRef,
   optionRefs,
@@ -152,6 +165,12 @@ function useSearchCombobox({
   /** Fired after any navigation (select / submit). The mobile sheet closes; the
    *  header pill ignores it. */
   onCommit?: () => void;
+  /** Whether a final Escape (popup already closed, field already empty) gives
+   *  focus back to the page. True for the header pill — the standard way out of
+   *  a search box you opened with ⌘K. The mobile sheet leaves it false: there,
+   *  Escape is the sheet's own close, and blurring first would fight its focus
+   *  trap. */
+  escapeBlurs?: boolean;
 } & ComboboxRefs) {
   const router = useRouter();
   const pathname = usePathname();
@@ -414,6 +433,9 @@ function useSearchCombobox({
           selectSuggestion(suggestions[activeIndex], activeIndex);
         }
         return;
+      // Escape unwinds the box one step at a time (the convention every
+      // command-palette-style search follows): close the suggestions, then
+      // clear the draft, then hand focus back to the page.
       case "Escape":
         if (open) {
           e.preventDefault();
@@ -421,6 +443,9 @@ function useSearchCombobox({
         } else if (value !== "") {
           e.preventDefault();
           setValue("");
+        } else if (escapeBlurs) {
+          e.preventDefault();
+          inputRef.current?.blur();
         }
         return;
       case "Tab":
@@ -487,16 +512,58 @@ function ClearButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-// The rounded-full pill: search glyph, the combobox input, and a clear ×. The
-// caller wraps it in the role="search" form so submit navigates.
+// Platform read for the keycap glyph, shaped as an external store: the value is
+// constant for the life of the tab, so `subscribe` hands back a no-op teardown
+// and the snapshot getters are module-level (stable identities, no re-subscribe
+// churn). `null` on the server — the platform is not knowable there.
+const NOOP_UNSUBSCRIBE = () => {};
+const subscribePlatform = () => NOOP_UNSUBSCRIBE;
+const readIsMacOnServer = (): boolean | null => null;
+const readIsMac = (): boolean | null => {
+  const platform = typeof navigator.platform === "string" ? navigator.platform : "";
+  return /Mac|iPhone|iPad|iPod/i.test(platform || navigator.userAgent);
+};
+
+/**
+ * The trailing ⌘K / Ctrl K keycap in the header pill — the affordance that
+ * makes the shortcut discoverable without a tooltip. Decorative
+ * (`aria-hidden`): assistive tech gets the same information from the input's
+ * `aria-keyshortcuts`. The platform is only knowable in the browser, so the
+ * glyph fills in after mount; the slot reserves its width up front so resolving
+ * it never reflows the pill.
+ */
+function ShortcutHint() {
+  // useSyncExternalStore (rather than an effect) so the server/hydration pass
+  // renders the empty slot and the client value lands in the same commit — no
+  // setState-in-effect, no hydration mismatch. The platform never changes, so
+  // the subscription is a no-op.
+  const mac = useSyncExternalStore(subscribePlatform, readIsMac, readIsMacOnServer);
+
+  return (
+    <kbd
+      aria-hidden="true"
+      data-testid="search-shortcut-hint"
+      className="pointer-events-none flex h-6 min-w-[2.5rem] shrink-0 items-center justify-center rounded-md border border-border bg-surface px-1.5 text-[11px] font-semibold text-fg-muted"
+    >
+      {mac === null ? "" : mac ? "⌘K" : "Ctrl K"}
+    </kbd>
+  );
+}
+
+// The rounded-full pill: search glyph, the combobox input, and a trailing slot
+// that is the clear × while there is a draft and the ⌘K keycap while there is
+// not. The caller wraps it in the role="search" form so submit navigates.
 function PillInput({
   c,
   inputRef,
   autoFocus,
+  shortcutHint = false,
 }: {
   c: Combobox;
   inputRef: React.RefObject<HTMLInputElement | null>;
   autoFocus?: boolean;
+  /** Header pill only — the phone sheet has no hardware keyboard to hint at. */
+  shortcutHint?: boolean;
 }) {
   return (
     <div className="flex min-h-11 items-center gap-2.5 rounded-full border border-border bg-surface-muted px-4 py-2 transition-colors focus-within:bg-surface has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-focus">
@@ -511,6 +578,9 @@ function PillInput({
         aria-activedescendant={c.showPanel && c.activeIndex >= 0 ? c.optionId(c.activeIndex) : undefined}
         aria-autocomplete="list"
         aria-label={t("search.inputLabel")}
+        // Announces the global focus shortcuts to assistive tech; the visible
+        // keycap beside it is the sighted equivalent.
+        aria-keyshortcuts={shortcutHint ? "Meta+K Control+K /" : undefined}
         autoComplete="off"
         autoFocus={autoFocus}
         value={c.value}
@@ -523,7 +593,7 @@ function PillInput({
         onCompositionEnd={c.onCompositionEnd}
         className="w-full bg-transparent text-sm text-fg outline-none placeholder:text-fg-muted [&::-webkit-search-cancel-button]:appearance-none"
       />
-      {c.value ? <ClearButton onClick={c.clear} /> : null}
+      {c.value ? <ClearButton onClick={c.clear} /> : shortcutHint ? <ShortcutHint /> : null}
     </div>
   );
 }
@@ -626,11 +696,23 @@ function SuggestionListbox({
 
 // ── The header pill (sm and up) ─────────────────────────────────────────────
 
-function HeaderSearchField({ suggestionsEnabled }: { suggestionsEnabled: boolean }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function HeaderSearchField({
+  suggestionsEnabled,
+  inputRef,
+}: {
+  suggestionsEnabled: boolean;
+  /** Owned by the parent so the ⌘K / "/" handler can focus this field. */
+  inputRef: React.RefObject<HTMLInputElement | null>;
+}) {
   const listRef = useRef<HTMLUListElement>(null);
   const optionRefs = useRef<(HTMLLIElement | null)[]>([]);
-  const c = useSearchCombobox({ suggestionsEnabled, inputRef, listRef, optionRefs });
+  const c = useSearchCombobox({
+    suggestionsEnabled,
+    escapeBlurs: true,
+    inputRef,
+    listRef,
+    optionRefs,
+  });
   return (
     <div className="hidden min-w-0 flex-1 justify-center px-2 sm:flex">
       <form
@@ -642,7 +724,7 @@ function HeaderSearchField({ suggestionsEnabled }: { suggestionsEnabled: boolean
           c.submitRaw();
         }}
       >
-        <PillInput c={c} inputRef={inputRef} />
+        <PillInput c={c} inputRef={inputRef} shortcutHint />
         <div role="status" aria-live="polite" className="sr-only">
           {c.liveMessage}
         </div>
@@ -769,6 +851,11 @@ function MobileSearchOverlay({
  *    returned to the icon button on close. When the Search tab lands on an empty
  *    /search, the sheet auto-opens with the keyboard focused.
  *
+ *  - Shortcuts: ⌘K / Ctrl+K and "/" focus the box from anywhere in the app
+ *    (opening the sheet instead on phones), Escape steps back out of it
+ *    (suggestions → draft → focus), and the pill carries a ⌘K keycap plus
+ *    `aria-keyshortcuts` so both sighted and AT users can find it.
+ *
  * There is exactly one visible role="search" landmark at a time. Suggestions are
  * gated on the instance's effective `suggestions_enabled`; when off (or the
  * service is down) the box is a plain search field with a silent panel — the
@@ -779,7 +866,49 @@ export function SearchAutocomplete({ suggestionsEnabled = true }: { suggestionsE
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const headerInputRef = useRef<HTMLInputElement>(null);
   const autoOpenedRef = useRef(false);
+
+  // Global focus shortcuts: ⌘K / Ctrl+K anywhere, and the bare "/" that every
+  // browse-first site (YouTube, GitHub) has trained people to expect. Both land
+  // in whichever surface this breakpoint actually shows — the header pill at
+  // sm+, the full-screen sheet on phones (a hardware keyboard on a tablet-sized
+  // phone layout still deserves the shortcut).
+  //
+  // Skipped when: a modal dialog owns focus (the shortcut must not pull focus
+  // out of a trap), the sheet is already open (it has its own key handling), the
+  // event was already handled, or an IME is composing. The bare "/" is
+  // additionally skipped while the caret is in any other field — there it is a
+  // character, not a command — which also lets it be typed inside this box.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.isComposing) return;
+      const chord = e.metaKey || e.ctrlKey;
+      const isCommandK = chord && !e.altKey && (e.key === "k" || e.key === "K");
+      const isSlash = !chord && !e.altKey && e.key === "/";
+      if (!isCommandK && !isSlash) return;
+      if (mobileOpen) return;
+      if (isSlash && isEditableTarget(e.target)) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]') !== null) return;
+
+      e.preventDefault();
+      const phone =
+        typeof window.matchMedia === "function" && window.matchMedia("(max-width: 639px)").matches;
+      if (phone) {
+        setMobileOpen(true);
+        return;
+      }
+      const input = headerInputRef.current;
+      if (input === null) return;
+      input.focus();
+      // Select rather than append: re-triggering the shortcut over an existing
+      // query should let the next keystroke replace it.
+      input.select();
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileOpen]);
 
   const emptySearchPage = pathname === "/search" && (searchParams.get("q") ?? "") === "";
 
@@ -805,7 +934,7 @@ export function SearchAutocomplete({ suggestionsEnabled = true }: { suggestionsE
 
   return (
     <>
-      <HeaderSearchField suggestionsEnabled={suggestionsEnabled} />
+      <HeaderSearchField suggestionsEnabled={suggestionsEnabled} inputRef={headerInputRef} />
       <div className="flex flex-1 justify-end sm:hidden">
         <button
           ref={triggerRef}
@@ -839,7 +968,12 @@ export function SearchAutocompleteFallback() {
         <div className="relative w-full max-w-xl">
           <div className="flex min-h-11 items-center gap-2.5 rounded-full border border-border bg-surface-muted px-4 py-2">
             <SearchIcon size={17} strokeWidth={2} className="shrink-0 text-fg-muted" />
-            <span className="truncate text-sm text-fg-muted">{t("search.placeholder")}</span>
+            <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">
+              {t("search.placeholder")}
+            </span>
+            {/* The keycap slot, reserved at the same size the live pill uses so
+                hydration swaps content into it without moving anything. */}
+            <span aria-hidden="true" className="h-6 min-w-[2.5rem] shrink-0" />
           </div>
         </div>
       </div>

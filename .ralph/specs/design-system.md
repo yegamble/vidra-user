@@ -448,6 +448,13 @@ fallback. `prefers-reduced-transparency`, `prefers-contrast: more`, and forced
 colors all use the solid treatment. Keep this material on navigation and
 transient controls; content cards remain on standard canvas/surface materials.
 
+The material comes in two boxes. The **floating** one (rounded, ringed,
+shadowed) is the sidebar and the phone tab bar. The **full-bleed** one — the
+same material plus `.glass-chrome-flush`, which drops the radius, the ring, and
+the shadow in favour of a single bottom hairline — is the app header, which
+spans the viewport edge to edge with no top or side gutter. A new surface picks
+one of these two; it does not invent a third box.
+
 ## Component primitives (`components/ui/`)
 
 Import from the barrel `@/components/ui`. All primitives are token-driven and
@@ -531,7 +538,17 @@ never substitute a library's variant when the design's path differs. Typed
 
 - `Header` — brand, centered pill `SearchBox` (hidden < `sm`; Search is a tab
   there), pill Create → `/studio` (hidden < `sm`), `NotificationsBell`,
-  `AccountMenu`. Sticky and inset in a rounded `.glass-chrome` toolbar.
+  `AccountMenu`. Sticky and **full-bleed**: `.glass-chrome .glass-chrome-flush`
+  spanning the viewport with no top/side gutter and a single bottom hairline,
+  safe-area padded at the top. The row's own `px-6 sm:px-8` is the only inset,
+  which keeps the brand where the earlier floating toolbar put it optically.
+  Sticky offsets that park under it (e.g. `Sidebar`) measure from its `h-16
+  sm:h-14` height, not from a gutter.
+  The search pill carries a ⌘K / Ctrl K keycap and `aria-keyshortcuts`:
+  ⌘K / Ctrl+K / `/` focus it from anywhere (the phone sheet opens instead below
+  `sm`), and Escape unwinds it one step at a time — suggestions, then draft,
+  then focus. Keep the keycap and `KeyboardShortcutsModal`'s "Focus search" row
+  in sync with the handler.
 - `Sidebar` (≥ `sm`) — every primary destination + role-gated
   Moderation/Admin, `aria-current="page"`, collapsible icon rail (persisted),
   floating in a rounded `.glass-chrome` panel rather than anchoring to an edge.

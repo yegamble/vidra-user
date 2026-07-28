@@ -25,6 +25,13 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 // wordmark shrinks beside the centered search pill. Hidden on focused standalone
 // routes (embeds and account entry).
 //
+// The bar is full-bleed: the chrome material spans the viewport edge to edge and
+// sits flush against the top (`.glass-chrome-flush` drops the corner radius, the
+// ring, and the shadow for a single bottom hairline), so the only inset is the
+// row's own padding — which keeps the brand optically where the old floating
+// toolbar put it. Safe-area top padding keeps the row clear of a notch when the
+// PWA runs standalone.
+//
 // Config-parity W4 branding: the SSR instance snapshot (passed down by
 // app/layout.tsx; null when the backend is unreachable) supplies the header
 // logo slots — header_wide for the sm+ header, header_square as the compact
@@ -76,8 +83,8 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
   const desktopLogo = wideLogo ?? squareLogo ?? avatar;
 
   return (
-    <header className="sticky top-0 z-30 px-2 pt-2 sm:px-3 sm:pt-3">
-      <div className="glass-chrome mx-auto flex h-16 w-full items-center gap-3 rounded-[22px] px-4 sm:h-14 sm:gap-5 sm:px-5">
+    <header className="glass-chrome glass-chrome-flush sticky top-0 z-30 pt-[env(safe-area-inset-top)]">
+      <div className="mx-auto flex h-16 w-full items-center gap-3 px-6 sm:h-14 sm:gap-5 sm:px-8">
         <Link
           href="/"
           className="focus-ring flex min-h-11 flex-col justify-center gap-1 rounded-lg"
