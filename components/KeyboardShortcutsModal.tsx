@@ -7,7 +7,7 @@ const groups = [
   {
     title: "Site navigation",
     shortcuts: [
-      ["Focus search", "/"], ["Go home", "g then h"], ["Open Studio", "g then s"],
+      ["Focus search", "⌘K / Ctrl K / /"], ["Go home", "g then h"], ["Open Studio", "g then s"],
       ["Open your profile", "g then p"], ["Open library", "g then l"], ["Show this dialog", "?"],
     ],
   },

@@ -217,10 +217,32 @@ test.describe("Apple HIG polish at desktop width", () => {
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "Recent videos", level: 1 })).toBeVisible();
-    const headerMaterial = page.getByRole("banner").locator(".glass-chrome");
+    // Two boxes of the one chrome material: the header is the full-bleed box
+    // (edge to edge, no radius, a single bottom hairline instead of a ring +
+    // shadow); the sidebar is the floating box (rounded, inset from the edge).
+    const banner = page.getByRole("banner");
     const sidebar = page.getByRole("navigation", { name: "Primary" });
-    await expect(headerMaterial).toHaveCount(1);
+    await expect(banner).toHaveClass(/glass-chrome/);
+    await expect(banner).toHaveClass(/glass-chrome-flush/);
     await expect(sidebar).toHaveClass(/glass-chrome/);
+
+    const header = await banner.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return {
+        radius: Number.parseFloat(style.borderRadius),
+        borderBottom: Number.parseFloat(style.borderBottomWidth),
+        background: style.backgroundColor,
+        left: rect.left,
+        width: rect.width,
+        viewportWidth: document.documentElement.clientWidth,
+      };
+    });
+    expect(header.radius).toBe(0);
+    expect(header.borderBottom).toBeGreaterThan(0);
+    expect(header.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(header.left).toBe(0);
+    expect(header.width).toBe(header.viewportWidth);
 
     const chrome = await sidebar.evaluate((element) => {
       const style = getComputedStyle(element);

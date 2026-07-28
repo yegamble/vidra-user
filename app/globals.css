@@ -288,6 +288,20 @@ body {
   }
 }
 
+/*
+ * Full-bleed variant of the same material: used by the app header, which spans
+ * the viewport edge to edge with no gutter and no corner radius, and separates
+ * from the content with a single hairline instead of a floating card's ring +
+ * shadow. It only re-boxes `.glass-chrome` (both classes are applied), so the
+ * material itself — and every reduced-transparency / prefers-contrast /
+ * forced-colors fallback that targets `.glass-chrome` — still applies.
+ */
+.glass-chrome-flush {
+  border-width: 0 0 1px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 /* Hide the scrollbar on horizontal chip/filter strips — the content still
    scrolls by touch/trackpad; a visible bar under a chip row reads as clutter. */
 .scrollbar-none {
