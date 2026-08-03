@@ -95,9 +95,17 @@ describe("AdminJobRunsView", () => {
   it("sends server filters and expands sanitized failure/event detail", async () => {
     render(<AdminJobRunsView refreshKey={0} />);
     expect(await screen.findByText("video_import")).toBeTruthy();
-    expect(mocks.subscribeEventStream).toHaveBeenCalledWith(
-      "/api/v1/admin/jobs/events",
-      expect.objectContaining({ lastEventId: "90071992547409930001" }),
+    // The stream subscription is an effect of the SAME state update that paints
+    // the rows (the list response seeds `streamSeed`), so it lands in a later
+    // passive-effect flush than the DOM mutation `findByText` observes. RTL
+    // disables the act environment inside `findBy*`/`waitFor` and only drains a
+    // single `setTimeout(…, 0)` afterwards, which is not ordered against React's
+    // scheduler task — so a bare assert here loses the race under CPU load.
+    await waitFor(() =>
+      expect(mocks.subscribeEventStream).toHaveBeenCalledWith(
+        "/api/v1/admin/jobs/events",
+        expect.objectContaining({ lastEventId: "90071992547409930001" }),
+      ),
     );
 
     fireEvent.change(screen.getByLabelText("State"), { target: { value: "failed" } });
