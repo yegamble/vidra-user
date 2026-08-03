@@ -3,12 +3,24 @@ name: publish-container
 on:
   release:
     types: [published]
+  # Re-publish the image for a tag that is ALREADY released — a build that died
+  # on a transient registry error, or a tag released while NEXT_PUBLIC_API_BASE_URL
+  # was still unset (this repo's most likely reason). It builds the tag, never
+  # the default branch (see "Resolve the tag being published"), and the origin
+  # gate below is unconditional, so a dispatch is held to exactly the same
+  # standard as a release.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: existing vX.Y.Z tag to build and publish
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.release.tag_name }}
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
   cancel-in-progress: false
 
 env:
@@ -25,13 +37,41 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      # One source of truth for "which tag is this build?", so the two triggers
+      # cannot drift: `inputs.tag` is empty on a release event and
+      # `github.event.release.tag_name` is empty on a dispatch. The existence
+      # check runs BEFORE the checkout so a typo'd dispatch input fails with a
+      # sentence instead of a checkout error — and so this workflow only ever
+      # builds a tag, never the default branch.
+      - name: Resolve the tag being published
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          TAG="${RELEASE_TAG:-$INPUT_TAG}"
+          if [ -z "${TAG}" ]; then
+            echo "::error::No tag to publish: neither the release payload nor the 'tag' input carried one."
+            exit 1
+          fi
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag '${TAG}' does not exist in ${GITHUB_REPOSITORY}. Push the tag (or cut the release) first — this workflow never builds the default branch."
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
       - name: Check out the released source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ steps.tag.outputs.tag }}
           persist-credentials: false
 
-      # Fail before we spend 20 minutes building an image nobody can use.
+      # Fail before we spend 20 minutes building an image nobody can use. This
+      # step is deliberately unconditional: a workflow_dispatch re-publish gets
+      # the same gate as a release, because the resulting image is exactly as
+      # public and exactly as broken without a real origin.
       # NEXT_PUBLIC_* is inlined into the CLIENT bundle by `next build`, so this
       # origin is frozen into every browser that loads the released image and a
       # restart cannot repoint it (lib/config.ts:10-12, Dockerfile:23-24). An
@@ -80,7 +120,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ github.event.release.tag_name }}
+            type=raw,value=${{ steps.tag.outputs.tag }}
             type=sha,format=long
 
       - name: Build and push the released image
