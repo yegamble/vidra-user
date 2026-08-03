@@ -2,13 +2,16 @@ import { cache } from "react";
 
 import { EMPTY_INSTANCE_ABOUT } from "@/lib/api/instance-platform";
 import type { InstanceAboutResponse, InstanceResponse } from "@/lib/api/types";
+import { clientIpForwardHeaders } from "@/lib/client-ip.server";
 import { internalApiBaseUrl } from "@/lib/config";
 
 /** Current public instance data for the About identity shell. */
 export const getInstanceAboutInstance = cache(async (): Promise<InstanceResponse | null> => {
   try {
     const res = await fetch(`${internalApiBaseUrl}/api/v1/instance`, {
-      headers: { Accept: "application/json" },
+      // Deliberately uncached (below), so each About view is one more request
+      // against the limiter — bill it to the viewer, not to the container.
+      headers: { Accept: "application/json", ...(await clientIpForwardHeaders()) },
       // About is a navigation destination, not site metadata. Fetch it at
       // request time so the route never bakes a development/build snapshot
       // into the loading bootstrap.
@@ -35,7 +38,8 @@ export const getInstanceAboutDocument = cache(
   async (): Promise<InstanceAboutResponse | null> => {
     try {
       const res = await fetch(`${internalApiBaseUrl}/api/v1/instance/about`, {
-        headers: { Accept: "application/json" },
+        // Same reasoning as getInstanceAboutInstance above.
+        headers: { Accept: "application/json", ...(await clientIpForwardHeaders()) },
         cache: "no-store",
         signal: AbortSignal.timeout(5000),
       });
