@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import type { PublicUserProfile } from "@/lib/api/types";
+import { clientIpForwardHeaders } from "@/lib/client-ip.server";
 import { internalApiBaseUrl } from "@/lib/config";
 
 export const getPublicUserProfile = cache(
@@ -9,7 +10,9 @@ export const getPublicUserProfile = cache(
       const res = await fetch(
         `${internalApiBaseUrl}/api/v1/users/${encodeURIComponent(username)}/profile`,
         {
-          headers: { Accept: "application/json" },
+          // Uncached and once per profile render, so it spends the viewer's
+          // rate-limit budget, not the frontend container's shared one.
+          headers: { Accept: "application/json", ...(await clientIpForwardHeaders()) },
           // Visibility changes must take effect immediately; never serve a
           // cached public profile after its owner makes it private.
           cache: "no-store",

@@ -4,6 +4,7 @@
 // its existing route-mockable retry path.
 
 import type { FeedParams, VideoFeedResponse } from "@/lib/api";
+import { clientIpForwardHeaders } from "@/lib/client-ip.server";
 import { internalApiBaseUrl } from "@/lib/config";
 
 export async function getPublicFeed(
@@ -16,7 +17,11 @@ export async function getPublicFeed(
 
   try {
     const res = await fetch(`${internalApiBaseUrl}/api/v1/videos?${query.toString()}`, {
-      headers: { Accept: "application/json" },
+      // The viewer's IP rides along so vidra-core's per-IP limiter buckets this
+      // read under the viewer rather than under the frontend container — this
+      // is the single hottest server-side read on the instance (one per home
+      // page render). Safe to attach here because the fetch is uncached.
+      headers: { Accept: "application/json", ...(await clientIpForwardHeaders()) },
       cache: "no-store",
     });
     if (!res.ok) return null;
