@@ -366,8 +366,21 @@ describe("branding panel reachability (General page, config-parity W4)", () => {
     });
     render(<ConfigForm page="general" />);
 
+    // Two SEQUENTIAL round trips stand between render() and this panel: the
+    // form's own GET /admin/settings has to commit before the General page
+    // paints its sections, and only then does InstanceBrandingManager mount and
+    // fire its GET /instance. Awaiting the panel directly puts both hops — plus
+    // whatever cold-start cost this test happens to carry — under ONE 1000 ms
+    // `findBy` budget, which is why the test's fate depended on its position in
+    // the file: shuffled to the front it pays the file's first-render warm-up
+    // (~220 ms unloaded, 0.5–2.4 s under CPU contention) and blows the budget,
+    // anywhere else another test has already paid it and this one lands in
+    // ~20 ms. Await the section heading first — the settings-load milestone the
+    // panel is nested in, exactly as the pre-W1 sibling test in this describe
+    // does — so each budget covers a single hop and no position is special.
+    expect(await screen.findByRole("heading", { name: "Branding" })).toBeTruthy();
+
     expect(await screen.findByRole("group", { name: "Branding assets" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Branding" })).toBeTruthy();
     // The server-placed toggle does NOT render here…
     expect(
       screen.queryByRole("switch", { name: "Hide the instance name in the header" }),
