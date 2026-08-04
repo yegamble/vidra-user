@@ -142,17 +142,30 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
 
     // …then the slow instance payload lands with different defaults.
     resolveInstance(instanceWithDefaults);
+    // Assert the whole post-prefill state INSIDE one waitFor rather than barrier-
+    // on-one-field-then-bare-assert-the-rest. The prefill writes every field from
+    // a single `.then`, so today React batches them into one commit and reading
+    // the touched fields straight after the download barrier happens to be safe —
+    // but that safety is React's batching, not an ordering this test established,
+    // which is exactly the shape that made AdminJobRunsView.test.tsx flaky (see
+    // its fix comment). Requiring the download flip in the same callback keeps
+    // this from passing vacuously before the prefill lands, and a real clobber
+    // still fails it: the callback would throw until the timeout.
     await waitFor(() => {
-      // The UNTOUCHED download toggle takes the instance default (false)…
+      // The UNTOUCHED download toggle takes the instance default (false) — proof
+      // that the late prefill has been applied…
       expect(
         screen.getByRole("switch", { name: "Allow downloads" }).getAttribute("aria-checked"),
       ).toBe("false");
+      // …and in that same committed state the touched fields still hold the
+      // creator's explicit choices.
+      expect(screen.getByLabelText("Privacy")).toHaveProperty("value", "unlisted");
+      expect(
+        screen.getByRole("switch", { name: "Allow comments" }).getAttribute("aria-checked"),
+      ).toBe(
+        "false", // the creator turned comments off; the default is also disabled — assert it stayed off
+      );
     });
-    // …while the touched fields keep the creator's explicit choices.
-    expect(screen.getByLabelText("Privacy")).toHaveProperty("value", "unlisted");
-    expect(screen.getByRole("switch", { name: "Allow comments" }).getAttribute("aria-checked")).toBe(
-      "false", // the creator turned comments off; the default is also disabled — assert it stayed off
-    );
   });
 
   it("narrows the file picker accept list when the extended container set is off (W10)", async () => {
