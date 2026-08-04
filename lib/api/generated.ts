@@ -745,7 +745,7 @@ export interface paths {
         };
         /**
          * Get a channel by handle
-         * @description Public channel page data, looked up by case-insensitive handle.
+         * @description Public channel page data, looked up by case-insensitive handle. Auth is OPTIONAL: an anonymous request gets the public projection, while a request carrying a valid token additionally gets the caller's own relationship with the channel — is_following and, when following, their notification_setting (bell).
          */
         get: operations["getChannel"];
         put?: never;
@@ -775,7 +775,7 @@ export interface paths {
         put?: never;
         /**
          * Follow a channel
-         * @description The authenticated user follows the channel. Idempotent.
+         * @description The authenticated user follows the channel. Idempotent. A new follow starts with its notification bell on ("all"): the follower is told about every new public video from the channel until they change it at PUT /api/v1/channels/{handle}/follow/notifications.
          */
         post: operations["followChannel"];
         /**
@@ -783,6 +783,26 @@ export interface paths {
          * @description The authenticated user stops following the channel. Idempotent.
          */
         delete: operations["unfollowChannel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{handle}/follow/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the notification bell for a followed channel
+         * @description Sets the authenticated caller's notification bell for a channel they follow: "all" notifies them of every new PUBLIC video the channel publishes, "none" mutes those notifications while keeping the subscription (the channel stays in their feed). New follows start at "all". The per-user new_video notification preference (PATCH /api/v1/me/notification-prefs) is the master switch layered on top of this per-channel bell. There is deliberately no "personalized" mode — this instance has no personalisation engine behind it. A caller who does not follow the channel gets 404, exactly as an unknown handle does: the bell is part of a subscription.
+         */
+        put: operations["setFollowNotifications"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1230,7 +1250,7 @@ export interface paths {
         };
         /**
          * List the local channels the caller follows
-         * @description The authenticated user's "FOLLOWING" list: the LOCAL channels they follow, most recently followed first, each with the channel's total follower_count and the followed_at timestamp. Remote-channel follows are listed separately at GET /me/remote-follows. Paginated via limit (1–100, default 20) and offset.
+         * @description The authenticated user's "FOLLOWING" list: the LOCAL channels they follow, most recently followed first, each with the channel's total follower_count, the followed_at timestamp, and the caller's notification_setting (bell) for it. Remote-channel follows are listed separately at GET /me/remote-follows. Paginated via limit (1–100, default 20) and offset.
          */
         get: operations["listFollowedChannels"];
         put?: never;
@@ -2613,7 +2633,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, follow, message, report_resolved, video_rejected) mapped to whether it is delivered. Types never configured default to enabled.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, follow, message, new_video, report_resolved, video_rejected) mapped to whether it is delivered. Types never configured default to enabled.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -5000,6 +5020,13 @@ export interface components {
              * @enum {string}
              */
             role?: "owner" | "editor";
+            /** @description Whether the AUTHENTICATED caller follows this channel. Present only on the single-channel GET and only when the request carries a valid token; omitted for anonymous callers and in bulk listings. */
+            is_following?: boolean;
+            /**
+             * @description The caller's notification bell for this channel — "all" (told about every new public video) or "none" (subscription kept, notifications muted). Present wherever the caller demonstrably follows the channel: the single-channel GET when is_following is true, and every row of GET /me/following. Omitted otherwise.
+             * @enum {string}
+             */
+            notification_setting?: "all" | "none";
         };
         CreateChannelRequest: {
             /**
@@ -5054,13 +5081,24 @@ export interface components {
              */
             role?: "editor";
         };
-        /** @description A channel the caller follows, with the follow timestamp. */
+        /** @description A channel the caller follows, with the follow timestamp. Each row also carries the caller's notification_setting (the bell) from the shared Channel schema, so the FOLLOWING list renders bell state without a request per row. */
         FollowedChannel: components["schemas"]["Channel"] & {
             /**
              * Format: date-time
              * @description When the caller followed this channel.
              */
             followed_at: string;
+        };
+        SetFollowNotificationsRequest: {
+            /**
+             * @description The bell mode to store. "all" = notify me about every new public video from this channel; "none" = keep the subscription, mute the notifications.
+             * @enum {string}
+             */
+            notification_setting: "all" | "none";
+        };
+        FollowNotificationsResponse: {
+            /** @enum {string} */
+            notification_setting: "all" | "none";
         };
         FollowedChannelsResponse: {
             channels: components["schemas"]["FollowedChannel"][];
@@ -5861,10 +5899,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video; message = someone sent you a direct message; report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one; the moderator's identity is never included); caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one; the moderator's identity is never included); caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
-            type: "follow" | "comment" | "message" | "report_resolved" | "video_rejected" | "caption_ready";
+            type: "follow" | "comment" | "message" | "new_video" | "report_resolved" | "video_rejected" | "caption_ready";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -5930,6 +5968,7 @@ export interface components {
              *       "comment": true,
              *       "follow": false,
              *       "message": true,
+             *       "new_video": true,
              *       "report_resolved": true,
              *       "video_rejected": true
              *     }
@@ -5940,7 +5979,7 @@ export interface components {
         };
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, follow, message, report_resolved, video_rejected. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, follow, message, new_video, report_resolved, video_rejected. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }
@@ -9546,6 +9585,59 @@ export interface operations {
             };
             /** @description No channel with that handle. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setFollowNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetFollowNotificationsRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored bell mode. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowNotificationsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No channel with that handle, or the caller does not follow it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description notification_setting is not one of "all" or "none". */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
