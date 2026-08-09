@@ -604,6 +604,13 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "contact",
   },
+  report_email_alerts_enabled: {
+    label: "Email me about new abuse reports",
+    help: "Sends the contact email an alert when a user files a report (needs an admin email and mail delivery). Staff also get an in-app notification either way.",
+    control: "toggle",
+    page: "general",
+    section: "contact",
+  },
   // GENERAL / Platform
   instance_name: {
     label: "Name",

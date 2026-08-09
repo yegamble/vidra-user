@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { MessageCircleIcon, ShieldIcon, UserIcon } from "@/components/icons";
+import { FlagIcon, MessageCircleIcon, ShieldIcon, UserIcon, VideoIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -28,6 +28,10 @@ export function NotificationTypeIcon({ type }: { type: string }) {
     case "video_rejected":
     case "report_resolved":
       return <ShieldIcon size={16} />;
+    case "new_report":
+      return <FlagIcon size={16} />;
+    case "new_video":
+      return <VideoIcon size={16} />;
     default:
       return <UserIcon size={16} />;
   }
@@ -45,6 +49,8 @@ const NOTIF_CHIP: Record<string, string> = {
   message: "bg-tile-green/12 text-tile-green",
   video_rejected: "bg-tile-red/12 text-tile-red",
   report_resolved: "bg-tile-orange/12 text-tile-orange",
+  new_report: "bg-tile-red/12 text-tile-red",
+  new_video: "bg-accent/12 text-accent",
 };
 const NOTIF_CHIP_DEFAULT = "bg-surface-muted text-fg-muted";
 
@@ -104,6 +110,25 @@ export function describeNotification(n: Notification): {
         : "resolved";
     const target = n.report_target_type ? `${n.report_target_type} report` : "report";
     return { lead: "A moderator", rest: ` ${outcome} your ${target}`, href: "#" };
+  }
+  if (n.type === "new_report") {
+    // Staff-only: a user filed an abuse report (the moderation queue's push
+    // signal). The actor is the reporter — staff see the reporter in the queue
+    // anyway — and the row links straight to the queue.
+    const target = n.report_target_type
+      ? n.report_target_type.replaceAll("_", " ")
+      : "piece of content";
+    return { lead: actor, rest: ` reported a ${target}`, href: "/admin" };
+  }
+  if (n.type === "new_video") {
+    // A channel the recipient follows published a new public video.
+    const channelName = n.channel_display_name || n.channel_handle || actor;
+    const title = n.video_title ? `“${n.video_title}”` : "a new video";
+    return {
+      lead: channelName,
+      rest: ` published ${title}`,
+      href: n.video_id ? `/videos/${n.video_id}` : "#",
+    };
   }
   // follow
   const channel = n.channel_display_name || n.channel_handle || "your channel";
