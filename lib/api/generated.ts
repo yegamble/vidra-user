@@ -2633,7 +2633,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, follow, message, new_video, report_resolved, video_rejected) mapped to whether it is delivered. Types never configured default to enabled.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, follow, message, new_report, new_video, report_resolved, video_rejected) mapped to whether it is delivered. Types never configured default to enabled. The new_report type is only ever delivered to admins/moderators, but the switch is visible to everyone.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -5907,10 +5907,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one; the moderator's identity is never included); caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one; the moderator's identity is never included); caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
-            type: "follow" | "comment" | "message" | "new_video" | "report_resolved" | "video_rejected" | "caption_ready";
+            type: "follow" | "comment" | "message" | "new_video" | "new_report" | "report_resolved" | "video_rejected" | "caption_ready";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -5938,19 +5938,19 @@ export interface components {
             conversation_id?: string;
             /**
              * Format: uuid
-             * @description The resolved report's id (report_resolved notifications). The resolving moderator's identity is never included (actor is absent for this type).
+             * @description The report's id (new_report and report_resolved notifications). On report_resolved the resolving moderator's identity is never included (actor is absent); on new_report the actor is the reporter.
              */
             report_id?: string;
             /**
-             * @description The report's resolution outcome (report_resolved notifications).
+             * @description The report's current status (new_report and report_resolved notifications).
              * @enum {string}
              */
             report_status?: "open" | "accepted" | "rejected";
             /**
-             * @description What the resolved report targeted (report_resolved notifications).
+             * @description What the report targeted (new_report and report_resolved notifications).
              * @enum {string}
              */
-            report_target_type?: "video" | "comment" | "account";
+            report_target_type?: "video" | "comment" | "account" | "remote_video" | "message";
         };
         NotificationListResponse: {
             notifications: components["schemas"]["Notification"][];
@@ -5976,6 +5976,7 @@ export interface components {
              *       "comment": true,
              *       "follow": false,
              *       "message": true,
+             *       "new_report": true,
              *       "new_video": true,
              *       "report_resolved": true,
              *       "video_rejected": true
@@ -5987,7 +5988,7 @@ export interface components {
         };
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, follow, message, new_video, report_resolved, video_rejected. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, follow, message, new_report, new_video, report_resolved, video_rejected. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }

@@ -14,8 +14,9 @@ type Status = "loading" | "error" | "ready";
 
 // Human copy for the known notification types (the backend's switchboard keys).
 // A type the backend returns that is not listed here still renders (by its raw
-// key) so a new backend type is never silently untogglable.
-const TYPE_LABELS: Record<string, { label: string; help: string }> = {
+// key) so a new backend type is never silently untogglable. Exported so the
+// notifications test can prove every shipped type has a label.
+export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
   comment: {
     label: "Comments",
     help: "Someone comments on one of your videos.",
@@ -27,6 +28,14 @@ const TYPE_LABELS: Record<string, { label: string; help: string }> = {
   message: {
     label: "Direct messages",
     help: "Someone sends you a direct message.",
+  },
+  new_video: {
+    label: "New videos",
+    help: "A channel you follow publishes a new video (per-channel bells apply).",
+  },
+  new_report: {
+    label: "New abuse reports",
+    help: "A user files an abuse report (delivered to admins and moderators only).",
   },
   report_resolved: {
     label: "Report outcomes",
@@ -47,7 +56,9 @@ const TYPE_LABELS: Record<string, { label: string; help: string }> = {
 const TYPE_ORDER = [
   "comment",
   "follow",
+  "new_video",
   "message",
+  "new_report",
   "report_resolved",
   "video_rejected",
   "caption_ready",
