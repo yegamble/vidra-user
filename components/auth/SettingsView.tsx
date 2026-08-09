@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 
 import { AccountDataSection } from "@/components/auth/AccountDataSection";
 import { useSession } from "@/components/auth/AuthProvider";
+import { BlueskyVisibilityToggle } from "@/components/auth/BlueskyVisibilityToggle";
 import { ConnectedLogins } from "@/components/auth/ConnectedLogins";
 import { ChevronRightIcon } from "@/components/icons";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
@@ -173,6 +174,7 @@ export function SettingsView() {
         ))}
       </div>
       <ConnectedLogins />
+      <BlueskyVisibilityToggle />
       <AccountDataSection />
       {/* Header sign-out is hidden on phones (the avatar is the only account
           control there), so settings must offer it — the design's full-width

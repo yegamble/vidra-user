@@ -4874,6 +4874,8 @@ export interface components {
             provider: string;
             /** @description Email snapshot captured when the identity was linked (display only; the account email is authoritative). May be empty. */
             email: string;
+            /** @description Human-readable remote handle for the linked identity (the ATProto / Bluesky handle, e.g. alice.bsky.social). Present only for providers that carry one; omitted otherwise. The provider subject (the DID for ATProto) is never exposed. */
+            handle?: string;
             /**
              * Format: date-time
              * @description When the identity was linked.
@@ -4922,6 +4924,8 @@ export interface components {
             history_enabled: boolean;
             /** @description Whether the account profile is publicly accessible. Private, inactive, and unknown profile URLs all return 404. */
             profile_public: boolean;
+            /** @description Per-user opt-in to display the linked Bluesky/ATProto sign-in handle on the public profile (surfaced as PublicUserProfile.bluesky_handle). Default false. Toggle via PATCH /auth/me. */
+            show_bluesky?: boolean;
             /** @description Per-user search-history preference (search-service W4): the user half of the two-factor history gate. Default true. */
             search_history_enabled?: boolean;
             /** @description Per-user personalized-search preference (search-service W4). Default true. */
@@ -4966,6 +4970,8 @@ export interface components {
             history_enabled?: boolean;
             /** @description Toggle public access to the account profile. */
             profile_public?: boolean;
+            /** @description Toggle displaying the linked Bluesky/ATProto handle on the public profile (see User.show_bluesky). */
+            show_bluesky?: boolean;
             /** @description Toggle the per-user search-history preference (search-service W4). */
             search_history_enabled?: boolean;
             /** @description Toggle the per-user personalized-search preference (search-service W4). */
@@ -4985,6 +4991,8 @@ export interface components {
             created_at: string;
             has_avatar: boolean;
             has_banner: boolean;
+            /** @description The account's linked Bluesky/ATProto sign-in handle (e.g. alice.bsky.social). Present only when the owner opted in (User.show_bluesky) AND a handle is on file; omitted otherwise. */
+            bluesky_handle?: string;
             channels: components["schemas"]["Channel"][];
         };
         Channel: {
