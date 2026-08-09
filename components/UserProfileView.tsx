@@ -105,6 +105,21 @@ export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
           <dl className="max-w-2xl divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
             <div className="flex items-center justify-between gap-4 px-4 py-3"><dt className="text-subhead text-fg-muted">Joined</dt><dd className="text-subhead font-semibold text-fg">{formatMonthYear(profile.created_at)}</dd></div>
             <div className="flex items-center justify-between gap-4 px-4 py-3"><dt className="text-subhead text-fg-muted">Channels</dt><dd className="text-subhead font-semibold tabular-nums text-fg">{profile.channels.length}</dd></div>
+            {profile.bluesky_handle ? (
+              <div className="flex items-center justify-between gap-4 px-4 py-3">
+                <dt className="text-subhead text-fg-muted">Bluesky</dt>
+                <dd className="min-w-0 truncate text-subhead font-semibold text-fg">
+                  <a
+                    href={`https://bsky.app/profile/${encodeURIComponent(profile.bluesky_handle)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="focus-ring rounded-sm text-accent underline underline-offset-2 hover:opacity-80"
+                  >
+                    @{profile.bluesky_handle}
+                  </a>
+                </dd>
+              </div>
+            ) : null}
           </dl>
         )}
       </div>
