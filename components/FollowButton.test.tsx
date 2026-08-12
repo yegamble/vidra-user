@@ -59,4 +59,10 @@ describe("FollowButton", () => {
     await screen.findByRole("button", { name: "Follow" });
     expect(onDelta).toHaveBeenLastCalledWith(-1);
   });
+
+  it("initializes to Following when passed initialFollowing=true", () => {
+    render(<FollowButton handle="grade-house" initialFollowing={true} />);
+    expect(screen.getByRole("button", { name: "Following" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Follow" })).toBeNull();
+  });
 });

@@ -18,11 +18,13 @@ export function WatchChannelCard({
   handle,
   name,
   followerCount,
+  isFollowing = false,
   onDelta,
 }: {
   handle: string;
   name: string;
   followerCount: number | null;
+  isFollowing?: boolean;
   onDelta?: (delta: number) => void;
 }) {
   return (
@@ -43,7 +45,12 @@ export function WatchChannelCard({
           ) : null}
         </div>
       </Link>
-      <FollowButton handle={handle} onDelta={onDelta} className="shrink-0 px-4" />
+      <FollowButton
+        handle={handle}
+        initialFollowing={isFollowing}
+        onDelta={onDelta}
+        className="shrink-0 px-4"
+      />
     </div>
   );
 }
