@@ -151,12 +151,12 @@ describe("queueReducer transitions", () => {
 describe("selectStartable — bounded parallelism", () => {
   it("starts up to the cap when nothing is uploading", () => {
     const state = [item("a", "queued"), item("b", "queued"), item("c", "queued")];
-    expect(selectStartable(state, 2)).toEqual(["a", "b"]);
+    expect(selectStartable(state, 2)).toEqual([state[0], state[1]]);
   });
 
   it("leaves room for the in-flight rows (cap minus active)", () => {
     const state = [item("a", "uploading"), item("b", "queued"), item("c", "queued")];
-    expect(selectStartable(state, 2)).toEqual(["b"]);
+    expect(selectStartable(state, 2)).toEqual([state[1]]);
   });
 
   it("returns nothing once the cap is saturated", () => {
@@ -172,7 +172,7 @@ describe("selectStartable — bounded parallelism", () => {
       item("d", "failed"),
       item("e", "queued"),
     ];
-    expect(selectStartable(state, MAX_CONCURRENT_UPLOADS)).toEqual(["c", "e"]);
+    expect(selectStartable(state, MAX_CONCURRENT_UPLOADS)).toEqual([state[2], state[4]]);
   });
 
   it("activeCount counts only uploading rows", () => {

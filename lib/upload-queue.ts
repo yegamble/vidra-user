@@ -214,18 +214,18 @@ export function activeCount(items: BatchItem[]): number {
 }
 
 /**
- * selectStartable returns the ids of the queued rows that may begin NOW, capping
- * total concurrency at `max`: it yields at most `max - activeCount` ids, in queue
- * order. Returns [] when the cap is already reached. The component filters out ids
+ * selectStartable returns the items of the queued rows that may begin NOW, capping
+ * total concurrency at `max`: it yields at most `max - activeCount` items, in queue
+ * order. Returns [] when the cap is already reached. The component filters out items
  * it has already kicked off (a run in flight before the reducer reflects it).
  */
-export function selectStartable(items: BatchItem[], max: number): string[] {
+export function selectStartable(items: BatchItem[], max: number): BatchItem[] {
   const free = Math.max(0, max - activeCount(items));
   if (free === 0) return [];
-  const out: string[] = [];
+  const out: BatchItem[] = [];
   for (const it of items) {
     if (it.status === "queued") {
-      out.push(it.id);
+      out.push(it);
       if (out.length === free) break;
     }
   }

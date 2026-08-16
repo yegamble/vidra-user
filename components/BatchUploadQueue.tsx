@@ -246,14 +246,12 @@ export function BatchUploadQueue({
     if (!started) return;
     if (Date.now() < backoffUntilRef.current) return;
     const startable = selectStartable(items, MAX_CONCURRENT_UPLOADS).filter(
-      (id) => !runningRef.current.has(id),
+      (item) => !runningRef.current.has(item.id),
     );
-    for (const id of startable) {
-      const item = items.find((i) => i.id === id);
-      if (!item) continue;
-      runningRef.current.add(id);
+    for (const item of startable) {
+      runningRef.current.add(item.id);
       const controller = new AbortController();
-      controllersRef.current.set(id, controller);
+      controllersRef.current.set(item.id, controller);
       void runOne(item, controller);
     }
   }, [items, started, runOne]);
