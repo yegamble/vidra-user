@@ -29,25 +29,65 @@ export function uniqueId(): string {
   return randomUUID().replace(/-/g, "").slice(0, 12);
 }
 
-// The deterministic test admin. The backend grants the admin role to the FIRST
-// account on a fresh instance, so `ensureAdmin` must run before any other
-// registration — the `backed-setup` Playwright project (a dependency of
-// `backend-backed`) guarantees that. These are throwaway credentials for an
-// ephemeral CI/dev database, never a real secret.
+// The deterministic test admin. `ensureAdmin` bootstraps it before any other
+// backed test registers a user — the `backed-setup` Playwright project (a
+// dependency of `backend-backed`) guarantees that. These are throwaway
+// credentials for an ephemeral CI/dev database, never a real secret.
 export const ADMIN_USERNAME = "e2eadmin";
 export const ADMIN_EMAIL = "e2e-admin@example.test";
 export const ADMIN_PASSWORD = "e2e-admin-supersecret";
 
+// OWNER_CLAIM_TOKEN is the fixed first-run owner-claim token the backed backend
+// is started with (frontend-e2e-backed.yml / the local recipe in .ralph/AGENT.md
+// must boot the api with OWNER_CLAIM_TOKEN set to exactly this value). Since the
+// owner-claim bootstrap, a fresh core grants admin ONLY by redeeming this token
+// at POST /api/v1/setup/claim-owner — every registration answers 403
+// owner_claim_required until then. Test-only value (the backend enforces >=16
+// characters and refuses the variable outright in production), never a real secret.
+export const OWNER_CLAIM_TOKEN = "e2e-owner-claim-token-not-secret";
+
 /**
- * ensureAdmin registers the deterministic admin (idempotent: a 409 means it already
- * exists from a prior run, which is fine). Run once, first, by the setup project.
- * NOTE: locally this only yields an admin against a FRESH database — reset with
- * `docker compose --profile core down -v` if the dev DB already has other accounts.
+ * ensureAdmin bootstraps the deterministic admin against BOTH core generations
+ * (CI checks out vidra-core@main, so the harness must not assume the owner-claim
+ * feature has merged):
+ *
+ *  - New core (owner-claim bootstrap): redeem the fixed OWNER_CLAIM_TOKEN at
+ *    POST /api/v1/setup/claim-owner — the claimed owner IS the deterministic
+ *    admin. A 403 (`owner_claim_invalid`) means the instance is already claimed
+ *    (a reused local DB from a prior run): fall through — the register below
+ *    answers 409 for the already-existing admin, which is fine.
+ *  - Old core (the endpoint 404s): fall back to the legacy register-first flow —
+ *    that backend grants admin to the FIRST account on a fresh instance
+ *    (register is idempotent here too: a 409 means a prior run created it).
+ *
+ * Run once, first, by the setup project. NOTE: locally this only yields an admin
+ * against a FRESH database — reset with `docker compose --profile core down -v`
+ * if the dev DB already has other accounts.
  */
 export async function ensureAdmin(request: APIRequestContext): Promise<void> {
-  await request.post(`${API_URL}/api/v1/auth/register`, {
+  const claim = await request.post(`${API_URL}/api/v1/setup/claim-owner`, {
+    data: {
+      token: OWNER_CLAIM_TOKEN,
+      username: ADMIN_USERNAME,
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+    },
+  });
+  if (claim.ok()) return; // 201 — the claimed owner IS the admin account.
+  const reg = await request.post(`${API_URL}/api/v1/auth/register`, {
     data: { username: ADMIN_USERNAME, email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
   });
+  if (reg.status() === 403) {
+    // New core, still unclaimed, and the fixed token was not accepted: the stack
+    // was booted without OWNER_CLAIM_TOKEN (or with a different value), so NO
+    // account can register until the boot-logged token is redeemed. Fail loudly
+    // with the fix instead of letting every admin-gated spec time out later.
+    throw new Error(
+      "ensureAdmin: registration answered 403 (owner_claim_required) and the fixed " +
+        "owner-claim token was not accepted — boot the backed stack with " +
+        "OWNER_CLAIM_TOKEN matching e2e-backed/fixtures.ts (see .ralph/AGENT.md).",
+    );
+  }
 }
 
 // LIVE_INGEST_SECRET is the shared secret the backed backend is started with
