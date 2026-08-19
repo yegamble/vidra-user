@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 import { AuthProvider } from "@/components/auth/AuthProvider";
@@ -56,6 +57,12 @@ export default async function RootLayout({
   return (
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        {/* Runtime browser config (app/runtime-config.js/route.ts): tells the
+            client bundle which API origin to call ("" = same-origin) from the
+            RUNNING server's env, so one image serves any domain. It must be
+            beforeInteractive — lib/config.ts reads the injected global at
+            module-evaluation time, before any app chunk runs. */}
+        <Script src="/runtime-config.js" strategy="beforeInteractive" />
         {/* Apply the stored theme preference (or, failing that, the instance
             default from the SSR snapshot) before first paint — no flash. */}
         <script

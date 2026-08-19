@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "@/lib/config";
+import { absoluteApiBaseUrl } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { activeTraceFields, injectTraceContext } from "@/lib/observability/trace";
 
@@ -71,7 +71,7 @@ export interface RequestOptions {
 const REFRESH_PATH = "/api/v1/auth/refresh";
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const url = new URL(apiBaseUrl + path);
+  const url = new URL(absoluteApiBaseUrl() + path);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined) {

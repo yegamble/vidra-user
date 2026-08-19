@@ -3,12 +3,10 @@ name: publish-container
 on:
   release:
     types: [published]
-  # Re-publish the image for a tag that is ALREADY released — a build that died
-  # on a transient registry error, or a tag released while NEXT_PUBLIC_API_BASE_URL
-  # was still unset (this repo's most likely reason). It builds the tag, never
-  # the default branch (see "Resolve the tag being published"), and the origin
-  # gate below is unconditional, so a dispatch is held to exactly the same
-  # standard as a release.
+  # Re-publish the image for a tag that is ALREADY released — e.g. a build that
+  # died on a transient registry error. It builds the tag, never the default
+  # branch (see "Resolve the tag being published"), so a dispatch is held to
+  # exactly the same standard as a release.
   workflow_dispatch:
     inputs:
       tag:
@@ -68,42 +66,6 @@ jobs:
           ref: ${{ steps.tag.outputs.tag }}
           persist-credentials: false
 
-      # Fail before we spend 20 minutes building an image nobody can use. This
-      # step is deliberately unconditional: a workflow_dispatch re-publish gets
-      # the same gate as a release, because the resulting image is exactly as
-      # public and exactly as broken without a real origin.
-      # NEXT_PUBLIC_* is inlined into the CLIENT bundle by `next build`, so this
-      # origin is frozen into every browser that loads the released image and a
-      # restart cannot repoint it (lib/config.ts:10-12, Dockerfile:23-24). An
-      # unset variable used to silently fall back to http://localhost:8080, which
-      # ships a production image whose every client-side call goes to the
-      # visitor's own machine — total, silent breakage. An empty value is just as
-      # bad (lib/config.ts uses `??`, so "" survives and every call becomes
-      # same-origin), so blank and localhost are both rejected here rather than
-      # relying on the build to notice.
-      - name: Require a real public API origin
-        env:
-          API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
-        run: |
-          set -eu
-          if [ -z "${API_BASE_URL}" ]; then
-            echo "::error::Repository variable NEXT_PUBLIC_API_BASE_URL is not set. Set it to the public vidra-core origin (e.g. https://api.example.com) under Settings > Secrets and variables > Actions > Variables, then re-run this release."
-            exit 1
-          fi
-          case "${API_BASE_URL}" in
-            http://*|https://*) ;;
-            *)
-              echo "::error::NEXT_PUBLIC_API_BASE_URL must be an absolute origin including the scheme; got '${API_BASE_URL}'."
-              exit 1
-              ;;
-          esac
-          case "${API_BASE_URL}" in
-            *localhost*|*127.0.0.1*|*0.0.0.0*)
-              echo "::error::NEXT_PUBLIC_API_BASE_URL points at '${API_BASE_URL}'. A released image baked with a loopback origin makes every browser call the visitor's own machine."
-              exit 1
-              ;;
-          esac
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
@@ -131,14 +93,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # NEXT_PUBLIC_* is compiled into the browser bundle, so this is a
-          # release-defining input, not a convenience default. Deliberately NO
-          # `||` fallback: the "Require a real public API origin" step above has
-          # already proved the repository variable is set to an absolute,
-          # non-loopback origin, and anything else must fail the release rather
-          # than publish a broken image.
-          build-args: |
-            NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+          # Deliberately NO build-args: the released image is generic. The API
+          # origin is runtime configuration (PUBLIC_API_BASE_URL served via
+          # /runtime-config.js for the browser, API_BASE_URL /
+          # INTERNAL_API_BASE_URL for server-side fetches; "" = same-origin), so
+          # one published image serves every self-hosted domain — no fork, no
+          # per-origin rebuild, no repo variable to gate on.
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

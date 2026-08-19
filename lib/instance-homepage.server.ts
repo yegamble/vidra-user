@@ -12,7 +12,7 @@
 
 import { cache } from "react";
 
-import { apiBaseUrl } from "@/lib/config";
+import { internalApiBaseUrl } from "@/lib/config";
 import { INSTANCE_CONFIG_REVALIDATE_SECONDS } from "@/lib/instance-config.server";
 
 export type InstanceHomepageDocument = {
@@ -29,7 +29,7 @@ export type InstanceHomepageDocument = {
  */
 export const getInstanceHomepage = cache(async (): Promise<InstanceHomepageDocument | null> => {
   try {
-    const res = await fetch(`${apiBaseUrl}/api/v1/instance/homepage`, {
+    const res = await fetch(`${internalApiBaseUrl}/api/v1/instance/homepage`, {
       headers: { Accept: "application/json" },
       next: { revalidate: INSTANCE_CONFIG_REVALIDATE_SECONDS },
     });

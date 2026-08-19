@@ -47,6 +47,11 @@ jobs:
       # LIVE_INGEST_SECRET enables the media-server-facing live ingest hooks so the
       # studio live-status test can flip a stream live/ended by its key (test seam;
       # value must match LIVE_INGEST_SECRET in e2e-backed/fixtures.ts).
+      # OWNER_CLAIM_TOKEN pins the first-run owner-claim token so admin.setup.ts can
+      # claim the deterministic admin (test seam; value must match OWNER_CLAIM_TOKEN
+      # in e2e-backed/fixtures.ts). Harmless on a core that predates the owner-claim
+      # bootstrap — the variable is simply unused there, and ensureAdmin falls back
+      # to the legacy register-first flow.
       # TRANSCODING_ENABLED=true turns on the async HLS transcode pipeline so
       # e2e-backed/hls-playback.spec.ts can prove publish → transcode → HLS
       # playback end to end (the compose api image ships ffmpeg/ffprobe).
@@ -58,7 +63,7 @@ jobs:
       # (channel-sync-backed, below) that does not run the URL-import specs.
       - name: Start vidra-core stack
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true docker compose --profile core up -d --build
+        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
@@ -140,9 +145,11 @@ jobs:
           path: .core
           persist-credentials: false
 
+      # OWNER_CLAIM_TOKEN: same admin-bootstrap seam as the main job above — this
+      # job's backed-setup dependency runs ensureAdmin too.
       - name: Start vidra-core stack (yt-dlp + channel auto-sync enabled)
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false HTTP_IMPORT_ALLOW_PRIVATE_URLS=true YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true docker compose --profile core up -d --build
+        run: RATE_LIMIT_ENABLED=false HTTP_IMPORT_ALLOW_PRIVATE_URLS=true YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core

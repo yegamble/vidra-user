@@ -117,8 +117,10 @@ the `E2E_*` vars in `playwright.config.ts`). Never commit a real `.env` or any s
 
 | Var | Scope | Meaning |
 |-----|-------|---------|
-| `NEXT_PUBLIC_API_BASE_URL` | build + browser | Backend URL the browser calls. **Baked at build time** — one image/build per backend. Default `http://localhost:8080` |
-| `INTERNAL_API_BASE_URL` | server only | Override for server-side fetches (compose/service DNS); falls back to the public URL |
+| `NEXT_PUBLIC_API_BASE_URL` | build + browser | Dev/e2e override for the backend URL the browser calls, inlined at build time. Unset, a production build defaults to **same-origin relative URLs** (dev/test default `http://localhost:8080`) |
+| `PUBLIC_API_BASE_URL` | runtime | Browser-facing API origin, served per page load via `/runtime-config.js` — repoint a running container without a rebuild. Empty = same-origin |
+| `API_BASE_URL` | runtime, server only | Server-side fetch target (compose/service DNS, e.g. `http://api:8080`) |
+| `INTERNAL_API_BASE_URL` | runtime, server only | Historical alias for `API_BASE_URL` (wins when both are set); falls back to the public URL |
 | `LOG_LEVEL` | server | `debug \| info \| warn \| error` (default `info`) |
 | `OTEL_ENABLED` | server | `true` registers the OTel SDK and injects W3C `traceparent` on server-side calls |
 | `OTEL_SERVICE_NAME` | server | OTel service identity (default `vidra-user`) |
@@ -175,17 +177,21 @@ scripts/        # codegen, contract check, icon lint, olm-wasm copy
 
 ## Docker
 
-Multi-stage build on Next's standalone output. `NEXT_PUBLIC_API_BASE_URL` is baked at build
-time, so build one image per target backend:
+Multi-stage build on Next's standalone output. The image is **generic**: the API origin is
+runtime configuration, so one image serves any domain:
 
 ```bash
-docker build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com -t vidra-user .
-docker run --rm -p 3000:3000 vidra-user
+docker build -t vidra-user .
+# Single-origin (Caddy path-routes /api/* to vidra-core): browser calls stay relative.
+docker run --rm -p 3000:3000 -e API_BASE_URL=http://api:8080 vidra-user
+# Cross-origin: repoint the browser too, no rebuild.
+docker run --rm -p 3000:3000 -e API_BASE_URL=http://api:8080 \
+  -e PUBLIC_API_BASE_URL=https://api.example.com vidra-user
 ```
 
-The runtime image runs `node server.js` as a non-root user on port 3000. Releases publish a
-GHCR image via `publish-container`, baking the URL from the `NEXT_PUBLIC_API_BASE_URL` repo
-variable.
+`--build-arg NEXT_PUBLIC_API_BASE_URL=…` still bakes a fixed origin for special builds. The
+runtime image runs `node server.js` as a non-root user on port 3000. Releases publish the
+generic GHCR image via `publish-container`.
 
 ## CI
 

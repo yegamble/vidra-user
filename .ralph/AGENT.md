@@ -195,10 +195,12 @@ npm run start               # serve the production build
 
 ### Docker image
 ```bash
-# NEXT_PUBLIC_API_BASE_URL is BAKED at build time (inlined into the client bundle);
-# build one image per target backend. Default: http://localhost:8080.
-docker build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com -t vidra-user .
-docker run --rm -p 3000:3000 vidra-user
+# The image is GENERIC: the API origin is runtime config (lib/config.ts).
+# Browser: PUBLIC_API_BASE_URL via /runtime-config.js, "" = same-origin relative.
+# Server fetches: API_BASE_URL (or the historical INTERNAL_API_BASE_URL).
+docker build -t vidra-user .
+docker run --rm -p 3000:3000 -e API_BASE_URL=http://api:8080 vidra-user
+# --build-arg NEXT_PUBLIC_API_BASE_URL=… still bakes a fixed origin if needed.
 ```
 Multi-stage build on Next standalone output (`next.config.ts` `output: "standalone"`),
 non-root runtime, `node server.js` on :3000. `next start` still works outside Docker
@@ -236,8 +238,12 @@ the compose default already allows.
 ### Backed admin harness (deterministic admin)
 Admin-gated backed verification (e.g. reading the moderation queue) uses a Playwright
 **setup project**: `backed-setup` (`e2e-backed/admin.setup.ts`, `testMatch *.setup.ts`)
-is a `dependencies` of `backend-backed`, so it runs FIRST and registers a deterministic
-admin (the backend grants admin to the first account on a fresh instance). Specs then
+is a `dependencies` of `backend-backed`, so it runs FIRST and bootstraps a deterministic
+admin: it redeems the fixed owner-claim token (`OWNER_CLAIM_TOKEN` in
+`e2e-backed/fixtures.ts`, which the backed stack must be booted with — see the recipe
+below) at `POST /api/v1/setup/claim-owner`; on a core that predates the owner-claim
+bootstrap the endpoint 404s and `ensureAdmin` falls back to the legacy register-first
+flow (that backend grants admin to the first account on a fresh instance). Specs then
 call `adminToken()` / `reportsQueue()` from `e2e-backed/fixtures.ts`. This works against
 a **fresh** DB only — locally `docker compose --profile core down -v` first; CI brings up
 a fresh stack per run. `backed-setup` never runs under `npm run ci` (that's `--project=chromium`).
@@ -255,10 +261,14 @@ a live backend. It is **never** part of `npm run ci` (which stays mocked and fas
 #    enable the dev mail-capture seam so the email-token confirm specs
 #    (password-reset-confirm, email-verify) can read the token they need; relax the
 #    URL-import SSRF guard so the studio import spec can import the backend's own
-#    /original; and set LIVE_INGEST_SECRET so the live-status spec can flip a stream
+#    /original; set LIVE_INGEST_SECRET so the live-status spec can flip a stream
 #    live via the media-server ingest hook (must match e2e-backed/fixtures.ts:
-#    LIVE_INGEST_SECRET = "e2e-ingest-secret"):
-( cd ../vidra-core && RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret docker compose --profile core up -d --build )  # pg+redis+migrate+api → :8080
+#    LIVE_INGEST_SECRET = "e2e-ingest-secret"); and set OWNER_CLAIM_TOKEN so the
+#    backed-setup project can claim the deterministic admin on the fresh instance
+#    (must match e2e-backed/fixtures.ts: OWNER_CLAIM_TOKEN =
+#    "e2e-owner-claim-token-not-secret" — without it, every registration answers
+#    403 owner_claim_required and the whole suite fails at setup):
+( cd ../vidra-core && RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build )  # pg+redis+migrate+api → :8080
 #    If host :8080 is taken, map another host port: add HTTP_PORT=8088 to the line above.
 #    (stale PG-version volume? `docker compose --profile core down -v` to reset the dev data.)
 # 2. Build the frontend pointed at it — NEXT_PUBLIC_* is baked at BUILD time, so a

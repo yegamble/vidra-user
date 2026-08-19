@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "@/lib/config";
+import { absoluteApiBaseUrl } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { activeTraceFields, injectTraceContext } from "@/lib/observability/trace";
 
@@ -37,7 +37,7 @@ export type EventStreamOptions = {
 };
 
 function buildUrl(path: string, query?: Query): string {
-  const url = new URL(apiBaseUrl + path);
+  const url = new URL(absoluteApiBaseUrl() + path);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined) url.searchParams.set(key, String(value));
