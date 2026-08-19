@@ -195,10 +195,12 @@ npm run start               # serve the production build
 
 ### Docker image
 ```bash
-# NEXT_PUBLIC_API_BASE_URL is BAKED at build time (inlined into the client bundle);
-# build one image per target backend. Default: http://localhost:8080.
-docker build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com -t vidra-user .
-docker run --rm -p 3000:3000 vidra-user
+# The image is GENERIC: the API origin is runtime config (lib/config.ts).
+# Browser: PUBLIC_API_BASE_URL via /runtime-config.js, "" = same-origin relative.
+# Server fetches: API_BASE_URL (or the historical INTERNAL_API_BASE_URL).
+docker build -t vidra-user .
+docker run --rm -p 3000:3000 -e API_BASE_URL=http://api:8080 vidra-user
+# --build-arg NEXT_PUBLIC_API_BASE_URL=… still bakes a fixed origin if needed.
 ```
 Multi-stage build on Next standalone output (`next.config.ts` `output: "standalone"`),
 non-root runtime, `node server.js` on :3000. `next start` still works outside Docker

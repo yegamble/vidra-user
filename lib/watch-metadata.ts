@@ -60,6 +60,12 @@ export function buildWatchMetadata(
   const metadata: Metadata = { title };
   if (description !== "") metadata.description = description;
 
+  // With the same-origin relative API base (""), the thumbnail/oembed URLs
+  // built above are root-relative; anchoring metadataBase to the request origin
+  // makes Next emit them absolute — og:image and the oembed href must be
+  // absolute for crawlers. Already-absolute URLs (dev/e2e) pass through as-is.
+  if (origin) metadata.metadataBase = new URL(origin);
+
   // oembed auto-discovery (rel="alternate" type="application/json+oembed"): only
   // when we know the request origin AND the video resolved public (a null video
   // returned {} above, so private/unknown videos never advertise an oembed).

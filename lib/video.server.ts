@@ -8,7 +8,7 @@
 import { cache } from "react";
 
 import type { Video } from "@/lib/api/types";
-import { apiBaseUrl } from "@/lib/config";
+import { internalApiBaseUrl } from "@/lib/config";
 
 // Watch metadata may lag a title/thumbnail edit by up to a minute — the same
 // freshness window the instance-config snapshot accepts.
@@ -20,7 +20,7 @@ export const PUBLIC_VIDEO_REVALIDATE_SECONDS = 60;
  */
 export const getPublicVideo = cache(async (id: string): Promise<Video | null> => {
   try {
-    const res = await fetch(`${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${internalApiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}`, {
       headers: { Accept: "application/json" },
       next: { revalidate: PUBLIC_VIDEO_REVALIDATE_SECONDS },
     });

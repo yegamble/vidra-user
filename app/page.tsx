@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { FeaturedBanner } from "@/components/FeaturedBanner";
@@ -29,17 +28,6 @@ import { buildHomeShelvesHintScript, HOME_SHELVES_SLOT_ATTRIBUTE } from "@/lib/h
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { getInstanceHomepage } from "@/lib/instance-homepage.server";
 import { PAGE_SIZE } from "@/components/ui/LoadMoreButton";
-
-// RSS auto-discovery (Wave F F3): the public videos feed lives on vidra-core at
-// {apiBaseUrl}/feeds/videos.xml. A page-level `alternates` merges with the root
-// layout's title/description/icons (Next merges metadata per key).
-export const metadata: Metadata = {
-  alternates: {
-    types: {
-      "application/rss+xml": [{ url: `${apiBaseUrl}/feeds/videos.xml`, title: "Videos" }],
-    },
-  },
-};
 
 const HEADINGS: Record<FeedSort, string> = {
   recent: "Recent videos",
@@ -106,6 +94,13 @@ export default async function Home({
   const featured = await resolveFeatured(instance?.featured);
   return (
     <PageShell className="pb-12 pt-7 sm:pb-16 sm:pt-10">
+      {/* RSS auto-discovery (Wave F F3): the public videos feed lives on
+          vidra-core at {apiBaseUrl}/feeds/videos.xml — root-relative when the
+          base is same-origin (""), and readers resolve it against the page
+          origin. A plain <link> (React 19 hoists it into <head>) rather than
+          metadata `alternates`, which Next would absolutize against a
+          metadataBase this page cannot know. */}
+      <link rel="alternate" type="application/rss+xml" title="Videos" href={`${apiBaseUrl}/feeds/videos.xml`} />
       {/* Pre-paint hint (mirrors the broadcast dismiss script): stamps the
           remembered shelf count onto <html> before first paint so the signed-in
           shelves band below can reserve that many skeleton shelves and never
