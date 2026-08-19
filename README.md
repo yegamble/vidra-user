@@ -4,12 +4,33 @@
   </a>
 </p>
 
-# Vidra User
+<h1 align="center">vidra-user</h1>
+
+<h3 align="center">The face of Vidra — a video app your viewers already know how to use.</h3>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#the-product-surface">Product surface</a> ·
+  <a href="#design-system--accessibility">Design system</a> ·
+  <a href="#testing">Testing</a> ·
+  <a href="#the-api-contract">API contract</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/yegamble/vidra-user/actions/workflows/frontend-ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/yegamble/vidra-user/frontend-ci.yml?label=frontend-ci" alt="frontend-ci"></a>
+  <a href="https://github.com/yegamble/vidra-user/releases"><img src="https://img.shields.io/github/v/release/yegamble/vidra-user?label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/yegamble/vidra-user" alt="License: AGPL-3.0"></a>
+  <img src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs" alt="Next.js 16">
+  <img src="https://img.shields.io/badge/React-19-087EA4?logo=react&logoColor=white" alt="React 19">
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white" alt="TypeScript strict">
+  <img src="https://img.shields.io/badge/Tailwind-v4-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind v4">
+  <img src="https://img.shields.io/badge/Playwright-e2e-2EAD33?logo=playwright&logoColor=white" alt="Playwright">
+</p>
 
 The TypeScript **Next.js** frontend for **Vidra** — a clean-room, PeerTube-inspired
-federated video platform. This project (`vidra-user`) is the full user-facing app: watch
-and browse, search, the creator studio, admin, playlists, direct messages, live, settings,
-and moderation.
+federated video platform you install yourself. This project (`vidra-user`) is the full
+user-facing app: watch and browse, search, the creator studio, admin, playlists, direct
+messages, live, settings, and moderation.
 
 It consumes the HTTP API served by the sibling **`vidra-core`** Go backend at runtime; the
 frontend ships no database of its own. The two repos are tied together by the **`vidra`**
@@ -17,9 +38,37 @@ meta-repo, which describes how to run the whole platform.
 
 - Backend: https://github.com/yegamble/vidra-core
 - Meta-repo: https://github.com/yegamble/vidra
+- Brand & design: https://github.com/yegamble/vidra-branding
 
 Stack: Next.js 16 (app router) · React 19 · strict TypeScript · Tailwind v4 · ESLint 10
 (`no-console`) · Vitest · Playwright.
+
+## The product surface
+
+A bespoke, token-driven video UI — no component kit, no webfont download, first paint
+in the platform's own face:
+
+- **Watch**: a custom hls.js player with keyboard shortcuts, picture-in-picture and
+  theatre mode, resume positions, captions and clickable timestamps.
+- **Browse**: YouTube-ergonomic home with shelves and an admin-curated featured banner,
+  trending, subscriptions, history and library.
+- **Create**: a tabbed Studio — uploads with instant autostart and
+  publish-after-transcode, channel management, per-channel federation protocol flags,
+  collaborators.
+- **Connect**: sign in with Bluesky or any ATProto PDS; direct messages with optional
+  end-to-end encryption (Olm, via WASM).
+- **Everywhere**: installable PWA, embeds, RSS/oEmbed discovery, per-user sensitive-content
+  policy with creator content warnings.
+
+## Design system & accessibility
+
+The UI implements the documented
+[Vidra design system](https://github.com/yegamble/vidra-branding/blob/main/design-system/README.md):
+Apple HIG foundations, semantic `light-dark()` tokens (no `dark:` variants, no hardcoded
+hex), one accent, and a glass material reserved for the navigation layer. **WCAG 2.2 AA
+is a hard gate** — axe runs in the mocked e2e suite and serious/critical findings fail
+CI; emoji glyphs are banned by a lint (`npm run lint:icons`); accessible names are
+asserted in tests so a restyle cannot silently rename a control.
 
 ## Prerequisites
 
