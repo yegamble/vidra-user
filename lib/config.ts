@@ -1,8 +1,36 @@
 // Typed runtime configuration. Read environment once here so the rest of the app
 // imports typed values instead of touching process.env directly.
 
+import { logger } from "@/lib/logger";
+
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, "");
+}
+
+// Runtime replacement for the origin checks the publish-container.yml release
+// gate used to run before an image could ship (the origin was build-time then;
+// it is runtime configuration now, so the gate has to live here). A non-empty
+// base URL without an http(s) scheme makes `new URL(base + path)` throw in
+// lib/api/client.ts / lib/api/sse.ts on EVERY call — the whole site breaks
+// with nothing but console TypeErrors — so it is rejected loudly in favour of
+// the safe same-origin default. Loopback origins only warn (server-side, once
+// per boot): dev/e2e use them legitimately, but a production deployment
+// configured this way makes every browser call the visitor's own machine.
+function checkedApiBaseUrl(value: string, source: string): string {
+  if (!/^https?:\/\//.test(value)) {
+    logger.error(
+      `${source} must be an absolute http(s):// URL — new URL() would throw on every API call; ignoring it and serving same-origin relative URLs ("")`,
+      { value },
+    );
+    return "";
+  }
+  if (typeof window === "undefined" && /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(value)) {
+    logger.warn(
+      `${source} is a loopback origin — fine for local dev/e2e, but in production every browser will call the visitor's own machine`,
+      { value },
+    );
+  }
+  return trimTrailingSlash(value);
 }
 
 // Runtime browser config, injected by app/runtime-config.js/route.ts and loaded
@@ -24,15 +52,28 @@ declare global {
 //      so it must be a non-secret URL only;
 //   3. "" (same-origin) in production; http://localhost:8080 under dev/test so
 //      host-run `npm run dev` and the unit suite need no env at all.
+// Configured values are validated by checkedApiBaseUrl above; a malformed one
+// is dropped in favour of the safe same-origin default rather than served.
 function resolvePublicApiBaseUrl(): string {
   if (typeof window !== "undefined") {
-    const injected = window.__VIDRA_RUNTIME_CONFIG__?.apiBaseUrl;
+    const runtimeConfig = window.__VIDRA_RUNTIME_CONFIG__;
+    if (runtimeConfig === undefined && process.env.NODE_ENV === "production") {
+      // The route always sets the global, even for the same-origin default —
+      // so an absent global means the beforeInteractive /runtime-config.js
+      // script itself failed to load, and a cross-origin deployment silently
+      // degrades to same-origin for this page load. Warn so the misroute is
+      // attributable instead of invisible.
+      logger.warn(
+        "/runtime-config.js failed to load; falling back to the build-time API base URL for this page load",
+      );
+    }
+    const injected = runtimeConfig?.apiBaseUrl;
     if (injected) return trimTrailingSlash(injected);
   } else if (process.env.PUBLIC_API_BASE_URL) {
-    return trimTrailingSlash(process.env.PUBLIC_API_BASE_URL);
+    return checkedApiBaseUrl(process.env.PUBLIC_API_BASE_URL, "PUBLIC_API_BASE_URL");
   }
   if (process.env.NEXT_PUBLIC_API_BASE_URL) {
-    return trimTrailingSlash(process.env.NEXT_PUBLIC_API_BASE_URL);
+    return checkedApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL, "NEXT_PUBLIC_API_BASE_URL");
   }
   return process.env.NODE_ENV === "production" ? "" : "http://localhost:8080";
 }

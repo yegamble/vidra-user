@@ -10,6 +10,7 @@ async function loadRoute(env: Record<string, string>) {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("GET /runtime-config.js", () => {
@@ -34,5 +35,16 @@ describe("GET /runtime-config.js", () => {
     const route = await loadRoute({ NODE_ENV: "production" });
     const res = route.GET();
     expect(await res.text()).toBe('self.__VIDRA_RUNTIME_CONFIG__={"apiBaseUrl":""};');
+  });
+
+  it("never serves a schemeless origin browsers would choke on — same-origin instead", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const route = await loadRoute({
+      NODE_ENV: "production",
+      PUBLIC_API_BASE_URL: "api.example.com",
+    });
+    const res = route.GET();
+    expect(await res.text()).toBe('self.__VIDRA_RUNTIME_CONFIG__={"apiBaseUrl":""};');
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("PUBLIC_API_BASE_URL"));
   });
 });
