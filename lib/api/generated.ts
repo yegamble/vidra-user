@@ -4085,7 +4085,7 @@ export interface paths {
         };
         /**
          * Operational system status (admin)
-         * @description Returns an operational snapshot for the admin dashboard: build info, the runtime environment, process uptime, an overall health flag, and per-dependency component status (postgres, redis). Restricted to admins. Always 200 (even when degraded) so the admin can see the degraded state, unlike /readyz which 503s. Reports only operational metadata.
+         * @description Returns an operational snapshot for the admin dashboard: build info, the runtime environment, process uptime, an overall health flag, and per-dependency component status (postgres, redis, s3, smtp, search, ffmpeg). Restricted to admins. Always 200 (even when degraded) so the admin can see the degraded state, unlike /readyz which 503s. Reports only operational metadata.
          */
         get: operations["systemStatus"];
         put?: never;
