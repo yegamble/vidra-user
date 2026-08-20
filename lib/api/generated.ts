@@ -64,6 +64,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/schemaz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Build and migration-ledger version
+         * @description Machine-readable build metadata plus the numeric position of the golang-migrate ledger, for host-local tooling (`vidra doctor`, `vidra update`) that has to compare an image against the database it is pointed at. Always 200: a ledger that cannot be read is reported inside the document, so the caller can tell "the api is not there" from "the api is there and its database is not". Exposes build information and one integer version — never secrets or config. Not routed publicly by the edge proxy.
+         */
+        get: operations["getSchemaVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodeinfo": {
         parameters: {
             query?: never;
@@ -4065,7 +4085,7 @@ export interface paths {
         };
         /**
          * Operational system status (admin)
-         * @description Returns an operational snapshot for the admin dashboard: build info, the runtime environment, process uptime, an overall health flag, and per-dependency component status (postgres, redis). Restricted to admins. Always 200 (even when degraded) so the admin can see the degraded state, unlike /readyz which 503s. Reports only operational metadata.
+         * @description Returns an operational snapshot for the admin dashboard: build info, the runtime environment, process uptime, an overall health flag, and per-dependency component status (postgres, redis, s3, smtp, search, ffmpeg). Restricted to admins. Always 200 (even when degraded) so the admin can see the degraded state, unlike /readyz which 503s. Reports only operational metadata.
          */
         get: operations["systemStatus"];
         put?: never;
@@ -4585,6 +4605,24 @@ export interface components {
             build_date: string;
             /** @example go1.26 */
             go: string;
+        };
+        SchemaVersionResponse: {
+            software: components["schemas"]["VersionResponse"];
+            schema: components["schemas"]["SchemaLedgerStatus"];
+        };
+        SchemaLedgerStatus: {
+            /**
+             * Format: int64
+             * @description The highest applied migration, as a number so callers can compare it. 0 when applied is false.
+             * @example 104
+             */
+            version: number;
+            /** @description A migration failed halfway and the schema state is unknown. Needs a human before anything else is deployed over it. */
+            dirty: boolean;
+            /** @description False when no migration has ever run against this database (the ledger table is absent or empty) — a fresh install, not a fault. */
+            applied: boolean;
+            /** @description Present only when the ledger could not be read for some reason other than "not migrated yet". The response is still 200. */
+            error?: string;
         };
         /** @description The single, consistent error envelope returned by every endpoint for non-2xx responses (except the readiness probe, which returns ReadinessResponse on 503). */
         ErrorResponse: {
@@ -7983,6 +8021,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VersionResponse"];
+                };
+            };
+        };
+    };
+    getSchemaVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Build metadata and ledger position. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchemaVersionResponse"];
                 };
             };
         };
