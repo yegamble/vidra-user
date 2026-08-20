@@ -15,6 +15,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { InstanceResponse } from "@/lib/api";
+import { OWNER_CLAIM_FROM_SIGNUP, OWNER_CLAIM_REQUIRED_CODE } from "@/lib/owner-claim";
 
 type RegState = "loading" | "open" | "closed";
 
@@ -73,8 +74,15 @@ export function SignupForm({
   const completingOAuth = oauthLanding && !landingDismissed && status === "restoring";
   const oauthSilentFailure = oauthLanding && !landingDismissed && status === "anon";
 
-  // Clean the one-shot OAuth markers out of the URL.
+  // Clean the one-shot OAuth markers out of the URL. One marker is not a
+  // failure to report but a destination: a provider signup refused because the
+  // server still has no owner belongs on the first-run wizard, not on an error
+  // banner over a form that cannot succeed.
   useEffect(() => {
+    if (oauthError === OWNER_CLAIM_REQUIRED_CODE) {
+      router.replace(OWNER_CLAIM_FROM_SIGNUP);
+      return;
+    }
     if (oauthPending || oauthError) router.replace("/signup");
   }, [oauthPending, oauthError, router]);
 
@@ -128,6 +136,18 @@ export function SignupForm({
       }
       router.push("/");
     } catch (err) {
+      // A server that has not been claimed yet refuses EVERY signup path. That
+      // is a first-run state, not the applicant's mistake — send them to the
+      // wizard (which explains itself) instead of a dead-end error.
+      if (err instanceof ApiError && err.code === OWNER_CLAIM_REQUIRED_CODE) {
+        // Release the button BEFORE navigating: if the replace is a no-op (the
+        // visitor is already on that route, or routing is blocked) the form
+        // stays on screen, and a permanently disabled "Creating account…" is a
+        // dead end with nothing to click.
+        setSubmitting(false);
+        router.replace(OWNER_CLAIM_FROM_SIGNUP);
+        return; // the navigation is the outcome — no error banner
+      }
       if (err instanceof ApiError && err.fields && err.fields.length > 0) {
         const map: Record<string, string> = {};
         for (const f of err.fields) map[f.field] = f.message;

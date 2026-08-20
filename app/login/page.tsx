@@ -1,5 +1,6 @@
 import { AuthPage } from "@/components/auth/AuthPage";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { OwnerClaimCard } from "@/components/OwnerClaimCard";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 
 // The OAuth callback redirects back here carrying one-shot markers: ?oauth=1
@@ -18,6 +19,9 @@ export default async function LoginPage({
   // the App template's standalone auth screens.
   return (
     <AuthPage>
+      {/* First-run: there is no account to sign in to yet — point at the
+          wizard above the form rather than letting people guess. */}
+      <OwnerClaimCard instance={instance} className="mb-6" />
       <LoginForm
         oauthPending={sp.oauth === "1"}
         oauthError={sp.oauth_error ?? ""}

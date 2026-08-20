@@ -7,6 +7,7 @@ describe("isStandaloneRoute", () => {
     "/embed/video-1",
     "/login",
     "/signup",
+    "/setup/claim",
     "/reset-password",
     "/reset-password/confirm",
     "/verify-email/confirm",

@@ -29,6 +29,8 @@ export type FieldError = NonNullable<Schemas["ErrorResponse"]["error"]["fields"]
 
 // --- Instance ---------------------------------------------------------------
 export type InstanceResponse = Schemas["InstanceResponse"];
+/** First-run owner claim: the setup-token redemption body (see lib/owner-claim.ts). */
+export type ClaimOwnerRequest = Schemas["ClaimOwnerRequest"];
 export type InstanceAboutResponse = Schemas["InstanceAboutResponse"];
 export type InstanceContactRequest = Schemas["InstanceContactRequest"];
 export type SensitiveContentPolicy = NonNullable<InstanceResponse["sensitive_content_policy"]>;

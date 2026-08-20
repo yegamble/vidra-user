@@ -8,6 +8,7 @@ import { HomepageDocument } from "@/components/HomepageDocument";
 import { HomeRecommendationsRail } from "@/components/HomeRecommendationsRail";
 import { HomeShelves } from "@/components/HomeShelves";
 import { LiveNowRail } from "@/components/LiveNowRail";
+import { OwnerClaimCard } from "@/components/OwnerClaimCard";
 import { PageShell } from "@/components/PageShell";
 import { VideoFeed } from "@/components/VideoFeed";
 import { VideoGridSkeleton } from "@/components/VideoCardSkeleton";
@@ -106,6 +107,10 @@ export default async function Home({
           shelves band below can reserve that many skeleton shelves and never
           shove the chips + grid down when it resolves. */}
       <script dangerouslySetInnerHTML={{ __html: buildHomeShelvesHintScript() }} />
+      {/* First-run signpost: while the server has no owner, nothing else on
+          this page matters as much as claiming it, so the card leads — above
+          even the featured banner. Renders nothing on every normal server. */}
+      <OwnerClaimCard instance={instance} className="mb-8 sm:mb-10" />
       {/* Admin featured banner (item 1, OUTSIDE the feed Suspense): server-
           resolved above, so it is present in the first paint or not at all. It
           leads the page above the shelves, holds a strict size budget, and stays

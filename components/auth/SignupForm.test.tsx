@@ -29,6 +29,9 @@ vi.mock("@/lib/api", async () => {
   };
 });
 
+import { ApiError } from "@/lib/api";
+import { OWNER_CLAIM_FROM_SIGNUP, OWNER_CLAIM_REQUIRED_CODE } from "@/lib/owner-claim";
+
 import { SignupForm } from "./SignupForm";
 
 // A minimal /instance document; tests override the W7 fields per case.
@@ -114,5 +117,28 @@ describe("SignupForm (W7 sign-up policies)", () => {
     getInstanceMock.mockResolvedValue(instanceDoc({ registration_enabled: false }));
     render(<SignupForm />);
     await screen.findByText("Registration is closed");
+  });
+
+  it("sends a signup refused for want of an owner to the wizard, button released", async () => {
+    getInstanceMock.mockResolvedValue(instanceDoc());
+    registerMock.mockRejectedValue(
+      new ApiError({
+        status: 403,
+        code: OWNER_CLAIM_REQUIRED_CODE,
+        message: "instance is awaiting its owner",
+      }),
+    );
+    render(<SignupForm />);
+
+    await fillCoreFields();
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    await waitFor(() => expect(routerReplace).toHaveBeenCalledWith(OWNER_CLAIM_FROM_SIGNUP));
+    // The redirect is the outcome, but it can be a no-op — the form has to be
+    // usable afterwards rather than stuck on a disabled "Creating account…".
+    const button = await screen.findByRole("button", { name: "Create account" });
+    expect(button.hasAttribute("disabled")).toBe(false);
+    // Not the applicant's mistake: no error banner over a form that cannot win.
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

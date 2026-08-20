@@ -264,6 +264,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/setup/claim-owner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem the first-run setup token for the owner (admin) account
+         * @description First-run owner bootstrap. While an instance has no accounts, boot mints a one-time high-entropy setup token and prints it to the server log (only its hash is stored; each restart while a claim is outstanding — even once accounts exist — mints a fresh token and invalidates the previous one, so a leaked boot log never stays a live admin credential). This endpoint redeems that token for THE admin account plus a session, atomically and exactly once — of two concurrent claims, one wins and the other answers 403 `owner_claim_invalid`. While the claim is pending, every normal signup path (register, OIDC, ATProto) answers 403 `owner_claim_required` (GET /api/v1/instance reports it as `owner_claim_pending`). Instances that already have accounts and no outstanding claim are implicitly claimed: no token exists and this endpoint always answers 403 `owner_claim_invalid`. Unauthenticated by design — the token is the credential — and rate limited like login. With `cookie_mode: true` the refresh token is delivered as an httpOnly `vidra_refresh` cookie instead of in the response body (the explicit flag is the only opt-in here: the cookie itself is scoped to Path=/api/v1/auth, so it is never presented to this endpoint).
+         */
+        post: operations["claimOwner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/register": {
         parameters: {
             query?: never;
@@ -275,7 +295,7 @@ export interface paths {
         put?: never;
         /**
          * Register a new account
-         * @description Creates an account and returns it with an access token. The first account created on a fresh instance is granted the admin role. Rate limited; subject to the standard request guards. When the instance requires registration approval, no account is created: a pending registration request is filed and 202 is returned with no token. When the instance requires email verification (registration_require_email_verification, effective only while the deployment has an outbound mail path — see features.mail), the account is created HELD: 202 `{"status":"verification_pending"}`, no token, and login stays 403 until the emailed link is confirmed. Both gates compose: approval first, then the approved account is held for verification. While registration_minimum_age is active the request must carry `age_attestation: true`. While registration_user_limit is reached signup answers 403 (GET /api/v1/instance reports registration_enabled=false with registration_disabled_reason `user_limit_reached`). With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body.
+         * @description Creates an account and returns it with an access token. On a fresh instance (no accounts yet) every signup path answers 403 with the stable code `owner_claim_required` until the operator redeems the boot-logged setup token at POST /api/v1/setup/claim-owner — accounts never gain the admin role by registering first. Rate limited; subject to the standard request guards. When the instance requires registration approval, no account is created: a pending registration request is filed and 202 is returned with no token. When the instance requires email verification (registration_require_email_verification, effective only while the deployment has an outbound mail path — see features.mail), the account is created HELD: 202 `{"status":"verification_pending"}`, no token, and login stays 403 until the emailed link is confirmed. Both gates compose: approval first, then the approved account is held for verification. While registration_minimum_age is active the request must carry `age_attestation: true`. While registration_user_limit is reached signup answers 403 (GET /api/v1/instance reports registration_enabled=false with registration_disabled_reason `user_limit_reached`). With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body.
          */
         post: operations["register"];
         delete?: never;
@@ -4646,6 +4666,8 @@ export interface components {
              * @description Signup age-attestation threshold: 0 = off; otherwise registration requires `age_attestation: true` ("I am at least N years old" — PeerTube parity, no birthdate is collected).
              */
             registration_minimum_age: number;
+            /** @description First-run signal: true while the instance awaits its owner (zero accounts and an unclaimed boot-minted setup token) — route to the claim-owner wizard instead of the signup form. Every signup path answers 403 `owner_claim_required` while this is true; it flips to false the moment POST /api/v1/setup/claim-owner succeeds. */
+            owner_claim_pending: boolean;
             /**
              * @description Configured OIDC login provider names, in display order. Render a "continue with <provider>" button per entry, navigating (top-level) to GET /api/v1/auth/oauth/{provider}. Empty when OAuth login is off.
              * @example [
@@ -7737,6 +7759,24 @@ export interface components {
              */
             cookie_mode: boolean;
         };
+        ClaimOwnerRequest: {
+            /**
+             * Format: password
+             * @description The one-time setup token from the server log. Compared in constant time against its stored hash; unrecoverable once the log line is lost (restart the server to mint a fresh one).
+             */
+            token: string;
+            /** @example ada */
+            username: string;
+            /** @example ada@example.test */
+            email: string;
+            /** Format: password */
+            password: string;
+            /**
+             * @description Opt the new session into cookie mode (browser clients): the rotating refresh token is set as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances, Max-Age = the refresh TTL) and omitted from the response body.
+             * @default false
+             */
+            cookie_mode: boolean;
+        };
         RegistrationPending: {
             /**
              * @description `pending`: the signup is queued for admin approval; no account exists yet. `verification_pending`: the account was created HELD behind the email-verification gate (registration_require_email_verification) — no session is issued and login answers 403 `email_verification_required` until the emailed link is confirmed at POST /api/v1/auth/verify-email/confirm.
@@ -8255,6 +8295,66 @@ export interface operations {
             };
         };
     };
+    claimOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimOwnerRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner account created and claimed; session issued. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Malformed request body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid, already-redeemed, or absent setup token (stable code `owner_claim_invalid` — one non-probing answer for all three). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Username or email already taken. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     register: {
         parameters: {
             query?: never;
@@ -8295,7 +8395,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Registration is disabled on this instance, or the registration_user_limit is reached. */
+            /** @description Registration is disabled on this instance, the registration_user_limit is reached, or (stable code `owner_claim_required`) the instance is awaiting its owner — complete first-run setup at POST /api/v1/setup/claim-owner. */
             403: {
                 headers: {
                     [name: string]: unknown;

@@ -19,6 +19,7 @@ import {
 } from "@/lib/api";
 import type {
   AuthResponse,
+  ClaimOwnerRequest,
   LoginRequest,
   RegisterRequest,
   UpdateProfileRequest,
@@ -57,6 +58,12 @@ interface SessionContextValue {
   /** Second half of a two-factor login (TOTP or recovery code). */
   completeMfaChallenge: (mfaToken: string, code: string) => Promise<void>;
   register: (input: Omit<RegisterRequest, "cookie_mode">) => Promise<RegisterOutcome>;
+  /**
+   * First-run owner claim: redeem the server's boot-logged setup token for the
+   * owner account. The 201 body IS an AuthResponse, so the session lands
+   * through exactly the same seam as a login.
+   */
+  claimOwner: (input: Omit<ClaimOwnerRequest, "cookie_mode">) => Promise<void>;
   updateProfile: (input: UpdateProfileRequest) => Promise<void>;
   deactivate: (password: string) => Promise<void>;
   /** IRREVERSIBLE hard delete (password re-confirmed); clears the local session. */
@@ -234,6 +241,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [apply],
   );
 
+  const claimOwner = useCallback(
+    async (input: Omit<ClaimOwnerRequest, "cookie_mode">) => {
+      // Identical to login's landing: `apply` holds the access token in memory,
+      // adopts the returned user, and schedules the proactive refresh — the
+      // owner is signed in the moment the claim succeeds, with no second round
+      // trip through the credentials form.
+      apply(await authApi.claimOwner(input));
+    },
+    [apply],
+  );
+
   const updateProfile = useCallback(async (input: UpdateProfileRequest) => {
     setUser(await authApi.updateMe(input));
   }, []);
@@ -275,6 +293,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       completeMfaChallenge,
       register,
+      claimOwner,
       updateProfile,
       deactivate,
       deleteAccount,
@@ -287,6 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       completeMfaChallenge,
       register,
+      claimOwner,
       updateProfile,
       deactivate,
       deleteAccount,
