@@ -6,6 +6,7 @@ import type {
   AccountExportStatus,
   AccountImportSummary,
   AuthResponse,
+  ClaimOwnerRequest,
   EmailVerificationConfirmRequest,
   LoginRequest,
   MFARequiredResponse,
@@ -32,6 +33,27 @@ import type {
  * so the client's silent-refresh retry is disabled (retryOn401: false).
  */
 export const authApi = {
+  /**
+   * POST /api/v1/setup/claim-owner — first-run owner bootstrap: redeem the
+   * boot-logged setup token for THE owner (admin) account. Unauthenticated by
+   * design (the token IS the credential) and rate limited like login; answers
+   * 201 with the same AuthResponse a login returns, so the owner lands signed
+   * in. 403 `owner_claim_invalid` covers a wrong / spent / rotated token
+   * (the token is re-minted on every restart while a claim is outstanding),
+   * 409 a taken username or email, 422 field-level validation.
+   *
+   * Cookie mode like login/register: the rotating refresh token is delivered
+   * as the httpOnly `vidra_refresh` cookie, never in JS-readable state. A 401
+   * here would be a real answer, so the silent-refresh retry stays off.
+   */
+  claimOwner: (body: Omit<ClaimOwnerRequest, "cookie_mode">) =>
+    apiRequest<AuthResponse>("/api/v1/setup/claim-owner", {
+      method: "POST",
+      body: { ...body, cookie_mode: true },
+      credentials: "include",
+      retryOn401: false,
+    }),
+
   /**
    * POST /api/v1/auth/register — create an account; returns a session (201).
    * When the instance requires registration approval no account is created:

@@ -81,6 +81,11 @@ export function oauthErrorMessage(code: string): string {
       return "This account is disabled.";
     case "conflict":
       return "An account could not be created — the username or email is already taken.";
+    // First run: the server has no owner yet, so no signup path can succeed.
+    // The signup page turns this marker into a trip to the wizard; this copy is
+    // the fallback for anywhere else it surfaces.
+    case "owner_claim_required":
+      return "This server is still waiting for its owner, so new accounts cannot be created yet.";
     // ATProto identity-login callback failures (Bluesky / any PDS).
     case "atproto_identity_mismatch":
       return "Bluesky sign-in could not be verified. Try again.";
