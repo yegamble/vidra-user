@@ -57,6 +57,7 @@ in the platform's own face:
   collaborators.
 - **Connect**: sign in with Bluesky or any ATProto PDS; direct messages with optional
   end-to-end encryption (Olm, via WASM).
+- **First run**: one-time owner-claim at `/setup/claim` (token from the api boot log) gates all signup until redeemed; admin-curated featured banner on the home feed.
 - **Everywhere**: installable PWA, embeds, RSS/oEmbed discovery, per-user sensitive-content
   policy with creator content warnings.
 
@@ -102,6 +103,8 @@ npm run dev                  # http://localhost:3000
 | `npm run e2e:backed` | Backend-backed Playwright suite — requires a live `vidra-core` |
 | `npm run codegen` | Regenerate `lib/api/generated.ts` from vidra-core's OpenAPI spec |
 | `npm run analyze` | Opt-in bundle report to `.next/diagnostics/analyze` |
+| `npm run generate:icons` | Regenerate PWA icon variants from the source SVG |
+| `npm run design:shots` | Capture design-system screenshots for visual review |
 | `npm run ci` | The canonical gate (see below) |
 
 **`npm run ci` is the canonical gate** and runs:
@@ -136,10 +139,10 @@ Three layers:
 - **Unit / component** — `npm run test` runs Vitest against the `*.test.ts(x)` files
   colocated in `lib/`, `components/`, and `app/`.
 - **Mocked e2e** — `npm run e2e` runs the Playwright `chromium` project over `e2e/`
-  (~90 specs). Every network call is intercepted; **no backend is required**. This is the
+  (94 specs). Every network call is intercepted; **no backend is required**. This is the
   suite `npm run ci` runs.
 - **Backend-backed e2e** — `npm run e2e:backed` runs the `backend-backed` project over
-  `e2e-backed/` (~68 specs). It needs a live `vidra-core` stack and an app built against
+  `e2e-backed/` (71 specs). It needs a live `vidra-core` stack and an app built against
   it, and seeds a deterministic admin via a `backed-setup` project (`admin.setup.ts`). See
   `.ralph/AGENT.md` for the full recipe.
 
@@ -164,13 +167,14 @@ resumable-upload helpers).
 
 ```
 app/            # 20+ route groups: videos (watch), search, studio, admin, playlists,
-                #   messages, live, settings, moderation, channels, library, trending…
+                #   messages, live, settings, moderation, channels, library, trending, setup/claim…
 components/     # UI: app-shell, video cards/feed, player, auth, ui/* primitives
 lib/            # api/  — typed client + OpenAPI contract (generated.ts, types.ts)
                 # config.ts — typed env
                 # logger.ts — the ONLY place raw console.* is allowed
-e2e/            # mocked Playwright specs (network intercepted, no backend)
-e2e-backed/     # backend-backed Playwright specs (real vidra-core + Postgres)
+                # owner-claim.ts — first-run gate helpers
+e2e/            # mocked Playwright specs (94, network intercepted, no backend)
+e2e-backed/     # backend-backed Playwright specs (71, real vidra-core + Postgres)
 scripts/        # codegen, contract check, icon lint, olm-wasm copy
 .ralph/         # agent instructions + specs (design-system, frontend-architecture, testing)
 ```
