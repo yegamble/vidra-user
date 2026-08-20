@@ -3,7 +3,7 @@
 // The first-run owner wizard: the claim itself (session established through the
 // login seam), the three error answers the backend can give, and the guard that
 // keeps a claimed server out of the wizard.
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { routerReplace, routerPush, claimOwnerMock, getInstanceCachedMock, invalidateMock } =
@@ -29,7 +29,7 @@ vi.mock("@/lib/api/instance-platform", () => ({
 }));
 
 import { ApiError } from "@/lib/api";
-import { OWNER_CLAIM_INVALID_CODE } from "@/lib/owner-claim";
+import { OWNER_CLAIM_INVALID_CODE, OWNER_CLAIM_LOG_COMMAND } from "@/lib/owner-claim";
 
 import { ClaimOwnerForm } from "./ClaimOwnerForm";
 
@@ -84,7 +84,7 @@ describe("ClaimOwnerForm", () => {
     expect(invalidateMock).toHaveBeenCalled();
   });
 
-  it("explains that the setup token rotates on every restart", async () => {
+  it("gives both reasons a 403 can mean — a rotated token or a claimed server", async () => {
     pendingInstance();
     claimOwnerMock.mockRejectedValue(
       new ApiError({
@@ -101,7 +101,16 @@ describe("ClaimOwnerForm", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("That setup token was not accepted.");
     expect(alert.textContent).toContain("new setup token every time it restarts");
-    expect(alert.textContent).toContain("docker compose logs api | grep 'FIRST-RUN'");
+    // The same 403 answers an ALREADY-CLAIMED server, where the log command
+    // prints nothing: the other cause, and its way out, are in the lede.
+    expect(alert.textContent).toContain("already has an owner");
+    expect(within(alert).getByRole("link", { name: "sign in" }).getAttribute("href")).toBe(
+      "/login",
+    );
+    // The command is the production invocation, not the bare one that would
+    // pick up the dev override on a prod host.
+    expect(alert.textContent).toContain(OWNER_CLAIM_LOG_COMMAND);
+    expect(alert.textContent).toContain("--env-file env/production.env");
   });
 
   it("points a conflict at signing in instead", async () => {
@@ -153,8 +162,13 @@ describe("ClaimOwnerForm", () => {
     expect(claimOwnerMock).not.toHaveBeenCalled();
   });
 
-  it("leaves for home when the live instance says the server already has an owner", async () => {
-    getInstanceCachedMock.mockResolvedValue({ owner_claim_pending: false });
+  it.each([
+    ["says the server already has an owner", { owner_claim_pending: false }],
+    // A backend that predates the claim flow never sends the field; the shared
+    // predicate reads that as "not waiting", and so must this guard.
+    ["does not report a first-run state at all", {}],
+  ])("leaves for home when the live instance %s", async (_label, doc) => {
+    getInstanceCachedMock.mockResolvedValue(doc);
     render(<ClaimOwnerForm />);
     await waitFor(() => expect(routerReplace).toHaveBeenCalledWith("/"));
   });

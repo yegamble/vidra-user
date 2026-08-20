@@ -44,8 +44,16 @@ export const OWNER_CLAIM_REQUIRED_CODE = "owner_claim_required";
  * The one command that prints the CURRENT setup token. Shown verbatim in the
  * invalid-token state — the token is unrecoverable once its log line scrolls
  * away, and restarting the server mints a fresh one.
+ *
+ * Spelled out in its PRODUCTION form on purpose. A bare `docker compose` picks
+ * up docker-compose.override.yml, which on a Vidra host is the DEVELOPMENT
+ * overlay — the same foot-gun `vidra doctor` flags. Naming the prod files (and
+ * the prod env file) reads the logs of the containers that are actually
+ * serving, so the token it prints is the live one.
  */
-export const OWNER_CLAIM_LOG_COMMAND = "docker compose logs api | grep 'FIRST-RUN'";
+export const OWNER_CLAIM_LOG_COMMAND =
+  "docker compose -f docker-compose.yml -f docker-compose.prod.yml " +
+  "--env-file env/production.env logs api | grep 'FIRST-RUN'";
 
 /** The marker the server prints the token beside, so it can be searched for. */
 export const OWNER_CLAIM_LOG_MARKER = "FIRST-RUN SETUP REQUIRED";

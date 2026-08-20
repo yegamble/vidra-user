@@ -33,4 +33,14 @@ describe("owner-claim constants", () => {
   it("hands over a command that reads the newest token, not a stale one", () => {
     expect(OWNER_CLAIM_LOG_COMMAND).toContain("FIRST-RUN");
   });
+
+  it("spells the log command in its production form, not the dev default", () => {
+    // A bare `docker compose` on a Vidra host silently loads
+    // docker-compose.override.yml — the DEV overlay — and reads the wrong
+    // containers' logs. The displayed command names the prod files itself.
+    expect(OWNER_CLAIM_LOG_COMMAND).toContain("-f docker-compose.yml");
+    expect(OWNER_CLAIM_LOG_COMMAND).toContain("-f docker-compose.prod.yml");
+    expect(OWNER_CLAIM_LOG_COMMAND).toContain("--env-file env/production.env");
+    expect(OWNER_CLAIM_LOG_COMMAND).toContain("logs api");
+  });
 });

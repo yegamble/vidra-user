@@ -14,6 +14,7 @@ import { LinkButton } from "@/components/ui/LinkButton";
 import { ApiError, errorMessage, fieldErrors } from "@/lib/api";
 import { getInstanceCached, invalidateInstanceCache } from "@/lib/api/instance-platform";
 import {
+  isOwnerClaimPending,
   OWNER_CLAIM_INVALID_CODE,
   OWNER_CLAIM_LOG_COMMAND,
   OWNER_CLAIM_LOG_MARKER,
@@ -61,7 +62,9 @@ export function ClaimOwnerForm({
     let cancelled = false;
     getInstanceCached()
       .then((instance) => {
-        if (!cancelled && instance.owner_claim_pending === false) router.replace("/");
+        // One predicate for the whole feature: a document that does not say
+        // "waiting" is not waiting, whether the field is false or absent.
+        if (!cancelled && !isOwnerClaimPending(instance)) router.replace("/");
       })
       .catch(() => {
         // Unreadable instance document: keep the wizard. A claim attempt gets
@@ -96,7 +99,7 @@ export function ClaimOwnerForm({
     } catch (err) {
       setSubmitting(false);
       if (err instanceof ApiError && err.code === OWNER_CLAIM_INVALID_CODE) {
-        setFormError(<StaleTokenHelp />);
+        setFormError(<InvalidTokenHelp />);
         return;
       }
       if (err instanceof ApiError && err.status === 409) {
@@ -240,27 +243,37 @@ export function ClaimOwnerForm({
 }
 
 /**
- * The invalid-token state — by far the most likely failure, and the one people
- * cannot diagnose on their own: the server mints a NEW setup token every time
- * it restarts, so a token copied from an earlier startup is already dead. The
- * backend deliberately answers the same way for a wrong, a spent, and a stale
- * token (it must not become an oracle), so the copy covers all three and hands
- * over the command that prints the current one.
+ * The 403 `owner_claim_invalid` state. The backend answers it the same way for
+ * a wrong, a spent, and a stale token — it must not become an oracle — AND for
+ * a server that already has an owner, where no setup token exists at all. So
+ * the copy leads with both live possibilities instead of sending someone who
+ * is on a claimed server to a log command that will print nothing:
+ *
+ *   - the token is out of date (the likeliest, and the one nobody diagnoses
+ *     alone: a new token is minted on every restart), which the command below
+ *     fixes; or
+ *   - this server is already somebody's, and the way in is the login page.
  */
-function StaleTokenHelp() {
+function InvalidTokenHelp() {
   return (
     <>
       <p className="font-semibold">That setup token was not accepted.</p>
       <p className="text-fg-muted">
-        Your server issues a new setup token every time it restarts, and only the newest one
-        works. Read the current one from your server&apos;s log:
+        Either the token is out of date — your server issues a new setup token every time it
+        restarts, and only the newest one works — or this server already has an owner, in
+        which case there is no token to redeem and you can{" "}
+        <Link href="/login" className="font-semibold underline underline-offset-2">
+          sign in
+        </Link>{" "}
+        instead.
       </p>
-      <code className="block overflow-x-auto rounded-lg bg-surface-muted px-3 py-2 font-mono text-[13px] text-fg">
+      <p className="text-fg-muted">To read the current token from your server&apos;s log:</p>
+      <code className="block whitespace-pre-wrap break-words rounded-lg bg-surface-muted px-3 py-2 font-mono text-[13px] leading-relaxed text-fg">
         {OWNER_CLAIM_LOG_COMMAND}
       </code>
       <p className="text-fg-muted">
         Look for the line beginning &ldquo;{OWNER_CLAIM_LOG_MARKER}&rdquo; and copy the token
-        beside it. If someone has already set this server up, sign in instead.
+        beside it. A server that has an owner prints no such line.
       </p>
     </>
   );

@@ -120,7 +120,7 @@ test("the wizard creates the owner and leaves them signed in", async ({ page }) 
   });
 });
 
-test("a stale setup token is explained, with the command that prints the live one", async ({
+test("a refused setup token names both causes, with the prod command for the live one", async ({
   page,
 }) => {
   await mockInstance(page, true);
@@ -140,7 +140,16 @@ test("a stale setup token is explained, with the command that prints the live on
   const alert = page.getByRole("main").getByRole("alert");
   await expect(alert).toContainText("That setup token was not accepted.");
   await expect(alert).toContainText("new setup token every time it restarts");
-  await expect(alert).toContainText("docker compose logs api | grep 'FIRST-RUN'");
+  // The identical 403 also means "this server already has an owner", where the
+  // log command prints nothing — so the other cause and its exit are offered.
+  await expect(alert).toContainText("already has an owner");
+  await expect(alert.getByRole("link", { name: "sign in" })).toHaveAttribute("href", "/login");
+  // The production invocation: a bare `docker compose` on a prod host loads the
+  // dev override and reads the wrong containers.
+  await expect(alert).toContainText(
+    "docker compose -f docker-compose.yml -f docker-compose.prod.yml " +
+      "--env-file env/production.env logs api | grep 'FIRST-RUN'",
+  );
 });
 
 test("a claim that lost the race sends the visitor to sign in", async ({ page }) => {

@@ -140,8 +140,13 @@ export function SignupForm({
       // is a first-run state, not the applicant's mistake — send them to the
       // wizard (which explains itself) instead of a dead-end error.
       if (err instanceof ApiError && err.code === OWNER_CLAIM_REQUIRED_CODE) {
+        // Release the button BEFORE navigating: if the replace is a no-op (the
+        // visitor is already on that route, or routing is blocked) the form
+        // stays on screen, and a permanently disabled "Creating account…" is a
+        // dead end with nothing to click.
+        setSubmitting(false);
         router.replace(OWNER_CLAIM_FROM_SIGNUP);
-        return; // stay submitting: the navigation is the outcome
+        return; // the navigation is the outcome — no error banner
       }
       if (err instanceof ApiError && err.fields && err.fields.length > 0) {
         const map: Record<string, string> = {};
