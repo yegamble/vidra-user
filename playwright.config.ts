@@ -61,6 +61,13 @@ export default defineConfig({
     // therefore point server reads at the real stack.
     env: {
       INTERNAL_API_BASE_URL: process.env.E2E_API_URL ?? "http://127.0.0.1:1",
+      // Playwright merges this over the parent environment, so pin the site
+      // origin empty instead of merely leaving it unset: a developer with
+      // PUBLIC_BASE_URL exported (say while driving a compose stack) would
+      // otherwise flip middleware.ts's HSTS branch and fail
+      // e2e/security-headers.spec.ts for reasons that have nothing to do with
+      // the code under test. Empty is the unconfigured default.
+      PUBLIC_BASE_URL: "",
     },
     // Always start a FRESH `next start` against the just-built output and never
     // adopt whatever already holds the port. CI already ran this way
