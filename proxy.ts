@@ -6,14 +6,19 @@
 // all depends on how the operator terminates TLS, and the same generic image
 // serves an acme/external-proxy deployment (https, HSTS on) and the deliberate
 // plain-http mode for labs, LANs and air-gapped installs (HSTS off — it would
-// pin a scheme the instance does not speak). Middleware runs per request, so it
+// pin a scheme the instance does not speak). This file runs per request, so it
 // can read PUBLIC_BASE_URL from the container's environment at request time.
+//
+// "proxy" is Next 16's name for what used to be middleware.ts (that convention
+// now warns as deprecated on every build). Besides the name, proxy always runs
+// on the Node.js runtime rather than the edge sandbox — which is what makes the
+// environment read above plain process.env rather than a runtime-specific quirk.
 
 import { NextResponse } from "next/server";
 
 import { STRICT_TRANSPORT_SECURITY, shouldSendHsts } from "@/lib/security-headers";
 
-export function middleware() {
+export function proxy() {
   const response = NextResponse.next();
   if (shouldSendHsts(process.env.PUBLIC_BASE_URL)) {
     response.headers.set(STRICT_TRANSPORT_SECURITY.key, STRICT_TRANSPORT_SECURITY.value);

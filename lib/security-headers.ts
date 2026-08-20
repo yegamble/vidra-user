@@ -37,8 +37,8 @@ export const SECURITY_HEADERS = [
 // TLS, and next.config's headers() is evaluated when the image is BUILT while
 // the origin is only known when the container RUNS — one generic image has to
 // serve both an https deployment and the deliberate plain-http mode
-// (lab/LAN/air-gap, VIDRA_TLS_MODE=plain-http). So middleware.ts emits it
-// per-request from the runtime environment instead.
+// (lab/LAN/air-gap, VIDRA_TLS_MODE=plain-http). So proxy.ts (Next 16's name for
+// middleware) emits it per-request from the runtime environment instead.
 export const STRICT_TRANSPORT_SECURITY = {
   key: "Strict-Transport-Security",
   value: "max-age=31536000; includeSubDomains",

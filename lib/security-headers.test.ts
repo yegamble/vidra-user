@@ -28,7 +28,7 @@ describe("global security headers", () => {
     );
   });
 
-  it("leaves HSTS out of the build-time list — middleware emits it per request", () => {
+  it("leaves HSTS out of the build-time list — proxy.ts emits it per request", () => {
     expect(SECURITY_HEADERS.map((header) => header.key)).not.toContain(
       "Strict-Transport-Security",
     );
