@@ -361,8 +361,10 @@ function MailTestCard() {
       setPhase("idle");
       setError(
         errorMessage(err, "Could not send the test message.", {
-          // The server's own copy for these is already precise and operator-
-          // facing; these overrides only add the "what do I do next" half.
+          // All three server messages are typed errors with stable codes
+          // (mail_not_configured / conflict / mail_test_failed) precisely so
+          // the api's generic 5xx scrub cannot replace them on the wire; these
+          // overrides only add the "what do I do next" half for this UI.
           "503":
             "This deployment has no outbound mail configured, so there is nothing to test. Set up an SMTP relay and restart the server.",
           "409":
