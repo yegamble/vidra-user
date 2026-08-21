@@ -74,7 +74,12 @@ export function InfrastructurePanel() {
     );
   }
   if (status === "error" || data === null) {
-    return <ErrorState message="Could not load the infrastructure summary." onRetry={refresh} />;
+    return (
+      <ErrorState
+        message="Could not load the infrastructure summary."
+        onRetry={refresh}
+      />
+    );
   }
 
   const { server, storage, networking, backups } = data;
@@ -82,7 +87,10 @@ export function InfrastructurePanel() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <Badge variant={networking.https_effective ? "success" : "warning"} status>
+        <Badge
+          variant={networking.https_effective ? "success" : "warning"}
+          status
+        >
           {networking.https_effective ? "HTTPS" : "Plain HTTP"}
         </Badge>
         <Badge variant="neutral" status>
@@ -98,17 +106,29 @@ export function InfrastructurePanel() {
         description="Runtime environment and the request limits this process enforces."
       >
         <Row label="Environment" value={server.environment} />
-        <Row label="Request timeout" value={`${server.request_timeout_seconds}s`} />
-        <Row label="Streaming timeout" value={`${server.stream_request_timeout_seconds}s`} />
+        <Row
+          label="Request timeout"
+          value={`${server.request_timeout_seconds}s`}
+        />
+        <Row
+          label="Streaming timeout"
+          value={`${server.stream_request_timeout_seconds}s`}
+        />
         <Row label="Body limit" value={server.body_limit} mono />
         <Row
           label="Max upload size"
-          value={server.upload_max_bytes === 0 ? "No cap" : formatBytes(server.upload_max_bytes)}
+          value={
+            server.upload_max_bytes === 0
+              ? "No cap"
+              : formatBytes(server.upload_max_bytes)
+          }
         />
         <Row label="Metrics endpoint" value={onOff(server.metrics_enabled)} />
         <Row
           label="Tracing"
-          value={server.tracing_enabled ? `On (${server.tracing_protocol})` : "Off"}
+          value={
+            server.tracing_enabled ? `On (${server.tracing_protocol})` : "Off"
+          }
         />
       </Panel>
 
@@ -116,14 +136,22 @@ export function InfrastructurePanel() {
         title="Storage"
         description="Where media bytes are written. Credentials are never included in this view."
       >
-        <Row label="Backend" value={storage.backend === "s3" ? "Object storage (S3)" : "Local disk"} />
+        <Row
+          label="Backend"
+          value={
+            storage.backend === "s3" ? "Object storage (S3)" : "Local disk"
+          }
+        />
         {storage.backend === "s3" ? (
           <>
             <Row label="Endpoint" value={storage.s3_endpoint} mono />
             <Row label="Bucket" value={storage.s3_bucket} mono />
             <Row label="Region" value={storage.s3_region} />
             <Row label="TLS" value={onOff(storage.s3_use_ssl)} />
-            <Row label="Path-style addressing" value={onOff(storage.s3_force_path_style)} />
+            <Row
+              label="Path-style addressing"
+              value={onOff(storage.s3_force_path_style)}
+            />
           </>
         ) : (
           <Row label="Media directory" value={storage.local_root} mono />
@@ -135,13 +163,34 @@ export function InfrastructurePanel() {
         description="How browsers and other instances reach this server."
       >
         <Row label="Public address" value={networking.public_base_url} mono />
-        <Row label="Served over HTTPS" value={yesNo(networking.https_effective)} />
-        <Row label="Plain HTTP allowed" value={yesNo(networking.allow_plain_http)} />
-        <Row label="Extra trusted proxies" value={listOr(networking.trusted_proxy_cidrs, "None")} />
-        <Row label="Allowed browser origins" value={listOr(networking.cors_allowed_origins, "None")} />
-        <Row label="ActivityPub federation" value={onOff(networking.federation_enabled)} />
-        <Row label="ATProto cross-posting" value={onOff(networking.atproto_enabled)} />
-        <Row label="Sign in with ATProto" value={onOff(networking.atproto_login_enabled)} />
+        <Row
+          label="Served over HTTPS"
+          value={yesNo(networking.https_effective)}
+        />
+        <Row
+          label="Plain HTTP allowed"
+          value={yesNo(networking.allow_plain_http)}
+        />
+        <Row
+          label="Extra trusted proxies"
+          value={listOr(networking.trusted_proxy_cidrs, "None")}
+        />
+        <Row
+          label="Allowed browser origins"
+          value={listOr(networking.cors_allowed_origins, "None")}
+        />
+        <Row
+          label="ActivityPub federation"
+          value={onOff(networking.federation_enabled)}
+        />
+        <Row
+          label="ATProto cross-posting"
+          value={onOff(networking.atproto_enabled)}
+        />
+        <Row
+          label="Sign in with ATProto"
+          value={onOff(networking.atproto_login_enabled)}
+        />
       </Panel>
 
       {/* Backups are the one section that reports a CONTRACT rather than live
@@ -154,7 +203,14 @@ export function InfrastructurePanel() {
         title="Backups"
         description="The backup contract for this deployment. This page reports the policy, not live state."
       >
-        <Row label="Database" value={backups.external_postgres ? "Managed externally" : "In this deployment"} />
+        <Row
+          label="Database"
+          value={
+            backups.external_postgres
+              ? "Managed externally"
+              : "In this deployment"
+          }
+        />
       </Panel>
       <Card className="flex flex-col gap-2 text-sm text-fg-muted">
         <p>{backups.schedule_note}</p>
@@ -223,10 +279,13 @@ function FeatureList({ features }: { features: InfrastructureFeature[] }) {
   return (
     <section aria-label="Optional features" className="flex flex-col gap-3">
       <div>
-        <h2 className="text-[15px] font-bold tracking-tight">Optional features</h2>
+        <h2 className="text-[15px] font-bold tracking-tight">
+          Optional features
+        </h2>
         <p className="text-[13px] text-fg-muted">
-          Everything vidra can do beyond the core. &ldquo;Enabled&rdquo; is your switch;
-          &ldquo;configured&rdquo; is whether this deployment supplies what the feature needs.
+          Everything vidra can do beyond the core. &ldquo;Enabled&rdquo; is your
+          switch; &ldquo;configured&rdquo; is whether this deployment supplies
+          what the feature needs.
         </p>
       </div>
       <ul className="flex flex-col divide-y divide-border-subtle rounded-2xl border border-border-subtle bg-surface px-4">
@@ -250,7 +309,9 @@ function FeatureRow({ feature }: { feature: InfrastructureFeature }) {
   return (
     <li className="flex flex-col gap-1 py-3">
       <div className="flex items-center justify-between gap-3">
-        <span className="truncate text-sm font-medium text-fg">{featureLabel(feature.key)}</span>
+        <span className="truncate text-sm font-medium text-fg">
+          {featureLabel(feature.key)}
+        </span>
         <Badge variant={variant} status>
           {label}
         </Badge>
@@ -262,7 +323,10 @@ function FeatureRow({ feature }: { feature: InfrastructureFeature }) {
           {href ? (
             <>
               {" "}
-              <Link href={href} className="font-medium text-accent hover:underline">
+              <Link
+                href={href}
+                className="font-medium text-accent hover:underline"
+              >
                 Open settings
               </Link>
             </>
@@ -308,19 +372,23 @@ function MailTestCard() {
     <section aria-label="Outbound mail test" className="flex flex-col gap-3">
       <Card className="flex flex-col gap-3">
         <div>
-          <h2 className="text-[15px] font-bold tracking-tight">Test outbound mail</h2>
+          <h2 className="text-[15px] font-bold tracking-tight">
+            Test outbound mail
+          </h2>
           <p className="mt-1 text-sm text-fg-muted">
-            Send one probe message to find out whether mail works before a user needs a
-            password reset. It goes to this instance&rsquo;s own contact address — you
-            cannot choose the recipient, which is what keeps this button from being a
-            relay for anyone who gets an admin password.
+            Send one probe message to find out whether mail works before a user
+            needs a password reset. It goes to this instance&rsquo;s own contact
+            address — you cannot choose the recipient, which is what keeps this
+            button from being a relay for anyone who gets an admin password.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={() => void send()} disabled={phase === "sending"}>
             {phase === "sending" ? "Sending…" : "Send test message"}
           </Button>
-          {phase === "sending" ? <Spinner label="Sending test message" /> : null}
+          {phase === "sending" ? (
+            <Spinner label="Sending test message" />
+          ) : null}
         </div>
       </Card>
 
@@ -336,9 +404,9 @@ function MailTestCard() {
             <Badge variant="success">Handed to the relay</Badge>
           </div>
           <p className="text-sm text-fg-muted">
-            The message was accepted for delivery to this instance&rsquo;s contact address.
-            Acceptance is a promise to try, not proof of delivery — check that inbox to
-            confirm it actually arrived.
+            The message was accepted for delivery to this instance&rsquo;s
+            contact address. Acceptance is a promise to try, not proof of
+            delivery — check that inbox to confirm it actually arrived.
           </p>
         </Card>
       ) : null}
@@ -361,16 +429,32 @@ function Panel({
     <section aria-label={title}>
       <h2 className="text-[15px] font-bold tracking-tight">{title}</h2>
       <p className="mb-2 text-[13px] text-fg-muted">{description}</p>
-      <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">{children}</dl>
+      <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+        {children}
+      </dl>
     </section>
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
     <div className="flex justify-between gap-3 border-b border-border-subtle py-1.5">
       <dt className="text-fg-muted">{label}</dt>
-      <dd className={mono ? "truncate font-mono text-[13px] text-fg" : "text-fg tabular-nums"}>
+      <dd
+        className={
+          mono
+            ? "truncate font-mono text-[13px] text-fg"
+            : "text-fg tabular-nums"
+        }
+      >
         {value || "—"}
       </dd>
     </div>

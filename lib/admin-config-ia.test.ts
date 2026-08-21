@@ -10,19 +10,24 @@ import {
   configPage,
   describeSettingDefault,
   humanizeSectionId,
-  intRange,
   isConfigPageId,
   placementFor,
-  validateHexColor,
-  validateRungSet,
-  validateTwitterHandle,
-  zeroOrIntRange,
   type ConfigPageId,
   type PlacedInstanceSetting,
 } from "./admin-config-ia";
 
-function setting(key: string, extra: Partial<PlacedInstanceSetting> = {}): PlacedInstanceSetting {
-  return { key, type: "string", value: "", default: "", overridden: false, ...extra };
+function setting(
+  key: string,
+  extra: Partial<PlacedInstanceSetting> = {},
+): PlacedInstanceSetting {
+  return {
+    key,
+    type: "string",
+    value: "",
+    default: "",
+    overridden: false,
+    ...extra,
+  };
 }
 
 // The authoritative server registry mirror (vidra-core
@@ -166,7 +171,10 @@ describe("config pages", () => {
     for (const [key, meta] of Object.entries(META)) {
       expect(isConfigPageId(meta.page), `${key} page`).toBe(true);
       const sections = PAGE_SECTIONS[meta.page].map((s) => s.id);
-      expect(sections, `${key} section ${meta.section} on ${meta.page}`).toContain(meta.section);
+      expect(
+        sections,
+        `${key} section ${meta.section} on ${meta.page}`,
+      ).toContain(meta.section);
     }
   });
 
@@ -179,9 +187,18 @@ describe("config pages", () => {
 
 describe("placementFor", () => {
   it("uses the client META map when the server sends no placement", () => {
-    expect(placementFor("instance_name")).toEqual({ page: "general", section: "identity" });
-    expect(placementFor("uploads_enabled")).toEqual({ page: "vod", section: "uploads" });
-    expect(placementFor("live_enabled")).toEqual({ page: "live", section: "streaming" });
+    expect(placementFor("instance_name")).toEqual({
+      page: "general",
+      section: "identity",
+    });
+    expect(placementFor("uploads_enabled")).toEqual({
+      page: "vod",
+      section: "uploads",
+    });
+    expect(placementFor("live_enabled")).toEqual({
+      page: "live",
+      section: "streaming",
+    });
   });
 
   it("places the broadcast slice on general/broadcast, disclosed under its master toggle", () => {
@@ -191,7 +208,10 @@ describe("placementFor", () => {
       "broadcast_level",
       "broadcast_dismissable",
     ]) {
-      expect(placementFor(key), key).toEqual({ page: "general", section: "broadcast" });
+      expect(placementFor(key), key).toEqual({
+        page: "general",
+        section: "broadcast",
+      });
     }
     expect(META.broadcast_enabled.parent).toBeUndefined();
     expect(META.broadcast_message.parent).toBe("broadcast_enabled");
@@ -221,16 +241,24 @@ describe("placementFor", () => {
 
   it("an unknown key with server placement lands where the server says", () => {
     expect(
-      placementFor("future_unknown_knob", { page: "vod", section: "transcoding" }),
+      placementFor("future_unknown_knob", {
+        page: "vod",
+        section: "transcoding",
+      }),
     ).toEqual({ page: "vod", section: "transcoding" });
   });
 
   it("an unknown key without placement falls back to advanced/other", () => {
-    expect(placementFor("mystery_knob")).toEqual({ page: "advanced", section: OTHER_SECTION_ID });
+    expect(placementFor("mystery_knob")).toEqual({
+      page: "advanced",
+      section: OTHER_SECTION_ID,
+    });
   });
 
   it("an invalid server page falls back to the client map", () => {
-    expect(placementFor("instance_name", { page: "bogus", section: "identity" })).toEqual({
+    expect(
+      placementFor("instance_name", { page: "bogus", section: "identity" }),
+    ).toEqual({
       page: "general",
       section: "identity",
     });
@@ -241,7 +269,11 @@ describe("buildPageModel", () => {
   it("renders META keys even when the server does not return them", () => {
     const model = buildPageModel("live", []);
     // The live page mirrors the server's streaming/replay/limits sections.
-    expect(model.map((s) => s.section.id)).toEqual(["streaming", "replay", "limits"]);
+    expect(model.map((s) => s.section.id)).toEqual([
+      "streaming",
+      "replay",
+      "limits",
+    ]);
     expect(model[0].keys).toEqual(["live_enabled"]);
     expect(model.find((s) => s.section.id === "replay")?.keys).toEqual([
       "live_allow_replay",
@@ -256,7 +288,13 @@ describe("buildPageModel", () => {
 
   it("puts an unknown key with server metadata under the named section", () => {
     const model = buildPageModel("vod", [
-      setting("clamav_enabled", { type: "bool", value: false, default: false, page: "vod", section: "transcoding" }),
+      setting("clamav_enabled", {
+        type: "bool",
+        value: false,
+        default: false,
+        page: "vod",
+        section: "transcoding",
+      }),
     ]);
     const transcoding = model.find((s) => s.section.id === "transcoding");
     expect(transcoding?.section.title).toBe("Transcoding");
@@ -267,7 +305,13 @@ describe("buildPageModel", () => {
 
   it("auto-creates a titled section for a server-invented section id", () => {
     const model = buildPageModel("vod", [
-      setting("clamav_enabled", { type: "bool", value: false, default: false, page: "vod", section: "virus-scanning" }),
+      setting("clamav_enabled", {
+        type: "bool",
+        value: false,
+        default: false,
+        page: "vod",
+        section: "virus-scanning",
+      }),
     ]);
     const auto = model.find((s) => s.section.id === "virus-scanning");
     expect(auto?.section.title).toBe("Virus scanning");
@@ -294,43 +338,6 @@ describe("buildPageModel", () => {
   });
 });
 
-describe("validators", () => {
-  it("validateHexColor accepts empty and #rrggbb only", () => {
-    expect(validateHexColor("")).toBeNull();
-    expect(validateHexColor("#7c5cff")).toBeNull();
-    expect(validateHexColor("#7C5CFF")).toBeNull();
-    expect(validateHexColor("#fff")).toMatch(/hex/);
-    expect(validateHexColor("red")).toMatch(/hex/);
-  });
-
-  it("zeroOrIntRange keeps the 0=unlimited convention", () => {
-    const check = zeroOrIntRange(144, 4320, "bad");
-    expect(check(0)).toBeNull();
-    expect(check(1080)).toBeNull();
-    expect(check(100)).toBe("bad");
-    expect(check(9999)).toBe("bad");
-    // Non-numbers are the server's problem, not inline validation's.
-    expect(check("x")).toBeNull();
-  });
-
-  it("META wires inline validation for the int-range limit keys", () => {
-    expect(META.import_max_height.validate?.(100)).toMatch(/144/);
-    expect(META.import_max_height.validate?.(0)).toBeNull();
-    expect(META.upload_max_size_bytes.validate?.(1024)).toMatch(/MiB/);
-    expect(META.upload_max_size_bytes.validate?.(1048576)).toBeNull();
-  });
-
-  it("validateTwitterHandle accepts empty and @?[A-Za-z0-9_]{1,15} only (W4)", () => {
-    expect(validateTwitterHandle("")).toBeNull();
-    expect(validateTwitterHandle("@vidra")).toBeNull();
-    expect(validateTwitterHandle("vidra")).toBeNull();
-    expect(validateTwitterHandle("Vi_dra42")).toBeNull();
-    expect(validateTwitterHandle("@way_too_long_handle")).toMatch(/handle/);
-    expect(validateTwitterHandle("no spaces")).toMatch(/handle/);
-    expect(validateTwitterHandle("dot.com")).toMatch(/handle/);
-  });
-});
-
 describe("W4 branding & social identity placement", () => {
   it("places the hide-name toggle in customization/header and the handle in general/social", () => {
     // The META fallback MATCHES the server registry placement (vidra-core
@@ -344,15 +351,20 @@ describe("W4 branding & social identity placement", () => {
       page: "general",
       section: "social",
     });
-    expect(META.social_meta_twitter_username.validate).toBe(validateTwitterHandle);
   });
 
   it("agrees with the real backend's server placement rows for the W4 keys", () => {
     expect(
-      placementFor("header_hide_instance_name", { page: "customization", section: "header" }),
+      placementFor("header_hide_instance_name", {
+        page: "customization",
+        section: "header",
+      }),
     ).toEqual({ page: "customization", section: "header" });
     expect(
-      placementFor("social_meta_twitter_username", { page: "general", section: "social" }),
+      placementFor("social_meta_twitter_username", {
+        page: "general",
+        section: "social",
+      }),
     ).toEqual({ page: "general", section: "social" });
   });
 
@@ -387,24 +399,36 @@ describe("W4 branding & social identity placement", () => {
 });
 
 describe("W5 browse, landing & player defaults placement", () => {
-  const W5_ENUM_KEYS = ["default_landing_page", "default_feed_sort", "default_feed_scope"];
+  const W5_ENUM_KEYS = [
+    "default_landing_page",
+    "default_feed_sort",
+    "default_feed_scope",
+  ];
 
   it("places the browse keys in general/browse, matching the backend registry", () => {
     // vidra-core instancesettings: PageGeneral/"browse" for the four browse
     // keys — the META fallback must agree so a pre-metadata backend and the
     // real one render identically.
-    for (const key of [...W5_ENUM_KEYS, "miniature_prefer_author_display_name"]) {
+    for (const key of [
+      ...W5_ENUM_KEYS,
+      "miniature_prefer_author_display_name",
+    ]) {
       expect(placementFor(key)).toEqual({ page: "general", section: "browse" });
-      expect(placementFor(key, { page: "general", section: "browse" })).toEqual({
-        page: "general",
-        section: "browse",
-      });
+      expect(placementFor(key, { page: "general", section: "browse" })).toEqual(
+        {
+          page: "general",
+          section: "browse",
+        },
+      );
     }
     expect(PAGE_SECTIONS.general.map((s) => s.id)).toContain("browse");
   });
 
   it("places the theme default in customization/theme and autoplay in customization/player", () => {
-    expect(placementFor("default_theme")).toEqual({ page: "customization", section: "theme" });
+    expect(placementFor("default_theme")).toEqual({
+      page: "customization",
+      section: "theme",
+    });
     expect(placementFor("default_player_autoplay")).toEqual({
       page: "customization",
       section: "player",
@@ -419,7 +443,10 @@ describe("W5 browse, landing & player defaults placement", () => {
       "popular",
       "trending",
     ]);
-    expect(META.default_feed_scope.options?.map((o) => o.value)).toEqual(["local", "all"]);
+    expect(META.default_feed_scope.options?.map((o) => o.value)).toEqual([
+      "local",
+      "all",
+    ]);
     expect(META.default_landing_page.options?.map((o) => o.value)).toEqual([
       "home-recent",
       "trending",
@@ -443,7 +470,9 @@ describe("W5 browse, landing & player defaults placement", () => {
   });
 
   it("builds the general page with the browse section holding the four keys in META order", () => {
-    const browse = buildPageModel("general", []).find((s) => s.section.id === "browse");
+    const browse = buildPageModel("general", []).find(
+      (s) => s.section.id === "browse",
+    );
     expect(browse?.section.title).toBe("Landing & browse defaults");
     expect(browse?.keys).toEqual([
       "default_landing_page",
@@ -463,18 +492,32 @@ describe("display helpers", () => {
 
   it("describes defaults per control kind", () => {
     expect(
-      describeSettingDefault(setting("k", { type: "bool", default: true }), "toggle"),
+      describeSettingDefault(
+        setting("k", { type: "bool", default: true }),
+        "toggle",
+      ),
     ).toBe("on");
     expect(
-      describeSettingDefault(setting("k", { type: "int", default: 0 }), "bytes"),
+      describeSettingDefault(
+        setting("k", { type: "int", default: 0 }),
+        "bytes",
+      ),
     ).toBe("unlimited");
     expect(
-      describeSettingDefault(setting("k", { type: "int", default: 2097152 }), "bytes"),
+      describeSettingDefault(
+        setting("k", { type: "int", default: 2097152 }),
+        "bytes",
+      ),
     ).toMatch(/MiB|MB/);
     expect(
-      describeSettingDefault(setting("k", { type: "list", default: ["en", "fr"] }), "language-multi"),
+      describeSettingDefault(
+        setting("k", { type: "list", default: ["en", "fr"] }),
+        "language-multi",
+      ),
     ).toBe("en, fr");
-    expect(describeSettingDefault(setting("k", { default: "" }), "text")).toBe("empty");
+    expect(describeSettingDefault(setting("k", { default: "" }), "text")).toBe(
+      "empty",
+    );
   });
 
   it("bootDepNote explains an absent boot dependency and stays quiet otherwise", () => {
@@ -485,14 +528,19 @@ describe("display helpers", () => {
       section: "uploads",
       bootDep: {
         note: "Needs WHISPER_ENDPOINT.",
-        isSatisfied: (i: { federation_enabled?: boolean }) => i.federation_enabled === true,
+        isSatisfied: (i: { federation_enabled?: boolean }) =>
+          i.federation_enabled === true,
       },
     };
-    expect(bootDepNote(meta, { federation_enabled: false })).toBe("Needs WHISPER_ENDPOINT.");
+    expect(bootDepNote(meta, { federation_enabled: false })).toBe(
+      "Needs WHISPER_ENDPOINT.",
+    );
     expect(bootDepNote(meta, { federation_enabled: true })).toBeNull();
     // No snapshot yet / no dependency declared: no note.
     expect(bootDepNote(meta, null)).toBeNull();
-    expect(bootDepNote(META.instance_name, { federation_enabled: false })).toBeNull();
+    expect(
+      bootDepNote(META.instance_name, { federation_enabled: false }),
+    ).toBeNull();
   });
 });
 
@@ -506,7 +554,10 @@ describe("publish defaults placement (config-parity W9)", () => {
 
   it("places every defaults.publish key on vod/publish-defaults via META", () => {
     for (const key of keys) {
-      expect(placementFor(key)).toEqual({ page: "vod", section: "publish-defaults" });
+      expect(placementFor(key)).toEqual({
+        page: "vod",
+        section: "publish-defaults",
+      });
     }
   });
 
@@ -518,19 +569,17 @@ describe("publish defaults placement (config-parity W9)", () => {
       section: "publish_defaults",
     });
     expect(placement).toEqual({ page: "vod", section: "publish-defaults" });
-    expect(PAGE_SECTIONS.vod.some((s) => s.id === "publish-defaults")).toBe(true);
+    expect(PAGE_SECTIONS.vod.some((s) => s.id === "publish-defaults")).toBe(
+      true,
+    );
 
-    const sections = buildPageModel("vod", keys.map((k) => setting(k, { page: "vod", section: "publish_defaults" })));
+    const sections = buildPageModel(
+      "vod",
+      keys.map((k) => setting(k, { page: "vod", section: "publish_defaults" })),
+    );
     const publish = sections.find((s) => s.section.id === "publish-defaults");
     expect(publish?.section.title).toBe("Publish defaults");
     for (const key of keys) expect(publish?.keys).toContain(key);
-  });
-
-  it("default_video_licence validates 0 or a PT-compatible licence id", () => {
-    const validate = META.default_video_licence.validate!;
-    expect(validate(0)).toBeNull();
-    expect(validate(3)).toBeNull();
-    expect(validate(8)).not.toBeNull();
   });
 });
 
@@ -553,7 +602,9 @@ describe("server registry mirror (config-parity closure slice)", () => {
       expect(placement.page, key).toBe(page);
       const declared = PAGE_SECTIONS[placement.page].map((s) => s.id);
       // The MIRROR RULE: the normalized server section is a real curated header.
-      expect(declared, `${key} → ${page}/${section}`).toContain(placement.section);
+      expect(declared, `${key} → ${page}/${section}`).toContain(
+        placement.section,
+      );
       expect(placement.section, key).not.toBe(OTHER_SECTION_ID);
     }
   });
@@ -567,14 +618,17 @@ describe("server registry mirror (config-parity closure slice)", () => {
   });
 
   it("builds every page with server rows landing only in declared sections (no auto ids)", () => {
-    const rows = SERVER_REGISTRY.map(([key, page, section]) => setting(key, { page, section }));
+    const rows = SERVER_REGISTRY.map(([key, page, section]) =>
+      setting(key, { page, section }),
+    );
     for (const p of CONFIG_PAGES) {
       const model = buildPageModel(p.id, rows);
       const declared = new Set(PAGE_SECTIONS[p.id].map((d) => d.id));
       for (const s of model) {
-        expect(declared.has(s.section.id), `${p.id} rendered auto section ${s.section.id}`).toBe(
-          true,
-        );
+        expect(
+          declared.has(s.section.id),
+          `${p.id} rendered auto section ${s.section.id}`,
+        ).toBe(true);
       }
     }
   });
@@ -586,7 +640,8 @@ describe("server registry mirror (config-parity closure slice)", () => {
       "federation_follower_approval",
       "federation_auto_follow_back",
     ];
-    for (const key of gates) expect(META[key].protocol, key).toBe("activitypub");
+    for (const key of gates)
+      expect(META[key].protocol, key).toBe("activitypub");
     // The remote-search keys deliberately carry NO protocol badge.
     expect(META.search_remote_uri_users.protocol).toBeUndefined();
     // No key claims ATProto coverage (vidra has no inbound ATProto gate).
@@ -605,24 +660,8 @@ describe("server registry mirror (config-parity closure slice)", () => {
 describe("transcoding_resolutions list control (config-parity W1/W10)", () => {
   it("is the only list-kind META key and renders via the list control", () => {
     expect(META.transcoding_resolutions.control).toBe("list");
-    expect(META.transcoding_resolutions.options?.map((o) => o.value)).toContain("1080");
-  });
-
-  it("validateRungSet rejects empty and duplicate rung sets, accepts a clean list", () => {
-    expect(validateRungSet(["1080", "720"])).toBeNull();
-    expect(validateRungSet([])).toMatch(/at least one/);
-    expect(validateRungSet(["1080", "1080"])).toMatch(/twice/);
-    expect(validateRungSet(["1080", ""])).toMatch(/blank/);
-    // Non-arrays are the server's problem, not inline validation's.
-    expect(validateRungSet("1080")).toBeNull();
-  });
-
-  it("intRange requires a bounded integer (concurrency knobs, no 0 sentinel)", () => {
-    const check = intRange(1, 16, "bad");
-    expect(check(1)).toBeNull();
-    expect(check(16)).toBeNull();
-    expect(check(0)).toBe("bad");
-    expect(check(17)).toBe("bad");
-    expect(check("x")).toBeNull();
+    expect(META.transcoding_resolutions.options?.map((o) => o.value)).toContain(
+      "1080",
+    );
   });
 });

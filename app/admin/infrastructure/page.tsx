@@ -7,8 +7,8 @@ export default function AdminInfrastructurePage() {
       <AdminTabs />
       <h1 className="mb-1 text-2xl font-bold tracking-tight">Infrastructure</h1>
       <p className="mb-6 text-[13px] text-fg-muted">
-        How this instance is deployed: server limits, storage, networking, backups, and
-        the optional features you have switched on.
+        How this instance is deployed: server limits, storage, networking,
+        backups, and the optional features you have switched on.
       </p>
       <AdminInfrastructureView />
     </main>
