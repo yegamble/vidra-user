@@ -16,6 +16,7 @@ const TABS = [
   { href: "/admin/media", label: "Media" },
   { href: "/admin/audit-log", label: "Audit log" },
   { href: "/admin/system", label: "System" },
+  { href: "/admin/infrastructure", label: "Infrastructure" },
 ];
 
 // AdminTabs is the admin section switcher below `lg`, where the desktop

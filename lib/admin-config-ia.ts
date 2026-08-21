@@ -47,7 +47,10 @@ export type SettingValue = string | boolean | string[] | number;
  * pre-W1 backend (rows without page/section), so the fields are re-declared
  * as optional strings over whatever the codegen says.
  */
-export type PlacedInstanceSetting = Omit<InstanceSetting, "page" | "section"> & {
+export type PlacedInstanceSetting = Omit<
+  InstanceSetting,
+  "page" | "section"
+> & {
   page?: string;
   section?: string;
 };
@@ -99,7 +102,8 @@ export const CONFIG_PAGES: readonly ConfigPageDef[] = [
   {
     id: "vod",
     label: "VOD",
-    description: "Uploads, imports, quotas, and processing for on-demand video.",
+    description:
+      "Uploads, imports, quotas, and processing for on-demand video.",
   },
   {
     id: "live",
@@ -128,7 +132,8 @@ export const CONFIG_PAGES: readonly ConfigPageDef[] = [
   {
     id: "ipfs",
     label: "IPFS",
-    description: "Public distribution and private replication mirror health and operations.",
+    description:
+      "Public distribution and private replication mirror health and operations.",
   },
   {
     id: "advanced",
@@ -168,7 +173,8 @@ export const OTHER_SECTION_ID = "other";
 const OTHER_SECTION: SectionDef = {
   id: OTHER_SECTION_ID,
   title: "Other settings",
-  description: "Additional runtime settings this admin console has no dedicated form for yet.",
+  description:
+    "Additional runtime settings this admin console has no dedicated form for yet.",
 };
 
 // Known sections per page, in display order. Every non-panel section id here
@@ -183,7 +189,8 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
     {
       id: "identity",
       title: "Platform",
-      description: "The public identity of this instance: name, descriptions, and classification.",
+      description:
+        "The public identity of this instance: name, descriptions, and classification.",
     },
     {
       // Server id "contact": the admin email + contact form (was the client-only
@@ -227,7 +234,8 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
     {
       id: "signup",
       title: "Sign-up & new users",
-      description: "Whether people can sign up, and what new accounts start with.",
+      description:
+        "Whether people can sign up, and what new accounts start with.",
     },
     {
       id: "moderation",
@@ -251,29 +259,34 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
     {
       id: "imports",
       title: "Imports",
-      description: "Importing videos from URLs and synchronizing remote channels.",
+      description:
+        "Importing videos from URLs and synchronizing remote channels.",
     },
     {
       id: "transcoding",
       title: "Transcoding",
-      description: "How uploaded videos are processed into streamable renditions.",
+      description:
+        "How uploaded videos are processed into streamable renditions.",
     },
     {
       id: "playback",
       title: "Playback",
-      description: "Optional playback experiences available while viewers browse video cards.",
+      description:
+        "Optional playback experiences available while viewers browse video cards.",
     },
     {
       // Server id "storyboards": seek-preview sprite generation.
       id: "storyboards",
       title: "Storyboards",
-      description: "Seek-preview thumbnail sprites generated when a video publishes.",
+      description:
+        "Seek-preview thumbnail sprites generated when a video publishes.",
     },
     {
       // Server id "transcription": Whisper auto-captions.
       id: "transcription",
       title: "Transcription",
-      description: "Automatic caption generation for uploaded videos (needs a transcription backend).",
+      description:
+        "Automatic caption generation for uploaded videos (needs a transcription backend).",
     },
     {
       // Server id "comments": vidra-core homes the comments toggle on VOD, not
@@ -292,7 +305,8 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       // (normalized to "publish-defaults") so the W9 keys land here.
       id: "publish-defaults",
       title: "Publish defaults",
-      description: "What a new video starts with before its creator changes anything.",
+      description:
+        "What a new video starts with before its creator changes anything.",
     },
   ],
   live: [
@@ -306,13 +320,15 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       // Server id "replay": recording live streams into videos.
       id: "replay",
       title: "Replay",
-      description: "Whether live streams can be recorded and kept as videos afterwards.",
+      description:
+        "Whether live streams can be recorded and kept as videos afterwards.",
     },
     {
       // Server id "limits": caps on concurrency and duration.
       id: "limits",
       title: "Limits",
-      description: "Caps on how many live streams run at once and how long a stream may run.",
+      description:
+        "Caps on how many live streams run at once and how long a stream may run.",
     },
   ],
   federation: [
@@ -320,13 +336,15 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       // Server id "comments": inbound remote comments.
       id: "comments",
       title: "Remote comments",
-      description: "Comments federated in from other instances over ActivityPub.",
+      description:
+        "Comments federated in from other instances over ActivityPub.",
     },
     {
       // Server id "followers": how inbound channel-follow requests are answered.
       id: "followers",
       title: "Followers",
-      description: "How this instance answers remote follow requests for its channels.",
+      description:
+        "How this instance answers remote follow requests for its channels.",
     },
     {
       // Server id "search": remote-URI search resolution (W13).
@@ -340,7 +358,8 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
     {
       id: "theme",
       title: "Theme",
-      description: "The default appearance for visitors who have not picked their own.",
+      description:
+        "The default appearance for visitors who have not picked their own.",
     },
     {
       id: "header",
@@ -350,7 +369,8 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
     {
       id: "player",
       title: "Player",
-      description: "How the video player behaves before a viewer changes anything.",
+      description:
+        "How the video player behaves before a viewer changes anything.",
     },
     {
       id: "email",
@@ -418,7 +438,8 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       // stubbed here live on the Federation page — vidra-core homes them there.)
       id: "user-data",
       title: "User data portability",
-      description: "Letting people take their account data with them, and the limits on exports.",
+      description:
+        "Letting people take their account data with them, and the limits on exports.",
     },
   ],
 };
@@ -426,7 +447,9 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
 /** "channel-sync" → "Channel sync" — the title for a server-invented section. */
 export function humanizeSectionId(id: string): string {
   const words = id.replace(/[-_]+/g, " ").trim();
-  return words === "" ? "Settings" : words.charAt(0).toUpperCase() + words.slice(1);
+  return words === ""
+    ? "Settings"
+    : words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 // --- Controls & validation ------------------------------------------------
@@ -464,48 +487,6 @@ export type SettingProtocol = "activitypub";
 /** One choice of an enum-segmented control: the wire value + its picker label. */
 export type EnumOption = { value: string; label: string };
 
-/** Immediate inline validation: null = fine, string = the inline error. */
-export type SettingValidator = (value: SettingValue) => string | null;
-
-/** "" is fine (unset); anything else must be a #rrggbb hex color. */
-export function validateHexColor(value: SettingValue): string | null {
-  if (typeof value !== "string" || value === "") return null;
-  return /^#[0-9a-fA-F]{6}$/.test(value) ? null : "Enter a 6-digit hex color, like #7c5cff.";
-}
-
-/**
- * "" is fine (unset); anything else must be an X/Twitter handle — an optional
- * leading @ plus 1–15 word characters (mirrors the backend validator for
- * social_meta_twitter_username).
- */
-export function validateTwitterHandle(value: SettingValue): string | null {
-  if (typeof value !== "string" || value === "") return null;
-  return /^@?[A-Za-z0-9_]{1,15}$/.test(value)
-    ? null
-    : "Enter a handle like @vidra: up to 15 letters, digits, or underscores.";
-}
-
-/** 0 = unlimited (the vidra convention — never -1); otherwise min..max. */
-export function zeroOrIntRange(
-  min: number,
-  max: number | null,
-  message: string,
-): SettingValidator {
-  return (value) => {
-    if (typeof value !== "number" || value === 0) return null;
-    if (value < min || (max !== null && value > max)) return message;
-    return null;
-  };
-}
-
-/** A required integer in [min, max] (no 0=unlimited sentinel — concurrency knobs). */
-export function intRange(min: number, max: number, message: string): SettingValidator {
-  return (value) => {
-    if (typeof value !== "number") return null; // non-numbers are the server's problem
-    return value < min || value > max ? message : null;
-  };
-}
-
 // The canonical HLS ladder rung heights an admin may enable, mirroring
 // vidra-core media.HLSCanonicalRungHeights (highest first). The server does NOT
 // expose these through the setting's `options` (that field is enum-only), so
@@ -521,28 +502,6 @@ export const TRANSCODING_RUNG_OPTIONS: readonly EnumOption[] = [
   { value: "240", label: "240p" },
   { value: "144", label: "144p" },
 ] as const;
-
-/**
- * Inline validation for a "rung set" list (transcoding_resolutions): a non-empty,
- * duplicate-free, non-blank string array — mirroring vidra-core
- * validateTranscodingResolutions (an empty ladder would disable every rung while
- * transcoding stays on; use the master toggle for that). Non-arrays are ignored
- * (the server's problem); canonical-rung membership is left to the server.
- */
-export function validateRungSet(value: SettingValue): string | null {
-  if (!Array.isArray(value)) return null;
-  if (value.length === 0) {
-    return "Enable at least one resolution (turn transcoding off with its toggle instead).";
-  }
-  const seen = new Set<string>();
-  for (const raw of value) {
-    const item = String(raw).trim();
-    if (item === "") return "A resolution cannot be blank.";
-    if (seen.has(item)) return `“${item}” is listed twice.`;
-    seen.add(item);
-  }
-  return null;
-}
 
 // --- Per-key presentation metadata -----------------------------------------
 
@@ -571,15 +530,16 @@ export type SettingMeta = {
    * gates carry one today.
    */
   protocol?: SettingProtocol;
-  /** Immediate inline validation run on every edit; blocks saving while set. */
-  validate?: SettingValidator;
   /**
    * Boot-env dependency: when the /instance snapshot says the backing
    * subsystem is absent, the row renders disabled with this note instead of
    * being silently ineffective. (No current key needs one; W3+ keys — e.g.
    * transcription without WHISPER_ENDPOINT — declare theirs here.)
    */
-  bootDep?: { note: string; isSatisfied: (instance: InstanceBootInfo) => boolean };
+  bootDep?: {
+    note: string;
+    isSatisfied: (instance: InstanceBootInfo) => boolean;
+  };
 };
 
 // In DISPLAY ORDER within each section. Any key the backend returns that is
@@ -696,7 +656,6 @@ export const META: Record<string, SettingMeta> = {
     control: "color",
     page: "customization",
     section: "theme",
-    validate: validateHexColor,
   },
   default_theme: {
     label: "Default theme",
@@ -882,7 +841,6 @@ export const META: Record<string, SettingMeta> = {
     control: "text",
     page: "general",
     section: "social",
-    validate: validateTwitterHandle,
   },
   // GENERAL / Moderation & sensitive content. The terms / code-of-conduct /
   // moderation-info markdown lives on the About page in the server registry
@@ -997,7 +955,6 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "signup",
     parent: "registration_enabled",
-    validate: zeroOrIntRange(1, null, "Must be 0 (unlimited) or a positive number."),
   },
   registration_minimum_age: {
     label: "Minimum age",
@@ -1006,7 +963,6 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "signup",
     parent: "registration_enabled",
-    validate: zeroOrIntRange(1, 150, "Must be 0 (disabled) or between 1 and 150."),
   },
   new_user_history_enabled: {
     label: "Watch history for new accounts",
@@ -1038,7 +994,6 @@ export const META: Record<string, SettingMeta> = {
     control: "bytes",
     page: "vod",
     section: "uploads",
-    validate: zeroOrIntRange(1048576, null, "Must be 0 (no cap) or at least 1 MiB (1048576)."),
   },
   upload_max_active_sessions_per_user: {
     label: "Max concurrent uploads per user",
@@ -1093,7 +1048,6 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "imports",
     parent: "imports_enabled",
-    validate: zeroOrIntRange(144, 4320, "Must be 0 (no cap) or between 144 and 4320."),
   },
   // Import sub-path + worker knobs (config-parity W8/W10). imports_enabled is
   // the master switch, so these disclose under it (mirrors import_max_height).
@@ -1112,7 +1066,6 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "imports",
     parent: "imports_enabled",
-    validate: intRange(1, 16, "Must be between 1 and 16."),
   },
   channel_sync_enabled: {
     label: "Channel sync",
@@ -1128,7 +1081,6 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "imports",
     parent: "channel_sync_enabled",
-    validate: zeroOrIntRange(1, 10000, "Must be 0 (unlimited) or between 1 and 10000."),
   },
   // VOD / Transcoding (config-parity W10). transcoding_enabled is the master;
   // the ladder + tuning knobs disclose under it.
@@ -1140,8 +1092,9 @@ export const META: Record<string, SettingMeta> = {
     section: "transcoding",
   },
   // Config-parity W1/W10: the only KindList registry key. A real list control —
-  // token chips over the canonical rung heights (server validates membership),
-  // with duplicate/empty inline validation.
+  // token chips over the canonical rung heights. The control refuses duplicate
+  // and empty additions as an input affordance; whether the resulting ladder is
+  // acceptable (non-empty, known rungs) is the server's answer, not ours.
   transcoding_resolutions: {
     label: "Transcoding ladder",
     help: "Which resolution rungs the HLS ladder produces (each ≤ the source is generated). Enable at least one; the shipped default is 1080p–360p.",
@@ -1150,7 +1103,6 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "transcoding",
     parent: "transcoding_enabled",
-    validate: validateRungSet,
   },
   transcoding_max_fps: {
     label: "Frame-rate cap",
@@ -1159,7 +1111,6 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "transcoding",
     parent: "transcoding_enabled",
-    validate: zeroOrIntRange(24, 240, "Must be 0 (no cap) or between 24 and 240."),
   },
   transcoding_threads: {
     label: "Threads per job",
@@ -1168,7 +1119,6 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "transcoding",
     parent: "transcoding_enabled",
-    validate: zeroOrIntRange(1, 64, "Must be 0 (FFmpeg default) or between 1 and 64."),
   },
   transcoding_concurrency: {
     label: "Transcode job concurrency",
@@ -1177,7 +1127,6 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "transcoding",
     parent: "transcoding_enabled",
-    validate: intRange(1, 16, "Must be between 1 and 16."),
   },
   transcoding_original_resolution: {
     label: "Keep an original-resolution rung",
@@ -1248,7 +1197,6 @@ export const META: Record<string, SettingMeta> = {
     control: "number",
     page: "vod",
     section: "publish-defaults",
-    validate: zeroOrIntRange(1, 7, "Must be 0 (no default) or a licence id between 1 and 7."),
   },
   default_comment_policy: {
     label: "Default comment policy",
@@ -1275,7 +1223,6 @@ export const META: Record<string, SettingMeta> = {
     control: "number",
     page: "general",
     section: "channels",
-    validate: zeroOrIntRange(1, 10000, "Must be 0 (unlimited) or between 1 and 10000."),
   },
   // LIVE / Streaming (server section "streaming"). The replay + limit keys
   // disclose under live_enabled; save-replay discloses under live_allow_replay.
@@ -1311,7 +1258,6 @@ export const META: Record<string, SettingMeta> = {
     page: "live",
     section: "limits",
     parent: "live_enabled",
-    validate: zeroOrIntRange(1, 10000, "Must be 0 (unlimited) or between 1 and 10000."),
   },
   live_max_user_lives: {
     label: "Max concurrent live streams (per user)",
@@ -1320,7 +1266,6 @@ export const META: Record<string, SettingMeta> = {
     page: "live",
     section: "limits",
     parent: "live_enabled",
-    validate: zeroOrIntRange(1, 10000, "Must be 0 (unlimited) or between 1 and 10000."),
   },
   live_max_duration_secs: {
     label: "Maximum stream duration",
@@ -1329,7 +1274,6 @@ export const META: Record<string, SettingMeta> = {
     page: "live",
     section: "limits",
     parent: "live_enabled",
-    validate: zeroOrIntRange(60, 2592000, "Must be 0 (no limit) or between 60 and 2592000 seconds."),
   },
   // FEDERATION / Remote comments (config-parity W12). Every federation gate
   // governs the ActivityPub inbox (internal/federation/inbox.go) — hence the
@@ -1443,7 +1387,6 @@ export const META: Record<string, SettingMeta> = {
     control: "number",
     page: "advanced",
     section: "search",
-    validate: intRange(1, 365, "Must be between 1 and 365 days."),
   },
   search_min_query_user_count: {
     label: "Minimum distinct users for a suggestion",
@@ -1451,7 +1394,6 @@ export const META: Record<string, SettingMeta> = {
     control: "number",
     page: "advanced",
     section: "search",
-    validate: intRange(1, 100, "Must be between 1 and 100 users."),
   },
   // ADVANCED / User data portability (config-parity W8). Server section
   // "user_data" (normalized to "user-data").
@@ -1476,7 +1418,6 @@ export const META: Record<string, SettingMeta> = {
     page: "advanced",
     section: "user-data",
     parent: "user_export_enabled",
-    validate: zeroOrIntRange(1, 8760, "Must be 0 (never expires) or between 1 and 8760 hours."),
   },
   user_export_max_quota_bytes: {
     label: "Maximum export size",
@@ -1570,7 +1511,8 @@ export function placementFor(
     if (section) return { page: server.page, section };
     // Server named a page but no (usable) section: keep the client section if
     // it agrees on the page, otherwise the page's auto-render fallback.
-    if (meta && meta.page === server.page) return { page: server.page, section: meta.section };
+    if (meta && meta.page === server.page)
+      return { page: server.page, section: meta.section };
     return { page: server.page, section: OTHER_SECTION_ID };
   }
   if (meta) return { page: meta.page, section: meta.section };
@@ -1607,7 +1549,8 @@ export function buildPageModel(
     if (!bucket) {
       bucket = [];
       buckets.set(sectionId, bucket);
-      if (!knownIds.has(sectionId) && sectionId !== OTHER_SECTION_ID) autoOrder.push(sectionId);
+      if (!knownIds.has(sectionId) && sectionId !== OTHER_SECTION_ID)
+        autoOrder.push(sectionId);
     }
     bucket.push(key);
   };
@@ -1627,7 +1570,8 @@ export function buildPageModel(
     const keys = buckets.get(def.id);
     // A panel section (alwaysRender) is part of the page even with no
     // registry keys — its content does not come from the registry.
-    if ((keys && keys.length > 0) || def.alwaysRender) sections.push({ section: def, keys: keys ?? [] });
+    if ((keys && keys.length > 0) || def.alwaysRender)
+      sections.push({ section: def, keys: keys ?? [] });
   }
   for (const id of autoOrder) {
     const keys = buckets.get(id);
@@ -1643,7 +1587,8 @@ export function buildPageModel(
     }
   }
   const other = buckets.get(OTHER_SECTION_ID);
-  if (other && other.length > 0) sections.push({ section: OTHER_SECTION, keys: other });
+  if (other && other.length > 0)
+    sections.push({ section: OTHER_SECTION, keys: other });
   return sections;
 }
 
@@ -1652,12 +1597,20 @@ export function buildPageModel(
 /** The empty/default draft value for a control kind (missing-key rows). */
 export function emptyValueFor(control: ControlKind): SettingValue {
   if (control === "toggle") return false;
-  if (control === "category-multi" || control === "language-multi" || control === "list") return [];
+  if (
+    control === "category-multi" ||
+    control === "language-multi" ||
+    control === "list"
+  )
+    return [];
   if (control === "number" || control === "bytes") return 0;
   return "";
 }
 
-export function controlFor(key: string, setting: InstanceSetting | undefined): ControlKind {
+export function controlFor(
+  key: string,
+  setting: InstanceSetting | undefined,
+): ControlKind {
   const meta = META[key];
   if (meta) return meta.control;
   // Unknown server key ("Other settings" / auto sections): render by server
@@ -1682,10 +1635,12 @@ export function describeSettingDefault(
   const value = setting.default;
   if (typeof value === "boolean") return value ? "on" : "off";
   if (typeof value === "number") {
-    if (control === "bytes") return value === 0 ? "unlimited" : formatBytes(value);
+    if (control === "bytes")
+      return value === 0 ? "unlimited" : formatBytes(value);
     return String(value);
   }
-  if (Array.isArray(value)) return value.length === 0 ? "none" : value.join(", ");
+  if (Array.isArray(value))
+    return value.length === 0 ? "none" : value.join(", ");
   if (value === "") return "empty";
   return value.length > 48 ? `${value.slice(0, 48)}…` : value;
 }

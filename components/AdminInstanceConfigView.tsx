@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { AdminVideoPicker } from "@/components/AdminVideoPicker";
 import { InstanceBrandingManager } from "@/components/InstanceBrandingManager";
@@ -53,6 +59,7 @@ import { primaryColorContrast } from "@/lib/contrast";
 import { COUNTRIES } from "@/lib/countries";
 import { formatBytes } from "@/lib/format";
 import { refreshInstanceFeatures } from "@/lib/instance-features";
+import { useSettingValidation } from "@/lib/use-setting-validation";
 
 type Status = "loading" | "error" | "ready";
 
@@ -118,10 +125,17 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   // The editable working copy, keyed by setting key. Reseeded from the server
   // truth on every successful load/save (so the UI reflects effective values).
   const [draft, setDraft] = useState<Record<string, SettingValue>>({});
-  // Server-side rejections (422 field errors) and immediate client-side
-  // validation, merged per row; a client error blocks saving that key.
+  // Save-time rejections (the PATCH's 422 field errors) and the early answers
+  // from the dry-run endpoint, merged per row. Both come from the SERVER's own
+  // validators — the dry run just asks sooner — so they read identically and a
+  // dry-run message blocks saving that key exactly as a 422 would.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
+  const {
+    errors: clientErrors,
+    validateKey,
+    clearKey: clearValidation,
+    reset: resetValidation,
+  } = useSettingValidation();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -129,7 +143,10 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   const [resetting, setResetting] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   // The shared markdown-preview modal: which field is being previewed.
-  const [preview, setPreview] = useState<{ label: string; text: string } | null>(null);
+  const [preview, setPreview] = useState<{
+    label: string;
+    text: string;
+  } | null>(null);
   // The taxonomy for the language/category selects (null until loaded; a failed
   // fetch leaves the selects with their current value and the multi-selects
   // showing an honest "options unavailable" note).
@@ -139,17 +156,21 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   // some pages carry a page-wide note). Best-effort: null just means no notes.
   const [instance, setInstance] = useState<InstanceBootInfo | null>(null);
 
-  const seed = useCallback((list: AdminInstanceSetting[]) => {
-    setSettings(list);
-    const next: Record<string, SettingValue> = {};
-    for (const s of list) {
-      // Defensive: a list kind whose value is not an array (mid-migration
-      // backend) is treated as empty rather than crashing the form.
-      next[s.key] = s.type === "list" && !Array.isArray(s.value) ? [] : s.value;
-    }
-    setDraft(next);
-    setClientErrors({});
-  }, []);
+  const seed = useCallback(
+    (list: AdminInstanceSetting[]) => {
+      setSettings(list);
+      const next: Record<string, SettingValue> = {};
+      for (const s of list) {
+        // Defensive: a list kind whose value is not an array (mid-migration
+        // backend) is treated as empty rather than crashing the form.
+        next[s.key] =
+          s.type === "list" && !Array.isArray(s.value) ? [] : s.value;
+      }
+      setDraft(next);
+      resetValidation();
+    },
+    [resetValidation],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -190,28 +211,37 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
 
   // The set of keys whose draft value differs from the effective server value.
   const changedKeys = useMemo(
-    () => settings.filter((s) => !sameValue(draft[s.key], s.value)).map((s) => s.key),
+    () =>
+      settings
+        .filter((s) => !sameValue(draft[s.key], s.value))
+        .map((s) => s.key),
     [settings, draft],
   );
   const dirty = changedKeys.length > 0;
   const invalid = changedKeys.some((key) => clientErrors[key] !== undefined);
 
-  const setValue = useCallback((key: string, value: SettingValue) => {
-    setSaved(false);
-    setDraft((prev) => ({ ...prev, [key]: value }));
-    // Immediate inline validation (HIG): the row tells you right away.
-    const validate = META[key]?.validate;
-    setClientErrors((prev) => {
-      const message = validate ? validate(value) : null;
-      if (message === null) {
-        if (prev[key] === undefined) return prev;
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      }
-      return { ...prev, [key]: message };
-    });
-  }, []);
+  const setValue = useCallback(
+    (key: string, value: SettingValue) => {
+      setSaved(false);
+      setDraft((prev) => ({ ...prev, [key]: value }));
+      // A stale message must not sit under a field the operator is actively
+      // fixing — clear it on edit, then ask the server again when they leave.
+      clearValidation(key);
+    },
+    [clearValidation],
+  );
+
+  // The row lost focus: ask the server whether what is in it would be accepted.
+  // Deliberately on blur rather than per keystroke — a half-typed hex color is
+  // not a mistake worth shouting about, it is an unfinished thought.
+  const validateOnBlur = useCallback(
+    (key: string) => {
+      const value = draft[key];
+      if (value === undefined) return;
+      validateKey(key, value);
+    },
+    [draft, validateKey],
+  );
 
   const applyResult = useCallback(
     (res: InstanceSettingsResponse) => {
@@ -224,7 +254,12 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   );
 
   const onError = useCallback((err: unknown) => {
-    if (err instanceof ApiError && err.status === 422 && err.fields && err.fields.length > 0) {
+    if (
+      err instanceof ApiError &&
+      err.status === 422 &&
+      err.fields &&
+      err.fields.length > 0
+    ) {
       const map: Record<string, string> = {};
       for (const f of err.fields) map[f.field] = f.message;
       setFieldErrors(map);
@@ -238,7 +273,9 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   // bar) or one section's slice (per-section save).
   const save = useCallback(
     async (keys?: string[]) => {
-      const toSave = (keys ?? changedKeys).filter((key) => changedKeys.includes(key));
+      const toSave = (keys ?? changedKeys).filter((key) =>
+        changedKeys.includes(key),
+      );
       if (toSave.length === 0 || saving) return;
       if (toSave.some((key) => clientErrors[key] !== undefined)) return;
       setSaving(true);
@@ -326,7 +363,8 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   }
 
   const byKey = new Map(settings.map((s) => [s.key, s]));
-  const pageBootNote = instance && pageDef.bootNote ? pageDef.bootNote(instance) : null;
+  const pageBootNote =
+    instance && pageDef.bootNote ? pageDef.bootNote(instance) : null;
 
   // Progressive disclosure: a child row stays hidden while its parent toggle
   // is off. Disclosure is transitive — a grandchild (e.g. live_default_save_replay
@@ -355,7 +393,9 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
     const visibleKeys = keys.filter(isVisible);
     if (visibleKeys.length === 0 && panel === null) return null;
     const sectionChanged = keys.filter((key) => changedKeys.includes(key));
-    const sectionInvalid = sectionChanged.some((key) => clientErrors[key] !== undefined);
+    const sectionInvalid = sectionChanged.some(
+      (key) => clientErrors[key] !== undefined,
+    );
     const headingId = sectionAnchorId(section.id);
     return (
       <section
@@ -370,7 +410,9 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
               {section.title}
             </h2>
             {section.description ? (
-              <p className="mt-1 text-[13px] text-fg-muted">{section.description}</p>
+              <p className="mt-1 text-[13px] text-fg-muted">
+                {section.description}
+              </p>
             ) : null}
           </div>
           {sectionChanged.length > 0 ? (
@@ -403,6 +445,7 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
                 resetting={resetting === key}
                 disabled={saving}
                 onChange={(v) => setValue(key, v)}
+                onBlur={() => validateOnBlur(key)}
                 onReset={() => void resetToDefault(key)}
                 onPreview={(label, text) => setPreview({ label, text })}
               />
@@ -441,7 +484,9 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
             {/* pb-8 (on top of the form's gap-8) keeps a full save-bar height of
                 clearance below the last section, so the sticky bar never covers
                 the final field as you scroll (design-review). */}
-            <div className="flex min-w-0 flex-col gap-8 pb-8">{model.map(renderSection)}</div>
+            <div className="flex min-w-0 flex-col gap-8 pb-8">
+              {model.map(renderSection)}
+            </div>
 
             {/* Sticky save bar (HIG): the dirty-diff count and the whole-page
                 save stay in reach however long the page is. In-flow on the
@@ -453,11 +498,17 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
               </Button>
               {dirty ? (
                 <>
-                  <Button type="button" variant="ghost" size="sm" onClick={discard}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={discard}
+                  >
                     Discard
                   </Button>
                   <span className="text-sm text-fg-muted">
-                    {changedKeys.length} unsaved {changedKeys.length === 1 ? "change" : "changes"}
+                    {changedKeys.length} unsaved{" "}
+                    {changedKeys.length === 1 ? "change" : "changes"}
                   </span>
                 </>
               ) : null}
@@ -525,7 +576,8 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
 
 // The non-registry panel a page section hosts, if any (see renderSection).
 function sectionPanel(page: ConfigPageId, sectionId: string): ReactNode | null {
-  if (page === "general" && sectionId === "branding") return <InstanceBrandingManager />;
+  if (page === "general" && sectionId === "branding")
+    return <InstanceBrandingManager />;
   if (page === "homepage" && sectionId === "homepage") {
     return (
       <InstanceDocumentEditor
@@ -574,6 +626,7 @@ function SettingRow({
   resetting,
   disabled,
   onChange,
+  onBlur,
   onReset,
   onPreview,
 }: {
@@ -590,6 +643,8 @@ function SettingRow({
   resetting: boolean;
   disabled: boolean;
   onChange: (value: SettingValue) => void;
+  /** The row lost focus — time to ask the server about its current value. */
+  onBlur: () => void;
   onReset: () => void;
   onPreview: (label: string, text: string) => void;
 }) {
@@ -609,7 +664,12 @@ function SettingRow({
   const isToggle = control === "toggle";
 
   return (
+    // onBlur is on the row rather than on each control because React's onBlur is
+    // focusout, which bubbles: one handler covers every control kind the row can
+    // render (inputs, selects, segmented buttons, the list editor) and no new
+    // prop has to be threaded through a dozen of them.
     <div
+      onBlur={onBlur}
       className={`flex min-w-0 flex-col gap-2 py-3.5 first:pt-0 last:pb-0 ${
         child ? "border-l-2 border-border-subtle pl-4" : ""
       }`}
@@ -617,7 +677,9 @@ function SettingRow({
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="break-words text-sm font-medium text-fg">{label}</span>
+            <span className="break-words text-sm font-medium text-fg">
+              {label}
+            </span>
             {/* Federation-protocol badge (config-parity W12): names the protocol
                 whose surface the gate governs — ActivityPub for the inbox gates. */}
             {meta?.protocol ? <ProtocolBadge protocol={meta.protocol} /> : null}
@@ -686,7 +748,13 @@ function SettingRow({
       ) : null}
 
       {control === "color" ? (
-        <ColorControl label={label} value={text} onChange={onChange} error={error} disabled={inactive} />
+        <ColorControl
+          label={label}
+          value={text}
+          onChange={onChange}
+          error={error}
+          disabled={inactive}
+        />
       ) : null}
 
       {control === "number" || control === "bytes" ? (
@@ -763,7 +831,11 @@ function SettingRow({
       {control === "category-multi" || control === "language-multi" ? (
         <MultiSelectList
           label={label}
-          options={(control === "category-multi" ? config?.categories : config?.languages) ?? []}
+          options={
+            (control === "category-multi"
+              ? config?.categories
+              : config?.languages) ?? []
+          }
           value={list}
           onChange={onChange}
           error={error}
@@ -823,7 +895,9 @@ function SettingRow({
       {/* Generic enum picker (config-parity W5): the META `options` carry the
           labels; the value falls back to the server default, then the first
           option, so the control is never in an unselectable state. */}
-      {control === "enum-segmented" && meta?.options && meta.options.length > 0 ? (
+      {control === "enum-segmented" &&
+      meta?.options &&
+      meta.options.length > 0 ? (
         <div className="flex flex-col gap-1">
           <SegmentedControl
             options={meta.options}
@@ -841,7 +915,9 @@ function SettingRow({
         </div>
       ) : null}
 
-      {isToggle && error ? <p className="text-xs text-danger">{error}</p> : null}
+      {isToggle && error ? (
+        <p className="text-xs text-danger">{error}</p>
+      ) : null}
     </div>
   );
 }
@@ -976,10 +1052,15 @@ function MultiSelectList({
         className="flex max-h-44 flex-col gap-0.5 overflow-y-auto rounded-xl border border-border bg-surface p-1.5"
       >
         {options.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-fg-muted">Options are unavailable right now.</p>
+          <p className="px-2 py-1 text-xs text-fg-muted">
+            Options are unavailable right now.
+          </p>
         ) : (
           options.map((o) => (
-            <div key={o.id} className="rounded-lg px-2 py-1 hover:bg-surface-muted">
+            <div
+              key={o.id}
+              className="rounded-lg px-2 py-1 hover:bg-surface-muted"
+            >
               <Checkbox
                 label={o.label}
                 checked={value.includes(o.id)}
@@ -1003,8 +1084,10 @@ function MultiSelectList({
 // It renders the current array as removable chips and adds via a free-text input
 // (so ANY list-kind setting is editable, keeping the auto-render invariant true)
 // plus optional quick-add suggestion chips from META options (the canonical
-// transcoding rungs). Empty/duplicate additions are refused at the control;
-// the whole-value inline validator (e.g. validateRungSet) carries the messaging.
+// transcoding rungs). Empty/duplicate additions are refused at the control
+// itself — that is an input affordance, not a rule about the value. Whether the
+// resulting list is acceptable (non-empty, known rungs) is the server's call,
+// answered by the dry run when the row loses focus.
 function ListControl({
   label,
   value,
@@ -1025,7 +1108,9 @@ function ListControl({
   // the transcoding ladder that is highest resolution → lowest resolution, so
   // selection order can never leave 2160p appended after 360p. Unknown values
   // sort after known options (the server will still validate membership).
-  const optionOrder = new Map((options ?? []).map((option, index) => [option.value, index]));
+  const optionOrder = new Map(
+    (options ?? []).map((option, index) => [option.value, index]),
+  );
   const ordered = (values: string[]) =>
     [...values].sort((a, b) => {
       const aIndex = optionOrder.get(a);
@@ -1037,7 +1122,8 @@ function ListControl({
       }
       const aNumber = Number(a);
       const bNumber = Number(b);
-      if (Number.isFinite(aNumber) && Number.isFinite(bNumber)) return bNumber - aNumber;
+      if (Number.isFinite(aNumber) && Number.isFinite(bNumber))
+        return bNumber - aNumber;
       return a.localeCompare(b);
     });
   const orderedValue = ordered(value);
@@ -1048,9 +1134,12 @@ function ListControl({
     setEntry("");
   };
   const remove = (v: string) => onChange(orderedValue.filter((x) => x !== v));
-  const labelFor = (v: string) => options?.find((o) => o.value === v)?.label ?? v;
+  const labelFor = (v: string) =>
+    options?.find((o) => o.value === v)?.label ?? v;
   // Suggestions not already chosen (canonical rungs for transcoding_resolutions).
-  const suggestions = (options ?? []).filter((o) => !orderedValue.includes(o.value));
+  const suggestions = (options ?? []).filter(
+    (o) => !orderedValue.includes(o.value),
+  );
   return (
     <div className="flex flex-col gap-1.5">
       <div
