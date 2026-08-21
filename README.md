@@ -116,7 +116,8 @@ typecheck && lint && lint:icons && test && build && e2e
 ## Environment variables
 
 App vars are read once, typed, in `lib/config.ts` (`LOG_LEVEL` in `lib/logger.ts`;
-the `E2E_*` vars in `playwright.config.ts`). Never commit a real `.env` or any secret.
+`PUBLIC_BASE_URL` per request in `proxy.ts`; the `E2E_*` vars in
+`playwright.config.ts`). Never commit a real `.env` or any secret.
 
 | Var | Scope | Meaning |
 |-----|-------|---------|
@@ -124,6 +125,7 @@ the `E2E_*` vars in `playwright.config.ts`). Never commit a real `.env` or any s
 | `PUBLIC_API_BASE_URL` | runtime | Browser-facing API origin, served per page load via `/runtime-config.js` — repoint a running container without a rebuild. Empty = same-origin |
 | `API_BASE_URL` | runtime, server only | Server-side fetch target (compose/service DNS, e.g. `http://api:8080`) |
 | `INTERNAL_API_BASE_URL` | runtime, server only | Historical alias for `API_BASE_URL` (wins when both are set); falls back to the public URL |
+| `PUBLIC_BASE_URL` | runtime, server only | The **site** origin — a different thing from the API origins above. Its scheme decides whether `proxy.ts` emits `Strict-Transport-Security`: https, unset, or unparseable emit (fail-secure); an explicit `http://` origin (the deliberate plain-http deployment mode) suppresses it |
 | `LOG_LEVEL` | server | `debug \| info \| warn \| error` (default `info`) |
 | `OTEL_ENABLED` | server | `true` registers the OTel SDK and injects W3C `traceparent` on server-side calls |
 | `OTEL_SERVICE_NAME` | server | OTel service identity (default `vidra-user`) |
