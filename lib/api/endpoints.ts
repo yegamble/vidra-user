@@ -14,6 +14,9 @@ import type {
   InstanceDocument,
   InstanceDocumentName,
   InstanceSettingsResponse,
+  InstanceSettingsValidationResponse,
+  InfrastructureStatus,
+  MailTestResult,
   UpdateInstanceSettingsRequest,
   InstanceAboutResponse,
   InstanceContactRequest,
@@ -1863,6 +1866,28 @@ export const api = {
   getSystemStatus: (signal?: AbortSignal) =>
     apiRequest<SystemStatus>("/api/v1/admin/system", { signal }),
 
+  /**
+   * GET /api/v1/admin/infrastructure — the deploy-time shape of this instance
+   * (admin only): server limits, storage backend, networking, backup guidance,
+   * and the optional-feature discovery list. Read-only and secret-free by
+   * construction — no DSN, no S3 keys, no SMTP credentials ever appear in it.
+   * Complements getSystemStatus: that one answers "is it healthy right now",
+   * this one answers "what did the operator actually deploy".
+   */
+  getInfrastructure: (signal?: AbortSignal) =>
+    apiRequest<InfrastructureStatus>("/api/v1/admin/infrastructure", { signal }),
+
+  /**
+   * POST /api/v1/admin/mail/test — send one outbound-mail probe (admin only).
+   * No request body and no recipient parameter: the server sends to the
+   * instance's own contact address, so the button cannot be turned into an
+   * open relay. 202 means the relay accepted the message, not that it was
+   * delivered. 503 = no mail path configured, 409 = no contact address set,
+   * 502 = the relay refused, 429 = throttled (its own small budget).
+   */
+  sendTestMail: () =>
+    apiRequest<MailTestResult>("/api/v1/admin/mail/test", { method: "POST" }),
+
   /** GET /api/v1/ipfs/status — effective public/private mirror health and pin counts (admin). */
   getIPFSStatus: (signal?: AbortSignal) =>
     apiRequest<IPFSStatus>("/api/v1/ipfs/status", { signal }),
@@ -2062,6 +2087,25 @@ export const api = {
       method: "PATCH",
       body: patch,
     }),
+
+  /**
+   * POST /api/v1/admin/instance-settings/validate — "would the PATCH accept
+   * this?" without writing anything (admin only). Same body as the PATCH; the
+   * answer is ALWAYS 200, because field problems are the result of asking a
+   * validation question, not an error. `fields` is never null: empty means the
+   * same body would be accepted. Lets the config form check a value against the
+   * server's own rules as the operator leaves the field, instead of keeping a
+   * hand-copied second copy of them here — a copy drifts the first time either
+   * side changes, and the operator only finds out as a 422 on save.
+   */
+  validateInstanceSettings: (
+    patch: UpdateInstanceSettingsRequest,
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<InstanceSettingsValidationResponse>(
+      "/api/v1/admin/instance-settings/validate",
+      { method: "POST", body: patch, signal },
+    ),
 
   /**
    * POST /api/v1/admin/instance-avatar — set the instance's avatar (admin,

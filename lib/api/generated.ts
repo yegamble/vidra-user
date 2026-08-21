@@ -4096,6 +4096,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/mail/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send an outbound-mail test message (admin)
+         * @description Sends one probe message so an admin can find out whether outbound mail works BEFORE a user needs a password reset. No request body. The recipient is the instance's own effective contact address and the caller CANNOT choose it. That is the security design of the endpoint: an authenticated send-to-any-address button is an open relay behind an admin password — useful for spam, for phishing from the instance's own domain, and for burning its sending reputation. With a fixed recipient there is nothing to abuse. 202 means the message was handed to the relay, not that it was delivered: SMTP acceptance is a promise to try, and an admin who reads "sent" and finds nothing in the inbox has learned something real. Restricted to admins, throttled on its own budget (3 per admin per hour in production wiring), and audited as admin.mail.test with the OUTCOME only — never an address.
+         */
+        post: operations["sendTestMail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/infrastructure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Deploy-time infrastructure shape (admin)
+         * @description Returns what this instance IS, as opposed to whether it is up (that is GET /api/v1/admin/system): the server's environment, request deadlines and size caps, the media storage backend and its bucket coordinates, the public origin and proxy/CORS trust, the backup contract, and a discovery list of every optional subsystem with whether it is enabled and whether the deployment supplies what it needs. Read-only, always 200, no probes. Every field is hand-picked and NO secret is included: no database or Redis DSN, no S3 access/secret key, no SMTP username or password, no JWT secret, no key-encryption key, no live ingest or search internal secret, no IPFS cluster token. The values come from BOOT CONFIG, never the runtime instance-settings overlay — this page is about the deployment, and it has to be able to contradict an admin toggle that claims a feature the host cannot provide. The backups block is GUIDANCE, not live state: the api container has no view of the deploy directory (mounting the backups into the public-facing service is how a compromised api deletes them), so it reports the documented cadence, the staleness rule and the artifacts, and points at `vidra doctor` on the host for whether a dump actually ran. Restricted to admins.
+         */
+        get: operations["getInfrastructure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/jobs": {
         parameters: {
             query?: never;
@@ -4195,6 +4235,26 @@ export interface paths {
          * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
          */
         patch: operations["updateInstanceSettings"];
+        trace?: never;
+    };
+    "/api/v1/admin/instance-settings/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dry-run instance-settings validation (admin)
+         * @description Answers "would PATCH /api/v1/admin/instance-settings accept this body?" without writing anything. The request body is exactly the PATCH's — a flat object of setting key → new value — and the response lists the field problems the write would have reported, or an empty list when it would be accepted. Nothing is persisted and no audit event is emitted. It exists so an admin config form can validate a field as the operator leaves it, against the SERVER's rules, instead of keeping a hand-copied second copy of them client-side (a copy drifts the first time either side changes, and the operator finds out as a 422 on save). The PATCH's 422 stays the authoritative backstop; this is only the early answer. Always 200 on a well-formed request: the field problems ARE the result of asking a validation question, so they are not themselves an error response. A body that is not a JSON object is 400. Restricted to admins.
+         */
+        post: operations["validateInstanceSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/instance-documents/{name}": {
@@ -7178,6 +7238,93 @@ export interface components {
                 window_seconds: number;
             };
         };
+        /** @description The mail probe was handed to the relay. "sent" is the only value — a failure is an error response, not a status in here. */
+        MailTestResult: {
+            /** @enum {string} */
+            status: "sent";
+        };
+        /** @description One optional subsystem's honest state. enabled is "the operator turned this on"; configured is "the deployment supplies what it needs to work". The two come apart (WHISPER_ENABLED with no endpoint, ATPROTO with no sealing key, MAIL_ENABLED behind a relay nobody set) and the gap is the interesting case, which is why one boolean was not enough. note carries the operator-facing sentence: what the gap is and what closing it buys. It is present when a feature is off (discovery — an operator cannot turn on what they never knew shipped) or enabled-but-unconfigured (a finding), and absent when the feature is on and complete. The key vocabulary is fixed and the list is returned in a stable order: object_storage, mail, search, federation, atproto, atproto_login, malware_scan, captions, live, ipfs, tracing, metrics, vp9_alternates. DASH and CDN are deliberately absent — neither exists in vidra (playback is HLS plus the progressive original, and there is no CDN integration), so listing them would invent switches an operator cannot find. */
+        InfrastructureFeature: {
+            /** @example object_storage */
+            key: string;
+            /** @description The operator's switch is on. */
+            enabled: boolean;
+            /** @description The deployment supplies what the feature needs. */
+            configured: boolean;
+            /** @description What to do about it. Absent when the feature is enabled and fully configured. */
+            note?: string;
+        };
+        /** @description The deploy-time shape of this instance. No secrets: no DSN, no S3 keys, no SMTP credentials, no JWT secret, no KEK, no ingest/internal secret. */
+        InfrastructureStatus: {
+            server: {
+                /** @enum {string} */
+                environment: "development" | "test" | "production";
+                /**
+                 * Format: int64
+                 * @description The general per-request handler deadline.
+                 */
+                request_timeout_seconds: number;
+                /**
+                 * Format: int64
+                 * @description The deadline used instead on the byte-streaming routes (uploads, media reads), which are bounded by the client's link speed.
+                 */
+                stream_request_timeout_seconds: number;
+                /**
+                 * @description HTTP_BODY_LIMIT verbatim, an Echo size string.
+                 * @example 8M
+                 */
+                body_limit: string;
+                /**
+                 * Format: int64
+                 * @description Effective single-upload cap in bytes; 0 means no cap.
+                 */
+                upload_max_bytes: number;
+                /** @description Whether GET /metrics is mounted. Shown because that endpoint has no authentication of its own. */
+                metrics_enabled: boolean;
+                tracing_enabled: boolean;
+                /** @description grpc | http/protobuf. The exporter ENDPOINT is deliberately not reported — it is an internal address. */
+                tracing_protocol: string;
+            };
+            /** @description Where media bytes live. The bucket's coordinates are operational; the credentials that open it are never included. */
+            storage: {
+                /** @enum {string} */
+                backend: "local" | "s3";
+                /** @description Container path media is written to on the local backend ("" on s3). */
+                local_root: string;
+                /** @description host[:port], no scheme ("" on local). */
+                s3_endpoint: string;
+                s3_bucket: string;
+                s3_region: string;
+                s3_use_ssl: boolean;
+                s3_force_path_style: boolean;
+            };
+            networking: {
+                /** @description The canonical public origin ("" when unset). */
+                public_base_url: string;
+                /** @description Whether browsers reach this instance over TLS — the one predicate Secure cookies and HSTS both hang off. */
+                https_effective: boolean;
+                /** @description The operator's explicit consent to a plain-http production origin (a lab/LAN/air-gapped install). True on a public deployment is a finding. */
+                allow_plain_http: boolean;
+                /** @description EXTRA networks whose X-Forwarded-For is believed, on top of the built-in loopback/private set. Never null. */
+                trusted_proxy_cidrs: string[];
+                /** @description The browser-origin allow-list. Never null. */
+                cors_allowed_origins: string[];
+                federation_enabled: boolean;
+                atproto_enabled: boolean;
+                atproto_login_enabled: boolean;
+            };
+            /** @description GUIDANCE, not live state. The api container cannot see the deploy directory the backups are written to, so it reports the contract and names the tool that can answer whether it is being met. */
+            backups: {
+                /** @description VIDRA_EXTERNAL_POSTGRES — the operator's declaration that the database is a managed one somebody else snapshots. Display-only; nothing in the api behaves differently. */
+                external_postgres: boolean;
+                /** @description The cadence in force. Replaced with the managed-database advice when external_postgres is true. */
+                schedule_note: string;
+                staleness_note: string;
+                artifacts_note: string;
+                live_state_note: string;
+            };
+            features: components["schemas"]["InfrastructureFeature"][];
+        };
         /**
          * @description Stable state vocabulary for the unified operational projection.
          * @enum {string}
@@ -7493,6 +7640,20 @@ export interface components {
         };
         InstanceSettingsResponse: {
             settings: components["schemas"]["InstanceSetting"][];
+        };
+        /** @description One rejected setting: the key that would fail and the message the PATCH's 422 would carry for it. Identical in shape to the field errors in ErrorResponse, so a client renders both the same way. */
+        SettingValidationIssue: {
+            /**
+             * @description The setting key.
+             * @example instance_name
+             */
+            field: string;
+            /** @example is required */
+            message: string;
+        };
+        /** @description The dry-run result. fields is always present: an empty array means the same body would be accepted by PATCH /api/v1/admin/instance-settings. */
+        InstanceSettingsValidationResponse: {
+            fields: components["schemas"]["SettingValidationIssue"][];
         };
         /** @description The admin-authored homepage document (config-parity W1): RAW markdown plus its sha256 content hash. */
         InstanceHomepageResponse: {
@@ -19221,6 +19382,118 @@ export interface operations {
             };
         };
     };
+    sendTestMail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The message was handed to the mail relay. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailTestResult"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No instance contact email is set, so there is nowhere to send the test. Set the contact_email instance setting first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many test messages recently. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The relay refused the message (code mail_test_failed). The response text is deliberately generic — the relay's own answer goes to the server log, because a rejection routinely quotes the recipient address back. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This deployment has no outbound mail path at all, so there is nothing to test. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getInfrastructure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deploy-time infrastructure snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InfrastructureStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listJobs: {
         parameters: {
             query?: never;
@@ -19530,6 +19803,57 @@ export interface operations {
             };
             /** @description An unknown key or an invalid value. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    validateInstanceSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateInstanceSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description The validation result. An empty fields array means the same body would be accepted by the PATCH. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceSettingsValidationResponse"];
+                };
+            };
+            /** @description Malformed request body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

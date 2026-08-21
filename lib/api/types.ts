@@ -129,6 +129,17 @@ export type AuditLogEntry = Schemas["AuditLogEntry"];
 export type AuditLogListResponse = Schemas["AuditLogListResponse"];
 export type SystemStatusComponent = Schemas["ComponentStatus"];
 export type SystemStatus = Schemas["SystemStatus"];
+// The deploy-time shape (GET /admin/infrastructure) — what the operator chose
+// at install time, as opposed to SystemStatus's live health. Section types are
+// projected off the parent because the spec declares them inline (no named
+// component to alias), which keeps them in lockstep with codegen.
+export type InfrastructureStatus = Schemas["InfrastructureStatus"];
+export type InfrastructureServer = InfrastructureStatus["server"];
+export type InfrastructureStorage = InfrastructureStatus["storage"];
+export type InfrastructureNetworking = InfrastructureStatus["networking"];
+export type InfrastructureBackups = InfrastructureStatus["backups"];
+export type InfrastructureFeature = Schemas["InfrastructureFeature"];
+export type MailTestResult = Schemas["MailTestResult"];
 export type AdminStats = Schemas["AdminStats"];
 export type UpdateUserRequest = Schemas["UpdateUserRequest"];
 
@@ -137,6 +148,12 @@ export type InstanceSetting = Schemas["InstanceSetting"];
 export type InstanceSettingType = NonNullable<Schemas["InstanceSetting"]["type"]>;
 export type InstanceSettingsResponse = Schemas["InstanceSettingsResponse"];
 export type UpdateInstanceSettingsRequest = Schemas["UpdateInstanceSettingsRequest"];
+// Dry-run validation (POST /admin/instance-settings/validate). An issue is the
+// SAME {field, message} shape the PATCH's 422 carries, deliberately, so the
+// config form renders early answers and save-time rejections through one path.
+export type SettingValidationIssue = Schemas["SettingValidationIssue"];
+export type InstanceSettingsValidationResponse =
+  Schemas["InstanceSettingsValidationResponse"];
 // Instance documents (config-parity W1 store, W6 editors). Hand-written: the
 // shape is fixed by .ralph/specs/config-parity/instance-contract.md so the
 // editors do not depend on the generated spec snapshot in use.
