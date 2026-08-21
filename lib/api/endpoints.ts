@@ -30,6 +30,8 @@ import type {
   PeerTubeImportLaunchRequest,
   PeerTubeImportRun,
   PeerTubeImportRunList,
+  StorageMigration,
+  StorageMigrationList,
   SystemStatus,
   AdminVideoListResponse,
   BlockedRemoteVideoListResponse,
@@ -1876,6 +1878,27 @@ export const api = {
    */
   getInfrastructure: (signal?: AbortSignal) =>
     apiRequest<InfrastructureStatus>("/api/v1/admin/infrastructure", { signal }),
+
+  /**
+   * GET /api/v1/admin/storage/migrations — media-store migration campaign
+   * history, newest first (admin only). Read-only on purpose: starting and
+   * cancelling a campaign are CLI/ops actions (core docs/operations.md,
+   * "Moving the media store"), because a move is bracketed by an environment
+   * swap and a restart that no browser button can perform.
+   */
+  getStorageMigrations: (signal?: AbortSignal) =>
+    apiRequest<StorageMigrationList>("/api/v1/admin/storage/migrations", { signal }),
+
+  /**
+   * GET /api/v1/admin/storage/migrations/{id} — one campaign (admin only).
+   * The single-campaign view is the only one that carries the per-state
+   * `objects` breakdown; the list omits it.
+   */
+  getStorageMigration: (id: string, signal?: AbortSignal) =>
+    apiRequest<StorageMigration>(
+      `/api/v1/admin/storage/migrations/${encodeURIComponent(id)}`,
+      { signal },
+    ),
 
   /**
    * POST /api/v1/admin/mail/test — send one outbound-mail probe (admin only).

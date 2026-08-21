@@ -10,6 +10,11 @@ const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const USERS = /\/api\/v1\/admin\/users(\?|$)/;
 const INFRA = /\/api\/v1\/admin\/infrastructure$/;
 const MAIL_TEST = /\/api\/v1\/admin\/mail\/test$/;
+// The Storage panel's live half: the object-store probe rides the system
+// status, and the migration card rides the campaign list. Both are stubbed for
+// every test in this file so an unrouted request can never reach a real host.
+const SYSTEM = /\/api\/v1\/admin\/system$/;
+const MIGRATIONS = /\/api\/v1\/admin\/storage\/migrations$/;
 
 type Role = "user" | "moderator" | "admin";
 
@@ -106,6 +111,30 @@ const infrastructure = {
   ],
 };
 
+const systemStatus = {
+  status: "ok",
+  software: {
+    name: "vidra",
+    version: "0.2.1",
+    commit: "abc1234",
+    build_date: "2026-08-21",
+    go_version: "go1.25",
+  },
+  environment: "production",
+  uptime_seconds: 3600,
+  components: {
+    postgres: { status: "ok" },
+    // The object-store probe's key IS the backend's probe vocabulary.
+    s3: { status: "ok" },
+  },
+  rate_limits: {
+    enabled: true,
+    requests: 300,
+    auth_requests: 30,
+    window_seconds: 60,
+  },
+};
+
 async function signIn(page: Page, role: Role) {
   await page.route(LOGIN, (route) => route.fulfill({ json: session(role) }));
   await page.route(FEED, (route) =>
@@ -128,6 +157,10 @@ async function signIn(page: Page, role: Role) {
 async function openInfrastructure(page: Page) {
   await page.route(USERS, (route) =>
     route.fulfill({ json: { users: [], limit: 100, offset: 0 } }),
+  );
+  await page.route(SYSTEM, (route) => route.fulfill({ json: systemStatus }));
+  await page.route(MIGRATIONS, (route) =>
+    route.fulfill({ json: { migrations: [] } }),
   );
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   await page.getByRole("link", { name: "Infrastructure" }).click();
@@ -161,6 +194,9 @@ test("an admin sees the deploy shape across all four panels", async ({
   await expect(page.getByText("Object storage (S3)")).toBeVisible();
   await expect(page.getByText("vidra-media")).toBeVisible();
   await expect(page.getByText("s3.example.test:443")).toBeVisible();
+  // The panel's live half: reachability comes from the system probe, not from
+  // the deploy-shape payload, so its absence would be a silent wiring break.
+  await expect(page.getByText("Object store reachable")).toBeVisible();
 
   // Networking.
   await expect(

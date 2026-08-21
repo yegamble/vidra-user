@@ -1008,6 +1008,18 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/system");
   });
 
+  it("getStorageMigrations targets the campaign list", async () => {
+    await api.getStorageMigrations();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/storage/migrations");
+  });
+
+  it("getStorageMigration targets one campaign by id", async () => {
+    await api.getStorageMigration("11111111-1111-1111-1111-111111111111");
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/storage/migrations/11111111-1111-1111-1111-111111111111",
+    );
+  });
+
   it("updateAdminUser PATCHes the role / active flag", async () => {
     await api.updateAdminUser("u1", { role: "moderator", is_active: false });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

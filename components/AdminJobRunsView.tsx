@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, subscribeEventStream } from "@/lib/api";
@@ -135,16 +136,7 @@ function Progress({ run }: { run: JobRun }) {
         </span>
         <span className="tabular-nums">{Math.round(value)}%</span>
       </div>
-      <div
-        role="progressbar"
-        aria-label={`Progress for ${run.type}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={value}
-        className="h-1.5 overflow-hidden rounded-full bg-surface-strong"
-      >
-        <div className="h-full rounded-full bg-accent" style={{ width: `${value}%` }} />
-      </div>
+      <ProgressBar value={value} label={`Progress for ${run.type}`} />
     </div>
   );
 }
