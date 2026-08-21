@@ -10976,7 +10976,7 @@ export interface operations {
                     "image/*": string;
                 };
             };
-            /** @description The public avatar is pinned; redirect to its immutable public IPFS gateway URL. */
+            /** @description Delivered from somewhere other than this API: the public avatar is pinned and the redirect points at its immutable IPFS gateway URL, or direct delivery is on and it points at a short-lived signed object URL. The 200 byte path stays authoritative. */
             307: {
                 headers: {
                     Location?: string;
@@ -11121,7 +11121,7 @@ export interface operations {
                     "image/*": string;
                 };
             };
-            /** @description The public banner is pinned; redirect to its immutable public IPFS gateway URL. */
+            /** @description Delivered from somewhere other than this API: the public banner is pinned and the redirect points at its immutable IPFS gateway URL, or direct delivery is on and it points at a short-lived signed object URL. The 200 byte path stays authoritative. */
             307: {
                 headers: {
                     Location?: string;
@@ -11452,7 +11452,7 @@ export interface operations {
                     "image/*": string;
                 };
             };
-            /** @description The public avatar is pinned; redirect to its immutable public IPFS gateway URL. */
+            /** @description Delivered from somewhere other than this API: the public avatar is pinned and the redirect points at its immutable IPFS gateway URL, or direct delivery is on and it points at a short-lived signed object URL. The 200 byte path stays authoritative. */
             307: {
                 headers: {
                     Location?: string;
@@ -11491,7 +11491,7 @@ export interface operations {
                     "image/*": string;
                 };
             };
-            /** @description The public banner is pinned; redirect to its immutable public IPFS gateway URL. */
+            /** @description Delivered from somewhere other than this API: the public banner is pinned and the redirect points at its immutable IPFS gateway URL, or direct delivery is on and it points at a short-lived signed object URL. The 200 byte path stays authoritative. */
             307: {
                 headers: {
                     Location?: string;
@@ -12140,6 +12140,14 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
+            /** @description Direct delivery: the instance has delivery_presign_enabled on and the object store can sign URLs, so this public request is redirected to a short-lived signed object URL (one hour) carrying the same Content-Type and Content-Disposition this route would have sent. Never emitted for private/unpublished/password-protected media, nor for a request carrying a playback token or Authorization header; the 200/206 byte path stays authoritative and is always the fallback. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No such video (or private and not yours), or no stored original. */
             404: {
                 headers: {
@@ -12229,6 +12237,14 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
+            /** @description Direct delivery: the instance has delivery_presign_enabled on and the object store can sign URLs, so this public request is redirected to a short-lived signed object URL (one hour) carrying the same Content-Type and Content-Disposition this route would have sent. Never emitted for private/unpublished/password-protected media, nor for a request carrying a playback token or Authorization header; the 200/206 byte path stays authoritative and is always the fallback. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description A password-protected video requires a valid playback token. */
             401: {
                 headers: {
@@ -12286,6 +12302,14 @@ export interface operations {
                 content: {
                     "video/webm": string;
                 };
+            };
+            /** @description Direct delivery: the instance has delivery_presign_enabled on and the object store can sign URLs, so this public request is redirected to a short-lived signed object URL (one hour) carrying the same Content-Type and Content-Disposition this route would have sent. Never emitted for private/unpublished/password-protected media, nor for a request carrying a playback token or Authorization header; the 200/206 byte path stays authoritative and is always the fallback. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description A password-protected video requires a valid playback token. */
             401: {
@@ -12349,6 +12373,14 @@ export interface operations {
                     "video/mp4": string;
                 };
             };
+            /** @description Direct delivery: the instance has delivery_presign_enabled on and the object store can sign URLs, so this public request is redirected to a short-lived signed object URL (one hour) carrying the same Content-Type and Content-Disposition this route would have sent. Never emitted for private/unpublished/password-protected media, nor for a request carrying a playback token or Authorization header; the 200/206 byte path stays authoritative and is always the fallback. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description A password-protected video requires a valid playback token. */
             401: {
                 headers: {
@@ -12406,6 +12438,14 @@ export interface operations {
                 content: {
                     "audio/mp4": string;
                 };
+            };
+            /** @description Direct delivery: the instance has delivery_presign_enabled on and the object store can sign URLs, so this public request is redirected to a short-lived signed object URL (one hour) carrying the same Content-Type and Content-Disposition this route would have sent. Never emitted for private/unpublished/password-protected media, nor for a request carrying a playback token or Authorization header; the 200/206 byte path stays authoritative and is always the fallback. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description A password-protected video requires a valid playback token. */
             401: {
@@ -12548,6 +12588,14 @@ export interface operations {
                     "video/mp2t": string;
                 };
             };
+            /** @description Direct delivery of a SEGMENT (never a playlist — .m3u8 references are rewritten by this origin): with delivery_presign_enabled on and a signing object store, a public+published video's segment request is redirected to a short-lived signed object URL. The 200 byte path stays authoritative. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No such video (or private and not yours), playlist not ready, or no such rendition file. */
             404: {
                 headers: {
@@ -12579,7 +12627,7 @@ export interface operations {
                     "image/jpeg": string;
                 };
             };
-            /** @description The public poster is pinned; redirect to its immutable public IPFS gateway URL. */
+            /** @description Delivered from somewhere other than this API: the public poster is pinned and the redirect points at its immutable IPFS gateway URL, or direct delivery is on and it points at a short-lived signed object URL. The 200 byte path stays authoritative. */
             307: {
                 headers: {
                     Location?: string;
@@ -12720,7 +12768,7 @@ export interface operations {
                     "image/jpeg": string;
                 };
             };
-            /** @description The public sprite sheet is pinned; redirect to its immutable public IPFS gateway URL. */
+            /** @description Delivered from somewhere other than this API: the public sprite sheet is pinned and the redirect points at its immutable IPFS gateway URL, or direct delivery is on and it points at a short-lived signed object URL. The 200 byte path stays authoritative. The companion .vtt map is NEVER redirected — its cues reference the sprite relatively. */
             307: {
                 headers: {
                     Location?: string;
@@ -13213,6 +13261,14 @@ export interface operations {
                 content: {
                     "video/webm": string;
                 };
+            };
+            /** @description Direct delivery: the instance has delivery_presign_enabled on and the object store can sign URLs, so this public request is redirected to a short-lived signed object URL (one hour) carrying the same Content-Type and Content-Disposition this route would have sent. Never emitted for private/unpublished/password-protected media, nor for a request carrying a playback token or Authorization header; the 200/206 byte path stays authoritative and is always the fallback. */
+            307: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No such video (or not visible), or no VP9/WebM alternate. */
             404: {
@@ -16075,7 +16131,7 @@ export interface operations {
                     "image/webp": string;
                 };
             };
-            /** @description The public playlist cover is pinned; redirect to its immutable public IPFS gateway URL. */
+            /** @description Delivered from somewhere other than this API: the public playlist cover is pinned and the redirect points at its immutable IPFS gateway URL, or direct delivery is on and it points at a short-lived signed object URL. The 200 byte path stays authoritative; a private playlist's cover is never redirected. */
             307: {
                 headers: {
                     Location?: string;
