@@ -1084,8 +1084,10 @@ function MultiSelectList({
 // It renders the current array as removable chips and adds via a free-text input
 // (so ANY list-kind setting is editable, keeping the auto-render invariant true)
 // plus optional quick-add suggestion chips from META options (the canonical
-// transcoding rungs). Empty/duplicate additions are refused at the control;
-// the whole-value inline validator (e.g. validateRungSet) carries the messaging.
+// transcoding rungs). Empty/duplicate additions are refused at the control
+// itself — that is an input affordance, not a rule about the value. Whether the
+// resulting list is acceptable (non-empty, known rungs) is the server's call,
+// answered by the dry run when the row loses focus.
 function ListControl({
   label,
   value,

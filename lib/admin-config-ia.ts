@@ -1092,8 +1092,9 @@ export const META: Record<string, SettingMeta> = {
     section: "transcoding",
   },
   // Config-parity W1/W10: the only KindList registry key. A real list control —
-  // token chips over the canonical rung heights (server validates membership),
-  // with duplicate/empty inline validation.
+  // token chips over the canonical rung heights. The control refuses duplicate
+  // and empty additions as an input affordance; whether the resulting ladder is
+  // acceptable (non-empty, known rungs) is the server's answer, not ours.
   transcoding_resolutions: {
     label: "Transcoding ladder",
     help: "Which resolution rungs the HLS ladder produces (each ≤ the source is generated). Enable at least one; the shipped default is 1080p–360p.",
