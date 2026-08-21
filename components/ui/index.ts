@@ -21,6 +21,7 @@ export { LinkButton, type LinkButtonProps } from "./LinkButton";
 export { LoadMoreButton, PAGE_SIZE } from "./LoadMoreButton";
 export { Modal, type ModalProps } from "./Modal";
 export { OtpInput, type OtpInputProps } from "./OtpInput";
+export { ProgressBar, type ProgressBarProps } from "./ProgressBar";
 export { Radio, type RadioProps } from "./Radio";
 export {
   SegmentedControl,

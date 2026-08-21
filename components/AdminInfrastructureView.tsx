@@ -5,13 +5,22 @@ import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
+import type { BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
-import type { InfrastructureFeature, InfrastructureStatus } from "@/lib/api";
-import { formatBytes } from "@/lib/format";
+import type {
+  InfrastructureFeature,
+  InfrastructureStatus,
+  InfrastructureStorage,
+  StorageMigration,
+  StorageMigrationState,
+  SystemStatusComponent,
+} from "@/lib/api";
+import { formatBytes, formatDateTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
@@ -135,6 +144,7 @@ export function InfrastructurePanel() {
       <Panel
         title="Storage"
         description="Where media bytes are written. Credentials are never included in this view."
+        footer={<StorageLive backend={storage.backend} />}
       >
         <Row
           label="Backend"
@@ -226,6 +236,313 @@ export function InfrastructurePanel() {
   );
 }
 
+// --- Live media-store state -------------------------------------------------
+
+/**
+ * The key the server files its object-store probe under in
+ * SystemStatus.components. It is the backend's own probe vocabulary
+ * ("s3"/"smtp"/"search"/"ffmpeg"), not a display name, so it is looked up
+ * rather than iterated — and a missing key is reported as "not reported"
+ * instead of being quietly rendered as healthy.
+ */
+const OBJECT_STORE_COMPONENT = "s3";
+
+/** Campaign states nothing further happens from. */
+const TERMINAL_MIGRATION_STATES = new Set<StorageMigrationState>([
+  "done",
+  "cancelled",
+  "failed",
+]);
+
+/**
+ * Operator-facing phase names. Exhaustive over the contract's union on purpose:
+ * a phase added core-side becomes a type error here rather than a raw
+ * snake_case string leaking into the page.
+ */
+const MIGRATION_STATE_LABEL: Record<StorageMigrationState, string> = {
+  enumerating: "Listing the source",
+  copying: "Copying",
+  synced: "Synced — ready to cut over",
+  cutover: "Cut over — grace period running",
+  deleting_source: "Deleting the old copies",
+  done: "Done",
+  cancelled: "Cancelled",
+  failed: "Failed",
+};
+
+const MIGRATION_STATE_VARIANT: Record<StorageMigrationState, BadgeVariant> = {
+  enumerating: "accent",
+  copying: "accent",
+  // The one phase that is waiting on a human: everything is verified in the
+  // destination and the operator has to swap the environment and restart.
+  synced: "warning",
+  cutover: "accent",
+  deleting_source: "accent",
+  done: "success",
+  cancelled: "neutral",
+  failed: "danger",
+};
+
+type Fetched<T> = { status: Status; data: T };
+
+/**
+ * StorageLive is the Storage panel's live half: is the object store actually
+ * reachable right now, and is a media-store migration in flight. Both answers
+ * come from endpoints the deploy-shape payload deliberately does not carry
+ * (they cost a round trip to the bucket / a query), so they fetch separately
+ * and fail separately — neither can blank the page around them.
+ *
+ * READ-ONLY BY DESIGN: there is no Start/Cancel button here and this wave does
+ * not add one. A migration is bracketed by an environment swap and a restart
+ * that a browser cannot perform, so the campaign is driven from the runbook
+ * ("Moving the media store" in the operations guide) and this page reports it.
+ */
+function StorageLive({ backend }: { backend: InfrastructureStorage["backend"] }) {
+  const [probe, setProbe] = useState<Fetched<SystemStatusComponent | null>>({
+    status: "loading",
+    data: null,
+  });
+  const [campaigns, setCampaigns] = useState<Fetched<StorageMigration[]>>({
+    status: "loading",
+    data: [],
+  });
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .getSystemStatus(controller.signal)
+      .then((res) =>
+        setProbe({
+          status: "ready",
+          data: res.components[OBJECT_STORE_COMPONENT] ?? null,
+        }),
+      )
+      .catch((err: unknown) => {
+        void err;
+        if (controller.signal.aborted) return;
+        setProbe({ status: "error", data: null });
+      });
+    api
+      .getStorageMigrations(controller.signal)
+      .then((res) => setCampaigns({ status: "ready", data: res.migrations }))
+      .catch((err: unknown) => {
+        void err;
+        if (controller.signal.aborted) return;
+        setCampaigns({ status: "error", data: [] });
+      });
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  // One button for both: they are the same question asked of two endpoints
+  // ("what is the media store doing right now"), and refreshing half of it
+  // would leave the panel internally inconsistent.
+  const recheck = useCallback(() => {
+    setProbe({ status: "loading", data: null });
+    setCampaigns({ status: "loading", data: [] });
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  const active = campaigns.data.find(
+    (m) => !TERMINAL_MIGRATION_STATES.has(m.state),
+  );
+  // The list is newest-first, so [0] is the campaign to report when none run.
+  const last = campaigns.data[0];
+  const pill = probeBadge(probe.status, probe.data);
+
+  return (
+    <div className="mt-3 flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle py-1.5 text-sm">
+        <span className="text-fg-muted">Object store reachable</span>
+        <span className="flex items-center gap-2">
+          <Badge variant={pill.variant} status>
+            {pill.label}
+          </Badge>
+          <Button variant="secondary" size="sm" onClick={recheck}>
+            Re-check
+          </Button>
+        </span>
+      </div>
+      <ProbeNote backend={backend} probe={probe} />
+
+      {active ? <MigrationCard campaign={active} /> : null}
+      {!active && campaigns.status === "ready" && last ? (
+        <p className="text-[13px] text-fg-muted">
+          Last migration: {MIGRATION_STATE_LABEL[last.state].toLowerCase()} on{" "}
+          {formatDateTime(last.updated_at)}.
+        </p>
+      ) : null}
+      {campaigns.status === "error" ? (
+        <p className="text-[13px] text-fg-muted">
+          The migration history could not be read, so this panel cannot say
+          whether one is running.
+        </p>
+      ) : null}
+
+      {backend === "local" &&
+      campaigns.status === "ready" &&
+      campaigns.data.length === 0 ? (
+        <ObjectStorageDiscoveryCard />
+      ) : null}
+    </div>
+  );
+}
+
+function probeBadge(
+  status: Status,
+  component: SystemStatusComponent | null,
+): { variant: BadgeVariant; label: string } {
+  if (status === "loading") return { variant: "neutral", label: "Checking" };
+  if (status === "error" || component === null) {
+    return { variant: "neutral", label: "Not reported" };
+  }
+  if (component.status === "ok") return { variant: "success", label: "Yes" };
+  if (component.status === "not_configured") {
+    return { variant: "neutral", label: "Not applicable" };
+  }
+  return { variant: "danger", label: "No" };
+}
+
+/**
+ * The sentence under the probe pill. The server's own error text is rendered
+ * verbatim when there is one — it is written to be operator-facing (a category
+ * or an instruction) and paraphrasing it would lose the only specific fact on
+ * the row.
+ */
+function ProbeNote({
+  backend,
+  probe,
+}: {
+  backend: InfrastructureStorage["backend"];
+  probe: Fetched<SystemStatusComponent | null>;
+}) {
+  if (probe.status === "loading") return null;
+  if (probe.status === "error") {
+    return (
+      <p className="text-[13px] text-fg-muted">
+        The health check could not be reached, so this is unknown rather than
+        healthy.
+      </p>
+    );
+  }
+  const component = probe.data;
+  if (component === null) {
+    return (
+      <p className="text-[13px] text-fg-muted">
+        This server did not report an object-store check.
+      </p>
+    );
+  }
+  if (component.status === "not_configured") {
+    return (
+      <p className="text-[13px] text-fg-muted">
+        {backend === "local"
+          ? "Media is written to this server's own disk, so there is no remote store to reach."
+          : "The server reports no object store to check, which does not match the backend above — re-check the storage configuration."}
+      </p>
+    );
+  }
+  if (component.status !== "ok") {
+    return (
+      <p role="alert" className="text-[13px] text-danger">
+        {component.error ||
+          "The object store did not answer. Uploads and playback that miss the cache will fail until it does."}
+      </p>
+    );
+  }
+  return null;
+}
+
+function MigrationCard({ campaign }: { campaign: StorageMigration }) {
+  const { objects_total: total, objects_done: done } = campaign;
+  const percent = total > 0 ? (done / total) * 100 : 0;
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold tracking-tight">Storage migration</h3>
+        <Badge variant={MIGRATION_STATE_VARIANT[campaign.state]} status>
+          {MIGRATION_STATE_LABEL[campaign.state]}
+        </Badge>
+      </div>
+      {/* Store IDENTITY strings, never credentials — "s3://<endpoint>/<bucket>"
+          or "local:<path>". They are what the api compares its own backends
+          against, so showing them verbatim is what makes a half-done cutover
+          legible. */}
+      <p className="font-mono text-[13px] break-all text-fg-muted">
+        {campaign.source_desc} → {campaign.target_desc}
+      </p>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2 text-xs text-fg-muted">
+          <span>
+            {total > 0
+              ? `${done.toLocaleString()} of ${total.toLocaleString()} objects verified`
+              : "Counting objects in the source"}
+          </span>
+          {total > 0 ? (
+            <span className="tabular-nums">{Math.round(percent)}%</span>
+          ) : null}
+        </div>
+        <ProgressBar value={percent} label="Storage migration progress" />
+      </div>
+      {campaign.objects_failed > 0 ? (
+        <p className="text-[13px] text-danger">
+          {campaign.objects_failed.toLocaleString()} object
+          {campaign.objects_failed === 1 ? "" : "s"} dead-lettered. They do not
+          block the campaign, but their bytes are not in the destination.
+        </p>
+      ) : null}
+      {campaign.last_error ? (
+        <p className="text-[13px] text-warning">{campaign.last_error}</p>
+      ) : null}
+      <p className="text-[13px] text-fg-muted">
+        Starting, cancelling and cutting over are operator actions from the
+        host — see &ldquo;Moving the media store&rdquo; in the operations guide.{" "}
+        <Link
+          href="/admin/jobs"
+          className="font-medium text-accent hover:underline"
+        >
+          Follow the per-object queue in Jobs
+        </Link>
+      </p>
+    </Card>
+  );
+}
+
+/**
+ * Graceful discovery: shown only on a local-disk deployment that has never run
+ * a campaign. It sells nothing and repeats no variable names — the Object
+ * storage row in the feature list below already carries those. What it adds is
+ * the half an operator cannot see from a config key: that moving later is a
+ * verified, non-destructive, zero-downtime path, because "will this strand my
+ * library" is the actual reason local installs never move.
+ */
+function ObjectStorageDiscoveryCard() {
+  return (
+    <Card className="flex flex-col gap-2 text-sm text-fg-muted">
+      <h3 className="text-sm font-bold tracking-tight text-fg">
+        Media is on this server&rsquo;s disk
+      </h3>
+      <p>
+        That is a supported deployment, and nothing here is broken. It does mean
+        the library is capped by this host&rsquo;s volume and is only as durable
+        as that volume&rsquo;s own backups. Object storage moves both to the
+        provider: replicated bytes, and room to grow without resizing the
+        machine.
+      </p>
+      <p>
+        Moving later is a supported path, not a rebuild. A migration campaign
+        copies every object into the destination, proves each copy by reading it
+        back and re-hashing it there, and only deletes the originals after a
+        grace period you set — the API reads from both stores while it runs, so
+        viewers notice nothing. The steps are in &ldquo;Moving the media
+        store&rdquo; in the operations guide; the settings to switch are on the
+        Object storage row below.
+      </p>
+    </Card>
+  );
+}
+
 // --- Feature discovery ------------------------------------------------------
 
 /**
@@ -251,12 +568,11 @@ const FEATURE_LABEL: Record<string, string> = {
 };
 
 /**
- * Where an operator goes to act on a feature AT RUNTIME. Deliberately partial:
- * only features with a real runtime setting get a link. The rest (object
- * storage, ATProto, malware scanning, tracing, metrics, VP9) are boot-env
- * decisions with no page to send anyone to, and a link that lands on a page
- * without the promised switch is worse than no link at all — the operator hunts
- * for a control that was never there.
+ * Where an operator goes to act on a feature. Deliberately partial: a link that
+ * lands on a page without the promised control is worse than no link at all —
+ * the operator hunts for a switch that was never there. The remaining boot-env
+ * features (ATProto, malware scanning, tracing, metrics, VP9) still have
+ * nowhere to send anyone.
  *
  * Keyed on the server's stable feature vocabulary, so this mapping is the
  * client's to own (the contract fixes the keys, not the destinations).
@@ -264,11 +580,26 @@ const FEATURE_LABEL: Record<string, string> = {
 const FEATURE_CONFIG_PAGE: Record<string, string> = {
   // The probe below sends to the contact address, which lives on General.
   mail: "/admin/config/general",
+  // Object storage has no runtime switch and never will — it is a boot-env
+  // decision. It earns a link anyway because this page now reports the live
+  // store: reachability, and any migration in flight. Sending the operator
+  // here is sending them to state, not to a control that does not exist.
+  object_storage: "/admin/infrastructure",
   search: "/admin/config/advanced",
   federation: "/admin/config/federation",
   captions: "/admin/config/vod",
   live: "/admin/config/live",
   ipfs: "/admin/config/ipfs",
+};
+
+/**
+ * Overrides for the link's own wording. Every other destination is a settings
+ * form, so "Open settings" is accurate; object storage's destination is this
+ * page's own Storage panel, and calling that "settings" would promise a form
+ * that is not there.
+ */
+const FEATURE_CONFIG_LINK_LABEL: Record<string, string> = {
+  object_storage: "See the media store above",
 };
 
 function featureLabel(key: string): string {
@@ -333,7 +664,7 @@ function FeatureRow({ feature }: { feature: InfrastructureFeature }) {
                 href={href}
                 className="font-medium text-accent hover:underline"
               >
-                Open settings
+                {FEATURE_CONFIG_LINK_LABEL[feature.key] ?? "Open settings"}
               </Link>
             </>
           ) : null}
@@ -428,10 +759,15 @@ function Panel({
   title,
   description,
   children,
+  footer,
 }: {
   title: string;
   description: string;
   children: React.ReactNode;
+  // Live state that belongs to this panel but cannot live in the definition
+  // list — anything carrying its own badge, button or card. Rendered inside the
+  // same landmark so it reads (and is queried) as part of the panel.
+  footer?: React.ReactNode;
 }) {
   return (
     <section aria-label={title}>
@@ -440,6 +776,7 @@ function Panel({
       <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
         {children}
       </dl>
+      {footer}
     </section>
   );
 }

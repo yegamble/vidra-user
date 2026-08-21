@@ -174,6 +174,12 @@ export type JobEvent = Schemas["JobEvent"];
 export type JobRunsResponse = Schemas["JobRunsResponse"];
 export type JobRunDetailResponse = Schemas["JobRunDetailResponse"];
 export type MediaGCResponse = Schemas["MediaGCResponse"];
+// Media-store migration campaigns (GET /admin/storage/migrations). The state
+// union is projected off the schema rather than re-typed so a new phase added
+// core-side becomes a compile error here instead of a silently unhandled label.
+export type StorageMigration = Schemas["StorageMigration"];
+export type StorageMigrationState = StorageMigration["state"];
+export type StorageMigrationList = Schemas["StorageMigrationList"];
 export type IPFSStatus = Schemas["IPFSStatus"];
 export type IPFSNetworks = Schemas["IPFSNetworks"];
 export type IPFSNetworkStatus = Schemas["IPFSNetworkStatus"];
