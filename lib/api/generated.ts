@@ -4145,7 +4145,7 @@ export interface paths {
         };
         /**
          * Durable job-queue status (admin)
-         * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
+         * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions, storage_migrations): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
          */
         get: operations["listJobs"];
         put?: never;
@@ -4477,6 +4477,76 @@ export interface paths {
          *     Idempotent, and it overwrites a marker belonging to a different install, so on a genuinely shared bucket it takes ownership away from the other one. Restricted to admins; audited (admin.media.gc.adopt_bucket).
          */
         post: operations["adminMediaGCAdoptBucket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/storage/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List storage migrations (admin)
+         * @description Returns the campaign history, newest first (up to 50), with each campaign's counters. Restricted to admins.
+         */
+        get: operations["listStorageMigrations"];
+        put?: never;
+        /**
+         * Start a storage migration (admin)
+         * @description Opens a campaign that copies EVERY object in the configured media store into the configured migration target (STORAGE_MIGRATION_TARGET_*), verifying each copy by reading it back out of the target and re-hashing it. Object keys are never rewritten, so the IPFS pin ledger and every stored storage_key keep pointing at the right bytes.
+         *
+         *     This does NOT change what the instance serves from. Cutover is an explicit operator step: swap BOTH environment sets (STORAGE_* to the new store, STORAGE_MIGRATION_TARGET_* to the old one) and restart. The api detects that swap, starts the grace clock, and only then — after STORAGE_MIGRATION_GRACE_HOURS — deletes the old store's copies. See vidra-core docs/operations.md, "Moving the media store".
+         *
+         *     While any campaign is not done or cancelled, DESTRUCTIVE media garbage collection is forced to dry-run (MediaGCResponse.forced_dry_run_reason = storage_migration_active). At most one campaign runs at a time. Restricted to admins; audited (admin.storage.migration.start).
+         */
+        post: operations["startStorageMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/storage/migrations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one storage migration (admin)
+         * @description Returns one campaign plus its per-state object breakdown — the numbers that say whether it is safe to cut over yet (cut over from `synced`, with `objects.pending` and `objects.copying` at zero). Restricted to admins.
+         */
+        get: operations["getStorageMigration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/storage/migrations/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a storage migration (admin)
+         * @description Stops a live campaign: no further objects are claimed, and the media garbage collector's interlock releases. Objects already copied are LEFT IN PLACE in the target — they are byte-identical copies under identical keys, so they are inert, and deleting them would be a destructive action taken on the way out of a destructive operation.
+         *
+         *     Before cutover this is a complete rollback: nothing about what the instance serves has changed. After cutover it is not — the instance is already serving from the target — so cancelling then simply stops the old store's copies from ever being deleted. Restricted to admins; audited (admin.storage.migration.cancel).
+         */
+        post: operations["cancelStorageMigration"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7212,8 +7282,70 @@ export interface components {
              * @enum {string}
              */
             bucket_ownership: "owned" | "unowned" | "conflict" | "not-applicable" | "unknown";
-            /** @description True when a requested delete was downgraded to a dry run because of bucket_ownership rather than because the caller asked for one. */
+            /** @description True when a requested delete was downgraded to a dry run by a safety rail rather than because the caller asked for one. See forced_dry_run_reason for which rail. */
             forced_dry_run: boolean;
+            /**
+             * @description Which safety rail forced the dry run; absent when none did. `bucket_ownership` — the object store is not established as this instance's (adopt it, or fix the configuration). `storage_migration_active` — a storage migration campaign is in flight, so the two stores are deliberately out of step and "unreferenced" is not evidence about either of them. It also covers the case where the check itself could not be answered, which is treated as "a migration is running". Wait for the campaign to reach done, or cancel it.
+             * @enum {string}
+             */
+            forced_dry_run_reason?: "bucket_ownership" | "storage_migration_active";
+        };
+        /** @description One media-store migration campaign. source_desc/target_desc are store IDENTITY strings ("s3://<endpoint>/<bucket>" or "local:<path>") — never credentials, which authorise a store rather than name it. The api compares them against the backends it is actually holding before it copies or deletes anything, which is how it detects the cutover env swap. */
+        StorageMigration: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description `enumerating` — listing the source store. `copying` — objects are being copied and verified. `synced` — every object is verified in the target and a delta pass found nothing new; this is the state to cut over from. `cutover` — the api is serving from the target and the grace clock is running. `deleting_source` — removing the old store's copies. `done`/`cancelled`/`failed` — terminal.
+             * @enum {string}
+             */
+            state: "enumerating" | "copying" | "synced" | "cutover" | "deleting_source" | "done" | "cancelled" | "failed";
+            /** @example local:/var/lib/vidra/media */
+            source_desc: string;
+            /** @example s3://nyc3.digitaloceanspaces.com/example-video-media */
+            target_desc: string;
+            /**
+             * Format: int64
+             * @description Objects enumerated in the source so far.
+             */
+            objects_total: number;
+            /**
+             * Format: int64
+             * @description Objects verified in the target (including those whose source copy has since been deleted).
+             */
+            objects_done: number;
+            /**
+             * Format: int64
+             * @description Objects that dead-lettered. They do not block completion; they are a reported fact.
+             */
+            objects_failed: number;
+            /** @description A safe, operator-facing diagnostic — a category or an instruction, never a raw backend error, endpoint or object key. Typically set when a campaign is STUCK waiting for an operator (for example, the environment was swapped before every object had been copied). */
+            last_error: string;
+            /**
+             * Format: date-time
+             * @description When the api first saw itself serving from target_desc. The grace period before the source is deleted is measured from here, and it is written once so a restart cannot restart the clock.
+             */
+            observed_cutover_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * @description Per-state object counts. Returned on the single-campaign view only. Cutting over is safe when pending and copying are both zero.
+             * @example {
+             *       "pending": 0,
+             *       "copying": 0,
+             *       "verified": 412,
+             *       "failed": 0,
+             *       "source_deleted": 0
+             *     }
+             */
+            objects?: {
+                [key: string]: number;
+            };
+        };
+        StorageMigrationList: {
+            /** @description Campaign history, newest first. */
+            migrations: components["schemas"]["StorageMigration"][];
         };
         MediaGCAdoptBucketResponse: {
             /**
@@ -7505,7 +7637,7 @@ export interface components {
             /** @description Newest-first, merged across queues, capped. */
             recent_failures: components["schemas"]["JobFailure"][];
         };
-        /** @description One queue's normalised depth. For upload_sessions (no retry model), pending=active, done=completed, failed=cancelled, running=0. */
+        /** @description One queue's normalised depth. For upload_sessions (no retry model), pending=active, done=completed, failed=cancelled, running=0. For storage_migrations the unit is the OBJECT being moved, not the campaign: pending=not yet copied, running=copying, done=verified or source-deleted, failed=dead-lettered. */
         QueueStatus: {
             /** @example transcode_jobs */
             queue: string;
@@ -20771,6 +20903,216 @@ export interface operations {
             };
             /** @description The instance has no identity to stamp on the bucket (the migrations have not been run against this database). */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listStorageMigrations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The campaign history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigrationList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    startStorageMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The campaign was opened. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigration"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A storage migration is already in progress. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No migration target is configured (STORAGE_MIGRATION_TARGET_* unset), the media store cannot enumerate its objects, or a configured backend does not report which store it is. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getStorageMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The campaign and its object breakdown. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigration"];
+                };
+            };
+            /** @description The id is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such storage migration. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancelStorageMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The campaign after cancellation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigration"];
+                };
+            };
+            /** @description The id is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such storage migration. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
