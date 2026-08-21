@@ -316,6 +316,12 @@ function FeatureRow({ feature }: { feature: InfrastructureFeature }) {
           {label}
         </Badge>
       </div>
+      {/* The server sends a note in two different situations and they do not
+          deserve the same framing. For a feature that is OFF the note is
+          discovery copy — here is something you could turn on — so it is
+          prefixed "Optional". For one that is ON but unconfigured the note is a
+          finding: mail that cannot deliver is not an optional extra, and
+          labelling it that way would talk an operator out of fixing it. */}
       {feature.note ? (
         <p className="text-[13px] text-fg-muted">
           {enabled ? "" : "Optional: "}
