@@ -4449,8 +4449,34 @@ export interface paths {
         /**
          * Run media garbage collection (admin)
          * @description Sweeps stored media objects under the known prefixes (originals, thumbnails, storyboards, captions, the HLS tree, playlist covers) and deletes those with no database reference. Never lists or touches an unknown prefix. Defaults to a dry run — pass dry_run=false to actually delete. Restricted to admins; audited. Returns the scanned count, the orphan keys, and the number deleted (0 on a dry run). The daily scheduled sweep runs the same collector.
+         *
+         *     A requested delete can still delete nothing, and that is a 200 with a full orphan list rather than an error: either the bucket-ownership marker does not establish that this instance owns the object store (forced_dry_run, bucket_ownership), or the orphan share of what was scanned exceeded MEDIA_GC_MAX_ORPHAN_PERCENT (breaker_tripped). Deleting from a store whose contents cannot be attributed is the failure this endpoint is built to refuse; POST /api/v1/admin/media/gc/adopt-bucket is the deliberate way out.
          */
         post: operations["adminMediaGC"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/media/gc/adopt-bucket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adopt the configured object store for this instance (admin)
+         * @description Writes this instance's identity into the object store's ownership marker (`.vidra/owner`), which re-enables DESTRUCTIVE media garbage collection against a bucket the instance could not establish as its own at boot.
+         *
+         *     A bucket the api created, or one that was empty when the api started, is marked automatically and never needs this. The bucket that does is one that already held objects — a store carried over from a previous install, a bucket shared with something else, or the destination of a migration in progress — and the missing evidence is an operator saying the media is theirs. Calling this asserts exactly that: from the next sweep onward, every object under the swept prefixes with no database row referencing it is deletable.
+         *
+         *     Idempotent, and it overwrites a marker belonging to a different install, so on a genuinely shared bucket it takes ownership away from the other one. Restricted to admins; audited (admin.media.gc.adopt_bucket).
+         */
+        post: operations["adminMediaGCAdoptBucket"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7164,13 +7190,42 @@ export interface components {
             dry_run: boolean;
         };
         MediaGCResponse: {
+            /** @description Whether the sweep ACTUALLY ran as a dry run, which is not necessarily what was asked for — see forced_dry_run and breaker_tripped. */
             dry_run: boolean;
+            /**
+             * @description The mode the sweep actually ran in; the same fact as dry_run.
+             * @enum {string}
+             */
+            mode: "dry-run" | "delete";
             /** @description Total stored objects listed across the known prefixes. */
             scanned: number;
             /** @description Orphan object keys — the would-delete set on a dry run, the deleted set otherwise. */
             orphans: string[];
             /** @description Number of orphans actually deleted (0 on a dry run). */
             deleted: number;
+            /** @description Orphans as a whole-number percentage of scanned (0 when nothing was scanned) — the figure the circuit breaker compares against MEDIA_GC_MAX_ORPHAN_PERCENT. */
+            orphan_percent: number;
+            /** @description True when the orphan share exceeded MEDIA_GC_MAX_ORPHAN_PERCENT, so a requested delete deleted nothing. Only ever set on sweeps of more than 100 orphans — a handful of orphans in a nearly-empty store is a high percentage and not a reason to stop. */
+            breaker_tripped: boolean;
+            /**
+             * @description Whether the object store is established as this instance's: `owned` (marker matches), `unowned` (no marker and the store was not empty), `conflict` (the marker names a different install), `not-applicable` (local disk, exempt by design), `unknown` (ownership was never resolved). Only `owned` and `not-applicable` permit deletion.
+             * @enum {string}
+             */
+            bucket_ownership: "owned" | "unowned" | "conflict" | "not-applicable" | "unknown";
+            /** @description True when a requested delete was downgraded to a dry run because of bucket_ownership rather than because the caller asked for one. */
+            forced_dry_run: boolean;
+        };
+        MediaGCAdoptBucketResponse: {
+            /**
+             * @description The ownership state after the adoption.
+             * @enum {string}
+             */
+            bucket_ownership: "owned";
+            /**
+             * @description The object key the ownership marker was written to.
+             * @example .vidra/owner
+             */
+            marker_key: string;
         };
         /** @description Instance-wide overview counts for the admin dashboard cards. Every field is a live COUNT/SUM; no deltas, no secrets/PII. */
         AdminStats: {
@@ -20650,6 +20705,71 @@ export interface operations {
                 };
             };
             /** @description The storage backend does not support listing (GC unavailable). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminMediaGCAdoptBucket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The marker was written; the instance now owns the store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaGCAdoptBucketResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This instance stores media on local disk, so there is no bucket to adopt (local storage is exempt from the ownership marker by design). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The marker could not be written to the object store. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The instance has no identity to stamp on the bucket (the migrations have not been run against this database). */
             503: {
                 headers: {
                     [name: string]: unknown;
