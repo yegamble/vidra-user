@@ -27,6 +27,7 @@ import type {
   IPFSReconcileResult,
   IPFSStatus,
   MediaGCResponse,
+  QoEPlaybackHealth,
   PeerTubeImportLaunchRequest,
   PeerTubeImportRun,
   PeerTubeImportRunList,
@@ -1952,6 +1953,33 @@ export const api = {
       `/api/v1/admin/storage/migrations/${encodeURIComponent(id)}`,
       { signal },
     ),
+
+  /**
+   * GET /api/v1/admin/qoe/playback-health — playback quality for a window,
+   * read entirely from the hourly rollups (phase-4 delivery item 4; admin only).
+   *
+   * Called with NO parameters it answers the phase-4 exit criterion directly —
+   * "TTFF/rebuffer percentiles per source for the last 24h" — so the admin
+   * page's default view is the criterion itself. `since`/`until` are RFC3339
+   * and are snapped to hour boundaries server-side (that is the resolution the
+   * rollups exist at); a window wider than 7 days is a 422.
+   *
+   * limit/offset page `buckets` (the hourly detail) only. `sources` is a
+   * summary over the whole window and is never paged.
+   */
+  getPlaybackHealth: (
+    params: { since?: string; until?: string; limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<QoEPlaybackHealth>("/api/v1/admin/qoe/playback-health", {
+      query: {
+        since: params.since,
+        until: params.until,
+        limit: params.limit,
+        offset: params.offset,
+      },
+      signal,
+    }),
 
   /**
    * POST /api/v1/admin/mail/test — send one outbound-mail probe (admin only).

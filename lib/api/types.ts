@@ -204,6 +204,23 @@ export type IPFSPinCounts = Schemas["IPFSPinCounts"];
 export type IPFSClassPinCounts = Schemas["IPFSClassPinCounts"];
 export type IPFSReconcileResult = Schemas["IPFSReconcileResult"];
 
+// --- Admin: playback quality (phase-4 delivery item 4) ----------------------
+// GET /admin/qoe/playback-health. Two projections in one payload: `sources` is
+// the phase-4 exit criterion (one merged row per delivery source over the whole
+// window, percentiles recomputed from the summed histograms and therefore never
+// paged), `buckets` the hourly detail behind it.
+//
+// The four dimension unions are projected off the schema rather than re-typed
+// so a vocabulary member added core-side becomes a compile error in the label
+// maps (lib/playback-health.ts) instead of a raw snake_case string on screen.
+export type QoEPlaybackHealth = Schemas["QoEPlaybackHealth"];
+export type QoESourceSummary = Schemas["QoESourceSummary"];
+export type QoEBucket = Schemas["QoEBucket"];
+export type QoEPercentiles = Schemas["QoEPercentiles"];
+export type QoEDeliverySource = NonNullable<QoESourceSummary["delivery_source"]>;
+export type QoEEngine = NonNullable<QoEBucket["engine"]>;
+export type QoEPackagingFormat = NonNullable<QoEBucket["packaging_format"]>;
+
 // --- Admin: PeerTube import / migration (P10 UI over P18 backend) ------------
 export type PeerTubeImportLaunchRequest = Schemas["PeerTubeImportLaunchRequest"];
 export type PeerTubeImportMode = NonNullable<Schemas["PeerTubeImportLaunchRequest"]["mode"]>;
