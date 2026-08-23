@@ -10,6 +10,8 @@ import { expect, test, type Page } from "@playwright/test";
 // the dynamic import + attachMedia + manifest fetch happened); segments are
 // aborted (no real encoder output in a hermetic mock).
 const LIVE = /\/api\/v1\/live\/ls1$/;
+const SESSION = /\/api\/v1\/live\/ls1\/playback-session$/;
+const TOKENED_MASTER = /\/api\/v1\/live\/ls1\/hls\/master\.m3u8\?pt=/;
 const MASTER = /\/api\/v1\/live\/ls1\/hls\/master\.m3u8$/;
 const VARIANT = /\/api\/v1\/live\/ls1\/hls\/\d+p\/playlist\.m3u8$/;
 const SEGMENT = /\/api\/v1\/live\/ls1\/hls\/\d+p\/seg_\d+\.ts$/;
@@ -55,6 +57,23 @@ const VARIANT_PLAYLIST = [
   "",
 ].join("\n");
 
+// The live playback session (phase-4 item 7's session half): the same object a
+// video session returns, carrying live_stream_id instead of video_id and — only
+// for a PRIVATE stream — a playback token.
+async function mockSession(page: Page, overrides: Record<string, unknown> = {}) {
+  await page.route(SESSION, (route) =>
+    route.fulfill({
+      json: {
+        session_id: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+        live_stream_id: "ls1",
+        packaging_format: "hls-ts",
+        hls_url: "/api/v1/live/ls1/hls/master.m3u8",
+        ...overrides,
+      },
+    }),
+  );
+}
+
 async function mockHlsTree(page: Page) {
   await page.route(MASTER, (route) =>
     route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: MASTER_PLAYLIST }),
@@ -67,6 +86,7 @@ async function mockHlsTree(page: Page) {
 
 test("a live stream plays via hls.js with a quality menu", async ({ page }) => {
   await page.route(LIVE, (route) => route.fulfill({ json: liveStream() }));
+  await mockSession(page);
   await mockHlsTree(page);
   const masterRequested = page.waitForRequest(MASTER);
 
@@ -90,6 +110,43 @@ test("a live stream plays via hls.js with a quality menu", async ({ page }) => {
     "href",
     "/channels/ada_makes",
   );
+});
+
+test("a private stream plays with the token its session issued, on the URL", async ({ page }) => {
+  // Live's only revocable, expiring credential (phase-4 item 7). It must ride in
+  // the URL as well as the header: the API rewrites the rolling playlist's
+  // segment URIs to keep it, because relative resolution discards a query string
+  // and Safari's native HLS cannot set a header at all.
+  await page.route(LIVE, (route) => route.fulfill({ json: liveStream({ privacy: "private" }) }));
+  await mockSession(page, { playback_token: "pt-live-1", expires_in: 21_600 });
+  await page.route(/\/api\/v1\/live\/ls1\/hls\/master\.m3u8/, (route) =>
+    route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: MASTER_PLAYLIST }),
+  );
+  await page.route(VARIANT, (route) =>
+    route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: VARIANT_PLAYLIST }),
+  );
+  await page.route(SEGMENT, (route) => route.abort());
+  const tokened = page.waitForRequest(TOKENED_MASTER);
+
+  await page.goto("/live/ls1");
+  const request = await tokened;
+  expect(request.url()).toContain("pt=pt-live-1");
+  await expect(page.getByRole("button", { name: "Quality: Auto" })).toBeVisible();
+});
+
+test("a public stream is played without inventing a credential", async ({ page }) => {
+  // A public stream's session issues no token, and none is attached: any `?pt=`
+  // or Authorization header marks the request credentialed, which forces
+  // no-store and blocks every CDN/presigned redirect.
+  await page.route(LIVE, (route) => route.fulfill({ json: liveStream() }));
+  await mockSession(page);
+  await mockHlsTree(page);
+  const masterRequested = page.waitForRequest(MASTER);
+
+  await page.goto("/live/ls1");
+  const request = await masterRequested;
+  expect(request.url()).not.toContain("pt=");
+  expect(await request.headerValue("authorization")).toBeNull();
 });
 
 test("an offline stream shows a not-live-yet state and does not play", async ({ page }) => {

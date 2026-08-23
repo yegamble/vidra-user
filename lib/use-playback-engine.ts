@@ -227,7 +227,10 @@ function usePlaybackEngine(
   const candidates = useMemo(
     // Suspended: no candidates, so no engine is picked and nothing loads. The
     // list is rebuilt (and playback begins) the moment the session settles.
-    () => (suspended ? NO_ENGINES : selectEngines({ hlsJs, nativeHls, progressive }, probeSupport())),
+    () =>
+      suspended
+        ? NO_ENGINES
+        : selectEngines({ hlsJs, nativeHls, progressive }, probeSupport()),
     [suspended, hlsJs, nativeHls, progressive],
   );
   const declinedHere = declined.key === key ? declined.engines : NO_ENGINES;
@@ -241,8 +244,19 @@ function usePlaybackEngine(
   // the post-redirect URL; a media element cannot, so for native/progressive this
   // is the answer.
   const activeSourceUrl =
-    mode === "hls-js" ? hlsJs : mode === "native-hls" ? nativeHls : mode === "progressive" ? progressive : undefined;
-  const telemetry = usePlaybackQoE({ videoRef, engine: mode, session, sourceUrl: activeSourceUrl });
+    mode === "hls-js"
+      ? hlsJs
+      : mode === "native-hls"
+        ? nativeHls
+        : mode === "progressive"
+          ? progressive
+          : undefined;
+  const telemetry = usePlaybackQoE({
+    videoRef,
+    engine: mode,
+    session,
+    sourceUrl: activeSourceUrl,
+  });
 
   useEffect(() => {
     if (mode !== "hls-js" || !hlsJs) return; // the other engines play via <video src>.
