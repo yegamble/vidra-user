@@ -52,6 +52,7 @@ const SECONDARY: readonly { href: string; label: string }[] = [
   { href: "/admin/audit-log", label: "Audit log" },
   { href: "/admin/system", label: "System" },
   { href: "/admin/infrastructure", label: "Infrastructure" },
+  { href: "/admin/playback-health", label: "Playback health" },
 ];
 
 // The open-reports count is capped for display; the exact figure lives on the
