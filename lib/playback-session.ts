@@ -113,9 +113,14 @@ export function usePlaybackSession(
     request
       .then((session) => {
         clearTimeout(timer);
-        // A token, when the server issued one, flows into the SAME in-memory
-        // store the unlock flow uses — one token mechanism, cleared by the same
-        // navigate-away cleanup. A session that issued none writes nothing.
+        // An answer that arrives after this player is gone (unmounted, or the
+        // wait expired) is dropped whole — including its token. Writing one then
+        // would land AFTER the navigate-away cleanup already ran and leave a
+        // credential in the store for a video nobody is watching.
+        if (settled || controller.signal.aborted) return;
+        // Otherwise a token, when the server issued one, flows into the SAME
+        // in-memory store the unlock flow uses — one token mechanism, cleared by
+        // the same cleanup. A session that issued none writes nothing.
         if (session.playback_token) setPlaybackToken(id, session.playback_token);
         settle({ status: "ready", session });
       })

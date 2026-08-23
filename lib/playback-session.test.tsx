@@ -95,6 +95,25 @@ describe("usePlaybackSession", () => {
     expect(result.current.status).toBe("unavailable");
   });
 
+  it("drops a session that lands after the player is gone, token and all", async () => {
+    // The store is cleared by the surface's navigate-away cleanup. A token
+    // written after that would sit there for a video nobody is watching, which
+    // is exactly what the in-memory store's lifetime exists to prevent.
+    let release: (session: PlaybackSession) => void = () => {};
+    vi.spyOn(api, "createVideoPlaybackSession").mockReturnValue(
+      new Promise<PlaybackSession>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const { unmount } = renderHook(() => usePlaybackSession("video", VIDEO_ID));
+    unmount();
+
+    await act(async () => {
+      release({ ...SESSION, playback_token: "pt-late" });
+    });
+    expect(getPlaybackToken(VIDEO_ID)).toBeNull();
+  });
+
   it("asks for nothing when there is no subject to broker (a federated video)", () => {
     const video = vi.spyOn(api, "createVideoPlaybackSession");
     const live = vi.spyOn(api, "createLivePlaybackSession");
