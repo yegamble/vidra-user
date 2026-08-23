@@ -14,7 +14,7 @@ const hlsMock = vi.hoisted(() => ({
     bandwidthEstimate: number;
     destroyed: boolean;
     source: string | null;
-    levels: Array<{ height: number }>;
+    levels: Array<{ height: number; codecSet?: string }>;
     emit: (event: string, ...args: unknown[]) => void;
   }>,
 }));
@@ -39,7 +39,7 @@ vi.mock("hls.js", () => {
     bandwidthEstimate = 7_500_000;
     destroyed = false;
     source: string | null = null;
-    levels: Array<{ height: number }> = [];
+    levels: Array<{ height: number; codecSet?: string }> = [];
     handlers: Record<string, Array<(...args: unknown[]) => void>> = {};
 
     constructor(config: Record<string, unknown> = {}) {
@@ -129,6 +129,41 @@ describe("hls.js playback tuning", () => {
 
     act(() => hls.emit("fragBuffered"));
     expect(localStorage.getItem("vidra:hls-bandwidth-estimate:v1")).toContain("7500000");
+  });
+
+  it("keeps the quality menu inside the codec family hls.js is playing", async () => {
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() =>
+      useHlsPlayback(videoRef, { id: "video-1", hls_url: "/master.m3u8" }, null),
+    );
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    // A multi-codec master as hls.js sorts it: height ascending, preferred codec
+    // last. Manifest order is inert — these are the indices hls.js exposes.
+    hls.levels = [
+      { height: 480, codecSet: "avc1,mp4a" },
+      { height: 480, codecSet: "hvc1,mp4a" },
+      { height: 1080, codecSet: "avc1,mp4a" },
+      { height: 1080, codecSet: "hvc1,mp4a" },
+    ];
+    // hls.js starts on the H.264 rung → the menu offers only H.264 indices, so
+    // picking 1080p cannot force a cross-codec (changeType) switch.
+    act(() => hls.emit("manifestParsed", { firstLevel: 0 }));
+    expect(result.current.levels).toEqual([
+      { level: -1, label: "Auto" },
+      { level: 2, label: "1080p" },
+      { level: 0, label: "480p" },
+    ]);
+
+    // The engine itself lands in the HEVC family: the menu follows it.
+    act(() => hls.emit("levelSwitched", { level: 3 }));
+    expect(result.current.levels).toEqual([
+      { level: -1, label: "Auto" },
+      { level: 3, label: "1080p" },
+      { level: 1, label: "480p" },
+    ]);
+    expect(result.current.activeHeight).toBe(1080);
   });
 
   it("does not reuse or persist the server estimate for an IPFS mirror", async () => {

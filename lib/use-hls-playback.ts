@@ -154,9 +154,23 @@ export function useHlsPlayback(
         hlsRef.current = hls;
         let parsed = false;
         let recoveries = 0;
-        hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
+        // The codec family the quality menu is currently built from. With a
+        // multi-codec master (same ladder in H.264 + HEVC + AV1) the menu must
+        // list only the family hls.js is actually playing, or a manual pick can
+        // force a cross-codec switch ABR would never make (see buildLevelMenu);
+        // single-codec masters never change it, so their menu is built once,
+        // exactly as before.
+        let menuCodecSet: string | undefined;
+        hls.on(HlsClass.Events.MANIFEST_PARSED, (_event, data) => {
           parsed = true;
-          setLevels(buildLevelMenu(hls.levels));
+          // The rung hls.js is about to start on names the codec family it has
+          // chosen: firstAutoLevel is ABR's own opening pick (we set no
+          // startLevel, so that IS the start level), with the manifest's first
+          // variant as the fallback. Either way LEVEL_SWITCHED below corrects
+          // the menu if the engine settles in another family.
+          const startLevel = hls.firstAutoLevel ?? data?.firstLevel ?? AUTO_LEVEL;
+          menuCodecSet = hls.levels[startLevel]?.codecSet;
+          setLevels(buildLevelMenu(hls.levels, startLevel));
           const networkCap = autoLevelCapForNetwork(
             hls.levels,
             browserNetworkInformation(),
@@ -172,8 +186,16 @@ export function useHlsPlayback(
         // record the active height for the "Auto (720p)" readout, and clear the
         // pending flag once the switch reaches the requested rung.
         hls.on(HlsClass.Events.LEVEL_SWITCHED, (_event, data) => {
-          const height = hls.levels[data.level]?.height;
+          const level = hls.levels[data.level];
+          const height = level?.height;
           setActiveHeight(typeof height === "number" && height > 0 ? height : null);
+          // Follow the engine's codec choice: only when the effective rung has
+          // left the family the menu was built from (possible on a multi-codec
+          // master) is the menu rebuilt, inside the new family.
+          if (level && level.codecSet !== menuCodecSet) {
+            menuCodecSet = level.codecSet;
+            setLevels(buildLevelMenu(hls.levels, data.level));
+          }
           setPendingLevel((p) => (p === null || data.level === p ? null : p));
         });
         hls.on(HlsClass.Events.ERROR, (_event, data) => {
