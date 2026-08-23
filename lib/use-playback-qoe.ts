@@ -190,7 +190,13 @@ export function usePlaybackQoE(args: {
       stateRef.current = freshMeasurement(sessionId);
     }
     const next = stateRef.current;
-    next.engine = engine;
+    if (next.engine !== engine) {
+      next.engine = engine;
+      // Anything observed so far was fetched down the PREVIOUS engine's path; a
+      // new engine fetches from wherever its own source points, and attributing
+      // its bytes to the old one would misreport the delivery source.
+      next.fetchedUrl = undefined;
+    }
     next.subject = qoeSubject(session, engine);
     next.sourceUrl = beaconSourceUrl(sourceUrl);
     if (engine && sourceUrl && next.anchorMs === null) next.anchorMs = now();
