@@ -1722,8 +1722,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get an HLS rendition playlist or segment
-         * @description Serves one file of a transcoded HLS rendition: its variant playlist (file = "playlist.m3u8"), a dense byte-range I-frame trick-play playlist and media object ("iframe.m3u8" / "iframe.ts"), or one MPEG-TS segment (file = "seg_00000.ts"). Rendition directories are named by rung height ("720p"). Same visibility and readiness rules as the master playlist; names outside the transcoder's fixed naming are 404.
+         * Get a streaming playlist, manifest or segment
+         * @description Serves one file under a video's streaming prefix.
+         *
+         *     For a video packaged as MPEG-TS, rendition is a rung-height directory ("720p") and file is its variant playlist ("playlist.m3u8"), the dense byte-range I-frame trick-play pair ("iframe.m3u8" / "iframe.ts"), or one segment ("seg_00000.ts").
+         *
+         *     For a video packaged as CMAF, rendition is the pseudo-rendition "cmaf" — one directory holding the shared fMP4 segments that BOTH manifests point at. `GET /api/v1/videos/{id}/hls/cmaf/stream.mpd` is the video's canonical MPEG-DASH manifest; the same directory also holds the per-representation HLS media playlists ("media_0.m3u8"), init segments ("init-0.mp4"), media segments ("chunk-0-00001.m4s") and the trick-play pair ("iframe-0.m3u8" / "iframe-0.mp4"). Requesting a "cmaf" name against a video that is not packaged as CMAF is 404, as is the reverse.
+         *
+         *     Same visibility and readiness rules as the master playlist; names outside the transcoder's fixed naming are 404.
          */
         get: operations["getVideoHLSFile"];
         put?: never;
@@ -1836,6 +1842,34 @@ export interface paths {
          * @description Verifies a submitted password against a password-protected video's stored passwords (CORE-17) and, on success, mints a short-lived, video-scoped playback token. The token carries no account identity, is valid for 6 hours, and unlocks ONLY this video's read endpoints, presented either as `Authorization: Bearer <playback_token>` or as a `?pt=<playback_token>` query parameter (the header-less path for Safari native-HLS and progressive playback). Optional auth. Rate-limited under the same strict budget as login. The password and the token are never logged.
          */
         post: operations["unlockVideo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/playback-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a playback session for a video
+         * @description The one call a player makes before it plays. Decides authorization once and returns everything needed to run the playback without asking the core API again per segment: which manifests exist, the packaging format they describe, the available ladder rungs, a session id for quality telemetry, and — only for a video that requires one — a playback token.
+         *
+         *     Authorization is IDENTICAL to the media routes (GET /videos/{id}/hls/master.m3u8): an invisible video is 404 so its existence is not leaked, and a password-protected video with no credential is 401 `password_required`, which is what the watch/embed page renders its unlock prompt from. Optional auth; no request body.
+         *
+         *     A video whose HLS tree is not ready is 200 with no manifest URLs — the caller IS authorized, there is simply nothing transcoded yet, and progressive playback via /videos/{id}/original still applies.
+         *
+         *     The token is CONDITIONAL BY DESIGN. Any request carrying `?pt=` or an Authorization header is treated as credentialed, and a credentialed media request is never cached, never presigned and never redirected — so a session that minted a token for every viewer would silently make all media delivery origin-only. It is minted only for the one tier that cannot play without it (privacy `password`), never for public, unlisted, private or unpublished videos.
+         *
+         *     Later delivery capabilities — CDN steering, signed URLs, DRM license configuration, P2P policy — land as additional fields on this same response.
+         */
+        post: operations["createPlaybackSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5469,6 +5503,17 @@ export interface components {
             hls_url?: string;
             /** @description The available HLS ladder rungs (tallest first), present alongside hls_url on the detail endpoint once transcoding completed. */
             renditions?: components["schemas"]["VideoRendition"][];
+            /**
+             * @description DETAIL view only. How the streaming tree is packaged — HLS over MPEG-TS segments, or a single CMAF tree serving both HLS and DASH from the same fMP4 segments. Present alongside hls_url once the tree is ready. Same value as the playback session's packaging_format; it is repeated here because this is the response a client reads first.
+             * @example cmaf
+             * @enum {string}
+             */
+            packaging_format?: "hls-ts" | "cmaf";
+            /**
+             * @description DETAIL view only. Origin-relative path of the MPEG-DASH manifest, present only when packaging_format is `cmaf`. Unversioned and NOT immutable — see PlaybackSession.dash_url.
+             * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/cmaf/stream.mpd
+             */
+            dash_url?: string;
             /** @description Whether at least one of this video's media objects is currently pinned to IPFS (fix_plan P19, .ralph/specs/ipfs-media.md). Drives the "IPFS" thumbnail badge on card/feed views. Present (true) only for public+published videos whose media the mirror has pinned; omitted (treat as false) otherwise, and always absent when IPFS_ENABLED is off. IPFS is a MIRROR SIDECAR — local/S3 remains authoritative, so a false/absent value never affects playback. */
             ipfs_pinned?: boolean;
             /** @description IPFS mirror CIDs for this video, present on the DETAIL endpoint only when the video is public+published and at least one object is pinned; omitted otherwise. CIDs are NEVER emitted for non-public videos regardless of caller (privacy invariant). Serving is unchanged — these are additive, content-address handles for clients that prefer a gateway fetch. */
@@ -5516,6 +5561,45 @@ export interface components {
         /** @description The whole chapter set to store (replaces any existing set). An empty array clears all chapters. start_seconds must be >= 0 and strictly increasing; titles are 1–120 characters after trimming; at most 100 chapters; each start must be less than the probed duration when known. */
         SetVideoChaptersRequest: {
             chapters: components["schemas"]["VideoChapter"][];
+        };
+        /** @description A brokered playback session for one video. Returned by POST /videos/{id}/playback-session. */
+        PlaybackSession: {
+            /**
+             * Format: uuid
+             * @description Server-minted identifier for this playback session, and the correlation key for its quality-of-experience events. It is NOT the `X-Vidra-Session` browse id (client-generated per tab) and it is never an authorization input on its own — for a password-protected video the authority lives in playback_token, which is signed over this same id.
+             * @example 3f2504e0-4f89-11d3-9a0c-0305e82c3301
+             */
+            session_id: string;
+            /**
+             * Format: uuid
+             * @description The video this session is for.
+             */
+            video_id: string;
+            /**
+             * @description How the streaming tree is packaged — HLS over MPEG-TS segments, or a single CMAF tree serving both HLS and DASH from the same fMP4 segments. Omitted when no tree is ready. A client cannot infer this from hls_url: both formats serve HLS from master.m3u8.
+             * @example cmaf
+             * @enum {string}
+             */
+            packaging_format?: "hls-ts" | "cmaf";
+            /**
+             * @description Origin-relative, generation-versioned path of the HLS master playlist. Omitted until the transcoded tree is ready. Not a presigned URL — delivery-source selection (CDN, presigned redirect, IPFS gateway) is made per request when the bytes are served, so this URL carries no credential and does not expire.
+             * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/master.m3u8?v=ctw5ps0e8w00
+             */
+            hls_url?: string;
+            /**
+             * @description Origin-relative path of the MPEG-DASH manifest. Present only when packaging_format is `cmaf` (an MPEG-TS tree has no MPD); both manifests describe the SAME segments. Deliberately UNVERSIONED and NOT immutable: a DASH player expands the manifest's SegmentTemplate patterns itself and fetches the segments without a query string, so a version here would fence only the manifest. The MPD is revalidated, as its segments are.
+             * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/cmaf/stream.mpd
+             */
+            dash_url?: string;
+            /** @description The available ladder rungs (tallest first); omitted when none. */
+            renditions?: components["schemas"]["VideoRendition"][];
+            /** @description A video-scoped, session-scoped credential (a secret — do not log), present ONLY for a video that cannot be played without one, i.e. privacy `password`. Append it as `?pt=<playback_token>` (the header-less path Safari native-HLS needs) or send it as `Authorization: Bearer <playback_token>`. ABSENT is the normal case and is what keeps CDN/presigned delivery reachable — a credentialed media request is never cached and never redirected. */
+            playback_token?: string;
+            /**
+             * @description The token lifetime in seconds (21600 = 6 hours). Present only with playback_token.
+             * @example 21600
+             */
+            expires_in?: number;
         };
         /** @description A password to unlock a password-protected video (CORE-17). */
         UnlockVideoRequest: {
@@ -12569,23 +12653,25 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                /** @description The rendition directory, e.g. "720p". */
+                /** @description A rendition directory ("720p") for an MPEG-TS video, or the "cmaf" pseudo-rendition for a CMAF one. */
                 rendition: string;
-                /** @description "playlist.m3u8", "iframe.m3u8", "iframe.ts", or a segment such as "seg_00000.ts". */
+                /** @description MPEG-TS: "playlist.m3u8", "iframe.m3u8", "iframe.ts", or a segment such as "seg_00000.ts". CMAF: "stream.mpd", "media_0.m3u8", "init-0.mp4", "chunk-0-00001.m4s", "iframe-0.m3u8" or "iframe-0.mp4". */
                 file: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The rendition playlist or segment. */
+            /** @description The playlist, DASH manifest, or segment. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/vnd.apple.mpegurl": string;
+                    "application/dash+xml": string;
                     "video/mp2t": string;
+                    "video/mp4": string;
                 };
             };
             /** @description Direct delivery of a SEGMENT (never a playlist — .m3u8 references are rewritten by this origin): with delivery_presign_enabled on and a signing object store, a public+published video's segment request is redirected to a short-lived signed object URL. The 200 byte path stays authoritative. */
@@ -12946,6 +13032,46 @@ export interface operations {
             };
             /** @description Too many unlock attempts (rate limited). */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createPlaybackSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session object. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackSession"];
+                };
+            };
+            /** @description The video is password protected and the request carried neither owner/moderator authority nor a valid playback token (code `password_required`). Unlock via POST /videos/{id}/unlock and retry. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or it is not visible to the caller. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
