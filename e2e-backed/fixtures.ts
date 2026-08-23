@@ -554,6 +554,8 @@ export async function videoDetail(
   tags?: string[];
   hls_url?: string;
   renditions?: Array<{ height: number; width: number }>;
+  packaging_format?: "hls-ts" | "cmaf";
+  dash_url?: string;
 }> {
   const res = await request.get(`${API_URL}/api/v1/videos/${videoId}`);
   return (await res.json()) as {
@@ -565,6 +567,8 @@ export async function videoDetail(
     tags?: string[];
     hls_url?: string;
     renditions?: Array<{ height: number; width: number }>;
+    packaging_format?: "hls-ts" | "cmaf";
+    dash_url?: string;
   };
 }
 
