@@ -15,10 +15,6 @@ export interface NetworkInformationLike {
   effectiveType?: string;
 }
 
-export interface HlsLevelLike {
-  height?: number;
-}
-
 type EstimateStorage = Pick<Storage, "getItem" | "setItem">;
 
 function localEstimateStorage(): EstimateStorage | null {
@@ -99,31 +95,24 @@ export function shouldConserveData(connection?: NetworkInformationLike): boolean
 }
 
 /**
- * Return the hls.js level index to use as autoLevelCapping, or null when the
- * browser reports no constrained-network signal. Manual quality picks remain
- * available; this limits Auto only.
+ * autoHeightCapForNetwork returns the tallest rendition HEIGHT Auto may climb to
+ * on this connection, or null when the browser reports no constrained-network
+ * signal. Manual quality picks remain available; this limits Auto only.
+ *
+ * This is pure network policy and deliberately knows nothing about any playback
+ * engine — a height is the same statement to hls.js, to DASH, and to a reader.
+ * Translating it into whatever handle the engine caps with is the adapter's job
+ * (lib/hls.ts levelIndexForHeightCap), which is also what keeps the cap and the
+ * quality menu speaking the same language.
  */
-export function autoLevelCapForNetwork(
-  levels: readonly HlsLevelLike[],
+export function autoHeightCapForNetwork(
   connection?: NetworkInformationLike,
 ): number | null {
   if (!connection) return null;
   const effectiveType = connection.effectiveType?.toLowerCase();
-  const maxHeight =
-    connection.saveData === true || effectiveType === "slow-2g" || effectiveType === "2g"
-      ? 480
-      : effectiveType === "3g"
-        ? 720
-        : null;
-  if (maxHeight === null) return null;
-
-  const ranked = levels
-    .map((level, index) => ({ index, height: level.height }))
-    .filter((level): level is { index: number; height: number } =>
-      typeof level.height === "number" && level.height > 0,
-    )
-    .sort((a, b) => a.height - b.height);
-  if (ranked.length === 0) return null;
-  const withinCap = ranked.filter((level) => level.height <= maxHeight);
-  return (withinCap[withinCap.length - 1] ?? ranked[0]).index;
+  if (connection.saveData === true || effectiveType === "slow-2g" || effectiveType === "2g") {
+    return 480;
+  }
+  if (effectiveType === "3g") return 720;
+  return null;
 }

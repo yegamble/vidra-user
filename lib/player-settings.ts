@@ -17,7 +17,13 @@
 
 import { useSyncExternalStore } from "react";
 
-import { AUTO_LEVEL, type LevelOption } from "@/lib/hls";
+import type { LevelOption } from "@/lib/hls";
+import {
+  AUTO_QUALITY,
+  heightOfQualityPreference,
+  isAutoQuality,
+  type QualitySelection,
+} from "@/lib/quality-id";
 import type { PlayerSettings } from "@/lib/api";
 
 /**
@@ -142,7 +148,7 @@ export function usePlayerSettings(): PlayerSettings {
   return useSyncExternalStore(subscribe, getPlayerSettingsSnapshot, serverSnapshot);
 }
 
-// --- default-quality ⇄ HLS level mapping ------------------------------------
+// --- default-quality ⇄ quality-menu mapping ---------------------------------
 
 /**
  * The Select options for "Default quality": Auto plus the common rungs. The
@@ -160,14 +166,27 @@ export const QUALITY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = 
 ];
 
 /**
- * matchQualityLevel maps a stored default_quality onto an hls.js level index for
- * the parsed quality menu. "auto" — or a rung this video doesn't offer (an
- * unknown / unavailable height) — maps to AUTO_LEVEL, so the player stays on
- * adaptive rather than forcing a rung that doesn't exist. A matching rung maps to
- * its hls.js level index (the value the quality menu assigns).
+ * matchQualityLevel maps a stored default_quality onto a selection for the
+ * parsed quality menu.
+ *
+ * The stored preference is a HEIGHT ("720p") — that is its durable wire format
+ * (`"auto"` or `^[0-9]{2,4}p$`, validated server-side in vidra-core
+ * internal/playersettings), and it stays that way: a preference must outlive the
+ * ladder it was chosen against, so it names the rung a user wants and nothing
+ * finer. Matching is therefore a height match against the menu, which is already
+ * built inside the codec family the engine is playing — so the result can never
+ * name a rung outside that family.
+ *
+ * "auto" — or a rung this video doesn't offer (an unknown / unavailable height)
+ * — maps to AUTO_QUALITY, so the player stays adaptive rather than forcing a
+ * rung that doesn't exist.
  */
-export function matchQualityLevel(defaultQuality: string, levels: LevelOption[]): number {
-  if (defaultQuality === "auto") return AUTO_LEVEL;
-  const match = levels.find((l) => l.level !== AUTO_LEVEL && l.label === defaultQuality);
-  return match ? match.level : AUTO_LEVEL;
+export function matchQualityLevel(
+  defaultQuality: string,
+  levels: LevelOption[],
+): QualitySelection {
+  const height = heightOfQualityPreference(defaultQuality);
+  if (height === null) return AUTO_QUALITY;
+  const match = levels.find((l) => !isAutoQuality(l.id) && l.id.height === height);
+  return match ? match.id : AUTO_QUALITY;
 }

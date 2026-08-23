@@ -171,8 +171,8 @@ function LivePlayer({ stream }: { stream: LiveStream }) {
       <div className="flex flex-wrap items-center gap-2">
         <QualityMenu
           levels={playback.levels}
-          currentLevel={playback.currentLevel}
-          onSelect={playback.setLevel}
+          currentQuality={playback.currentQuality}
+          onSelect={playback.setQuality}
         />
       </div>
     </div>

@@ -7,19 +7,29 @@ import type Hls from "hls.js";
 import { videoHlsMasterUrl, videoOriginalUrl } from "@/lib/api";
 import {
   HLS_ABR_DEFAULT_ESTIMATE,
-  autoLevelCapForNetwork,
+  autoHeightCapForNetwork,
   browserNetworkInformation,
   readStoredBandwidthEstimate,
   storeBandwidthEstimate,
 } from "@/lib/hls-bandwidth";
 import {
-  AUTO_LEVEL,
+  HLS_AUTO_LEVEL,
   buildLevelMenu,
   canPlayNativeHls,
   choosePlaybackMode,
+  levelIndexForHeightCap,
+  qualityIdOfLevel,
+  resolveLevelIndex,
   type LevelOption,
   type PlaybackMode,
 } from "@/lib/hls";
+import {
+  AUTO_QUALITY,
+  isAutoQuality,
+  sameQuality,
+  type QualityId,
+  type QualitySelection,
+} from "@/lib/quality-id";
 
 // How many hls.js-recommended recoveries (network → startLoad, media →
 // recoverMediaError) to attempt after the manifest parsed before giving up and
@@ -32,13 +42,13 @@ export interface HlsPlayback {
   src: string | undefined;
   /** Quality menu entries (Auto + one per height); [] when nothing is selectable. */
   levels: LevelOption[];
-  /** The user's selected level (-1 = Auto). Drives the menu's checked entry. */
-  currentLevel: number;
+  /** The user's selection (AUTO_QUALITY = adaptive). Drives the menu's checked entry. */
+  currentQuality: QualitySelection;
   /** Pixel height of the rung actually playing (from LEVEL_SWITCHED); null until known. */
   activeHeight: number | null;
   /** True while a manual rung switch has been requested but not yet confirmed. */
   pending: boolean;
-  setLevel: (level: number) => void;
+  setQuality: (quality: QualitySelection) => void;
 }
 
 // probeSupport sniffs the browser's HLS capabilities once per call site. A
@@ -58,9 +68,17 @@ function probeSupport(): { mseSupported: boolean; nativeHls: boolean } {
  * hls.js (dynamically imported, so non-HLS videos never load it) when the
  * detail carries hls_url and MSE exists, native HLS without MSE (iOS Safari),
  * else the progressive /original file. In hls.js mode it exposes the parsed
- * quality levels and a setter driving hls.nextLevel (Auto = -1); a fatal
- * hls.js failure falls back to the original file after bounded recovery
- * attempts, so playback degrades instead of dying.
+ * quality menu and a setter for it; a fatal hls.js failure falls back to the
+ * original file after bounded recovery attempts, so playback degrades instead
+ * of dying.
+ *
+ * This is the hls.js ENGINE ADAPTER for quality. Everything it hands out — the
+ * menu entries, the current selection, the pending target — is an engine-neutral
+ * QualityId (lib/quality-id.ts) or the AUTO_QUALITY sentinel. hls.js's level
+ * INDEX exists only inside this file and lib/hls.ts: minted from a selection at
+ * the moment of assignment, and read out of an event immediately into an id.
+ * Nothing downstream can hold one, which is what lets the same surfaces work
+ * against another engine later.
  *
  * Quality switching uses `hls.nextLevel` (a SMOOTH switch that takes effect at
  * the next fragment boundary) rather than `hls.currentLevel` (which flushes the
@@ -91,10 +109,10 @@ export function useHlsPlayback(
   // instead. Keyed by id so a navigation to another video decides afresh.
   const [failedId, setFailedId] = useState<string | null>(null);
   const [levels, setLevels] = useState<LevelOption[]>([]);
-  const [currentLevel, setCurrentLevel] = useState(AUTO_LEVEL);
-  // The level index a manual switch is heading to, until LEVEL_SWITCHED confirms
+  const [currentQuality, setCurrentQuality] = useState<QualitySelection>(AUTO_QUALITY);
+  // The rendition a manual switch is heading to, until LEVEL_SWITCHED confirms
   // it; null when nothing is in flight (Auto/ABR or already settled).
-  const [pendingLevel, setPendingLevel] = useState<number | null>(null);
+  const [pendingQuality, setPendingQuality] = useState<QualityId | null>(null);
   // Pixel height of the rung hls.js is actually playing (last LEVEL_SWITCHED).
   const [activeHeight, setActiveHeight] = useState<number | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -111,8 +129,8 @@ export function useHlsPlayback(
     if (!el) return;
     let disposed = false;
     setLevels([]);
-    setCurrentLevel(AUTO_LEVEL);
-    setPendingLevel(null);
+    setCurrentQuality(AUTO_QUALITY);
+    setPendingQuality(null);
     setActiveHeight(null);
     // Dynamic import: the hls.js chunk loads only when an HLS video actually
     // plays through MSE — never for original/native playback.
@@ -161,21 +179,23 @@ export function useHlsPlayback(
         // single-codec masters never change it, so their menu is built once,
         // exactly as before.
         let menuCodecSet: string | undefined;
-        hls.on(HlsClass.Events.MANIFEST_PARSED, (_event, data) => {
+        hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
           parsed = true;
           // The rung hls.js is about to start on names the codec family it has
           // chosen: firstAutoLevel is ABR's own opening pick (we set no
-          // startLevel, so that IS the start level), with the manifest's first
-          // variant as the fallback. Either way LEVEL_SWITCHED below corrects
-          // the menu if the engine settles in another family.
-          const startLevel = hls.firstAutoLevel ?? data?.firstLevel ?? AUTO_LEVEL;
-          menuCodecSet = hls.levels[startLevel]?.codecSet;
-          setLevels(buildLevelMenu(hls.levels, startLevel));
-          const networkCap = autoLevelCapForNetwork(
-            hls.levels,
-            browserNetworkInformation(),
-          );
-          if (networkCap !== null) hls.autoLevelCapping = networkCap;
+          // startLevel, so that IS the start level). It can be -1 before ABR has
+          // decided, which leaves menuCodecSet undefined — buildLevelMenu's
+          // unknown-family path — and LEVEL_SWITCHED below corrects the menu if
+          // the engine settles in another family.
+          menuCodecSet = hls.levels[hls.firstAutoLevel]?.codecSet;
+          setLevels(buildLevelMenu(hls.levels, menuCodecSet));
+          // The metered-network policy speaks HEIGHTS; the engine caps by level
+          // index, so translate here — the menu and the cap must not disagree
+          // about what "720p" means.
+          const heightCap = autoHeightCapForNetwork(browserNetworkInformation());
+          const capIndex =
+            heightCap === null ? null : levelIndexForHeightCap(hls.levels, heightCap);
+          if (capIndex !== null) hls.autoLevelCapping = capIndex;
         });
         if (!hlsMasterOverride) {
           hls.on(HlsClass.Events.FRAG_BUFFERED, () => {
@@ -187,16 +207,18 @@ export function useHlsPlayback(
         // pending flag once the switch reaches the requested rung.
         hls.on(HlsClass.Events.LEVEL_SWITCHED, (_event, data) => {
           const level = hls.levels[data.level];
-          const height = level?.height;
-          setActiveHeight(typeof height === "number" && height > 0 ? height : null);
+          const switched = qualityIdOfLevel(level);
+          setActiveHeight(switched?.height ?? null);
           // Follow the engine's codec choice: only when the effective rung has
           // left the family the menu was built from (possible on a multi-codec
           // master) is the menu rebuilt, inside the new family.
           if (level && level.codecSet !== menuCodecSet) {
             menuCodecSet = level.codecSet;
-            setLevels(buildLevelMenu(hls.levels, data.level));
+            setLevels(buildLevelMenu(hls.levels, menuCodecSet));
           }
-          setPendingLevel((p) => (p === null || data.level === p ? null : p));
+          // A pending pick is confirmed by the engine landing on that RENDITION,
+          // not on some particular index: two levels can be the same rung.
+          setPendingQuality((p) => (p === null || sameQuality(switched, p) ? null : p));
         });
         hls.on(HlsClass.Events.ERROR, (_event, data) => {
           if (!data.fatal) return;
@@ -250,18 +272,32 @@ export function useHlsPlayback(
   return {
     mode,
     src,
+    // Native HLS (iOS Safari, no MSE) deliberately exposes NO quality entries.
+    // There the browser owns variant selection outright, steered by the SCORE
+    // attribute the backend emits on each variant; nothing can read which
+    // variant is playing or ask for another, so a QualityId has no faithful
+    // implementation on that path. An empty list is the honest answer and hides
+    // the menu (QualityMenu renders null) — do not synthesize a list here from
+    // the manifest, it would render a control that cannot control anything.
     levels: mode === "hls-js" ? levels : [],
-    currentLevel,
+    currentQuality,
     activeHeight: mode === "hls-js" ? activeHeight : null,
-    pending: pendingLevel !== null,
-    setLevel: (level: number) => {
+    pending: pendingQuality !== null,
+    setQuality: (quality: QualitySelection) => {
       const hls = hlsRef.current;
       if (!hls) return;
+      // The one place a level index exists: minted from the selection, written
+      // straight to the engine, never stored. A rung this level list no longer
+      // offers resolves to null and is ignored rather than guessed at.
+      const index = isAutoQuality(quality)
+        ? HLS_AUTO_LEVEL
+        : resolveLevelIndex(hls.levels, quality);
+      if (index === null) return;
       // Smooth switch at the next fragment boundary (nextLevel), not a buffer
       // flush (currentLevel). Hold the pick pending until LEVEL_SWITCHED lands.
-      hls.nextLevel = level;
-      setCurrentLevel(level);
-      setPendingLevel(level === AUTO_LEVEL ? null : level);
+      hls.nextLevel = index;
+      setCurrentQuality(quality);
+      setPendingQuality(isAutoQuality(quality) ? null : quality);
     },
   };
 }

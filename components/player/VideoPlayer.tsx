@@ -46,7 +46,7 @@ import {
   matchQualityLevel,
   usePlayerSettings,
 } from "@/lib/player-settings";
-import { AUTO_LEVEL } from "@/lib/hls";
+import { isAutoQuality } from "@/lib/quality-id";
 import { readBuffered, stepVolume } from "@/lib/player-ui";
 import {
   SHORTCUT_IGNORE_SELECTOR,
@@ -473,7 +473,7 @@ export function VideoPlayer({
     if (playback.levels.length === 0) return; // levels not parsed yet
     appliedQualityRef.current = video.id;
     const target = matchQualityLevel(settings.default_quality, playback.levels);
-    if (target !== AUTO_LEVEL) playback.setLevel(target);
+    if (!isAutoQuality(target)) playback.setQuality(target);
   }, [playback, settings.default_quality, video.id]);
 
   // Apply the per-user "captions on by default" (PLAY-07) once per video when a
@@ -744,10 +744,10 @@ export function VideoPlayer({
 
           <QualityMenu
             levels={playback.levels}
-            currentLevel={playback.currentLevel}
+            currentQuality={playback.currentQuality}
             activeHeight={playback.activeHeight}
             pending={playback.pending}
-            onSelect={playback.setLevel}
+            onSelect={playback.setQuality}
             variant="overlay"
           />
 
