@@ -72,6 +72,24 @@ export type VideoSearchResponse = Schemas["VideoSearchResponse"];
 export type VideoDownloadFile = Schemas["VideoDownloadFile"];
 export type VideoDownloadResponse = Schemas["VideoDownloadResponse"];
 
+// --- Playback session + QoE (phase-4 delivery items 1, 4, 7) ----------------
+// ONE session object for both subjects: POST /videos/{id}/playback-session and
+// POST /live/{id}/playback-session answer the same schema, carrying video_id or
+// live_stream_id (exactly one) — which is what lets a player consume a session
+// the same way whichever it is playing. See lib/playback-session.ts.
+export type PlaybackSession = Schemas["PlaybackSession"];
+export type PlaybackPackagingFormat = NonNullable<PlaybackSession["packaging_format"]>;
+// One playback measurement for POST /qoe/events (batched from lib/playback-qoe.ts).
+// Note what the schema does NOT have: a delivery_source. The client reports the
+// URL it fetched from and the SERVER classifies it, which is what keeps that
+// dimension bounded — see lib/playback-qoe.ts.
+export type QoEEventInput = Schemas["QoEEventInput"];
+export type QoEEventType = QoEEventInput["type"];
+export type QoEErrorClass = NonNullable<QoEEventInput["error_class"]>;
+// `QoEEngine` and `QoEPackagingFormat` are one closed vocabulary shared by the
+// beacon that writes these events and the rollups that read them, so they are
+// declared once — in the admin block below, projected off the rollup schema.
+
 // --- Search & discovery (search-service W4) ---------------------------------
 // Autocomplete suggestions. The response is inline in the spec (not a named
 // component), so it is derived from the operation. `type` is a string in the

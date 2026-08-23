@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import type Hls from "hls.js";
 
 import { liveHlsMasterUrl, videoHlsMasterUrl, videoOriginalUrl } from "@/lib/api";
+import type { PlaybackSession } from "@/lib/api/types";
 import {
   HLS_ABR_DEFAULT_ESTIMATE,
   autoHeightCapForNetwork,
@@ -28,7 +29,10 @@ import {
   type EngineId,
   type EngineSources,
 } from "@/lib/player-engine";
+import { finalFetchUrl, hlsErrorClass } from "@/lib/playback-qoe";
+import { playbackMasterUrl, usePlaybackSession } from "@/lib/playback-session";
 import { remotePlaybackSources } from "@/lib/remote-playback";
+import { usePlaybackQoE } from "@/lib/use-playback-qoe";
 import {
   AUTO_QUALITY,
   isAutoQuality,
@@ -67,6 +71,20 @@ import {
 // the hls.js engine has actually won selection, so a viewer who plays natively,
 // progressively — or who never plays anything — never downloads the chunk. Any
 // second engine added here must obey the same rule.
+//
+// THE SESSION IS THE FRONT DOOR (phase-4 item 1). Each surface opens a playback
+// session before it plays and drives the master URL from the session's answer;
+// the video detail's `hls_url` is now only the fallback for a session that never
+// arrived. The session is also where a playback token comes from — CONDITIONALLY:
+// the server mints one only for a subject that cannot be played without it, and
+// this file attaches a credential ONLY when it was handed one. Anything else
+// would mark every media request credentialed, which forces `no-store` and blocks
+// every CDN/presign redirect for viewers who needed none of it.
+//
+// AND IT IS THE ONE CAPTURE POINT for playback quality (item 4). Because all
+// three surfaces run this lifecycle, instrumenting it here instruments every one
+// of them — see lib/use-playback-qoe.ts. Telemetry is fire-and-forget and never
+// on a playback path.
 
 // How many hls.js-recommended recoveries (network → startLoad, media →
 // recoverMediaError) to attempt after the manifest parsed before giving up on
@@ -95,6 +113,13 @@ export interface HlsPlayback {
   /** True while a manual rung switch has been requested but not yet confirmed. */
   pending: boolean;
   setQuality: (quality: QualitySelection) => void;
+  /**
+   * The CMAF tree's DASH manifest, when the session advertised one.
+   * INFORMATIONAL: nothing plays it and it must not influence engine selection —
+   * there is no DASH engine yet (item 3c). It is surfaced so the second engine,
+   * when it lands, finds the manifest already in hand.
+   */
+  dashUrl: string | null;
 }
 
 /** Live playback, plus the one thing only a live surface needs. */
@@ -135,6 +160,20 @@ interface EngineTuning {
    *   answer for a path nothing has ever measured (live, a foreign origin).
    */
   bandwidth: "measured" | "seeded" | "engine";
+  /**
+   * Hold everything: pick no engine, load nothing, report `mode` null. Set while
+   * the playback session is still in flight, because starting on the detail's URL
+   * and swapping to the session's a moment later would restart a loading media
+   * element for no reason. It is NOT a failure — a live surface must not read it
+   * as one.
+   */
+  suspended?: boolean;
+  /**
+   * The session this playback belongs to, when there is one. Used for exactly
+   * two things here: quality telemetry keys on it (null ⇒ this playback is not
+   * measured), and its `dash_url` is passed through unplayed.
+   */
+  session?: PlaybackSession | null;
 }
 
 /**
@@ -151,7 +190,15 @@ function usePlaybackEngine(
   tuning: EngineTuning,
 ): HlsPlayback {
   const { hlsJs, nativeHls, progressive } = sources;
-  const { startPosition, backBufferLength, lowLatencyMode, authToken, bandwidth } = tuning;
+  const {
+    startPosition,
+    backBufferLength,
+    lowLatencyMode,
+    authToken,
+    bandwidth,
+    suspended = false,
+    session = null,
+  } = tuning;
 
   const [levels, setLevels] = useState<LevelOption[]>([]);
   const [currentQuality, setCurrentQuality] = useState<QualitySelection>(AUTO_QUALITY);
@@ -178,14 +225,38 @@ function usePlaybackEngine(
   }, []);
 
   const candidates = useMemo(
-    () => selectEngines({ hlsJs, nativeHls, progressive }, probeSupport()),
-    [hlsJs, nativeHls, progressive],
+    // Suspended: no candidates, so no engine is picked and nothing loads. The
+    // list is rebuilt (and playback begins) the moment the session settles.
+    () =>
+      suspended
+        ? NO_ENGINES
+        : selectEngines({ hlsJs, nativeHls, progressive }, probeSupport()),
+    [suspended, hlsJs, nativeHls, progressive],
   );
   const declinedHere = declined.key === key ? declined.engines : NO_ENGINES;
   const mode = useMemo(
     () => pickEngine(candidates, declinedHere),
     [candidates, declinedHere],
   );
+
+  // The URL the winning engine was pointed at — the pre-redirect fallback for
+  // "where did these bytes come from?". hls.js improves on it per fragment with
+  // the post-redirect URL; a media element cannot, so for native/progressive this
+  // is the answer.
+  const activeSourceUrl =
+    mode === "hls-js"
+      ? hlsJs
+      : mode === "native-hls"
+        ? nativeHls
+        : mode === "progressive"
+          ? progressive
+          : undefined;
+  const telemetry = usePlaybackQoE({
+    videoRef,
+    engine: mode,
+    session,
+    sourceUrl: activeSourceUrl,
+  });
 
   useEffect(() => {
     if (mode !== "hls-js" || !hlsJs) return; // the other engines play via <video src>.
@@ -278,6 +349,14 @@ function usePlaybackEngine(
             storeBandwidthEstimate(hls.bandwidthEstimate);
           });
         }
+        // Where the bytes actually came from. FRAG_LOADED (not FRAG_BUFFERED) is
+        // the event that carries the loader, and the loader is the only place the
+        // FINAL url — after a 307 to a CDN or a presigned object store — is
+        // visible at all. The client reports that origin and the SERVER decides
+        // what it means; this file never names a delivery source.
+        hls.on(HlsClass.Events.FRAG_LOADED, (_event, data) => {
+          telemetry.observeFetch(finalFetchUrl(data?.networkDetails) ?? data?.frag?.url);
+        });
         // Every effective rung switch (ABR on Auto, or a confirmed manual pick):
         // record the active height for the "Auto (720p)" readout, and clear the
         // pending flag once the switch reaches the requested rung.
@@ -285,6 +364,10 @@ function usePlaybackEngine(
           const level = hls.levels[data.level];
           const switched = qualityIdOfLevel(level);
           setActiveHeight(switched?.height ?? null);
+          // The rung in play, for telemetry. The FIRST one is the opening pick
+          // and is reported on playback.start, not as a switch — the reporter
+          // owns that distinction.
+          telemetry.reportRendition(switched?.height ?? null);
           // Follow the engine's codec choice: only when the effective rung has
           // left the family the menu was built from (possible on a multi-codec
           // master) is the menu rebuilt, inside the new family.
@@ -298,6 +381,11 @@ function usePlaybackEngine(
         });
         hls.on(HlsClass.Events.ERROR, (_event, data) => {
           if (!data.fatal) return;
+          // Every fatal error is a quality event, including the ones the ladder
+          // below recovers from: playback stopped, whether or not it resumed.
+          // Non-fatal errors are not reported — hls.js emits them constantly and
+          // they say nothing about what the viewer saw.
+          telemetry.reportError(hlsErrorClass(data.type, data.details));
           // Fatal before the manifest parsed (e.g. the playlist 404s despite the
           // detail advertising it) — or recovery exhausted.
           if (!parsed || recoveries >= MAX_RECOVERIES) {
@@ -339,6 +427,7 @@ function usePlaybackEngine(
     authToken,
     bandwidth,
     declineEngines,
+    telemetry,
   ]);
 
   const src =
@@ -358,6 +447,8 @@ function usePlaybackEngine(
     currentQuality,
     activeHeight: mode === "hls-js" ? activeHeight : null,
     pending: pendingQuality !== null,
+    // Advertised, never played — see HlsPlayback.dashUrl.
+    dashUrl: session?.dash_url ?? null,
     setQuality: (quality: QualitySelection) => {
       const hls = hlsRef.current;
       if (!hls) return;
@@ -378,9 +469,13 @@ function usePlaybackEngine(
 }
 
 /**
- * useHlsPlayback plays a local VOD video: the HLS ladder where the detail
- * carries one, the progressive /original file otherwise and as the last resort
- * when the ladder proves unplayable.
+ * useHlsPlayback plays a local VOD video: the HLS ladder the SESSION advertises,
+ * the progressive /original file otherwise and as the last resort when the ladder
+ * proves unplayable.
+ *
+ * The session is opened first and answers the manifest question (item 1). The
+ * detail's `hls_url` is now only the fallback for a session that never arrived,
+ * which is exactly how this played before sessions existed.
  */
 export function useHlsPlayback(
   videoRef: RefObject<HTMLVideoElement | null>,
@@ -397,21 +492,27 @@ export function useHlsPlayback(
   // progressive paths it is appended to the src as `?pt=`. A secret — never logged.
   playbackToken?: string | null,
 ): HlsPlayback {
-  const hasHls = Boolean(video.hls_url);
+  // The session is authorized exactly like the media routes, so the unlock
+  // token — when the viewer has one — is what opens a password video's session.
+  const sessionState = usePlaybackSession("video", video.id, playbackToken);
+  const master = playbackMasterUrl(sessionState, video.hls_url);
+  // A session-scoped token, and ONLY where the server issued one. A public video
+  // gets none, which is what keeps its bytes CDN-eligible; the session's token
+  // supersedes the unlock token because the session id is signed into it, which
+  // is what lets the beacon be attested.
+  const token = sessionState.session?.playback_token ?? playbackToken;
+  const hasHls = Boolean(master);
   // The `?pt=` token (a query param) is placed before the `#t=` media fragment.
   const fragment = startAt !== null ? `#t=${startAt}` : "";
   return usePlaybackEngine(
     videoRef,
     video.id,
     {
-      hlsJs: hasHls
-        ? hlsMasterOverride || videoHlsMasterUrl(video.id, null, video.hls_url)
-        : undefined,
+      hlsJs: hasHls ? hlsMasterOverride || videoHlsMasterUrl(video.id, null, master) : undefined,
       nativeHls: hasHls
-        ? (hlsMasterOverride || videoHlsMasterUrl(video.id, playbackToken, video.hls_url)) +
-          fragment
+        ? (hlsMasterOverride || videoHlsMasterUrl(video.id, token, master)) + fragment
         : undefined,
-      progressive: videoOriginalUrl(video.id, playbackToken) + fragment,
+      progressive: videoOriginalUrl(video.id, token) + fragment,
     },
     {
       startPosition: startAt,
@@ -419,8 +520,11 @@ export function useHlsPlayback(
       // No token on the IPFS gateway mirror: a public gateway needs none, and a
       // non-simple Authorization header would trip its CORS preflight. Password
       // videos are never IPFS-mirrored anyway.
-      authToken: hlsMasterOverride ? null : playbackToken,
+      authToken: hlsMasterOverride ? null : token,
       bandwidth: hlsMasterOverride ? "seeded" : "measured",
+      // Wait for the session rather than start on the detail's URL and swap.
+      suspended: sessionState.status === "pending",
+      session: sessionState.session,
     },
   );
 }
@@ -434,12 +538,28 @@ export function useLivePlayback(
   videoRef: RefObject<HTMLVideoElement | null>,
   streamId: string,
 ): LivePlayback {
-  const master = liveHlsMasterUrl(streamId);
+  // Live's session half (item 7). A PRIVATE stream's session carries the only
+  // revocable, expiring credential live has; a public one carries none and none
+  // is sent. The API rewrites the rolling playlist's segment URIs to carry this
+  // same `?pt=`, so it survives relative resolution on Safari's native HLS.
+  const sessionState = usePlaybackSession("live", streamId);
+  const token = sessionState.session?.playback_token ?? null;
+  // The session advertises the playlist; the deterministic path stands in when
+  // no session arrived, which is exactly what live played before.
+  const master = liveHlsMasterUrl(streamId, token, sessionState.session?.hls_url);
   const playback = usePlaybackEngine(
     videoRef,
     streamId,
     { hlsJs: master, nativeHls: master },
     {
+      suspended: sessionState.status === "pending",
+      // Carries live_stream_id and no video_id, so nothing is measured yet — the
+      // ingest endpoint has no live path (see qoeSubject). Passed anyway so the
+      // day it does, this is already wired.
+      session: sessionState.session,
+      // hls.js cannot put the token in the URL for its own requests, so it rides
+      // as a Bearer header there; the media element gets it as `?pt=` above.
+      authToken: token,
       // Live playback needs a much shorter rewind window than VOD. Bounding it
       // prevents an open live tab from retaining the entire broadcast.
       backBufferLength: 30,
@@ -452,7 +572,10 @@ export function useLivePlayback(
       bandwidth: "engine",
     },
   );
-  return { ...playback, failed: playback.mode === null };
+  // "No engine" is only a failure once something was actually attempted — while
+  // the session is still in flight nothing has been tried yet, and reporting a
+  // dead stream there would flash an error panel over every live open.
+  return { ...playback, failed: sessionState.status !== "pending" && playback.mode === null };
 }
 
 /**
@@ -474,6 +597,11 @@ export function useRemotePlayback(
       // A foreign origin's path characteristics are its own; the server
       // measurement says nothing about it in either direction.
       bandwidth: "engine",
+      // No session and no telemetry, deliberately: this instance neither brokers
+      // nor delivers these bytes, so there is nothing here to broker and nothing
+      // about ITS delivery to measure. There is no remote playback-session
+      // endpoint to call.
+      session: null,
     },
   );
   return { mode, src };

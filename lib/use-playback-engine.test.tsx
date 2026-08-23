@@ -2,6 +2,10 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { api } from "@/lib/api";
+import type { PlaybackSession, QoEEventInput } from "@/lib/api/types";
+import { flushPlaybackEvents, resetPlaybackQoEForTest } from "@/lib/playback-qoe";
+
 import { useHlsPlayback, useLivePlayback, useRemotePlayback } from "./use-playback-engine";
 
 const hlsMock = vi.hoisted(() => ({
@@ -31,6 +35,7 @@ vi.mock("hls.js", () => {
       MANIFEST_PARSED: "manifestParsed",
       LEVEL_SWITCHED: "levelSwitched",
       FRAG_BUFFERED: "fragBuffered",
+      FRAG_LOADED: "fragLoaded",
       ERROR: "error",
     };
     static ErrorTypes = { NETWORK_ERROR: "networkError", MEDIA_ERROR: "mediaError" };
@@ -76,6 +81,16 @@ vi.mock("hls.js", () => {
   return { default: MockHls };
 });
 
+// The playback session every surface now opens before it plays. Mutable so a
+// test can change what the server answers — the same shape as hlsMock above.
+const sessionMock: {
+  video: Partial<PlaybackSession> | null;
+  live: Partial<PlaybackSession> | null;
+} = { video: null, live: null };
+
+/** Every QoE event the beacon queued, captured at the transport boundary. */
+let beaconed: QoEEventInput[] = [];
+
 beforeEach(() => {
   hlsMock.instances.length = 0;
   hlsMock.supported = true;
@@ -85,20 +100,53 @@ beforeEach(() => {
     configurable: true,
     value: class MediaSource {},
   });
+  // Defaults that reproduce what these fixtures always played: the session
+  // advertises the same master the detail used to.
+  sessionMock.video = {
+    session_id: "22222222-2222-2222-2222-222222222222",
+    packaging_format: "hls-ts",
+    hls_url: "/master.m3u8",
+  };
+  sessionMock.live = {
+    session_id: "44444444-4444-4444-4444-444444444444",
+    live_stream_id: "live-1",
+    packaging_format: "hls-ts",
+  };
+  vi.spyOn(api, "createVideoPlaybackSession").mockImplementation((id: string) =>
+    sessionMock.video
+      ? Promise.resolve({ video_id: id, ...sessionMock.video } as PlaybackSession)
+      : Promise.reject(new Error("no session")),
+  );
+  vi.spyOn(api, "createLivePlaybackSession").mockImplementation((id: string) =>
+    sessionMock.live
+      ? Promise.resolve({ live_stream_id: id, ...sessionMock.live } as PlaybackSession)
+      : Promise.reject(new Error("no session")),
+  );
+  beaconed = [];
+  resetPlaybackQoEForTest();
+  vi.spyOn(api, "postQoEEvents").mockImplementation((events) => {
+    beaconed.push(...events);
+    return Promise.resolve(undefined);
+  });
 });
 
 afterEach(() => {
   cleanup();
+  resetPlaybackQoEForTest();
+  vi.restoreAllMocks();
   Reflect.deleteProperty(window, "MediaSource");
 });
 
 describe("hls.js playback tuning", () => {
   it("bounds the VOD back-buffer and caps ABR to player/decode capacity", async () => {
+    // The SESSION advertises the generation-versioned master now; the detail's
+    // copy is stale the moment a re-transcode bumps the generation.
+    sessionMock.video = { ...sessionMock.video, hls_url: "/master.m3u8?v=generation-1" };
     const videoRef = { current: document.createElement("video") };
     const { result } = renderHook(() =>
       useHlsPlayback(
         videoRef,
-        { id: "video-1", hls_url: "/master.m3u8?v=generation-1" },
+        { id: "video-1", hls_url: "/master.m3u8?v=generation-0" },
         12,
       ),
     );
@@ -168,7 +216,7 @@ describe("hls.js playback tuning", () => {
       useHlsPlayback(videoRef, { id: "video-1", hls_url: "/master.m3u8" }, null),
     );
 
-    expect(result.current.mode).toBe("native-hls");
+    await waitFor(() => expect(result.current.mode).toBe("native-hls"));
     expect(result.current.levels).toEqual([]);
     expect(result.current.activeHeight).toBeNull();
     expect(result.current.src).toBe("http://localhost:8080/master.m3u8");
@@ -532,5 +580,302 @@ describe("federated playback", () => {
 
     expect(result.current.mode).toBeNull();
     expect(result.current.src).toBeUndefined();
+  });
+});
+
+// Phase-4 item 1: the session is the front door. It decides what plays, and it
+// is the ONLY place a media credential may come from.
+describe("the playback session drives the source", () => {
+  const VIDEO = { id: "video-1", hls_url: "/detail/master.m3u8" };
+
+  it("plays the session's manifest, not the detail's", async () => {
+    sessionMock.video = { ...sessionMock.video, hls_url: "/session/master.m3u8?v=gen7" };
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    expect(hlsMock.instances[0].source).toBe("http://localhost:8080/session/master.m3u8?v=gen7");
+  });
+
+  it("waits for the session rather than starting on the detail and swapping", async () => {
+    let release: (session: PlaybackSession) => void = () => {};
+    vi.spyOn(api, "createVideoPlaybackSession").mockReturnValue(
+      new Promise<PlaybackSession>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    // Nothing picked, nothing loaded, no progressive fallback started.
+    expect(result.current.mode).toBeNull();
+    expect(result.current.src).toBeUndefined();
+    expect(hlsMock.instances).toHaveLength(0);
+
+    await act(async () => {
+      release({
+        session_id: "22222222-2222-2222-2222-222222222222",
+        video_id: "video-1",
+        packaging_format: "cmaf",
+        hls_url: "/session/master.m3u8",
+      });
+    });
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    expect(hlsMock.instances[0].source).toBe("http://localhost:8080/session/master.m3u8");
+  });
+
+  it("falls back to the detail when no session arrived — playback is never blocked", async () => {
+    sessionMock.video = null; // the endpoint is unreachable / refuses
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    expect(hlsMock.instances[0].source).toBe("http://localhost:8080/detail/master.m3u8");
+    expect(result.current.mode).toBe("hls-js");
+  });
+
+  it("attaches NO credential when the session issued none", async () => {
+    // The constraint that protects delivery: any `?pt=` or Authorization header
+    // marks a media request credentialed, which forces no-store and blocks every
+    // CDN/presign redirect. A public video must carry neither.
+    const canPlayType = vi
+      .spyOn(HTMLMediaElement.prototype, "canPlayType")
+      .mockReturnValue("maybe");
+    Reflect.deleteProperty(window, "MediaSource");
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(result.current.mode).toBe("native-hls"));
+    expect(result.current.src).not.toContain("pt=");
+    canPlayType.mockRestore();
+
+    Object.defineProperty(window, "MediaSource", {
+      configurable: true,
+      value: class MediaSource {},
+    });
+    cleanup();
+    const second = { current: document.createElement("video") };
+    renderHook(() => useHlsPlayback(second, VIDEO, null));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    expect(hlsMock.instances[0].config.xhrSetup).toBeUndefined();
+  });
+
+  it("uses the session's token where the server issued one, over the unlock token", async () => {
+    // Both open the video's bytes; only the session's has this session's id
+    // signed into it, which is what lets the beacon be attested.
+    sessionMock.video = { ...sessionMock.video, playback_token: "pt-session", expires_in: 21_600 };
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() => useHlsPlayback(videoRef, VIDEO, null, null, "pt-unlock"));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const xhrSetup = hlsMock.instances[0].config.xhrSetup as (xhr: {
+      setRequestHeader: (k: string, v: string) => void;
+    }) => void;
+    const headers: Record<string, string> = {};
+    xhrSetup({ setRequestHeader: (k, v) => void (headers[k] = v) });
+    expect(headers.Authorization).toBe("Bearer pt-session");
+  });
+
+  it("surfaces dash_url without letting it touch engine selection", async () => {
+    // There is no DASH engine (item 3c is unbuilt). The manifest is carried, not
+    // consumed — hls.js still plays the HLS master off the same CMAF segments.
+    sessionMock.video = {
+      ...sessionMock.video,
+      packaging_format: "cmaf",
+      dash_url: "/api/v1/videos/video-1/hls/cmaf/stream.mpd",
+    };
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(result.current.mode).toBe("hls-js"));
+    expect(result.current.dashUrl).toBe("/api/v1/videos/video-1/hls/cmaf/stream.mpd");
+    expect(hlsMock.instances[0].source).toBe("http://localhost:8080/master.m3u8");
+  });
+
+  it("gives a private live stream its `?pt=` and its Bearer header, and a public one neither", async () => {
+    sessionMock.live = { ...sessionMock.live, playback_token: "pt-live", expires_in: 21_600 };
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() => useLivePlayback(videoRef, "live-1"));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    // hls.js requests the master itself and carries the token as a header; the
+    // media element cannot set one, so its URL carries `?pt=` (the API rewrites
+    // the rolling playlist's segment URIs to keep it).
+    expect(hlsMock.instances[0].source).toContain("pt=pt-live");
+    expect(hlsMock.instances[0].config.xhrSetup).toBeDefined();
+
+    cleanup();
+    hlsMock.instances.length = 0;
+    sessionMock.live = {
+      session_id: "44444444-4444-4444-4444-444444444444",
+      packaging_format: "hls-ts",
+    };
+    const publicRef = { current: document.createElement("video") };
+    renderHook(() => useLivePlayback(publicRef, "live-2"));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    expect(hlsMock.instances[0].source).not.toContain("pt=");
+    expect(hlsMock.instances[0].config.xhrSetup).toBeUndefined();
+  });
+
+  it("does not call the live player failed while its session is still in flight", async () => {
+    vi.spyOn(api, "createLivePlaybackSession").mockReturnValue(new Promise(() => {}));
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useLivePlayback(videoRef, "live-1"));
+    // mode is null because nothing has been tried yet — that is not a dead feed,
+    // and flashing "Can't play this live stream" over it would be a lie.
+    expect(result.current.mode).toBeNull();
+    expect(result.current.failed).toBe(false);
+  });
+});
+
+// Phase-4 item 4: the adapter is the single capture point, so one set of
+// assertions covers every surface.
+describe("quality telemetry", () => {
+  const VIDEO = { id: "video-1", hls_url: "/master.m3u8" };
+
+  /** Drive the element far enough to produce a first frame, then drain the queue. */
+  const firstFrame = async (el: HTMLVideoElement) => {
+    await act(async () => {
+      el.dispatchEvent(new Event("loadeddata"));
+    });
+    flushPlaybackEvents();
+  };
+
+  it("measures TTFF once, keyed on the session, and reports where the bytes came from", async () => {
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    hls.levels = [{ height: 480 }, { height: 720 }];
+    act(() => hls.emit("manifestParsed"));
+    act(() => hls.emit("levelSwitched", { level: 1 }));
+    // A fragment that was REDIRECTED to a CDN. The client reports the final URL
+    // and nothing else — the server maps that origin onto its own vocabulary.
+    act(() =>
+      hls.emit("fragLoaded", {
+        networkDetails: { responseURL: "https://cdn.example.test/o/seg_1.ts?sig=xyz" },
+      }),
+    );
+
+    await firstFrame(videoRef.current);
+    expect(beaconed).toHaveLength(1);
+    expect(beaconed[0]).toMatchObject({
+      type: "playback.start",
+      video_id: "video-1",
+      session_id: "22222222-2222-2222-2222-222222222222",
+      engine: "hls-js",
+      packaging_format: "hls-ts",
+      rendition_height: 720,
+      source_url: "https://cdn.example.test/o/seg_1.ts",
+    });
+    expect(beaconed[0].ttff_ms).toBeGreaterThanOrEqual(0);
+    // No delivery source is named by the client, ever.
+    expect(JSON.stringify(beaconed[0])).not.toContain("delivery_source");
+
+    // A second first-frame event does not produce a second start.
+    await firstFrame(videoRef.current);
+    expect(beaconed).toHaveLength(1);
+  });
+
+  it("reports rendition as unknowable on native HLS rather than as a null or a guess", async () => {
+    Reflect.deleteProperty(window, "MediaSource");
+    const canPlayType = vi
+      .spyOn(HTMLMediaElement.prototype, "canPlayType")
+      .mockReturnValue("maybe");
+    const el = document.createElement("video");
+    // The element knows its decoded height — and it is STILL not the rung the
+    // browser selected, so it must not be reported as one.
+    Object.defineProperty(el, "videoHeight", { configurable: true, value: 1080 });
+    const videoRef = { current: el };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+    await waitFor(() => expect(result.current.mode).toBe("native-hls"));
+
+    await firstFrame(el);
+    expect(beaconed).toHaveLength(1);
+    expect(beaconed[0].engine).toBe("native-hls");
+    expect("rendition_height" in beaconed[0]).toBe(false);
+    expect(JSON.stringify(beaconed[0])).not.toContain("rendition_height");
+    canPlayType.mockRestore();
+  });
+
+  it("counts a rung CHANGE as a switch, and the opening pick as none", async () => {
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    hls.levels = [{ height: 480 }, { height: 720 }];
+    act(() => hls.emit("manifestParsed"));
+
+    act(() => hls.emit("levelSwitched", { level: 0 })); // the opening pick
+    flushPlaybackEvents();
+    expect(beaconed).toHaveLength(0);
+
+    act(() => hls.emit("levelSwitched", { level: 1 })); // ABR moved up
+    act(() => hls.emit("levelSwitched", { level: 1 })); // ...and stayed there
+    flushPlaybackEvents();
+    expect(beaconed).toHaveLength(1);
+    expect(beaconed[0]).toMatchObject({
+      type: "playback.bitrate_switch",
+      rendition_height: 720,
+      metadata: { switch_count: 1 },
+    });
+  });
+
+  it("classifies a fatal engine error, and measures a rebuffer that ended", async () => {
+    const el = document.createElement("video");
+    const videoRef = { current: el };
+    renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    hls.levels = [{ height: 720 }];
+    act(() => hls.emit("manifestParsed"));
+    await firstFrame(el);
+    beaconed = [];
+
+    act(() => hls.emit("error", { fatal: true, type: "networkError", details: "fragLoadError" }));
+    await act(async () => {
+      el.dispatchEvent(new Event("waiting"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    await act(async () => {
+      el.dispatchEvent(new Event("playing"));
+    });
+    flushPlaybackEvents();
+
+    expect(beaconed.map((e) => e.type)).toEqual(["playback.error", "playback.rebuffer"]);
+    expect(beaconed[0].error_class).toBe("network");
+    expect(beaconed[1].rebuffer_ms).toBeGreaterThanOrEqual(150);
+    expect(beaconed[1].metadata).toMatchObject({ trigger: "playback" });
+  });
+
+  it("measures nothing without a session — the beacon is keyed by one", async () => {
+    sessionMock.video = null;
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+    await waitFor(() => expect(result.current.mode).toBe("hls-js"));
+
+    await firstFrame(videoRef.current);
+    expect(beaconed).toHaveLength(0);
+  });
+
+  it("measures nothing for LIVE or FEDERATED playback", async () => {
+    // Live: the ingest endpoint requires a video_id and a live session has none.
+    // Federated: this instance neither brokers nor delivers those bytes.
+    const liveRef = { current: document.createElement("video") };
+    renderHook(() => useLivePlayback(liveRef, "live-1"));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    await firstFrame(liveRef.current);
+    expect(beaconed).toHaveLength(0);
+
+    cleanup();
+    const remoteRef = { current: document.createElement("video") };
+    renderHook(() =>
+      useRemotePlayback(remoteRef, {
+        id: "remote-1",
+        stream_url: "https://origin.example/v/master.m3u8",
+      }),
+    );
+    await firstFrame(remoteRef.current);
+    expect(beaconed).toHaveLength(0);
   });
 });

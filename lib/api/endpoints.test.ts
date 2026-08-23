@@ -268,6 +268,62 @@ describe("api endpoints", () => {
     );
   });
 
+  it("liveHlsMasterUrl prefers the playlist the session advertised, and carries a live token", () => {
+    expect(liveHlsMasterUrl("ls1", null, "/api/v1/live/ls1/hls/master.m3u8")).toBe(
+      "http://localhost:8080/api/v1/live/ls1/hls/master.m3u8",
+    );
+    // A PRIVATE stream's token rides as `?pt=` — the API rewrites the rolling
+    // playlist's segment URIs to keep it, since relative resolution would drop it.
+    expect(liveHlsMasterUrl("ls1", "pt-live")).toBe(
+      "http://localhost:8080/api/v1/live/ls1/hls/master.m3u8?pt=pt-live",
+    );
+    // ...and a public stream gets no credential at all.
+    expect(liveHlsMasterUrl("ls1", null)).not.toContain("pt=");
+  });
+
+  it("createVideoPlaybackSession POSTs, carrying an unlock token as a bearer", async () => {
+    await api.createVideoPlaybackSession("v1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/playback-session");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>).authorization).toBeUndefined();
+
+    fetchMock.mockResolvedValue(okJson());
+    await api.createVideoPlaybackSession("v1", "pt-unlock");
+    const [, authed] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect((authed.headers as Record<string, string>).authorization).toBe("Bearer pt-unlock");
+  });
+
+  it("createLivePlaybackSession POSTs to the live endpoint", async () => {
+    await api.createLivePlaybackSession("ls1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/live/ls1/playback-session");
+    expect(init.method).toBe("POST");
+  });
+
+  it("postQoEEvents batches to the beacon endpoint without the browse session header", async () => {
+    // The QoE endpoint correlates on the playback session id; the browse
+    // `X-Vidra-Session` the search beacon sends is identity it never asked for.
+    await api.postQoEEvents(
+      [
+        {
+          type: "playback.start",
+          video_id: "v1",
+          engine: "hls-js",
+          packaging_format: "cmaf",
+          ttff_ms: 900,
+        },
+      ],
+      { keepalive: true },
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/qoe/events");
+    expect(init.method).toBe("POST");
+    expect(init.keepalive).toBe(true);
+    expect((init.headers as Record<string, string>)["X-Vidra-Session"]).toBeUndefined();
+    expect(JSON.parse(init.body as string).events).toHaveLength(1);
+  });
+
   it("getWatchHistory targets the history endpoint with pagination", async () => {
     await api.getWatchHistory({ limit: 5 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/history?limit=5");
