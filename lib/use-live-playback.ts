@@ -6,13 +6,19 @@ import type Hls from "hls.js";
 
 import { liveHlsMasterUrl } from "@/lib/api";
 import {
-  AUTO_LEVEL,
+  HLS_AUTO_LEVEL,
   buildLevelMenu,
   canPlayNativeHls,
   choosePlaybackMode,
+  resolveLevelIndex,
   type LevelOption,
   type PlaybackMode,
 } from "@/lib/hls";
+import {
+  AUTO_QUALITY,
+  isAutoQuality,
+  type QualitySelection,
+} from "@/lib/quality-id";
 
 // How many hls.js-recommended recoveries (network → startLoad, media →
 // recoverMediaError) to attempt after the manifest parsed before giving up.
@@ -26,8 +32,9 @@ export interface LivePlayback {
   src: string | undefined;
   /** Quality menu entries (Auto + one per height); [] when nothing is selectable. */
   levels: LevelOption[];
-  currentLevel: number;
-  setLevel: (level: number) => void;
+  /** The user's selection (AUTO_QUALITY = adaptive). Drives the menu's checked entry. */
+  currentQuality: QualitySelection;
+  setQuality: (quality: QualitySelection) => void;
   /**
    * True once the live playlist could not be played (hls.js fatal after bounded
    * recovery, or no HLS support at all). A live stream has no original file to
@@ -61,7 +68,7 @@ export function useLivePlayback(
   streamId: string,
 ): LivePlayback {
   const [levels, setLevels] = useState<LevelOption[]>([]);
-  const [currentLevel, setCurrentLevel] = useState(AUTO_LEVEL);
+  const [currentQuality, setCurrentQuality] = useState<QualitySelection>(AUTO_QUALITY);
   // hls.js pipeline failed fatally (set only from async callbacks). The
   // no-HLS-support case is derived synchronously below, not via state.
   const [hlsFailed, setHlsFailed] = useState(false);
@@ -103,9 +110,24 @@ export function useLivePlayback(
         hlsRef.current = hls;
         let parsed = false;
         let recoveries = 0;
+        // The codec family the quality menu is built from. A multi-codec master
+        // carries the same ladder several times over and ABR never leaves the
+        // family it is playing, so the menu must not either — see buildLevelMenu.
+        // The live plane needs this for exactly the reason VOD does: without it
+        // the menu offers rungs from every family and a manual pick can force a
+        // cross-codec (changeType) switch that ABR itself would never make.
+        let menuCodecSet: string | undefined;
         hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
           parsed = true;
-          setLevels(buildLevelMenu(hls.levels));
+          menuCodecSet = hls.levels[hls.firstAutoLevel]?.codecSet;
+          setLevels(buildLevelMenu(hls.levels, menuCodecSet));
+        });
+        hls.on(HlsClass.Events.LEVEL_SWITCHED, (_event, data) => {
+          const level = hls.levels[data.level];
+          if (level && level.codecSet !== menuCodecSet) {
+            menuCodecSet = level.codecSet;
+            setLevels(buildLevelMenu(hls.levels, menuCodecSet));
+          }
         });
         hls.on(HlsClass.Events.ERROR, (_event, data) => {
           if (!data.fatal) return;
@@ -144,15 +166,23 @@ export function useLivePlayback(
   return {
     mode,
     src,
+    // Native HLS (iOS Safari, no MSE) deliberately exposes NO quality entries:
+    // the browser owns variant selection there, steered by the SCORE attribute
+    // on each variant, and nothing can read or set the active one. See the same
+    // seam in use-hls-playback.
     levels: mode === "hls-js" ? levels : [],
-    currentLevel,
-    setLevel: (level: number) => {
+    currentQuality,
+    setQuality: (quality: QualitySelection) => {
       const hls = hlsRef.current;
       if (!hls) return;
+      const index = isAutoQuality(quality)
+        ? HLS_AUTO_LEVEL
+        : resolveLevelIndex(hls.levels, quality);
+      if (index === null) return;
       // Switch at the next fragment boundary instead of flushing the live
       // buffer and re-seeking immediately.
-      hls.nextLevel = level;
-      setCurrentLevel(level);
+      hls.nextLevel = index;
+      setCurrentQuality(quality);
     },
     failed,
   };

@@ -4,11 +4,12 @@ import {
   HLS_ABR_DEFAULT_ESTIMATE,
   HLS_BANDWIDTH_MAX_AGE_MS,
   HLS_BANDWIDTH_STORAGE_KEY,
-  autoLevelCapForNetwork,
+  autoHeightCapForNetwork,
   readStoredBandwidthEstimate,
   shouldConserveData,
   storeBandwidthEstimate,
 } from "./hls-bandwidth";
+import { levelIndexForHeightCap } from "./hls";
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -47,16 +48,28 @@ describe("HLS bandwidth estimate persistence", () => {
 
 describe("metered-network policy", () => {
   const levels = [{ height: 1080 }, { height: 360 }, { height: 720 }, { height: 480 }];
+  // The policy states a HEIGHT; the engine adapter translates it into whatever
+  // handle that engine caps with (for hls.js, a level index).
+  const capIndex = (connection?: Parameters<typeof autoHeightCapForNetwork>[0]) => {
+    const height = autoHeightCapForNetwork(connection);
+    return height === null ? null : levelIndexForHeightCap(levels, height);
+  };
 
-  it("caps Save-Data/2G at the highest 480p-or-lower rung", () => {
-    expect(autoLevelCapForNetwork(levels, { saveData: true, effectiveType: "4g" })).toBe(3);
-    expect(autoLevelCapForNetwork(levels, { effectiveType: "2g" })).toBe(3);
+  it("caps Save-Data/2G at 480p — the highest 480p-or-lower rung", () => {
+    expect(autoHeightCapForNetwork({ saveData: true, effectiveType: "4g" })).toBe(480);
+    expect(autoHeightCapForNetwork({ effectiveType: "2g" })).toBe(480);
+    expect(autoHeightCapForNetwork({ effectiveType: "slow-2g" })).toBe(480);
+    expect(capIndex({ saveData: true, effectiveType: "4g" })).toBe(3);
+    expect(capIndex({ effectiveType: "2g" })).toBe(3);
   });
 
   it("caps 3G at 720p and leaves unconstrained networks uncapped", () => {
-    expect(autoLevelCapForNetwork(levels, { effectiveType: "3g" })).toBe(2);
-    expect(autoLevelCapForNetwork(levels, { effectiveType: "4g" })).toBeNull();
-    expect(autoLevelCapForNetwork(levels)).toBeNull();
+    expect(autoHeightCapForNetwork({ effectiveType: "3g" })).toBe(720);
+    expect(capIndex({ effectiveType: "3g" })).toBe(2);
+    expect(autoHeightCapForNetwork({ effectiveType: "4g" })).toBeNull();
+    expect(autoHeightCapForNetwork()).toBeNull();
+    expect(capIndex({ effectiveType: "4g" })).toBeNull();
+    expect(capIndex()).toBeNull();
   });
 
   it("suppresses optional media on every constrained signal", () => {
