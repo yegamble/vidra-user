@@ -4277,6 +4277,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/qoe/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record playback quality-of-experience measurements
+         * @description Accepts a batch (<= 20) of playback measurements — time to first frame, a rebuffer that has ended, an ABR rung change, or a playback error — enriches each with a keyed viewer digest, classifies the reported origin into a bounded delivery source, and records them (phase-4 delivery item 4). Optional auth. Validation is all-or-nothing: one unsupported event type, engine, packaging format or error class rejects the whole batch. Always 202 on a well-formed batch, whether or not a row landed — the write is best-effort and a viewer's playback must never depend on it. Also 202, with nothing recorded, when the qoe_collection_enabled instance setting is off.
+         *
+         *     The client reports `source_url`, the final URL it actually fetched media from; the SERVER classifies it against its own configured CDN base, IPFS gateway, object store and public origin. An unrecognised origin becomes `other` and never a value of its own, which is what keeps the dimension bounded. The URL is never stored.
+         *
+         *     `session_id` is client-asserted unless the batch also carries the matching `playback_token`, which only a password-protected video has; the stored row and the admin rollups record which it was.
+         */
+        post: operations["recordQoEEvents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/qoe/playback-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Playback quality rollups for a time window (admin)
+         * @description Returns playback quality for a window, read entirely from the hourly rollup table (phase-4 delivery item 4). This is the backend contract behind the admin playback-health page and the phase-4 exit criterion: with no parameters it answers "TTFF/rebuffer percentiles per source for the last 24h".
+         *
+         *     Two projections come back. `sources` merges every row in the window into one entry per delivery source and is NOT paged — a page of a summary is not a summary — and its percentiles are recomputed from the summed histograms rather than averaged from the hourly ones, because percentiles do not merge. `buckets` is the hourly detail behind it, paged with limit/offset.
+         *
+         *     Percentiles are null, not zero, when the window recorded no measurement of that kind. `rendition_reporting_supported` is false for the native-hls engine permanently: the browser owns variant selection there and exposes no hook, so zero bitrate switches is a capability gap and not a quality result. `verified_session_count` below `event_count` means the rest of the events carried a session id the server could not attest.
+         */
+        get: operations["getQoEPlaybackHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/instance-settings": {
         parameters: {
             query?: never;
@@ -8417,6 +8465,125 @@ export interface components {
              * @default false
              */
             cookie_mode: boolean;
+        };
+        /** @description One playback measurement. Every vocabulary is closed and validated at the edge; an unknown value rejects the whole batch rather than being stored. */
+        QoEEventInput: {
+            /** @enum {string} */
+            type: "playback.start" | "playback.rebuffer" | "playback.bitrate_switch" | "playback.error";
+            /** Format: uuid */
+            video_id: string;
+            /**
+             * Format: uuid
+             * @description The playback session's id. Client-asserted unless playback_token is also present and verifies.
+             */
+            session_id?: string;
+            /** @description The session's playback token, when the video had one (password privacy only). Presenting it makes session_id attestable. */
+            playback_token?: string;
+            /** @description The final URL the client fetched media from. Classified server-side into a delivery source and then discarded — never stored. */
+            source_url?: string;
+            /** @enum {string} */
+            engine: "hls-js" | "native-hls" | "progressive" | "shaka";
+            /** @enum {string} */
+            packaging_format: "hls-ts" | "cmaf" | "progressive";
+            /** @description Required on playback.start, and rejected on every other type. */
+            ttff_ms?: number;
+            /** @description Duration of one rebuffer that has ENDED. Required on playback.rebuffer, and rejected on every other type. */
+            rebuffer_ms?: number;
+            /** @description The rung in play. Optional, and rejected outright from the native-hls engine, which cannot know it. */
+            rendition_height?: number;
+            /**
+             * @description Required on playback.error, and rejected on every other type.
+             * @enum {string}
+             */
+            error_class?: "network" | "media" | "manifest" | "decrypt" | "timeout" | "other";
+            /** @description Optional extras, deny-by-default: only a short allowlist of bounded enum/number/boolean keys survives, everything else is discarded. */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description p50/p95/p99 in milliseconds. Each is null — never 0 — when the window recorded no measurement of that kind. */
+        QoEPercentiles: {
+            p50_ms?: number | null;
+            p95_ms?: number | null;
+            p99_ms?: number | null;
+        };
+        /** @description One delivery source, merged across the whole window. */
+        QoESourceSummary: {
+            /** @enum {string} */
+            delivery_source?: "api-proxy" | "presigned" | "cdn" | "ipfs-gateway" | "origin-live" | "other";
+            /** Format: int64 */
+            event_count?: number;
+            /** Format: int64 */
+            start_count?: number;
+            /** Format: int64 */
+            rebuffer_count?: number;
+            /** Format: int64 */
+            bitrate_switch_count?: number;
+            /** Format: int64 */
+            error_count?: number;
+            /**
+             * Format: int64
+             * @description How many of these events carried a session id the server could verify against a signed playback token. Below event_count means the remainder are client-asserted.
+             */
+            verified_session_count?: number;
+            ttff?: components["schemas"]["QoEPercentiles"];
+            rebuffer?: components["schemas"]["QoEPercentiles"];
+            /** Format: int64 */
+            rebuffer_total_ms?: number;
+            /** @description Counts keyed by the closed error-class vocabulary. */
+            error_counts?: {
+                [key: string]: number;
+            };
+            engines?: ("hls-js" | "native-hls" | "progressive" | "shaka")[];
+            /** @description True when at least one row in the window was written by a different histogram version and was excluded from the percentile merge. Counts still include it. */
+            partial_percentiles?: boolean;
+        };
+        /** @description One hour of one (source, engine, packaging format) combination. */
+        QoEBucket: {
+            /** Format: date-time */
+            hour_bucket?: string;
+            /** @enum {string} */
+            delivery_source?: "api-proxy" | "presigned" | "cdn" | "ipfs-gateway" | "origin-live" | "other";
+            /** @enum {string} */
+            engine?: "hls-js" | "native-hls" | "progressive" | "shaka";
+            /** @enum {string} */
+            packaging_format?: "hls-ts" | "cmaf" | "progressive";
+            /** Format: int64 */
+            event_count?: number;
+            /** Format: int64 */
+            start_count?: number;
+            /** Format: int64 */
+            rebuffer_count?: number;
+            /** Format: int64 */
+            bitrate_switch_count?: number;
+            /** Format: int64 */
+            error_count?: number;
+            /** Format: int64 */
+            verified_session_count?: number;
+            ttff?: components["schemas"]["QoEPercentiles"];
+            rebuffer?: components["schemas"]["QoEPercentiles"];
+            /** Format: int64 */
+            rebuffer_total_ms?: number;
+            error_counts?: {
+                [key: string]: number;
+            };
+            /** @description False for native-hls, permanently: the browser owns variant selection through the manifest SCORE attribute and exposes no hook, so zero bitrate switches there is a capability gap rather than flawless ABR. */
+            rendition_reporting_supported?: boolean;
+            /** Format: date-time */
+            computed_at?: string;
+        };
+        QoEPlaybackHealth: {
+            /** Format: date-time */
+            window_start?: string;
+            /** Format: date-time */
+            window_end?: string;
+            /** @description One merged entry per delivery source over the whole window. Never paged. */
+            sources?: components["schemas"]["QoESourceSummary"][];
+            buckets?: components["schemas"]["QoEBucket"][];
+            /** Format: int64 */
+            buckets_total?: number;
+            limit?: number;
+            offset?: number;
         };
     };
     responses: never;
@@ -20144,6 +20311,112 @@ export interface operations {
             };
             /** @description The caller is not an admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recordQoEEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    events: components["schemas"]["QoEEventInput"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Batch accepted (or silently dropped because collection is off). */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description More than 20 events, or an event that failed validation. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getQoEPlaybackHealth: {
+        parameters: {
+            query?: {
+                /** @description Window start, RFC3339. Snapped down to the hour. Defaults to 24h before `until`. */
+                since?: string;
+                /** @description Window end (exclusive), RFC3339. Snapped up to the hour. Defaults to now. */
+                until?: string;
+                /** @description Hourly buckets per page. */
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The window summary plus one page of hourly buckets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QoEPlaybackHealth"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unparseable timestamp, or a window wider than 7 days. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Playback telemetry is not wired on this instance. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

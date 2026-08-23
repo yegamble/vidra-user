@@ -96,6 +96,8 @@ import type {
   FeedSort,
   InstanceResponse,
   RatingValue,
+  PlaybackSession,
+  QoEEventInput,
   Video,
   VideoChapters,
   SetVideoChaptersRequest,
@@ -250,6 +252,25 @@ export const api = {
     apiRequest<Video>(`/api/v1/videos/${encodeURIComponent(id)}`, { token, signal }),
 
   /**
+   * POST /api/v1/videos/{id}/playback-session — the one call the player makes
+   * before it plays (phase-4 delivery item 1). Answers which manifests exist,
+   * the packaging format they describe, the ladder rungs, a session id for
+   * quality telemetry, and — ONLY for a video that cannot be played without one
+   * (privacy `password`) — a playback token.
+   *
+   * Authorization is identical to the media routes, so `token` is the same
+   * video-scoped playback token the unlock flow mints: an invisible video is
+   * 404 and a password-protected video without a credential is 401
+   * `password_required`, which is exactly what the watch/embed unlock prompt is
+   * already driven by.
+   */
+  createVideoPlaybackSession: (id: string, token?: string, signal?: AbortSignal) =>
+    apiRequest<PlaybackSession>(
+      `/api/v1/videos/${encodeURIComponent(id)}/playback-session`,
+      { method: "POST", token, signal },
+    ),
+
+  /**
    * GET /api/v1/videos/{id}/download — the currently available downloadable
    * originals, progressive transcodes, HLS-quality MP4s, audio and subtitles.
    * The server applies the instance download policy and role bypass rules.
@@ -377,6 +398,24 @@ export const api = {
       method: "POST",
       body: { events },
       headers: searchSessionHeaders(),
+      keepalive: opts.keepalive,
+    }),
+
+  /**
+   * POST /api/v1/qoe/events — record a batch (≤20) of playback quality
+   * measurements (phase-4 delivery item 4). Optional auth; validation is
+   * all-or-nothing; always 202 on a well-formed batch whether or not a row
+   * landed. Best-effort: fire-and-forget from lib/playback-qoe.ts, which is the
+   * only caller. `keepalive` lets a flush survive a page unload.
+   *
+   * The browse `X-Vidra-Session` header the search beacon sends is deliberately
+   * NOT sent here: this endpoint correlates on the playback session id, and a
+   * second identifier it does not read would be identity it did not ask for.
+   */
+  postQoEEvents: (events: readonly QoEEventInput[], opts: { keepalive?: boolean } = {}) =>
+    apiRequest<void>("/api/v1/qoe/events", {
+      method: "POST",
+      body: { events },
       keepalive: opts.keepalive,
     }),
 
@@ -888,6 +927,20 @@ export const api = {
    */
   getLiveStream: (id: string, signal?: AbortSignal) =>
     apiRequest<LiveStream>(`/api/v1/live/${encodeURIComponent(id)}`, { signal }),
+
+  /**
+   * POST /api/v1/live/{id}/playback-session — the live half of the session model
+   * (phase-4 delivery item 7). Same object as the video session, carrying
+   * `live_stream_id` instead of `video_id`, `packaging_format` `hls-ts`, the live
+   * playlist URL, and — only for a PRIVATE stream — a playback token. That token
+   * is the only revocable, expiring credential live has; a public stream gets
+   * none, and none must be sent.
+   */
+  createLivePlaybackSession: (id: string, signal?: AbortSignal) =>
+    apiRequest<PlaybackSession>(
+      `/api/v1/live/${encodeURIComponent(id)}/playback-session`,
+      { method: "POST", signal },
+    ),
 
   /** PATCH /api/v1/live/{id} — edit a live stream (auth, owner). Never rotates the key. */
   updateLiveStream: (id: string, body: UpdateLiveStreamRequest) =>
@@ -2325,22 +2378,36 @@ export function videoOriginalUrl(id: string, pt?: string | null): string {
 }
 
 /**
- * Direct URL to a video's HLS master playlist. Only meaningful once the detail
- * response carries `hls_url` (the readiness signal — the playlist 404s before
- * transcoding completes). When supplied, the advertised URL is preferred so
- * generation-version cache keys returned by the backend are preserved.
+ * Resolve a manifest URL the backend advertised (on a playback session or a
+ * detail response) against the API base: absolute URLs pass through, the
+ * origin-relative paths the backend actually emits are prefixed. Falls back to a
+ * deterministic path when nothing was advertised.
+ */
+function advertisedMediaUrl(advertisedUrl: string | null | undefined, fallbackPath: string): string {
+  if (!advertisedUrl) return `${apiBaseUrl}${fallbackPath}`;
+  if (/^https?:\/\//i.test(advertisedUrl)) return advertisedUrl;
+  return `${apiBaseUrl}${advertisedUrl.startsWith("/") ? "" : "/"}${advertisedUrl}`;
+}
+
+/**
+ * Direct URL to a video's HLS master playlist. Only meaningful once a playback
+ * session (or, failing that, the detail) carries `hls_url` — the readiness
+ * signal, since the playlist 404s before transcoding completes. When supplied,
+ * the advertised URL is preferred so the generation-version cache key the
+ * backend minted is preserved.
  */
 export function videoHlsMasterUrl(
   id: string,
   pt?: string | null,
   advertisedUrl?: string | null,
 ): string {
-  const url = advertisedUrl
-    ? /^https?:\/\//i.test(advertisedUrl)
-      ? advertisedUrl
-      : `${apiBaseUrl}${advertisedUrl.startsWith("/") ? "" : "/"}${advertisedUrl}`
-    : `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}/hls/master.m3u8`;
-  return withPlaybackToken(url, pt);
+  return withPlaybackToken(
+    advertisedMediaUrl(
+      advertisedUrl,
+      `/api/v1/videos/${encodeURIComponent(id)}/hls/master.m3u8`,
+    ),
+    pt,
+  );
 }
 
 /**
@@ -2362,12 +2429,26 @@ export function ipfsHlsMasterUrl(ipfs?: {
 
 /**
  * Direct URL to a live stream's HLS master playlist. Only meaningful while the
- * stream is live and a media server is serving it (the get response's `hls_url`
- * is the readiness signal — the playlist 404s otherwise). The path is
- * deterministic per the contract, matching the LiveStream.hls_url value.
+ * stream is live and a media server is serving it (the session's / get
+ * response's `hls_url` is the readiness signal — the playlist 404s otherwise).
+ *
+ * `pt` is the live playback token from POST /live/{id}/playback-session, present
+ * only for a PRIVATE stream. Unlike VOD, the live playlist is written by the
+ * media server and mutates every two seconds, so the API rewrites the segment
+ * URIs to carry this same `?pt=` — relative resolution (RFC 3986 §5.2.2) would
+ * otherwise discard the query and leave Safari's native HLS, which cannot set a
+ * header, unable to fetch a single segment. Never pass a token that was not
+ * issued: any credential marks the request credentialed.
  */
-export function liveHlsMasterUrl(id: string): string {
-  return `${apiBaseUrl}/api/v1/live/${encodeURIComponent(id)}/hls/master.m3u8`;
+export function liveHlsMasterUrl(
+  id: string,
+  pt?: string | null,
+  advertisedUrl?: string | null,
+): string {
+  return withPlaybackToken(
+    advertisedMediaUrl(advertisedUrl, `/api/v1/live/${encodeURIComponent(id)}/hls/master.m3u8`),
+    pt,
+  );
 }
 
 /** Direct URL to a video's poster image (for an <img> src). */
