@@ -8,7 +8,7 @@ import { QualityMenu } from "@/components/QualityMenu";
 import { Button, EmptyState, ErrorState, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import type { LiveStream } from "@/lib/api";
-import { useLivePlayback } from "@/lib/use-live-playback";
+import { useLivePlayback } from "@/lib/use-playback-engine";
 
 type Status = "loading" | "error" | "notfound" | "ready";
 
@@ -167,11 +167,15 @@ function LivePlayer({ stream }: { stream: LiveStream }) {
         Your browser does not support the video tag.
       </video>
       {/* Only hls.js playback exposes controllable quality; the menu hides itself
-          for native-HLS playback (levels is empty). */}
+          for native-HLS playback (levels is empty). Sharing VOD's lifecycle also
+          gives live the "Auto (720p)" readout and the busy "…" on a pick that
+          has not landed yet — both come straight off LEVEL_SWITCHED. */}
       <div className="flex flex-wrap items-center gap-2">
         <QualityMenu
           levels={playback.levels}
           currentQuality={playback.currentQuality}
+          activeHeight={playback.activeHeight}
+          pending={playback.pending}
           onSelect={playback.setQuality}
         />
       </div>

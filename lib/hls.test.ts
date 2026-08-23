@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildLevelMenu,
-  canPlayNativeHls,
-  choosePlaybackMode,
   levelIndexForHeightCap,
   qualityIdOfLevel,
   qualityLabel,
@@ -20,56 +18,6 @@ function row(id: QualityId | typeof AUTO_QUALITY, label: string): LevelOption {
 }
 
 const AUTO_ROW = row(AUTO_QUALITY, "Auto");
-
-describe("choosePlaybackMode", () => {
-  it("plays the original when the detail carries no hls_url", () => {
-    expect(choosePlaybackMode({ hasHls: false, mseSupported: true, nativeHls: true })).toBe(
-      "original",
-    );
-  });
-
-  it("prefers hls.js (MSE) whenever it is available — it is the only quality-selectable path", () => {
-    expect(choosePlaybackMode({ hasHls: true, mseSupported: true, nativeHls: false })).toBe(
-      "hls-js",
-    );
-    // Even where the browser ALSO claims native HLS (Safari desktop, some
-    // Chromium builds), hls.js wins so the quality menu works.
-    expect(choosePlaybackMode({ hasHls: true, mseSupported: true, nativeHls: true })).toBe(
-      "hls-js",
-    );
-  });
-
-  it("falls back to native HLS without MSE (iOS Safari)", () => {
-    expect(choosePlaybackMode({ hasHls: true, mseSupported: false, nativeHls: true })).toBe(
-      "native-hls",
-    );
-  });
-
-  it("falls back to the original with no HLS capability at all", () => {
-    expect(choosePlaybackMode({ hasHls: true, mseSupported: false, nativeHls: false })).toBe(
-      "original",
-    );
-  });
-});
-
-describe("canPlayNativeHls", () => {
-  it("is true for maybe/probably and false for the empty string", () => {
-    expect(canPlayNativeHls({ canPlayType: () => "maybe" })).toBe(true);
-    expect(canPlayNativeHls({ canPlayType: () => "probably" })).toBe(true);
-    expect(canPlayNativeHls({ canPlayType: () => "" })).toBe(false);
-  });
-
-  it("asks about the Apple HLS MIME type", () => {
-    let asked = "";
-    canPlayNativeHls({
-      canPlayType: (t) => {
-        asked = t;
-        return "";
-      },
-    });
-    expect(asked).toBe("application/vnd.apple.mpegurl");
-  });
-});
 
 describe("qualityIdOfLevel", () => {
   it("mints height, codec family and — where the tree names one — the representation", () => {

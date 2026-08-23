@@ -1,11 +1,14 @@
-// Pure HLS playback decision + quality-menu helpers. No React, no hls.js — the
-// runtime wiring lives in lib/use-hls-playback.ts; these stay unit-testable.
+// Pure quality-menu helpers. No React, no hls.js — the runtime wiring lives in
+// lib/use-playback-engine.ts; these stay unit-testable.
 //
 // This module is the hls.js side of the engine seam: everything here speaks
 // hls.js's parsed level shape on the way IN and engine-neutral QualityIds
 // (lib/quality-id.ts) on the way OUT. The level INDEX never escapes — it is
 // minted into an id by buildLevelMenu and resolved back by resolveLevelIndex,
 // both here, so no caller ever stores one.
+//
+// Which engine plays at all is a separate question and lives in
+// lib/player-engine.ts, because it is not an hls.js question.
 
 import {
   AUTO_QUALITY,
@@ -15,16 +18,6 @@ import {
   type QualityId,
   type QualitySelection,
 } from "@/lib/quality-id";
-
-/**
- * How a video should be played:
- * - "hls-js"     — the master playlist via hls.js over MSE (quality selectable).
- * - "native-hls" — the master playlist straight into <video src> (Safari/iOS
- *                  without MSE; the browser owns quality/ABR).
- * - "original"   — the progressive Range-capable /original file (no transcode
- *                  ready, or no HLS support at all).
- */
-export type PlaybackMode = "hls-js" | "native-hls" | "original";
 
 /**
  * One entry of the quality menu.
@@ -94,34 +87,6 @@ export function qualityIdOfLevel(level: MenuLevel | undefined): QualityId | null
     ...(level.codecSet ? { codecFamily: level.codecSet } : {}),
     ...(repId !== undefined ? { repId } : {}),
   };
-}
-
-/**
- * canPlayNativeHls reports whether a media element claims native HLS support
- * (canPlayType is "maybe"/"probably" for the Apple HLS MIME type). True on
- * Safari; some Chromium builds also claim it, which is why hls.js is still
- * preferred whenever MSE exists (see choosePlaybackMode).
- */
-export function canPlayNativeHls(el: { canPlayType(type: string): string }): boolean {
-  return el.canPlayType("application/vnd.apple.mpegurl") !== "";
-}
-
-/**
- * choosePlaybackMode picks how to play a video. hls.js (MSE) is preferred over
- * native HLS even where both work — it is the only path that exposes manual
- * quality selection — so native is effectively the iOS-Safari fallback (no
- * MSE). Without an hls_url, or with no HLS capability at all, the original
- * progressive file plays as before.
- */
-export function choosePlaybackMode(input: {
-  hasHls: boolean;
-  mseSupported: boolean;
-  nativeHls: boolean;
-}): PlaybackMode {
-  if (!input.hasHls) return "original";
-  if (input.mseSupported) return "hls-js";
-  if (input.nativeHls) return "native-hls";
-  return "original";
 }
 
 /**
@@ -217,7 +182,7 @@ export function levelIndexForHeightCap(
 /**
  * qualityLabel renders the quality menu-button's label from the current
  * selection state, matching the smooth-switch (hls.nextLevel + LEVEL_SWITCHED)
- * pending model in use-hls-playback:
+ * pending model in use-playback-engine:
  * - a manual pick not yet confirmed by LEVEL_SWITCHED shows the target rung with
  *   a trailing ellipsis ("720p…") — the "busy" state the spec requires;
  * - once confirmed (or picked while ABR was already there) it shows that rung;

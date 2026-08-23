@@ -2,10 +2,13 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useHlsPlayback } from "./use-hls-playback";
-import { useLivePlayback } from "./use-live-playback";
+import { useHlsPlayback, useLivePlayback, useRemotePlayback } from "./use-playback-engine";
 
 const hlsMock = vi.hoisted(() => ({
+  // What hls.js itself answers to isSupported(). It is the AUTHORITY on whether
+  // that engine can run here, and it lives inside the chunk — which is why a
+  // "no" arrives asynchronously, after selection has provisionally picked it.
+  supported: true,
   instances: [] as Array<{
     config: Record<string, unknown>;
     currentLevel: number;
@@ -32,7 +35,7 @@ vi.mock("hls.js", () => {
     };
     static ErrorTypes = { NETWORK_ERROR: "networkError", MEDIA_ERROR: "mediaError" };
     static isSupported() {
-      return true;
+      return hlsMock.supported;
     }
 
     config: Record<string, unknown>;
@@ -75,6 +78,7 @@ vi.mock("hls.js", () => {
 
 beforeEach(() => {
   hlsMock.instances.length = 0;
+  hlsMock.supported = true;
   localStorage.clear();
   Reflect.deleteProperty(navigator, "connection");
   Object.defineProperty(window, "MediaSource", {
@@ -331,5 +335,202 @@ describe("hls.js playback tuning", () => {
       { height: 1080, codecFamily: "hvc1,mp4a" },
       { height: 720, codecFamily: "hvc1,mp4a" },
     ]);
+  });
+});
+
+// Selection is `probe → ask each engine → pick`, and the second half of the
+// probe is asynchronous: only hls.js knows whether hls.js can run here, and it
+// says so from inside the chunk. What it says must move the pick.
+describe("engine selection", () => {
+  const VIDEO = { id: "video-1", hls_url: "/master.m3u8" };
+
+  it("promotes native HLS when hls.js declines — not the whole progressive file", async () => {
+    // MSE-partial browser (ManagedMediaSource without MediaSource, or an hls.js
+    // that does not drive it): the master playlist is still perfectly playable
+    // by the browser itself. Routing this device to the progressive original is
+    // a bandwidth cliff — the entire file instead of an ABR ladder.
+    hlsMock.supported = false;
+    const canPlayType = vi
+      .spyOn(HTMLMediaElement.prototype, "canPlayType")
+      .mockReturnValue("maybe");
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    // hls.js won selection first (MSE is present) and the chunk WAS loaded —
+    // there is no other way to ask it — but it built no instance.
+    await waitFor(() => expect(result.current.mode).toBe("native-hls"));
+    expect(hlsMock.instances).toHaveLength(0);
+    expect(result.current.src).toBe("http://localhost:8080/master.m3u8");
+    expect(result.current.levels).toEqual([]);
+    canPlayType.mockRestore();
+  });
+
+  it("falls to the progressive file only when nothing here reads a playlist", async () => {
+    // Same decline, but this browser makes no native-HLS claim at all
+    // (jsdom's canPlayType is ""), so the progressive file really is next.
+    hlsMock.supported = false;
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(result.current.mode).toBe("progressive"));
+    expect(result.current.src).toBe("http://localhost:8080/api/v1/videos/video-1/original");
+  });
+
+  it("drops every HLS engine when the PLAYLIST is what failed", async () => {
+    // A fatal error before MANIFEST_PARSED is evidence about the stream, not
+    // about one engine — so a browser claiming native HLS must NOT be handed
+    // the same broken master (Chromium's canPlayType claims HLS it cannot
+    // play). VOD degrades to the progressive original, as it always has.
+    const canPlayType = vi
+      .spyOn(HTMLMediaElement.prototype, "canPlayType")
+      .mockReturnValue("maybe");
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    act(() => hls.emit("error", { fatal: true, type: "networkError" }));
+
+    await waitFor(() => expect(result.current.mode).toBe("progressive"));
+    expect(hls.destroyed).toBe(true);
+    expect(result.current.src).toBe("http://localhost:8080/api/v1/videos/video-1/original");
+    canPlayType.mockRestore();
+  });
+});
+
+// Live and federated playback had no tests at all before they shared VOD's
+// lifecycle. These assert the three behaviours the collapse was for.
+describe("live playback", () => {
+  it("reads the active rung out of LEVEL_SWITCHED, like VOD always has", async () => {
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useLivePlayback(videoRef, "live-1"));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    hls.levels = [{ height: 480 }, { height: 720 }];
+    act(() => hls.emit("manifestParsed"));
+    expect(result.current.activeHeight).toBeNull();
+
+    act(() => hls.emit("levelSwitched", { level: 1 }));
+    expect(result.current.activeHeight).toBe(720);
+    expect(result.current.failed).toBe(false);
+  });
+
+  it("retries twice, then fails honestly — there is no original to degrade to", async () => {
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useLivePlayback(videoRef, "live-1"));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    hls.levels = [{ height: 720 }];
+    act(() => hls.emit("manifestParsed"));
+
+    act(() => hls.emit("error", { fatal: true, type: "networkError" }));
+    act(() => hls.emit("error", { fatal: true, type: "mediaError" }));
+    expect(result.current.failed).toBe(false);
+    expect(hls.destroyed).toBe(false);
+
+    act(() => hls.emit("error", { fatal: true, type: "networkError" }));
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    expect(result.current.mode).toBeNull();
+    expect(hls.destroyed).toBe(true);
+  });
+
+  it("does not read or write the VOD path's remembered throughput", async () => {
+    localStorage.setItem(
+      "vidra:hls-bandwidth-estimate:v1",
+      JSON.stringify({ bitsPerSecond: 12_000_000, measuredAt: Date.now() }),
+    );
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() => useLivePlayback(videoRef, "live-1"));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    // Nothing has ever measured the live edge, so hls.js's own default stands.
+    expect(hls.config.abrEwmaDefaultEstimate).toBeUndefined();
+    hls.bandwidthEstimate = 3_000_000;
+    act(() => hls.emit("fragBuffered"));
+    expect(localStorage.getItem("vidra:hls-bandwidth-estimate:v1")).toContain("12000000");
+  });
+});
+
+describe("federated playback", () => {
+  const REMOTE = { id: "remote-1", stream_url: "https://origin.example/v/master.m3u8" };
+
+  it("gets the ABR tuning it previously had none of", async () => {
+    // The whole defect: `new Hls()` with no config at all, so an open federated
+    // watch retained the entire played stream in MSE and downloaded renditions
+    // the rendered player could not use.
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useRemotePlayback(videoRef, REMOTE));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    expect(hlsMock.instances[0].config).toMatchObject({
+      backBufferLength: 90,
+      capLevelToPlayerSize: true,
+      capLevelOnFPSDrop: true,
+    });
+    expect(hlsMock.instances[0].source).toBe(REMOTE.stream_url);
+    expect(result.current.mode).toBe("hls-js");
+    expect(result.current.src).toBeUndefined();
+  });
+
+  it("caps Auto on a metered connection, like every other surface", async () => {
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: { effectiveType: "3g" },
+    });
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() => useRemotePlayback(videoRef, REMOTE));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    hls.levels = [{ height: 1080 }, { height: 480 }, { height: 720 }];
+    act(() => hls.emit("manifestParsed"));
+    expect(hls.autoLevelCapping).toBe(2); // the 720p rung
+  });
+
+  it("retries a fatal error twice before giving up on the origin", async () => {
+    // It used to destroy on the FIRST fatal error, so one dropped segment
+    // request took the viewer to the link-out panel while VOD and live both
+    // recovered from the same blip.
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useRemotePlayback(videoRef, REMOTE));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    const hls = hlsMock.instances[0];
+    hls.levels = [{ height: 720 }];
+    act(() => hls.emit("manifestParsed"));
+
+    act(() => hls.emit("error", { fatal: true, type: "networkError" }));
+    act(() => hls.emit("error", { fatal: true, type: "mediaError" }));
+    expect(result.current.mode).toBe("hls-js");
+    expect(hls.destroyed).toBe(false);
+
+    // Exhausted: an origin we do not control has no fallback here, so the page
+    // keeps its "Watch on <origin>" link as the honest path.
+    act(() => hls.emit("error", { fatal: true, type: "networkError" }));
+    await waitFor(() => expect(result.current.mode).toBeNull());
+    expect(result.current.src).toBeUndefined();
+    expect(hls.destroyed).toBe(true);
+  });
+
+  it("plays a direct file with no engine chunk at all", () => {
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() =>
+      useRemotePlayback(videoRef, { id: "remote-2", stream_url: "https://origin.example/f.mp4" }),
+    );
+
+    expect(result.current.mode).toBe("progressive");
+    expect(result.current.src).toBe("https://origin.example/f.mp4");
+    expect(hlsMock.instances).toHaveLength(0);
+  });
+
+  it("selects nothing when the origin advertised no stream", () => {
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useRemotePlayback(videoRef, { id: "remote-3" }));
+
+    expect(result.current.mode).toBeNull();
+    expect(result.current.src).toBeUndefined();
   });
 });
