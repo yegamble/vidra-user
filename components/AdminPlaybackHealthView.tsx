@@ -632,11 +632,18 @@ function BucketRow({ bucket }: { bucket: QoEBucket }) {
   const breakdown = summarizeErrorCounts(bucket.error_counts);
   return (
     <tr>
-      <td
-        className="whitespace-nowrap px-3 py-2.5 align-top text-fg-muted"
-        title={bucket.hour_bucket ? formatDateTime(bucket.hour_bucket) : undefined}
-      >
-        {bucket.hour_bucket ? relativeTime(bucket.hour_bucket) : "—"}
+      {/* The absolute hour leads, not "3h ago": this table exists to answer
+          "when did it change", and the rollup key IS the hour. The relative
+          reading rides underneath for orientation. */}
+      <td className="whitespace-nowrap px-3 py-2.5 align-top">
+        {bucket.hour_bucket ? (
+          <>
+            <div className="text-fg">{formatDateTime(bucket.hour_bucket)}</div>
+            <div className="text-xs text-fg-muted">{relativeTime(bucket.hour_bucket)}</div>
+          </>
+        ) : (
+          <span className="text-fg-muted">—</span>
+        )}
       </td>
       <td className="px-3 py-2.5 align-top text-fg">
         {bucket.delivery_source ? DELIVERY_SOURCE_LABEL[bucket.delivery_source] : "—"}
