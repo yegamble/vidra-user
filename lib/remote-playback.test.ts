@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { chooseRemotePlaybackMode, isHlsUrl } from "./remote-playback";
+import { isHlsUrl, remotePlaybackSources } from "./remote-playback";
+import { pickEngine, selectEngines } from "./player-engine";
 
 describe("isHlsUrl", () => {
   it("detects .m3u8 playlists, with or without query/fragment", () => {
@@ -15,37 +16,35 @@ describe("isHlsUrl", () => {
   });
 });
 
-describe("chooseRemotePlaybackMode", () => {
+describe("remotePlaybackSources", () => {
   const HLS = "https://origin.example/v/master.m3u8";
   const MP4 = "https://origin.example/v/file.mp4";
 
-  it("is none without a stream_url", () => {
-    expect(
-      chooseRemotePlaybackMode({ streamUrl: undefined, mseSupported: true, nativeHls: true }),
-    ).toBe("none");
+  it("has no sources at all without a stream_url", () => {
+    expect(remotePlaybackSources(undefined)).toEqual({});
   });
 
-  it("plays a direct file as a plain <video src> regardless of HLS support", () => {
-    expect(chooseRemotePlaybackMode({ streamUrl: MP4, mseSupported: false, nativeHls: false })).toBe(
-      "direct",
-    );
+  it("offers a direct file to the progressive engine only", () => {
+    expect(remotePlaybackSources(MP4)).toEqual({ progressive: MP4 });
   });
 
-  it("prefers hls.js (MSE) for HLS streams", () => {
-    expect(chooseRemotePlaybackMode({ streamUrl: HLS, mseSupported: true, nativeHls: true })).toBe(
-      "hls-js",
-    );
+  it("offers a playlist to both HLS engines, so an Apple browser keeps the ladder", () => {
+    expect(remotePlaybackSources(HLS)).toEqual({ hlsJs: HLS, nativeHls: HLS });
   });
 
-  it("falls back to native HLS without MSE (iOS Safari)", () => {
-    expect(chooseRemotePlaybackMode({ streamUrl: HLS, mseSupported: false, nativeHls: true })).toBe(
-      "native-hls",
-    );
-  });
+  // The four outcomes the old chooseRemotePlaybackMode enumerated are now what
+  // the SHARED selection makes of these sources — one decision, not a second
+  // copy of it that can drift.
+  it("still yields the four federated outcomes through the shared selection", () => {
+    const pick = (
+      streamUrl: string | undefined,
+      support: { mseSupported: boolean; nativeHls: boolean },
+    ) => pickEngine(selectEngines(remotePlaybackSources(streamUrl), support), []);
 
-  it("is none for an HLS stream with no HLS capability at all", () => {
-    expect(chooseRemotePlaybackMode({ streamUrl: HLS, mseSupported: false, nativeHls: false })).toBe(
-      "none",
-    );
+    expect(pick(undefined, { mseSupported: true, nativeHls: true })).toBeNull();
+    expect(pick(MP4, { mseSupported: false, nativeHls: false })).toBe("progressive");
+    expect(pick(HLS, { mseSupported: true, nativeHls: true })).toBe("hls-js");
+    expect(pick(HLS, { mseSupported: false, nativeHls: true })).toBe("native-hls");
+    expect(pick(HLS, { mseSupported: false, nativeHls: false })).toBeNull();
   });
 });

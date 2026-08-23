@@ -3,8 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 // Mocked live-watch coverage (no real backend in `npm run ci`; the media plane
 // is proven end to end against a real vidra-core in e2e-backed/). The /live/[id]
 // surface loads a single live stream and, when it is live with an HLS playlist,
-// plays it via the SHARED HLS util (lib/use-live-playback → lib/hls + hls.js) —
-// the same pipeline the VOD watch page uses. Tiny valid m3u8 fixtures are served
+// plays it via the SHARED engine adapter (lib/use-playback-engine → lib/hls +
+// hls.js) — literally the same lifecycle the VOD watch page drives, configured
+// for live. Tiny valid m3u8 fixtures are served
 // so REAL hls.js parses a real master playlist (the quality menu appearing proves
 // the dynamic import + attachMedia + manifest fetch happened); segments are
 // aborted (no real encoder output in a hermetic mock).

@@ -55,7 +55,7 @@ import {
   shortcutForKey,
 } from "@/lib/player-shortcuts";
 import { useChapters } from "@/lib/use-chapters";
-import { useHlsPlayback } from "@/lib/use-hls-playback";
+import { useHlsPlayback } from "@/lib/use-playback-engine";
 import { useStoryboard } from "@/lib/use-storyboard";
 
 // How long the overlay controls linger after the last pointer activity while

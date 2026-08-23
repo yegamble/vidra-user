@@ -11,7 +11,7 @@ import { Button, EmptyState, ErrorState, Spinner, buttonClasses } from "@/compon
 import { ApiError, api, errorMessage, remoteVideoThumbnailUrl } from "@/lib/api";
 import type { RemoteVideo } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
-import { useRemotePlayback } from "@/lib/use-remote-playback";
+import { useRemotePlayback } from "@/lib/use-playback-engine";
 import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
 
 type Status = "loading" | "error" | "notfound" | "ready";
@@ -165,7 +165,7 @@ function RemotePlayer({ video, onEnded }: { video: RemoteVideo; onEnded?: () => 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playback = useRemotePlayback(videoRef, video);
 
-  if (playback.mode === "none") {
+  if (playback.mode === null) {
     return (
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-2xl bg-surface-muted p-6 text-center">
         {video.has_thumbnail ? (
