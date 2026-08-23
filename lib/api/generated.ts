@@ -3678,6 +3678,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/live/{id}/playback-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a playback session for a live stream
+         * @description The live half of the playback session model — the one call a player makes before it plays a live stream, answering with the SAME session object as POST /videos/{id}/playback-session. It carries `live_stream_id` instead of `video_id`, `packaging_format` `hls-ts`, the live `hls_url`, and — only for a PRIVATE stream — a playback token.
+         *
+         *     Authorization is IDENTICAL to the live media routes (GET /live/{id}/hls/master.m3u8), because it is the same code: 404 when live HLS serving is not configured, when there is no such stream, when the stream is private and the caller is neither its owner nor holding a valid live token, and when the stream is not currently live. There is no 401 equivalent of the video password prompt — live has no password tier.
+         *
+         *     Unlike the video session, a stream that is not live is 404 rather than 200 with no URLs: a video with no transcode still plays progressively, whereas an offline stream has nothing to play by any route, so a 200 would advertise an hls_url that 404s.
+         *
+         *     The token is CONDITIONAL BY DESIGN, exactly as it is for videos: it is minted only for the `private` tier, which is the only one that cannot be watched without a credential. Public and unlisted streams get no token, because any request carrying `?pt=` is treated as credentialed and is then never cached and never redirected.
+         *
+         *     The token is scoped to this stream and to live playback specifically (it opens no video), and it is bounded twice: by `expires_in`, and by the live-state check every live media request still passes — so ENDING THE BROADCAST revokes every token outstanding against it.
+         */
+        post: operations["createLivePlaybackSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/live/{id}/hls/master.m3u8": {
         parameters: {
             query?: never;
@@ -3687,7 +3715,9 @@ export interface paths {
         };
         /**
          * Get a live stream's HLS playlist
-         * @description Serves a live stream's HLS playlist while it is live. The media server writes segments into LIVE_HLS_ROOT keyed by stream ID; the api serves them gated by the stream's privacy (private → owner only) and state (only while live). 404 when LIVE_HLS_ROOT is not configured, the stream is not live, or it is private and not yours — the get response's hls_url tells clients when a live playlist exists.
+         * @description Serves a live stream's HLS playlist while it is live. The media server writes segments into LIVE_HLS_ROOT keyed by stream ID; the api serves them gated by the stream's privacy (private → owner, or the bearer of a live playback token from POST /live/{id}/playback-session) and state (only while live). 404 when LIVE_HLS_ROOT is not configured, the stream is not live, or it is private and you have neither claim — the get response's hls_url tells clients when a live playlist exists.
+         *
+         *     A `?pt=<playback_token>` on this request is propagated INTO the playlist: the relative segment URIs are rewritten to carry it, because a relative URI resolves against the playlist URL without inheriting its query string (RFC 3986 §5.2.2), and Safari's native HLS player — which cannot set an Authorization header — has no other way to keep the credential.
          */
         get: operations["getLiveHLSMaster"];
         put?: never;
@@ -3707,7 +3737,7 @@ export interface paths {
         };
         /**
          * Get a live HLS playlist or segment
-         * @description Serves one live HLS file: the media playlist ("<id>.m3u8", served as application/vnd.apple.mpegurl) or a numbered MPEG-TS segment ("<id>-<n>.ts", served as video/mp2t). Names outside that id-scoped shape are 404. Same privacy/state gate as the master playlist.
+         * @description Serves one live HLS file: the media playlist ("<id>.m3u8", served as application/vnd.apple.mpegurl) or a numbered MPEG-TS segment ("<id>-<n>.ts", served as video/mp2t). Names outside that id-scoped shape are 404. Same privacy/state gate as the master playlist, and the same `?pt=<playback_token>` credential — which is how a player reaches a private stream's segments, since the playlist it followed rewrote the token onto every segment URI.
          */
         get: operations["getLiveHLSFile"];
         put?: never;
@@ -5562,7 +5592,7 @@ export interface components {
         SetVideoChaptersRequest: {
             chapters: components["schemas"]["VideoChapter"][];
         };
-        /** @description A brokered playback session for one video. Returned by POST /videos/{id}/playback-session. */
+        /** @description A brokered playback session for one video or one live stream. Returned by POST /videos/{id}/playback-session and POST /live/{id}/playback-session — ONE object shape, so a player consumes a session the same way whichever it is playing. */
         PlaybackSession: {
             /**
              * Format: uuid
@@ -5572,17 +5602,22 @@ export interface components {
             session_id: string;
             /**
              * Format: uuid
-             * @description The video this session is for.
+             * @description The video this session is for. Present on every video session and absent on a live one — exactly one of video_id / live_stream_id is always present, and which one tells a client what it is playing.
              */
-            video_id: string;
+            video_id?: string;
             /**
-             * @description How the streaming tree is packaged — HLS over MPEG-TS segments, or a single CMAF tree serving both HLS and DASH from the same fMP4 segments. Omitted when no tree is ready. A client cannot infer this from hls_url: both formats serve HLS from master.m3u8.
+             * Format: uuid
+             * @description The live stream this session is for; present only on a live session. Separate from video_id rather than a shared polymorphic id because videos and live streams are different resources — a live stream's id resolves on no video endpoint.
+             */
+            live_stream_id?: string;
+            /**
+             * @description How the streaming tree is packaged — HLS over MPEG-TS segments, or a single CMAF tree serving both HLS and DASH from the same fMP4 segments. Omitted when no tree is ready. A client cannot infer this from hls_url: both formats serve HLS from master.m3u8. A live session is always `hls-ts` (the media server muxes MPEG-TS).
              * @example cmaf
              * @enum {string}
              */
             packaging_format?: "hls-ts" | "cmaf";
             /**
-             * @description Origin-relative, generation-versioned path of the HLS master playlist. Omitted until the transcoded tree is ready. Not a presigned URL — delivery-source selection (CDN, presigned redirect, IPFS gateway) is made per request when the bytes are served, so this URL carries no credential and does not expire.
+             * @description Origin-relative, generation-versioned path of the HLS master playlist. Omitted until the transcoded tree is ready. Not a presigned URL — delivery-source selection (CDN, presigned redirect, IPFS gateway) is made per request when the bytes are served, so this URL carries no credential and does not expire. On a live session this is the live playlist path and carries no version: live segments are ephemeral, are never stored, and have no generation to fence.
              * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/master.m3u8?v=ctw5ps0e8w00
              */
             hls_url?: string;
@@ -5591,9 +5626,13 @@ export interface components {
              * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/cmaf/stream.mpd
              */
             dash_url?: string;
-            /** @description The available ladder rungs (tallest first); omitted when none. */
+            /** @description The available ladder rungs (tallest first); omitted when none. Always omitted on a live session: the media server passes the publisher's single bitrate through, so there is no ladder to advertise. */
             renditions?: components["schemas"]["VideoRendition"][];
-            /** @description A video-scoped, session-scoped credential (a secret — do not log), present ONLY for a video that cannot be played without one, i.e. privacy `password`. Append it as `?pt=<playback_token>` (the header-less path Safari native-HLS needs) or send it as `Authorization: Bearer <playback_token>`. ABSENT is the normal case and is what keeps CDN/presigned delivery reachable — a credentialed media request is never cached and never redirected. */
+            /**
+             * @description A subject-scoped, session-scoped credential (a secret — do not log), present ONLY for a subject that cannot be played without one: a video with privacy `password`, or a `private` live stream. Append it as `?pt=<playback_token>` (the header-less path Safari native-HLS needs) or send it as `Authorization: Bearer <playback_token>`. ABSENT is the normal case and is what keeps CDN/presigned delivery reachable — a credentialed media request is never cached and never redirected.
+             *
+             *     A token is bound to BOTH its subject and its purpose: a video token opens no live stream and a live token opens no video. A live token additionally stops granting anything the moment the broadcast ends.
+             */
             playback_token?: string;
             /**
              * @description The token lifetime in seconds (21600 = 6 hours). Present only with playback_token.
@@ -18598,6 +18637,37 @@ export interface operations {
                 };
             };
             /** @description No such live stream, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createLivePlaybackSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session object. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackSession"];
+                };
+            };
+            /** @description No such/visible live stream, not currently live, or live HLS serving is not configured. */
             404: {
                 headers: {
                     [name: string]: unknown;
