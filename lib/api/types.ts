@@ -85,9 +85,10 @@ export type PlaybackPackagingFormat = NonNullable<PlaybackSession["packaging_for
 // dimension bounded — see lib/playback-qoe.ts.
 export type QoEEventInput = Schemas["QoEEventInput"];
 export type QoEEventType = QoEEventInput["type"];
-export type QoEEngine = QoEEventInput["engine"];
-export type QoEPackagingFormat = QoEEventInput["packaging_format"];
 export type QoEErrorClass = NonNullable<QoEEventInput["error_class"]>;
+// `QoEEngine` and `QoEPackagingFormat` are one closed vocabulary shared by the
+// beacon that writes these events and the rollups that read them, so they are
+// declared once — in the admin block below, projected off the rollup schema.
 
 // --- Search & discovery (search-service W4) ---------------------------------
 // Autocomplete suggestions. The response is inline in the spec (not a named
