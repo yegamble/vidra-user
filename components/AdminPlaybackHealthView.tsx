@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { AdminPagination } from "@/components/admin/AdminControls";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import type { BadgeVariant } from "@/components/ui/Badge";
@@ -622,7 +623,7 @@ function HourlyDetail({
           </tbody>
         </table>
       </div>
-      <Pagination total={total} limit={limit} offset={offset} onOffset={onOffset} />
+      <AdminPagination total={total} limit={limit} offset={offset} onOffset={onOffset} label="hours" />
     </section>
   );
 }
@@ -695,46 +696,5 @@ function BucketRow({ bucket }: { bucket: QoEBucket }) {
         {breakdown ? <div className="text-xs text-fg-muted">{breakdown}</div> : null}
       </td>
     </tr>
-  );
-}
-
-function Pagination({
-  total,
-  limit,
-  offset,
-  onOffset,
-}: {
-  total: number;
-  limit: number;
-  offset: number;
-  onOffset: (offset: number) => void;
-}) {
-  if (total <= limit && offset === 0) return null;
-  const start = total === 0 ? 0 : offset + 1;
-  const end = Math.min(offset + limit, total);
-  return (
-    <nav aria-label="Paginate hours" className="flex flex-wrap items-center justify-between gap-3">
-      <span className="text-xs tabular-nums text-fg-muted">
-        {start}–{end} of {total}
-      </span>
-      <div className="flex gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={offset === 0}
-          onClick={() => onOffset(Math.max(0, offset - limit))}
-        >
-          Previous
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={offset + limit >= total}
-          onClick={() => onOffset(offset + limit)}
-        >
-          Next
-        </Button>
-      </div>
-    </nav>
   );
 }
