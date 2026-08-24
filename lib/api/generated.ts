@@ -1876,6 +1876,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/license/clearkey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue an EME ClearKey license for a video
+         * @description This instance's own EME ClearKey license service (interfaces.md section 10). A player that saw a `drm` block on its playback session with key system `org.w3.clearkey` POSTs the key ids its CDM asked for and receives the matching content keys as a JWK set.
+         *
+         *     NOT USABLE YET, AND 404 ON EVERY INSTALL. The provider seam and its key store exist; the packaging step that would encrypt media and mint content keys does not. No video has keys, so this endpoint currently answers 404 for every video — which is also the answer when no DRM provider is configured at all, deliberately: distinguishing those states would report whether a given video is protected to a caller who has no business knowing.
+         *
+         *     CLEARKEY PROTECTS NOTHING. It hands the content key to any AUTHORISED viewer in the clear over TLS, which is what makes it a test key system. It exists so the whole path — session, license request, CDM playback — can be proven before a commercial key system is wired in.
+         *
+         *     Authorization is IDENTICAL to the media routes and the playback session: an invisible video is 404, and a password-protected video with no credential is 401 `password_required`. A password video's player presents its session `playback_token` as `Authorization: Bearer <token>` — a license request is an XHR the player makes itself, so unlike a native-HLS segment fetch it can set a header. Optional auth.
+         *
+         *     The response body contains key material and is always `no-store`.
+         */
+        post: operations["issueClearKeyLicense"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/passwords": {
         parameters: {
             query?: never;
@@ -5687,6 +5715,78 @@ export interface components {
              * @example 21600
              */
             expires_in?: number;
+            /** @description How this video's media is protected and where a license comes from (interfaces.md section 10). ABSENT for clear media — which is every video on every install, because the packaging step that would encrypt media has not landed — so a player that does not know this field behaves exactly as before. Never present on a live session: live media is not packaged and has nothing to protect. */
+            drm?: components["schemas"]["PlaybackSessionDRM"];
+        };
+        /** @description The content-protection block of a playback session. ONE object rather than separate protection and license fields, because a player consumes them together: a key id with nowhere to redeem it, or a license URL for unencrypted media, is not a state a client can act on. */
+        PlaybackSessionDRM: {
+            /**
+             * @description The ISO Common Encryption scheme the segments are encrypted with. `cenc` is full-sample AES-CTR — what Widevine, PlayReady and EME ClearKey are all defined against. FairPlay's `cbcs` pattern scheme is deliberately absent until something can produce it.
+             * @example cenc
+             * @enum {string}
+             */
+            scheme: "cenc";
+            /**
+             * Format: uuid
+             * @description The CENC key id (KID). PUBLIC: it is carried in the media itself, in the EME `encrypted` event the browser raises, and in the license request the player then makes. It names a key; it is not one.
+             */
+            key_id: string;
+            /** @description The EME key systems this asset can be played under, in the provider's order of preference. Omitted when the provider distributes keys some other way. */
+            key_systems?: components["schemas"]["PlaybackSessionKeySystem"][];
+        };
+        /** @description One EME key system and the license service behind it. */
+        PlaybackSessionKeySystem: {
+            /**
+             * @description The EME key system identifier the player passes to `navigator.requestMediaKeySystemAccess`.
+             * @example org.w3.clearkey
+             */
+            key_system: string;
+            /**
+             * @description Where the player POSTs its license request. ORIGIN-RELATIVE when this instance issues the licenses itself (the same convention hls_url and dash_url use), absolute when a third-party license service does.
+             * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/license/clearkey
+             */
+            license_url: string;
+        };
+        /** @description An EME ClearKey license request, exactly as a browser's CDM produces it (W3C Encrypted Media Extensions, "License Request Format"). */
+        ClearKeyLicenseRequest: {
+            /**
+             * @description The key ids the CDM is asking for: base64url WITHOUT padding, over the raw 16 bytes of each KID. At least one, at most 16. Only key ids belonging to this video are answered — a request naming another video's KID is 404, never that key.
+             * @example [
+             *       "a6uBEJ2t0dGAtADAT9QwyA"
+             *     ]
+             */
+            kids: string[];
+            /**
+             * @description The MediaKeySession type the CDM opened. Accepted and ignored: only `temporary` is ever valid, and rejecting a request over an echoed field would break players for no gain.
+             * @example temporary
+             */
+            type?: string;
+        };
+        /** @description An EME ClearKey license: a JWK set carrying the content keys for the requested key ids (W3C Encrypted Media Extensions, "License Format"). THE BODY IS KEY MATERIAL — it is served `no-store` and must never be cached, logged or persisted by anything that handles it. */
+        ClearKeyLicense: {
+            keys: components["schemas"]["ClearKeyJWK"][];
+            /**
+             * @description Session-lifetime license: the CDM does not persist the key and it dies with the MediaKeySession. `persistent-license` is for offline playback, which Vidra does not offer.
+             * @example temporary
+             * @enum {string}
+             */
+            type: "temporary";
+        };
+        /** @description One symmetric key as a JWK (RFC 7517/7518). Both `kid` and `k` are base64url WITHOUT padding over the raw 16 bytes — a padded value is rejected by browsers' CDMs and is the most common way a hand-written ClearKey endpoint fails while looking correct. */
+        ClearKeyJWK: {
+            /**
+             * @description JWK key type — `oct`, a symmetric octet sequence.
+             * @example oct
+             * @enum {string}
+             */
+            kty: "oct";
+            /**
+             * @description The key id this key answers, base64url-unpadded.
+             * @example a6uBEJ2t0dGAtADAT9QwyA
+             */
+            kid: string;
+            /** @description THE CONTENT KEY, base64url-unpadded. A secret handed to an authorised player in the clear, which is precisely why ClearKey is a test key system and protects nothing. Never log it. */
+            k: string;
         };
         /** @description A password to unlock a password-protected video (CORE-17). */
         UnlockVideoRequest: {
@@ -6799,7 +6899,13 @@ export interface components {
         };
         AdminUserListResponse: {
             users: components["schemas"]["AdminUser"][];
-            /** @example 20 */
+            /**
+             * Format: int64
+             * @description How many accounts match the same query, ignoring pagination. Counted with the request's own `q`, so a filtered page reports the size of its own result set rather than the instance total. Without it a client cannot tell a last page from a truncated one.
+             * @example 4649
+             */
+            total: number;
+            /** @example 50 */
             limit: number;
             /** @example 0 */
             offset: number;
@@ -8510,80 +8616,80 @@ export interface components {
         /** @description One delivery source, merged across the whole window. */
         QoESourceSummary: {
             /** @enum {string} */
-            delivery_source?: "api-proxy" | "presigned" | "cdn" | "ipfs-gateway" | "origin-live" | "other";
+            delivery_source: "api-proxy" | "presigned" | "cdn" | "ipfs-gateway" | "origin-live" | "other";
             /** Format: int64 */
-            event_count?: number;
+            event_count: number;
             /** Format: int64 */
-            start_count?: number;
+            start_count: number;
             /** Format: int64 */
-            rebuffer_count?: number;
+            rebuffer_count: number;
             /** Format: int64 */
-            bitrate_switch_count?: number;
+            bitrate_switch_count: number;
             /** Format: int64 */
-            error_count?: number;
+            error_count: number;
             /**
              * Format: int64
              * @description How many of these events carried a session id the server could verify against a signed playback token. Below event_count means the remainder are client-asserted.
              */
-            verified_session_count?: number;
-            ttff?: components["schemas"]["QoEPercentiles"];
-            rebuffer?: components["schemas"]["QoEPercentiles"];
+            verified_session_count: number;
+            ttff: components["schemas"]["QoEPercentiles"];
+            rebuffer: components["schemas"]["QoEPercentiles"];
             /** Format: int64 */
-            rebuffer_total_ms?: number;
+            rebuffer_total_ms: number;
             /** @description Counts keyed by the closed error-class vocabulary. */
             error_counts?: {
                 [key: string]: number;
             };
             engines?: ("hls-js" | "native-hls" | "progressive" | "shaka")[];
             /** @description True when at least one row in the window was written by a different histogram version and was excluded from the percentile merge. Counts still include it. */
-            partial_percentiles?: boolean;
+            partial_percentiles: boolean;
         };
         /** @description One hour of one (source, engine, packaging format) combination. */
         QoEBucket: {
             /** Format: date-time */
-            hour_bucket?: string;
+            hour_bucket: string;
             /** @enum {string} */
-            delivery_source?: "api-proxy" | "presigned" | "cdn" | "ipfs-gateway" | "origin-live" | "other";
+            delivery_source: "api-proxy" | "presigned" | "cdn" | "ipfs-gateway" | "origin-live" | "other";
             /** @enum {string} */
-            engine?: "hls-js" | "native-hls" | "progressive" | "shaka";
+            engine: "hls-js" | "native-hls" | "progressive" | "shaka";
             /** @enum {string} */
-            packaging_format?: "hls-ts" | "cmaf" | "progressive";
+            packaging_format: "hls-ts" | "cmaf" | "progressive";
             /** Format: int64 */
-            event_count?: number;
+            event_count: number;
             /** Format: int64 */
-            start_count?: number;
+            start_count: number;
             /** Format: int64 */
-            rebuffer_count?: number;
+            rebuffer_count: number;
             /** Format: int64 */
-            bitrate_switch_count?: number;
+            bitrate_switch_count: number;
             /** Format: int64 */
-            error_count?: number;
+            error_count: number;
             /** Format: int64 */
-            verified_session_count?: number;
-            ttff?: components["schemas"]["QoEPercentiles"];
-            rebuffer?: components["schemas"]["QoEPercentiles"];
+            verified_session_count: number;
+            ttff: components["schemas"]["QoEPercentiles"];
+            rebuffer: components["schemas"]["QoEPercentiles"];
             /** Format: int64 */
-            rebuffer_total_ms?: number;
+            rebuffer_total_ms: number;
             error_counts?: {
                 [key: string]: number;
             };
             /** @description False for native-hls, permanently: the browser owns variant selection through the manifest SCORE attribute and exposes no hook, so zero bitrate switches there is a capability gap rather than flawless ABR. */
-            rendition_reporting_supported?: boolean;
+            rendition_reporting_supported: boolean;
             /** Format: date-time */
-            computed_at?: string;
+            computed_at: string;
         };
         QoEPlaybackHealth: {
             /** Format: date-time */
-            window_start?: string;
+            window_start: string;
             /** Format: date-time */
-            window_end?: string;
+            window_end: string;
             /** @description One merged entry per delivery source over the whole window. Never paged. */
-            sources?: components["schemas"]["QoESourceSummary"][];
-            buckets?: components["schemas"]["QoEBucket"][];
+            sources: components["schemas"]["QoESourceSummary"][];
+            buckets: components["schemas"]["QoEBucket"][];
             /** Format: int64 */
-            buckets_total?: number;
-            limit?: number;
-            offset?: number;
+            buckets_total: number;
+            limit: number;
+            offset: number;
         };
     };
     responses: never;
@@ -13278,6 +13384,59 @@ export interface operations {
             };
             /** @description No such video, or it is not visible to the caller. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    issueClearKeyLicense: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClearKeyLicenseRequest"];
+            };
+        };
+        responses: {
+            /** @description The license (a JWK set). Never cached. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearKeyLicense"];
+                };
+            };
+            /** @description The video is password protected and the request carried neither owner/moderator authority nor a valid playback token (code `password_required`). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, it is not visible to the caller, it has no content keys, or no key system that issues licenses here is configured. One answer for all of them on purpose. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed: the body named no key ids, or more than 16. A well-formed request for a key id this video does not have is 404, not 422 — it is a valid request this video cannot answer. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

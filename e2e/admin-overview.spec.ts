@@ -134,7 +134,7 @@ async function signIn(page: Page, role: Role) {
 // header Admin (→ /admin/users) → the Overview tab.
 async function openOverview(page: Page) {
   await page.route(USERS, (route) =>
-    route.fulfill({ json: { users: [], limit: 100, offset: 0 } }),
+    route.fulfill({ json: { users: [], total: 0, limit: 100, offset: 0 } }),
   );
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   await page.getByRole("link", { name: "Overview" }).click();

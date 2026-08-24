@@ -696,6 +696,7 @@ test("the admin users page passes axe (admin, list rendered)", async ({ page }) 
             created_at: new Date().toISOString(),
           },
         ],
+        total: 2,
         limit: 100,
         offset: 0,
       },

@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { AdminPagination } from "@/components/admin/AdminControls";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -464,10 +465,11 @@ export function AdminJobRunsView({ refreshKey }: { refreshKey: number }) {
               </tbody>
             </table>
           </div>
-          <Pagination
+          <AdminPagination
             total={data.total}
             limit={data.limit}
             offset={data.offset}
+            label="executions"
             onOffset={(nextOffset) => {
               setRefreshing(true);
               setRefreshError(null);
@@ -717,7 +719,7 @@ function EventHistory({
           ))}
         </ol>
       )}
-      <Pagination
+      <AdminPagination
         total={detail.events_total}
         limit={detail.events_limit}
         offset={detail.events_offset}
@@ -725,48 +727,5 @@ function EventHistory({
         label="events"
       />
     </section>
-  );
-}
-
-function Pagination({
-  total,
-  limit,
-  offset,
-  onOffset,
-  label = "executions",
-}: {
-  total: number;
-  limit: number;
-  offset: number;
-  onOffset: (offset: number) => void;
-  label?: string;
-}) {
-  if (total <= limit && offset === 0) return null;
-  const start = total === 0 ? 0 : offset + 1;
-  const end = Math.min(offset + limit, total);
-  return (
-    <nav aria-label={`Paginate ${label}`} className="flex flex-wrap items-center justify-between gap-3">
-      <span className="text-xs text-fg-muted tabular-nums">
-        {start}–{end} of {total}
-      </span>
-      <div className="flex gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={offset === 0}
-          onClick={() => onOffset(Math.max(0, offset - limit))}
-        >
-          Previous
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={offset + limit >= total}
-          onClick={() => onOffset(offset + limit)}
-        >
-          Next
-        </Button>
-      </div>
-    </nav>
   );
 }

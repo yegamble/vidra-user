@@ -86,7 +86,7 @@ test("anonymous viewers are gated out of admin users", async ({ page }) => {
   let fetched = false;
   await page.route(USERS, (route) => {
     fetched = true;
-    return route.fulfill({ json: { users: [], limit: 20, offset: 0 } });
+    return route.fulfill({ json: { users: [], total: 0, limit: 20, offset: 0 } });
   });
   await page.goto("/admin/users");
   await expect(page.getByText("Administrators only")).toBeVisible();
@@ -103,7 +103,7 @@ test("a regular signed-in user gets no admin nav entry and is gated from admin u
   let fetched = false;
   await page.route(USERS, (route) => {
     fetched = true;
-    return route.fulfill({ json: { users: [], limit: 20, offset: 0 } });
+    return route.fulfill({ json: { users: [], total: 0, limit: 20, offset: 0 } });
   });
   await page.goto("/admin/users");
   await expect(page.getByText("Administrators only")).toBeVisible();
@@ -128,6 +128,7 @@ test("an admin sees the users table with a self marker and a self-guarded detail
           adminUser("u2", "alice", "user"),
           adminUser("u3", "bob", "moderator"),
         ],
+        total: 3,
         limit: 100,
         offset: 0,
       },
@@ -181,7 +182,12 @@ test("an admin can change a user's role via the segmented control in the detail"
   await signIn(page, "admin");
   await page.route(USERS, (route) =>
     route.fulfill({
-      json: { users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")], limit: 100, offset: 0 },
+      json: {
+        users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
     }),
   );
   await page.route(UPDATE, (route) =>
@@ -209,7 +215,12 @@ test("an admin can set and reset a user's storage quota override", async ({ page
   await signIn(page, "admin");
   await page.route(USERS, (route) =>
     route.fulfill({
-      json: { users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")], limit: 100, offset: 0 },
+      json: {
+        users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
     }),
   );
   let lastQuota: number | null | undefined;
@@ -253,7 +264,12 @@ test("an admin can deactivate a user", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(USERS, (route) =>
     route.fulfill({
-      json: { users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")], limit: 100, offset: 0 },
+      json: {
+        users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
     }),
   );
   await page.route(UPDATE, (route) =>
@@ -275,7 +291,12 @@ test("an admin can permanently delete a user after the double confirm", async ({
   await signIn(page, "admin");
   await page.route(USERS, (route) =>
     route.fulfill({
-      json: { users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")], limit: 100, offset: 0 },
+      json: {
+        users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
     }),
   );
   let deletedUrl = "";
@@ -310,7 +331,12 @@ test("cancelling the admin delete keeps the user", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(USERS, (route) =>
     route.fulfill({
-      json: { users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")], limit: 100, offset: 0 },
+      json: {
+        users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
     }),
   );
   let deleted = false;

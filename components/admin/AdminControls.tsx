@@ -73,6 +73,65 @@ export function AdminSearch({
   );
 }
 
+/**
+ * AdminPagination — the admin surfaces' limit/offset pager: a `start–end of
+ * total` readout on the left, Previous / Next on the right. It renders nothing
+ * when the whole result set already fits on the first page, so a small instance
+ * never sees pagination chrome it has no use for.
+ *
+ * It needs a real `total` from the endpoint. Without one a client cannot tell a
+ * last page from a truncated one, which is the difference between "that is
+ * everybody" and "there are 4,549 more" — so a surface whose contract carries no
+ * total must not fake this control.
+ *
+ * `label` names the rows for the nav's accessible name ("Paginate users").
+ */
+export function AdminPagination({
+  total,
+  limit,
+  offset,
+  onOffset,
+  label,
+}: {
+  total: number;
+  limit: number;
+  offset: number;
+  onOffset: (offset: number) => void;
+  label: string;
+}) {
+  if (total <= limit && offset === 0) return null;
+  const start = total === 0 ? 0 : offset + 1;
+  const end = Math.min(offset + limit, total);
+  return (
+    <nav
+      aria-label={`Paginate ${label}`}
+      className="flex flex-wrap items-center justify-between gap-3"
+    >
+      <span className="text-xs tabular-nums text-fg-muted">
+        {start}–{end} of {total}
+      </span>
+      <div className="flex gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={offset === 0}
+          onClick={() => onOffset(Math.max(0, offset - limit))}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={offset + limit >= total}
+          onClick={() => onOffset(offset + limit)}
+        >
+          Next
+        </Button>
+      </div>
+    </nav>
+  );
+}
+
 const ROLE_PILL: Record<UserRole, string> = {
   // Admin is the emphasised role: the documented `inverse` Badge chip
   // (`bg-fg text-canvas` — a black/near-black pill). Accent is reserved for

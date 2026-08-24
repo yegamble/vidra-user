@@ -96,7 +96,10 @@ export function hasUnreportableEngine(engines: readonly QoEEngine[] | undefined)
  * unknown engine is not a reason to accuse it of a capability gap.
  */
 export function bucketReportsRenditions(
-  bucket: Pick<QoEBucket, "engine" | "rendition_reporting_supported">,
+  // Partial, deliberately: the spec now declares both fields required, but the
+  // fallback below exists precisely for a server that predates them, and a
+  // required-field type would make that branch unreachable to its own callers.
+  bucket: Partial<Pick<QoEBucket, "engine" | "rendition_reporting_supported">>,
 ): boolean {
   if (typeof bucket.rendition_reporting_supported === "boolean") {
     return bucket.rendition_reporting_supported;
