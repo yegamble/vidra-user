@@ -4822,7 +4822,7 @@ export interface paths {
         };
         /**
          * List accounts (admin)
-         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Restricted to admins. Paginated via limit (1–100, default 20) and offset.
+         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Restricted to admins. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
          */
         get: operations["listUsers"];
         put?: never;
@@ -7994,7 +7994,7 @@ export interface components {
             source_version?: number;
             dry_run: boolean;
             conflict_policy: string;
-            /** @description Per-entity-kind counts, keyed by entity kind (user, channel, video, …). */
+            /** @description Per-entity-kind counts, keyed by entity kind (category_taxonomy, user, channel, actor_avatar, actor_banner, video, video_file, hls_playlist, thumbnail, caption, tag, view_count, chapter, rating, rendition, comment, playlist, playlist_item, follow). view_count counts VIDEOS whose view total was carried, never views: the source records one lifetime number per video and no daily breakdown, so the total is applied as a delta to the video's counter and no per-day rows are invented. category_taxonomy is the INSTANCE's category list, so it is 0 or 1: 1 when the source replaces the stock taxonomy (a categories plugin) and the setting is the import's to write, 0 for the majority of sources, which run the stock list and get no override written. actor_avatar and actor_banner count the source's account and channel profile images, which are FETCHED over HTTP from the source instance rather than read from its object store (no PeerTube configuration puts them there), and which are never written over an image this instance already has. */
             entities: {
                 [key: string]: components["schemas"]["PeerTubeImportCounts"];
             };
