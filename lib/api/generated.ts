@@ -1402,8 +1402,57 @@ export interface paths {
          * Search public videos by title or tag
          * @description Fuzzy (trigram) search over public, published video titles, ranked by similarity then recency. A video also matches when one of its free-form tags contains the query (case-insensitive); tag-only matches rank after title matches. Videos of accounts that opted out of discovery (User.unlisted) never appear. Ingested federated remote videos are UNIONed in by title match as remote:true cards (origin domain + watch/stream URLs); they respect the admin instance blocklist and an authenticated viewer's instance mutes. Each result carries its view count and whether a poster image exists. Auth is optional: an authenticated viewer's muted accounts' videos are hidden from results (per-viewer); an anonymous viewer sees all. Requires a non-empty q (<= 100 chars); paginated with limit (1–100, default 20) and offset (>= 0).
          *     Remote-URI search (config-parity W13): a URI-shaped ("https://…") or handle-shaped ("@user@host" / "user@host") first-page query is additionally resolved to remote content through the federation machinery (WebFinger/actor/object fetch, SSRF-guarded), gated per auth state by search_remote_uri_users (default on) / search_remote_uri_anonymous (default off) and rate-limited per caller (10 resolutions/minute by default). Resolution runs CONCURRENTLY with the local search under a strict ~2.5s deadline, so ordinary searches are unaffected and a slow origin delays the response by at most that deadline. A resolved remote video/channel/account rides the additive `remote` array; anything unresolvable (bad target, blocked domain, timeout, exhausted budget) silently yields local-only results. The 100-char q cap applies to shaped queries too — longer URLs are 400, as before.
+         *     Backends. This endpoint has two: the search service, and a local SQL fallback that must return the same result SET. The service accepts only the tag/category/language facets and ranks by its own relevance, so a request using `sort` other than `relevance`, or any of duration_min / duration_max / published_after / published_before / tags_all_of / tags_one_of, is served by local SQL — where the ordering and every predicate are real — regardless of whether the search service is healthy. Re-sorting or post-filtering a relevance-ranked, truncated id list would answer a different question ("the newest of the N most relevant") and would drift as the corpus grew, so it is not done.
          */
         get: operations["searchVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search channels by handle or display name
+         * @description Fuzzy (trigram) search over channel handles and display names, ranked by similarity then follower count. Optional auth.
+         *     Backed by core's own Postgres, NOT the search service. The search index holds videos; a channel appears there only as denormalised columns on the video rows it published, so a channel that has published nothing is invisible to it — and "find the channel that was just created" is exactly what a channel search is asked. A local trigram query has no such blind spot.
+         *     Visibility. A channel is a public publishing identity and has no privacy flag of its own, so the gate is on its OWNER: the account must be active (a deactivated, suspended, or deleted account takes its channels out of discovery with it) and must not have opted out of discovery (User.unlisted, §16 — direct /channels/{handle} URLs keep serving, which is the point of the flag). The owner's profile_public setting is NOT consulted: it governs whether the ACCOUNT page exists, not the channels.
+         *     An authenticated caller's muted and blocked accounts have their channels hidden, per-viewer, and the reported total is counted under the same predicate — so it never promises pages the caller cannot reach.
+         *     Requires a non-empty q (<= 100 chars); paginated with limit (1–100, default 20) and offset (>= 0).
+         */
+        get: operations["searchChannels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search public accounts by username or display name
+         * @description Fuzzy (trigram) search over account usernames and display names, ranked by similarity then recency. Optional auth. Backed by core's own Postgres: the search service does not index accounts at all.
+         *     ONLY PUBLICLY VISIBLE ACCOUNTS ARE RETURNED, under exactly the rule GET /users/{username}/profile already enforces — the account must be active AND have opted its profile in (User.profile_public). Deactivated, suspended, hard-deleted, and private accounts all collapse into that gate and none of them appear here, just as none of them resolve there.
+         *     One predicate applies here that does NOT apply to the profile lookup: accounts that opted out of discovery (User.unlisted) are excluded. That flag means "keep serving my direct URLs, keep me out of discovery" — a profile fetched by username is a direct URL, a search result list is discovery.
+         *     An authenticated caller's muted and blocked accounts are removed on top of that, and the reported total is counted under the identical predicate: a total computed over a wider set would leak the existence of the accounts the list refuses to return.
+         *     Requires a non-empty q (<= 100 chars); paginated with limit (1–100, default 20) and offset (>= 0).
+         */
+        get: operations["searchAccounts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5456,6 +5505,26 @@ export interface components {
         ChannelListResponse: components["schemas"]["PageMeta"] & {
             channels: components["schemas"]["Channel"][];
         };
+        ChannelSearchResponse: components["schemas"]["PageMeta"] & {
+            /** @example cooking */
+            query: string;
+            channels: components["schemas"]["Channel"][];
+        };
+        /** @description A public account as a search result card. Its fields are a strict SUBSET of PublicUserProfile, with the same keys and types, so a client can render a card with the profile type it already has. The two omitted parts are the ones that cannot be answered per row without a query each: the account's channel list, and the Bluesky handle behind its own opt-in. */
+        AccountSearchResult: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            display_name: string;
+            bio: string;
+            /** @description Whether the account has an avatar, served at GET /users/{username}/avatar. Present only when the profile-image service is wired; omitted otherwise, exactly as on PublicUserProfile. */
+            has_avatar?: boolean;
+        };
+        AccountSearchResponse: components["schemas"]["PageMeta"] & {
+            /** @example alice */
+            query: string;
+            accounts: components["schemas"]["AccountSearchResult"][];
+        };
         /** @description A channel collaborator (migration 0097). */
         ChannelMember: {
             /** Format: uuid */
@@ -6334,6 +6403,16 @@ export interface components {
             videos: components["schemas"]["Video"][];
             /** @description Remote-URI search hits (config-parity W13). Present only on the first page (offset 0) when the query was URI/handle-shaped, the caller's auth-state gate (search_remote_uri_users / search_remote_uri_anonymous) allowed resolution, AND the target resolved within the strict deadline; omitted otherwise — unresolvable/timeout/rate-limited resolution degrades silently to local-only results. */
             remote?: components["schemas"]["RemoteSearchResult"][];
+            /**
+             * Format: int64
+             * @description The search service's own hit count — the size of the set its ranker worked over. NOT the same number as `total`: `total` stays core's per-viewer count of matches this caller could actually be shown (the index holds static eligibility and knows nothing about this viewer's mutes, blocks, or unlisted owners), and it is the number to render as "N results".
+             *     ABSENT MEANS UNKNOWN, never zero. It is omitted whenever the local SQL backend served the request, and omitted by a deployed search service released before it reported the field.
+             */
+            search_total?: number;
+            /** @description True when the search service stopped looking rather than reaching the end: its ranker recalls a capped window, so on a large corpus search_total is a FLOOR and paging will run out before `total` is reached. Render the count as "top N" rather than "N" when this is true. Omitted — meaning unknown, not false — on the local SQL path and from a search service that predates the field. */
+            total_is_lower_bound?: boolean;
+            /** @description Whether a further page from the search service would return at least one result. Exact whenever present, and computed independently of the totals, so this is the field to drive "fetch another page". Omitted — meaning unknown, not false — on the local SQL path and from a search service that predates the field; a client seeing it absent should fall back to comparing offset + page length against `total`. */
+            has_more?: boolean;
         };
         /** @description A recommendation rail (search-service W4). items are video cards, each with an added `reason`; personalized reflects whether personalization was applied; source is "search" (ranked by vidra-search) or "fallback" (server-side trending / related heuristic). */
         RecommendationsResponse: {
@@ -12147,12 +12226,26 @@ export interface operations {
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
                 offset?: components["parameters"]["PageOffset"];
+                /** @description Result ordering, using the same `-field`/`field` convention as the admin video list. `relevance` (the default) is trigram similarity then recency — the behaviour this endpoint had before it accepted a sort at all, so existing callers are unaffected. `published_at` is an alias of created_at: local videos carry no separate published_at column, and remote rows project COALESCE(published_at, fetched_at) into the same column. An unrecognised value is a 400, never a silent fallback to a different order. Anything other than `relevance` is served by the local SQL backend (see the description above). */
+                sort?: "relevance" | "-published_at" | "published_at" | "-views" | "views";
                 /** @description Narrow to a free-form tag (matched case-insensitively). Excludes remote results. */
                 tag?: string;
                 /** @description Narrow to a taxonomy category id (from GET /videos/config); unknown values are 422. Excludes remote results. */
                 category?: string;
                 /** @description Narrow to a taxonomy language id (from GET /videos/config); unknown values are 422. Excludes remote results. */
                 language?: string;
+                /** @description Minimum video length in SECONDS, inclusive. A RANGE rather than the short/medium/long buckets the UI renders on top of it, because ranges compose and buckets do not — "4 to 10 minutes" is duration_min=240&duration_max=600, and a caller wanting something else is not stuck. Videos whose duration is unknown (no probe has run, or a federated actor never advertised one) do NOT match either bound: the filter answers "provably within the range". Applies to local and remote results alike. duration_min greater than duration_max is a 400. */
+                duration_min?: number;
+                /** @description Maximum video length in SECONDS, inclusive. See duration_min. */
+                duration_max?: number;
+                /** @description Only videos published at or after this RFC3339 timestamp (inclusive). Applies to local and remote results alike. published_after later than published_before is a 400 rather than an empty page that looks like "no data". */
+                published_after?: string;
+                /** @description Only videos published at or before this RFC3339 timestamp (inclusive). See published_after. */
+                published_before?: string;
+                /** @description Narrow to videos carrying EVERY listed free-form tag. Repeatable and/or comma-separated (`?tags_all_of=a&tags_all_of=b` and `?tags_all_of=a,b` are equivalent). Matched case-insensitively. Excludes remote results, which carry no local tags. The single `tag` parameter still works and is unchanged. */
+                tags_all_of?: string[];
+                /** @description Narrow to videos carrying AT LEAST ONE of the listed free-form tags. Same encoding and rules as tags_all_of. */
+                tags_one_of?: string[];
             };
             header?: never;
             path?: never;
@@ -12169,6 +12262,50 @@ export interface operations {
                     "application/json": components["schemas"]["VideoSearchResponse"];
                 };
             };
+            /** @description Missing or too-long q, an unrecognised sort, a malformed or negative duration bound, a non-RFC3339 timestamp, or an inverted duration/publish range. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description An unknown category or language filter value, or an over-long tag in tags_all_of / tags_one_of. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    searchChannels: {
+        parameters: {
+            query: {
+                q: string;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of matching channels. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelSearchResponse"];
+                };
+            };
             /** @description Missing or too-long q. */
             400: {
                 headers: {
@@ -12178,8 +12315,34 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description An unknown category or language filter value. */
-            422: {
+        };
+    };
+    searchAccounts: {
+        parameters: {
+            query: {
+                q: string;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of matching public accounts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSearchResponse"];
+                };
+            };
+            /** @description Missing or too-long q. */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
