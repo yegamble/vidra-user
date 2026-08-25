@@ -26,7 +26,7 @@ test("the admin audit log lists real security events", async ({ page }) => {
     (r) => /\/admin\/audit-log\?.*action=auth\.login/.test(r.url()) && r.ok(),
   );
   await page.getByLabel("Filter by action").fill("auth.login");
-  await page.getByRole("button", { name: "Filter" }).click();
+  await page.getByRole("button", { name: "Search" }).click();
   await filtered;
   await expect(page.getByText("auth.login").first()).toBeVisible();
 });
