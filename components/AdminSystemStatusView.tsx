@@ -9,7 +9,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { SystemStatus } from "@/lib/api";
-import { formatUptime } from "@/lib/format";
+import { formatUptime, formatVersion } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
@@ -82,7 +82,7 @@ function StatusPanel() {
       </div>
 
       <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
-        <Row label="Software" value={`${data.software.name} ${data.software.version}`} />
+        <Row label="Software" value={`${data.software.name} ${formatVersion(data.software.version)}`} />
         <Row label="Commit" value={data.software.commit} mono />
         <Row label="Build date" value={data.software.build_date} />
         <Row label="Go version" value={data.software.go_version} />

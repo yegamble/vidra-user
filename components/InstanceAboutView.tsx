@@ -17,6 +17,7 @@ import {
   XIcon,
 } from "@/components/icons";
 import { useInstanceAboutBootstrap } from "@/components/InstanceAboutProvider";
+import { formatVersion } from "@/lib/format";
 import { InstanceAboutSkeleton } from "@/components/InstanceAboutSkeleton";
 import { InstanceContactModal } from "@/components/InstanceContactModal";
 import { Markdown } from "@/components/Markdown";
@@ -585,7 +586,7 @@ function TechnicalSection({
         <dl className="divide-y divide-border-subtle text-sm">
           <TechnicalRow
             label="Software"
-            value={`${instance.software.name} v${instance.software.version}`}
+            value={`${instance.software.name} ${formatVersion(instance.software.version)}`}
           />
           <TechnicalRow
             label="Federation"
