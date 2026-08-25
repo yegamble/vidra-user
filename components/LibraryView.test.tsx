@@ -163,14 +163,17 @@ describe("LibraryView", () => {
 
   it("renders the history rail, playlist rows, and saved rows with exactly one Playlists link", async () => {
     mockHistory.mockResolvedValue({
+      total: 2,
       videos: [historyItem("h1", "Grading session", 95, 200), historyItem("h2", "Alps diary", 0, 400)],
       limit: 12,
       offset: 0,
     });
     mockPlaylists.mockResolvedValue({
+      total: 2, limit: 20, offset: 0,
       playlists: [playlist("p1", "Watch later", 6, "private"), playlist("p2", "Show reel", 1, "public")],
     });
     mockSaved.mockResolvedValue({
+      total: 1,
       videos: [video("s1", "Saved clip")],
       sort: "recent",
       limit: 20,
@@ -219,9 +222,9 @@ describe("LibraryView", () => {
   });
 
   it("hides the History section when there is nothing watched and shows empty hints", async () => {
-    mockHistory.mockResolvedValue({ videos: [], limit: 12, offset: 0 });
-    mockPlaylists.mockResolvedValue({ playlists: [] });
-    mockSaved.mockResolvedValue({ videos: [], sort: "recent", limit: 20, offset: 0 });
+    mockHistory.mockResolvedValue({ total: 0, videos: [], limit: 12, offset: 0 });
+    mockPlaylists.mockResolvedValue({ total: 0, limit: 20, offset: 0, playlists: [], });
+    mockSaved.mockResolvedValue({ total: 0, videos: [], sort: "recent", limit: 20, offset: 0 });
 
     render(<LibraryView />);
 
@@ -236,9 +239,9 @@ describe("LibraryView", () => {
   });
 
   it("requests a bounded history preview with an abort signal", async () => {
-    mockHistory.mockResolvedValue({ videos: [], limit: 12, offset: 0 });
-    mockPlaylists.mockResolvedValue({ playlists: [] });
-    mockSaved.mockResolvedValue({ videos: [], sort: "recent", limit: 20, offset: 0 });
+    mockHistory.mockResolvedValue({ total: 0, videos: [], limit: 12, offset: 0 });
+    mockPlaylists.mockResolvedValue({ total: 0, limit: 20, offset: 0, playlists: [], });
+    mockSaved.mockResolvedValue({ total: 0, videos: [], sort: "recent", limit: 20, offset: 0 });
     render(<LibraryView />);
     await waitFor(() => expect(mockHistory).toHaveBeenCalled());
     expect(mockHistory).toHaveBeenCalledWith({ limit: 12 }, expect.any(AbortSignal));
@@ -246,12 +249,14 @@ describe("LibraryView", () => {
 
   it("removes deleted history and saved entries from their owning lists", async () => {
     mockHistory.mockResolvedValue({
+      total: 1,
       videos: [historyItem("h1", "History deletion", 12, 100)],
       limit: 12,
       offset: 0,
     });
-    mockPlaylists.mockResolvedValue({ playlists: [] });
+    mockPlaylists.mockResolvedValue({ total: 0, limit: 20, offset: 0, playlists: [], });
     mockSaved.mockResolvedValue({
+      total: 1,
       videos: [video("s1", "Saved deletion")],
       sort: "recent",
       limit: 20,
@@ -273,12 +278,14 @@ describe("LibraryView", () => {
     previewMocks.featureEnabled = true;
     previewMocks.preferenceEnabled = true;
     mockHistory.mockResolvedValue({
+      total: 1,
       videos: [historyItem("h1", "Preview history", 12, 100)],
       limit: 12,
       offset: 0,
     });
-    mockPlaylists.mockResolvedValue({ playlists: [] });
+    mockPlaylists.mockResolvedValue({ total: 0, limit: 20, offset: 0, playlists: [], });
     mockSaved.mockResolvedValue({
+      total: 1,
       videos: [video("s1", "Preview saved", { duration_seconds: 120 })],
       sort: "recent",
       limit: 20,
@@ -298,12 +305,14 @@ describe("LibraryView", () => {
     previewMocks.featureEnabled = true;
     previewMocks.preferenceEnabled = false;
     mockHistory.mockResolvedValue({
+      total: 1,
       videos: [historyItem("h1", "Preview history", 12, 100)],
       limit: 12,
       offset: 0,
     });
-    mockPlaylists.mockResolvedValue({ playlists: [] });
+    mockPlaylists.mockResolvedValue({ total: 0, limit: 20, offset: 0, playlists: [], });
     mockSaved.mockResolvedValue({
+      total: 1,
       videos: [video("s1", "Preview saved")],
       sort: "recent",
       limit: 20,
@@ -322,6 +331,7 @@ describe("LibraryView", () => {
     previewMocks.preferenceEnabled = true;
     previewMocks.sensitivePolicy = "blur";
     mockHistory.mockResolvedValue({
+      total: 3,
       videos: [
         historyItem("remote", "Remote history", 12, 100) as HistoryItem,
         { ...historyItem("sensitive", "Sensitive history", 12, 100), is_sensitive: true },
@@ -329,8 +339,9 @@ describe("LibraryView", () => {
       limit: 12,
       offset: 0,
     });
-    mockPlaylists.mockResolvedValue({ playlists: [] });
+    mockPlaylists.mockResolvedValue({ total: 0, limit: 20, offset: 0, playlists: [], });
     mockSaved.mockResolvedValue({
+      total: 1,
       videos: [video("private", "Private saved", { privacy: "private" })],
       sort: "recent",
       limit: 20,

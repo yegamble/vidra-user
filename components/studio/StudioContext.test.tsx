@@ -77,7 +77,7 @@ afterEach(() => {
 describe("StudioProvider", () => {
   it("restores the persisted current channel when it still exists", async () => {
     window.localStorage.setItem(STORAGE_KEY, "second");
-    getMyChannels.mockResolvedValue({ channels: [channel("first"), channel("second")] });
+    getMyChannels.mockResolvedValue({ total: 2, limit: 20, offset: 0, channels: [channel("first"), channel("second")] });
 
     renderStudio();
 
@@ -88,7 +88,7 @@ describe("StudioProvider", () => {
 
   it("falls back to the first channel when the persisted handle is stale", async () => {
     window.localStorage.setItem(STORAGE_KEY, "ghost");
-    getMyChannels.mockResolvedValue({ channels: [channel("first"), channel("second")] });
+    getMyChannels.mockResolvedValue({ total: 2, limit: 20, offset: 0, channels: [channel("first"), channel("second")] });
 
     renderStudio();
 
@@ -97,7 +97,7 @@ describe("StudioProvider", () => {
   });
 
   it("falls back to the first channel when no selection is persisted", async () => {
-    getMyChannels.mockResolvedValue({ channels: [channel("first"), channel("second")] });
+    getMyChannels.mockResolvedValue({ total: 2, limit: 20, offset: 0, channels: [channel("first"), channel("second")] });
 
     renderStudio();
 
@@ -106,7 +106,7 @@ describe("StudioProvider", () => {
   });
 
   it("exposes an empty current handle and channel when the caller has zero channels", async () => {
-    getMyChannels.mockResolvedValue({ channels: [] });
+    getMyChannels.mockResolvedValue({ total: 0, limit: 20, offset: 0, channels: [], });
 
     renderStudio();
 
@@ -118,6 +118,7 @@ describe("StudioProvider", () => {
 
   it("exposes owned + editor channels with their roles for grouping", async () => {
     getMyChannels.mockResolvedValue({
+      total: 2, limit: 20, offset: 0,
       channels: [channel("mine", { role: "owner" }), channel("shared", { role: "editor" })],
     });
 
@@ -131,7 +132,7 @@ describe("StudioProvider", () => {
   });
 
   it("persists a switched channel to localStorage", async () => {
-    getMyChannels.mockResolvedValue({ channels: [channel("first"), channel("second")] });
+    getMyChannels.mockResolvedValue({ total: 2, limit: 20, offset: 0, channels: [channel("first"), channel("second")] });
 
     renderStudio();
 

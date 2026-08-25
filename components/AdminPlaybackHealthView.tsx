@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminPagination } from "@/components/admin/AdminControls";
+import { AdminTable, type AdminTableColumn } from "@/components/admin/AdminTable";
 import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import type { BadgeVariant } from "@/components/ui/Badge";
@@ -41,7 +42,11 @@ import {
 
 type Status = "loading" | "error" | "ready";
 
-/** Hourly rows per page of the detail table. */
+/**
+ * Hourly rows per page of the detail table. A day's worth, which is the unit an
+ * operator reads this in — and deliberately not one of `PAGE_SIZE_OPTIONS`, so
+ * the pager offers it as an extra choice rather than misreporting the size.
+ */
 const PAGE_SIZE = 24;
 
 /**
@@ -100,6 +105,7 @@ export function PlaybackHealthPanel() {
   const [error, setError] = useState<string | null>(null);
   const [windowHours, setWindowHours] = useState<WindowHours>(DEFAULT_WINDOW_HOURS);
   const [offset, setOffset] = useState(0);
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const [reloadKey, setReloadKey] = useState(0);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const collection = useCollectionSwitch();
@@ -108,7 +114,7 @@ export function PlaybackHealthPanel() {
     const controller = new AbortController();
     api
       .getPlaybackHealth(
-        { since: windowSince(windowHours), limit: PAGE_SIZE, offset },
+        { since: windowSince(windowHours), limit, offset },
         controller.signal,
       )
       .then((response) => {
@@ -133,7 +139,7 @@ export function PlaybackHealthPanel() {
     // `data` is read to decide refresh-vs-replace and is deliberately not a
     // dependency; adding it would re-fetch on every successful fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offset, reloadKey, windowHours]);
+  }, [limit, offset, reloadKey, windowHours]);
 
   // Visible tabs only, plus a focus catch-up. A backgrounded admin tab polling
   // an aggregate nobody is looking at is pure server load.
@@ -254,9 +260,15 @@ export function PlaybackHealthPanel() {
         <HourlyDetail
           buckets={buckets}
           total={data.buckets_total ?? 0}
-          limit={data.limit ?? PAGE_SIZE}
+          limit={data.limit ?? limit}
           offset={data.offset ?? 0}
           onOffset={setOffset}
+          onPageSize={(next) => {
+            // A new page size invalidates the window: row 48 of a 24-per-page
+            // list is not row 48 of a 10-per-page one.
+            setOffset(0);
+            setLimit(next);
+          }}
         />
       ) : null}
     </div>
@@ -571,18 +583,140 @@ function AttestationNote({ sources }: { sources: QoESourceSummary[] }) {
 
 // --- Hourly detail ----------------------------------------------------------
 
+/**
+ * The hourly rollup columns, declared as data for `AdminTable`. Every cell is
+ * `align: "top"` in the original; the shell's padding covers the rest, and the
+ * three "cannot be reported" cases stay explicit rather than printing a zero.
+ */
+const HOURLY_COLUMNS: readonly AdminTableColumn<QoEBucket>[] = [
+  {
+    key: "hour",
+    header: "Hour",
+    cellClassName: "whitespace-nowrap align-top",
+    // The absolute hour leads, not "3h ago": this table exists to answer "when
+    // did it change", and the rollup key IS the hour. The relative reading
+    // rides underneath for orientation.
+    cell: (bucket) =>
+      bucket.hour_bucket ? (
+        <>
+          <div className="text-fg">{formatDateTime(bucket.hour_bucket)}</div>
+          <div className="text-xs text-fg-muted">{relativeTime(bucket.hour_bucket)}</div>
+        </>
+      ) : (
+        <span className="text-fg-muted">—</span>
+      ),
+  },
+  {
+    key: "source",
+    header: "Source",
+    cellClassName: "align-top text-fg",
+    cell: (bucket) =>
+      bucket.delivery_source ? DELIVERY_SOURCE_LABEL[bucket.delivery_source] : "—",
+  },
+  {
+    key: "engine",
+    header: "Engine",
+    cellClassName: "align-top text-fg-muted",
+    cell: (bucket) => (bucket.engine ? ENGINE_LABEL[bucket.engine] : "—"),
+  },
+  {
+    key: "format",
+    header: "Format",
+    cellClassName: "align-top text-fg-muted",
+    cell: (bucket) =>
+      bucket.packaging_format ? PACKAGING_FORMAT_LABEL[bucket.packaging_format] : "—",
+  },
+  {
+    key: "playbacks",
+    header: "Playbacks",
+    cellClassName: "align-top tabular-nums text-fg",
+    cell: (bucket) => formatCount(bucket.start_count ?? 0),
+  },
+  {
+    key: "ttff-p50",
+    header: "TTFF p50",
+    cellClassName: "align-top tabular-nums text-fg",
+    cell: (bucket) => formatApproxMs(bucket.ttff?.p50_ms),
+  },
+  {
+    key: "ttff-p95",
+    header: "TTFF p95",
+    cellClassName: "align-top tabular-nums text-fg",
+    cell: (bucket) => formatApproxMs(bucket.ttff?.p95_ms),
+  },
+  {
+    key: "rebuffers",
+    header: "Rebuffers",
+    cellClassName: "align-top tabular-nums text-fg-muted",
+    cell: (bucket) => formatCount(bucket.rebuffer_count ?? 0),
+  },
+  {
+    key: "rebuffer-p95",
+    header: "Rebuffer p95",
+    cellClassName: "align-top tabular-nums text-fg",
+    cell: (bucket) => formatApproxMs(bucket.rebuffer?.p95_ms),
+  },
+  {
+    key: "switches",
+    header: "Switches",
+    cellClassName: "align-top",
+    // The one cell that must never print a number it does not have. Native HLS
+    // cannot name the variant it is playing, so a 0 here would read as "this
+    // source needed no ABR" when it means "this engine has no hook to tell us".
+    // Saying so is the whole reason engine is part of the rollup key.
+    cell: (bucket) =>
+      bucketReportsRenditions(bucket) ? (
+        <span className="tabular-nums text-fg">
+          {formatCount(bucket.bitrate_switch_count ?? 0)}
+        </span>
+      ) : (
+        <span
+          className="text-fg-muted"
+          title="The browser owns variant selection on native HLS through the manifest's SCORE attribute, so this engine cannot report switches at all."
+        >
+          Not reportable
+        </span>
+      ),
+  },
+  {
+    key: "errors",
+    header: "Errors",
+    cellClassName: "align-top",
+    cell: (bucket) => {
+      const errors = bucket.error_count ?? 0;
+      const breakdown = summarizeErrorCounts(bucket.error_counts);
+      return (
+        <>
+          <span
+            className={
+              errors > 0
+                ? "font-semibold tabular-nums text-danger"
+                : "tabular-nums text-fg-muted"
+            }
+          >
+            {formatCount(errors)}
+          </span>
+          {breakdown ? <div className="text-xs text-fg-muted">{breakdown}</div> : null}
+        </>
+      );
+    },
+  },
+];
+
 function HourlyDetail({
   buckets,
   total,
   limit,
   offset,
   onOffset,
+  onPageSize,
 }: {
   buckets: QoEBucket[];
   total: number;
   limit: number;
   offset: number;
   onOffset: (offset: number) => void;
+  onPageSize: (limit: number) => void;
 }) {
   return (
     <section aria-labelledby="playback-hours-heading" className="flex flex-col gap-3">
@@ -596,105 +730,33 @@ function HourlyDetail({
           something changed.
         </p>
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-border-subtle">
-        <table className="w-full min-w-[72rem] text-left text-sm" aria-label="Hourly playback quality">
-          <thead className="border-b border-border-subtle text-[10.5px] font-bold uppercase tracking-[0.05em] text-fg-muted">
-            <tr>
-              <th scope="col" className="px-3 py-2.5">Hour</th>
-              <th scope="col" className="px-3 py-2.5">Source</th>
-              <th scope="col" className="px-3 py-2.5">Engine</th>
-              <th scope="col" className="px-3 py-2.5">Format</th>
-              <th scope="col" className="px-3 py-2.5">Playbacks</th>
-              <th scope="col" className="px-3 py-2.5">TTFF p50</th>
-              <th scope="col" className="px-3 py-2.5">TTFF p95</th>
-              <th scope="col" className="px-3 py-2.5">Rebuffers</th>
-              <th scope="col" className="px-3 py-2.5">Rebuffer p95</th>
-              <th scope="col" className="px-3 py-2.5">Switches</th>
-              <th scope="col" className="px-3 py-2.5">Errors</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-subtle">
-            {buckets.map((bucket) => (
-              <BucketRow
-                key={`${bucket.hour_bucket}-${bucket.delivery_source}-${bucket.engine}-${bucket.packaging_format}`}
-                bucket={bucket}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <AdminPagination total={total} limit={limit} offset={offset} onOffset={onOffset} label="hours" />
+      <AdminTable<QoEBucket>
+        label="Hourly playback quality"
+        columns={HOURLY_COLUMNS}
+        rows={buckets}
+        rowKey={(bucket) =>
+          `${bucket.hour_bucket}-${bucket.delivery_source}-${bucket.engine}-${bucket.packaging_format}`
+        }
+        density="compact"
+        minWidth="72rem"
+        empty={
+          <EmptyState
+            title="Nothing on this page"
+            message="No rollup rows sit at this offset. Step back a page."
+          />
+        }
+        footer={
+          <AdminPagination
+            total={total}
+            limit={limit}
+            offset={offset}
+            onOffset={onOffset}
+            onPageSize={onPageSize}
+            label="hours"
+          />
+        }
+      />
     </section>
   );
 }
 
-function BucketRow({ bucket }: { bucket: QoEBucket }) {
-  const errors = bucket.error_count ?? 0;
-  const breakdown = summarizeErrorCounts(bucket.error_counts);
-  return (
-    <tr>
-      {/* The absolute hour leads, not "3h ago": this table exists to answer
-          "when did it change", and the rollup key IS the hour. The relative
-          reading rides underneath for orientation. */}
-      <td className="whitespace-nowrap px-3 py-2.5 align-top">
-        {bucket.hour_bucket ? (
-          <>
-            <div className="text-fg">{formatDateTime(bucket.hour_bucket)}</div>
-            <div className="text-xs text-fg-muted">{relativeTime(bucket.hour_bucket)}</div>
-          </>
-        ) : (
-          <span className="text-fg-muted">—</span>
-        )}
-      </td>
-      <td className="px-3 py-2.5 align-top text-fg">
-        {bucket.delivery_source ? DELIVERY_SOURCE_LABEL[bucket.delivery_source] : "—"}
-      </td>
-      <td className="px-3 py-2.5 align-top text-fg-muted">
-        {bucket.engine ? ENGINE_LABEL[bucket.engine] : "—"}
-      </td>
-      <td className="px-3 py-2.5 align-top text-fg-muted">
-        {bucket.packaging_format ? PACKAGING_FORMAT_LABEL[bucket.packaging_format] : "—"}
-      </td>
-      <td className="px-3 py-2.5 align-top tabular-nums text-fg">
-        {formatCount(bucket.start_count ?? 0)}
-      </td>
-      <td className="px-3 py-2.5 align-top tabular-nums text-fg">
-        {formatApproxMs(bucket.ttff?.p50_ms)}
-      </td>
-      <td className="px-3 py-2.5 align-top tabular-nums text-fg">
-        {formatApproxMs(bucket.ttff?.p95_ms)}
-      </td>
-      <td className="px-3 py-2.5 align-top tabular-nums text-fg-muted">
-        {formatCount(bucket.rebuffer_count ?? 0)}
-      </td>
-      <td className="px-3 py-2.5 align-top tabular-nums text-fg">
-        {formatApproxMs(bucket.rebuffer?.p95_ms)}
-      </td>
-      {/* The one cell that must never print a number it does not have. Native
-          HLS cannot name the variant it is playing, so a 0 here would read as
-          "this source needed no ABR" when it means "this engine has no hook to
-          tell us". Saying so is the whole reason engine is part of the rollup
-          key. */}
-      <td className="px-3 py-2.5 align-top">
-        {bucketReportsRenditions(bucket) ? (
-          <span className="tabular-nums text-fg">
-            {formatCount(bucket.bitrate_switch_count ?? 0)}
-          </span>
-        ) : (
-          <span
-            className="text-fg-muted"
-            title="The browser owns variant selection on native HLS through the manifest's SCORE attribute, so this engine cannot report switches at all."
-          >
-            Not reportable
-          </span>
-        )}
-      </td>
-      <td className="px-3 py-2.5 align-top">
-        <span className={errors > 0 ? "font-semibold tabular-nums text-danger" : "tabular-nums text-fg-muted"}>
-          {formatCount(errors)}
-        </span>
-        {breakdown ? <div className="text-xs text-fg-muted">{breakdown}</div> : null}
-      </td>
-    </tr>
-  );
-}

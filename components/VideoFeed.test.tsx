@@ -36,6 +36,7 @@ afterEach(cleanup);
 describe("VideoFeed server seed", () => {
   it("hydrates from the first page without a duplicate fetch and prioritizes one desktop row", () => {
     const initialPage = {
+      total: 4,
       videos: [video(1), video(2), video(3), video(4)],
       sort: "recent",
       scope: "local",

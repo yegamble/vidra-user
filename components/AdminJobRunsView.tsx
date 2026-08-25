@@ -162,6 +162,7 @@ export function AdminJobRunsView({ refreshKey }: { refreshKey: number }) {
   const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [offset, setOffset] = useState(0);
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const [reloadKey, setReloadKey] = useState(0);
   const [listRevision, setListRevision] = useState(0);
   const [streamSeed, setStreamSeed] = useState<string | null>(null);
@@ -184,7 +185,7 @@ export function AdminJobRunsView({ refreshKey }: { refreshKey: number }) {
           failure: filters.failure === "true" ? true : undefined,
           createdAfter: isoDate(filters.createdAfter),
           createdBefore: isoDate(filters.createdBefore),
-          limit: PAGE_SIZE,
+          limit,
           offset,
         },
         controller.signal,
@@ -209,7 +210,7 @@ export function AdminJobRunsView({ refreshKey }: { refreshKey: number }) {
         else setStatus("error");
       });
     return () => controller.abort();
-  }, [filters, offset, refreshKey, reloadKey]);
+  }, [filters, limit, offset, refreshKey, reloadKey]);
 
   const onLiveEvent = useCallback((message: ServerSentEvent) => {
     const event = parseJobEvent(message);
@@ -444,6 +445,12 @@ export function AdminJobRunsView({ refreshKey }: { refreshKey: number }) {
         />
       ) : (
         <>
+          {/* Deliberately NOT on `AdminTable`, unlike the other admin tables:
+              every execution can expand into a full-width detail row, so one
+              logical row emits TWO <tr>s. AdminTable's contract is one row in,
+              one <tr> out with declared columns — expressing an expansion row
+              would mean adding a second rendering mode for this single caller,
+              which costs more than the shared chrome saves. */}
           <div className="overflow-x-auto rounded-2xl border border-border-subtle">
             <table className="w-full min-w-[68rem] text-left text-sm" aria-label="Job executions">
               <thead className="border-b border-border-subtle text-[10.5px] font-bold uppercase tracking-[0.05em] text-fg-muted">
@@ -474,6 +481,14 @@ export function AdminJobRunsView({ refreshKey }: { refreshKey: number }) {
               setRefreshing(true);
               setRefreshError(null);
               setOffset(nextOffset);
+            }}
+            onPageSize={(nextLimit) => {
+              setRefreshing(true);
+              setRefreshError(null);
+              // A resize invalidates the window: row 50 of a 25-per-page list
+              // is not row 50 of a 10-per-page one.
+              setOffset(0);
+              setLimit(nextLimit);
             }}
           />
         </>
