@@ -23,6 +23,14 @@ export interface ListPage<T> {
 
 export type ListStatus = "loading" | "error" | "ready";
 
+/**
+ * One shared empty array for every "no rows yet" render. A fresh `[]` each time
+ * would give `items` a new identity on every render, which breaks any caller
+ * that treats it as a memo/effect dependency (and would spin a render-time
+ * reconciliation forever).
+ */
+const NO_ITEMS: unknown[] = [];
+
 export interface UsePagedListOptions<T> extends UseListQueryOptions {
   /**
    * Fetch one page. Receives the current `{limit, offset, sort, filters}` and an
@@ -114,8 +122,12 @@ export function usePagedList<T>(options: UsePagedListOptions<T>): PagedList<T> {
 
   useEffect(() => {
     const controller = new AbortController();
-    loadRef
-      .current(state, controller.signal)
+    // `Promise.resolve().then` rather than a bare call so a `load` that decides
+    // the request is unsendable can just THROW — a client-side validation
+    // failure lands in the same error state as a rejected fetch instead of
+    // escaping the effect and crashing the tree.
+    Promise.resolve()
+      .then(() => loadRef.current(state, controller.signal))
       .then((page) => {
         if (controller.signal.aborted) return;
         setLoaded({ state, attempt, page });
@@ -164,7 +176,7 @@ export function usePagedList<T>(options: UsePagedListOptions<T>): PagedList<T> {
   return {
     ...query,
     status,
-    items: current?.items ?? [],
+    items: current?.items ?? (NO_ITEMS as T[]),
     total: current?.total ?? 0,
     // Fall back on what we asked for so the pager is sized sanely on the first
     // paint and on an error, before any server echo exists.

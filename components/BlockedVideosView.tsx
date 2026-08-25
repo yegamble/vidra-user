@@ -1,18 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { PagedListShell } from "@/components/admin/PagedListShell";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { BlockedVideo } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
-
-type Status = "loading" | "error" | "ready";
+import { usePagedList } from "@/lib/use-paged-list";
 
 // BlockedVideosView is the moderator/admin block-list: every currently-blocked
 // video with the context to review it (channel, reason, who blocked it, when)
@@ -21,70 +19,47 @@ type Status = "loading" | "error" | "ready";
 export function BlockedVideosView() {
   return (
     <RoleGate minRole="moderator" action="review blocked videos">
-      <BlockList />
+      <ListBoundary label="blocked videos">
+        <BlockList />
+      </ListBoundary>
     </RoleGate>
   );
 }
 
 function BlockList() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [videos, setVideos] = useState<BlockedVideo[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getBlockedVideos({ limit: 100 }, controller.signal)
-      .then((res) => {
-        setVideos(res.videos);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
-
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  // After an unblock, drop the row locally so it disappears immediately; a later
-  // refetch confirms persistence.
-  const onUnblocked = useCallback((id: string) => {
-    setVideos((prev) => prev.filter((v) => v.video_id !== id));
-  }, []);
-
-  if (status === "loading") {
-    return (
-      <div className="flex justify-center py-24">
-        <Spinner label="Loading blocked videos" />
-      </div>
-    );
-  }
-  if (status === "error") {
-    return <ErrorState message="Could not load the block-list." onRetry={retry} />;
-  }
-  if (videos.length === 0) {
-    return (
-      <EmptyState
-        title="No blocked videos"
-        message="When a moderator blocks a video it is hidden from public surfaces and listed here."
-      />
-    );
-  }
+  const list = usePagedList<BlockedVideo>({
+    load: (query, signal) =>
+      api
+        .getBlockedVideos({ limit: query.limit, offset: query.offset }, signal)
+        .then((res) => ({
+          items: res.videos,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
 
   return (
-    <ul className="flex flex-col gap-3">
-      {videos.map((video) => (
-        <li key={video.video_id}>
-          <BlockedRow video={video} onUnblocked={onUnblocked} />
-        </li>
-      ))}
-    </ul>
+    <PagedListShell
+      list={list}
+      noun="blocked video"
+      errorMessage="Could not load the block-list."
+      emptyTitle="No blocked videos"
+      emptyMessage="When a moderator blocks a video it is hidden from public surfaces and listed here."
+    >
+      <ul className="flex flex-col gap-3">
+        {list.items.map((video) => (
+          <li key={video.video_id}>
+            {/* An unblocked video really leaves this list, so it must leave the
+                total too — `drop`, not a local filter. */}
+            <BlockedRow
+              video={video}
+              onUnblocked={(id) => list.drop((v) => v.video_id !== id)}
+            />
+          </li>
+        ))}
+      </ul>
+    </PagedListShell>
   );
 }
 

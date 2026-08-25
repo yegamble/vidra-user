@@ -1,20 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { PagedListShell } from "@/components/admin/PagedListShell";
 import { RoleGate } from "@/components/RoleGate";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronLeftIcon, FlagIcon } from "@/components/icons";
 import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
+import { FilterChipGroup, type FilterChipOption } from "@/components/ui/FilterChips";
 import { cn } from "@/lib/cn";
 import { api, errorMessage } from "@/lib/api";
-import type { Report, ReportStatus } from "@/lib/api";
+import type { Report, ReportStatus, ReportStatusFilter } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { usePagedList } from "@/lib/use-paged-list";
 
 const MAX_NOTE_LEN = 2000;
 // The mail-triage two-pane opens at `lg`; below that a report drills in over the
@@ -25,7 +27,38 @@ function isWideViewport(): boolean {
   return typeof window !== "undefined" && window.matchMedia(WIDE_QUERY).matches;
 }
 
-type Status = "loading" | "error" | "ready";
+/**
+ * The queue's real three-way status. It used to be Open / All, because the
+ * endpoint's filter was a boolean pretending to be an enum — asking for
+ * `resolved` returned the whole queue. Now that the backend rejects an
+ * unrecognised value, "Resolved" is a question that can be asked.
+ *
+ * Filtering is the SERVER's job here, not a post-fetch `Array.filter`: the old
+ * view narrowed the page it had been handed, so "Open" meant "the open ones
+ * among the first hundred reports".
+ */
+const STATUS_OPTIONS: readonly FilterChipOption<ReportStatusFilter>[] = [
+  { value: "open", label: "Open" },
+  { value: "resolved", label: "Resolved" },
+  { value: "all", label: "All" },
+];
+
+const DEFAULT_STATUS: ReportStatusFilter = "open";
+
+const EMPTY_COPY: Record<ReportStatusFilter, { title: string; message: string }> = {
+  open: {
+    title: "No open reports",
+    message: "Nothing to review right now. Reports filed by viewers will appear here.",
+  },
+  resolved: {
+    title: "No resolved reports",
+    message: "Reports you accept or reject are kept here as a record.",
+  },
+  all: {
+    title: "No reports yet",
+    message: "When viewers report a video or comment, it shows up here.",
+  },
+};
 
 // ModerationQueue is the moderator/admin abuse-report triage, styled as a Mail
 // split view: a queue list (left) selects a report into a detail pane (right).
@@ -34,196 +67,135 @@ type Status = "loading" | "error" | "ready";
 export function ModerationQueue() {
   return (
     <RoleGate minRole="moderator" action="review reports">
-      <Queue />
+      <ListBoundary label="reports">
+        <Queue />
+      </ListBoundary>
     </RoleGate>
   );
 }
 
 function Queue() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [reports, setReports] = useState<Report[]>([]);
-  const [openOnly, setOpenOnly] = useState(true);
-  const [reloadKey, setReloadKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const list = usePagedList<Report>({
+    filterKeys: ["status"],
+    load: (query, signal) =>
+      api
+        .getReports(
+          {
+            status: (query.filters.status as ReportStatusFilter) ?? DEFAULT_STATUS,
+            limit: query.limit,
+            offset: query.offset,
+          },
+          signal,
+        )
+        .then((res) => ({
+          items: res.reports,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getReports({ openOnly, limit: 100 }, controller.signal)
-      .then((res) => {
-        setReports(res.reports);
-        setStatus("ready");
-        // Keep a report selected on the two-pane view so the detail pane is
-        // never blank (initial load / filter switch); narrow viewports stay on
-        // the queue until the moderator taps in.
-        const vis = openOnly ? res.reports.filter((r) => r.status === "open") : res.reports;
-        setSelectedId((cur) =>
-          cur && vis.some((r) => r.id === cur)
-            ? cur
-            : isWideViewport()
-              ? (vis[0]?.id ?? null)
-              : null,
-        );
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [openOnly, reloadKey]);
+  const status = (list.filters.status as ReportStatusFilter) ?? DEFAULT_STATUS;
+  const { items, patch, drop } = list;
 
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  // Switch filter (re-triggers the fetch effect). Set loading here rather than in
-  // the effect body so a stale list doesn't flash before the refetch resolves.
-  const selectFilter = useCallback(
-    (next: boolean) => {
-      if (next === openOnly) return;
-      setStatus("loading");
-      setOpenOnly(next);
-    },
-    [openOnly],
-  );
-
-  const visible = useMemo(
-    () => (openOnly ? reports.filter((r) => r.status === "open") : reports),
-    [openOnly, reports],
-  );
+  // The selection is DERIVED, not synchronised: whatever the moderator picked,
+  // falling back to the first report on the two-pane layout so the detail pane
+  // is never blank. That makes a filter switch or a page turn self-correcting —
+  // the old id simply is not in `items` any more — with no effect to keep in
+  // step. Narrow viewports get no fallback: they stay on the queue until tapped.
   const selected = useMemo(
-    () => visible.find((r) => r.id === selectedId) ?? null,
-    [visible, selectedId],
+    () =>
+      items.find((r) => r.id === selectedId) ??
+      (isWideViewport() ? (items[0] ?? null) : null),
+    [items, selectedId],
   );
 
-  // After a resolve, update the row's status locally so it drops out of the
-  // open-only view immediately; a later refetch confirms persistence. In the
-  // open-only view the resolved report leaves the queue, so advance the detail
-  // pane to the next open report (two-pane view only).
+  // After a resolve the row keeps its place (and its slot in the total) with a
+  // new status. In the open-only view it no longer belongs, so the detail pane
+  // advances to the next still-open report on the two-pane layout.
   const onResolved = useCallback(
     (id: string, newStatus: ReportStatus) => {
-      setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
-      if (!openOnly) return;
+      patch((reports) => reports.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
+      if (status !== "open") return;
       setSelectedId((cur) => {
         if (cur !== id) return cur;
-        const next = reports.find((r) => r.status === "open" && r.id !== id);
+        const next = items.find((r) => r.status === "open" && r.id !== id);
         return isWideViewport() ? (next?.id ?? null) : null;
       });
     },
-    [openOnly, reports],
+    [items, patch, status],
   );
 
-  // After an admin hard-delete the row is gone for good — drop it locally and
-  // advance the detail pane to the next visible report; a later refetch confirms
-  // the purge persisted.
+  // An admin hard-delete really destroys the row, so it comes off the total too.
   const onDeleted = useCallback(
     (id: string) => {
-      setReports((prev) => prev.filter((r) => r.id !== id));
+      drop((r) => r.id !== id);
       setSelectedId((cur) => {
         if (cur !== id) return cur;
-        const pool = openOnly ? reports.filter((r) => r.status === "open") : reports;
-        const next = pool.find((r) => r.id !== id);
+        const next = items.find((r) => r.id !== id);
         return isWideViewport() ? (next?.id ?? null) : null;
       });
     },
-    [openOnly, reports],
+    [drop, items],
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2" role="group" aria-label="Filter reports">
-        <FilterButton active={openOnly} onClick={() => selectFilter(true)}>
-          Open
-        </FilterButton>
-        <FilterButton active={!openOnly} onClick={() => selectFilter(false)}>
-          All
-        </FilterButton>
-      </div>
-
-      {status === "loading" ? (
-        <div className="flex justify-center py-24">
-          <Spinner label="Loading reports" />
-        </div>
-      ) : status === "error" ? (
-        <ErrorState message="Could not load the moderation queue." onRetry={retry} />
-      ) : visible.length === 0 ? (
-        <EmptyState
-          icon={<FlagIcon size={24} />}
-          title={openOnly ? "No open reports" : "No reports yet"}
-          message={
-            openOnly
-              ? "Nothing to review right now. Reports filed by viewers will appear here."
-              : "When viewers report a video or comment, it shows up here."
-          }
+    <PagedListShell
+      list={list}
+      noun="report"
+      toolbar={
+        <FilterChipGroup<ReportStatusFilter>
+          label="Filter reports"
+          options={STATUS_OPTIONS}
+          value={status}
+          onChange={(next) => list.setFilter("status", next === DEFAULT_STATUS ? "" : next)}
         />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)] lg:items-start">
-          {/* Queue list — hidden on narrow viewports once a report is open. */}
-          <ul
-            aria-label="Report queue"
-            className={cn("flex-col gap-1.5", selected ? "hidden lg:flex" : "flex")}
-          >
-            {visible.map((report) => (
-              <li key={report.id}>
-                <ReportRow
-                  report={report}
-                  active={report.id === selectedId}
-                  onSelect={() => setSelectedId(report.id)}
-                />
-              </li>
-            ))}
-          </ul>
-
-          {/* Detail pane — the report drills in here on narrow viewports. */}
-          <div className={cn(selected ? "block" : "hidden lg:block")}>
-            {selected ? (
-              <ReportDetail
-                key={selected.id}
-                report={selected}
-                onBack={() => setSelectedId(null)}
-                onResolved={onResolved}
-                onDeleted={onDeleted}
-              />
-            ) : (
-              <div className="hidden rounded-2xl bg-surface-muted lg:block">
-                <EmptyState
-                  icon={<FlagIcon size={24} />}
-                  title="No report selected"
-                  message="Choose a report from the queue to review it."
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FilterButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={
-        active
-          ? "focus-ring rounded-full border border-accent bg-accent px-4 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors"
-          : "focus-ring rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted"
       }
+      errorMessage="Could not load the moderation queue."
+      emptyIcon={<FlagIcon size={24} />}
+      emptyTitle={EMPTY_COPY[status].title}
+      emptyMessage={EMPTY_COPY[status].message}
     >
-      {children}
-    </button>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)] lg:items-start">
+        {/* Queue list — hidden on narrow viewports once a report is open. */}
+        <ul
+          aria-label="Report queue"
+          className={cn("flex-col gap-1.5", selected ? "hidden lg:flex" : "flex")}
+        >
+          {items.map((report) => (
+            <li key={report.id}>
+              <ReportRow
+                report={report}
+                active={report.id === selected?.id}
+                onSelect={() => setSelectedId(report.id)}
+              />
+            </li>
+          ))}
+        </ul>
+
+        {/* Detail pane — the report drills in here on narrow viewports. */}
+        <div className={cn(selected ? "block" : "hidden lg:block")}>
+          {selected ? (
+            <ReportDetail
+              key={selected.id}
+              report={selected}
+              onBack={() => setSelectedId(null)}
+              onResolved={onResolved}
+              onDeleted={onDeleted}
+            />
+          ) : (
+            <div className="hidden rounded-2xl bg-surface-muted lg:block">
+              <EmptyState
+                icon={<FlagIcon size={24} />}
+                title="No report selected"
+                message="Choose a report from the queue to review it."
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </PagedListShell>
   );
 }
 

@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   deleteAdminUser: vi.fn(),
 }));
 
+// A stub that really re-renders on navigation: the list window lives in the URL
+// now, so "did paging refetch" is only a real assertion if replace() propagates.
+vi.mock("next/navigation", async () => (await import("@/lib/test-navigation")).navigationMock);
 vi.mock("@/components/RoleGate", () => ({
   RoleGate: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -26,6 +29,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { AdminUsersView } from "@/components/AdminUsersView";
+import { navigation } from "@/lib/test-navigation";
 
 // The instance from the bug report: 4,649 accounts, 100 to a page.
 const TOTAL = 4649;
@@ -59,6 +63,7 @@ function page(offset: number, count: number, total = TOTAL) {
 }
 
 beforeEach(() => {
+  navigation.reset("/admin/users");
   mocks.getAdminUsers.mockReset();
   mocks.updateAdminUser.mockReset();
   mocks.deleteAdminUser.mockReset();
@@ -110,12 +115,39 @@ describe("AdminUsersView pagination", () => {
     expect(screen.getByRole("button", { name: "Next" }).hasAttribute("disabled")).toBe(true);
   });
 
-  it("hides the pager when every account fits on one page", async () => {
+  it("keeps the readout and the size picker even when everything fits on one page", async () => {
     mocks.getAdminUsers.mockResolvedValue(page(0, 3, 3));
     render(<AdminUsersView />);
 
     await screen.findByRole("button", { name: "Open person0" });
-    expect(screen.queryByRole("navigation", { name: "Paginate users" })).toBeNull();
+    // Both steps are dead ends, but the rows-per-page picker is the only way to
+    // change the page size — hiding it here would strand it.
+    expect(screen.getByText("1–3 of 3")).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Rows per page" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("changes the page size and starts the new-sized window at the top", async () => {
+    mocks.getAdminUsers.mockResolvedValueOnce(page(0, PAGE));
+    render(<AdminUsersView />);
+    await screen.findByText("1–100 of 4649");
+
+    mocks.getAdminUsers.mockResolvedValueOnce({ ...page(0, 20), limit: 20 });
+    fireEvent.change(screen.getByRole("combobox", { name: "Rows per page" }), {
+      target: { value: "20" },
+    });
+
+    await waitFor(() => expect(mocks.getAdminUsers).toHaveBeenCalledTimes(2));
+    expect(requestedPage(1)).toMatchObject({ limit: 20, offset: 0 });
+  });
+
+  it("puts the window in the URL, so a page is a link", async () => {
+    mocks.getAdminUsers.mockResolvedValue(page(0, PAGE));
+    render(<AdminUsersView />);
+    await screen.findByText("1–100 of 4649");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(navigation.lastUrl()).toBe("/admin/users?offset=100");
   });
 
   it("keeps the pager on an empty page past the first, so the operator can get back", async () => {
@@ -214,7 +246,7 @@ describe("AdminUsersView facet counts", () => {
     });
     render(<AdminUsersView />);
 
-    const facets = await screen.findByRole("group", { name: "Filter users" });
+    const facets = await screen.findByRole("group", { name: "Filter this page of users" });
     expect(facets.textContent).toContain("· 2");
     expect(screen.queryByText(/not all/)).toBeNull();
   });

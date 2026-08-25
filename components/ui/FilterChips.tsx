@@ -152,6 +152,70 @@ export function FilterChipGroup<T extends string>({
   );
 }
 
+export type FilterChipMultiGroupProps<T extends string> = {
+  options: readonly FilterChipOption<T>[];
+  /** The applied values. Empty means "no filter", i.e. everything. */
+  values: readonly T[];
+  /** Called with the next selection whenever a chip is toggled. */
+  onChange: (values: T[]) => void;
+  /** Accessible group name ("Lifecycle state"). Provide this OR `labelledBy`. */
+  label?: string;
+  labelledBy?: string;
+  size?: FilterChipSize;
+  disabled?: boolean;
+  className?: string;
+};
+
+/**
+ * FilterChipMultiGroup — the MULTI-select sibling of `FilterChipGroup`, for a
+ * filter the backend accepts as a repeatable array (`?state=draft&state=failed`).
+ *
+ * Selecting nothing is not a fourth state: an empty selection sends no
+ * parameter, which the API documents as "all". Rendering an explicit "All" chip
+ * would put two spellings of the same thing on screen, so the group's caption
+ * carries that meaning instead.
+ */
+export function FilterChipMultiGroup<T extends string>({
+  options,
+  values,
+  onChange,
+  label,
+  labelledBy,
+  size = "md",
+  disabled = false,
+  className,
+}: FilterChipMultiGroupProps<T>) {
+  return (
+    <div
+      role="group"
+      aria-label={labelledBy ? undefined : label}
+      aria-labelledby={labelledBy}
+      className={cn("flex flex-wrap items-center gap-2", className)}
+    >
+      {options.map((option) => {
+        const active = values.includes(option.value);
+        return (
+          <FilterChip
+            key={option.value}
+            active={active}
+            disabled={disabled}
+            size={size}
+            onClick={() =>
+              onChange(
+                active
+                  ? values.filter((v) => v !== option.value)
+                  : [...values, option.value],
+              )
+            }
+          >
+            {option.label}
+          </FilterChip>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * A tri-state filter value as it travels in a query string: "" is ABSENT (the
  * server sees no parameter and returns everything), "true" and "false" are the

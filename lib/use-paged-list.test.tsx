@@ -85,7 +85,9 @@ describe("usePagedList", () => {
     });
     // The stubbed router mutates `nav.params` without telling React, which the
     // real `router.replace` would; `rerender` stands in for that re-render.
-    rerender();
+    await act(async () => {
+      rerender();
+    });
     // Derived status: the page-1 rows cannot show under a page-2 window.
     expect(result.current.status).toBe("loading");
     expect(result.current.items).toEqual([]);

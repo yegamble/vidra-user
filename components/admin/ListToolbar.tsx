@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import { ADMIN_PANEL, AdminSearch } from "@/components/admin/AdminControls";
 import { Badge } from "@/components/ui/Badge";
@@ -36,7 +36,14 @@ export function ListSearch({
   onSubmit: (value: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  // Adjusting state DURING render rather than in an effect: React's documented
+  // way to reset state when a prop changes. An effect would render once with a
+  // stale box, then again with the fresh one.
+  const [appliedValue, setAppliedValue] = useState(value);
+  if (value !== appliedValue) {
+    setAppliedValue(value);
+    setDraft(value);
+  }
 
   const submit = (next: string) => {
     if (next !== value) onSubmit(next);

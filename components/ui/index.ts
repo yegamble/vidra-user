@@ -17,9 +17,11 @@ export { ErrorState } from "./ErrorState";
 export {
   FilterChip,
   FilterChipGroup,
+  FilterChipMultiGroup,
   TriStateFilter,
   triStateValue,
   type FilterChipGroupProps,
+  type FilterChipMultiGroupProps,
   type FilterChipOption,
   type FilterChipProps,
   type FilterChipSize,
