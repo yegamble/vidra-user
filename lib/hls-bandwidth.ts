@@ -3,7 +3,24 @@
 // known-fast connection, while a short TTL and network-quality caps keep stale
 // estimates from overriding Save-Data or a newly constrained connection.
 
-export const HLS_ABR_DEFAULT_ESTIMATE = 5_000_000;
+/**
+ * The cold-start throughput a viewer with NO stored measurement opens on — the
+ * first watch of a session, and every watch by someone whose storage is
+ * unavailable.
+ *
+ * It has to be pessimistic, because hls.js applies no safety discount to its
+ * OPENING pick the way it does to later ABR decisions: whatever this claims is
+ * taken at face value against the ladder, so a generous seed puts a cold visitor
+ * straight onto the top rung and makes them pay for the mistake in start-up
+ * latency (and often an immediate step back down). A seed that is too low costs
+ * only one fragment at a lower rung — ABR measures the real throughput from the
+ * first fragment and climbs. The asymmetry is why this is 2 Mbps and not the
+ * "typical broadband" number it looks like it should be.
+ *
+ * A remembered measurement always wins over this (see readStoredBandwidthEstimate):
+ * this is the answer for a path nothing has measured YET, not a ceiling.
+ */
+export const HLS_ABR_DEFAULT_ESTIMATE = 2_000_000;
 export const HLS_BANDWIDTH_STORAGE_KEY = "vidra:hls-bandwidth-estimate:v1";
 export const HLS_BANDWIDTH_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 

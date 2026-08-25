@@ -11,6 +11,7 @@ import {
   PLAYBACK_SESSION_WAIT_MS,
   playbackMasterUrl,
   usePlaybackSession,
+  videoNeedsPlaybackToken,
 } from "./playback-session";
 
 const VIDEO_ID = "11111111-1111-1111-1111-111111111111";
@@ -154,6 +155,38 @@ describe("usePlaybackSession", () => {
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(post).toHaveBeenCalledWith("s1", expect.any(AbortSignal));
     expect(result.current.session?.video_id).toBeUndefined();
+  });
+});
+
+// Which plays may begin before the session answers. This predicate is the whole
+// of that decision, and it has to keep saying the same thing as the server's
+// videoRequiresPlaybackToken (httpapi/playback_session.go) — widening it costs a
+// wait on every play it starts matching, narrowing it breaks playback outright.
+describe("videoNeedsPlaybackToken", () => {
+  it("is the password tier and nothing else", () => {
+    expect(videoNeedsPlaybackToken({ privacy: "password" })).toBe(true);
+    // Every other tier is gated on account identity, which the media element's
+    // own request already carries in the session cookie.
+    expect(videoNeedsPlaybackToken({ privacy: "public" })).toBe(false);
+    expect(videoNeedsPlaybackToken({ privacy: "unlisted" })).toBe(false);
+    expect(videoNeedsPlaybackToken({ privacy: "private" })).toBe(false);
+  });
+
+  it("does not guess when the detail said nothing about privacy", () => {
+    // A remote/partial card carries no privacy. Absent is not "password": a
+    // federated video is not brokered here and has no token to wait for.
+    expect(videoNeedsPlaybackToken({})).toBe(false);
+    expect(videoNeedsPlaybackToken({ privacy: null })).toBe(false);
+  });
+
+  it("treats an unlock token as proof of the password tier, whatever privacy says", () => {
+    // Holding a video-scoped token means the viewer came through the unlock
+    // flow. Erring towards the wait costs a round trip; erring the other way
+    // starts a credentialed video with no credential.
+    expect(videoNeedsPlaybackToken({}, "pt-unlock")).toBe(true);
+    expect(videoNeedsPlaybackToken({ privacy: "public" }, "pt-unlock")).toBe(true);
+    expect(videoNeedsPlaybackToken({ privacy: "public" }, null)).toBe(false);
+    expect(videoNeedsPlaybackToken({ privacy: "public" }, "")).toBe(false);
   });
 });
 

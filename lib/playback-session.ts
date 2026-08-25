@@ -147,6 +147,36 @@ export function usePlaybackSession(
 }
 
 /**
+ * videoNeedsPlaybackToken answers "could this video's session hand back a media
+ * credential?" — the question that decides whether playback may START before the
+ * session answers, or has to wait for it.
+ *
+ * It is the client-side twin of the server's videoRequiresPlaybackToken
+ * (httpapi/playback_session.go) and states the same rule: ONLY the password tier
+ * needs a `?pt=`. Every other privacy tier is gated on account identity, which a
+ * media element's own request already carries in the session cookie — so for a
+ * public, unlisted or private video the session's answer contains no credential,
+ * and its `hls_url` is the SAME string the detail already advertised (both are
+ * built by the same hlsDetail()). There is nothing to wait for.
+ *
+ * A password video is the opposite: its manifest, its variants and its segments
+ * are all unreachable until the session mints a token, and on the native-HLS
+ * path that token has to be in the URL BEFORE the media element is pointed at
+ * it. Those plays still wait.
+ *
+ * `unlockToken` widens the answer rather than narrowing it: holding a video-scoped
+ * token means the viewer came through the unlock flow, so this is a password
+ * video whatever the detail said about its privacy. Being wrong in that direction
+ * costs a wait; being wrong in the other direction breaks playback.
+ */
+export function videoNeedsPlaybackToken(
+  video: { privacy?: string | null },
+  unlockToken?: string | null,
+): boolean {
+  return video.privacy === "password" || Boolean(unlockToken);
+}
+
+/**
  * playbackMasterUrl answers "which HLS master does this player load?".
  *
  * A READY session answers it — that is what makes it the front door, and why the
