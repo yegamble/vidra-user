@@ -30,7 +30,11 @@ import {
   type EngineSources,
 } from "@/lib/player-engine";
 import { finalFetchUrl, hlsErrorClass } from "@/lib/playback-qoe";
-import { playbackMasterUrl, usePlaybackSession } from "@/lib/playback-session";
+import {
+  playbackMasterUrl,
+  usePlaybackSession,
+  videoNeedsPlaybackToken,
+} from "@/lib/playback-session";
 import { remotePlaybackSources } from "@/lib/remote-playback";
 import { usePlaybackQoE } from "@/lib/use-playback-qoe";
 import {
@@ -80,6 +84,15 @@ import {
 // this file attaches a credential ONLY when it was handed one. Anything else
 // would mark every media request credentialed, which forces `no-store` and blocks
 // every CDN/presign redirect for viewers who needed none of it.
+//
+// THE FRONT DOOR IS NOT A TURNSTILE. Being the authority on what plays does not
+// mean every play has to stand still until it answers. A session only holds
+// playback back when it carries something the player cannot begin without — a
+// media credential, which is the password tier and nothing else. A public,
+// unlisted or private video starts on the detail's manifest immediately and the
+// session, which is building that manifest URL from the very same server-side
+// function, confirms it a moment later without moving anything. See
+// videoNeedsPlaybackToken in lib/playback-session.ts.
 //
 // AND IT IS THE ONE CAPTURE POINT for playback quality (item 4). Because all
 // three surfaces run this lifecycle, instrumenting it here instruments every one
@@ -162,10 +175,12 @@ interface EngineTuning {
   bandwidth: "measured" | "seeded" | "engine";
   /**
    * Hold everything: pick no engine, load nothing, report `mode` null. Set while
-   * the playback session is still in flight, because starting on the detail's URL
+   * a playback session that the player cannot start without is still in flight —
+   * one that will carry a media credential — because starting on the detail's URL
    * and swapping to the session's a moment later would restart a loading media
-   * element for no reason. It is NOT a failure — a live surface must not read it
-   * as one.
+   * element for no reason. A session with nothing the player needs is NOT waited
+   * for: that wait sat on the critical path of every play and bought nothing.
+   * It is NOT a failure — a live surface must not read it as one.
    */
   suspended?: boolean;
   /**
@@ -287,10 +302,41 @@ function usePlaybackEngine(
           // fragment in MSE. Every surface gets this; a federated watch used to
           // get none of it.
           backBufferLength,
+          // Forward-buffer headroom against a jittery origin. hls.js's 30s
+          // default is a FLOOR, not a ceiling — getMaxBufferLength() takes the
+          // LARGER of it and the seconds maxBufferSize buys at the playing
+          // rung's bitrate — so it only ever binds at the top of a ladder, which
+          // is exactly where a stall hurts most: at 16 Mbps the default 60 MB
+          // budget is worth 30s and the floor adds nothing. Raising the floor to
+          // 60s doubles the runway there and changes nothing at ordinary
+          // bitrates, where the size-derived value already wins. maxBufferSize
+          // and maxMaxBufferLength are deliberately untouched, so the MEMORY
+          // ceiling is exactly what it was.
+          maxBufferLength: 60,
           // Do not download/decode a rendition the rendered player cannot use,
           // and step down when decoding cannot keep up with the selected rung.
           capLevelToPlayerSize: true,
           capLevelOnFPSDrop: true,
+          // Stall detection, tightened. hls.js's defaults give a fragment 10s to
+          // produce its first byte and 120s to finish — patient enough that a
+          // half-open connection to a struggling origin looks, to the viewer,
+          // exactly like a player that has hung. 5s/30s is still far longer than
+          // any healthy fragment takes and hands the stall to the retry ladder
+          // (and, through it, to ABR) while the viewer is still watching.
+          //
+          // The retry sub-objects are hls.js 1.6.16's own fragLoadPolicy
+          // defaults, copied VERBATIM and on purpose: mergeConfig() merges the
+          // top level of the config shallowly, so naming fragLoadPolicy at all
+          // replaces the whole LoadPolicy. Omitting these would silently drop
+          // the 4 timeout retries and 6 error retries every fragment gets today.
+          fragLoadPolicy: {
+            default: {
+              maxTimeToFirstByteMs: 5_000,
+              maxLoadTimeMs: 30_000,
+              timeoutRetry: { maxNumRetry: 4, retryDelayMs: 0, maxRetryDelayMs: 0 },
+              errorRetry: { maxNumRetry: 6, retryDelayMs: 1_000, maxRetryDelayMs: 8_000 },
+            },
+          },
           ...(lowLatencyMode === undefined ? {} : { lowLatencyMode }),
           ...(bandwidth === "measured"
             ? { abrEwmaDefaultEstimate: readStoredBandwidthEstimate() }
@@ -479,7 +525,7 @@ function usePlaybackEngine(
  */
 export function useHlsPlayback(
   videoRef: RefObject<HTMLVideoElement | null>,
-  video: { id: string; hls_url?: string },
+  video: { id: string; hls_url?: string; privacy?: string | null },
   startAt: number | null,
   // Optional HLS master URL to stream from INSTEAD of the server one — used to
   // play a video from its IPFS gateway mirror (DR5). It only overrides the HLS
@@ -501,6 +547,12 @@ export function useHlsPlayback(
   // supersedes the unlock token because the session id is signed into it, which
   // is what lets the beacon be attested.
   const token = sessionState.session?.playback_token ?? playbackToken;
+  // Whether this play may begin before the session answers. Only a video whose
+  // session can hand back a credential has to wait: everything else would be
+  // waiting for an answer it already has (see videoNeedsPlaybackToken), and the
+  // wait is on the critical path of EVERY play — up to PLAYBACK_SESSION_WAIT_MS
+  // before hls.js is so much as imported.
+  const needsToken = videoNeedsPlaybackToken(video, playbackToken);
   const hasHls = Boolean(master);
   // The `?pt=` token (a query param) is placed before the `#t=` media fragment.
   const fragment = startAt !== null ? `#t=${startAt}` : "";
@@ -522,8 +574,22 @@ export function useHlsPlayback(
       // videos are never IPFS-mirrored anyway.
       authToken: hlsMasterOverride ? null : token,
       bandwidth: hlsMasterOverride ? "seeded" : "measured",
-      // Wait for the session rather than start on the detail's URL and swap.
-      suspended: sessionState.status === "pending",
+      // Wait for the session rather than start on the detail's URL and swap —
+      // but ONLY where the session has something the player cannot start
+      // without. For a password video that is its token, which has to be in
+      // hand before the first request (and, on native HLS, before the media
+      // element is pointed anywhere at all). For every other video the session
+      // re-states the manifest the detail already gave us, so waiting for it
+      // bought nothing and cost the whole round trip.
+      //
+      // A session that lands after the engine started is handled the way any
+      // other source change is: if it names a DIFFERENT master (a re-transcode
+      // bumped the generation between the detail fetch and this POST) the
+      // effect below tears the engine down and rebuilds it on the session's
+      // URL — the session still decides what plays, it just no longer decides
+      // WHEN. When it names the same master, which is the normal case, nothing
+      // moves.
+      suspended: needsToken && sessionState.status === "pending",
       session: sessionState.session,
     },
   );

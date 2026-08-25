@@ -20,6 +20,16 @@ function memoryStorage() {
 }
 
 describe("HLS bandwidth estimate persistence", () => {
+  it("seeds a cold start pessimistically — hls.js discounts its opening pick by nothing", () => {
+    // The value matters, not just that there is one: hls.js takes this estimate
+    // at face value for its FIRST level pick (no safety factor is applied until
+    // ABR has real measurements), so a generous seed opens a cold visitor on the
+    // top rung. Being low costs one fragment at a lower rung; being high costs
+    // start-up latency and usually an immediate step back down.
+    expect(HLS_ABR_DEFAULT_ESTIMATE).toBe(2_000_000);
+    expect(readStoredBandwidthEstimate(null)).toBe(HLS_ABR_DEFAULT_ESTIMATE);
+  });
+
   it("round-trips a recent, bounded estimate", () => {
     const storage = memoryStorage();
     storeBandwidthEstimate(8_250_000.4, storage, 1_000);
