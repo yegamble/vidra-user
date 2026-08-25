@@ -111,34 +111,27 @@ function Queue() {
     [items, selectedId],
   );
 
-  // After a resolve the row keeps its place (and its slot in the total) with a
-  // new status. In the open-only view it no longer belongs, so the detail pane
-  // advances to the next still-open report on the two-pane layout.
+  // Now that the SERVER applies the status filter, `total` counts the reports
+  // matching it. Under "Open", a report that has just been accepted or rejected
+  // is no longer one of them, so it leaves the page and the count together —
+  // `patch` would leave the pager promising an open report that is not. Under
+  // "All" the row stays, wearing its new status.
+  //
+  // Nothing needs to move the selection: `selected` is derived, so a report that
+  // is no longer in `items` falls through to the next one on the two-pane view.
   const onResolved = useCallback(
     (id: string, newStatus: ReportStatus) => {
-      patch((reports) => reports.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
-      if (status !== "open") return;
-      setSelectedId((cur) => {
-        if (cur !== id) return cur;
-        const next = items.find((r) => r.status === "open" && r.id !== id);
-        return isWideViewport() ? (next?.id ?? null) : null;
-      });
+      if (status === "all") {
+        patch((reports) => reports.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
+      } else {
+        drop((r) => r.id !== id);
+      }
     },
-    [items, patch, status],
+    [drop, patch, status],
   );
 
   // An admin hard-delete really destroys the row, so it comes off the total too.
-  const onDeleted = useCallback(
-    (id: string) => {
-      drop((r) => r.id !== id);
-      setSelectedId((cur) => {
-        if (cur !== id) return cur;
-        const next = items.find((r) => r.id !== id);
-        return isWideViewport() ? (next?.id ?? null) : null;
-      });
-    },
-    [drop, items],
-  );
+  const onDeleted = useCallback((id: string) => drop((r) => r.id !== id), [drop]);
 
   return (
     <PagedListShell

@@ -118,14 +118,46 @@ test("an admin lists the pending queue with applicant details", async ({ page })
   await expect(page.getByRole("button", { name: "Approve ada" })).toBeVisible();
 });
 
-test("approving flips the row in place", async ({ page }) => {
+test("approving takes the request out of the pending queue and off its count", async ({ page }) => {
   await signIn(page, "admin");
+  // The status filter is the SERVER's now, so `total` counts the requests that
+  // match it: an approved request is no longer pending, and must leave both the
+  // page and the count rather than sitting there wearing a resolved badge.
   await page.route(REQUESTS, (route) =>
-    route.fulfill({ json: { requests: [pendingRequest("r1", "ada")], limit: 100, offset: 0 } }),
+    route.fulfill({
+      json: { requests: [pendingRequest("r1", "ada")], total: 1, limit: 100, offset: 0 },
+    }),
   );
   await page.route(APPROVE, (route) => route.fulfill({ status: 204, body: "" }));
 
   await openQueue(page);
+  await expect(page.getByText("1 registration request")).toBeVisible();
+
+  const approved = page.waitForResponse(
+    (r) => APPROVE.test(r.url()) && r.request().method() === "POST" && r.ok(),
+  );
+  await page.getByRole("button", { name: "Approve ada" }).click();
+  await approved;
+
+  await expect(page.getByRole("button", { name: "Approve ada" })).toHaveCount(0);
+  await expect(page.getByText("0 registration requests")).toBeVisible();
+  await expect(page.getByText("No pending requests")).toBeVisible();
+});
+
+test("the All view keeps a resolved request, flipped in place", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.route(REQUESTS, (route) =>
+    route.fulfill({
+      json: { requests: [pendingRequest("r1", "ada")], total: 1, limit: 100, offset: 0 },
+    }),
+  );
+  await page.route(APPROVE, (route) => route.fulfill({ status: 204, body: "" }));
+
+  await openQueue(page);
+  // "All" still matches a resolved request, so the row stays and the badge flips.
+  await page.getByRole("button", { name: "All" }).click();
+  await expect(page).toHaveURL(/status=all/);
+
   const approved = page.waitForResponse(
     (r) => APPROVE.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
@@ -141,7 +173,9 @@ test("approving flips the row in place", async ({ page }) => {
 test("rejecting with a note flips the row and records the note", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(REQUESTS, (route) =>
-    route.fulfill({ json: { requests: [pendingRequest("r1", "ada")], limit: 100, offset: 0 } }),
+    route.fulfill({
+      json: { requests: [pendingRequest("r1", "ada")], total: 1, limit: 100, offset: 0 },
+    }),
   );
   let body: unknown;
   await page.route(REJECT, async (route) => {
@@ -150,6 +184,13 @@ test("rejecting with a note flips the row and records the note", async ({ page }
   });
 
   await openQueue(page);
+  // Under "All" a rejected request still matches, so the row stays to show the
+  // note. Switching filter refetches, which unmounts the row — so wait for the
+  // new page to land before typing into it.
+  const listed = page.waitForResponse((r) => REQUESTS.test(r.url()) && r.url().includes("status=all"));
+  await page.getByRole("button", { name: "All" }).click();
+  await listed;
+  await expect(page.getByRole("button", { name: "Reject ada" })).toBeVisible();
   await page.getByLabel("Internal note for ada").fill("looks like a spam signup");
   const rejected = page.waitForResponse(
     (r) => REJECT.test(r.url()) && r.request().method() === "POST" && r.ok(),

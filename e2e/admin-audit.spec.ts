@@ -92,7 +92,9 @@ test("an admin sees the audit log and can filter by action", async ({ page }) =>
 
   const searched = page.waitForResponse((r) => AUDIT.test(r.url()) && r.url().includes("action=auth.login"));
   await page.getByLabel("Filter by action").fill("auth.login");
-  await page.getByRole("button", { name: "Filter" }).click();
+  // The audit log used to carry its own bordered input + "Filter" button; it is
+  // on the shared admin search control now, whose submit verb is "Search".
+  await page.getByRole("button", { name: "Search" }).click();
   await searched;
   await expect(page.getByText("auth.register")).toHaveCount(0);
   await expect(page.getByText("auth.login")).toBeVisible();

@@ -94,14 +94,19 @@ function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
   });
 
   const status = (list.filters.status as RegistrationRequestFilter) ?? DEFAULT_STATUS;
-  const { patch } = list;
+  const { patch, drop } = list;
 
-  // Reflect a resolution in place: the row flips to its new status (with the
-  // acting admin as reviewer) so the outcome is visible without a refetch; the
-  // next fetch (filter switch / reload) confirms persistence. It stays on the
-  // page — and in the total — because the request still exists, just resolved.
+  // The SERVER applies the status filter, so `total` counts the requests that
+  // match it. A request that has just been approved or rejected still matches
+  // "All", where the row simply flips to its new status (with the acting admin
+  // as reviewer) so the outcome is visible without a refetch. Under "Pending" it
+  // does not match any more, so it leaves the page and the count together.
   const onResolved = useCallback(
     (id: string, newStatus: RegistrationRequestStatus, moderatorNote?: string) => {
+      if (status !== "all" && status !== newStatus) {
+        drop((r) => r.id !== id);
+        return;
+      }
       patch((requests) =>
         requests.map((r) =>
           r.id === id
@@ -116,7 +121,7 @@ function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
         ),
       );
     },
-    [patch, reviewerUsername],
+    [drop, patch, reviewerUsername, status],
   );
 
   return (
