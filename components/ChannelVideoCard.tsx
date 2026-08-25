@@ -68,6 +68,11 @@ export function ChannelVideoCard({
 
   return (
     <div className="group/card flex flex-col gap-2">
+      {/* hasStoryboard stays false: a channel listing carries no has_storyboard
+          flag, so the card cannot know whether one exists and does not guess.
+          Claiming it made every hover fetch a storyboard.vtt that 404s for any
+          video that never had one generated. The hover scrubber shows the
+          timestamp alone; frames belong to the watch page, which has the flag. */}
       <VideoCardPreview
         videoId={video.id}
         title={video.title}
@@ -75,7 +80,7 @@ export function ChannelVideoCard({
         src={previewEligible ? videoOriginalUrl(video.id) : null}
         poster={video.has_thumbnail ? videoThumbnailUrl(video.id) : null}
         duration={duration}
-        hasStoryboard={previewEligible}
+        hasStoryboard={false}
         previewEnabled={previewEligible}
         className="rounded-[11px]"
         posterClassName={`transition-transform ${

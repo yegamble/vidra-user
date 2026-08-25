@@ -42,7 +42,8 @@ export function useStoryboard(
 ): SeekStoryboard | null {
   const [loaded, setLoaded] = useState<{ videoId: string; cues: StoryboardCue[] } | null>(null);
   // The videoId we've already kicked a fetch for (null = none yet); guards the
-  // one-time lazy load per video without a state reset.
+  // one-time lazy load per video without a state reset. Released again only
+  // when the request failed to reach an answer (see the catch below).
   const activatedRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -64,6 +65,16 @@ export function useStoryboard(
       })
       .catch(() => {
         // No preview frames — the seek tooltip still shows the timestamp.
+        // A 404 never lands here: it resolves through the branch above as an
+        // empty body, which is an answer ("there is no storyboard") and leaves
+        // the one-shot guard set so we never ask a second time. This branch is
+        // the request failing to produce an answer at all — offline, DNS, a
+        // dropped connection — which the next hover may well get past, so the
+        // guard is released and one more attempt is allowed. An abort is our
+        // own doing (unmount, or a switch to another video) and must not
+        // release a guard that by then belongs to a newer fetch.
+        if (controller.signal.aborted || activatedRef.current !== id) return;
+        activatedRef.current = null;
       });
   }, [videoId, hasStoryboard, playbackToken]);
 

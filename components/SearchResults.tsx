@@ -144,6 +144,9 @@ function SearchResultRow({
         className="w-[148px] flex-none sm:w-[220px]"
         onClick={() => onSelect?.()}
       >
+        {/* Search hits carry no has_storyboard flag, so this row cannot know
+            whether one exists and does not guess — asserting it made every
+            hover fetch a storyboard.vtt that 404s for a video without one. */}
         <VideoCardPreview
           videoId={video.id}
           title={video.title}
@@ -157,7 +160,7 @@ function SearchResultRow({
               : null
           }
           duration={duration}
-          hasStoryboard={previewEligible}
+          hasStoryboard={false}
           previewEnabled={previewEligible}
           className="rounded-[10px]"
           posterClassName={cn(

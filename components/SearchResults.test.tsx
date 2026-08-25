@@ -197,7 +197,9 @@ describe("SearchResults inline preview integration", () => {
 
     expect(previewMocks.props.get("v1")?.previewEnabled).toBe(true);
     expect(previewMocks.props.get("v1")?.src).toBe("/videos/v1/original");
-    expect(previewMocks.props.get("v1")?.hasStoryboard).toBe(true);
+    // Eligibility is a policy answer, not evidence a storyboard was generated;
+    // a search hit carries no has_storyboard flag, so the row claims nothing.
+    expect(previewMocks.props.get("v1")?.hasStoryboard).toBe(false);
   });
 
   it.each([

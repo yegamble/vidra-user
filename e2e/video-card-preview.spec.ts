@@ -119,19 +119,27 @@ async function mockPreviewBrowse(page: Page) {
       body: "WEBVTT\n\n00:00:00.000 --> 00:00:10.000\nPreview caption\n",
     }),
   );
-  await page.route(STORYBOARD_VTT, (route) =>
-    route.fulfill({
-      contentType: "text/vtt",
-      body: "WEBVTT\n\n00:00:00.000 --> 00:00:10.000\nstoryboard.jpg#xywh=0,0,160,90\n",
-    }),
-  );
-  await page.route(STORYBOARD_IMAGE, (route) => route.fulfill({ status: 204 }));
+  // A card payload carries no has_storyboard flag, so a card must never probe
+  // the storyboard — on an instance whose videos have none, every probe is a
+  // 404 on every hover. These routes answer the way the server really would,
+  // and record the hits so a regression fails the test rather than degrading
+  // quietly to a timestamp.
+  const storyboardHits: string[] = [];
+  await page.route(STORYBOARD_VTT, (route) => {
+    storyboardHits.push(route.request().url());
+    return route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+  });
+  await page.route(STORYBOARD_IMAGE, (route) => {
+    storyboardHits.push(route.request().url());
+    return route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+  });
+  return storyboardHits;
 }
 
 test("inline card playback is hover-intent driven, captioned, seekable, and keeps audio mode for the tab", async ({
   page,
 }) => {
-  await mockPreviewBrowse(page);
+  const storyboardHits = await mockPreviewBrowse(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Preview One" })).toBeVisible();
 
@@ -157,7 +165,13 @@ test("inline card playback is hover-intent driven, captioned, seekable, and keep
   const box = await timeline.boundingBox();
   if (!box) throw new Error("preview timeline has no bounding box");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await expect(first.getByTestId("video-card-preview-storyboard")).toBeAttached();
+  // Scrubbing a card shows the timestamp bubble and nothing more: the card was
+  // never told a storyboard exists, so it neither paints a frame nor asks for
+  // one. The regex is mid-track of a ten-second clip, floored, and tolerant of
+  // sub-pixel rounding at the midpoint; the 0:10 duration badge cannot match it.
+  await expect(first.getByText(/^0:0[45]$/)).toBeVisible();
+  await expect(first.getByTestId("video-card-preview-storyboard")).toHaveCount(0);
+  expect(storyboardHits).toEqual([]);
   await page.mouse.click(box.x + box.width * 0.7, box.y + box.height / 2);
   await expect.poll(() => firstMedia.evaluate((node: HTMLVideoElement) => node.currentTime)).toBeGreaterThan(6);
 

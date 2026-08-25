@@ -20,6 +20,15 @@ function stubFetch(impl: () => Promise<Response>) {
   return fn;
 }
 
+// Drain the whole fetch promise chain (a macrotask runs after every pending
+// microtask), so an assertion about what the hook did NOT do afterwards is
+// reading a settled hook rather than racing it.
+function settle() {
+  return act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -59,5 +68,41 @@ describe("useStoryboard", () => {
     act(() => result.current!.activate());
     await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
     expect(result.current!.cueAt(1)).toBeNull();
+  });
+
+  it("never re-asks after a 404 — the server already answered", async () => {
+    const fetchFn = stubFetch(async () => new Response("", { status: 404 }));
+    const { result } = renderHook(() => useStoryboard("v1", true));
+    act(() => result.current!.activate());
+    await settle();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+
+    // Every later hover is silent: "there is no storyboard" is a final answer.
+    act(() => result.current!.activate());
+    act(() => result.current!.activate());
+    await settle();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(result.current!.cueAt(1)).toBeNull();
+  });
+
+  it("retries once more on the next hover when the network never answered", async () => {
+    let attempt = 0;
+    const fetchFn = stubFetch(async () => {
+      attempt += 1;
+      if (attempt === 1) throw new TypeError("Failed to fetch");
+      return new Response(VTT, { status: 200 });
+    });
+    const { result } = renderHook(() => useStoryboard("v1", true));
+
+    act(() => result.current!.activate());
+    await settle();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(result.current!.cueAt(1)).toBeNull();
+
+    // The connection failed, not the answer, so the hook is not dead for this
+    // video: the next hover asks again and this time the cues arrive.
+    act(() => result.current!.activate());
+    await waitFor(() => expect(result.current!.cueAt(1)).not.toBeNull());
+    expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 });
