@@ -230,6 +230,9 @@ function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void 
   return (
     <div className="group/card flex gap-3">
       <div className="w-[150px] shrink-0">
+        {/* Related items carry no has_storyboard flag, so this card cannot know
+            whether one exists and does not guess — asserting it made every
+            hover fetch a storyboard.vtt that 404s for a video without one. */}
         <VideoCardPreview
           videoId={video.id}
           title={video.title}
@@ -243,7 +246,7 @@ function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void 
               : null
           }
           duration={duration}
-          hasStoryboard={previewEligible}
+          hasStoryboard={false}
           previewEnabled={previewEligible}
           className="rounded-lg"
           posterClassName={cn(

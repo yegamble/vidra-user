@@ -186,6 +186,9 @@ function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: ()
 
   return (
     <div className="group/card relative">
+      {/* History rows carry no has_storyboard flag, so this card cannot know
+          whether one exists and does not guess — asserting it made every hover
+          fetch a storyboard.vtt that 404s for a video without one. */}
       <VideoCardPreview
         videoId={item.id}
         title={item.title}
@@ -199,7 +202,7 @@ function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: ()
             : null
         }
         duration={duration}
-        hasStoryboard={previewEligible}
+        hasStoryboard={false}
         previewEnabled={previewEligible}
         className="rounded-xl"
         posterClassName={cn(
@@ -453,6 +456,9 @@ function SavedRow({ video, onDeleted }: { video: Video; onDeleted: () => void })
   return (
     <div className="group/card relative flex items-center gap-3 py-2.5">
       <div className="w-[112px] flex-none">
+        {/* Library rows carry no has_storyboard flag, so this card cannot know
+            whether one exists and does not guess — asserting it made every
+            hover fetch a storyboard.vtt that 404s for a video without one. */}
         <VideoCardPreview
           videoId={video.id}
           title={video.title}
@@ -466,7 +472,7 @@ function SavedRow({ video, onDeleted }: { video: Video; onDeleted: () => void })
               : null
           }
           duration={duration}
-          hasStoryboard={previewEligible}
+          hasStoryboard={false}
           previewEnabled={previewEligible}
           className="rounded-[9px]"
           posterClassName={cn(

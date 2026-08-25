@@ -114,7 +114,18 @@ describe("VideoCard preview integration", () => {
 
     expect(mocks.previewProps?.previewEnabled).toBe(true);
     expect(String(mocks.previewProps?.src)).toMatch(/\/api\/v1\/videos\/v1\/original$/);
-    expect(mocks.previewProps?.hasStoryboard).toBe(true);
+  });
+
+  it("never claims a storyboard the card payload cannot vouch for", () => {
+    mocks.featureEnabled = true;
+    mocks.preferenceEnabled = true;
+
+    render(<VideoCard video={video()} />);
+
+    // Eligibility is a policy answer, not evidence a storyboard was generated.
+    // Passing it through would make every hover probe a VTT that 404s.
+    expect(mocks.previewProps?.previewEnabled).toBe(true);
+    expect(mocks.previewProps?.hasStoryboard).toBe(false);
   });
 
   it("passes above-the-fold poster priority into the shared preview", () => {

@@ -129,8 +129,13 @@ export function VideoCard({
           (transition-transform, globally neutralized under reduced-motion) and
           picks up a quiet soft shadow — no heavy elevation. */}
       <div className="overflow-hidden rounded-xl transition-[transform,box-shadow] duration-200 ease-out group-hover/card:scale-[1.02] group-hover/card:shadow-soft active:scale-[0.995]">
-        {/* Card payloads omit the storyboard detail flag. The VTT is only
-            probed lazily when the timeline is used; a 404 degrades to time. */}
+        {/* hasStoryboard is false rather than previewEligible: card payloads
+            carry no has_storyboard flag, so the card cannot know whether one
+            exists and must not guess. Passing the eligibility policy instead
+            made every hover on an eligible card fetch storyboard.vtt, which is
+            a 404 for any video that never had a storyboard generated. The
+            hover scrubber shows timestamps only; the real storyboard belongs
+            to the watch page, where the detail carries the true flag. */}
         <VideoCardPreview
           videoId={video.id}
           title={video.title}
@@ -144,7 +149,7 @@ export function VideoCard({
               : null
           }
           duration={duration}
-          hasStoryboard={previewEligible}
+          hasStoryboard={false}
           previewEnabled={previewEligible}
           posterPriority={priority}
           className="rounded-xl"
