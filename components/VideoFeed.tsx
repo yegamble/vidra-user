@@ -1,23 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
+import { ListTail } from "@/components/ui/ListTail";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoGridSkeleton } from "@/components/VideoCardSkeleton";
 import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { FeedSort, Video, VideoFeedResponse } from "@/lib/api";
+import { resolveBrowseScrollMode } from "@/lib/feed-defaults";
 import type { FeedFilters } from "@/lib/feed-url";
-
-type Status = "loading" | "error" | "ready";
-type MoreStatus = "idle" | "loading" | "error";
+import { useInstanceDefaults } from "@/lib/instance-defaults";
+import { useAppendingList } from "@/lib/use-appending-list";
 
 // VideoFeed hydrates from an optional server-fetched first page and owns client
 // pagination/retry thereafter. Without a seed (backend unavailable server-side,
 // /trending, or a route-mocked e2e) it preserves the original browser fetch.
+//
+// Paging is `useAppendingList`, the same hook the search results use — including
+// its honest `hasMore` (the feed reports a `total`, so the last page is now
+// known rather than guessed from its length) and the operator-gated auto-load.
 export function VideoFeed({
   sort,
   filters = {},
@@ -29,62 +31,26 @@ export function VideoFeed({
   initialPage?: VideoFeedResponse | null;
   prioritizeFirstRow?: boolean;
 }) {
-  const seeded = initialPage !== undefined && initialPage !== null;
-  const [status, setStatus] = useState<Status>(seeded ? "ready" : "loading");
-  const [videos, setVideos] = useState<Video[]>(initialPage?.videos ?? []);
-  const [hasMore, setHasMore] = useState(
-    Boolean(initialPage && initialPage.videos.length >= PAGE_SIZE),
-  );
-  const [more, setMore] = useState<MoreStatus>("idle");
-  const [reloadKey, setReloadKey] = useState(0);
-
   const { tag, category, language, scope } = filters;
+  // Infinite scroll is the operator's call (GET /instance defaults). Absent or
+  // unrecognised means the Load more button — today's behavior exactly.
+  const autoLoad = resolveBrowseScrollMode(useInstanceDefaults()) === "auto";
 
-  useEffect(() => {
-    if (seeded && reloadKey === 0) return;
-    const controller = new AbortController();
-    api
-      .getFeed(
-        { sort, scope, tag, category, language, limit: PAGE_SIZE, offset: 0 },
-        controller.signal,
-      )
-      .then((res) => {
-        setVideos(res.videos);
-        setHasMore(res.videos.length === PAGE_SIZE);
-        setStatus("ready");
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setStatus("error");
-      });
-    return () => controller.abort();
-  }, [sort, scope, tag, category, language, reloadKey, seeded]);
+  const list = useAppendingList<Video>({
+    queryKey: JSON.stringify([sort, scope, tag, category, language]),
+    initialPage: initialPage
+      ? { items: initialPage.videos, total: initialPage.total }
+      : null,
+    load: (window, signal) =>
+      api
+        .getFeed(
+          { sort, scope, tag, category, language, limit: window.limit, offset: window.offset },
+          signal,
+        )
+        .then((res) => ({ items: res.videos, total: res.total })),
+  });
 
-  function retry() {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }
-
-  async function loadMore() {
-    setMore("loading");
-    try {
-      const res = await api.getFeed({
-        sort,
-        scope,
-        tag,
-        category,
-        language,
-        limit: PAGE_SIZE,
-        offset: videos.length,
-      });
-      setVideos((v) => [...v, ...res.videos]);
-      setHasMore(res.videos.length === PAGE_SIZE);
-      setMore("idle");
-    } catch {
-      setMore("error");
-    }
-  }
-
-  if (status === "loading") {
+  if (list.status === "loading") {
     // Same silhouette as the grid that replaces it (and as app/loading.tsx),
     // so the route → client-fetch → data handoff doesn't jump layouts.
     return (
@@ -94,15 +60,15 @@ export function VideoFeed({
       </div>
     );
   }
-  if (status === "error") {
+  if (list.status === "error") {
     return (
       <ErrorState
         message="Could not load videos. The backend may be unavailable."
-        onRetry={retry}
+        onRetry={list.reload}
       />
     );
   }
-  if (videos.length === 0) {
+  if (list.items.length === 0) {
     return tag || category || language ? (
       <EmptyState
         title="No matching videos"
@@ -115,23 +81,23 @@ export function VideoFeed({
   return (
     <div className="flex flex-col gap-6">
       <VideoGrid>
-        {videos.map((video, index) => (
+        {list.items.map((video, index) => (
           <li key={video.id}>
             <VideoCard
               video={video}
               priority={prioritizeFirstRow && index < 3}
-              onDeleted={() => setVideos((cur) => cur.filter((v) => v.id !== video.id))}
+              onDeleted={() => list.drop((v) => v.id !== video.id)}
             />
           </li>
         ))}
       </VideoGrid>
-      {hasMore ? (
-        <LoadMoreButton
-          busy={more === "loading"}
-          error={more === "error" ? "Could not load more videos." : null}
-          onClick={() => void loadMore()}
-        />
-      ) : null}
+      <ListTail
+        hasMore={list.hasMore}
+        autoLoad={autoLoad}
+        busy={list.moreStatus === "loading"}
+        error={list.moreStatus === "error" ? "Could not load more videos." : null}
+        onLoadMore={list.loadMore}
+      />
     </div>
   );
 }

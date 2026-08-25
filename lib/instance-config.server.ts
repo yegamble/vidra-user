@@ -38,6 +38,12 @@ export type InstanceBrandingBlock = {
 export type InstanceDefaultsBlock = {
   feed_sort?: "recent" | "popular" | "trending";
   feed_scope?: "local" | "all";
+  /**
+   * How a browse list advances past its first page: "button" is the explicit
+   * Load more control (the shipped behaviour), "auto" is infinite scroll.
+   * Operator-level because it is an accessibility and data-usage decision.
+   */
+  browse_scroll_mode?: "button" | "auto";
   landing_page?: "home-recent" | "trending" | "local" | "home";
   theme?: "system" | "light" | "dark";
   player_autoplay?: boolean;

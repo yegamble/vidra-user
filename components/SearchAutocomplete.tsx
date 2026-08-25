@@ -21,7 +21,12 @@ import type { SearchSuggestion } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { trackSearchEvent } from "@/lib/search-events";
-import { readSearchFilters, searchHref, type SearchFilters } from "@/lib/search-url";
+import {
+  readSearchFilters,
+  readSearchType,
+  searchHref,
+  type SearchFilters,
+} from "@/lib/search-url";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 
 const DEBOUNCE_MS = 200;
@@ -178,13 +183,16 @@ function useSearchCombobox({
 
   const onSearchPage = pathname === "/search";
   const urlQuery = onSearchPage ? searchParams.get("q") ?? "" : "";
+  // Every facet on the results page rides onto the next navigation, so
+  // re-searching from the header narrows the same way the current view does.
+  // Reading the whole bag (rather than three named params) is what keeps a
+  // newly-added facet from being silently dropped here.
   const filters: SearchFilters = onSearchPage
-    ? readSearchFilters({
-        category: searchParams.get("category") ?? undefined,
-        language: searchParams.get("language") ?? undefined,
-        tag: searchParams.get("tag") ?? undefined,
-      })
+    ? readSearchFilters(Object.fromEntries(searchParams))
     : {};
+  // The active result tab travels too: submitting a new term from the Channels
+  // tab should search channels, not silently drop you back to videos.
+  const resultType = onSearchPage ? readSearchType(searchParams.get("type") ?? undefined) : "videos";
 
   const baseId = useId();
   const listboxId = `${baseId}-listbox`;
@@ -317,7 +325,7 @@ function useSearchCombobox({
 
   function navigateToQuery(text: string) {
     setValue(text);
-    go(searchHref(text.trim(), filters));
+    go(searchHref(text.trim(), filters, resultType));
   }
 
   function selectSuggestion(s: SearchSuggestion, index: number) {
@@ -346,7 +354,7 @@ function useSearchCombobox({
         return;
       case "tag":
         setValue(s.text);
-        go(searchHref("", { ...filters, tag: s.text }));
+        go(searchHref("", { ...filters, tag: s.text }, resultType));
         return;
       case "query":
       case "history":
@@ -362,7 +370,7 @@ function useSearchCombobox({
     // The header does nothing on an empty submit; on /search an empty submit
     // clears the results back to the prompt (drops `q`, keeps the filters).
     if (!q && !onSearchPage) return;
-    go(searchHref(q, filters));
+    go(searchHref(q, filters, resultType));
   }
 
   // Clear the field. On /search this navigates back to the prompt (keeping the
@@ -371,7 +379,7 @@ function useSearchCombobox({
     setValue("");
     closePopup();
     inputRef.current?.focus();
-    if (onSearchPage) router.push(searchHref("", filters));
+    if (onSearchPage) router.push(searchHref("", filters, resultType));
   }
 
   function removeHistoryItem(index: number) {

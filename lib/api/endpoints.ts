@@ -152,6 +152,8 @@ import type {
   VideoRating,
   VideoStatsResponse,
   VideoSearchResponse,
+  AccountSearchResponse,
+  ChannelSearchResponse,
   SearchSuggestionsResponse,
   RecommendationsResponse,
   SearchHistoryResponse,
@@ -191,15 +193,32 @@ export interface SearchParams {
 }
 
 /**
- * Params for GET /videos/search: pagination plus the optional taxonomy/tag
- * filters the search page mirrors from the home feed (category/language ids come
- * from GET /videos/config; tag is a free-form lowercased tag). Each filter
- * narrows to LOCAL results (federated remote cards are excluded when set).
+ * Params for GET /videos/search: pagination plus the optional facets the search
+ * page exposes (category/language ids come from GET /videos/config; tags are
+ * free-form lowercased tags). The taxonomy and tag filters narrow to LOCAL
+ * results (federated remote cards are excluded when set); the duration and
+ * publish-window bounds apply to local and remote alike.
+ *
+ * Anything other than the default relevance sort — and any of the duration /
+ * publish / multi-tag facets — makes the backend serve the request from local
+ * SQL rather than the search service, which is where those predicates are real.
+ * That is the backend's decision, not something the caller opts into.
  */
 export interface SearchVideosParams extends SearchParams {
   tag?: string;
   category?: string;
   language?: string;
+  /** Ordering; omit for the endpoint's own relevance default. */
+  sort?: string;
+  /** Inclusive length bounds, in SECONDS. A video with no known duration matches neither. */
+  durationMin?: number;
+  durationMax?: number;
+  /** Inclusive RFC3339 publish window. An inverted window is a 400, not an empty page. */
+  publishedAfter?: string;
+  publishedBefore?: string;
+  /** Comma-separated tag lists: every tag / at least one tag. */
+  tagsAllOf?: string;
+  tagsOneOf?: string;
 }
 
 export interface JobRunListParams {
@@ -337,7 +356,42 @@ export const api = {
         tag: params.tag,
         category: params.category,
         language: params.language,
+        sort: params.sort,
+        duration_min: params.durationMin,
+        duration_max: params.durationMax,
+        published_after: params.publishedAfter,
+        published_before: params.publishedBefore,
+        tags_all_of: params.tagsAllOf,
+        tags_one_of: params.tagsOneOf,
       },
+      signal,
+    }),
+
+  /**
+   * GET /api/v1/search/channels?q= — fuzzy channel search over handles and
+   * display names, ranked by similarity then follower count. Backed by core's
+   * own Postgres rather than the search service: the index holds videos, so a
+   * channel that has published nothing is invisible to it — and "find the
+   * channel that was just created" is exactly what a channel search is asked.
+   * Optional auth (a signed-in caller's muted/blocked accounts drop out, and the
+   * reported total is counted under the same predicate).
+   */
+  searchChannels: (query: string, params: SearchParams = {}, signal?: AbortSignal) =>
+    apiRequest<ChannelSearchResponse>("/api/v1/search/channels", {
+      query: { q: query, limit: params.limit, offset: params.offset },
+      signal,
+    }),
+
+  /**
+   * GET /api/v1/search/accounts?q= — fuzzy account search over usernames and
+   * display names. Returns only accounts that are active, have opted their
+   * profile in, and have not opted out of discovery; the total is counted under
+   * the identical predicate, so it can never leak the existence of an account
+   * the list refuses to return. Optional auth.
+   */
+  searchAccounts: (query: string, params: SearchParams = {}, signal?: AbortSignal) =>
+    apiRequest<AccountSearchResponse>("/api/v1/search/accounts", {
+      query: { q: query, limit: params.limit, offset: params.offset },
       signal,
     }),
 

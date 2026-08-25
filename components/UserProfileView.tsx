@@ -1,22 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { ChannelResultCard } from "@/components/EntityResultCard";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
-import {
-  ApiError,
-  api,
-  channelAvatarUrl,
-  userAvatarUrl,
-  userBannerUrl,
-} from "@/lib/api";
-import type { Channel, PublicUserProfile } from "@/lib/api";
-import { formatCount, formatMonthYear, pluralize } from "@/lib/format";
+import { ApiError, api, userAvatarUrl, userBannerUrl } from "@/lib/api";
+import type { PublicUserProfile } from "@/lib/api";
+import { formatMonthYear } from "@/lib/format";
 
 export function UserProfileLoader({ username }: { username: string }) {
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
@@ -96,7 +90,7 @@ export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
             <ul aria-label={`Channels by ${name}`} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {profile.channels.map((channel) => (
                 <li key={channel.id}>
-                  <ProfileChannelCard channel={channel} />
+                  <ChannelResultCard channel={channel} />
                 </li>
               ))}
             </ul>
@@ -124,19 +118,5 @@ export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
         )}
       </div>
     </div>
-  );
-}
-
-function ProfileChannelCard({ channel }: { channel: Channel }) {
-  const name = channel.display_name || channel.handle;
-  return (
-    <Link href={`/channels/${encodeURIComponent(channel.handle)}`} className="focus-ring flex h-full gap-3 rounded-2xl bg-surface-muted p-4 transition-colors hover:bg-surface-strong">
-      <Avatar src={channel.has_avatar ? channelAvatarUrl(channel.handle) : null} name={name} className="h-12 w-12 shrink-0" />
-      <span className="min-w-0">
-        <span className="block truncate text-subhead font-semibold text-fg">{name}</span>
-        <span className="block truncate text-footnote text-fg-muted">@{channel.handle}</span>
-        <span className="mt-1 block text-footnote tabular-nums text-fg-muted">{formatCount(channel.follower_count)} {pluralize(channel.follower_count, "follower")}</span>
-      </span>
-    </Link>
   );
 }

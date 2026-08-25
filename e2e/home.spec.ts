@@ -271,3 +271,70 @@ test("a rail card's kebab menu is portaled, fully in view, and does not scroll t
   // Opening the menu did not scroll the rail ("tiles raise up" regression).
   expect(await rail.evaluate((el) => el.scrollTop)).toBe(scrollTopBefore);
 });
+
+test("the feed pager retires on the server's total instead of a short-page guess", async ({
+  page,
+}) => {
+  await page.route(FEED_URL, (route) =>
+    route.fulfill({
+      json: {
+        // A full page that is nevertheless the whole feed. The old guess
+        // (length === 20) would have left a Load more that fetched nothing.
+        videos: Array.from({ length: 20 }, (_, i) => video(`v${i}`, `Feed Video ${i + 1}`, 1)),
+        total: 20,
+        sort: "recent",
+        limit: 20,
+        offset: 0,
+      },
+    }),
+  );
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Feed Video 20" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load more" })).toBeHidden();
+});
+
+test("the feed auto-loads when the operator chose infinite scroll", async ({ page }) => {
+  await page.route(/\/api\/v1\/instance$/, (route) =>
+    route.fulfill({
+      json: {
+        name: "Vidra",
+        defaults: {
+          feed_sort: "recent",
+          feed_scope: "local",
+          browse_scroll_mode: "auto",
+          landing_page: "home-recent",
+          theme: "system",
+          player_autoplay: false,
+          miniature_prefer_author_display_name: false,
+          publish: { privacy: "public", licence: 1, comment_policy: "enabled", download_enabled: true },
+        },
+      },
+    }),
+  );
+  await page.route(FEED_URL, (route) => {
+    const offset = Number(new URL(route.request().url()).searchParams.get("offset") ?? "0");
+    route.fulfill({
+      json: {
+        videos:
+          offset === 0
+            ? Array.from({ length: 20 }, (_, i) => video(`v${i}`, `Feed Video ${i + 1}`, 1))
+            : [video("v20", "Feed Video 21", 1)],
+        total: 21,
+        sort: "recent",
+        limit: 20,
+        offset,
+      },
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Feed Video 20" })).toBeVisible();
+  // Auto-load carries the list, so the button steps aside — but the home feed
+  // gets the same treatment as search, rather than being left clicking.
+  await expect(page.getByRole("button", { name: "Load more" })).toBeHidden();
+
+  await page.getByTestId("load-more-sentinel").scrollIntoViewIfNeeded();
+  await expect(page.getByRole("heading", { name: "Feed Video 21" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Feed Video 1", exact: true })).toBeVisible();
+});
