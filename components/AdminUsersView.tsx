@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import { AdminPagination, AdminSearch, RolePill } from "@/components/admin/AdminControls";
+import { AdminPagination, RolePill } from "@/components/admin/AdminControls";
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { ListSearch } from "@/components/admin/ListToolbar";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronLeftIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
@@ -10,18 +12,19 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { FilterChipGroup } from "@/components/ui/FilterChips";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
-import type { AdminUser, AdminUserListResponse, UserRole } from "@/lib/api";
+import type { AdminUser, UserRole } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatBytes, formatMonthYear, relativeTime } from "@/lib/format";
-
-type Status = "loading" | "error" | "ready";
+import { usePagedList } from "@/lib/use-paged-list";
 
 // Accounts per request. The endpoint pages via limit/offset and the published
 // contract caps a page at 100, which is also the page this view has always
-// shown — what it lacked was any way to ask for the second one.
+// shown. It is now just the DEFAULT: the pager's rows-per-page picker can take
+// it down to something an operator can actually read through.
 const PAGE_SIZE = 100;
 
 // The design's role control is a three-way segmented switch (was a <select>).
@@ -89,112 +92,74 @@ export function AdminUsersView() {
 
   return (
     <RoleGate minRole="admin" action="manage users">
-      {user ? <UsersList currentUserId={user.id} /> : null}
+      {user ? (
+        <ListBoundary label="users">
+          <UsersList currentUserId={user.id} />
+        </ListBoundary>
+      ) : null}
     </RoleGate>
   );
 }
 
 function UsersList({ currentUserId }: { currentUserId: string }) {
-  const [status, setStatus] = useState<Status>("loading");
-  // The whole page envelope, not just its rows: `total` is what turns "here are
-  // 100 accounts" into "here are 100 of 4,649", and the pager needs the server's
-  // own limit/offset rather than what we asked for.
-  const [page, setPage] = useState<AdminUserListResponse | null>(null);
-  const [offset, setOffset] = useState(0);
-  const [query, setQuery] = useState("");
-  const [input, setInput] = useState("");
-  const [filter, setFilter] = useState<QuotaFilter>("all");
-  const [reloadKey, setReloadKey] = useState(0);
   // Desktop console (DR12): the users table is a master → detail. `selectedId`
   // is only ever set from the desktop table; mobile keeps its inline-control
   // cards, so it stays null there.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<QuotaFilter>("all");
 
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getAdminUsers({ q: query || undefined, limit: PAGE_SIZE, offset }, controller.signal)
-      .then((res) => {
-        if (controller.signal.aborted) return;
-        setPage(res);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [query, offset, reloadKey]);
+  const list = usePagedList<AdminUser>({
+    defaultLimit: PAGE_SIZE,
+    filterKeys: ["q"],
+    load: (query, signal) =>
+      api
+        .getAdminUsers(
+          { q: query.filters.q, limit: query.limit, offset: query.offset },
+          signal,
+        )
+        .then((res) => ({
+          items: res.users,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
 
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  // Submit the search (re-triggers the fetch effect). Set loading here rather than
-  // in the effect body so a stale list doesn't flash before the refetch resolves.
-  // A new query is a new result set, so it starts at the first page — page 40 of
-  // the old one is not a meaningful position in the new one, and the server
-  // would answer an out-of-range offset with an empty page that reads as "no
-  // matches".
-  const submitSearch = useCallback(
-    (next: string) => {
-      if (next === query) return;
-      setStatus("loading");
-      setSelectedId(null);
-      setOffset(0);
-      setQuery(next);
-    },
-    [query],
-  );
-
-  const goToOffset = useCallback((next: number) => {
-    setStatus("loading");
-    setSelectedId(null);
-    setOffset(next);
-  }, []);
+  const { items: users, total, pageLimit, pageOffset, patch, drop } = list;
+  const query = list.filters.q ?? "";
 
   // Reflect a saved edit back into the list (the PATCH returns the updated user).
-  const onUpdated = useCallback((updated: AdminUser) => {
-    setPage((prev) =>
-      prev
-        ? { ...prev, users: prev.users.map((u) => (u.id === updated.id ? updated : u)) }
-        : prev,
-    );
-  }, []);
+  const onUpdated = useCallback(
+    (updated: AdminUser) => patch((all) => all.map((u) => (u.id === updated.id ? updated : u))),
+    [patch],
+  );
 
   // A hard-deleted account is gone for good — drop its row, close its detail,
   // and take it off the total so the pager doesn't keep counting a row that no
   // longer exists anywhere.
-  const onDeleted = useCallback((id: string) => {
-    setPage((prev) =>
-      prev
-        ? {
-            ...prev,
-            users: prev.users.filter((u) => u.id !== id),
-            total: Math.max(0, prev.total - 1),
-          }
-        : prev,
-    );
-    setSelectedId((cur) => (cur === id ? null : cur));
+  const onDeleted = useCallback(
+    (id: string) => {
+      drop((u) => u.id !== id);
+      setSelectedId((cur) => (cur === id ? null : cur));
+    },
+    [drop],
+  );
+
+  // Leaving the current page — by searching, paging, or resizing the page —
+  // takes the open detail with it: the account it was showing is no longer in
+  // the rows behind it.
+  const leavePage = useCallback((run: () => void) => {
+    setSelectedId(null);
+    run();
   }, []);
 
-  const users = useMemo(() => page?.users ?? [], [page]);
-  const total = page?.total ?? 0;
-  // The server's echo, not our request: it clamps the limit, so believing our
-  // own number would mis-size every page label and every Next step.
-  const pageLimit = page?.limit ?? PAGE_SIZE;
-  const pageOffset = page?.offset ?? 0;
-  // True when the instance has more accounts than this page holds — the state
-  // in which a page-scoped count would otherwise pass for an instance-wide one.
-  const paged = total > users.length;
-
   // Facet counts over the loaded page. They cannot be anything else: the list
-  // endpoint filters by search text only, so there is no request that could
-  // answer "how many admins does this instance have" — and inventing one from a
-  // single page would put a wrong number in front of an operator. So the counts
-  // stay page-scoped and the caption below says so out loud.
+  // endpoint filters by search text only (no role or status parameter exists),
+  // so there is no request that could answer "how many admins does this instance
+  // have" — and inventing one from a single page would put a wrong number in
+  // front of an operator. They are therefore labelled as page-scoped in the
+  // group's accessible name, unconditionally, rather than only once a second
+  // page exists.
   const counts = useMemo(
     () => ({
       all: users.length,
@@ -203,6 +168,10 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
     }),
     [users],
   );
+
+  // True when the instance has more accounts than this page holds — the state
+  // in which a page-scoped count would otherwise pass for an instance-wide one.
+  const paged = total > users.length;
 
   // A facet that empties a page has not proved the instance has no such
   // accounts — only that this page has none.
@@ -218,42 +187,49 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
 
   const selected = selectedId ? users.find((u) => u.id === selectedId) ?? null : null;
 
+  const pager = (
+    <AdminPagination
+      total={total}
+      limit={pageLimit}
+      offset={pageOffset}
+      onOffset={(next) => leavePage(() => list.setOffset(next))}
+      onPageSize={(next) => leavePage(() => list.setLimit(next))}
+      label="users"
+    />
+  );
+
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar: always on mobile; on desktop it hides while a user detail is
           open (the detail is its own full screen in the design). */}
       <div className={cn("flex flex-col gap-4", selected && "lg:hidden")}>
-        <AdminSearch
+        <ListSearch
           label="Search users"
           placeholder="Search by username or email"
-          value={input}
-          onChange={setInput}
-          onSubmit={() => submitSearch(input.trim())}
-          onClear={() => {
-            setInput("");
-            submitSearch("");
-          }}
-          hasQuery={Boolean(query)}
+          value={query}
+          // A new query is a new result set, so it starts at the first page —
+          // page 40 of the old one is not a meaningful position in the new one.
+          // `setFilter` resets the offset for us.
+          onSubmit={(next) => leavePage(() => list.setFilter("q", next))}
         />
 
         <div className="flex flex-col gap-1.5">
-          <div
-            className="flex flex-wrap items-center gap-1.5"
-            role="group"
-            aria-label={paged ? "Filter this page of users" : "Filter users"}
-          >
-            <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-              All <span className="tabular-nums">· {counts.all}</span>
-            </FilterChip>
-            <FilterChip active={filter === "staff"} onClick={() => setFilter("staff")}>
-              Staff <span className="tabular-nums">· {counts.staff}</span>
-            </FilterChip>
-            <FilterChip active={filter === "deactivated"} onClick={() => setFilter("deactivated")}>
-              Deactivated <span className="tabular-nums">· {counts.deactivated}</span>
-            </FilterChip>
-          </div>
-          {/* Only worth saying once there is a second page. On an instance that
-              fits on one, the page IS the instance and the counts are totals. */}
+          <FilterChipGroup<QuotaFilter>
+            size="sm"
+            // The name says "this page" whether or not there IS a second page:
+            // the counts are page-scoped by construction, and a label that only
+            // admits it sometimes teaches the wrong reading the rest of the time.
+            label="Filter this page of users"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: "All", count: counts.all },
+              { value: "staff", label: "Staff", count: counts.staff },
+              { value: "deactivated", label: "Deactivated", count: counts.deactivated },
+            ]}
+          />
+          {/* Only worth spelling out once there is a second page. On an instance
+              that fits on one, the page IS the instance and the counts are totals. */}
           {paged ? (
             <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
               These counts cover the <span className="tabular-nums">{counts.all}</span> accounts on
@@ -264,12 +240,12 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
         </div>
       </div>
 
-      {status === "loading" ? (
+      {list.status === "loading" ? (
         <div className="flex justify-center py-24">
           <Spinner label="Loading users" />
         </div>
-      ) : status === "error" ? (
-        <ErrorState message="Could not load users." onRetry={retry} />
+      ) : list.status === "error" ? (
+        <ErrorState message="Could not load users." onRetry={list.reload} />
       ) : users.length === 0 ? (
         // An empty page past the first one is not an empty instance — deleting
         // the last account on the last page lands here — so it keeps the pager,
@@ -285,13 +261,7 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
                   : "Accounts will appear here as people sign up."
             }
           />
-          <AdminPagination
-            total={total}
-            limit={pageLimit}
-            offset={pageOffset}
-            onOffset={goToOffset}
-            label="users"
-          />
+          {pager}
         </>
       ) : (
         <>
@@ -335,46 +305,10 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
           {/* Hidden alongside the toolbar while a desktop detail is open: the
               detail is its own full screen, and paging out from under it would
               leave the open account behind. */}
-          <div className={cn(selected && "lg:hidden")}>
-            <AdminPagination
-              total={total}
-              limit={pageLimit}
-              offset={pageOffset}
-              onOffset={goToOffset}
-              label="users"
-            />
-          </div>
+          <div className={cn(selected && "lg:hidden")}>{pager}</div>
         </>
       )}
     </div>
-  );
-}
-
-// FilterChip — the design's Users facet pill (active = accent-filled, inactive =
-// outlined). Single-select; `aria-pressed` carries the state to assistive tech.
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "focus-ring rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
-        active
-          ? "bg-accent text-accent-fg"
-          : "border border-border text-fg-muted hover:bg-surface-muted hover:text-fg",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -395,6 +329,14 @@ const TABLE_GRID = "grid-cols-[1.4fr_1fr_110px_130px_120px_90px]";
 // / Storage / Joined / Status) with uppercase column headers and 0.55-opacity
 // deactivated rows. Each row is a button that opens the user detail. Keyboard-
 // and screen-reader-reachable (a real button per row).
+//
+// Deliberately NOT on `AdminTable`, unlike the other admin tables. AdminTable
+// renders a real `<table>` whose cells are `<td>`s; this table's whole row is a
+// single button (that is the master→detail affordance). Fitting it to the shell
+// would mean either a button per cell — six tab stops per account and six
+// announcements of the same action — or a `<button>` wrapping `<tr>`, which is
+// not valid HTML. The shell earns its keep on the other four tables; contorting
+// it for this one caller would cost more than the duplication saves.
 function UsersTable({
   users,
   currentUserId,

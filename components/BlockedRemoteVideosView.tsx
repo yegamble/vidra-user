@@ -1,17 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { PagedListShell } from "@/components/admin/PagedListShell";
 import { SlashCircleIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { BlockedRemoteVideo } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
-
-type Status = "loading" | "error" | "ready";
+import { usePagedList } from "@/lib/use-paged-list";
 
 // BlockedRemoteVideosView is the FEDERATED half of the moderation block-list:
 // every currently-blocked remote video with its origin identity (title, channel
@@ -23,71 +21,46 @@ type Status = "loading" | "error" | "ready";
 export function BlockedRemoteVideosView() {
   return (
     <RoleGate minRole="moderator" action="review blocked videos">
-      <BlockList />
+      <ListBoundary label="blocked remote videos">
+        <BlockList />
+      </ListBoundary>
     </RoleGate>
   );
 }
 
 function BlockList() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [videos, setVideos] = useState<BlockedRemoteVideo[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getBlockedRemoteVideos({ limit: 100 }, controller.signal)
-      .then((res) => {
-        setVideos(res.videos);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
-
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  // After an unblock, drop the row locally so it disappears immediately; a later
-  // refetch confirms persistence.
-  const onUnblocked = useCallback((id: string) => {
-    setVideos((prev) => prev.filter((v) => v.remote_video_id !== id));
-  }, []);
-
-  if (status === "loading") {
-    return (
-      <div className="flex justify-center py-24">
-        <Spinner label="Loading blocked remote videos" />
-      </div>
-    );
-  }
-  if (status === "error") {
-    return <ErrorState message="Could not load the remote block-list." onRetry={retry} />;
-  }
-  if (videos.length === 0) {
-    return (
-      <EmptyState
-        icon={<SlashCircleIcon size={24} />}
-        title="No blocked remote videos"
-        message="When a moderator blocks a federated video it is hidden from all local surfaces and listed here."
-      />
-    );
-  }
+  const list = usePagedList<BlockedRemoteVideo>({
+    load: (query, signal) =>
+      api
+        .getBlockedRemoteVideos({ limit: query.limit, offset: query.offset }, signal)
+        .then((res) => ({
+          items: res.videos,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
 
   return (
-    <ul className="flex flex-col gap-3">
-      {videos.map((video) => (
-        <li key={video.remote_video_id}>
-          <BlockedRow video={video} onUnblocked={onUnblocked} />
-        </li>
-      ))}
-    </ul>
+    <PagedListShell
+      list={list}
+      noun="blocked remote video"
+      errorMessage="Could not load the remote block-list."
+      emptyIcon={<SlashCircleIcon size={24} />}
+      emptyTitle="No blocked remote videos"
+      emptyMessage="When a moderator blocks a federated video it is hidden from all local surfaces and listed here."
+    >
+      <ul className="flex flex-col gap-3">
+        {list.items.map((video) => (
+          <li key={video.remote_video_id}>
+            <BlockedRow
+              video={video}
+              onUnblocked={(id) => list.drop((v) => v.remote_video_id !== id)}
+            />
+          </li>
+        ))}
+      </ul>
+    </PagedListShell>
   );
 }
 

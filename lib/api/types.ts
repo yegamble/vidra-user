@@ -235,6 +235,10 @@ export type PeerTubeImportRunState = NonNullable<Schemas["PeerTubeImportRun"]["s
 export type PeerTubeImportRunList = Schemas["PeerTubeImportRunList"];
 
 export type RegistrationRequestStatus = NonNullable<Schemas["RegistrationRequest"]["status"]>;
+/** GET /admin/registration-requests `?status` — the lifecycle enum plus "all". */
+export type RegistrationRequestFilter = NonNullable<
+  NonNullable<operations["listRegistrationRequests"]["parameters"]["query"]>["status"]
+>;
 export type RegistrationRequest = Schemas["RegistrationRequest"];
 export type RegistrationRequestListResponse = Schemas["RegistrationRequestListResponse"];
 export type RejectRegistrationRequest = Schemas["RejectRegistrationRequest"];
@@ -316,8 +320,20 @@ export type BlockedVideo = Schemas["BlockedVideo"];
 export type BlockedVideoListResponse = Schemas["BlockedVideoListResponse"];
 export type BlockedRemoteVideo = Schemas["BlockedRemoteVideo"];
 export type BlockedRemoteVideoListResponse = Schemas["BlockedRemoteVideoListResponse"];
+/** GET /admin/reports `?status` — the real three-way enum, not a boolean. */
+export type ReportStatusFilter = NonNullable<
+  NonNullable<operations["listReports"]["parameters"]["query"]>["status"]
+>;
 export type AdminVideo = Schemas["AdminVideo"];
 export type AdminVideoListResponse = Schemas["AdminVideoListResponse"];
+/** The 18-key ordering enum GET /admin/videos accepts (`published_at` aliases `created_at`). */
+export type AdminVideoSort = NonNullable<
+  NonNullable<operations["listAdminVideos"]["parameters"]["query"]>["sort"]
+>;
+/** GET /admin/videos `?scope` — local rows, federated rows, or both. */
+export type AdminVideoScope = NonNullable<
+  NonNullable<operations["listAdminVideos"]["parameters"]["query"]>["scope"]
+>;
 export type AdminComment = Schemas["AdminComment"];
 export type AdminCommentListResponse = Schemas["AdminCommentListResponse"];
 export type WatchedWord = Schemas["WatchedWord"];

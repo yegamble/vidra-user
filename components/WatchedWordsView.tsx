@@ -1,19 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { PagedListShell } from "@/components/admin/PagedListShell";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { WatchedWord } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { usePagedList } from "@/lib/use-paged-list";
 
 const MAX_WORD_LEN = 100;
-
-type Status = "loading" | "error" | "ready";
 
 // WatchedWordsView is the moderator/admin watched-words list: add and remove
 // instance-wide watched terms. Role-gated by RoleGate (an under-privileged/
@@ -21,70 +19,46 @@ type Status = "loading" | "error" | "ready";
 export function WatchedWordsView() {
   return (
     <RoleGate minRole="moderator" action="manage watched words">
-      <WordsList />
+      <ListBoundary label="watched words">
+        <WordsList />
+      </ListBoundary>
     </RoleGate>
   );
 }
 
 function WordsList() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [words, setWords] = useState<WatchedWord[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getWatchedWords({ limit: 100 }, controller.signal)
-      .then((res) => {
-        setWords(res.words);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
-
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  const onAdded = useCallback((word: WatchedWord) => {
-    setWords((prev) => [word, ...prev]);
-  }, []);
-
-  const onRemoved = useCallback((id: string) => {
-    setWords((prev) => prev.filter((w) => w.id !== id));
-  }, []);
+  const list = usePagedList<WatchedWord>({
+    load: (query, signal) =>
+      api
+        .getWatchedWords({ limit: query.limit, offset: query.offset }, signal)
+        .then((res) => ({
+          items: res.words,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
 
   return (
-    <div className="flex flex-col gap-4">
-      <AddWordForm onAdded={onAdded} />
-
-      {status === "loading" ? (
-        <div className="flex justify-center py-16">
-          <Spinner label="Loading watched words" />
-        </div>
-      ) : status === "error" ? (
-        <ErrorState message="Could not load watched words." onRetry={retry} />
-      ) : words.length === 0 ? (
-        <EmptyState
-          title="No watched words"
-          message="Add a term above. Content containing a watched word can be flagged for review."
-        />
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {words.map((w) => (
-            <li key={w.id}>
-              <WordRow word={w} onRemoved={onRemoved} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <PagedListShell
+      list={list}
+      noun="watched word"
+      // The add form is the surface's primary control, so it sits above the
+      // list; a new term is prepended AND counted, which keeps the pager
+      // honest without a refetch.
+      toolbar={<AddWordForm onAdded={list.prepend} />}
+      errorMessage="Could not load watched words."
+      emptyTitle="No watched words"
+      emptyMessage="Add a term above. Content containing a watched word can be flagged for review."
+    >
+      <ul className="flex flex-col gap-2">
+        {list.items.map((w) => (
+          <li key={w.id}>
+            <WordRow word={w} onRemoved={(id) => list.drop((x) => x.id !== id)} />
+          </li>
+        ))}
+      </ul>
+    </PagedListShell>
   );
 }
 

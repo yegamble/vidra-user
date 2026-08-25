@@ -1,9 +1,10 @@
 "use client";
 
-import type { FormEvent } from "react";
+import { useId, type FormEvent } from "react";
 
 import { SearchIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import type { UserRole } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
@@ -74,15 +75,28 @@ export function AdminSearch({
 }
 
 /**
+ * The page sizes the admin pager offers. Bounded by the backend's list contract
+ * (any `limit` in [1,100]); 20 matches the app-wide `PAGE_SIZE` default.
+ */
+export const PAGE_SIZE_OPTIONS = [5, 10, 20, 50, 100] as const;
+
+/**
  * AdminPagination — the admin surfaces' limit/offset pager: a `start–end of
- * total` readout on the left, Previous / Next on the right. It renders nothing
- * when the whole result set already fits on the first page, so a small instance
- * never sees pagination chrome it has no use for.
+ * total` + `Page X of Y` readout on the left, an optional rows-per-page picker
+ * and Previous / Next on the right.
  *
  * It needs a real `total` from the endpoint. Without one a client cannot tell a
  * last page from a truncated one, which is the difference between "that is
  * everybody" and "there are 4,549 more" — so a surface whose contract carries no
  * total must not fake this control.
+ *
+ * Visibility has two modes, deliberately:
+ *  - **without `onPageSize`** (the historical call sites) it renders nothing
+ *    when the whole result set already fits on the first page, so a small list
+ *    never sees pagination chrome it has no use for;
+ *  - **with `onPageSize`** it renders whenever there is at least one row. A
+ *    seven-row list still reads "1–7 of 7" and still lets you change the page
+ *    size — hiding the control would strand the only way to change it.
  *
  * `label` names the rows for the nav's accessible name ("Paginate users").
  */
@@ -92,25 +106,78 @@ export function AdminPagination({
   offset,
   onOffset,
   label,
+  pageSize,
+  onPageSize,
 }: {
   total: number;
   limit: number;
   offset: number;
   onOffset: (offset: number) => void;
   label: string;
+  /**
+   * The selected page size. Defaults to `limit` — pass it explicitly only when
+   * the pending selection differs from the limit the current rows were fetched
+   * with (e.g. a request in flight). A value outside `PAGE_SIZE_OPTIONS` is
+   * offered as an extra option so the picker never lies about the current size.
+   */
+  pageSize?: number;
+  /**
+   * Called with the chosen page size. Omit it to leave the picker out entirely
+   * — the four historical call sites do, and keep their old behaviour.
+   */
+  onPageSize?: (pageSize: number) => void;
 }) {
-  if (total <= limit && offset === 0) return null;
+  const sizeLabelId = useId();
+  if (!onPageSize && total <= limit && offset === 0) return null;
+  if (onPageSize && total === 0) return null;
   const start = total === 0 ? 0 : offset + 1;
   const end = Math.min(offset + limit, total);
+  // Guard against a zero/negative limit reaching us from a bad query string:
+  // Math.ceil(n/0) is Infinity and would render "Page 1 of Infinity".
+  const perPage = limit > 0 ? limit : 1;
+  const pageCount = Math.max(1, Math.ceil(total / perPage));
+  const page = Math.min(pageCount, Math.floor(offset / perPage) + 1);
+  const selectedSize = pageSize ?? limit;
+  const sizes: number[] = PAGE_SIZE_OPTIONS.some((size) => size === selectedSize)
+    ? [...PAGE_SIZE_OPTIONS]
+    : [...PAGE_SIZE_OPTIONS, selectedSize].sort((a, b) => a - b);
   return (
     <nav
       aria-label={`Paginate ${label}`}
       className="flex flex-wrap items-center justify-between gap-3"
     >
-      <span className="text-xs tabular-nums text-fg-muted">
-        {start}–{end} of {total}
+      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-xs tabular-nums text-fg-muted">
+          {start}–{end} of {total}
+        </span>
+        <span className="text-xs tabular-nums text-fg-muted">
+          Page {page} of {pageCount}
+        </span>
       </span>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {onPageSize ? (
+          <div className="flex items-center gap-2">
+            <span id={sizeLabelId} className="text-xs text-fg-muted">
+              Rows per page
+            </span>
+            {/* Fixed-width wrapper rather than a width utility on the Select:
+                `cn()` is a plain concat (no tailwind-merge), so a competing
+                `w-*` would resolve by stylesheet order, not by our order. */}
+            <div className="w-24">
+              <Select
+                aria-labelledby={sizeLabelId}
+                value={selectedSize}
+                onChange={(e) => onPageSize(Number(e.target.value))}
+              >
+                {sizes.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+        ) : null}
         <Button
           variant="secondary"
           size="sm"

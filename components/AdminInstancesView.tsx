@@ -1,20 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { PagedListShell } from "@/components/admin/PagedListShell";
 import { ServerIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { BlockedInstance } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { usePagedList } from "@/lib/use-paged-list";
 
 const MAX_REASON_LEN = 2000;
-
-type Status = "loading" | "error" | "ready";
 
 // AdminInstancesView is the moderator/admin federation blocklist: block a
 // remote instance by domain (inbound activity from it is dropped, its content
@@ -25,70 +23,62 @@ type Status = "loading" | "error" | "ready";
 export function AdminInstancesView() {
   return (
     <RoleGate minRole="moderator" action="manage the instance blocklist">
-      <InstancesList />
+      <ListBoundary label="blocked instances">
+        <InstancesList />
+      </ListBoundary>
     </RoleGate>
   );
 }
 
 function InstancesList() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [instances, setInstances] = useState<BlockedInstance[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
+  const list = usePagedList<BlockedInstance>({
+    load: (query, signal) =>
+      api
+        .getBlockedInstances({ limit: query.limit, offset: query.offset }, signal)
+        .then((res) => ({
+          items: res.instances,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getBlockedInstances({ limit: 100 }, controller.signal)
-      .then((res) => {
-        setInstances(res.instances);
-        setStatus("ready");
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
-
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  const onBlocked = useCallback((instance: BlockedInstance) => {
-    setInstances((prev) => [instance, ...prev.filter((i) => i.domain !== instance.domain)]);
-  }, []);
-
-  const onUnblocked = useCallback((domain: string) => {
-    setInstances((prev) => prev.filter((i) => i.domain !== domain));
-  }, []);
+  const { items, patch, prepend } = list;
+  // Blocking is idempotent: re-blocking a domain already on the page refreshes
+  // its reason rather than adding a row, so that path patches instead of
+  // prepending — otherwise the total would climb on a no-op.
+  const onBlocked = useCallback(
+    (instance: BlockedInstance) => {
+      if (items.some((i) => i.domain === instance.domain)) {
+        patch((rows) => rows.map((i) => (i.domain === instance.domain ? instance : i)));
+      } else {
+        prepend(instance);
+      }
+    },
+    [items, patch, prepend],
+  );
 
   return (
-    <div className="flex flex-col gap-4">
-      <BlockInstanceForm onBlocked={onBlocked} />
-
-      {status === "loading" ? (
-        <div className="flex justify-center py-16">
-          <Spinner label="Loading blocked instances" />
-        </div>
-      ) : status === "error" ? (
-        <ErrorState message="Could not load the instance blocklist." onRetry={retry} />
-      ) : instances.length === 0 ? (
-        <EmptyState
-          icon={<ServerIcon size={24} />}
-          title="No blocked instances"
-          message="Block a federated instance above and its content disappears from every surface on this server."
-        />
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {instances.map((instance) => (
-            <li key={instance.domain}>
-              <BlockedInstanceRow instance={instance} onUnblocked={onUnblocked} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <PagedListShell
+      list={list}
+      noun="blocked instance"
+      toolbar={<BlockInstanceForm onBlocked={onBlocked} />}
+      errorMessage="Could not load the instance blocklist."
+      emptyIcon={<ServerIcon size={24} />}
+      emptyTitle="No blocked instances"
+      emptyMessage="Block a federated instance above and its content disappears from every surface on this server."
+    >
+      <ul className="flex flex-col gap-2">
+        {list.items.map((instance) => (
+          <li key={instance.domain}>
+            <BlockedInstanceRow
+              instance={instance}
+              onUnblocked={(domain) => list.drop((i) => i.domain !== domain)}
+            />
+          </li>
+        ))}
+      </ul>
+    </PagedListShell>
   );
 }
 

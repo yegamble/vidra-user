@@ -35,6 +35,8 @@ import type {
   StorageMigrationList,
   SystemStatus,
   AdminVideoListResponse,
+  AdminVideoScope,
+  AdminVideoSort,
   BlockedRemoteVideoListResponse,
   BlockedVideoListResponse,
   BlockVideoRequest,
@@ -127,9 +129,11 @@ import type {
   PlaylistDetail,
   PlaylistListResponse,
   ProfileImage,
+  RegistrationRequestFilter,
   RegistrationRequestListResponse,
   RejectRegistrationRequest,
   ReportListResponse,
+  ReportStatusFilter,
   ResolveReportRequest,
   UnreadCountResponse,
   UpdateUserRequest,
@@ -139,6 +143,8 @@ import type {
   CreateUploadSessionRequest,
   UploadSessionResponse,
   UploadStatusResponse,
+  VideoPrivacy,
+  VideoState,
   ActiveUploadsResponse,
   ImportJobResponse,
   ImportResolver,
@@ -1774,16 +1780,23 @@ export const api = {
     apiRequest<void>(`/api/v1/playlists/${encodeURIComponent(id)}/thumbnail`, { method: "DELETE" }),
 
   /**
-   * GET /api/v1/admin/reports — the moderation queue, newest first (moderator/admin).
-   * Pass `openOnly` to return only unresolved reports.
+   * GET /api/v1/admin/reports — the moderation queue, newest first
+   * (moderator/admin), with a `total` counting the reports that match the same
+   * status.
+   *
+   * `status` is a real three-way enum: "open" (unresolved), "resolved"
+   * (accepted or rejected), or "all" — which is also what omitting it means. It
+   * used to be a boolean spelled as "send status=open or send nothing", so
+   * `?status=resolved` silently returned the entire queue; the backend now
+   * rejects an unrecognised value with a 400 instead of quietly widening it.
    */
   getReports: (
-    params: { openOnly?: boolean; limit?: number; offset?: number } = {},
+    params: { status?: ReportStatusFilter; limit?: number; offset?: number } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<ReportListResponse>("/api/v1/admin/reports", {
       query: {
-        status: params.openOnly ? "open" : undefined,
+        status: params.status,
         limit: params.limit,
         offset: params.offset,
       },
@@ -1837,10 +1850,16 @@ export const api = {
 
   /**
    * GET /api/v1/admin/registration-requests — the registration approval queue,
-   * newest first (admin only). status="pending" returns only unresolved requests.
+   * newest first (admin only), with a `total` counting the requests that match
+   * the same status.
+   *
+   * `status` is the full lifecycle enum — "pending", "approved", "rejected", or
+   * "all" (also what omitting it means). It previously accepted only "pending"
+   * in practice: any other value fell through to "everything", so "show me the
+   * rejected applications" was unaskable.
    */
   getRegistrationRequests: (
-    params: { status?: "pending"; limit?: number; offset?: number } = {},
+    params: { status?: RegistrationRequestFilter; limit?: number; offset?: number } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<RegistrationRequestListResponse>("/api/v1/admin/registration-requests", {
@@ -2060,15 +2079,59 @@ export const api = {
     }),
 
   /**
-   * GET /api/v1/admin/videos — all videos (any privacy/state) newest first, each
-   * with its block status (moderator/admin). Optional `q` filters by title.
+   * GET /api/v1/admin/videos — the local + federated video inventory (any
+   * privacy/state) with each row's block status and media facts
+   * (moderator/admin), plus a `total` counting everything the SAME filters
+   * match. Every filter is optional and they intersect.
+   *
+   * Two shapes worth knowing at the call site:
+   *
+   *  - `state` and `privacy` are repeatable arrays. The backend accepts the
+   *    repeated form and the comma-separated form as equivalent, and the shared
+   *    query builder only serialises scalars, so they go out comma-joined.
+   *  - `hasOriginal` / `hasHls` / `hasWebFiles` are TRI-STATE. `undefined` omits
+   *    the parameter and means "all"; `false` is a real filter meaning "the ones
+   *    without". Collapsing that to a plain boolean would make "videos with no
+   *    HLS" unaskable.
+   *
+   * There is deliberately no storage filter: `object_storage` is derived from
+   * the instance-wide backend rather than per-file truth, so it is identical on
+   * every local row and filtering on it would answer nothing.
    */
   getAdminVideos: (
-    params: { q?: string; limit?: number; offset?: number } = {},
+    params: {
+      q?: string;
+      sort?: AdminVideoSort;
+      state?: readonly VideoState[];
+      privacy?: readonly VideoPrivacy[];
+      scope?: AdminVideoScope;
+      channel?: string;
+      publishedAfter?: string;
+      publishedBefore?: string;
+      hasOriginal?: boolean;
+      hasHls?: boolean;
+      hasWebFiles?: boolean;
+      limit?: number;
+      offset?: number;
+    } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<AdminVideoListResponse>("/api/v1/admin/videos", {
-      query: { q: params.q, limit: params.limit, offset: params.offset },
+      query: {
+        q: params.q,
+        sort: params.sort,
+        state: params.state?.length ? params.state.join(",") : undefined,
+        privacy: params.privacy?.length ? params.privacy.join(",") : undefined,
+        scope: params.scope,
+        channel: params.channel,
+        published_after: params.publishedAfter,
+        published_before: params.publishedBefore,
+        has_original: params.hasOriginal,
+        has_hls: params.hasHls,
+        has_web_files: params.hasWebFiles,
+        limit: params.limit,
+        offset: params.offset,
+      },
       signal,
     }),
 

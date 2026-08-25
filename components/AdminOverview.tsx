@@ -159,7 +159,7 @@ function Dashboard() {
         if (!aborted()) setStatsStatus("error");
       });
     api
-      .getReports({ openOnly: true, limit: REPORTS_PAGE }, signal)
+      .getReports({ status: "open", limit: REPORTS_PAGE }, signal)
       .then((res) => {
         setOpenReports(res.reports.length);
         setOpenReportsFullPage(res.reports.length >= REPORTS_PAGE);

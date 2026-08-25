@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,7 +16,12 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
+// The list state lives in the URL now, so the stub must re-render on navigation
+// or "did paging refetch" would only be measuring the stub.
+vi.mock("next/navigation", async () => {
+  const { navigationMock } = await import("@/lib/test-navigation");
+  return { ...navigationMock, useRouter: () => ({ ...navigationMock.useRouter(), push: mocks.push }) };
+});
 vi.mock("@/components/RoleGate", () => ({
   RoleGate: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -38,6 +43,7 @@ vi.mock("@/lib/api", () => ({
 
 import { AdminVideosView } from "@/components/AdminVideosView";
 import { ToastProvider } from "@/components/ui";
+import { navigation } from "@/lib/test-navigation";
 
 const local = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -47,6 +53,8 @@ const local = {
   channel_handle: "ada",
   channel_display_name: "Ada Films",
   views: 9,
+  likes: 4,
+  comments: 2,
   published_at: "2026-07-13T12:00:00Z",
   duration_seconds: 305,
   is_local: true,
@@ -81,7 +89,15 @@ const remote = {
 };
 
 beforeEach(() => {
-  mocks.getAdminVideos.mockResolvedValue({ videos: [local, remote], limit: 100, offset: 0 });
+  navigation.reset("/moderation/videos");
+  // 4649 is deliberately NOT the row count: the header must read the server's
+  // total, which is the whole point of this contract change.
+  mocks.getAdminVideos.mockResolvedValue({
+    videos: [local, remote],
+    total: 4649,
+    limit: 20,
+    offset: 0,
+  });
   mocks.runVideoTranscoding.mockResolvedValue({ status: "queued" });
   mocks.requestAutoCaption.mockResolvedValue({ caption_job: { state: "pending" } });
 });
@@ -120,5 +136,95 @@ describe("AdminVideosView", () => {
     await waitFor(() =>
       expect(mocks.runVideoTranscoding).toHaveBeenCalledWith(local.id, "web_video"),
     );
+  });
+
+  it("counts the instance, not the page — the reported bug", async () => {
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+    // Two rows on screen, 4,649 on the instance. This line used to read "2".
+    expect(await screen.findByText("4649 videos")).toBeTruthy();
+    // And it asks for a real window rather than a fixed limit: 100 with no offset.
+    expect(mocks.getAdminVideos.mock.calls[0][0]).toMatchObject({ limit: 20, offset: 0 });
+  });
+
+  it("pages forward with a real offset and remembers it in the URL", async () => {
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+    await screen.findByText("Local film");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(navigation.lastUrl()).toBe("/moderation/videos?offset=20");
+    await waitFor(() =>
+      expect(mocks.getAdminVideos).toHaveBeenLastCalledWith(
+        expect.objectContaining({ offset: 20 }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("lets the operator change the page size", async () => {
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+    await screen.findByText("Local film");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Rows per page" }), {
+      target: { value: "50" },
+    });
+    expect(navigation.lastUrl()).toBe("/moderation/videos?limit=50");
+    await waitFor(() =>
+      expect(mocks.getAdminVideos).toHaveBeenLastCalledWith(
+        expect.objectContaining({ limit: 50 }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("has a Transcoding preset that asks for both in-flight states", async () => {
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+    await screen.findByText("Local film");
+
+    fireEvent.click(screen.getByRole("button", { name: "Transcoding" }));
+    expect(navigation.params().get("state")).toBe("processing,transcoding");
+    await waitFor(() =>
+      expect(mocks.getAdminVideos).toHaveBeenLastCalledWith(
+        expect.objectContaining({ state: ["processing", "transcoding"] }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("can ask for videos that have NO HLS — the query a checkbox would delete", async () => {
+    navigation.reset("/moderation/videos", "hls=false");
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+    await screen.findByText("Local film");
+
+    expect(mocks.getAdminVideos.mock.calls[0][0]).toMatchObject({ hasHls: false });
+  });
+
+  it("treats an absent tri-state as 'all', not as false", async () => {
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+    await screen.findByText("Local film");
+    const params = mocks.getAdminVideos.mock.calls[0][0];
+    expect(params.hasHls).toBeUndefined();
+    expect(params.hasOriginal).toBeUndefined();
+    expect(params.hasWebFiles).toBeUndefined();
+  });
+
+  it("refuses an inverted publish window instead of requesting a 400", async () => {
+    navigation.reset("/moderation/videos", "after=2026-08-01T00:00&before=2026-07-01T00:00");
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      expect.stringContaining("ends before it starts"),
+    );
+    expect(mocks.getAdminVideos).not.toHaveBeenCalled();
+  });
+
+  it("offers no storage filter — the backend has no per-file truth behind one", async () => {
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+    await screen.findByText("Local film");
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    const panel = screen.getByRole("group", { name: "Filters" });
+    // The "Object storage" pill still appears on a row; what must not exist is a
+    // control to filter on it, since every local row reports the same value.
+    expect(within(panel).queryByText(/storage/i)).toBeNull();
   });
 });

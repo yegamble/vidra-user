@@ -1,20 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { PagedListShell } from "@/components/admin/PagedListShell";
 import { ShieldIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { QuarantinedVideo } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { usePagedList } from "@/lib/use-paged-list";
 
 const MAX_REASON_LEN = 2000;
-
-type Status = "loading" | "error" | "ready";
 
 // QuarantineQueueView is the moderator/admin review queue for uploads held by
 // the QUARANTINE_NEW_UPLOADS instance setting. Approving publishes the video
@@ -24,70 +22,47 @@ type Status = "loading" | "error" | "ready";
 export function QuarantineQueueView() {
   return (
     <RoleGate minRole="moderator" action="review held uploads">
-      <Queue />
+      <ListBoundary label="held uploads">
+        <Queue />
+      </ListBoundary>
     </RoleGate>
   );
 }
 
 function Queue() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [videos, setVideos] = useState<QuarantinedVideo[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getQuarantinedVideos({ limit: 100 }, controller.signal)
-      .then((res) => {
-        setVideos(res.videos);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
-
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  // A decided row drops out immediately; a later refetch confirms persistence.
-  const onDecided = useCallback((id: string) => {
-    setVideos((prev) => prev.filter((v) => v.id !== id));
-  }, []);
-
-  if (status === "loading") {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading held uploads" />
-      </div>
-    );
-  }
-  if (status === "error") {
-    return <ErrorState message="Could not load the quarantine queue." onRetry={retry} />;
-  }
-  if (videos.length === 0) {
-    return (
-      <EmptyState
-        icon={<ShieldIcon size={24} />}
-        title="No uploads waiting for review"
-        message="When this instance holds a new upload for review, it appears here for approval or rejection."
-      />
-    );
-  }
+  const list = usePagedList<QuarantinedVideo>({
+    load: (query, signal) =>
+      api
+        .getQuarantinedVideos({ limit: query.limit, offset: query.offset }, signal)
+        .then((res) => ({
+          items: res.videos,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
 
   return (
-    <ul className="flex flex-col gap-3">
-      {videos.map((video) => (
-        <li key={video.id}>
-          <QuarantineRow video={video} onDecided={onDecided} />
-        </li>
-      ))}
-    </ul>
+    <PagedListShell
+      list={list}
+      noun="held upload"
+      errorMessage="Could not load the quarantine queue."
+      emptyIcon={<ShieldIcon size={24} />}
+      emptyTitle="No uploads waiting for review"
+      emptyMessage="When this instance holds a new upload for review, it appears here for approval or rejection."
+    >
+      <ul className="flex flex-col gap-3">
+        {list.items.map((video) => (
+          <li key={video.id}>
+            {/* A decided upload leaves the queue for good — off the total too. */}
+            <QuarantineRow
+              video={video}
+              onDecided={(id) => list.drop((v) => v.id !== id)}
+            />
+          </li>
+        ))}
+      </ul>
+    </PagedListShell>
   );
 }
 

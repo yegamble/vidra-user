@@ -49,7 +49,7 @@ afterEach(() => {
 
 describe("LiveNowRail", () => {
   it("renders nothing while there is nothing live", async () => {
-    mockList.mockResolvedValue({ live_streams: [], limit: 20, offset: 0 });
+    mockList.mockResolvedValue({ total: 0, live_streams: [], limit: 20, offset: 0 });
     const { container } = render(<LiveNowRail />);
     await waitFor(() => expect(mockList).toHaveBeenCalled());
     expect(container.firstChild).toBeNull();
@@ -65,6 +65,7 @@ describe("LiveNowRail", () => {
 
   it("renders the rail with a card per live stream, each linking to its watch page", async () => {
     mockList.mockResolvedValue({
+      total: 3,
       live_streams: [
         card("11111111-1111-1111-1111-111111111111", "Late-night color grading"),
         card("22222222-2222-2222-2222-222222222222", "Field diary, live", {
@@ -98,6 +99,7 @@ describe("LiveNowRail", () => {
 
   it("uses the singular label for a single live stream and requests a bounded page", async () => {
     mockList.mockResolvedValue({
+      total: 1,
       live_streams: [card("33333333-3333-3333-3333-333333333333", "Solo stream")],
       limit: 20,
       offset: 0,

@@ -1,21 +1,58 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { PagedListShell } from "@/components/admin/PagedListShell";
 import { useSession } from "@/components/auth/AuthProvider";
 import { UsersIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
+import { FilterChipGroup, type FilterChipOption } from "@/components/ui/FilterChips";
 import { ApiError, api, errorMessage } from "@/lib/api";
-import type { RegistrationRequest, RegistrationRequestStatus } from "@/lib/api";
+import type {
+  RegistrationRequest,
+  RegistrationRequestFilter,
+  RegistrationRequestStatus,
+} from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { usePagedList } from "@/lib/use-paged-list";
 
 const MAX_NOTE_LEN = 2000;
 
-type Status = "loading" | "error" | "ready";
+/**
+ * The full lifecycle, now that the endpoint has a real enum. It used to be a
+ * boolean in disguise — "send pending, or send nothing" — so anything other
+ * than `pending` fell through to "everything", and the rejected pile was
+ * unaskable.
+ */
+const STATUS_OPTIONS: readonly FilterChipOption<RegistrationRequestFilter>[] = [
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+  { value: "all", label: "All" },
+];
+
+const DEFAULT_STATUS: RegistrationRequestFilter = "pending";
+
+const EMPTY_COPY: Record<RegistrationRequestFilter, { title: string; message: string }> = {
+  pending: {
+    title: "No pending requests",
+    message: "Nothing to review right now. Signups awaiting approval will appear here.",
+  },
+  approved: {
+    title: "No approved requests",
+    message: "Requests you approve are kept here as a record.",
+  },
+  rejected: {
+    title: "No rejected requests",
+    message: "Requests you reject are kept here as a record.",
+  },
+  all: {
+    title: "No registration requests yet",
+    message: "When this instance requires signup approval, requests show up here.",
+  },
+};
 
 // AdminRegistrationRequestsView is the admin-only registration approval queue,
 // role-gated by RoleGate (an under-privileged/anonymous viewer sees the shared
@@ -26,59 +63,52 @@ export function AdminRegistrationRequestsView() {
 
   return (
     <RoleGate minRole="admin" action="review registration requests">
-      {user ? <RequestQueue reviewerUsername={user.username} /> : null}
+      {user ? (
+        <ListBoundary label="registration requests">
+          <RequestQueue reviewerUsername={user.username} />
+        </ListBoundary>
+      ) : null}
     </RoleGate>
   );
 }
 
 function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
-  const [status, setStatus] = useState<Status>("loading");
-  const [requests, setRequests] = useState<RegistrationRequest[]>([]);
-  const [pendingOnly, setPendingOnly] = useState(true);
-  const [reloadKey, setReloadKey] = useState(0);
+  const list = usePagedList<RegistrationRequest>({
+    filterKeys: ["status"],
+    load: (query, signal) =>
+      api
+        .getRegistrationRequests(
+          {
+            status: (query.filters.status as RegistrationRequestFilter) ?? DEFAULT_STATUS,
+            limit: query.limit,
+            offset: query.offset,
+          },
+          signal,
+        )
+        .then((res) => ({
+          items: res.requests,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getRegistrationRequests(
-        { status: pendingOnly ? "pending" : undefined, limit: 100 },
-        controller.signal,
-      )
-      .then((res) => {
-        setRequests(res.requests);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [pendingOnly, reloadKey]);
+  const status = (list.filters.status as RegistrationRequestFilter) ?? DEFAULT_STATUS;
+  const { patch, drop } = list;
 
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  // Switch filter (re-triggers the fetch effect). Set loading here rather than in
-  // the effect body so a stale list doesn't flash before the refetch resolves.
-  const selectFilter = useCallback(
-    (next: boolean) => {
-      if (next === pendingOnly) return;
-      setStatus("loading");
-      setPendingOnly(next);
-    },
-    [pendingOnly],
-  );
-
-  // Reflect a resolution in place: the row flips to its new status (with the
-  // acting admin as reviewer) so the outcome is visible without a refetch; the
-  // next fetch (filter switch / reload) confirms persistence.
+  // The SERVER applies the status filter, so `total` counts the requests that
+  // match it. A request that has just been approved or rejected still matches
+  // "All", where the row simply flips to its new status (with the acting admin
+  // as reviewer) so the outcome is visible without a refetch. Under "Pending" it
+  // does not match any more, so it leaves the page and the count together.
   const onResolved = useCallback(
     (id: string, newStatus: RegistrationRequestStatus, moderatorNote?: string) => {
-      setRequests((prev) =>
-        prev.map((r) =>
+      if (status !== "all" && status !== newStatus) {
+        drop((r) => r.id !== id);
+        return;
+      }
+      patch((requests) =>
+        requests.map((r) =>
           r.id === id
             ? {
                 ...r,
@@ -91,71 +121,36 @@ function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
         ),
       );
     },
-    [reviewerUsername],
+    [drop, patch, reviewerUsername, status],
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2" role="group" aria-label="Filter registration requests">
-        <FilterButton active={pendingOnly} onClick={() => selectFilter(true)}>
-          Pending
-        </FilterButton>
-        <FilterButton active={!pendingOnly} onClick={() => selectFilter(false)}>
-          All
-        </FilterButton>
-      </div>
-
-      {status === "loading" ? (
-        <div className="flex justify-center py-24">
-          <Spinner label="Loading registration requests" />
-        </div>
-      ) : status === "error" ? (
-        <ErrorState message="Could not load registration requests." onRetry={retry} />
-      ) : requests.length === 0 ? (
-        <EmptyState
-          icon={<UsersIcon size={24} />}
-          title={pendingOnly ? "No pending requests" : "No registration requests yet"}
-          message={
-            pendingOnly
-              ? "Nothing to review right now. Signups awaiting approval will appear here."
-              : "When this instance requires signup approval, requests show up here."
+    <PagedListShell
+      list={list}
+      noun="registration request"
+      toolbar={
+        <FilterChipGroup<RegistrationRequestFilter>
+          label="Filter registration requests"
+          options={STATUS_OPTIONS}
+          value={status}
+          onChange={(next) =>
+            list.setFilter("status", next === DEFAULT_STATUS ? "" : next)
           }
         />
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {requests.map((request) => (
-            <li key={request.id}>
-              <RequestRow request={request} onResolved={onResolved} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function FilterButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={
-        active
-          ? "focus-ring rounded-full border border-accent bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-accent-fg"
-          : "focus-ring rounded-full border border-border px-3.5 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted"
       }
+      errorMessage="Could not load registration requests."
+      emptyIcon={<UsersIcon size={24} />}
+      emptyTitle={EMPTY_COPY[status].title}
+      emptyMessage={EMPTY_COPY[status].message}
     >
-      {children}
-    </button>
+      <ul className="flex flex-col gap-3">
+        {list.items.map((request) => (
+          <li key={request.id}>
+            <RequestRow request={request} onResolved={onResolved} />
+          </li>
+        ))}
+      </ul>
+    </PagedListShell>
   );
 }
 

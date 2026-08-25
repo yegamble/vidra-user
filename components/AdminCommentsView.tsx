@@ -1,19 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
-import { AdminSearch } from "@/components/admin/AdminControls";
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { ListSearch } from "@/components/admin/ListToolbar";
+import { PagedListShell } from "@/components/admin/PagedListShell";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminComment } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
-
-type Status = "loading" | "error" | "ready";
+import { usePagedList } from "@/lib/use-paged-list";
 
 // AdminCommentsView is the moderator/admin comments overview: browse every
 // comment and delete any of them. Role-gated by RoleGate (an under-privileged/
@@ -21,89 +19,59 @@ type Status = "loading" | "error" | "ready";
 export function AdminCommentsView() {
   return (
     <RoleGate minRole="moderator" action="review comments">
-      <CommentsList />
+      <ListBoundary label="comments">
+        <CommentsList />
+      </ListBoundary>
     </RoleGate>
   );
 }
 
 function CommentsList() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [comments, setComments] = useState<AdminComment[]>([]);
-  const [query, setQuery] = useState("");
-  const [input, setInput] = useState("");
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getAdminComments({ q: query || undefined, limit: 100 }, controller.signal)
-      .then((res) => {
-        setComments(res.comments);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [query, reloadKey]);
-
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  const submitSearch = useCallback(
-    (next: string) => {
-      if (next === query) return;
-      setStatus("loading");
-      setQuery(next);
-    },
-    [query],
-  );
-
-  // Drop a deleted comment from the list.
-  const onDeleted = useCallback((id: string) => {
-    setComments((prev) => prev.filter((c) => c.id !== id));
-  }, []);
+  const list = usePagedList<AdminComment>({
+    filterKeys: ["q"],
+    load: (query, signal) =>
+      api
+        .getAdminComments(
+          { q: query.filters.q, limit: query.limit, offset: query.offset },
+          signal,
+        )
+        .then((res) => ({
+          items: res.comments,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
+  const searched = Boolean(list.filters.q);
 
   return (
-    <div className="flex flex-col gap-4">
-      <AdminSearch
-        label="Search comments"
-        placeholder="Search by text"
-        value={input}
-        onChange={setInput}
-        onSubmit={() => submitSearch(input.trim())}
-        onClear={() => {
-          setInput("");
-          submitSearch("");
-        }}
-        hasQuery={Boolean(query)}
-      />
-
-      {status === "loading" ? (
-        <div className="flex justify-center py-24">
-          <Spinner label="Loading comments" />
-        </div>
-      ) : status === "error" ? (
-        <ErrorState message="Could not load comments." onRetry={retry} />
-      ) : comments.length === 0 ? (
-        <EmptyState
-          title={query ? "No matching comments" : "No comments yet"}
-          message={query ? "Try a different search term." : "Comments will appear here as viewers post them."}
+    <PagedListShell
+      list={list}
+      noun="comment"
+      toolbar={
+        <ListSearch
+          label="Search comments"
+          placeholder="Search by text"
+          value={list.filters.q ?? ""}
+          onSubmit={(next) => list.setFilter("q", next)}
         />
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {comments.map((c) => (
-            <li key={c.id}>
-              <CommentRow comment={c} onDeleted={onDeleted} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+      }
+      errorMessage="Could not load comments."
+      emptyTitle={searched ? "No matching comments" : "No comments yet"}
+      emptyMessage={
+        searched
+          ? "Try a different search term."
+          : "Comments will appear here as viewers post them."
+      }
+    >
+      <ul className="flex flex-col gap-3">
+        {list.items.map((c) => (
+          <li key={c.id}>
+            <CommentRow comment={c} onDeleted={(id) => list.drop((x) => x.id !== id)} />
+          </li>
+        ))}
+      </ul>
+    </PagedListShell>
   );
 }
 

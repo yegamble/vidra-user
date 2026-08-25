@@ -76,7 +76,7 @@ export function AdminConsole() {
     if (user?.role !== "admin") return;
     const controller = new AbortController();
     api
-      .getReports({ openOnly: true, limit: REPORTS_PAGE }, controller.signal)
+      .getReports({ status: "open", limit: REPORTS_PAGE }, controller.signal)
       // Best-effort: the badge is a convenience, so a failed read simply omits it
       // (swallowed — never a thrown rejection or a blank console).
       .then((res) => setOpenReports(res.reports.length))

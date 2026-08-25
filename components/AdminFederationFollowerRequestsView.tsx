@@ -1,18 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
+import { ListBoundary } from "@/components/admin/ListBoundary";
+import { PagedListShell } from "@/components/admin/PagedListShell";
 import { GlobeIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { FederationFollowerRequest } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
-
-type Status = "loading" | "error" | "ready";
+import { usePagedList } from "@/lib/use-paged-list";
 
 // AdminFederationFollowerRequestsView is the admin-only federation
 // follower-approval queue (config-parity W12; modeled on the
@@ -25,67 +23,48 @@ type Status = "loading" | "error" | "ready";
 export function AdminFederationFollowerRequestsView() {
   return (
     <RoleGate minRole="admin" action="review follower requests">
-      <RequestQueue />
+      <ListBoundary label="follower requests">
+        <RequestQueue />
+      </ListBoundary>
     </RoleGate>
   );
 }
 
 function RequestQueue() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [requests, setRequests] = useState<FederationFollowerRequest[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getFederationFollowerRequests({ limit: 100 }, controller.signal)
-      .then((res) => {
-        setRequests(res.requests);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
-
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  // A resolved request simply leaves the pending list (the queue only ever
-  // holds unresolved follows — there is no resolved-state history to show).
-  const onResolved = useCallback((id: string) => {
-    setRequests((prev) => prev.filter((r) => r.id !== id));
-  }, []);
+  const list = usePagedList<FederationFollowerRequest>({
+    load: (query, signal) =>
+      api
+        .getFederationFollowerRequests({ limit: query.limit, offset: query.offset }, signal)
+        .then((res) => ({
+          items: res.requests,
+          total: res.total,
+          limit: res.limit,
+          offset: res.offset,
+        })),
+  });
 
   return (
-    <div className="flex flex-col gap-4">
-      {status === "loading" ? (
-        <div className="flex justify-center py-24">
-          <Spinner label="Loading follower requests" />
-        </div>
-      ) : status === "error" ? (
-        <ErrorState message="Could not load follower requests." onRetry={retry} />
-      ) : requests.length === 0 ? (
-        <EmptyState
-          icon={<GlobeIcon size={24} />}
-          title="No pending follower requests"
-          message="Nothing to review right now. While follower approval is on, new remote followers of local channels appear here."
-        />
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {requests.map((request) => (
-            <li key={request.id}>
-              <RequestRow request={request} onResolved={onResolved} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <PagedListShell
+      list={list}
+      noun="follower request"
+      errorMessage="Could not load follower requests."
+      emptyIcon={<GlobeIcon size={24} />}
+      emptyTitle="No pending follower requests"
+      emptyMessage="Nothing to review right now. While follower approval is on, new remote followers of local channels appear here."
+    >
+      <ul className="flex flex-col gap-3">
+        {list.items.map((request) => (
+          <li key={request.id}>
+            {/* A resolved request leaves the pending queue for good — the queue
+                only ever holds unresolved follows, so it leaves the total too. */}
+            <RequestRow
+              request={request}
+              onResolved={(id) => list.drop((r) => r.id !== id)}
+            />
+          </li>
+        ))}
+      </ul>
+    </PagedListShell>
   );
 }
 
