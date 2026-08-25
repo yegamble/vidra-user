@@ -7981,6 +7981,11 @@ export interface components {
              */
             conflict_policy?: "skip" | "rename" | "merge" | "fail";
             /**
+             * @description Optional; omitted means false. Whether the SOURCE wins where it and this instance have diverged. It is a SECOND, ORTHOGONAL axis, not another conflict_policy value: the policy resolves natural-key collisions at insert time, this decides whether a re-run may UPDATE the rows the import already owns. It exists for the migration workflow this tool is actually used for — a repeated sync against a still-live PeerTube, on a schedule, up to cutover — where a title edited, a password changed or a chapter moved on the source must follow. It updates video/channel/user metadata (including the password hash), chapters, video tags, ratings, playlist items, subscriptions, the instance category taxonomy and actor images. It NEVER touches a row created on Vidra (they have no import ledger entry), never re-inserts an entity, never rotates an actor keypair, never assigns a view count, never overwrites a rendition row, and never re-downloads media. Defaults to false — gap-filling, which is what an import has always done.
+             *     It is independent of `acknowledged_schema_version`, which is a version gate rather than a write policy: acknowledging a schema version grants no permission to overwrite anything, and a source-authoritative run against a verified source needs no acknowledgement.
+             */
+            source_authoritative?: boolean;
+            /**
              * @description An administrator's explicit, per-request sign-off on a source schema version OUTSIDE the importer's verified range. Omit it — that is the normal case, and the version gate then stands.
              *     Set it only to the exact `source_version` a previous run reported alongside `error_code: unverified_schema`. It is a version rather than a boolean deliberately: the gate opens only when this equals the version preflight actually detects, so an acknowledgement cannot be made in the abstract by a caller that never looked at the source, and stops applying by itself if the source is upgraded in the meantime.
              *     It is per-run and is never remembered: the next launch must state it again. There is no server default and no configuration key for it. It widens the schema-version gate and nothing else, and is recorded on the run (`acknowledged_schema_version`) next to the admin who launched it, plus an audit event naming the version accepted.
@@ -7992,6 +7997,8 @@ export interface components {
         PeerTubeImportCounts: {
             planned: number;
             imported: number;
+            /** @description Rows that already existed and were CHANGED to match the source. Only ever non-zero for a source_authoritative run. Not required: reports persisted by earlier releases have no such field. */
+            updated?: number;
             skipped: number;
             failed: number;
             unsupported: number;
@@ -8002,6 +8009,8 @@ export interface components {
             source_version?: number;
             dry_run: boolean;
             conflict_policy: string;
+            /** @description Whether this run was allowed to update rows the import already owns where the source and this instance had diverged. Recorded on the report because "why did that title change?" is asked long afterwards. */
+            source_authoritative?: boolean;
             /** @description Per-entity-kind counts, keyed by entity kind (category_taxonomy, user, channel, actor_avatar, actor_banner, video, video_file, hls_playlist, thumbnail, caption, tag, view_count, chapter, rating, rendition, comment, playlist, playlist_item, follow). view_count counts VIDEOS whose view total was carried, never views: the source records one lifetime number per video and no daily breakdown, so the total is applied as a delta to the video's counter and no per-day rows are invented. category_taxonomy is the INSTANCE's category list, so it is 0 or 1: 1 when the source replaces the stock taxonomy (a categories plugin) and the setting is the import's to write, 0 for the majority of sources, which run the stock list and get no override written. actor_avatar and actor_banner count the source's account and channel profile images, which are FETCHED over HTTP from the source instance rather than read from its object store (no PeerTube configuration puts them there), and which are never written over an image this instance already has. */
             entities: {
                 [key: string]: components["schemas"]["PeerTubeImportCounts"];
@@ -8021,6 +8030,8 @@ export interface components {
             state: "pending" | "running" | "done" | "failed";
             /** @enum {string} */
             conflict_policy: "skip" | "rename" | "merge" | "fail";
+            /** @description Whether this run was launched with the source as the authority where the two sides have diverged. */
+            source_authoritative?: boolean;
             /** @description The PeerTube schema version (application.migrationVersion) preflight detected. Populated even when preflight REFUSED that version — it is the number an administrator has to be shown before they can be asked to acknowledge it. */
             source_version?: number | null;
             /** @description The unverified schema version the launching administrator explicitly accepted for this run, or null (the norm). Recorded so the import history shows what was signed off on, not merely that something was. */
