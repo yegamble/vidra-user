@@ -28,11 +28,17 @@ export {
   type TriState,
   type TriStateFilterProps,
 } from "./FilterChips";
-export { FilterPanel, type FilterPanelProps } from "./FilterPanel";
+export {
+  FilterField,
+  FilterPanel,
+  type FilterFieldProps,
+  type FilterPanelProps,
+} from "./FilterPanel";
 export { IconButton, type IconButtonProps } from "./IconButton";
 export { IconTile, type TileColor } from "./IconTile";
 export { Input, type InputProps } from "./Input";
 export { LinkButton, type LinkButtonProps } from "./LinkButton";
+export { ListTail, type ListTailProps } from "./ListTail";
 export { LoadMoreButton, LoadMoreSentinel, PAGE_SIZE } from "./LoadMoreButton";
 export { Modal, type ModalProps } from "./Modal";
 export { OtpInput, type OtpInputProps } from "./OtpInput";

@@ -1,29 +1,32 @@
-import { SearchFilters } from "@/components/SearchFilters";
 import { SearchResults } from "@/components/SearchResults";
 import { getInstanceConfig } from "@/lib/instance-config.server";
-import { readSearchFilters } from "@/lib/search-url";
+import { readSearchFilters, readSearchType } from "@/lib/search-url";
 
-// The search page. The query AND the category/language/tag filters (the same
-// controls the home feed exposes) live in the URL so a filtered search is
-// shareable and back-button friendly; the controls push a new URL and this
-// server page re-reads searchParams and remounts the results.
+// The search page. The query, the result type (videos / channels / accounts)
+// and every facet live in the URL so a sorted, filtered search is shareable and
+// back-button friendly; the controls push a new URL and this server page
+// re-reads searchParams.
+//
+// There is no remount key here any more. The results component derives its
+// loading state from the query signature (lib/use-appending-list), so a filter
+// change swaps to the skeleton and resets to page one on its own — and the
+// filter panel, which used to be remounted (and so collapsed) by every change
+// it made, stays open.
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string; language?: string; tag?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
   const query = (sp.q ?? "").trim();
   const filters = readSearchFilters(sp);
+  const type = readSearchType(sp.type);
   // The SSR snapshot's search{} block: the W13 remote-URI gates drive the
   // results component's URL/handle help text; the search-service W4 gates drive
   // the autocomplete (suggestions_enabled) and the personalization hint (mode).
   // Absent on an older backend / when the fetch fails — every feature then stays
   // dark.
   const search = (await getInstanceConfig())?.search;
-  const resultsKey = [query, filters.category ?? "", filters.language ?? "", filters.tag ?? ""].join(
-    "|",
-  );
   // max-w-4xl: search results are a dense list (thumbnail-left rows), so the
   // page keeps a comfortable reading measure instead of the grid pages' 7xl.
   return (
@@ -33,10 +36,7 @@ export default async function SearchPage({
           every navigation). The page title stays for the accessibility tree
           only. */}
       <h1 className="sr-only">{query ? `Search results for “${query}”` : "Search"}</h1>
-      <div className="mb-3 sm:mb-4">
-        <SearchFilters query={query} filters={filters} />
-      </div>
-      <SearchResults key={resultsKey} query={query} filters={filters} remoteSearch={search} />
+      <SearchResults query={query} filters={filters} type={type} remoteSearch={search} />
     </main>
   );
 }

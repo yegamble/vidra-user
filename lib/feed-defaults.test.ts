@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   feedDefaultsForLanding,
+  resolveBrowseScrollMode,
   resolveFeedScope,
   resolveFeedSort,
   resolveLandingPage,
@@ -144,5 +145,25 @@ describe("shouldRenderHomepageDocument", () => {
     expect(shouldRenderHomepageDocument("home", homepage, { tag: "music" })).toBe(false);
     expect(shouldRenderHomepageDocument("home", homepage, { category: "7" })).toBe(false);
     expect(shouldRenderHomepageDocument("home", homepage, { language: "en" })).toBe(false);
+  });
+});
+
+// browse_scroll_mode: whether a browse list auto-loads as the reader scrolls.
+describe("resolveBrowseScrollMode", () => {
+  it("only says auto when the operator said auto", () => {
+    expect(resolveBrowseScrollMode({ browse_scroll_mode: "auto" })).toBe("auto");
+  });
+
+  it("falls back to the button for every other input", () => {
+    // Absent block, absent field, an unrecognised value, an explicit button —
+    // all four are the behavior every list shipped with, so a missing snapshot
+    // (old backend, failed fetch, mocked e2e) can never turn infinite scroll on.
+    expect(resolveBrowseScrollMode({ browse_scroll_mode: "button" })).toBe("button");
+    expect(resolveBrowseScrollMode({})).toBe("button");
+    expect(resolveBrowseScrollMode(null)).toBe("button");
+    expect(resolveBrowseScrollMode(undefined)).toBe("button");
+    expect(
+      resolveBrowseScrollMode({ browse_scroll_mode: "infinite" } as never),
+    ).toBe("button");
   });
 });

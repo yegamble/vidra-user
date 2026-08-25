@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Tabs } from "./Tabs";
 
@@ -66,5 +66,29 @@ describe("Tabs", () => {
     const panel = screen.getByRole("tabpanel");
     expect(panel.getAttribute("aria-labelledby")).toBe(tab.getAttribute("id"));
     expect(tab.getAttribute("aria-controls")).toBe(panel.getAttribute("id"));
+  });
+  it("lets a caller own the selection, so the active tab can live in the URL", () => {
+    const onTabChange = vi.fn();
+    const { rerender } = render(
+      <Tabs tabs={tabs} label="Sections" activeTabId="b" onTabChange={onTabChange} />,
+    );
+    expect(screen.getByRole("tab", { name: "Second" }).getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Third" }));
+    // Controlled: the caller is told, and NOTHING moves until it says so — the
+    // URL is the source of truth, not a second copy of it in component state.
+    expect(onTabChange).toHaveBeenCalledWith("c");
+    expect(screen.getByRole("tab", { name: "Second" }).getAttribute("aria-selected")).toBe("true");
+
+    rerender(<Tabs tabs={tabs} label="Sections" activeTabId="c" onTabChange={onTabChange} />);
+    expect(screen.getByRole("tab", { name: "Third" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("still notifies an uncontrolled caller", () => {
+    const onTabChange = vi.fn();
+    render(<Tabs tabs={tabs} label="Sections" onTabChange={onTabChange} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Second" }));
+    expect(onTabChange).toHaveBeenCalledWith("b");
+    expect(screen.getByRole("tab", { name: "Second" }).getAttribute("aria-selected")).toBe("true");
   });
 });

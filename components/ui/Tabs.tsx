@@ -15,8 +15,15 @@ export type TabItem = {
 
 export type TabsProps = {
   tabs: TabItem[];
-  /** Initially-selected tab id (defaults to the first tab). */
+  /** Initially-selected tab id (defaults to the first tab). Uncontrolled only. */
   defaultTabId?: string;
+  /**
+   * Selected tab id when the caller owns the selection — e.g. from the URL, so
+   * the chosen tab is shareable. Uncontrolled otherwise.
+   */
+  activeTabId?: string;
+  /** Notified on every selection change, controlled or not. */
+  onTabChange?: (id: string) => void;
   /** Accessible name for the tablist. */
   label: string;
   className?: string;
@@ -31,14 +38,28 @@ export type TabsProps = {
  *  - ArrowLeft/ArrowRight move (and wrap) selection, Home/End jump to the
  *    first/last tab, and selection follows focus.
  *
- * This is the in-page tab primitive (state-driven). Route-backed sub-navs (e.g.
- * the admin/moderation tab bars that are really links) intentionally stay as
- * `<Link>` lists and do not use this.
+ * This is the in-page tab primitive (state-driven), controlled or uncontrolled.
+ * Route-backed sub-navs (e.g. the admin/moderation tab bars that are really
+ * links) intentionally stay as `<Link>` lists and do not use this.
  */
-export function Tabs({ tabs, defaultTabId, label, className }: TabsProps) {
+export function Tabs({
+  tabs,
+  defaultTabId,
+  activeTabId,
+  onTabChange,
+  label,
+  className,
+}: TabsProps) {
   const baseId = useId();
-  const [active, setActive] = useState(defaultTabId ?? tabs[0]?.id);
+  const [uncontrolledActive, setUncontrolledActive] = useState(defaultTabId ?? tabs[0]?.id);
+  const controlled = activeTabId !== undefined;
+  const active = controlled ? activeTabId : uncontrolledActive;
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  function setActive(id: string) {
+    if (!controlled) setUncontrolledActive(id);
+    onTabChange?.(id);
+  }
 
   function tabId(id: string) {
     return `${baseId}-tab-${id}`;

@@ -18,6 +18,15 @@ import type {
 export const FALLBACK_FEED_SORT: FeedSort = "recent";
 export const FALLBACK_FEED_SCOPE: FeedScope = "local";
 
+/** How a browse list advances past its first page. */
+export type BrowseScrollMode = "button" | "auto";
+
+/**
+ * The shipped fallback: an explicit "Load more" button. Infinite scroll is
+ * something an operator opts into, never something a missing snapshot turns on.
+ */
+export const FALLBACK_BROWSE_SCROLL_MODE: BrowseScrollMode = "button";
+
 /** What "/" shows a visitor who expressed no preference of their own. */
 export type LandingPage = "home-recent" | "trending" | "local" | "home";
 
@@ -61,6 +70,22 @@ export function resolveLandingPage(defaults?: InstanceDefaultsBlock | null): Lan
   return value === "trending" || value === "local" || value === "home" || value === "home-recent"
     ? value
     : "home-recent";
+}
+
+/**
+ * Whether browse lists auto-load as the reader scrolls, or wait for a click.
+ *
+ * "auto" only when the operator said so in as many words: an absent block (old
+ * backend, failed fetch, the mocked e2e suite) and any unrecognised value both
+ * mean "button", which is exactly the behavior every list shipped with. Infinite
+ * scroll strands keyboard users and anything below the list, so it is not a
+ * thing to fall INTO — and the manual button keeps rendering either way (see
+ * `shouldRenderLoadMore`); "auto" adds a sentinel, it never removes the control.
+ */
+export function resolveBrowseScrollMode(
+  defaults?: InstanceDefaultsBlock | null,
+): BrowseScrollMode {
+  return defaults?.browse_scroll_mode === "auto" ? "auto" : FALLBACK_BROWSE_SCROLL_MODE;
 }
 
 /**

@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
 
 import { useOptionalSession } from "@/components/auth/AuthProvider";
+import { AccountResultCard, ChannelResultCard } from "@/components/EntityResultCard";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
+import { SearchFilters as SearchFilterPanel } from "@/components/SearchFilters";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
+import { ListTail } from "@/components/ui/ListTail";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Tabs } from "@/components/ui/Tabs";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
 import {
@@ -22,10 +26,11 @@ import {
   videoOriginalUrl,
   videoThumbnailUrl,
 } from "@/lib/api";
-import type { Video } from "@/lib/api";
+import type { AccountSearchResult, Channel, Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useRestrictedMode } from "@/lib/device-preferences";
-import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { resolveBrowseScrollMode } from "@/lib/feed-defaults";
+import { formatCount, formatDuration, pluralize, relativeTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { InstanceSearchBlock } from "@/lib/instance-config.server";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
@@ -39,11 +44,16 @@ import {
   searchQueryLooksRemote,
 } from "@/lib/remote-search";
 import type { RemoteSearchActor, RemoteSearchResult } from "@/lib/remote-search";
-import type { SearchFilters } from "@/lib/search-url";
+import {
+  activeSearchFilterCount,
+  searchApiFilters,
+  searchFilterKey,
+  searchHref,
+  type SearchFilters,
+  type SearchResultType,
+} from "@/lib/search-url";
+import { useAppendingList } from "@/lib/use-appending-list";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
-
-type Status = "idle" | "loading" | "error" | "ready";
-type MoreStatus = "idle" | "loading" | "error";
 
 // The search page is a thumbnail-left list, not a browse grid. Matching that
 // geometry during the client fetch prevents the global/grid → spinner → rows
@@ -73,6 +83,62 @@ function SearchResultsSkeleton({ count = 5 }: { count?: number }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+// The identity-card silhouette, for the channel and account tabs.
+function EntityResultsSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div role="status" aria-live="polite" data-testid="search-results-loading">
+      <span className="sr-only">Searching…</span>
+      <ul aria-hidden className="grid gap-4 sm:grid-cols-2">
+        {Array.from({ length: count }).map((_, index) => (
+          <li key={index} className="flex gap-3 rounded-2xl bg-surface-muted p-4">
+            <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
+            <div className="flex min-w-0 flex-1 flex-col gap-2 pt-1">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/3" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * The result count for one tab. Two things it refuses to do: guess, and
+ * overstate.
+ *
+ * A backend that reports no total renders nothing at all — "20 results" derived
+ * from the page length is how the admin lists came to claim "100 videos" on an
+ * instance with thousands. And when the search service says its count is a
+ * FLOOR (`total_is_lower_bound`: its ranker hit a recall cap, so matches exist
+ * that were never scored) the number is shown as "1,000+", never as an exact
+ * figure. That distinction earns its keep the moment auto-load is on: infinite
+ * scroll reaches that boundary in seconds, where the button took twenty-five
+ * clicks to get near it.
+ */
+function ResultCount({
+  total,
+  lowerBound,
+  noun,
+}: {
+  total: number | null;
+  lowerBound: boolean;
+  noun: string;
+}) {
+  if (total === null) return null;
+  return (
+    <p className="text-sm font-semibold tabular-nums text-fg-muted">
+      {total}
+      {lowerBound ? "+" : ""} {pluralize(total, noun)}
+      {lowerBound ? (
+        <span className="ml-1 font-normal">
+          — the ranker stopped counting here; there are more.
+        </span>
+      ) : null}
+    </p>
   );
 }
 
@@ -341,113 +407,79 @@ function RemoteActorResult({
   );
 }
 
-// SearchResults loads public title/tag-search results client-side, with a "Load
-// more" pager (limit/offset; the pager hides once a page comes back short).
-// The page mounts it with a key that encodes the query AND the active
-// category/language/tag filters, so the initial status is derived from the
-// query (no synchronous setState in the effect) and any change gives a fresh
-// load — the filters ride every page request (initial + "Load more").
-//
-// remoteSearch carries the /instance search{} gates (config-parity W13, passed
-// by the server page): when the caller's auth state may search by URL/handle,
-// the prompt/empty states say so, and any resolved remote hits from the first
-// page render in a "From the fediverse" group above the local results.
-export function SearchResults({
+/**
+ * The videos tab. Owns the facet panel (the facets narrow videos and nothing
+ * else, so they belong inside this tab rather than above all three), the local
+ * result rows, and the "From the fediverse" group.
+ */
+function VideoResults({
   query,
-  filters = {},
-  remoteSearch,
+  filters,
+  type,
+  remoteHintEnabled,
+  personalizedActive,
+  autoLoad,
 }: {
   query: string;
-  filters?: SearchFilters;
-  remoteSearch?: InstanceSearchBlock;
+  filters: SearchFilters;
+  type: SearchResultType;
+  remoteHintEnabled: boolean;
+  personalizedActive: boolean;
+  autoLoad: boolean;
 }) {
-  const trimmed = query.trim();
-  const { category, language, tag } = filters;
-  const user = useOptionalSession()?.user ?? null;
-  // The personalization hint (search-service W4): shown only when the instance
-  // runs advanced ranking AND allows personalized search AND the signed-in user
-  // has kept their personalized-search preference on — i.e. results the viewer
-  // sees really are tailored to them. A link to /settings/search lets them turn
-  // it off. Absent gates (older backend) keep it dark.
-  const personalizedActive =
-    remoteSearch?.mode === "advanced" &&
-    remoteSearch?.personalized_search_enabled !== false &&
-    user?.personalized_search_enabled === true;
-  const [videos, setVideos] = useState<Video[]>([]);
+  // Resolved URI/handle hits ride the first page's response, not the row list —
+  // they are a different question ("what does this pasted link point at") with a
+  // different answer shape, and they are not paginated.
   const [remote, setRemote] = useState<RemoteSearchResult[]>([]);
-  const [status, setStatus] = useState<Status>(trimmed ? "loading" : "idle");
-  const [hasMore, setHasMore] = useState(false);
-  const [more, setMore] = useState<MoreStatus>("idle");
-  const [reloadKey, setReloadKey] = useState(0);
 
-  // Whether THIS caller may search by URL/handle (drives help text only; the
-  // backend enforces the gate either way). Evaluated per render — cheap, and
-  // login state changes remount the page anyway.
-  const remoteHintEnabled = Boolean(
-    getAccessToken() !== null ? remoteSearch?.remote_uri_users : remoteSearch?.remote_uri_anonymous,
+  const list = useAppendingList<Video>({
+    queryKey: searchFilterKey(query, filters),
+    load: (window, signal) =>
+      api
+        .searchVideos(
+          query,
+          { ...searchApiFilters(filters), limit: window.limit, offset: window.offset },
+          signal,
+        )
+        .then((res) => {
+          if (window.offset === 0) {
+            setRemote(readRemoteSearchResults(res));
+            // A search was submitted and produced this many local results — the
+            // signal the search service learns ranking from.
+            trackSearchEvent({ type: "search.submitted", query, count: res.videos.length });
+          }
+          return {
+            items: res.videos,
+            total: res.total,
+            totalIsLowerBound: res.total_is_lower_bound,
+            hasMore: res.has_more,
+          };
+        }),
+  });
+
+  const panel = (
+    <div className="mb-3 sm:mb-4">
+      <SearchFilterPanel query={query} filters={filters} type={type} />
+    </div>
   );
 
-  useEffect(() => {
-    if (!trimmed) return;
-    const controller = new AbortController();
-    api
-      .searchVideos(trimmed, { limit: PAGE_SIZE, offset: 0, category, language, tag }, controller.signal)
-      .then((res) => {
-        setVideos(res.videos);
-        setRemote(readRemoteSearchResults(res));
-        setHasMore(res.videos.length === PAGE_SIZE);
-        setStatus("ready");
-        // A search was submitted and produced this many local results — the
-        // signal the search service learns ranking from.
-        trackSearchEvent({ type: "search.submitted", query: trimmed, count: res.videos.length });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setStatus("error");
-      });
-    return () => controller.abort();
-  }, [trimmed, category, language, tag, reloadKey]);
-
-  function retry() {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }
-
-  async function loadMore() {
-    setMore("loading");
-    try {
-      const res = await api.searchVideos(trimmed, {
-        limit: PAGE_SIZE,
-        offset: videos.length,
-        category,
-        language,
-        tag,
-      });
-      setVideos((v) => [...v, ...res.videos]);
-      setHasMore(res.videos.length === PAGE_SIZE);
-      setMore("idle");
-    } catch {
-      setMore("error");
-    }
-  }
-
-  if (!trimmed) {
+  if (list.status === "loading") {
     return (
-      <EmptyState
-        title="Search for videos"
-        message={
-          remoteHintEnabled
-            ? "Enter a search term above — or paste a video/channel URL or a name@domain handle to look it up on another instance."
-            : "Enter a search term above."
-        }
-      />
+      <>
+        {panel}
+        <SearchResultsSkeleton />
+      </>
     );
   }
-  if (status === "loading") {
-    return <SearchResultsSkeleton />;
+  if (list.status === "error") {
+    return (
+      <>
+        {panel}
+        <ErrorState message="Search failed. Please try again." onRetry={list.reload} />
+      </>
+    );
   }
-  if (status === "error") {
-    return <ErrorState message="Search failed. Please try again." onRetry={retry} />;
-  }
+
   // The remote group (config-parity W13): resolved URI/handle hits from the
   // first page, rendered above the local results. Video hits reuse the same
   // remote-card row treatment; channel/account hits get the identity row.
@@ -472,63 +504,268 @@ export function SearchResults({
         </ul>
       </section>
     ) : null;
-  if (videos.length === 0 && remote.length === 0) {
-    const filtered = Boolean(category || language || tag);
+
+  if (list.items.length === 0 && remote.length === 0) {
+    const filtered = activeSearchFilterCount(filters) > 0;
     const unresolvedRemote =
-      remoteHintEnabled && searchQueryLooksRemote(trimmed)
+      remoteHintEnabled && searchQueryLooksRemote(query)
         ? " That looks like a URL or handle, but it did not resolve to remote content."
         : "";
     return (
+      <>
+        {panel}
+        <EmptyState
+          title="No results"
+          message={
+            filtered
+              ? `Nothing matched “${query}” with these filters. Try removing a filter.`
+              : `Nothing matched “${query}”.${unresolvedRemote}`
+          }
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {panel}
+      <div className="flex flex-col gap-6">
+        {personalizedActive ? (
+          <p className="text-xs text-fg-muted">
+            {t("search.personalizedHint")}{" "}
+            <Link
+              href="/settings/search"
+              className="focus-ring rounded font-medium text-fg underline-offset-2 hover:underline"
+            >
+              {t("search.personalizedManage")}
+            </Link>
+          </p>
+        ) : null}
+        <ResultCount total={list.total} lowerBound={list.totalIsLowerBound} noun="result" />
+        {remoteGroup}
+        {list.items.length > 0 ? (
+          <ul className="flex flex-col">
+            {list.items.map((video, index) => (
+              <SearchResultRow
+                key={video.id}
+                video={video}
+                onSelect={() =>
+                  trackSearchEvent({
+                    type: "search.result_clicked",
+                    query,
+                    video_id: video.id,
+                    position: index,
+                  })
+                }
+                onDeleted={() => list.drop((item) => item.id !== video.id)}
+              />
+            ))}
+          </ul>
+        ) : null}
+        <ListTail
+          hasMore={list.hasMore}
+          autoLoad={autoLoad}
+          busy={list.moreStatus === "loading"}
+          error={list.moreStatus === "error" ? "Could not load more results." : null}
+          onLoadMore={list.loadMore}
+        />
+      </div>
+    </>
+  );
+}
+
+/**
+ * The channels and accounts tabs. One component, two configurations: both are
+ * a paged fuzzy search over an identity, rendered as the same card grid, so the
+ * only differences worth naming are the endpoint, the card, and the noun.
+ * Writing them out twice is how the two tabs would drift apart.
+ */
+function EntityResults<T>({
+  query,
+  autoLoad,
+  label,
+  noun,
+  emptyTitle,
+  emptyMessage,
+  errorMessage: error,
+  load,
+  itemKey,
+  renderItem,
+}: {
+  query: string;
+  autoLoad: boolean;
+  /** Accessible name for the results list. */
+  label: string;
+  /** Singular noun for the count line ("channel"). */
+  noun: string;
+  emptyTitle: string;
+  emptyMessage: string;
+  errorMessage: string;
+  load: (
+    window: { limit: number; offset: number },
+    signal: AbortSignal,
+  ) => Promise<{ items: T[]; total: number }>;
+  itemKey: (item: T) => string;
+  renderItem: (item: T) => ReactNode;
+}) {
+  const list = useAppendingList<T>({ queryKey: query, load });
+
+  if (list.status === "loading") return <EntityResultsSkeleton />;
+  if (list.status === "error") return <ErrorState message={error} onRetry={list.reload} />;
+  if (list.items.length === 0) {
+    return <EmptyState title={emptyTitle} message={emptyMessage} />;
+  }
+  return (
+    <div className="flex flex-col gap-6">
+      <ResultCount total={list.total} lowerBound={list.totalIsLowerBound} noun={noun} />
+      <ul aria-label={label} className="grid gap-4 sm:grid-cols-2">
+        {list.items.map((item) => (
+          <li key={itemKey(item)}>{renderItem(item)}</li>
+        ))}
+      </ul>
+      <ListTail
+        hasMore={list.hasMore}
+        autoLoad={autoLoad}
+        busy={list.moreStatus === "loading"}
+        error={list.moreStatus === "error" ? error : null}
+        onLoadMore={list.loadMore}
+      />
+    </div>
+  );
+}
+
+// SearchResults is the whole results surface: a Videos / Channels / Accounts
+// switcher over three independent paged lists, each hitting its own endpoint
+// with its own count. The active tab lives in the URL (`?type=`), like every
+// other piece of search state, so a channel search is a shareable link.
+//
+// Pagination is `useAppendingList`, shared with the browse feed: it derives its
+// status from the query signature, which is why this component no longer needs
+// the page to remount it on a filter key — a filter change swaps to the
+// skeleton on the same render, with no stale rows underneath.
+//
+// remoteSearch carries the /instance search{} gates (config-parity W13, passed
+// by the server page): when the caller's auth state may search by URL/handle,
+// the prompt/empty states say so, and any resolved remote hits from the first
+// page render in a "From the fediverse" group above the local results.
+export function SearchResults({
+  query,
+  filters = {},
+  type = "videos",
+  remoteSearch,
+}: {
+  query: string;
+  filters?: SearchFilters;
+  /** Which result kind to list; from `?type=`, defaulting to videos. */
+  type?: SearchResultType;
+  remoteSearch?: InstanceSearchBlock;
+}) {
+  const router = useRouter();
+  const trimmed = query.trim();
+  const user = useOptionalSession()?.user ?? null;
+  // Infinite scroll is the operator's call (GET /instance defaults). Absent or
+  // unrecognised means the Load more button, which is what every list shipped
+  // with — so a missing snapshot (old backend, mocked e2e) changes nothing.
+  const autoLoad = resolveBrowseScrollMode(useInstanceDefaults()) === "auto";
+  // The personalization hint (search-service W4): shown only when the instance
+  // runs advanced ranking AND allows personalized search AND the signed-in user
+  // has kept their personalized-search preference on — i.e. results the viewer
+  // sees really are tailored to them. A link to /settings/search lets them turn
+  // it off. Absent gates (older backend) keep it dark.
+  const personalizedActive =
+    remoteSearch?.mode === "advanced" &&
+    remoteSearch?.personalized_search_enabled !== false &&
+    user?.personalized_search_enabled === true;
+
+  // Whether THIS caller may search by URL/handle (drives help text only; the
+  // backend enforces the gate either way). Evaluated per render — cheap, and
+  // login state changes remount the page anyway.
+  const remoteHintEnabled = Boolean(
+    getAccessToken() !== null ? remoteSearch?.remote_uri_users : remoteSearch?.remote_uri_anonymous,
+  );
+
+  if (!trimmed) {
+    // No term, nothing to switch between: the tab strip would offer three
+    // empty lists.
+    return (
       <EmptyState
-        title="No results"
+        title="Search for videos"
         message={
-          filtered
-            ? `Nothing matched “${trimmed}” with these filters. Try removing a filter.`
-            : `Nothing matched “${trimmed}”.${unresolvedRemote}`
+          remoteHintEnabled
+            ? "Enter a search term above — or paste a video/channel URL or a name@domain handle to look it up on another instance."
+            : "Enter a search term above."
         }
       />
     );
   }
+
   return (
-    <div className="flex flex-col gap-6">
-      {personalizedActive ? (
-        <p className="text-xs text-fg-muted">
-          {t("search.personalizedHint")}{" "}
-          <Link
-            href="/settings/search"
-            className="focus-ring rounded font-medium text-fg underline-offset-2 hover:underline"
-          >
-            {t("search.personalizedManage")}
-          </Link>
-        </p>
-      ) : null}
-      {remoteGroup}
-      {videos.length > 0 ? (
-        <ul className="flex flex-col">
-          {videos.map((video, index) => (
-            <SearchResultRow
-              key={video.id}
-              video={video}
-              onSelect={() =>
-                trackSearchEvent({
-                  type: "search.result_clicked",
-                  query: trimmed,
-                  video_id: video.id,
-                  position: index,
-                })
-              }
-              onDeleted={() => setVideos((current) => current.filter((item) => item.id !== video.id))}
+    <Tabs
+      label="Result type"
+      activeTabId={type}
+      onTabChange={(next) =>
+        router.push(searchHref(trimmed, filters, next as SearchResultType))
+      }
+      tabs={[
+        {
+          id: "videos",
+          label: "Videos",
+          panel: (
+            <VideoResults
+              query={trimmed}
+              filters={filters}
+              type={type}
+              remoteHintEnabled={remoteHintEnabled}
+              personalizedActive={personalizedActive}
+              autoLoad={autoLoad}
             />
-          ))}
-        </ul>
-      ) : null}
-      {hasMore ? (
-        <LoadMoreButton
-          busy={more === "loading"}
-          error={more === "error" ? "Could not load more results." : null}
-          onClick={() => void loadMore()}
-        />
-      ) : null}
-    </div>
+          ),
+        },
+        {
+          id: "channels",
+          label: "Channels",
+          panel: (
+            <EntityResults<Channel>
+              query={trimmed}
+              autoLoad={autoLoad}
+              label="Channel results"
+              noun="channel"
+              emptyTitle="No channels"
+              emptyMessage={`No channel matched “${trimmed}”.`}
+              errorMessage="Could not load channels."
+              load={(window, signal) =>
+                api
+                  .searchChannels(trimmed, window, signal)
+                  .then((res) => ({ items: res.channels, total: res.total }))
+              }
+              itemKey={(channel) => channel.id}
+              renderItem={(channel) => <ChannelResultCard channel={channel} />}
+            />
+          ),
+        },
+        {
+          id: "accounts",
+          label: "Accounts",
+          panel: (
+            <EntityResults<AccountSearchResult>
+              query={trimmed}
+              autoLoad={autoLoad}
+              label="Account results"
+              noun="account"
+              emptyTitle="No accounts"
+              emptyMessage={`No public account matched “${trimmed}”.`}
+              errorMessage="Could not load accounts."
+              load={(window, signal) =>
+                api
+                  .searchAccounts(trimmed, window, signal)
+                  .then((res) => ({ items: res.accounts, total: res.total }))
+              }
+              itemKey={(account) => account.id}
+              renderItem={(account) => <AccountResultCard account={account} />}
+            />
+          ),
+        },
+      ]}
+    />
   );
 }

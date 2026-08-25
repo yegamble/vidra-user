@@ -29,7 +29,7 @@ import {
   triStateValue,
   type TriState,
 } from "@/components/ui/FilterChips";
-import { FilterPanel } from "@/components/ui/FilterPanel";
+import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
 import { Input } from "@/components/ui/Input";
 import {
   api,
@@ -466,27 +466,6 @@ function VideosList() {
  * rather than a form field (chips have no `<label>` to hang off, so the caption
  * names the group through `aria-labelledby`).
  */
-function FilterField({
-  label,
-  hint,
-  render,
-}: {
-  label: string;
-  hint?: string;
-  render: (labelId: string) => ReactNode;
-}) {
-  const id = `filter-${label.toLowerCase().replace(/[^a-z]+/g, "-")}`;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span id={id} className="text-sm font-medium text-fg">
-        {label}
-      </span>
-      {render(id)}
-      {hint ? <p className="text-xs text-fg-muted">{hint}</p> : null}
-    </div>
-  );
-}
-
 const PILL = "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-[0.04em]";
 
 function VideoCell({ video }: { video: AdminVideo }) {

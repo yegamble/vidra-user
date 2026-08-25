@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
 import { ChevronDownIcon, SlidersIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/Badge";
@@ -150,6 +158,39 @@ export function FilterPanel({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+export type FilterFieldProps = {
+  /** Visible field caption. */
+  label: string;
+  /** One line under the control, for the meaning a caption cannot carry. */
+  hint?: string;
+  /**
+   * The control, given the id of its caption. Chip groups are `role="group"`
+   * and native fields are labelled elements, so neither can use a plain
+   * `<label htmlFor>` — they take the caption by `aria-labelledby` instead,
+   * which is why this is a render prop and not a wrapper.
+   */
+  render: (labelId: string) => ReactNode;
+};
+
+/**
+ * FilterField — one captioned control inside a `FilterPanel` grid. The `Input`
+ * / `Select` primitives carry their own labels; this is for everything else
+ * (chip groups, segmented rows, anything composed), so a panel's fields keep one
+ * caption size, one gap, and one hint treatment however they are built.
+ */
+export function FilterField({ label, hint, render }: FilterFieldProps) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span id={id} className="text-sm font-medium text-fg">
+        {label}
+      </span>
+      {render(id)}
+      {hint ? <p className="text-xs text-fg-muted">{hint}</p> : null}
     </div>
   );
 }

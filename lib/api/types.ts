@@ -98,6 +98,13 @@ export type SearchSuggestionsResponse =
   operations["searchSuggestions"]["responses"]["200"]["content"]["application/json"];
 export type SearchSuggestion = SearchSuggestionsResponse["suggestions"][number];
 export type SearchSuggestionType = "query" | "video" | "channel" | "tag" | "history";
+// The entity searches. Both are ordinary paged lists over types the app already
+// renders: channel hits are plain `Channel` objects, and an account hit is a
+// strict subset of `PublicUserProfile` — so a result card is the profile card,
+// not a search-only projection modelled twice.
+export type ChannelSearchResponse = Schemas["ChannelSearchResponse"];
+export type AccountSearchResponse = Schemas["AccountSearchResponse"];
+export type AccountSearchResult = Schemas["AccountSearchResult"];
 // A home / related recommendation rail: video cards each carrying a `reason`.
 export type RecommendationsResponse = Schemas["RecommendationsResponse"];
 export type RecommendationItem = RecommendationsResponse["items"][number];

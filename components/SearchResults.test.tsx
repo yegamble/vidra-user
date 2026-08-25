@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const previewMocks = vi.hoisted(() => ({
   featureEnabled: false,
@@ -21,6 +21,8 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+
+vi.mock("next/navigation", async () => (await import("@/lib/test-navigation")).navigationMock);
 
 vi.mock("@/components/VideoActionsMenu", () => ({
   VideoActionsMenu: ({
@@ -66,6 +68,19 @@ vi.mock("@/lib/device-preferences", () => ({
   useRestrictedMode: () => previewMocks.restrictedMode,
 }));
 
+// The filter panel's taxonomy: its own module, so the `@/lib/api` mock below
+// does not cover it. Resolving keeps the category/language selects enabled.
+vi.mock("@/lib/api/video-config", () => ({
+  getVideoConfigCached: vi.fn(() =>
+    Promise.resolve({
+      categories: [{ id: "7", label: "Gaming" }],
+      languages: [{ id: "en", label: "English" }],
+      licenses: [],
+      privacies: [],
+    }),
+  ),
+}));
+
 // The current access token the mocked auth store reports; tests flip it to
 // exercise the authed/anonymous help-text and follow affordances (W13).
 let mockedToken: string | null = null;
@@ -73,6 +88,8 @@ let mockedToken: string | null = null;
 vi.mock("@/lib/api", () => ({
   api: {
     searchVideos: vi.fn(),
+    searchChannels: vi.fn(),
+    searchAccounts: vi.fn(),
     createRemoteFollow: vi.fn(),
     postSearchEvents: vi.fn(() => Promise.resolve()),
   },
@@ -88,16 +105,23 @@ vi.mock("@/lib/api", () => ({
   remoteVideoThumbnailUrl: (id: string) => `/remote/${id}/thumbnail`,
   videoOriginalUrl: (id: string) => `/videos/${id}/original`,
   videoThumbnailUrl: (id: string) => `/videos/${id}/thumbnail`,
+  channelAvatarUrl: (handle: string) => `/channels/${handle}/avatar`,
+  userAvatarUrl: (id: string) => `/users/${id}/avatar`,
   isSensitiveVideo: (candidate: { is_sensitive?: boolean }) => candidate.is_sensitive === true,
   // The W5 miniature-name hook primes this shared fetch; rejecting keeps the
-  // instance defaults null (today's channel attribution).
+  // instance defaults null (today's channel attribution, and the Load more
+  // button rather than auto-load).
   getInstanceCached: vi.fn(() => Promise.reject(new Error("no backend in unit tests"))),
 }));
 
-import { api, type Video } from "@/lib/api";
+import { api, type AccountSearchResult, type Channel, type Video } from "@/lib/api";
+import { setInstanceDefaultsForTests } from "@/lib/instance-defaults";
+import { navigation } from "@/lib/test-navigation";
 import { SearchResults } from "@/components/SearchResults";
 
 const searchVideos = vi.mocked(api.searchVideos);
+const searchChannels = vi.mocked(api.searchChannels);
+const searchAccounts = vi.mocked(api.searchAccounts);
 const createRemoteFollow = vi.mocked(api.createRemoteFollow);
 
 function video(id: string, title: string): Video {
@@ -112,6 +136,24 @@ function video(id: string, title: string): Video {
     created_at: "2026-01-01T00:00:00Z",
     has_thumbnail: false,
   } as Video;
+}
+
+function channel(id: string, handle: string): Channel {
+  return {
+    id,
+    handle,
+    display_name: handle.toUpperCase(),
+    description: "",
+    owner_id: "owner-1",
+    follower_count: 12,
+    has_avatar: false,
+    has_banner: false,
+    created_at: "2026-01-01T00:00:00Z",
+  } as Channel;
+}
+
+function account(id: string, username: string): AccountSearchResult {
+  return { id, username, display_name: username.toUpperCase(), bio: "a bio" };
 }
 
 // A search response carrying the W13 additive `remote` array.
@@ -140,10 +182,15 @@ const channelHit = {
   },
 };
 
+beforeEach(() => {
+  navigation.reset("/search", "q=grading");
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mockedToken = null;
+  setInstanceDefaultsForTests(null);
   previewMocks.featureEnabled = false;
   previewMocks.preferenceEnabled = false;
   previewMocks.sensitivePolicy = "display";
@@ -333,5 +380,203 @@ describe("SearchResults remote-URI hits (config-parity W13)", () => {
 
     expect(await screen.findByRole("heading", { name: "Search match" })).toBeTruthy();
     expect(screen.queryByText("From the fediverse")).toBeNull();
+  });
+});
+
+describe("SearchResults counts", () => {
+  it("shows the server's per-viewer total, not the page length", async () => {
+    searchVideos.mockResolvedValue({
+      videos: [video("v1", "Search match")],
+      total: 42,
+      limit: 20,
+      offset: 0,
+    } as never);
+
+    render(<SearchResults query="grading" />);
+
+    expect(await screen.findByText(/42 results/)).toBeTruthy();
+  });
+
+  it("marks a recall-capped count as a lower bound rather than an exact figure", async () => {
+    searchVideos.mockResolvedValue({
+      videos: [video("v1", "Search match")],
+      total: 1000,
+      total_is_lower_bound: true,
+      limit: 20,
+      offset: 0,
+    } as never);
+
+    render(<SearchResults query="grading" />);
+
+    expect(await screen.findByText(/1000\+ results/)).toBeTruthy();
+    expect(screen.getByText(/stopped counting here/)).toBeTruthy();
+  });
+
+  it("shows no count at all when the backend reports none", async () => {
+    searchVideos.mockResolvedValue({ videos: [video("v1", "Search match")] } as never);
+
+    render(<SearchResults query="grading" />);
+    await screen.findByRole("heading", { name: "Search match" });
+
+    expect(screen.queryByText(/results$/)).toBeNull();
+  });
+});
+
+describe("SearchResults pagination", () => {
+  it("believes the server's has_more over the page's length", async () => {
+    // One row back, and the server says that is all there is — the short-page
+    // guess would have agreed here, so make it disagree: a FULL page with
+    // has_more false.
+    searchVideos.mockResolvedValue({
+      videos: Array.from({ length: 20 }, (_, i) => video(`v${i}`, `Match ${i}`)),
+      total: 100,
+      has_more: false,
+      limit: 20,
+      offset: 0,
+    } as never);
+
+    render(<SearchResults query="grading" />);
+    await screen.findByRole("heading", { name: "Match 0" });
+
+    // total=100 would say "more"; has_more is exact and wins.
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+  });
+
+  it("appends the next page and asks for it at the right offset", async () => {
+    searchVideos.mockImplementation((_q, params) =>
+      Promise.resolve({
+        videos:
+          (params?.offset ?? 0) === 0
+            ? [video("v1", "Match one")]
+            : [video("v2", "Match two")],
+        total: 2,
+        has_more: (params?.offset ?? 0) === 0,
+        limit: 20,
+        offset: params?.offset ?? 0,
+      } as never),
+    );
+
+    render(<SearchResults query="grading" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Load more" }));
+
+    expect(await screen.findByRole("heading", { name: "Match two" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Match one" })).toBeTruthy();
+    expect(searchVideos).toHaveBeenLastCalledWith(
+      "grading",
+      expect.objectContaining({ offset: 1, limit: 20 }),
+      expect.anything(),
+    );
+  });
+});
+
+describe("SearchResults filter facets", () => {
+  it("expands the URL buckets into the endpoint's parameters", async () => {
+    searchVideos.mockResolvedValue({ videos: [], total: 0, limit: 20, offset: 0 } as never);
+
+    render(
+      <SearchResults
+        query="grading"
+        filters={{
+          sort: "-views",
+          duration: "medium",
+          published: "7d",
+          tagsAll: ["ocean", "reef"],
+          tagsOne: ["1970s"],
+          category: "7",
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(searchVideos).toHaveBeenCalled());
+    const params = searchVideos.mock.calls[0][1];
+    expect(params).toMatchObject({
+      sort: "-views",
+      durationMin: 240,
+      durationMax: 600,
+      tagsAllOf: "ocean,reef",
+      tagsOneOf: "1970s",
+      category: "7",
+    });
+    expect(typeof params?.publishedAfter).toBe("string");
+  });
+
+  it("tells an empty filtered search apart from an empty search", async () => {
+    searchVideos.mockResolvedValue({ videos: [], total: 0, limit: 20, offset: 0 } as never);
+
+    render(<SearchResults query="grading" filters={{ duration: "long" }} />);
+
+    expect(await screen.findByText(/Try removing a filter/)).toBeTruthy();
+  });
+});
+
+describe("SearchResults result types", () => {
+  it("puts the chosen tab in the URL without touching the query or the facets", async () => {
+    searchVideos.mockResolvedValue({ videos: [], total: 0, limit: 20, offset: 0 } as never);
+
+    render(<SearchResults query="grading" filters={{ category: "7" }} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Channels" }));
+
+    expect(navigation.pushed.at(-1)).toBe("/search?q=grading&type=channels&category=7");
+  });
+
+  it("lists channels from the channel endpoint with their own count", async () => {
+    searchChannels.mockResolvedValue({
+      query: "grading",
+      channels: [channel("c1", "film-house")],
+      total: 3,
+      limit: 20,
+      offset: 0,
+    } as never);
+
+    render(<SearchResults query="grading" type="channels" />);
+
+    expect(await screen.findByText("FILM-HOUSE")).toBeTruthy();
+    expect(screen.getByText("@film-house")).toBeTruthy();
+    expect(screen.getByText(/3 channels/)).toBeTruthy();
+    // Each tab is its own endpoint: the video search is never called for it.
+    expect(searchVideos).not.toHaveBeenCalled();
+    expect(searchChannels).toHaveBeenCalledWith(
+      "grading",
+      expect.objectContaining({ offset: 0 }),
+      expect.anything(),
+    );
+  });
+
+  it("lists accounts from the account endpoint and links to their profiles", async () => {
+    searchAccounts.mockResolvedValue({
+      query: "grading",
+      accounts: [account("u1", "ada")],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    } as never);
+
+    render(<SearchResults query="grading" type="accounts" />);
+
+    expect(await screen.findByText("ADA")).toBeTruthy();
+    expect(screen.getByText(/1 account$/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /ADA/ }).getAttribute("href")).toBe("/users/ada");
+    expect(searchVideos).not.toHaveBeenCalled();
+  });
+
+  it("says so when an entity search matches nothing", async () => {
+    searchChannels.mockResolvedValue({
+      query: "grading",
+      channels: [],
+      total: 0,
+      limit: 20,
+      offset: 0,
+    } as never);
+
+    render(<SearchResults query="grading" type="channels" />);
+
+    expect(await screen.findByText("No channels")).toBeTruthy();
+  });
+
+  it("offers no tab strip before a term is entered", () => {
+    render(<SearchResults query="" />);
+
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByText("Search for videos")).toBeTruthy();
   });
 });
