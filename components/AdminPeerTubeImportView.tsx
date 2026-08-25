@@ -7,6 +7,7 @@ import { RoleGate } from "@/components/RoleGate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Select } from "@/components/ui/Select";
@@ -34,6 +35,27 @@ function isInFlight(run: PeerTubeImportRun | null): run is PeerTubeImportRun {
   return run !== null && (run.state === "pending" || run.state === "running");
 }
 
+// The two schema-version refusals preflight can return (error_code on a failed
+// run). They are NOT interchangeable: `unverified_schema` names a version an
+// admin may overrule from here; `undetectable_schema` names nothing at all and
+// so cannot be acknowledged in a browser — it needs the CLI's --force.
+const UNVERIFIED_SCHEMA = "unverified_schema";
+const UNDETECTABLE_SCHEMA = "undetectable_schema";
+
+// The schema version a run was REFUSED for and an admin may sign off on, or
+// null. Both halves matter: the refusal class, and a version to name. A refusal
+// with no readable version is never acknowledgeable.
+function refusedSchemaVersion(run: PeerTubeImportRun | null): number | null {
+  if (!run || run.state !== "failed" || run.error_code !== UNVERIFIED_SCHEMA) return null;
+  return typeof run.source_version === "number" ? run.source_version : null;
+}
+
+// Preflight could not read a version from the source at all — there is nothing
+// to name, so this page must not offer an acknowledgement for it.
+function isUndetectableSchema(run: PeerTubeImportRun | null): boolean {
+  return run?.state === "failed" && run.error_code === UNDETECTABLE_SCHEMA;
+}
+
 // The per-entity column order for the report table.
 const COUNT_COLUMNS = ["planned", "imported", "skipped", "failed", "unsupported"] as const;
 
@@ -45,6 +67,13 @@ const COUNT_COLUMNS = ["planned", "imported", "skipped", "failed", "unsupported"
 // connection comes from the server configuration; this page only triggers and
 // monitors. When the backend reports no source is configured (503), it shows
 // operator guidance pointing at the server config instead of any credential form.
+//
+// It also carries the one refusal an administrator is entitled to overrule: a
+// source whose schema version is outside the importer's verified range comes
+// back as a failed run with error_code `unverified_schema` and the detected
+// `source_version`, and this page turns that into a named, per-run sign-off
+// (see UnverifiedSchemaNotice). Its sibling `undetectable_schema` is NOT
+// offered a sign-off here — no version was read, so there is nothing to name.
 export function AdminPeerTubeImportView() {
   return (
     <RoleGate minRole="admin" action="import from PeerTube">
@@ -61,6 +90,11 @@ function ImportPanel() {
   // The run we currently show a report/progress for and (while in-flight) poll.
   const [activeRun, setActiveRun] = useState<PeerTubeImportRun | null>(null);
   const [conflictPolicy, setConflictPolicy] = useState<PeerTubeImportConflictPolicy>("skip");
+  // The unverified schema VERSION the admin has signed off on — deliberately a
+  // version and not a boolean, mirroring the server's own rule: the gate opens
+  // only on exact equality with the version the source currently reports, so a
+  // sign-off on 1040 stops meaning anything once the source moves to 1055.
+  const [acknowledgedVersion, setAcknowledgedVersion] = useState<number | null>(null);
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
   // The backend reported no source is configured (503) — show guidance, never a form.
@@ -118,14 +152,33 @@ function ImportPanel() {
     };
   }, [activeRun, pollNonce]);
 
+  // The version the run on screen was refused for (null when it was not refused
+  // for a version), and whether a launch is currently blocked on the admin
+  // naming it. Selecting a different run re-derives both — an acknowledgement
+  // ticked for one version does not survive the view moving to another.
+  const refusedVersion = refusedSchemaVersion(activeRun);
+  const schemaUndetectable = isUndetectableSchema(activeRun);
+  const awaitingAcknowledgement = refusedVersion !== null && acknowledgedVersion !== refusedVersion;
+
   const launch = useCallback(
     async (mode: PeerTubeImportMode) => {
       if (launching || isInFlight(activeRun)) return;
+      // Blocked on an unacknowledged schema refusal — the buttons are disabled,
+      // this is the second lock so no code path can launch around it.
+      if (awaitingAcknowledgement) return;
       setLaunching(true);
       setLaunchError(null);
       setNotConfigured(false);
       try {
-        const run = await api.launchPeerTubeImport({ mode, conflict_policy: conflictPolicy });
+        const run = await api.launchPeerTubeImport({
+          mode,
+          conflict_policy: conflictPolicy,
+          // Sent ONLY when the tick names the version the source currently
+          // reports; omitted entirely in the normal case, leaving the gate up.
+          ...(refusedVersion !== null && acknowledgedVersion === refusedVersion
+            ? { acknowledged_schema_version: refusedVersion }
+            : {}),
+        });
         setActiveRun(run);
         setRuns((prev) => [run, ...prev]);
       } catch (err) {
@@ -149,9 +202,13 @@ function ImportPanel() {
         }
       } finally {
         setLaunching(false);
+        // The tick is spent by the attempt it authorised, however that attempt
+        // ended. Nothing carries a sign-off into a later run behind the
+        // admin's back — the next one has to be given again, deliberately.
+        setAcknowledgedVersion(null);
       }
     },
-    [launching, activeRun, conflictPolicy],
+    [launching, activeRun, conflictPolicy, awaitingAcknowledgement, refusedVersion, acknowledgedVersion],
   );
 
   if (status === "loading") {
@@ -174,7 +231,10 @@ function ImportPanel() {
   }
 
   const inFlight = isInFlight(activeRun);
+  // Busy disables the whole panel; the acknowledgement gate disables only the
+  // two launch buttons (the conflict policy stays editable while deciding).
   const controlsDisabled = launching || inFlight;
+  const launchDisabled = controlsDisabled || awaitingAcknowledgement;
 
   return (
     <div className="flex flex-col gap-6">
@@ -205,11 +265,21 @@ function ImportPanel() {
             ))}
           </Select>
 
+          {refusedVersion !== null ? (
+            <UnverifiedSchemaNotice
+              version={refusedVersion}
+              acknowledged={acknowledgedVersion === refusedVersion}
+              disabled={controlsDisabled}
+              onAcknowledgedChange={(on) => setAcknowledgedVersion(on ? refusedVersion : null)}
+            />
+          ) : null}
+          {schemaUndetectable ? <UndetectableSchemaNotice /> : null}
+
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" onClick={() => void launch("dry_run")} disabled={controlsDisabled}>
+            <Button variant="secondary" onClick={() => void launch("dry_run")} disabled={launchDisabled}>
               {launching ? "Starting…" : "Preview (dry run)"}
             </Button>
-            <Button onClick={() => void launch("run")} disabled={controlsDisabled}>
+            <Button onClick={() => void launch("run")} disabled={launchDisabled}>
               Start import
             </Button>
             {inFlight ? (
@@ -253,6 +323,87 @@ function NotConfiguredGuidance() {
       <p className="text-sm text-fg-muted">
         For safety, source credentials are never entered here — they live only in the server
         configuration and are used server-side.
+      </p>
+    </Card>
+  );
+}
+
+// The acknowledgement a refused-for-its-version source needs before this page
+// will launch anything. It names the detected version in the heading, in the
+// tick, and in the reminder underneath, because that number is the whole
+// decision: the server opens the gate only for an exactly-equal version, so an
+// admin who has not read it cannot express this and one who has cannot express
+// it for a source that has since moved on.
+function UnverifiedSchemaNotice({
+  version,
+  acknowledged,
+  disabled,
+  onAcknowledgedChange,
+}: {
+  version: number;
+  acknowledged: boolean;
+  disabled: boolean;
+  onAcknowledgedChange: (acknowledged: boolean) => void;
+}) {
+  return (
+    <Card className="flex flex-col gap-2 ring-1 ring-inset ring-warning/40">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="warning">Unverified schema</Badge>
+        <h2 className="text-[15px] font-bold tracking-tight text-fg">
+          The source reports PeerTube schema v{version}, which this importer has not been verified
+          against
+        </h2>
+      </div>
+      <p className="text-sm text-fg-muted">
+        The importer reads the source database directly, by column name. On a schema nobody has
+        checked it against, those columns may have been renamed, retyped, or removed: the run can
+        stop partway through, and it can carry wrong values across without failing at all. Nothing
+        downstream re-checks what was written — you would have to.
+      </p>
+      <p className="text-sm text-fg-muted">
+        If you accept it, preview first. A dry run still writes nothing, and it is the cheapest way
+        to find out how much of schema v{version} this importer can actually read. Before a real
+        import, have a database backup you are willing to restore from.
+      </p>
+      <Checkbox
+        label={`I accept PeerTube schema v${version} for this run, and that the import may stop partway through or write wrong data.`}
+        checked={acknowledged}
+        disabled={disabled}
+        onChange={(e) => onAcknowledgedChange(e.target.checked)}
+      />
+      <p className="text-xs text-fg-muted">
+        This covers the next launch only. It is not remembered, and it stops applying if the
+        source&rsquo;s schema version changes.
+      </p>
+    </Card>
+  );
+}
+
+// The other refusal: preflight read NO version. There is no number to name, so
+// there is deliberately no checkbox here — an acknowledgement in the abstract
+// is exactly what the server refuses to accept.
+function UndetectableSchemaNotice() {
+  return (
+    <Card className="flex flex-col gap-2 ring-1 ring-inset ring-warning/40">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="warning">Schema version unreadable</Badge>
+        <h2 className="text-[15px] font-bold tracking-tight text-fg">
+          No schema version could be read from the source
+        </h2>
+      </div>
+      <p className="text-sm text-fg-muted">
+        Preflight found no migration version in the source database, so there is no version to
+        accept and this refusal cannot be overruled from here. Usually the connection is not
+        pointing at a PeerTube database, or the configured user cannot read its application table.
+      </p>
+      <p className="text-sm text-fg-muted">
+        Check the source connection in this server&rsquo;s configuration. If you are certain the
+        source is right, importing from a database this opaque has to be forced by a human on the
+        server with{" "}
+        <code className="rounded-md bg-surface-muted px-1.5 py-0.5 font-mono text-xs font-semibold text-fg">
+          peertube-import --force
+        </code>
+        , not from a browser.
       </p>
     </Card>
   );

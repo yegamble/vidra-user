@@ -40,6 +40,9 @@ type Run = {
   state: "pending" | "running" | "done" | "failed";
   conflict_policy: "skip" | "rename" | "merge" | "fail";
   source_version?: number;
+  acknowledged_schema_version?: number;
+  error?: string;
+  error_code?: string;
   report?: unknown;
   created_at: string;
   updated_at: string;
@@ -86,6 +89,32 @@ const runReport = {
     video: { planned: 140, imported: 136, skipped: 0, failed: 1, unsupported: 3 },
   },
 };
+
+// Preflight refused the source for its schema version: a FAILED run carrying the
+// refusal class (error_code) plus the number the admin has to be shown before
+// they can be asked to accept it. This is the ONE refusal a browser may overrule.
+const unverified = () =>
+  run({
+    id: "r9",
+    mode: "dry_run",
+    state: "failed",
+    conflict_policy: "skip",
+    source_version: 1040,
+    error_code: "unverified_schema",
+    error: "source schema version 1040 is outside the importer's verified range (max 1000)",
+  });
+
+// The sibling refusal: no version could be read from the source at all. There is
+// no number to name, so it is NOT acknowledgeable from here at any price.
+const undetectable = () =>
+  run({
+    id: "r8",
+    mode: "dry_run",
+    state: "failed",
+    conflict_policy: "skip",
+    error_code: "undetectable_schema",
+    error: "could not read application.migrationVersion from the source database",
+  });
 
 async function signIn(page: Page, role: Role) {
   await page.route(LOGIN, (route) => route.fulfill({ json: session(role) }));
@@ -262,4 +291,183 @@ test("when no PeerTube source is configured, the operator sees guidance not a fo
   await expect(page.getByRole("button", { name: "Preview (dry run)" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Start import" })).toHaveCount(0);
   expect(await page.locator('input[type="password"]').count()).toBe(0);
+});
+
+test("a preview refused for an unverified schema names the detected version", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.route(IMPORT, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        status: 202,
+        json: run({ id: "r9", mode: "dry_run", state: "pending" }),
+      });
+    }
+    return route.fulfill({ json: { runs: [] } });
+  });
+  // A dry run reaches version detection before it writes anything, so a refused
+  // PREVIEW is how the operator discovers which version their source reports.
+  await page.route(IMPORT_ONE, (route) => route.fulfill({ json: unverified() }));
+
+  await openImport(page);
+  await page.getByRole("button", { name: "Preview (dry run)" }).click();
+
+  const launchSection = page.getByRole("region", { name: "Launch an import" });
+  await expect(
+    launchSection.getByRole("heading", {
+      name: /The source reports PeerTube schema v1040, which this importer has not been verified against/,
+    }),
+  ).toBeVisible();
+  // The risk is stated plainly, not smoothed over.
+  await expect(
+    page.getByText("those columns may have been renamed, retyped, or removed"),
+  ).toBeVisible();
+  // The tick names the version — an admin who never read the refusal cannot give it.
+  await expect(
+    launchSection.getByRole("checkbox", { name: /I accept PeerTube schema v1040 for this run/ }),
+  ).toBeVisible();
+});
+
+test("both launch buttons stay dead until the unverified version is acknowledged", async ({
+  page,
+}) => {
+  await signIn(page, "admin");
+  let launched = false;
+  await page.route(IMPORT, (route) => {
+    if (route.request().method() === "POST") {
+      launched = true;
+      return route.fulfill({ status: 202, json: run({ id: "r10", state: "pending" }) });
+    }
+    // The refusal is the newest run in the history, so a reload lands straight
+    // back on the decision rather than losing it.
+    return route.fulfill({ json: { runs: [unverified()] } });
+  });
+
+  await openImport(page);
+  const preview = page.getByRole("button", { name: "Preview (dry run)" });
+  const start = page.getByRole("button", { name: "Start import" });
+  await expect(preview).toBeDisabled();
+  await expect(start).toBeDisabled();
+
+  // Even forced, a disabled control launches nothing.
+  await preview.click({ force: true });
+  await start.click({ force: true });
+  expect(launched).toBe(false);
+
+  // Ticking the version — and only that — opens both.
+  await page.getByRole("checkbox", { name: /I accept PeerTube schema v1040/ }).check();
+  await expect(preview).toBeEnabled();
+  await expect(start).toBeEnabled();
+});
+
+test("acknowledging sends the exact detected version as acknowledged_schema_version", async ({
+  page,
+}) => {
+  await signIn(page, "admin");
+  let launchBody: unknown = null;
+  await page.route(IMPORT, (route) => {
+    if (route.request().method() === "POST") {
+      launchBody = route.request().postDataJSON();
+      return route.fulfill({
+        status: 202,
+        json: run({ id: "r10", mode: "dry_run", state: "pending", conflict_policy: "skip" }),
+      });
+    }
+    return route.fulfill({ json: { runs: [unverified()] } });
+  });
+  await page.route(IMPORT_ONE, (route) =>
+    route.fulfill({
+      json: run({
+        id: "r10",
+        mode: "dry_run",
+        state: "done",
+        conflict_policy: "skip",
+        source_version: 1040,
+        acknowledged_schema_version: 1040,
+        report: dryReport,
+      }),
+    }),
+  );
+
+  await openImport(page);
+  await page.getByRole("checkbox", { name: /I accept PeerTube schema v1040/ }).check();
+  await page.getByRole("button", { name: "Preview (dry run)" }).click();
+
+  // The run goes through, and the decision travelled as the version itself.
+  await expect(page.getByRole("heading", { name: "Dry run preview" })).toBeVisible();
+  expect(launchBody).toEqual({
+    mode: "dry_run",
+    conflict_policy: "skip",
+    acknowledged_schema_version: 1040,
+  });
+});
+
+test("the acknowledgement is per-run: the next launch carries none", async ({ page }) => {
+  await signIn(page, "admin");
+  const bodies: Record<string, unknown>[] = [];
+  await page.route(IMPORT, (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      bodies.push(body);
+      const id = bodies.length === 1 ? "r10" : "r11";
+      return route.fulfill({
+        status: 202,
+        json: run({ id, mode: body.mode as Run["mode"], state: "pending" }),
+      });
+    }
+    return route.fulfill({ json: { runs: [unverified()] } });
+  });
+  await page.route(IMPORT_ONE, (route) => {
+    const id = route.request().url().split("/").pop() ?? "";
+    const dry = id === "r10";
+    return route.fulfill({
+      json: run({
+        id,
+        mode: dry ? "dry_run" : "run",
+        state: "done",
+        source_version: 1040,
+        acknowledged_schema_version: dry ? 1040 : undefined,
+        report: dry ? dryReport : runReport,
+      }),
+    });
+  });
+
+  await openImport(page);
+  await page.getByRole("checkbox", { name: /I accept PeerTube schema v1040/ }).check();
+  await page.getByRole("button", { name: "Preview (dry run)" }).click();
+  await expect(page.getByRole("heading", { name: "Dry run preview" })).toBeVisible();
+
+  // A second launch, with nothing re-ticked in between: the sign-off was spent
+  // by the run it authorised and must NOT ride along silently.
+  await page.getByRole("button", { name: "Start import" }).click();
+  await expect(
+    page.getByText("The migration summary below reflects what was written."),
+  ).toBeVisible();
+
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0]).toEqual({
+    mode: "dry_run",
+    conflict_policy: "skip",
+    acknowledged_schema_version: 1040,
+  });
+  expect(bodies[1]).toEqual({ mode: "run", conflict_policy: "skip" });
+  expect("acknowledged_schema_version" in bodies[1]).toBe(false);
+});
+
+test("an undetectable schema version offers no acknowledgement at all", async ({ page }) => {
+  await signIn(page, "admin");
+  await page.route(IMPORT, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({ status: 202, json: run({ id: "r10", state: "pending" }) });
+    }
+    return route.fulfill({ json: { runs: [undetectable()] } });
+  });
+
+  await openImport(page);
+  const launchSection = page.getByRole("region", { name: "Launch an import" });
+  await expect(
+    launchSection.getByRole("heading", { name: "No schema version could be read from the source" }),
+  ).toBeVisible();
+  // Nothing to name means nothing to tick — this refusal needs a human on the CLI.
+  await expect(launchSection.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.getByText("peertube-import --force")).toBeVisible();
 });

@@ -4509,6 +4509,7 @@ export interface paths {
         /**
          * Launch a PeerTube import run (admin)
          * @description Launches a one-way PeerTube→Vidra migration run and returns it (202) so the UI can poll its progress (fix_plan P18). mode is "dry_run" (report counts + mapping plan + conflicts, writes NOTHING) or "run" (perform the import). conflict_policy (skip|rename|merge|fail, default skip) resolves username/handle/email/slug collisions. The import is idempotent and resumable — a re-run skips already-imported rows via a durable ledger. The SOURCE PeerTube database + storage connection is taken from SERVER CONFIG only; the browser NEVER sends a DSN or credential. Only one run may be active at a time (409 otherwise). 503 when import is not configured on the instance. Restricted to admins; audited (no secrets).
+         *     Preflight refuses a source whose schema version is outside the verified range, and the run fails with `error_code: unverified_schema` plus the detected `source_version`. An administrator may accept that specific version by re-launching with `acknowledged_schema_version` set to it; the server never sets that field for itself and has no default for it.
          */
         post: operations["launchPeerTubeImport"];
         delete?: never;
@@ -7979,6 +7980,13 @@ export interface components {
              * @enum {string}
              */
             conflict_policy?: "skip" | "rename" | "merge" | "fail";
+            /**
+             * @description An administrator's explicit, per-request sign-off on a source schema version OUTSIDE the importer's verified range. Omit it — that is the normal case, and the version gate then stands.
+             *     Set it only to the exact `source_version` a previous run reported alongside `error_code: unverified_schema`. It is a version rather than a boolean deliberately: the gate opens only when this equals the version preflight actually detects, so an acknowledgement cannot be made in the abstract by a caller that never looked at the source, and stops applying by itself if the source is upgraded in the meantime.
+             *     It is per-run and is never remembered: the next launch must state it again. There is no server default and no configuration key for it. It widens the schema-version gate and nothing else, and is recorded on the run (`acknowledged_schema_version`) next to the admin who launched it, plus an audit event naming the version accepted.
+             *     What is being accepted is real: an unverified schema may have renamed or removed columns the importer reads, so the run can fail partway or carry incorrect data. A run refused with `error_code: undetectable_schema` cannot be acknowledged at all — there is no version to name.
+             */
+            acknowledged_schema_version?: number;
         };
         /** @description Per-entity outcome tally. */
         PeerTubeImportCounts: {
@@ -8013,10 +8021,20 @@ export interface components {
             state: "pending" | "running" | "done" | "failed";
             /** @enum {string} */
             conflict_policy: "skip" | "rename" | "merge" | "fail";
+            /** @description The PeerTube schema version (application.migrationVersion) preflight detected. Populated even when preflight REFUSED that version — it is the number an administrator has to be shown before they can be asked to acknowledge it. */
             source_version?: number | null;
+            /** @description The unverified schema version the launching administrator explicitly accepted for this run, or null (the norm). Recorded so the import history shows what was signed off on, not merely that something was. */
+            acknowledged_schema_version?: number | null;
             report?: components["schemas"]["PeerTubeImportReport"];
             /** @description Safe, client-visible failure reason (never a DSN/credential). */
             error?: string;
+            /**
+             * @description Stable snake_case class of a failure; empty when the run has not failed or the failure has no class of its own. Clients branch on this; `error` is prose for a person.
+             *     unverified_schema — the source's schema version was detected and falls outside the importer's verified range. `source_version` carries it. This is the ONE failure an administrator may overrule, by re-launching with `acknowledged_schema_version` set to that number.
+             *     undetectable_schema — no schema version could be read from the source at all. Not acknowledgeable: there is no version to name. It needs a human on the `peertube-import` CLI with --force.
+             * @example unverified_schema
+             */
+            error_code?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -21260,7 +21278,7 @@ export interface operations {
                     "application/json": components["schemas"]["PeerTubeImportRun"];
                 };
             };
-            /** @description Invalid mode or conflict policy. */
+            /** @description Invalid mode, conflict policy, or a negative acknowledged_schema_version. */
             400: {
                 headers: {
                     [name: string]: unknown;
