@@ -145,6 +145,20 @@ describe("useListQuery", () => {
     expect(lastQuery()).toContain("runs_offset=150");
   });
 
+  it("keeps `filters` stable across renders when filterKeys is an inline array", () => {
+    nav.params = new URLSearchParams("state=failed");
+    // Every call site writes `filterKeys={["state", "privacy"]}` inline, which
+    // is a NEW array each render. If that identity reached the memo, `filters`
+    // would be a new object every render and any fetch effect keyed on the list
+    // state would refetch forever.
+    const { result, rerender } = renderHook(() =>
+      useListQuery({ filterKeys: ["state", "privacy"] }),
+    );
+    const first = result.current.filters;
+    rerender();
+    expect(result.current.filters).toBe(first);
+  });
+
   it("drops only its own params on reset", () => {
     nav.params = new URLSearchParams("tab=queues&limit=50&offset=100&sort=name&state=failed");
     const { result } = renderHook(() => useListQuery({ filterKeys: ["state"] }));

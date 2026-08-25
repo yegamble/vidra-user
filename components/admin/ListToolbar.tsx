@@ -1,14 +1,62 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
-import { ADMIN_PANEL } from "@/components/admin/AdminControls";
+import { ADMIN_PANEL, AdminSearch } from "@/components/admin/AdminControls";
 import { Badge } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
 import { cn } from "@/lib/cn";
 
 /** One choice in the toolbar's sort picker. */
 export type SortOption = { value: string; label: string };
+
+/**
+ * ListSearch — `AdminSearch` bound to an APPLIED value rather than to component
+ * state. The field's half-typed draft is local (typing must not refetch on every
+ * keystroke, and must not rewrite the URL); submitting or clearing hands the
+ * trimmed term to `onSubmit`, which is where it becomes a real query param.
+ *
+ * The draft re-syncs whenever the applied value changes underneath it, so a Back
+ * press — which restores the query string, not React state — leaves the box
+ * agreeing with the results below it. Every admin surface used to keep this
+ * `input`/`query` pair by hand, and each one had to remember not to refetch when
+ * the submitted term had not actually changed.
+ */
+export function ListSearch({
+  label,
+  placeholder,
+  value,
+  onSubmit,
+}: {
+  label: string;
+  placeholder: string;
+  /** The term the current results were fetched with ("" when unfiltered). */
+  value: string;
+  /** Called with the trimmed term on submit, and with "" on clear. */
+  onSubmit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+
+  const submit = (next: string) => {
+    if (next !== value) onSubmit(next);
+  };
+
+  return (
+    <AdminSearch
+      label={label}
+      placeholder={placeholder}
+      value={draft}
+      onChange={setDraft}
+      onSubmit={() => submit(draft.trim())}
+      onClear={() => {
+        setDraft("");
+        submit("");
+      }}
+      hasQuery={Boolean(value)}
+    />
+  );
+}
 
 export type ListToolbarProps = {
   /** The search control — normally an `<AdminSearch>`; any node is accepted. */

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FilterChip, FilterChipGroup } from "./FilterChips";
+import { FilterChip, FilterChipGroup, TriStateFilter, triStateValue } from "./FilterChips";
 
 afterEach(cleanup);
 
@@ -172,5 +172,31 @@ describe("FilterChipGroup", () => {
       </>,
     );
     expect(screen.getByRole("group", { name: "Accounts" })).toBeTruthy();
+  });
+});
+
+describe("TriStateFilter", () => {
+  it("offers all three states, with Any as the absent parameter", () => {
+    render(<TriStateFilter label="HLS renditions" value="" onChange={() => {}} />);
+    const group = screen.getByRole("group", { name: "HLS renditions" });
+    expect(
+      Array.from(group.querySelectorAll("button")).map((b) => b.textContent),
+    ).toEqual(["Any", "Yes", "No"]);
+    expect(screen.getByRole("button", { name: "Any" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("can express the negative half — the query a checkbox would delete", () => {
+    const onChange = vi.fn();
+    render(<TriStateFilter label="HLS renditions" value="" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    expect(onChange).toHaveBeenCalledWith("false");
+  });
+
+  it("maps its URL value onto the boolean the API client wants", () => {
+    expect(triStateValue("true")).toBe(true);
+    // The distinction the whole control exists for: false is a filter, absent is not.
+    expect(triStateValue("false")).toBe(false);
+    expect(triStateValue("")).toBeUndefined();
+    expect(triStateValue(undefined)).toBeUndefined();
   });
 });

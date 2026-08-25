@@ -988,9 +988,14 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/reports");
   });
 
-  it("getReports adds status=open when openOnly is set", async () => {
-    await api.getReports({ openOnly: true, limit: 100 });
+  it("getReports passes the three-way status through verbatim", async () => {
+    await api.getReports({ status: "open", limit: 100 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/reports?status=open&limit=100");
+  });
+
+  it("getReports can ask for the resolved half, which used to mean everything", async () => {
+    await api.getReports({ status: "resolved" });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/reports?status=resolved");
   });
 
   it("resolveReport POSTs the status + note to the resolve endpoint", async () => {
@@ -1348,6 +1353,43 @@ describe("api endpoints", () => {
   it("getAdminVideos omits q when not provided", async () => {
     await api.getAdminVideos();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/videos");
+  });
+
+  it("getAdminVideos comma-joins the repeatable state/privacy filters", async () => {
+    await api.getAdminVideos({ state: ["processing", "transcoding"], privacy: ["private"] });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/videos?state=processing%2Ctranscoding&privacy=private",
+    );
+  });
+
+  it("getAdminVideos drops an empty state/privacy selection rather than sending a blank", async () => {
+    await api.getAdminVideos({ state: [], privacy: [] });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/videos");
+  });
+
+  it("getAdminVideos sends has_* as tri-state: false is a filter, undefined is not", async () => {
+    await api.getAdminVideos({ hasHls: false, hasOriginal: true, hasWebFiles: undefined });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/videos?has_original=true&has_hls=false",
+    );
+  });
+
+  it("getAdminVideos passes sort, scope, channel and the publish window", async () => {
+    await api.getAdminVideos({
+      sort: "-views",
+      scope: "local",
+      channel: "ada",
+      publishedAfter: "2026-01-01T00:00:00.000Z",
+      publishedBefore: "2026-02-01T00:00:00.000Z",
+    });
+    const url = new URL(calledUrl());
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      sort: "-views",
+      scope: "local",
+      channel: "ada",
+      published_after: "2026-01-01T00:00:00.000Z",
+      published_before: "2026-02-01T00:00:00.000Z",
+    });
   });
 
   it("runVideoTranscoding POSTs the selected recovery target", async () => {

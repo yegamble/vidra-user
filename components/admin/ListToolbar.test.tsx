@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminSearch } from "./AdminControls";
-import { ListToolbar } from "./ListToolbar";
+import { ListSearch, ListToolbar } from "./ListToolbar";
 
 afterEach(cleanup);
 
@@ -79,5 +79,44 @@ describe("ListToolbar", () => {
   it("renders trailing actions last", () => {
     render(<ListToolbar search={search()} actions={<button type="button">Refresh</button>} />);
     expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
+  });
+});
+
+describe("ListSearch", () => {
+  it("keeps the draft local and only submits on Search", () => {
+    const onSubmit = vi.fn();
+    render(<ListSearch label="Search videos" placeholder="Search" value="" onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search videos" }), {
+      target: { value: "cats " },
+    });
+    // Typing must not refetch or rewrite the URL.
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(onSubmit).toHaveBeenCalledWith("cats");
+  });
+
+  it("does not resubmit a term that is already applied", () => {
+    const onSubmit = vi.fn();
+    render(<ListSearch label="Search videos" placeholder="Search" value="cats" onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("submits the empty term on Clear", () => {
+    const onSubmit = vi.fn();
+    render(<ListSearch label="Search videos" placeholder="Search" value="cats" onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(onSubmit).toHaveBeenCalledWith("");
+  });
+
+  it("re-syncs the box when the applied term changes underneath it (Back)", () => {
+    const { rerender } = render(
+      <ListSearch label="Search videos" placeholder="Search" value="cats" onSubmit={() => {}} />,
+    );
+    expect(screen.getByRole("searchbox", { name: "Search videos" })).toHaveProperty("value", "cats");
+    rerender(<ListSearch label="Search videos" placeholder="Search" value="dogs" onSubmit={() => {}} />);
+    expect(screen.getByRole("searchbox", { name: "Search videos" })).toHaveProperty("value", "dogs");
   });
 });

@@ -17,10 +17,14 @@ export { ErrorState } from "./ErrorState";
 export {
   FilterChip,
   FilterChipGroup,
+  TriStateFilter,
+  triStateValue,
   type FilterChipGroupProps,
   type FilterChipOption,
   type FilterChipProps,
   type FilterChipSize,
+  type TriState,
+  type TriStateFilterProps,
 } from "./FilterChips";
 export { FilterPanel, type FilterPanelProps } from "./FilterPanel";
 export { IconButton, type IconButtonProps } from "./IconButton";

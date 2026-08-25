@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -148,6 +148,71 @@ export function FilterChipGroup<T extends string>({
           ) : null}
         </FilterChip>
       ))}
+    </div>
+  );
+}
+
+/**
+ * A tri-state filter value as it travels in a query string: "" is ABSENT (the
+ * server sees no parameter and returns everything), "true" and "false" are the
+ * two halves.
+ */
+export type TriState = "" | "true" | "false";
+
+/** Parse a URL-held tri-state back to the boolean the API client wants. */
+export function triStateValue(value: string | undefined): boolean | undefined {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
+export type TriStateFilterProps = {
+  /** Visible field label, e.g. "Original file". */
+  label: string;
+  value: TriState;
+  onChange: (value: TriState) => void;
+  /** Copy for the true/false chips. Defaults to Yes / No. */
+  yesLabel?: string;
+  noLabel?: string;
+  disabled?: boolean;
+};
+
+/**
+ * TriStateFilter — a labelled Any / Yes / No chip row for a filter whose ABSENCE
+ * is a third meaning.
+ *
+ * The backend's `has_original`, `has_hls` and `has_web_files` are tri-state on
+ * purpose: absent means "all", not "false". A checkbox has only two states, so
+ * wiring one of these to a checkbox silently deletes the "show me the videos
+ * with NO HLS" query — the one an operator hunting broken transcodes actually
+ * needs. Three chips make all three states reachable and visible.
+ */
+export function TriStateFilter({
+  label,
+  value,
+  onChange,
+  yesLabel = "Yes",
+  noLabel = "No",
+  disabled = false,
+}: TriStateFilterProps) {
+  const labelId = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span id={labelId} className="text-sm font-medium text-fg">
+        {label}
+      </span>
+      <FilterChipGroup<TriState>
+        labelledBy={labelId}
+        size="sm"
+        disabled={disabled}
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: "", label: "Any" },
+          { value: "true", label: yesLabel },
+          { value: "false", label: noLabel },
+        ]}
+      />
     </div>
   );
 }
