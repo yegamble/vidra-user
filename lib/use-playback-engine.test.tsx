@@ -140,7 +140,10 @@ afterEach(() => {
 describe("hls.js playback tuning", () => {
   it("bounds the VOD back-buffer and caps ABR to player/decode capacity", async () => {
     // The SESSION advertises the generation-versioned master now; the detail's
-    // copy is stale the moment a re-transcode bumps the generation.
+    // copy is stale the moment a re-transcode bumps the generation. A public
+    // video no longer WAITS for that answer, so it opens on the detail's copy
+    // and the session's answer replaces it: the session still decides what
+    // plays, it just no longer decides when playback may begin.
     sessionMock.video = { ...sessionMock.video, hls_url: "/master.m3u8?v=generation-1" };
     const videoRef = { current: document.createElement("video") };
     const { result } = renderHook(() =>
@@ -151,21 +154,36 @@ describe("hls.js playback tuning", () => {
       ),
     );
 
-    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
-    expect(hlsMock.instances[0].config).toMatchObject({
-      startPosition: 12,
-      backBufferLength: 90,
-      capLevelToPlayerSize: true,
-      capLevelOnFPSDrop: true,
-      abrEwmaDefaultEstimate: 5_000_000,
-    });
-    expect(hlsMock.instances[0].source).toBe(
-      "http://localhost:8080/master.m3u8?v=generation-1",
+    await waitFor(() =>
+      expect(hlsMock.instances.at(-1)?.source).toBe(
+        "http://localhost:8080/master.m3u8?v=generation-1",
+      ),
     );
-
     // A pick made from the parsed menu is an engine-neutral id; the adapter is
     // the only thing that turns it back into an hls.js level index.
-    const hls = hlsMock.instances[0];
+    const hls = hlsMock.instances.at(-1)!;
+    expect(hls.config).toMatchObject({
+      startPosition: 12,
+      backBufferLength: 90,
+      // Forward-buffer headroom above hls.js's 30s floor, without moving the
+      // maxBufferSize/maxMaxBufferLength memory ceiling.
+      maxBufferLength: 60,
+      capLevelToPlayerSize: true,
+      capLevelOnFPSDrop: true,
+      abrEwmaDefaultEstimate: 2_000_000,
+    });
+    // Tightened stall detection. The retry sub-objects MUST be hls.js's own
+    // defaults: mergeConfig replaces the whole LoadPolicy when it is named, so
+    // omitting them would silently drop every fragment retry.
+    expect(hls.config.fragLoadPolicy).toEqual({
+      default: {
+        maxTimeToFirstByteMs: 5_000,
+        maxLoadTimeMs: 30_000,
+        timeoutRetry: { maxNumRetry: 4, retryDelayMs: 0, maxRetryDelayMs: 0 },
+        errorRetry: { maxNumRetry: 6, retryDelayMs: 1_000, maxRetryDelayMs: 8_000 },
+      },
+    });
+
     hls.levels = [{ height: 480 }, { height: 720 }, { height: 1080 }];
     act(() => hls.emit("manifestParsed"));
     const pinned = result.current.levels.find((l) => l.label === "1080p")!;
@@ -326,7 +344,7 @@ describe("hls.js playback tuning", () => {
 
     await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
     const hls = hlsMock.instances[0];
-    expect(hls.config.abrEwmaDefaultEstimate).toBe(5_000_000);
+    expect(hls.config.abrEwmaDefaultEstimate).toBe(2_000_000);
     hls.bandwidthEstimate = 3_000_000;
     act(() => hls.emit("fragBuffered"));
     expect(localStorage.getItem("vidra:hls-bandwidth-estimate:v1")).toContain("12000000");
@@ -593,11 +611,36 @@ describe("the playback session drives the source", () => {
     const videoRef = { current: document.createElement("video") };
     renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
 
-    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
-    expect(hlsMock.instances[0].source).toBe("http://localhost:8080/session/master.m3u8?v=gen7");
+    await waitFor(() =>
+      expect(hlsMock.instances.at(-1)?.source).toBe(
+        "http://localhost:8080/session/master.m3u8?v=gen7",
+      ),
+    );
   });
 
-  it("waits for the session rather than starting on the detail and swapping", async () => {
+  it("starts a public video on the detail's manifest without waiting for the session", async () => {
+    // The wait used to be unconditional and sat on the critical path of EVERY
+    // play: up to PLAYBACK_SESSION_WAIT_MS before hls.js was so much as
+    // imported. A public video's session carries no credential and re-states the
+    // manifest the detail already gave us, so there is nothing here to wait for.
+    vi.spyOn(api, "createVideoPlaybackSession").mockReturnValue(new Promise(() => {}));
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    expect(hlsMock.instances[0].source).toBe("http://localhost:8080/detail/master.m3u8");
+    expect(result.current.mode).toBe("hls-js");
+    // And nothing was credentialed on the way — the whole reason the token is
+    // conditional.
+    expect(hlsMock.instances[0].config.xhrSetup).toBeUndefined();
+  });
+
+  it("waits for the session on a password video rather than starting uncredentialed", async () => {
+    // The one case where the session carries something playback cannot begin
+    // without: the `?pt=` that opens the master, the variants and every segment
+    // — and which, on native HLS, has to be in the URL before the media element
+    // is pointed anywhere at all.
+    const LOCKED = { ...VIDEO, privacy: "password" };
     let release: (session: PlaybackSession) => void = () => {};
     vi.spyOn(api, "createVideoPlaybackSession").mockReturnValue(
       new Promise<PlaybackSession>((resolve) => {
@@ -605,7 +648,7 @@ describe("the playback session drives the source", () => {
       }),
     );
     const videoRef = { current: document.createElement("video") };
-    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+    const { result } = renderHook(() => useHlsPlayback(videoRef, LOCKED, null));
 
     // Nothing picked, nothing loaded, no progressive fallback started.
     expect(result.current.mode).toBeNull();
@@ -656,8 +699,8 @@ describe("the playback session drives the source", () => {
     cleanup();
     const second = { current: document.createElement("video") };
     renderHook(() => useHlsPlayback(second, VIDEO, null));
-    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
-    expect(hlsMock.instances[0].config.xhrSetup).toBeUndefined();
+    await waitFor(() => expect(hlsMock.instances.length).toBeGreaterThan(0));
+    expect(hlsMock.instances.at(-1)!.config.xhrSetup).toBeUndefined();
   });
 
   it("uses the session's token where the server issued one, over the unlock token", async () => {
@@ -687,9 +730,11 @@ describe("the playback session drives the source", () => {
     const videoRef = { current: document.createElement("video") };
     const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
 
-    await waitFor(() => expect(result.current.mode).toBe("hls-js"));
-    expect(result.current.dashUrl).toBe("/api/v1/videos/video-1/hls/cmaf/stream.mpd");
-    expect(hlsMock.instances[0].source).toBe("http://localhost:8080/master.m3u8");
+    await waitFor(() =>
+      expect(result.current.dashUrl).toBe("/api/v1/videos/video-1/hls/cmaf/stream.mpd"),
+    );
+    expect(result.current.mode).toBe("hls-js");
+    expect(hlsMock.instances.at(-1)!.source).toBe("http://localhost:8080/master.m3u8");
   });
 
   it("gives a private live stream its `?pt=` and its Bearer header, and a public one neither", async () => {
@@ -773,6 +818,51 @@ describe("quality telemetry", () => {
     expect(JSON.stringify(beaconed[0])).not.toContain("delivery_source");
 
     // A second first-frame event does not produce a second start.
+    await firstFrame(videoRef.current);
+    expect(beaconed).toHaveLength(1);
+  });
+
+  it("still reports TTFF when the first frame beats the session it is keyed on", async () => {
+    // Public playback no longer waits for its session, so on a warm path the
+    // first frame can land first. A start event cannot be taken again later, so
+    // it is HELD until there is a subject to key it on — and the number kept is
+    // the one measured at the frame, because TTFF is what the viewer waited and
+    // the session arriving afterwards did not change that.
+    let release: (session: PlaybackSession) => void = () => {};
+    vi.spyOn(api, "createVideoPlaybackSession").mockReturnValue(
+      new Promise<PlaybackSession>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const videoRef = { current: document.createElement("video") };
+    renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+
+    await firstFrame(videoRef.current);
+    // Nothing is invented while there is no session: an unkeyed measurement is
+    // not sent with a fabricated subject.
+    expect(beaconed).toHaveLength(0);
+
+    await act(async () => {
+      release({
+        session_id: "22222222-2222-2222-2222-222222222222",
+        video_id: "video-1",
+        packaging_format: "hls-ts",
+        hls_url: "/master.m3u8",
+      });
+    });
+    flushPlaybackEvents();
+    expect(beaconed).toHaveLength(1);
+    expect(beaconed[0]).toMatchObject({
+      type: "playback.start",
+      video_id: "video-1",
+      session_id: "22222222-2222-2222-2222-222222222222",
+      engine: "hls-js",
+    });
+    expect(beaconed[0].ttff_ms).toBeGreaterThanOrEqual(0);
+
+    // And the release does not re-open the measurement: a later frame is still
+    // not a second start.
     await firstFrame(videoRef.current);
     expect(beaconed).toHaveLength(1);
   });

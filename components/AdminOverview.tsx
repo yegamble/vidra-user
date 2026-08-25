@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { AdminStats, AuditLogEntry, JobsOverview, SystemStatus } from "@/lib/api";
-import { formatBytes, formatCount, formatUptime, relativeTime } from "@/lib/format";
+import { formatBytes, formatCount, formatUptime, formatVersion, relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
@@ -335,7 +335,7 @@ function HealthCard({
               {system.status === "degraded" ? "Degraded" : "Healthy"}
             </Badge>
             <span className="text-[13px] font-semibold tracking-tight text-fg">
-              {system.software.name} {system.software.version}
+              {system.software.name} {formatVersion(system.software.version)}
             </span>
             <span className="text-[12.5px] text-fg-muted tabular-nums">
               up {formatUptime(system.uptime_seconds)}

@@ -93,6 +93,14 @@ interface MeasurementState {
   height: number | null;
   switches: number;
   emitted: number;
+  /**
+   * A TTFF measured before this playback had a session to key it on, held until
+   * one arrives. Public playback no longer waits for its session (see
+   * videoNeedsPlaybackToken), so on a fast path the first frame can beat the
+   * session response — and a start event is the one measurement that cannot be
+   * taken again later. null when there is nothing held.
+   */
+  pendingStartTtffMs: number | null;
   /** The URL handed to the engine, and the final URL media actually came from. */
   sourceUrl?: string;
   fetchedUrl?: string;
@@ -110,6 +118,7 @@ function freshMeasurement(sessionId: string | null): MeasurementState {
     height: null,
     switches: 0,
     emitted: 0,
+    pendingStartTtffMs: null,
   };
 }
 
@@ -186,7 +195,16 @@ export function usePlaybackQoE(args: {
   const sessionId = session?.session_id ?? null;
   useEffect(() => {
     const state = stateRef.current;
-    if (state.sessionId !== sessionId) {
+    if (state.sessionId === null && sessionId !== null) {
+      // The session for a playback that has ALREADY STARTED. Since public
+      // playback stopped waiting for its session, this is the ordinary case —
+      // adopt the id into the running measurement rather than resetting, or the
+      // clock that has been ticking since the engine got its source (and any
+      // first frame already reached against it) would be thrown away and TTFF
+      // would be re-measured from the session's arrival, which is neither what
+      // the viewer waited nor, on a first frame already past, measurable at all.
+      state.sessionId = sessionId;
+    } else if (state.sessionId !== sessionId) {
       stateRef.current = freshMeasurement(sessionId);
     }
     const next = stateRef.current;
@@ -200,7 +218,16 @@ export function usePlaybackQoE(args: {
     next.subject = qoeSubject(session, engine);
     next.sourceUrl = beaconSourceUrl(sourceUrl);
     if (engine && sourceUrl && next.anchorMs === null) next.anchorMs = now();
-  }, [sessionId, session, engine, sourceUrl]);
+    // Release a start held back for want of a subject (see pendingStartTtffMs).
+    // The number is the one measured at the first frame, not a fresh one: TTFF
+    // is what the VIEWER waited, and the session landing afterwards did not
+    // change that.
+    const heldTtffMs = next.pendingStartTtffMs;
+    if (heldTtffMs !== null && next.subject) {
+      next.pendingStartTtffMs = null;
+      emit((rendition) => ({ type: "playback.start", ttffMs: heldTtffMs, rendition }));
+    }
+  }, [sessionId, session, engine, sourceUrl, emit]);
 
   // Observe the media element. Re-attached per session so a navigation to
   // another video starts from a clean set of handlers.
@@ -215,6 +242,13 @@ export function usePlaybackQoE(args: {
       const anchor = state.anchorMs;
       if (anchor === null) return;
       const ttffMs = now() - anchor;
+      // No subject yet means the session has not landed — hold the measurement
+      // instead of emitting it into nothing. `firstFrame` is already latched
+      // above, so this is the only chance to keep it.
+      if (!state.subject) {
+        state.pendingStartTtffMs = ttffMs;
+        return;
+      }
       emit((rendition) => ({ type: "playback.start", ttffMs, rendition }));
     };
 
