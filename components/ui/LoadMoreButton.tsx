@@ -1,9 +1,24 @@
+import type { Ref } from "react";
+
 /**
  * The page size the paginated grids request (server limit/offset paging) or
  * reveal (client-side chunking) per "Load more" click. Matches the backend's
  * default feed/search limit of 20.
  */
 export const PAGE_SIZE = 20;
+
+/**
+ * LoadMoreSentinel — the zero-height marker `useAutoLoad` watches. Place it
+ * directly after the last row; when it scrolls into view the next page fetches.
+ *
+ * Presentational and inert: it is `aria-hidden` and holds no text, because it
+ * is a scroll landmark, not content. It never replaces the real `LoadMoreButton`
+ * — see the manual-button contract on `useAutoLoad` (a sentinel is unreachable
+ * by keyboard).
+ */
+export function LoadMoreSentinel({ ref }: { ref?: Ref<HTMLDivElement> }) {
+  return <div ref={ref} aria-hidden="true" data-testid="load-more-sentinel" className="h-px w-full" />;
+}
 
 // LoadMoreButton is the shared pager control under the video grids. The parent
 // hides it when the last page came back short (no more items); while a page is
