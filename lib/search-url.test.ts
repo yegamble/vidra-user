@@ -74,6 +74,20 @@ describe("readSearchFilters", () => {
     expect(readSearchFilters({ tags_one: " , " }).tagsOne).toBeUndefined();
   });
 
+  it("survives a repeated key, which reaches a page as an array", () => {
+    // `?category=1&category=2` would otherwise call .trim() on an array and
+    // turn a hand-typed URL into a 500. Last value wins.
+    expect(readSearchFilters({ category: ["1", "2"], tag: ["a"] })).toMatchObject({
+      category: "2",
+      tag: "a",
+    });
+    expect(readSearchFilters({ duration: ["nonsense", "long"] }).duration).toBe("long");
+    // Repeatable AND comma-separated are equivalent for the tag lists, exactly
+    // as the endpoint documents them.
+    expect(readSearchFilters({ tags_all: ["a", "b"] }).tagsAll).toEqual(["a", "b"]);
+    expect(readSearchType(["accounts"])).toBe("accounts");
+  });
+
   it("ignores params it does not own, so the whole query bag can be passed in", () => {
     const filters = readSearchFilters({ q: "go", type: "channels", limit: "50", category: "7" });
     expect(filters.category).toBe("7");

@@ -1,6 +1,10 @@
 import { SearchResults } from "@/components/SearchResults";
 import { getInstanceConfig } from "@/lib/instance-config.server";
-import { readSearchFilters, readSearchType } from "@/lib/search-url";
+import {
+  readSearchFilters,
+  readSearchType,
+  type SearchParamValue,
+} from "@/lib/search-url";
 
 // The search page. The query, the result type (videos / channels / accounts)
 // and every facet live in the URL so a sorted, filtered search is shareable and
@@ -15,10 +19,11 @@ import { readSearchFilters, readSearchType } from "@/lib/search-url";
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>;
+  searchParams: Promise<Record<string, SearchParamValue>>;
 }) {
   const sp = await searchParams;
-  const query = (sp.q ?? "").trim();
+  // A repeated ?q= arrives as an array; take the last, never `.trim()` an array.
+  const query = (Array.isArray(sp.q) ? sp.q.at(-1) ?? "" : sp.q ?? "").trim();
   const filters = readSearchFilters(sp);
   const type = readSearchType(sp.type);
   // The SSR snapshot's search{} block: the W13 remote-URI gates drive the

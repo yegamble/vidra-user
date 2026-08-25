@@ -96,8 +96,21 @@ export const SEARCH_PUBLISHED: readonly {
 
 const RESULT_TYPES: readonly SearchResultType[] = ["videos", "channels", "accounts"];
 
-function pick<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {
-  const trimmed = value?.trim();
+/**
+ * One param value as a string. A repeated key (`?tag=a&tag=b`) reaches a page
+ * as an ARRAY, and every reader here treats a param as text — so narrow it
+ * once, at the edge, rather than letting a hand-typed URL reach `.trim()` on an
+ * array and 500 the page. Last value wins, matching `URLSearchParams.get`'s
+ * sibling `set` and the "most recent instruction" reading of a repeated param.
+ */
+export type SearchParamValue = string | string[] | undefined;
+
+function one(value: SearchParamValue): string | undefined {
+  return Array.isArray(value) ? value.at(-1) : value;
+}
+
+function pick<T extends string>(value: SearchParamValue, allowed: readonly T[]): T | undefined {
+  const trimmed = one(value)?.trim();
   return allowed.includes(trimmed as T) ? (trimmed as T) : undefined;
 }
 
@@ -105,11 +118,12 @@ function pick<T extends string>(value: string | undefined, allowed: readonly T[]
  * Split a comma-joined tag list from the URL. Tags are lowercased and de-duped
  * so `?tags_all=Cats,cats` is one filter, not a query that can never match twice.
  */
-function readTags(value: string | undefined): string[] | undefined {
-  if (!value) return undefined;
+function readTags(value: SearchParamValue): string[] | undefined {
+  const raw = Array.isArray(value) ? value.join(",") : value;
+  if (!raw) return undefined;
   const tags = [
     ...new Set(
-      value
+      raw
         .split(",")
         .map((t) => t.trim().toLowerCase())
         .filter(Boolean),
@@ -119,7 +133,7 @@ function readTags(value: string | undefined): string[] | undefined {
 }
 
 /** The result kind a `?type=` param asks for; anything unknown means videos. */
-export function readSearchType(value: string | undefined): SearchResultType {
+export function readSearchType(value: SearchParamValue): SearchResultType {
   return pick(value, RESULT_TYPES) ?? "videos";
 }
 
@@ -130,11 +144,11 @@ export function readSearchType(value: string | undefined): SearchResultType {
  * dropped rather than forwarded: the backend answers an unrecognised sort with a
  * 400, and a hand-edited URL should degrade to the default view, not to an error.
  */
-export function readSearchFilters(sp: Record<string, string | undefined>): SearchFilters {
+export function readSearchFilters(sp: Record<string, SearchParamValue>): SearchFilters {
   return {
-    category: sp.category?.trim() || undefined,
-    language: sp.language?.trim() || undefined,
-    tag: sp.tag?.trim() || undefined,
+    category: one(sp.category)?.trim() || undefined,
+    language: one(sp.language)?.trim() || undefined,
+    tag: one(sp.tag)?.trim() || undefined,
     sort: pick(sp.sort, ["-published_at", "-views"] as const),
     duration: pick(sp.duration, ["short", "medium", "long"] as const),
     published: pick(sp.published, ["today", "7d", "30d", "365d"] as const),
