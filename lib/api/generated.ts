@@ -857,7 +857,9 @@ export interface paths {
         };
         /**
          * List the channels the authenticated user can manage
-         * @description The channels the caller OWNS plus the channels shared with them as an editor collaborator (migration 0097), owned first. Each channel carries a `role` of "owner" or "editor".
+         * @description The channels the caller OWNS plus the channels shared with them as an editor collaborator (migration 0097), owned first. Each channel carries a `role` of "owner" or "editor" and its follower count.
+         *
+         *     BREAKING (this release): paginated, with a `total`. It previously returned every channel unbounded.
          */
         get: operations["listMyChannels"];
         put?: never;
@@ -878,6 +880,8 @@ export interface paths {
         /**
          * List a channel's collaborators
          * @description The channel's editor collaborators. Visible to the channel owner and to existing members; anyone else gets 403 (unknown handle → 404).
+         *
+         *     BREAKING (this release): paginated, with a `total`.
          */
         get: operations["listChannelMembers"];
         put?: never;
@@ -1331,6 +1335,8 @@ export interface paths {
         /**
          * List a channel's videos
          * @description The channel owner (bearer token) sees all of their videos (any state); everyone else sees only public, published ones. Each item carries its view count and whether a poster image exists.
+         *
+         *     BREAKING (this release): this route is now PAGINATED and reports `total`. It previously returned every video in the channel on every request, so a channel with tens of thousands of videos serialised all of them.
          */
         get: operations["listChannelVideos"];
         put?: never;
@@ -2218,6 +2224,8 @@ export interface paths {
         /**
          * List your channel auto-syncs
          * @description Returns the authenticated user's channel syncs (newest first), each with its state (waiting_first_run, syncing, idle, failed), last_sync_at, and a safe last_error.
+         *
+         *     BREAKING (this release): paginated, with a `total`.
          */
         get: operations["listChannelSyncs"];
         put?: never;
@@ -2804,6 +2812,8 @@ export interface paths {
         /**
          * List the caller's playlists
          * @description Returns the caller's playlists, newest first, each with its public video count.
+         *
+         *     BREAKING (this release): paginated, with a `total`.
          */
         get: operations["listMyPlaylists"];
         put?: never;
@@ -2823,7 +2833,9 @@ export interface paths {
         };
         /**
          * Get a playlist and its videos
-         * @description Returns a playlist with its ordered public, published video cards. Public/unlisted playlists are visible to anyone; a private playlist is visible only to its owner (otherwise 404).
+         * @description Returns a playlist with one page of its ordered public, published video cards. Public/unlisted playlists are visible to anyone; a private playlist is visible only to its owner (otherwise 404).
+         *
+         *     BREAKING (this release): the item list is paginated, and total/limit/offset describe the VIDEOS.
          */
         get: operations["getPlaylist"];
         put?: never;
@@ -2983,7 +2995,7 @@ export interface paths {
         };
         /**
          * List the moderation queue
-         * @description Returns abuse reports, newest first, with the reporter and target context. Restricted to moderators/admins. status=open returns only unresolved reports. Paginated via limit (1–100, default 20) and offset.
+         * @description Returns abuse reports, newest first, with the reporter and target context, plus a `total` counting the reports that match the same status filter. Restricted to moderators/admins.
          */
         get: operations["listReports"];
         put?: never;
@@ -3127,7 +3139,13 @@ export interface paths {
         };
         /**
          * List all videos (admin/moderator overview)
-         * @description The admin/moderator videos overview: every video (any privacy/state), newest first, each with its owning channel, view count, and whether it is currently blocked. Restricted to moderators/admins. Optional q filters by title substring. Paginated via limit (1–100, default 20) and offset.
+         * @description The admin/moderator videos overview: local videos AND federated metadata rows (any privacy/state), each with its owning channel, view count, file facts and whether it is currently blocked. Restricted to moderators/admins.
+         *
+         *     `total` reports how many videos match the SAME filters, ignoring pagination — the number an "N videos" header should render. Reading the page length instead is what made this view report "100" on instances with far more.
+         *
+         *     Every filter is optional and their effects intersect. An unrecognised value for any of them is a 400, never a silently ignored no-op.
+         *
+         *     Two PeerTube filters are deliberately absent because vidra has no data behind them. `storage`: `object_storage` here is derived from the instance-wide storage backend, not per-file truth, so every local video reports the same value and filtering on it would be meaningless (PeerTube records a per-file storage enum; vidra does not). `isLive`: vidra keeps live streams in a separate table that this inventory does not include, and a stream recorded to VOD becomes an ordinary video with no structural marker, so there is no column to filter on.
          */
         get: operations["listAdminVideos"];
         put?: never;
@@ -3624,6 +3642,8 @@ export interface paths {
         /**
          * List a channel's live streams
          * @description Lists the caller's live streams for a channel they own, newest first. Behind auth; a non-owner is 403, an unknown channel 404. Stream keys are never included.
+         *
+         *     BREAKING (this release): paginated, with a `total`.
          */
         get: operations["listLiveStreams"];
         put?: never;
@@ -4703,7 +4723,7 @@ export interface paths {
         };
         /**
          * List the registration approval queue
-         * @description Returns registration requests, newest first, with the reviewing admin's username. Restricted to admins. status=pending returns only unresolved requests. Paginated via limit (1–100, default 20) and offset. The stored password hash is never exposed.
+         * @description Returns registration requests, newest first, with the reviewing admin's username, plus a `total` counting the requests that match the same status filter. Restricted to admins. The stored password hash is never exposed.
          */
         get: operations["listRegistrationRequests"];
         put?: never;
@@ -4862,6 +4882,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description The pagination envelope every list response carries. It is composed into each list schema with allOf rather than re-declared, so the wire shape is defined in exactly one place; the fields stay at the TOP LEVEL of the response object, not nested. */
+        PageMeta: {
+            /**
+             * Format: int64
+             * @description How many rows match the SAME filters as this page, ignoring limit and offset. Without it a client cannot tell "last page" from "there is more" and can only render the page length — which is how the admin videos view came to report "100" on an instance with far more. A filtered request reports the size of its own filtered result set, not the instance total.
+             * @example 4649
+             */
+            total: number;
+            /**
+             * @description The page size actually applied, after clamping.
+             * @example 20
+             */
+            limit: number;
+            /** @example 0 */
+            offset: number;
+        };
         LivenessResponse: {
             /** @example ok */
             status: string;
@@ -5076,6 +5112,11 @@ export interface components {
                 feed_sort: "recent" | "popular" | "trending";
                 /** @enum {string} */
                 feed_scope: "local" | "all";
+                /**
+                 * @description How a browse list advances past its first page: "button" is an explicit pager / Load more control (the default, and the shipped behaviour), "auto" is infinite scroll. Operator-level because it is an accessibility and data-usage decision — infinite scroll strands keyboard users and anything below the list.
+                 * @enum {string}
+                 */
+                browse_scroll_mode: "button" | "auto";
                 /**
                  * @description "home" is the admin-authored homepage document and only takes effect once one is set (homepage.enabled).
                  * @enum {string}
@@ -5412,7 +5453,7 @@ export interface components {
             /** @description Toggle ATProto/Bluesky cross-posting for this channel (owner only). Absent leaves it unchanged. */
             atproto_enabled?: boolean;
         };
-        ChannelListResponse: {
+        ChannelListResponse: components["schemas"]["PageMeta"] & {
             channels: components["schemas"]["Channel"][];
         };
         /** @description A channel collaborator (migration 0097). */
@@ -5431,7 +5472,7 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        ChannelMembersResponse: {
+        ChannelMembersResponse: components["schemas"]["PageMeta"] & {
             members: components["schemas"]["ChannelMember"][];
         };
         AddChannelMemberRequest: {
@@ -5465,10 +5506,8 @@ export interface components {
             /** @enum {string} */
             notification_setting: "all" | "none";
         };
-        FollowedChannelsResponse: {
+        FollowedChannelsResponse: components["schemas"]["PageMeta"] & {
             channels: components["schemas"]["FollowedChannel"][];
-            limit: number;
-            offset: number;
         };
         /** @description A public crypto wallet address displayed for NON-CUSTODIAL donations. Vidra never holds funds or private keys and there is deliberately no balance/amount field. The internal verification nonce/expiry are never exposed. */
         DonationAddress: {
@@ -6076,10 +6115,8 @@ export interface components {
             /** @description True when the video's creator has hearted this comment (a like from the uploader). */
             hearted: boolean;
         };
-        CommentListResponse: {
+        CommentListResponse: components["schemas"]["PageMeta"] & {
             comments: components["schemas"]["Comment"][];
-            limit: number;
-            offset: number;
         };
         UpdateCommentRequest: {
             /** @description The new comment text. */
@@ -6094,20 +6131,16 @@ export interface components {
             /** Format: date-time */
             muted_at: string;
         };
-        MutedAccountListResponse: {
+        MutedAccountListResponse: components["schemas"]["PageMeta"] & {
             accounts: components["schemas"]["MutedAccount"][];
-            limit: number;
-            offset: number;
         };
         MutedInstance: {
             domain: string;
             /** Format: date-time */
             muted_at: string;
         };
-        MutedInstanceListResponse: {
+        MutedInstanceListResponse: components["schemas"]["PageMeta"] & {
             instances: components["schemas"]["MutedInstance"][];
-            limit: number;
-            offset: number;
         };
         BlockInstanceRequest: {
             /** @description Bare hostname (optionally host:port) of the instance to block. */
@@ -6126,10 +6159,8 @@ export interface components {
             /** Format: date-time */
             blocked_at: string;
         };
-        BlockedInstanceListResponse: {
+        BlockedInstanceListResponse: components["schemas"]["PageMeta"] & {
             instances: components["schemas"]["BlockedInstance"][];
-            limit: number;
-            offset: number;
         };
         RemoteVideo: {
             /** Format: uuid */
@@ -6238,10 +6269,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        RemoteFollowListResponse: {
+        RemoteFollowListResponse: components["schemas"]["PageMeta"] & {
             follows: components["schemas"]["RemoteFollow"][];
-            limit: number;
-            offset: number;
         };
         BlockedUser: {
             /** Format: uuid */
@@ -6251,10 +6280,8 @@ export interface components {
             /** Format: date-time */
             blocked_at: string;
         };
-        BlockedUserListResponse: {
+        BlockedUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["BlockedUser"][];
-            limit: number;
-            offset: number;
         };
         VideoRating: {
             /** Format: int64 */
@@ -6267,7 +6294,7 @@ export interface components {
              */
             my_rating: "like" | "dislike" | null;
         };
-        VideoListResponse: {
+        VideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
         };
         VideoConfigOption: {
@@ -6288,7 +6315,7 @@ export interface components {
             languages: components["schemas"]["VideoConfigOption"][];
             privacies: components["schemas"]["VideoConfigOption"][];
         };
-        VideoFeedResponse: {
+        VideoFeedResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
             /**
              * @description The ordering actually applied (normalised from the request).
@@ -6300,21 +6327,13 @@ export interface components {
              * @enum {string}
              */
             scope?: "local" | "all";
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
-        VideoSearchResponse: {
+        VideoSearchResponse: components["schemas"]["PageMeta"] & {
             /** @example go concurrency */
             query: string;
             videos: components["schemas"]["Video"][];
             /** @description Remote-URI search hits (config-parity W13). Present only on the first page (offset 0) when the query was URI/handle-shaped, the caller's auth-state gate (search_remote_uri_users / search_remote_uri_anonymous) allowed resolution, AND the target resolved within the strict deadline; omitted otherwise — unresolvable/timeout/rate-limited resolution degrades silently to local-only results. */
             remote?: components["schemas"]["RemoteSearchResult"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description A recommendation rail (search-service W4). items are video cards, each with an added `reason`; personalized reflects whether personalization was applied; source is "search" (ranked by vidra-search) or "fallback" (server-side trending / related heuristic). */
         RecommendationsResponse: {
@@ -6380,12 +6399,8 @@ export interface components {
              */
             watched_at: string;
         };
-        WatchHistoryResponse: {
+        WatchHistoryResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["HistoryItem"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         NotificationActor: {
             username: string;
@@ -6440,14 +6455,10 @@ export interface components {
              */
             report_target_type?: "video" | "comment" | "account" | "remote_video" | "message";
         };
-        NotificationListResponse: {
+        NotificationListResponse: components["schemas"]["PageMeta"] & {
             notifications: components["schemas"]["Notification"][];
             /** Format: int64 */
             unread_count: number;
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         UnreadCountResponse: {
             /**
@@ -6562,11 +6573,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        PlaylistListResponse: {
+        PlaylistListResponse: components["schemas"]["PageMeta"] & {
             playlists: components["schemas"]["Playlist"][];
         };
-        /** @description A playlist's fields plus its ordered public, published video cards. */
-        PlaylistDetailResponse: components["schemas"]["Playlist"] & {
+        /** @description A playlist's fields plus one page of its ordered public, published video cards. total/limit/offset describe the VIDEOS; the playlist's own video_count is unchanged. */
+        PlaylistDetailResponse: components["schemas"]["Playlist"] & components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
         };
         CreatePlaylistRequest: {
@@ -6622,12 +6633,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        QuarantinedVideoListResponse: {
+        QuarantinedVideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["QuarantinedVideo"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description Optional body for rejecting a quarantined upload; the reason is recorded in the audit trail (it is not shown to the owner). */
         RejectQuarantinedVideoRequest: {
@@ -6686,12 +6693,8 @@ export interface components {
             /** @description Snapshot of the reported message body at report time (survives a sender tombstone). */
             message_body?: string;
         };
-        ReportListResponse: {
+        ReportListResponse: components["schemas"]["PageMeta"] & {
             reports: components["schemas"]["Report"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description A currently-blocked video, for the moderation block-list. */
         BlockedVideo: {
@@ -6711,12 +6714,8 @@ export interface components {
             /** Format: date-time */
             blocked_at: string;
         };
-        BlockedVideoListResponse: {
+        BlockedVideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["BlockedVideo"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description A currently-blocked federated remote video, for the moderation block-list. */
         BlockedRemoteVideo: {
@@ -6738,12 +6737,8 @@ export interface components {
             /** Format: date-time */
             blocked_at: string;
         };
-        BlockedRemoteVideoListResponse: {
+        BlockedRemoteVideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["BlockedRemoteVideo"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description A local or federated video in the moderator inventory, with media/storage facts. */
         AdminVideo: {
@@ -6776,19 +6771,25 @@ export interface components {
             has_original: boolean;
             hls_count: number;
             web_video_count: number;
-            /** @description Whether the local media backend is S3-compatible object storage. */
+            /** @description Whether the local media backend is S3-compatible object storage. Derived from the INSTANCE storage backend, not per-file truth: every local video reports the same value. That is why this endpoint offers no filter over it. */
             object_storage: boolean;
             /** Format: int64 */
             size_bytes: number;
             /** @description Whether the video is currently blocked (hidden from public surfaces). */
             blocked: boolean;
+            /**
+             * Format: int64
+             * @description Like count. Always 0 for a federated row, which has no local ratings.
+             */
+            likes?: number;
+            /**
+             * Format: int64
+             * @description Live (non-tombstoned) comment count. Always 0 for a federated row.
+             */
+            comments?: number;
         };
-        AdminVideoListResponse: {
+        AdminVideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["AdminVideo"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description A comment in the admin/moderator overview, with author + video context. */
         AdminComment: {
@@ -6809,12 +6810,8 @@ export interface components {
             /** @description True for a tombstoned comment (its author's account was permanently deleted); body renders as "[deleted]". */
             deleted: boolean;
         };
-        AdminCommentListResponse: {
+        AdminCommentListResponse: components["schemas"]["PageMeta"] & {
             comments: components["schemas"]["AdminComment"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description A term on the instance-wide watched-words list. */
         WatchedWord: {
@@ -6826,12 +6823,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        WatchedWordListResponse: {
+        WatchedWordListResponse: components["schemas"]["PageMeta"] & {
             words: components["schemas"]["WatchedWord"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description Content flagged by the watched-words list, for moderator review: a comment (type "comment"; comment_id/comment_body present, video_id is the video it is on) or a video (type "video"; comment fields absent, video_id/video_title are the flagged video). author_username is the comment's author or the video's owner respectively. */
         WatchedWordMatch: {
@@ -6862,12 +6855,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        WatchedWordMatchListResponse: {
+        WatchedWordMatchListResponse: components["schemas"]["PageMeta"] & {
             matches: components["schemas"]["WatchedWordMatch"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         CreateWatchedWordRequest: {
             word: string;
@@ -6898,18 +6887,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        AdminUserListResponse: {
+        AdminUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["AdminUser"][];
-            /**
-             * Format: int64
-             * @description How many accounts match the same query, ignoring pagination. Counted with the request's own `q`, so a filtered page reports the size of its own result set rather than the instance total. Without it a client cannot tell a last page from a truncated one.
-             * @example 4649
-             */
-            total: number;
-            /** @example 50 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description The caller's storage picture: bytes currently stored and the effective quota (per-user override, else the instance default). quota_bytes is null when the caller is unlimited. */
         QuotaStatus: {
@@ -7145,7 +7124,7 @@ export interface components {
             /** @description RTMP ingest base URL (omitted when no ingest is configured). */
             rtmp_url?: string;
         };
-        LiveStreamListResponse: {
+        LiveStreamListResponse: components["schemas"]["PageMeta"] & {
             live_streams: components["schemas"]["LiveStream"][];
         };
         /** @description One entry of the public "Live now" listing — the minimal, truthful projection of a currently-live PUBLIC stream. Omits fields a discovery rail cannot honestly use: no privacy/state (every entry is public+live), no stream key, no viewer/concurrent count (no server-side counter yet — W4 dependency), no thumbnail (live streams have no server-generated poster yet). */
@@ -7166,10 +7145,8 @@ export interface components {
             /** @description Live HLS playlist path, present only when a media server (LIVE_HLS_ROOT) is configured to serve it. */
             hls_url?: string;
         };
-        LivePublicListResponse: {
+        LivePublicListResponse: components["schemas"]["PageMeta"] & {
             live_streams: components["schemas"]["LiveStreamCard"][];
-            limit: number;
-            offset: number;
         };
         LiveStreamKey: {
             /** @description The new stream key, shown ONCE. */
@@ -7233,12 +7210,8 @@ export interface components {
              */
             unread_count?: number;
         };
-        ConversationListResponse: {
+        ConversationListResponse: components["schemas"]["PageMeta"] & {
             conversations: components["schemas"]["ConversationSummary"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description The PLAINTEXT send shape — valid only on a plaintext conversation (sending it to an encrypted conversation is 422, and vice versa). A message needs a body OR at least one attachment. */
         SendMessageRequest: {
@@ -7522,12 +7495,8 @@ export interface components {
             before?: string;
             after?: string;
         };
-        AuditLogListResponse: {
+        AuditLogListResponse: components["schemas"]["PageMeta"] & {
             entries: components["schemas"]["AuditLogEntry"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         /** @description Media garbage-collection request. dry_run defaults to true. */
         MediaGCRequest: {
@@ -7891,12 +7860,8 @@ export interface components {
             /** Format: date-time */
             occurred_at: string;
         };
-        JobRunsResponse: {
+        JobRunsResponse: components["schemas"]["PageMeta"] & {
             runs: components["schemas"]["JobRun"][];
-            /** Format: int64 */
-            total: number;
-            limit: number;
-            offset: number;
             event_cursor: string;
         };
         JobRunDetailResponse: {
@@ -8312,7 +8277,7 @@ export interface components {
         ChannelSyncResponse: {
             channel_sync: components["schemas"]["ChannelSync"];
         };
-        ChannelSyncListResponse: {
+        ChannelSyncListResponse: components["schemas"]["PageMeta"] & {
             channel_syncs: components["schemas"]["ChannelSync"][];
         };
         /** @description Optional body for an auto-caption request. When language is omitted the server uses WHISPER_DEFAULT_LANGUAGE. */
@@ -8494,12 +8459,8 @@ export interface components {
             /** @description Username of the admin who reviewed it; omitted while pending. */
             reviewer_username?: string;
         };
-        RegistrationRequestListResponse: {
+        RegistrationRequestListResponse: components["schemas"]["PageMeta"] & {
             requests: components["schemas"]["RegistrationRequest"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         RejectRegistrationRequest: {
             /** @description Optional internal moderator note (not shown to the applicant). */
@@ -8522,12 +8483,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        FederationFollowerRequestListResponse: {
+        FederationFollowerRequestListResponse: components["schemas"]["PageMeta"] & {
             requests: components["schemas"]["FederationFollowerRequest"][];
-            /** @example 20 */
-            limit: number;
-            /** @example 0 */
-            offset: number;
         };
         LoginRequest: {
             /** @example ada@example.test */
@@ -8722,7 +8679,12 @@ export interface components {
         };
     };
     responses: never;
-    parameters: never;
+    parameters: {
+        /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+        PageLimit: number;
+        /** @description Rows to skip. Negative values are clamped to 0. */
+        PageOffset: number;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -10589,7 +10551,12 @@ export interface operations {
     };
     listMyChannels: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -10618,7 +10585,12 @@ export interface operations {
     };
     listChannelMembers: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
             header?: never;
             path: {
                 handle: string;
@@ -11938,8 +11910,10 @@ export interface operations {
     listFollowedChannels: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -11970,8 +11944,10 @@ export interface operations {
     listSubscriptionVideos: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -12001,7 +11977,14 @@ export interface operations {
     };
     listChannelVideos: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Ordering by publish time. `-published_at` (newest first) is the default and reproduces the previous fixed ordering; `published_at` is oldest first. These back the Latest/Oldest chips on the channel page. */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
             header?: never;
             path: {
                 handle: string;
@@ -12105,8 +12088,10 @@ export interface operations {
                 category?: string;
                 /** @description Only videos with this content-language code (see GET /videos/config). Unknown value -> 422. */
                 language?: string;
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -12158,8 +12143,10 @@ export interface operations {
         parameters: {
             query: {
                 q: string;
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
                 /** @description Narrow to a free-form tag (matched case-insensitively). Excludes remote results. */
                 tag?: string;
                 /** @description Narrow to a taxonomy category id (from GET /videos/config); unknown values are 422. Excludes remote results. */
@@ -14561,7 +14548,12 @@ export interface operations {
     };
     listChannelSyncs: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -15061,8 +15053,10 @@ export interface operations {
     listComments: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path: {
@@ -15615,8 +15609,10 @@ export interface operations {
     listSavedVideos: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -15738,8 +15734,10 @@ export interface operations {
     getMySearchHistory: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -15837,8 +15835,10 @@ export interface operations {
     listWatchHistory: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
                 /** @description When set to in_progress, returns only "Continue watching" entries: videos the caller has started (position_seconds >= 5) but not effectively finished (< 95% of a known duration). Any other value or omission returns the full history. */
                 progress?: "in_progress";
             };
@@ -16021,8 +16021,10 @@ export interface operations {
             query?: {
                 /** @description When true, return only unread notifications. */
                 unread?: boolean;
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -16339,7 +16341,12 @@ export interface operations {
     };
     listMyPlaylists: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -16368,7 +16375,12 @@ export interface operations {
     };
     getPlaylist: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
             header?: never;
             path: {
                 id: string;
@@ -16932,10 +16944,12 @@ export interface operations {
     listReports: {
         parameters: {
             query?: {
-                /** @description Set to "open" to return only unresolved reports. */
-                status?: "open";
-                limit?: number;
-                offset?: number;
+                /** @description Which half of the queue to return. `open` is unresolved; `resolved` is everything already accepted or rejected; `all` (the default, and what an absent parameter means) is both. An unrecognised value is a 400 — it previously meant "all", so `?status=resolved` silently returned the entire queue. */
+                status?: "open" | "resolved" | "all";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -17082,8 +17096,10 @@ export interface operations {
     listWatchedWords: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -17264,8 +17280,10 @@ export interface operations {
             query?: {
                 /** @description Case-insensitive body substring filter. */
                 q?: string;
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -17307,8 +17325,30 @@ export interface operations {
             query?: {
                 /** @description Case-insensitive title substring filter. */
                 q?: string;
-                limit?: number;
-                offset?: number;
+                /** @description Ordering. Each key is accepted bare (ascending) or `-`-prefixed (descending). `published_at` is an ALIAS of `created_at`: videos carry no separate published_at column and the federated arm projects its own publish time into created_at, so they order the same rows the same way. The default reproduces the previous fixed ordering. */
+                sort?: "-created_at" | "created_at" | "-published_at" | "published_at" | "-views" | "views" | "-duration" | "duration" | "title" | "-title" | "state" | "-state" | "-likes" | "likes" | "-comments" | "comments" | "-size_bytes" | "size_bytes";
+                /** @description Lifecycle states to include. Repeatable and/or comma-separated (`?state=draft&state=failed` and `?state=draft,failed` are equivalent). Absent means all states. */
+                state?: ("draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed")[];
+                /** @description Privacy tiers to include. Repeatable and/or comma-separated. Absent means all tiers. */
+                privacy?: ("public" | "unlisted" | "private" | "password")[];
+                /** @description Whether to include locally hosted rows, federated rows, or both. */
+                scope?: "local" | "remote" | "all";
+                /** @description Exact channel handle. Federated rows match on their `name@domain` handle. */
+                channel?: string;
+                /** @description Only videos published at or after this instant (RFC3339). */
+                published_after?: string;
+                /** @description Only videos published at or before this instant (RFC3339). An inverted window (after > before) is a 400 rather than an empty page that looks like "no data". */
+                published_before?: string;
+                /** @description Whether the video retains its uploaded original. TRI-STATE: absent means "all", not "false" — a plain boolean would make "videos with no original" unexpressible. */
+                has_original?: boolean;
+                /** @description Whether the video has any HLS renditions. Tri-state; absent means all. */
+                has_hls?: boolean;
+                /** @description Whether the video has any progressive web files (video_files of kind rendition or webm). Tri-state; absent means all. */
+                has_web_files?: boolean;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -17427,8 +17467,10 @@ export interface operations {
     listBlockedVideos: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -17468,8 +17510,10 @@ export interface operations {
     listQuarantinedVideos: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -17732,8 +17776,10 @@ export interface operations {
     listMutedAccounts: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -17840,8 +17886,10 @@ export interface operations {
     listMutedInstances: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -17948,8 +17996,10 @@ export interface operations {
     listBlockedInstances: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -18198,8 +18248,10 @@ export interface operations {
     listBlockedRemoteVideos: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -18337,8 +18389,10 @@ export interface operations {
     listRemoteFollows: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -18601,8 +18655,10 @@ export interface operations {
     listBlockedUsers: {
         parameters: {
             query?: {
-                limit?: number;
-                offset?: number;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -18708,7 +18764,12 @@ export interface operations {
     };
     listLiveStreams: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
             header?: never;
             path: {
                 handle: string;
@@ -18821,7 +18882,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
-                offset?: number;
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -21838,10 +21900,12 @@ export interface operations {
     listRegistrationRequests: {
         parameters: {
             query?: {
-                /** @description Set to "pending" to return only unresolved requests. */
-                status?: "pending";
-                limit?: number;
-                offset?: number;
+                /** @description Lifecycle state to return. `all` (the default, and what an absent parameter means) returns every request. An unrecognised value is a 400 — it previously meant "all", so `?status=approved` silently returned the entire queue. */
+                status?: "pending" | "approved" | "rejected" | "all";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
@@ -22135,7 +22199,8 @@ export interface operations {
                 /** @description Username/email substring filter. */
                 q?: string;
                 limit?: number;
-                offset?: number;
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
             };
             header?: never;
             path?: never;
