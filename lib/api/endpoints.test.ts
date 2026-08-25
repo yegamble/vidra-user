@@ -1812,6 +1812,22 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ mode: "dry_run", conflict_policy: "rename" });
   });
 
+  it("launchPeerTubeImport carries an admin's schema sign-off as the version itself", async () => {
+    // Not a boolean: the server opens the version gate only when this equals the
+    // version preflight actually detects, so the number has to reach the wire.
+    await api.launchPeerTubeImport({
+      mode: "run",
+      conflict_policy: "skip",
+      acknowledged_schema_version: 1040,
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      mode: "run",
+      conflict_policy: "skip",
+      acknowledged_schema_version: 1040,
+    });
+  });
+
   it("listPeerTubeImports targets the admin peertube-import collection", async () => {
     await api.listPeerTubeImports();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
