@@ -311,20 +311,42 @@ test("the sort / duration / published facets reach the endpoint as its own param
   await openSearchFilters(page);
   const main = page.getByRole("main");
 
+  // Each facet is its own navigation, so wait for the chip to read as applied
+  // before pressing the next one — asserting only the URL would race the
+  // re-render that the following click depends on.
   await main.getByRole("button", { name: "Views" }).click();
-  await expect(page).toHaveURL(/sort=-views/);
+  await expect(main.getByRole("button", { name: "Views" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await main.getByRole("button", { name: "4 – 10 minutes" }).click();
-  await expect(page).toHaveURL(/duration=medium/);
+  await expect(main.getByRole("button", { name: "4 – 10 minutes" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await main.getByRole("button", { name: "Last 7 days" }).click();
-  await expect(page).toHaveURL(/published=7d/);
+  await expect(main.getByRole("button", { name: "Last 7 days" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page).toHaveURL(/sort=-views&duration=medium&published=7d$/);
 
-  await expect.poll(() => calls.at(-1)?.get("sort")).toBe("-views");
-  const last = calls.at(-1)!;
-  // The bucket expands to the endpoint's SECONDS range, and to an RFC3339
-  // instant computed at fetch time — the URL keeps the bucket, not the maths.
-  expect(last.get("duration_min")).toBe("240");
-  expect(last.get("duration_max")).toBe("600");
-  expect(last.get("published_after")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  // Poll on the whole shape: the three facets land in three separate requests,
+  // and only the last one carries all of them.
+  await expect
+    .poll(() => {
+      const last = calls.at(-1);
+      return {
+        sort: last?.get("sort"),
+        // The bucket expands to the endpoint's SECONDS range, and to an
+        // RFC3339 instant computed at fetch time — the URL keeps the bucket,
+        // not the maths.
+        duration_min: last?.get("duration_min"),
+        duration_max: last?.get("duration_max"),
+        dated: /^\d{4}-\d{2}-\d{2}T/.test(last?.get("published_after") ?? ""),
+      };
+    })
+    .toEqual({ sort: "-views", duration_min: "240", duration_max: "600", dated: true });
 });
 
 test("the tag lists apply on Enter and travel as one comma-separated parameter", async ({
