@@ -122,3 +122,8 @@ export function formatDuration(totalSeconds: number): string {
   if (hours > 0) return `${hours}:${String(mins).padStart(2, "0")}:${ss}`;
   return `${mins}:${ss}`;
 }
+
+/** formatVersion renders a build tag for display: "v0.3.5" -> "0.3.5". */
+export function formatVersion(version: string): string {
+  return version.replace(/^v/, "");
+}

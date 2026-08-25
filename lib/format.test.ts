@@ -7,9 +7,22 @@ import {
   formatDuration,
   formatMonthYear,
   formatUptime,
+  formatVersion,
   pluralize,
   relativeTime,
 } from "./format";
+
+describe("formatVersion", () => {
+  it("strips the build tag's leading v", () => {
+    expect(formatVersion("v0.3.5")).toBe("0.3.5");
+  });
+  it("leaves an already-bare version alone", () => {
+    expect(formatVersion("0.3.5")).toBe("0.3.5");
+  });
+  it("only strips a leading v, not one inside", () => {
+    expect(formatVersion("dev")).toBe("dev");
+  });
+});
 
 describe("pluralize", () => {
   it("uses the singular only for exactly one", () => {

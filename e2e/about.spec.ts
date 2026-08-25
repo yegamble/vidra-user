@@ -144,7 +144,7 @@ test("the PeerTube-style about pages expose branding and paginate each section",
   await page.getByRole("link", { name: "Technical information" }).click();
   await expect(page).toHaveURL(/\/about\/instance\/tech$/);
   await expect(page.getByRole("heading", { name: "Technical information" })).toBeVisible();
-  await expect(page.getByText("vidra v0.1.0")).toBeVisible();
+  await expect(page.getByText("vidra 0.1.0")).toBeVisible();
   await expect(page.getByText("Video uploads")).toBeVisible();
 
   await page
