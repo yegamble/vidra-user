@@ -5673,6 +5673,11 @@ export interface components {
              * @description The scheduled publish time. Present on the detail, create/update, and owner (studio) channel-list views once a schedule was set; omitted otherwise. The server publishes the video (running the same side effects as a direct publish) when this time arrives.
              */
             publish_at?: string;
+            /**
+             * Format: date-time
+             * @description When the video was FIRST published elsewhere (a PeerTube import's originallyPublishedAt, or a date the creator set). Present on the detail and create/update views when known; omitted for anything first published on this instance, where created_at is the only date.
+             */
+            originally_published_at?: string;
             /** @description Probed duration in whole seconds, recorded by the media probe. Present on the detail endpoint and on card/feed views (feed, search, channel lists, subscriptions, saved, history) so a card can show a length badge or resume progress bar; omitted when unknown (not yet probed). */
             duration_seconds?: number | null;
             /** @description Probed pixel width; omitted when unknown (e.g. audio-only). */
@@ -6123,6 +6128,11 @@ export interface components {
              * @description Set (or move) the scheduled publish time. Only accepted while the video is not yet published, and must lie in the future -> 422 otherwise.
              */
             publish_at?: string;
+            /**
+             * Format: date-time
+             * @description Set when the video was first published elsewhere (omit to leave unchanged; it cannot be cleared back to unset). Unlike publish_at it schedules nothing, is accepted at any state, and is normally in the past.
+             */
+            originally_published_at?: string;
             /** @description Set or clear the sensitive-content flag (omit to leave unchanged). */
             is_sensitive?: boolean;
             /** @description Set the creator content-warning text (omit to leave unchanged; an empty string clears it). Trimmed and capped at 280 characters -> 422 over the cap. */
