@@ -192,6 +192,19 @@ export function SearchFilters({
             </option>
           ))}
         </Select>
+        <Select
+          label="License"
+          value={filters.license ?? ""}
+          onChange={(e) => apply({ license: e.target.value || undefined })}
+          disabled={config === null}
+        >
+          <option value="">All</option>
+          {(config?.licenses ?? []).map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </Select>
         {/* Both tag fields are comma-separated lists, applied on Enter or blur.
             "All of" and "one of" are separate parameters, not one control with a
             mode switch: they compose (every documentary tagged either 1970s or

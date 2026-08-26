@@ -12,12 +12,12 @@
  * tomorrow, where a baked `published_after=2026-08-18T…` would quietly become
  * "the eight days before you opened this".
  *
- * Four facets PeerTube offers are deliberately absent — original publication
- * year, live-vs-VOD, licence, and instance host. None of them is answerable from
- * what vidra stores (there is no originally_published_at column, live streams
- * are a disjoint table from videos, licence is never projected into the search
- * index, and the index knows only local/remote). A control that silently does
- * nothing is worse than its absence, so they are not rendered at all.
+ * Three facets PeerTube offers are deliberately absent — original publication
+ * year, live-vs-VOD, and instance host. None of them is answerable from what
+ * vidra stores (there is no originally_published_at column, live streams are a
+ * disjoint table from videos, and the index knows only local/remote). A control
+ * that silently does nothing is worse than its absence, so they are not
+ * rendered at all.
  */
 
 import type { SearchVideosParams } from "@/lib/api";
@@ -47,6 +47,8 @@ export interface SearchFilters {
   category?: string;
   /** Taxonomy language id (GET /videos/config). */
   language?: string;
+  /** Taxonomy licence id (GET /videos/config). */
+  license?: string;
   /** A single free-form tag — the chip a tag link lands on. */
   tag?: string;
   /** Ordering; "relevance" is the default and is never written to the URL. */
@@ -148,6 +150,7 @@ export function readSearchFilters(sp: Record<string, SearchParamValue>): SearchF
   return {
     category: one(sp.category)?.trim() || undefined,
     language: one(sp.language)?.trim() || undefined,
+    license: one(sp.license)?.trim() || undefined,
     tag: one(sp.tag)?.trim() || undefined,
     sort: pick(sp.sort, ["-published_at", "-views"] as const),
     duration: pick(sp.duration, ["short", "medium", "long"] as const),
@@ -174,6 +177,7 @@ export function searchHref(
   if (type !== "videos") params.set("type", type);
   if (filters.category) params.set("category", filters.category);
   if (filters.language) params.set("language", filters.language);
+  if (filters.license) params.set("license", filters.license);
   if (filters.tag) params.set("tag", filters.tag);
   if (filters.sort && filters.sort !== "relevance") params.set("sort", filters.sort);
   if (filters.duration) params.set("duration", filters.duration);
@@ -194,6 +198,7 @@ export function activeSearchFilterCount(filters: SearchFilters): number {
   return (
     (filters.category ? 1 : 0) +
     (filters.language ? 1 : 0) +
+    (filters.license ? 1 : 0) +
     (filters.tag ? 1 : 0) +
     (filters.sort && filters.sort !== "relevance" ? 1 : 0) +
     (filters.duration ? 1 : 0) +
@@ -230,6 +235,7 @@ export function searchApiFilters(
   return {
     category: filters.category,
     language: filters.language,
+    license: filters.license,
     tag: filters.tag,
     // "relevance" is the endpoint's own default: send nothing rather than spell
     // it out, so a plain search is byte-identical to the request it was before

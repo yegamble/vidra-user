@@ -12234,6 +12234,8 @@ export interface operations {
                 category?: string;
                 /** @description Narrow to a taxonomy language id (from GET /videos/config); unknown values are 422. Excludes remote results. */
                 language?: string;
+                /** @description Narrow to a taxonomy license id (from GET /videos/config); unknown values are 422. Excludes remote results. */
+                license?: string;
                 /** @description Minimum video length in SECONDS, inclusive. A RANGE rather than the short/medium/long buckets the UI renders on top of it, because ranges compose and buckets do not — "4 to 10 minutes" is duration_min=240&duration_max=600, and a caller wanting something else is not stuck. Videos whose duration is unknown (no probe has run, or a federated actor never advertised one) do NOT match either bound: the filter answers "provably within the range". Applies to local and remote results alike. duration_min greater than duration_max is a 400. */
                 duration_min?: number;
                 /** @description Maximum video length in SECONDS, inclusive. See duration_min. */

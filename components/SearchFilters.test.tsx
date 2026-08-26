@@ -21,7 +21,7 @@ vi.mock("@/lib/api/video-config", () => ({
     Promise.resolve({
       categories: [{ id: "7", label: "Gaming" }],
       languages: [{ id: "en", label: "English" }],
-      licenses: [],
+      licenses: [{ id: "1", label: "Attribution" }],
       privacies: [],
     }),
   ),
@@ -112,6 +112,17 @@ describe("SearchFilters facets", () => {
     expect(navigation.pushed.at(-1)).toBe("/search?q=go&category=7");
   });
 
+  it("applies the license select from the same taxonomy", async () => {
+    render(<SearchFilters query="go" filters={{}} />);
+    openPanel();
+
+    const license = screen.getByLabelText("License");
+    await waitFor(() => expect((license as HTMLSelectElement).disabled).toBe(false));
+    fireEvent.change(license, { target: { value: "1" } });
+
+    expect(navigation.pushed.at(-1)).toBe("/search?q=go&license=1");
+  });
+
   it("applies a comma-separated tag list on Enter, not on every keystroke", () => {
     render(<SearchFilters query="go" filters={{}} />);
     openPanel();
@@ -149,11 +160,11 @@ describe("SearchFilters facets", () => {
     render(<SearchFilters query="go" filters={{}} />);
     openPanel();
 
-    // Original publication year, live-vs-VOD, licence and instance host are
-    // absent rather than present-and-inert: nothing stores them, and a control
-    // that silently does nothing is worse than its absence.
+    // Original publication year, live-vs-VOD and instance host are absent
+    // rather than present-and-inert: nothing stores them, and a control that
+    // silently does nothing is worse than its absence. (Licence used to be on
+    // this list; it is now indexed and filterable, so it has a control.)
     expect(screen.queryByLabelText(/publication year/i)).toBeNull();
-    expect(screen.queryByText(/Licence|License/)).toBeNull();
     expect(screen.queryByLabelText(/instance host/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /^Live$/ })).toBeNull();
   });
