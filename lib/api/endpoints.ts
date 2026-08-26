@@ -194,7 +194,7 @@ export interface SearchParams {
 
 /**
  * Params for GET /videos/search: pagination plus the optional facets the search
- * page exposes (category/language ids come from GET /videos/config; tags are
+ * page exposes (category/language/license ids come from GET /videos/config; tags are
  * free-form lowercased tags). The taxonomy and tag filters narrow to LOCAL
  * results (federated remote cards are excluded when set); the duration and
  * publish-window bounds apply to local and remote alike.
@@ -208,6 +208,8 @@ export interface SearchVideosParams extends SearchParams {
   tag?: string;
   category?: string;
   language?: string;
+  /** Taxonomy licence id (GET /videos/config; unknown → 422). */
+  license?: string;
   /** Ordering; omit for the endpoint's own relevance default. */
   sort?: string;
   /** Inclusive length bounds, in SECONDS. A video with no known duration matches neither. */
@@ -343,9 +345,9 @@ export const api = {
 
   /**
    * GET /api/v1/videos/search?q= — public title/tag search. Optional taxonomy/tag
-   * filters (category/language/tag) narrow results to local videos; an unknown
-   * category/language value is a 422 (the selects are populated from the same
-   * GET /videos/config taxonomy, so the UI never sends one).
+   * filters (category/language/license/tag) narrow results to local videos; an
+   * unknown category/language/license value is a 422 (the selects are populated
+   * from the same GET /videos/config taxonomy, so the UI never sends one).
    */
   searchVideos: (query: string, params: SearchVideosParams = {}, signal?: AbortSignal) =>
     apiRequest<VideoSearchResponse>("/api/v1/videos/search", {
@@ -356,6 +358,7 @@ export const api = {
         tag: params.tag,
         category: params.category,
         language: params.language,
+        license: params.license,
         sort: params.sort,
         duration_min: params.durationMin,
         duration_max: params.durationMax,

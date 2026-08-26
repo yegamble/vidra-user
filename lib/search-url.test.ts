@@ -16,6 +16,9 @@ describe("searchHref", () => {
     expect(searchHref("go", { category: "7", language: "en", tag: "cats" })).toBe(
       "/search?q=go&category=7&language=en&tag=cats",
     );
+    expect(searchHref("go", { language: "en", license: "7" })).toBe(
+      "/search?q=go&language=en&license=7",
+    );
   });
 
   it("URL-encodes the query and tag", () => {
@@ -46,14 +49,20 @@ describe("searchHref", () => {
 
 describe("readSearchFilters", () => {
   it("extracts filters and normalizes empty strings to undefined", () => {
-    expect(readSearchFilters({ category: "7", language: "en", tag: "cats" })).toMatchObject({
+    expect(
+      readSearchFilters({ category: "7", language: "en", license: "1", tag: "cats" }),
+    ).toMatchObject({
       category: "7",
       language: "en",
+      license: "1",
       tag: "cats",
     });
-    expect(readSearchFilters({ category: "  ", language: "", tag: undefined })).toMatchObject({
+    expect(
+      readSearchFilters({ category: "  ", language: "", license: "  ", tag: undefined }),
+    ).toMatchObject({
       category: undefined,
       language: undefined,
+      license: undefined,
       tag: undefined,
     });
   });
@@ -114,6 +123,7 @@ describe("activeSearchFilterCount", () => {
       activeSearchFilterCount({
         category: "7",
         language: "en",
+        license: "1",
         tag: "cats",
         sort: "-published_at",
         duration: "short",
@@ -121,7 +131,7 @@ describe("activeSearchFilterCount", () => {
         tagsAll: ["a"],
         tagsOne: ["b"],
       }),
-    ).toBe(8);
+    ).toBe(9);
     // An empty list is not a filter.
     expect(activeSearchFilterCount({ tagsAll: [] })).toBe(0);
   });
@@ -138,6 +148,15 @@ describe("searchFilterKey", () => {
 
 describe("searchApiFilters", () => {
   const now = new Date("2026-08-25T12:00:00.000Z");
+
+  it("passes the taxonomy ids through untouched", () => {
+    expect(searchApiFilters({ category: "7", language: "en", license: "1" }, now)).toMatchObject({
+      category: "7",
+      language: "en",
+      license: "1",
+    });
+    expect(searchApiFilters({}, now).license).toBeUndefined();
+  });
 
   it("expands a duration bucket into inclusive second bounds that do not overlap", () => {
     expect(searchApiFilters({ duration: "short" }, now)).toMatchObject({
