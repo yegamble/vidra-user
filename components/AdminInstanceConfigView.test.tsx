@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   validateInstanceSettings: vi.fn(),
   getInstance: vi.fn(),
   getInstanceDocument: vi.fn(),
+  getInfrastructure: vi.fn(),
   getVideoConfigCached: vi.fn(),
   getInstanceCached: vi.fn(),
 }));
@@ -33,6 +34,7 @@ vi.mock("@/lib/api", async (importActual) => {
       validateInstanceSettings: mocks.validateInstanceSettings,
       getInstance: mocks.getInstance,
       getInstanceDocument: mocks.getInstanceDocument,
+      getInfrastructure: mocks.getInfrastructure,
     },
     getVideoConfigCached: mocks.getVideoConfigCached,
     getInstanceCached: mocks.getInstanceCached,
@@ -119,6 +121,9 @@ beforeEach(() => {
     categories: [],
   });
   mocks.getInstanceCached.mockResolvedValue({ federation_enabled: true });
+  // Rejecting by default proves the wiring warns are best-effort: every other
+  // test renders exactly as before the /admin/infrastructure fetch existed.
+  mocks.getInfrastructure.mockRejectedValue(new Error("not served"));
 });
 
 afterEach(() => {
@@ -885,5 +890,102 @@ describe("transcoding ladder list control (config-parity W1/W10)", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
+  });
+});
+
+// The live contradiction signal for the delivery toggles (admin-parity audit):
+// the view feeds the admin-only /admin/infrastructure snapshot into per-key
+// wiring warns. The one non-negotiable: a warn must never disable the row —
+// the state it flags is an ON switch wired to nothing, and the only remedy the
+// page offers is flipping it back OFF.
+describe("delivery wiring warnings (Advanced page)", () => {
+  const deliveryDoc = {
+    settings: [
+      {
+        key: "delivery_presign_enabled",
+        type: "bool",
+        value: true,
+        default: false,
+        overridden: true,
+      },
+      {
+        key: "delivery_cdn_enabled",
+        type: "bool",
+        value: true,
+        default: false,
+        overridden: true,
+      },
+      {
+        key: "qoe_collection_enabled",
+        type: "bool",
+        value: true,
+        default: true,
+        overridden: false,
+      },
+    ],
+  };
+  const unwiredInfra = {
+    storage: { backend: "local" },
+    features: [{ key: "cdn", enabled: true, configured: false }],
+  };
+
+  beforeEach(() => {
+    mocks.getInstanceSettings.mockResolvedValue(deliveryDoc);
+  });
+
+  it("shows both warns on an unwired deploy and keeps the toggles flippable", async () => {
+    mocks.getInfrastructure.mockResolvedValue(unwiredInfra);
+    render(<ConfigForm page="advanced" />);
+
+    expect(
+      await screen.findByText(/not booted with DELIVERY_CDN_BASE_URL/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/storage backend is not S3/),
+    ).toBeTruthy();
+
+    // NON-DISABLING is the point: the on-but-inert switch must stay operable
+    // so the operator can turn it back off — and the flip must save.
+    const cdn = screen.getByRole("switch", {
+      name: "CDN delivery",
+    }) as HTMLButtonElement;
+    expect(cdn.disabled).toBe(false);
+    fireEvent.click(cdn);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.updateInstanceSettings).toHaveBeenCalledWith({
+        delivery_cdn_enabled: false,
+      }),
+    );
+  });
+
+  it("shows no warn when the deploy backs both toggles", async () => {
+    mocks.getInfrastructure.mockResolvedValue({
+      storage: { backend: "s3" },
+      features: [{ key: "cdn", enabled: true, configured: true }],
+    });
+    render(<ConfigForm page="advanced" />);
+    await screen.findByRole("switch", { name: "CDN delivery" });
+    await waitFor(() =>
+      expect(mocks.getInfrastructure).toHaveBeenCalledTimes(1),
+    );
+    expect(screen.queryByText(/currently does nothing/)).toBeNull();
+  });
+
+  it("degrades to no warn when the infrastructure fetch fails", async () => {
+    // beforeEach default: getInfrastructure rejects.
+    render(<ConfigForm page="advanced" />);
+    const cdn = (await screen.findByRole("switch", {
+      name: "CDN delivery",
+    })) as HTMLButtonElement;
+    expect(screen.queryByText(/currently does nothing/)).toBeNull();
+    expect(cdn.disabled).toBe(false);
+  });
+
+  it("does not spend the admin fetch on a page with no wiring checks", async () => {
+    mocks.getInstanceSettings.mockResolvedValue(doc);
+    render(<ConfigForm page="vod" />);
+    await screen.findByLabelText("Max concurrent uploads per user");
+    expect(mocks.getInfrastructure).not.toHaveBeenCalled();
   });
 });

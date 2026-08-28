@@ -11,8 +11,11 @@ import {
   describeSettingDefault,
   humanizeSectionId,
   isConfigPageId,
+  pageHasWiringChecks,
   placementFor,
+  wiringWarnNote,
   type ConfigPageId,
+  type InfrastructureWiringInfo,
   type PlacedInstanceSetting,
 } from "./admin-config-ia";
 
@@ -742,15 +745,110 @@ describe("ADVANCED / Delivery (phase-2 item 6, phase-4 items 2 & 4)", () => {
     expect(META.qoe_collection_enabled.help).toContain("Playback health");
   });
 
-  // No bootDep yet: /instance reports neither the storage backend nor a CDN
-  // base URL, so there is nothing honest to hang isSatisfied() on. When core
-  // adds a CDN row to the infrastructure feature list, wire it here — this
-  // assertion is the reminder that today's answer is "said in words".
-  it("declares no boot dependency it cannot actually check", () => {
+  // Presign on S3 has a prerequisite whose failure mode is NOT benign: a
+  // bucket whose CORS policy does not allow this site's origin fails every
+  // in-browser segment fetch platform-wide (a real incident class). The help
+  // must say so instead of framing the toggle as worst-case inert.
+  it("warns about the bucket CORS prerequisite in the presign help", () => {
+    expect(META.delivery_presign_enabled.help).toContain("CORS");
+    expect(META.delivery_presign_enabled.help).toContain("origin");
+  });
+
+  // "purge that separately" promised an admin control that does not exist.
+  // Purging is an automatic side effect (vidra-core media_purge.go: deletion,
+  // a privacy flip away from public, an admin block — via the boot-configured
+  // DELIVERY_CDN_PURGE_URL); anything else is the CDN provider's console.
+  it("describes where edge purging actually happens instead of promising a control", () => {
+    expect(META.delivery_cdn_enabled.help).not.toContain("purge that separately");
+    expect(META.delivery_cdn_enabled.help).toContain("automatically");
+    expect(META.delivery_cdn_enabled.help).toContain("CDN provider");
+  });
+
+  // qoe_collection_enabled is default-ON, so the help must state the
+  // collection granularity the code actually has (vidra-core migration 0109 +
+  // internal/qoe/digest.go): no account id, no IP, a day-scoped keyed viewer
+  // digest, raw events pruned after 7 days.
+  it("states the QoE collection granularity honestly", () => {
+    const help = META.qoe_collection_enabled.help ?? "";
+    expect(help).toContain("account");
+    expect(help).toContain("IP address");
+    expect(help).toContain("7 days");
+  });
+
+  // bootDep DISABLES a row (AdminInstanceConfigView locks it), and the failure
+  // these toggles need flagged is "on but wired to nothing" — a state the
+  // operator must stay able to flip back OFF. So they must never carry a
+  // bootDep; the honest live signal is the non-disabling wiring warn below.
+  it("keeps the delivery toggles bootDep-free — a wiring warn must never lock the row", () => {
     for (const key of DELIVERY_KEYS) {
       expect(META[key].bootDep, key).toBeUndefined();
       expect(bootDepNote(META[key], { features: {} }), key).toBeNull();
     }
+  });
+
+  // The live contradiction signal (admin-parity): GET /admin/infrastructure
+  // reports the cdn feature's configured half and the storage backend, so the
+  // config view can say "this switch currently does nothing" while it is ON.
+  describe("wiring warnings from the infrastructure snapshot", () => {
+    const wired: InfrastructureWiringInfo = {
+      storage: { backend: "s3" },
+      features: [{ key: "cdn", enabled: true, configured: true }],
+    };
+    const unwired: InfrastructureWiringInfo = {
+      storage: { backend: "local" },
+      features: [{ key: "cdn", enabled: true, configured: false }],
+    };
+
+    it("warns on the CDN toggle when the cdn feature is not configured", () => {
+      const note = wiringWarnNote(META.delivery_cdn_enabled, unwired);
+      expect(note).toContain("DELIVERY_CDN_BASE_URL");
+      expect(note).toContain("does nothing");
+      expect(wiringWarnNote(META.delivery_cdn_enabled, wired)).toBeNull();
+    });
+
+    it("warns on the presign toggle when the storage backend is not s3", () => {
+      const note = wiringWarnNote(META.delivery_presign_enabled, unwired);
+      expect(note).toContain("storage backend");
+      expect(note).toContain("does nothing");
+      expect(wiringWarnNote(META.delivery_presign_enabled, wired)).toBeNull();
+    });
+
+    // Graceful degradation is a hard requirement: no snapshot (fetch failed,
+    // older backend, missing halves) renders exactly as today — no warn.
+    it("stays silent without a snapshot or without the half it reads", () => {
+      for (const key of ["delivery_cdn_enabled", "delivery_presign_enabled"]) {
+        expect(wiringWarnNote(META[key], null), key).toBeNull();
+        expect(wiringWarnNote(META[key], {}), key).toBeNull();
+        expect(
+          wiringWarnNote(META[key], { storage: {}, features: [] }),
+          key,
+        ).toBeNull();
+      }
+      // A key with no warn check never warns, whatever the snapshot says.
+      expect(wiringWarnNote(META.qoe_collection_enabled, unwired)).toBeNull();
+      expect(wiringWarnNote(undefined, unwired)).toBeNull();
+    });
+
+    // The admin-only fetch is spent only where a warn check can consume it.
+    it("marks only the advanced page as needing the infrastructure snapshot", () => {
+      expect(pageHasWiringChecks("advanced")).toBe(true);
+      expect(pageHasWiringChecks("general")).toBe(false);
+      expect(pageHasWiringChecks("vod")).toBe(false);
+    });
+  });
+});
+
+// instance_is_sensitive is a behavioural toggle, so its row must state the
+// behaviour. Verified consumers (2026-08-28): vidra-core publishes it as the
+// public /instance is_sensitive flag (internal/httpapi/instance.go) and the
+// frontend About page renders a "dedicated to sensitive content" notice from
+// it (InstanceAboutView) — and NOTHING else reads it, so the help must also
+// say it hides no videos (that is sensitive_content_policy's job).
+describe("GENERAL / moderation: instance_is_sensitive consequences", () => {
+  it("states what the flag actually drives", () => {
+    const help = META.instance_is_sensitive.help ?? "";
+    expect(help).toContain("About page");
+    expect(help.toLowerCase()).toContain("does not hide");
   });
 });
 

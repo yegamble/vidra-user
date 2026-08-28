@@ -34,8 +34,11 @@ import {
   controlFor,
   describeSettingDefault,
   emptyValueFor,
+  pageHasWiringChecks,
+  wiringWarnNote,
   type ConfigPageId,
   type EnumOption,
+  type InfrastructureWiringInfo,
   type InstanceBootInfo,
   type PageSection,
   type PlacedInstanceSetting,
@@ -155,6 +158,10 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   // whose boot-env backing is absent renders disabled with an explanation, and
   // some pages carry a page-wide note). Best-effort: null just means no notes.
   const [instance, setInstance] = useState<InstanceBootInfo | null>(null);
+  // The admin-only /admin/infrastructure snapshot, feeding the NON-DISABLING
+  // wiring warns (an ON delivery toggle backed by nothing). Best-effort like
+  // the /instance fetch: null means no warns, never an error state.
+  const [infra, setInfra] = useState<InfrastructureWiringInfo | null>(null);
 
   const seed = useCallback(
     (list: AdminInstanceSetting[]) => {
@@ -208,6 +215,24 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
       cancelled = true;
     };
   }, []);
+
+  // Fetched only for pages whose keys carry a wiring warn check (Advanced /
+  // delivery today) — the other pages could not consume the answer, so they
+  // never spend the request. A failure (older backend, transient error) means
+  // the page renders exactly as it did before this fetch existed.
+  useEffect(() => {
+    if (!pageHasWiringChecks(page)) return;
+    const controller = new AbortController();
+    api
+      .getInfrastructure(controller.signal)
+      .then((doc) => {
+        if (!controller.signal.aborted) setInfra(doc);
+      })
+      .catch(() => {
+        // No wiring warns; the help text still names the preconditions.
+      });
+    return () => controller.abort();
+  }, [page]);
 
   // The set of keys whose draft value differs from the effective server value.
   const changedKeys = useMemo(
@@ -441,6 +466,7 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
                 draftValue={draft[key]}
                 error={fieldErrors[key] ?? clientErrors[key]}
                 bootNote={bootDepNote(META[key], instance)}
+                warnNote={wiringWarnNote(META[key], infra)}
                 child={META[key]?.parent !== undefined}
                 resetting={resetting === key}
                 disabled={saving}
@@ -622,6 +648,7 @@ function SettingRow({
   draftValue,
   error,
   bootNote,
+  warnNote,
   child,
   resetting,
   disabled,
@@ -638,6 +665,12 @@ function SettingRow({
   error?: string;
   /** Non-null when the setting's boot-env dependency is absent: disable + explain. */
   bootNote: string | null;
+  /**
+   * Non-null when the deploy wiring contradicts this setting (wiringWarnNote):
+   * explain in the warning style but NEVER disable — the flagged state is an
+   * ON switch backed by nothing, and it must stay flippable back off.
+   */
+  warnNote: string | null;
   /** True for a progressive-disclosure child (renders indented under its parent). */
   child: boolean;
   resetting: boolean;
@@ -694,6 +727,13 @@ function SettingRow({
           ) : null}
           {bootNote !== null && !unsupported ? (
             <span className="block text-xs text-fg-muted">{bootNote}</span>
+          ) : null}
+          {/* Wiring warn: warning ink, and deliberately NOT part of `inactive`
+              above — see the warnNote prop doc. */}
+          {warnNote !== null && !unsupported ? (
+            <span role="note" className="block text-xs text-warning">
+              {warnNote}
+            </span>
           ) : null}
           {/* Badge treatment: ONLY an overridden key gets a badge (+ its config
               default and the reset affordance); a key at its config default

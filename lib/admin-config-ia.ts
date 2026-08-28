@@ -68,6 +68,18 @@ export type InstanceBootInfo = {
   };
 };
 
+/**
+ * The minimal GET /admin/infrastructure shape the deploy-wiring warn checks
+ * read (admin-only endpoint; the config view sits behind the same admin gate).
+ * Every field is optional on purpose: the checks must tolerate an older
+ * backend that reports less, and a missing half never fires a warning — the
+ * warn is best-effort enrichment, absence of evidence is silence.
+ */
+export type InfrastructureWiringInfo = {
+  storage?: { backend?: string };
+  features?: { key?: string; enabled?: boolean; configured?: boolean }[];
+};
+
 // --- Pages ---------------------------------------------------------------
 
 export type ConfigPageId =
@@ -552,6 +564,18 @@ export type SettingMeta = {
     note: string;
     isSatisfied: (instance: InstanceBootInfo) => boolean;
   };
+  /**
+   * Deploy-wiring warning: when the admin-only /admin/infrastructure snapshot
+   * says the deployment lacks what this setting needs, the row shows this note
+   * in the warning style. Unlike bootDep it must NEVER disable the row — the
+   * failure it flags is a switch that is on but wired to nothing, and the
+   * operator has to stay able to flip it back off. Best-effort: no snapshot
+   * (fetch failed, older backend) means no warning, never an error state.
+   */
+  warn?: {
+    note: string;
+    isTriggered: (infra: InfrastructureWiringInfo) => boolean;
+  };
 };
 
 // In DISPLAY ORDER within each section. Any key the backend returns that is
@@ -884,8 +908,13 @@ export const META: Record<string, SettingMeta> = {
   // moderation-info markdown lives on the About page in the server registry
   // (general/about); only the sensitive-content flags and the upload
   // quarantine gate are the moderation section here.
+  // Verified consumers (2026-08-28): the public /instance document's
+  // is_sensitive flag (vidra-core internal/httpapi/instance.go), which the
+  // About page renders as a "dedicated to sensitive content" notice — and
+  // nothing else reads it, so the help must not imply any gating.
   instance_is_sensitive: {
     label: "This instance is dedicated to sensitive content",
+    help: "Declares the whole instance sensitive on the public instance API, and the About page shows a notice saying so. It does not hide, blur, or restrict any videos — the policy below controls that.",
     control: "toggle",
     page: "general",
     section: "moderation",
@@ -1440,31 +1469,43 @@ export const META: Record<string, SettingMeta> = {
   // Both redirect toggles are EFFECTIVE only with their boot-side backing —
   // an S3 backend for presign, DELIVERY_CDN_BASE_URL for the CDN — and the
   // help says so, because a toggle that reads "on" while doing nothing is the
-  // failure mode these rows exist to prevent. Neither carries a bootDep note:
-  // the /instance snapshot the config view reads reports no storage backend
-  // and no CDN base URL today, and inventing a signal the contract does not
-  // carry would be worse than saying it in words. (The admin infrastructure
-  // endpoint DOES report both halves of the CDN pair as of core#116, but it is
-  // an admin-only endpoint this view does not fetch — the Optional features
-  // list on /admin/infrastructure is where that contradiction shows up, and its
-  // CDN row links back here.)
+  // failure mode these rows exist to prevent. Since core#116 the admin-only
+  // GET /admin/infrastructure also reports both halves live (the storage
+  // backend, and the cdn feature's enabled/configured pair), so each toggle
+  // carries a `warn` check the config view feeds that snapshot: an on-but-
+  // unwired switch shows its contradiction on the row itself, not only on
+  // /admin/infrastructure. Deliberately `warn`, never bootDep — bootDep locks
+  // the row, and an on-but-inert toggle must stay flippable back off.
   delivery_presign_enabled: {
     label: "Direct object delivery",
-    help: "Answer public media requests with a redirect to a short-lived signed object-store URL instead of streaming every byte through the API. Applies only to the S3 storage backend — on a local-filesystem install it stays inert. Turning it off sends the next request back through the API.",
+    help: "Answer public media requests with a redirect to a short-lived signed object-store URL instead of streaming every byte through the API. Applies only to the S3 storage backend — on a local-filesystem install it stays inert. On S3 the bucket's CORS policy must allow this site's origin: without that, every media fetch fails in browsers and playback breaks platform-wide until this is turned back off. Turning it off sends the next request back through the API.",
     control: "toggle",
     page: "advanced",
     section: "delivery",
+    warn: {
+      note: "This server's storage backend is not S3, so this switch currently does nothing — every byte is still served by this instance. See Infrastructure → Storage.",
+      isTriggered: (infra) =>
+        infra.storage?.backend !== undefined &&
+        infra.storage.backend !== "s3",
+    },
   },
   delivery_cdn_enabled: {
     label: "CDN delivery",
-    help: "Answer public media requests with a redirect to the CDN edge instead of streaming every byte through the API. Effective only when the server was booted with DELIVERY_CDN_BASE_URL. Turning it off stops sending viewers to the edge from the next request on, but does not evict what the edge already cached — purge that separately.",
+    help: "Answer public media requests with a redirect to the CDN edge instead of streaming every byte through the API. Effective only when the server was booted with DELIVERY_CDN_BASE_URL. Turning it off stops sending viewers to the edge from the next request on, but does not evict what the edge already cached — Vidra purges edge copies automatically when a video is deleted, blocked, or made private (through DELIVERY_CDN_PURGE_URL); evict anything else at your CDN provider.",
     control: "toggle",
     page: "advanced",
     section: "delivery",
+    warn: {
+      note: "This server was not booted with DELIVERY_CDN_BASE_URL, so this switch currently does nothing — every byte is still served by this instance. See Infrastructure → Optional features.",
+      isTriggered: (infra) =>
+        infra.features?.some(
+          (f) => f.key === "cdn" && f.configured === false,
+        ) === true,
+    },
   },
   qoe_collection_enabled: {
     label: "Playback quality measurement",
-    help: "Record how playback actually went for viewers — time to first frame, rebuffering, bitrate switches and errors, attributed to the delivery source that served the bytes. Turning it off blanks the Playback health page from that moment on; already-written rollups stay until retention ages them out.",
+    help: "Record how playback actually went for viewers — time to first frame, rebuffering, bitrate switches and errors, attributed to the delivery source that served the bytes. Measurements carry no account id and no IP address, only a keyed daily viewer digest that cannot be linked across days; individual events are deleted after 7 days, leaving hourly aggregates. Turning it off blanks the Playback health page from that moment on; already-written rollups stay until retention ages them out.",
     control: "toggle",
     page: "advanced",
     section: "delivery",
@@ -1726,4 +1767,31 @@ export function bootDepNote(
 ): string | null {
   if (!meta?.bootDep || instance === null) return null;
   return meta.bootDep.isSatisfied(instance) ? null : meta.bootDep.note;
+}
+
+/**
+ * The warning note for a row whose deploy wiring contradicts it — an enabled
+ * switch backed by nothing (delivery toggles). NEVER disables the row (see
+ * SettingMeta.warn); null without a snapshot, so a failed /admin/infrastructure
+ * fetch renders exactly as before the warn mechanism existed.
+ */
+export function wiringWarnNote(
+  meta: SettingMeta | undefined,
+  infra: InfrastructureWiringInfo | null,
+): string | null {
+  if (!meta?.warn || infra === null) return null;
+  return meta.warn.isTriggered(infra) ? meta.warn.note : null;
+}
+
+/**
+ * Whether any of this page's META keys carries a wiring warn check — the gate
+ * that keeps the admin-only /admin/infrastructure fetch off the pages that
+ * could not consume it. Reads the META fallback placement: if the server ever
+ * re-homes a warn-carrying key to another page, that page simply degrades to
+ * no warning (the same best-effort posture as a failed fetch).
+ */
+export function pageHasWiringChecks(page: ConfigPageId): boolean {
+  return Object.values(META).some(
+    (m) => m.warn !== undefined && m.page === page,
+  );
 }
