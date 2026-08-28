@@ -193,7 +193,10 @@ async function openConfig(page: Page) {
   );
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   // The desktop console (DR12) labels this destination "Instance".
-  await page.getByRole("link", { name: "Instance" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Instance" })
+    .click();
   await expect(page).toHaveURL(/\/admin\/config\/general$/);
 }
 

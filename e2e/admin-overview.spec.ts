@@ -7,7 +7,6 @@ import { expect, test, type Page } from "@playwright/test";
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
-const USERS = /\/api\/v1\/admin\/users(\?|$)/;
 const SYSTEM = /\/api\/v1\/admin\/system$/;
 const STATS = /\/api\/v1\/admin\/stats$/;
 const REPORTS = /\/api\/v1\/admin\/reports(\?|$)/;
@@ -131,14 +130,10 @@ async function signIn(page: Page, role: Role) {
 }
 
 // Reach /admin via client-side navigation so the in-memory session survives:
-// header Admin (→ /admin/users) → the Overview tab.
+// the sidebar Admin entry lands directly on the console home (the Overview).
 async function openOverview(page: Page) {
-  await page.route(USERS, (route) =>
-    route.fulfill({ json: { users: [], total: 0, limit: 100, offset: 0 } }),
-  );
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Overview" }).click();
-  await expect(page.getByRole("heading", { name: "Admin", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
 }
 
 test("anonymous viewers are gated out of the admin overview", async ({ page }) => {

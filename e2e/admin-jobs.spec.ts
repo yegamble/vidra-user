@@ -162,7 +162,10 @@ async function signIn(page: Page, role: Role) {
 async function openJobs(page: Page) {
   await page.route(USERS, (route) => route.fulfill({ json: { users: [], limit: 100, offset: 0 } }));
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Jobs" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Jobs" })
+    .click();
 }
 
 test("anonymous viewers are gated out of the jobs page", async ({ page }) => {

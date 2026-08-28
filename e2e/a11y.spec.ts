@@ -702,7 +702,13 @@ test("the admin users page passes axe (admin, list rendered)", async ({ page }) 
       },
     }),
   );
+  // The sidebar Admin entry lands on the console home (/admin); the Users
+  // section is one rail click further.
   await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Users" })
+    .click();
   // The email renders in both the desktop table and the (display:none) mobile
   // card, so scope to the visible desktop console surface (DR12).
   await expect(

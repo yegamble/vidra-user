@@ -86,7 +86,10 @@ test("an admin sees the audit log and can filter by action", async ({ page }) =>
   });
 
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Audit log" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Audit log" })
+    .click();
   await expect(page.getByText("auth.register")).toBeVisible();
   await expect(page.getByText("auth.login")).toBeVisible();
 

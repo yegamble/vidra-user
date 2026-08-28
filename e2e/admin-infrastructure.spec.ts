@@ -163,7 +163,10 @@ async function openInfrastructure(page: Page) {
     route.fulfill({ json: { migrations: [] } }),
   );
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Infrastructure" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Infrastructure" })
+    .click();
   await expect(page).toHaveURL(/\/admin\/infrastructure$/);
 }
 
