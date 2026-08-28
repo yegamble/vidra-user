@@ -301,6 +301,10 @@ separate job from the canonical `npm run ci` gate (which stays mocked/fast).
    `vidra-core` (see `.ralph/specs/observability.md`)
 4. branch CI is green (same `npm run ci`); `ci-guard.yml` passes — a local green
    alone is not done
+5. the slice is merged into `main` and pushed — a green side branch is not done
+   until merged — and branches already merged into `origin/main` are deleted
+   (local + remote, then `git fetch --prune`); never delete `main`, the current
+   branch, or an unmerged branch
 
 (Individual scripts — `npm run typecheck|lint|test|build`, `npx playwright test`
 — remain available for focused runs.)
