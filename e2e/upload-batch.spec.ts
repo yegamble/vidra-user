@@ -20,6 +20,9 @@ const CHANNEL_LIVE = /\/api\/v1\/channels\/ada_makes\/live$/;
 const UPLOAD_SESSION = /\/api\/v1\/videos\/(bv\d+)\/upload-session$/;
 const CHUNK = /\/api\/v1\/uploads\/up-(bv\d+)\/chunks\/\d+$/;
 const COMPLETE = /\/api\/v1\/uploads\/up-(bv\d+)\/complete$/;
+// The poll the client runs after the 202, and the video read that follows it.
+const SESSION_STATUS = /\/api\/v1\/uploads\/up-(bv\d+)$/;
+const VIDEO_BY_ID = /\/api\/v1\/videos\/(bv\d+)$/;
 
 const FUTURE = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 
@@ -32,6 +35,23 @@ function channel() {
     description: "",
     follower_count: 0,
     created_at: new Date().toISOString(),
+  };
+}
+
+// sessionStatus is the upload-session representation the completion 202 and the
+// poll both answer with.
+function sessionStatus(id: string, state: string) {
+  return {
+    upload_id: `up-${id}`,
+    video_id: id,
+    state,
+    size: 4,
+    chunk_size: 1_048_576,
+    total_chunks: 1,
+    received_chunks: [0],
+    bytes_received: 4,
+    expires_at: FUTURE,
+    failure_reason: "",
   };
 }
 
@@ -128,9 +148,20 @@ async function wireStudio(page: Page, opts: { quota?: unknown } = {}) {
       },
     });
   });
+  // Completion is asynchronous: the POST answers 202 with the session's state.
+  // These mocks settle immediately (state "completed"), so the poll that follows
+  // is served by the same body and the client then reads the video back.
   await page.route(COMPLETE, (route) => {
     const id = COMPLETE.exec(route.request().url())![1];
-    return route.fulfill({ status: 201, json: { video: publishedVideo(id) } });
+    return route.fulfill({ status: 202, json: sessionStatus(id, "completed") });
+  });
+  await page.route(SESSION_STATUS, (route) => {
+    const id = SESSION_STATUS.exec(route.request().url())![1];
+    return route.fulfill({ status: 200, json: sessionStatus(id, "completed") });
+  });
+  await page.route(VIDEO_BY_ID, (route) => {
+    const id = VIDEO_BY_ID.exec(route.request().url())![1];
+    return route.fulfill({ json: publishedVideo(id) });
   });
 }
 
@@ -225,7 +256,15 @@ test("an edited per-file title is sent on that file's draft", async ({ page }) =
   });
   await page.route(COMPLETE, (route) => {
     const id = COMPLETE.exec(route.request().url())![1];
-    return route.fulfill({ status: 201, json: { video: publishedVideo(id) } });
+    return route.fulfill({ status: 202, json: sessionStatus(id, "completed") });
+  });
+  await page.route(SESSION_STATUS, (route) => {
+    const id = SESSION_STATUS.exec(route.request().url())![1];
+    return route.fulfill({ status: 200, json: sessionStatus(id, "completed") });
+  });
+  await page.route(VIDEO_BY_ID, (route) => {
+    const id = VIDEO_BY_ID.exec(route.request().url())![1];
+    return route.fulfill({ json: publishedVideo(id) });
   });
 
   await page.getByRole("link", { name: "Studio" }).click();

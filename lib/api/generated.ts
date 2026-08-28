@@ -8439,14 +8439,19 @@ export interface components {
              */
             expires_at: string;
         };
-        /** @description A resumable upload's received-chunk status (the resume contract). */
+        /** @description A resumable upload's received-chunk status (the resume contract) and its lifecycle state — which, since completion became asynchronous, is also the contract a client polls after the last chunk lands. */
         UploadStatusResponse: {
             /** Format: uuid */
             upload_id: string;
             /** Format: uuid */
             video_id: string;
-            /** @enum {string} */
-            state: "active" | "completed" | "cancelled";
+            /**
+             * @description `active` — the client is still sending chunks. `queued` — completion was accepted and a finalize job is enqueued. `processing` — a worker is assembling, storing and probing the file. `completed` — the pipeline finished; read the VIDEO for its outcome (a probe or scan may still have failed it). `failed` — finalisation failed permanently; `failure_reason` says why. `cancelled` — the client cancelled before completing.
+             * @enum {string}
+             */
+            state: "active" | "queued" | "processing" | "completed" | "failed" | "cancelled";
+            /** @description A safe, human-readable reason for a `failed` session; empty for every other state. */
+            failure_reason: string;
             /** Format: int64 */
             size: number;
             chunk_size: number;
@@ -14563,17 +14568,35 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The upload was assembled and the video finalised. */
-            201: {
+            /** @description The session had already reached a terminal state (completed or failed); nothing was re-queued. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadVideoFileResponse"];
+                    "application/json": components["schemas"]["UploadStatusResponse"];
+                };
+            };
+            /** @description The completion was accepted and queued. Poll GET /api/v1/uploads/{upload_id} for the outcome. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadStatusResponse"];
                 };
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A replace-purpose session while video replacement is disabled on this instance (code feature_disabled). */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14590,7 +14613,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The session already completed or was cancelled. */
+            /** @description The session was cancelled, or (replace-purpose) the video can no longer have its file replaced (code replace_conflict). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14601,6 +14624,15 @@ export interface operations {
             };
             /** @description One or more chunks are missing or the wrong size, or completing would exceed the caller's storage quota (code quota_exceeded) or the rolling-24h daily upload quota (code daily_quota_exceeded). */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The completion queue is not wired on this instance. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

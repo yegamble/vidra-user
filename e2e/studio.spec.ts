@@ -111,11 +111,18 @@ function captionJob(state: string, overrides: Record<string, unknown> = {}) {
 }
 
 // mockChunkedUpload wires the resumable-upload protocol so a studio file upload
-// completes: open session → PUT each chunk → complete returns `completeJson`.
-// Small test files fit one chunk (chunk_size defaults large).
+// completes: open session → PUT each chunk → POST complete (202, "accepted")
+// → poll the session (here already "completed") → GET the finalised video,
+// which is `finalVideo`. Small test files fit one chunk (chunk_size defaults
+// large).
+//
+// The completion is asynchronous on purpose: assembling and probing the file
+// takes minutes on a real object store, so the server enqueues the work and the
+// client polls. These mocks settle on the first poll — the interesting timing is
+// covered by the unit tests in lib/api/resumable-upload.test.ts.
 async function mockChunkedUpload(
   page: Page,
-  completeJson: Record<string, unknown>,
+  finalVideo: Record<string, unknown>,
   opts: { total?: number; chunkSize?: number; size?: number } = {},
 ) {
   const total = opts.total ?? 1;
@@ -148,7 +155,27 @@ async function mockChunkedUpload(
       },
     });
   });
-  await page.route(COMPLETE, (route) => route.fulfill({ status: 201, json: completeJson }));
+  const finishedSession = {
+    upload_id: "up1",
+    video_id: "v1",
+    state: "completed",
+    size,
+    chunk_size: chunkSize,
+    total_chunks: total,
+    received_chunks: Array.from({ length: total }, (_, i) => i),
+    bytes_received: size,
+    expires_at: FUTURE,
+    failure_reason: "",
+  };
+  await page.route(COMPLETE, (route) => route.fulfill({ status: 202, json: finishedSession }));
+  await page.route(SESSION, (route) =>
+    route.request().method() === "GET" ? route.fulfill({ json: finishedSession }) : route.fallback(),
+  );
+  // The client reads the video back once the session settles; anything else on
+  // this route (PATCH/DELETE) belongs to the test's own handler.
+  await page.route(VIDEO, (route) =>
+    route.request().method() === "GET" ? route.fulfill({ json: finalVideo }) : route.fallback(),
+  );
 }
 
 const session = {
@@ -549,7 +576,7 @@ test("a creator can upload and publish a video", async ({ page }) => {
     }
     return route.continue();
   });
-  await mockChunkedUpload(page, { video: video() });
+  await mockChunkedUpload(page, video());
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await gotoStudioTab(page, "Content");
@@ -642,7 +669,7 @@ test("publish sends the entered tags, normalized, on the draft", async ({ page }
     }
     return route.continue();
   });
-  await mockChunkedUpload(page, { video: video() });
+  await mockChunkedUpload(page, video());
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await gotoStudioTab(page, "Content");
@@ -718,7 +745,7 @@ test("a failed upload is reported as a processing failure, not Published!", asyn
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  await mockChunkedUpload(page, { video: video({ state: "failed" }) });
+  await mockChunkedUpload(page, video({ state: "failed" }));
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await gotoStudioTab(page, "Content");
@@ -816,11 +843,11 @@ test("an upload still processing shows an in-progress message, not Published!", 
     }
     return route.fulfill({ json: { videos: [] } });
   });
-  await mockChunkedUpload(page, { video: video({ state: "processing" }) });
+  await mockChunkedUpload(page, video({ state: "processing" }));
   await page.route(VIDEO, (route) =>
     route.request().method() === "PATCH"
       ? route.fulfill({ json: video({ state: "processing" }) })
-      : route.continue(),
+      : route.fallback(),
   );
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
@@ -949,18 +976,22 @@ test("a re-picked file offers Resume and finishes the interrupted upload", async
   }, FUTURE);
 
   // GET the session status → active, chunk 0 received (of 3).
+  // The resume read sees an ACTIVE session with chunk 0 landed; once the
+  // completion is accepted the same endpoint becomes the finalisation poll.
+  let completionAccepted = false;
   await page.route(SESSION, (route) =>
     route.fulfill({
       json: {
         upload_id: "up1",
         video_id: "v1",
-        state: "active",
+        state: completionAccepted ? "completed" : "active",
         size: 10,
         chunk_size: 4,
         total_chunks: 3,
-        received_chunks: [0],
-        bytes_received: 4,
+        received_chunks: completionAccepted ? [0, 1, 2] : [0],
+        bytes_received: completionAccepted ? 10 : 4,
         expires_at: FUTURE,
+        failure_reason: "",
       },
     }),
   );
@@ -983,7 +1014,27 @@ test("a re-picked file offers Resume and finishes the interrupted upload", async
       },
     });
   });
-  await page.route(COMPLETE, (route) => route.fulfill({ status: 201, json: { video: video() } }));
+  await page.route(COMPLETE, (route) => {
+    completionAccepted = true;
+    return route.fulfill({
+      status: 202,
+      json: {
+        upload_id: "up1",
+        video_id: "v1",
+        state: "queued",
+        size: 10,
+        chunk_size: 4,
+        total_chunks: 3,
+        received_chunks: [0, 1, 2],
+        bytes_received: 10,
+        expires_at: FUTURE,
+        failure_reason: "",
+      },
+    });
+  });
+  await page.route(VIDEO, (route) =>
+    route.request().method() === "GET" ? route.fulfill({ json: video() }) : route.fallback(),
+  );
 
   await gotoStudioTab(page, "Content");
   await openUpload(page);
@@ -1766,7 +1817,7 @@ test("the upload form prefills from the instance publish defaults and sends the 
     }
     return route.continue();
   });
-  await mockChunkedUpload(page, { video: video() });
+  await mockChunkedUpload(page, video());
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
   await gotoStudioTab(page, "Content");

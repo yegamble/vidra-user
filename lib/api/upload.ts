@@ -11,6 +11,17 @@ import { logger } from "@/lib/logger";
 
 import { ApiError, apiErrorFromBody } from "./client";
 
+/**
+ * Which half of an upload the progress snapshot describes.
+ *
+ * "uploading" is bytes leaving the browser — the determinate part. "processing"
+ * is everything after the last chunk lands: the server assembles the file out of
+ * its chunks, stores it, probes it and builds the thumbnail/storyboard on a
+ * queue. That phase has no byte counter to show (loaded == total throughout), so
+ * a UI must say "Processing…" rather than sit at a stalled 100%.
+ */
+export type UploadPhase = "uploading" | "processing";
+
 /** A determinate progress snapshot for an in-flight upload. */
 export interface UploadProgress {
   /** Bytes sent so far. */
@@ -19,6 +30,11 @@ export interface UploadProgress {
   total: number;
   /** Whole-number 0–100 (rounded). */
   percent: number;
+  /**
+   * What the upload is doing. Absent on the multipart (XHR) path, which has no
+   * post-transfer phase to report; the resumable path always sets it.
+   */
+  phase?: UploadPhase;
 }
 
 export interface UploadOptions {

@@ -25,7 +25,7 @@ import type {
   ImportJob,
   StoredUploadSession,
   UpdateVideoRequest,
-  UploadVideoResult,
+  UploadPhase,
   Video,
   VideoConfigResponse,
   VideoPrivacy,
@@ -144,6 +144,13 @@ export function UploadSection({
   // Bytes transferred so far / total, for the "X of Y" detail under the bar
   // (real loaded/total from the resumable-upload progress callback).
   const [bytes, setBytes] = useState<{ loaded: number; total: number } | null>(null);
+  // Which half of the upload is running. "uploading" is bytes leaving the
+  // browser; "processing" is the server assembling, storing and probing the file
+  // after the last chunk lands — asynchronous work with no byte counter, so the
+  // card says "Processing…" instead of parking on a stalled 100% bar. It also
+  // hides Cancel: once the server has accepted the completion the pipeline runs
+  // regardless, and offering a button that cannot stop it would be a lie.
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>("uploading");
   // The picked file's name, shown in the dropzone once a file is chosen.
   const [fileName, setFileName] = useState<string | null>(null);
   // A resumable session found for the currently-picked file (matched by
@@ -552,6 +559,7 @@ export function UploadSection({
     setState("uploading");
     setProgress(0);
     setBytes(null);
+    setUploadPhase("uploading");
     setError(null);
     setFieldErrors({});
     setResult(null);
@@ -585,10 +593,11 @@ export function UploadSection({
         resetFileToPick();
         return;
       }
-      const res: UploadVideoResult = await resumableUpload(draft.id, file, {
+      const res = await resumableUpload(draft.id, file, {
         onProgress: (p) => {
           setProgress(p.percent);
           setBytes({ loaded: p.loaded, total: p.total });
+          setUploadPhase(p.phase ?? "uploading");
         },
         signal: controller.signal,
         onSessionOpened: (id) => {
@@ -653,6 +662,7 @@ export function UploadSection({
     publishPendingRef.current = false;
     setProgress(0);
     setBytes(null);
+    setUploadPhase("uploading");
     metaProbeCleanupRef.current?.();
     metaProbeCleanupRef.current = null;
     if (fileRef.current) fileRef.current.value = "";
@@ -887,6 +897,7 @@ export function UploadSection({
     setStep("details");
     setState("uploading");
     setProgress(0);
+    setUploadPhase("uploading");
     setError(null);
     setFieldErrors({});
     setResult(null);
@@ -904,6 +915,7 @@ export function UploadSection({
         onProgress: (p) => {
           setProgress(p.percent);
           setBytes({ loaded: p.loaded, total: p.total });
+          setUploadPhase(p.phase ?? "uploading");
         },
         signal: controller.signal,
         onSessionOpened: (id) => {
@@ -1199,7 +1211,18 @@ export function UploadSection({
                             {fileName}
                           </span>
                         </div>
-                        {state === "uploading" && !publishPending ? (
+                        {state === "uploading" && uploadPhase === "processing" ? (
+                          // The server has the bytes and is finalising them —
+                          // there is nothing left to cancel, and no byte counter
+                          // to show.
+                          <span
+                            role="status"
+                            className="inline-flex shrink-0 items-center gap-1 text-[13px] font-semibold text-fg-muted"
+                          >
+                            <LoaderIcon size={14} className="animate-spin" aria-hidden="true" />{" "}
+                            Processing…
+                          </span>
+                        ) : state === "uploading" && !publishPending ? (
                           <Button
                             variant="secondary"
                             size="sm"
@@ -1249,7 +1272,12 @@ export function UploadSection({
                           </span>
                         </div>
                       ) : null}
-                      {state === "uploading" && bytes ? (
+                      {state === "uploading" && uploadPhase === "processing" ? (
+                        <p className="text-[12.5px] text-fg-muted">
+                          Upload complete — we’re processing your video. This can take a few minutes
+                          for a large file; you can keep filling in the details.
+                        </p>
+                      ) : state === "uploading" && bytes ? (
                         <p className="text-[12.5px] tabular-nums text-fg-muted">
                           {formatBytes(bytes.loaded)} of {formatBytes(bytes.total)} · resumes from the
                           last completed chunk if interrupted

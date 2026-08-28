@@ -41,12 +41,12 @@ test("a scheduled publish persists publish_at and parks the video as scheduled",
   await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
   // Publish a real (tiny) video with a future schedule. Selecting the file
-  // AUTO-STARTS the upload, and completion server-side publishes the (private)
-  // draft — after which publish_at is rejected (422). So HOLD the browser's
-  // final `complete` POST until the schedule PATCH has landed on the still-draft
-  // video, then release it to the real backend: the processed video then parks
-  // as "scheduled". This is the deterministic equivalent of scheduling while a
-  // real (slow) upload is still in flight.
+  // AUTO-STARTS the upload, and finalising it server-side publishes the
+  // (private) draft — after which publish_at is rejected (422). So HOLD the
+  // browser's `complete` POST until the schedule PATCH has landed on the
+  // still-draft video, then release it: the POST answers 202 and the finalize
+  // worker then parks the processed video as "scheduled". Holding the POST is
+  // still the right gate — nothing is queued until it goes through.
   let releaseComplete!: () => void;
   const completeGate = new Promise<void>((r) => {
     releaseComplete = r;
@@ -123,8 +123,9 @@ test("moving a schedule from the edit surface persists the new publish_at", asyn
   await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
   // Same gated-complete choreography as above: the schedule PATCH must land
-  // while the auto-started upload's finalization is held (a completed upload
-  // publishes the draft, after which publish_at is rejected).
+  // before the completion POST is allowed through (nothing is queued until it
+  // is), because a finalised upload publishes the draft, after which publish_at
+  // is rejected.
   let releaseComplete!: () => void;
   const completeGate = new Promise<void>((r) => {
     releaseComplete = r;

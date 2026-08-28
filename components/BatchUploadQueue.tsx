@@ -198,7 +198,14 @@ export function BatchUploadQueue({
       }
       const res = await resumableUpload(draft.id, item.file, {
         onProgress: (p) =>
-          dispatch({ type: "progress", id: item.id, loaded: p.loaded, total: p.total, percent: p.percent }),
+          dispatch({
+            type: "progress",
+            id: item.id,
+            loaded: p.loaded,
+            total: p.total,
+            percent: p.percent,
+            phase: p.phase,
+          }),
         signal: controller.signal,
         onSessionOpened: (sid) => {
           sessionId = sid;
@@ -441,6 +448,9 @@ function BatchRow({
           </span>
         </div>
       ) : null}
+      {item.status === "uploading" && item.phase === "processing" ? (
+        <p className="text-xs text-fg-muted">Upload complete — processing on the server.</p>
+      ) : null}
       {item.status === "over_quota" ? (
         <p className="text-xs text-warning">
           This file would exceed your storage quota. Free up space, then retry — or remove it.
@@ -448,7 +458,17 @@ function BatchRow({
       ) : null}
       {item.error ? <p className="text-xs text-danger">{item.error}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
-        {item.status === "uploading" ? (
+        {item.status === "uploading" && item.phase === "processing" ? (
+          // Every byte is on the server; it is assembling and probing the file
+          // on a queue. There is nothing left to cancel and no counter to move.
+          <span
+            role="status"
+            className="inline-flex items-center gap-1.5 text-[13px] text-fg-muted"
+          >
+            <LoaderIcon size={16} className="animate-spin" aria-hidden="true" />
+            Processing…
+          </span>
+        ) : item.status === "uploading" ? (
           <>
             <span
               role="status"

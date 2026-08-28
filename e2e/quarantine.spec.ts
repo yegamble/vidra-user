@@ -15,6 +15,8 @@ const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
 const UPLOAD_SESSION = /\/api\/v1\/videos\/v1\/upload-session$/;
 const CHUNK = /\/api\/v1\/uploads\/up1\/chunks\/\d+$/;
 const COMPLETE = /\/api\/v1\/uploads\/up1\/complete$/;
+// The finalisation poll the client runs after the completion 202.
+const SESSION = /\/api\/v1\/uploads\/up1$/;
 const VIDEO = /\/api\/v1\/videos\/v1$/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 const NOTIFICATIONS = /\/api\/v1\/me\/notifications(\?|$)/;
@@ -233,14 +235,28 @@ test("a quarantined publish outcome is reported as held for review, not failed o
       },
     }),
   );
-  await page.route(COMPLETE, (route) =>
-    route.fulfill({ status: 201, json: { video: video({ state: "quarantined" }) } }),
-  );
-  // Publish PATCHes the metadata; the video is already held for review.
+  // Completion is accepted (202) and finalised on a queue; these mocks settle on
+  // the first poll.
+  const finishedSession = {
+    upload_id: "up1",
+    video_id: "v1",
+    state: "completed",
+    size: 4,
+    chunk_size: 1_048_576,
+    total_chunks: 1,
+    received_chunks: [0],
+    bytes_received: 4,
+    expires_at: FUTURE,
+    failure_reason: "",
+  };
+  await page.route(COMPLETE, (route) => route.fulfill({ status: 202, json: finishedSession }));
+  await page.route(SESSION, (route) => route.fulfill({ json: finishedSession }));
+  // The client reads the video back after the session settles; Publish then
+  // PATCHes the metadata onto a video already held for review.
   await page.route(VIDEO, (route) =>
     route.request().method() === "PATCH"
       ? route.fulfill({ json: video({ state: "quarantined" }) })
-      : route.continue(),
+      : route.fulfill({ json: video({ state: "quarantined" }) }),
   );
   await page.route(VIDEO_CONFIG, (route) =>
     route.fulfill({ json: { categories: [], licenses: [], languages: [], privacies: [] } }),

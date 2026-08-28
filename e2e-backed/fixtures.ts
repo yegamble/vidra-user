@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 
+import { expect } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
 // A small 4-second (16x16, 5fps) valid H.264 MP4, base64-encoded. It is long
@@ -137,12 +138,17 @@ export async function createChannelViaStudioUI(
 }
 
 /**
- * startStudioUpload opens the "Upload video" sheet, selects the file (which now
- * AUTO-STARTS the resumable upload — create session → PUT chunks → complete — the
- * instant a single file is chosen), and fills the title on the details stage. The
- * bytes are already uploading (or done) by the time it returns; Publish then only
- * applies the metadata. Waits for the terminal `complete` call so the finished
- * video exists before the caller Publishes.
+ * startStudioUpload opens the "Upload video" sheet, selects the file (which
+ * AUTO-STARTS the resumable upload — create session → PUT chunks → complete —
+ * the instant a single file is chosen), and fills the title on the details
+ * stage. Publish then only applies the metadata.
+ *
+ * Completion is ASYNCHRONOUS: the `complete` POST answers 202 ("accepted") and a
+ * background worker assembles and processes the file, so the POST returning is
+ * no longer the signal that a finished video exists. This waits for the POST and
+ * then for the file card's "Uploaded" state, which is the client's own report
+ * that the session finished — the deterministic point at which a caller may
+ * Publish and expect an immediate outcome.
  */
 export async function startStudioUpload(
   page: Page,
@@ -171,6 +177,9 @@ export async function startStudioUpload(
     buffer: opts.buffer,
   });
   await uploaded;
+  // 202 only means the work was queued. Wait for the client to report the
+  // session finished (the file card flips from "Processing…" to "Uploaded").
+  await expect(page.getByText("Uploaded", { exact: true })).toBeVisible({ timeout: 60_000 });
   // The title prefilled from the filename on the (now-visible) details stage —
   // overwrite it with the caller's title.
   await page.getByLabel("Video title").fill(opts.title);
@@ -182,8 +191,8 @@ export async function startStudioUpload(
 /**
  * publishViaStudioUI clicks the studio Publish button and waits for the metadata
  * PATCH that applies it. In the auto-start flow the file upload already finished
- * (startStudioUpload waited on `complete`), so Publish just PATCHes the form and
- * derives the outcome. Works for both immediate and scheduled publishes (the
+ * (startStudioUpload waited for the "Uploaded" state), so Publish just PATCHes
+ * the form and derives the outcome. Works for both immediate and scheduled publishes (the
  * outcome differs; the PATCH is the shared signal).
  */
 export async function publishViaStudioUI(page: Page): Promise<void> {

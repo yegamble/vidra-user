@@ -8,7 +8,7 @@ export {
   RATE_LIMITED_MESSAGE,
 } from "./error-message";
 export { isUploadCancelled, uploadWithProgress } from "./upload";
-export type { UploadOptions, UploadProgress } from "./upload";
+export type { UploadOptions, UploadPhase, UploadProgress } from "./upload";
 export {
   api,
   channelAvatarUrl,
@@ -31,8 +31,14 @@ export {
   forgetUploadSession,
   rememberUploadSession,
   resumableUpload,
+  UPLOAD_FAILED_CODE,
+  UPLOAD_PROCESSING_TIMEOUT_CODE,
 } from "./resumable-upload";
-export type { ResumableUploadOptions, StoredUploadSession } from "./resumable-upload";
+export type {
+  ResumableUploadOptions,
+  ResumableUploadResult,
+  StoredUploadSession,
+} from "./resumable-upload";
 export { computeFileFingerprint, findUploadByFingerprint } from "./fingerprint";
 export type {
   FeedParams,
