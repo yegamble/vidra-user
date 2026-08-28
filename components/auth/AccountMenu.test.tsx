@@ -63,6 +63,27 @@ describe("AccountMenu", () => {
     expect(localStorage.getItem("vidra.restricted-mode")).toBe("true");
   });
 
+  // Below `sm` the Sidebar (the only chrome carrying ADMIN_LINK) is hidden and
+  // the BottomTabBar has no admin entry, so this menu row is a phone admin's
+  // only route into the console. Self-hiding for everyone else, like the
+  // sidebar entry.
+  it("offers admins an Admin row to the console home", () => {
+    session.value = { status: "authed", user: { ...user, role: "admin" }, logout: vi.fn() };
+    render(<AccountMenu />);
+    fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
+    expect(screen.getByRole("link", { name: "Admin" }).getAttribute("href")).toBe("/admin");
+  });
+
+  it("hides the Admin row from non-admins, moderators included", () => {
+    for (const role of ["user", "moderator"]) {
+      session.value = { status: "authed", user: { ...user, role }, logout: vi.fn() };
+      render(<AccountMenu />);
+      fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
+      expect(screen.queryByRole("link", { name: "Admin" })).toBe(null);
+      cleanup();
+    }
+  });
+
   it("opens the keyboard reference and signs out from the menu", () => {
     const logout = vi.fn().mockResolvedValue(undefined);
     session.value = { status: "authed", user: { ...user, profile_public: true }, logout };

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import {
-  GlobeIcon, KeyboardIcon, LogOutIcon, MonitorIcon, SettingsIcon,
+  GlobeIcon, GridIcon, KeyboardIcon, LogOutIcon, MonitorIcon, SettingsIcon,
   ShieldIcon, UserIcon, VideoIcon,
 } from "@/components/icons";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
@@ -127,6 +127,10 @@ export function AccountMenu() {
             <MenuLink href={profileHref} icon={<UserIcon />} label="Your profile" note={user.profile_public ? undefined : "Private preview"} />
             <MenuLink href="/studio" icon={<VideoIcon />} label="Studio" />
             <MenuLink href="/settings" icon={<SettingsIcon />} label="Settings" />
+            {/* Below `sm` the Sidebar (the only chrome with ADMIN_LINK) is
+                hidden, so this self-hiding row is a phone admin's only route
+                into the console. Same glyph + destination as ADMIN_LINK. */}
+            {user.role === "admin" ? <MenuLink href="/admin" icon={<GridIcon />} label="Admin" /> : null}
           </MenuGroup>
           <MenuGroup>
             <PreferenceRow icon={<MonitorIcon />} label="Appearance">
