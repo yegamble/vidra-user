@@ -57,7 +57,7 @@ test("approving a quarantined upload publishes it for real", async ({ page, requ
   await expect(page.locator("article").filter({ hasText: seeded.videoTitle })).toHaveCount(0);
 
   // Fresh refetch (tab away + back) keeps the row out — not just optimistic state.
-  await page.getByRole("link", { name: "Reports" }).click();
+  await page.getByRole("link", { name: "Queues" }).click();
   await page.getByRole("link", { name: "Quarantine" }).click();
   await expect(page.locator("article").filter({ hasText: seeded.videoTitle })).toHaveCount(0);
 

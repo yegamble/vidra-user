@@ -241,11 +241,13 @@ test("an admin sees per-queue cards, recent failures, and can refresh", async ({
       .getByText(/^(Live|Connecting|Polling fallback)$/),
   ).toBeVisible();
 
-  // Refresh re-reads the snapshot.
-  expect(calls).toBe(1);
+  // Refresh re-reads the snapshot. The journey passes through the console
+  // home, whose queue cards also read it — assert the refresh delta, not an
+  // absolute count.
+  const before = calls;
   // exact: the executions section has its own "Refresh executions" button.
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
-  await expect.poll(() => calls).toBe(2);
+  await expect.poll(() => calls).toBe(before + 1);
   await expect(queueList.getByText("transcode_jobs")).toBeVisible();
 });
 

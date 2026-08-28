@@ -49,7 +49,10 @@ test("an admin previews a real PeerTube source with a dry run", async ({ page, r
 
   // Open the Import page (client-side nav keeps the session).
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Import", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Import", exact: true })
+    .click();
 
   // No credential form — the source connection comes from server config.
   await expect(

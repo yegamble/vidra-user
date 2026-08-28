@@ -28,7 +28,12 @@ test("an admin blocks and unblocks a video from the videos overview", async ({ p
 
   // Moderation → All videos, then filter to the seeded video by title.
   await page.getByRole("link", { name: "Moderation" }).click();
-  await page.getByRole("link", { name: "All videos" }).click();
+  // Scoped: an unscoped name "Content" resolves to the page's "Skip to
+  // content" skip-link first (substring matching), which sits off-viewport.
+  await page
+    .getByRole("navigation", { name: "Moderation sections" })
+    .getByRole("link", { name: "Content" })
+    .click();
   await page.getByLabel("Search videos by title").fill(videoTitle);
   await page.getByRole("button", { name: "Search" }).click();
 

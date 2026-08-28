@@ -16,7 +16,12 @@ test("the admin audit log lists real security events", async ({ page }) => {
 
   // Open the audit log (client-side nav keeps the in-memory session).
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Audit log" }).click();
+  // The sidebar Admin entry lands on the console home, whose section cards
+  // reuse the rail labels — scope the click to the rail to stay unambiguous.
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Audit log" })
+    .click();
 
   // The admin's own login is in the trail (real rows from the running backend).
   await expect(page.getByText("auth.login").first()).toBeVisible();
