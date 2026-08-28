@@ -74,9 +74,15 @@ async function signIn(page: Page, role: Role) {
 }
 
 // Reach /admin/users via the console entry point (client-side nav keeps the
-// in-memory session) and return the desktop table/detail region locator.
+// in-memory session) and return the desktop table/detail region locator. The
+// sidebar Admin entry lands on the console home (/admin); Users is one rail
+// click further.
 async function openUsers(page: Page) {
   await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Users" })
+    .click();
   const desktop = page.getByTestId("admin-users-desktop");
   await expect(desktop).toBeVisible();
   return desktop;

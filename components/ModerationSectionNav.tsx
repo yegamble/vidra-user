@@ -8,8 +8,9 @@ import { useSession } from "@/components/auth/AuthProvider";
 import {
   ChevronDownIcon,
   EyeIcon,
-  FlagIcon,
+  GridIcon,
   HashIcon,
+  LockIcon,
   MessageCircleIcon,
   ServerIcon,
   ShieldIcon,
@@ -21,14 +22,20 @@ import { cn } from "@/lib/cn";
 
 type Section = { href: string; label: string; icon: ReactNode };
 
-// The moderation surfaces, ordered as a Mail-style section sidebar. Reports is
-// the mail-triage home; the rest are the review/blocklist tools that used to
-// live in a horizontal tab strip.
+// The moderation surfaces, ordered as a Mail-style section sidebar. Queues
+// (the report queue) is the mail-triage home; the rest are the review/blocklist
+// tools that used to live in a horizontal tab strip.
+//
+// VOCABULARY IS THE ADMIN REGISTRY'S (lib/admin-nav.ts): the console links out
+// to /moderation as "Queues" (shield glyph) and /moderation/videos as
+// "Content", so this rail names — and iconographs — the same routes the same
+// way. When it said "Reports"/"All videos" and wore the shield on Quarantine
+// instead, an admin tapping "Queues" landed on a rail highlighting "Reports".
 const SECTIONS: Section[] = [
-  { href: "/moderation", label: "Reports", icon: <FlagIcon size={18} /> },
-  { href: "/moderation/quarantine", label: "Quarantine", icon: <ShieldIcon size={18} /> },
+  { href: "/moderation", label: "Queues", icon: <ShieldIcon size={18} /> },
+  { href: "/moderation/quarantine", label: "Quarantine", icon: <LockIcon size={18} /> },
   { href: "/moderation/blocked", label: "Blocked videos", icon: <SlashCircleIcon size={18} /> },
-  { href: "/moderation/videos", label: "All videos", icon: <VideoIcon size={18} /> },
+  { href: "/moderation/videos", label: "Content", icon: <VideoIcon size={18} /> },
   { href: "/moderation/comments", label: "Comments", icon: <MessageCircleIcon size={18} /> },
   { href: "/moderation/watched-words", label: "Watched words", icon: <EyeIcon size={18} /> },
   {
@@ -61,6 +68,13 @@ export function ModerationSectionNav() {
 
   const current = SECTIONS.find((s) => isActive(pathname, s.href)) ?? SECTIONS[0];
 
+  // The way back: /moderation lives outside /admin, so neither the console rail
+  // nor AdminTabs renders here — without this, an admin who followed a console
+  // link-out (a phone admin especially) had no route back but the URL bar.
+  // Admins only: a moderator without admin would just hit the "Administrators
+  // only" gate.
+  const isAdmin = user.role === "admin";
+
   return (
     <>
       {/* Desktop: vertical section rail, tint-pill active. */}
@@ -89,6 +103,19 @@ export function ModerationSectionNav() {
             </Link>
           );
         })}
+        {isAdmin ? (
+          <div className="mt-2 border-t border-border-subtle pt-2">
+            <Link
+              href="/admin"
+              className="focus-ring flex min-h-11 items-center gap-3 rounded-[10px] px-3 text-subhead text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+            >
+              <span aria-hidden className="shrink-0">
+                <GridIcon size={18} />
+              </span>
+              <span className="truncate">Admin console</span>
+            </Link>
+          </div>
+        ) : null}
       </nav>
 
       {/* Mobile: compact section switcher (not a horizontal tab strip). */}
@@ -109,10 +136,18 @@ export function ModerationSectionNav() {
               <ChevronDownIcon size={16} aria-hidden />
             </>
           }
-          items={SECTIONS.map((s) => ({
-            label: s.label,
-            onSelect: () => router.push(s.href),
-          }))}
+          items={[
+            ...SECTIONS.map((s) => ({
+              label: s.label,
+              onSelect: () => router.push(s.href),
+            })),
+            ...(isAdmin
+              ? [
+                  { type: "separator" } as const,
+                  { label: "Admin console", href: "/admin", icon: <GridIcon size={18} /> },
+                ]
+              : []),
+          ]}
         />
       </div>
     </>

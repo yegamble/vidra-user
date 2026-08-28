@@ -85,9 +85,10 @@ test("an admin browses all videos and blocks one from the overview", async ({ pa
     route.request().method() === "POST" ? route.fulfill({ status: 204, body: "" }) : route.continue(),
   );
 
-  // Moderation → All videos (client-side nav keeps the in-memory session).
+  // Moderation → Content (client-side nav keeps the in-memory session; the
+  // rail names /moderation/videos exactly as the admin console does).
   await page.getByRole("link", { name: "Moderation" }).click();
-  await page.getByRole("link", { name: "All videos" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
 
   await expect(page.getByRole("link", { name: "Fresh clip" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();

@@ -2,13 +2,13 @@ import type { ReactElement } from "react";
 
 import {
   ClockIcon,
+  GridIcon,
   type IconProps,
   LibraryIcon,
   MessageCircleIcon,
   ShieldIcon,
   TrendingUpIcon,
   TvIcon,
-  UsersIcon,
   VideoIcon,
   HomeIcon,
 } from "@/components/icons";
@@ -47,21 +47,25 @@ export const MODERATION_LINK: NavLinkDef = {
   Icon: ShieldIcon,
 };
 
-/** Admin entry (admins only). Any /admin/* route counts as active. */
+/**
+ * Admin entry (admins only). Points at the console home — /admin, the Overview
+ * dashboard — matching ADMIN_NAV_HOME in lib/admin-nav.ts, and wears the same
+ * grid glyph the console gives Overview there (UsersIcon would collide with the
+ * console's own "Users" destination). Prefix matching keeps it lit on /admin/*.
+ */
 export const ADMIN_LINK: NavLinkDef = {
-  href: "/admin/users",
+  href: "/admin",
   label: "Admin",
-  Icon: UsersIcon,
+  Icon: GridIcon,
 };
 
 /**
  * Whether a nav entry is the active route. "/" matches only exactly; other
- * entries match themselves and their subroutes ("/admin/users" owns "/admin/*",
- * so the Admin entry stays lit across the admin tabs).
+ * entries match themselves and their subroutes (so the Admin entry stays lit
+ * across the whole console).
  */
 export function isActiveNavLink(item: NavLinkDef, pathname: string | null): boolean {
   if (!pathname) return false;
   if (item.href === "/") return pathname === "/";
-  const prefix = item.href === ADMIN_LINK.href ? "/admin" : item.href;
-  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+  return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }

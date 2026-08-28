@@ -345,7 +345,10 @@ test.describe("admin search section", () => {
     });
 
     await page.getByRole("link", { name: "Admin", exact: true }).click();
-    await page.getByRole("link", { name: "Instance" }).click();
+    await page
+      .getByRole("navigation", { name: "Admin console" })
+      .getByRole("link", { name: "Instance" })
+      .click();
     await page.getByRole("navigation", { name: "Configuration pages" }).getByRole("link", { name: "Advanced" }).click();
     await expect(page).toHaveURL(/\/admin\/config\/advanced$/);
 

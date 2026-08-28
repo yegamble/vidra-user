@@ -65,7 +65,10 @@ async function openQueue(page: Page) {
     route.fulfill({ json: { users: [], limit: 100, offset: 0 } }),
   );
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Registration" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Registration" })
+    .click();
   await expect(page).toHaveURL(/\/admin\/registration-requests$/);
 }
 

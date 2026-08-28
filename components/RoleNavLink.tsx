@@ -40,15 +40,3 @@ export function RoleNavLink({
     </Link>
   );
 }
-
-/** The Admin nav entry — admins only. */
-export function AdminNavLink({ className }: { className?: string }) {
-  return <RoleNavLink minRole="admin" href="/admin/users" label="Admin" className={className} />;
-}
-
-/** The Moderation nav entry — moderators and admins. */
-export function ModerationNavLink({ className }: { className?: string }) {
-  return (
-    <RoleNavLink minRole="moderator" href="/moderation" label="Moderation" className={className} />
-  );
-}

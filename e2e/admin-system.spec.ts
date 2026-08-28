@@ -76,7 +76,10 @@ test("an admin sees the system status snapshot", async ({ page }) => {
   await page.route(SYSTEM, (route) => route.fulfill({ json: systemStatus }));
 
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "System" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "System" })
+    .click();
 
   await expect(page.getByText("Healthy")).toBeVisible();
   await expect(page.getByText("vidra 0.1.0")).toBeVisible();

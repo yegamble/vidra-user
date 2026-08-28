@@ -72,7 +72,10 @@ async function openQueue(page: Page) {
     route.fulfill({ json: { users: [], limit: 100, offset: 0 } }),
   );
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Followers" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Followers" })
+    .click();
   await expect(page).toHaveURL(/\/admin\/federation\/follower-requests$/);
 }
 
@@ -195,7 +198,10 @@ test("the federation config page links to the follower queue", async ({ page }) 
   // Client-side navigate Admin → Instance (config) → Federation page, keeping
   // the in-memory session.
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Instance" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Instance" })
+    .click();
   await expect(page).toHaveURL(/\/admin\/config\/general$/);
   await page
     .getByRole("navigation", { name: "Configuration pages" })
