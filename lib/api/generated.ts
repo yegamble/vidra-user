@@ -4254,7 +4254,7 @@ export interface paths {
         };
         /**
          * Operational system status (admin)
-         * @description Returns an operational snapshot for the admin dashboard: build info, the runtime environment, process uptime, an overall health flag, per-dependency component status (postgres, redis, s3, smtp, search, ffmpeg), and live PostgreSQL connection-pool counts. Restricted to admins. Always 200 (even when degraded) so the admin can see the degraded state, unlike /readyz which 503s. Reports only operational metadata. The `database` block is sampled at request time and is ABSENT — not zeroed — on a process with no pool wired: a pool reported as 0 of 0 is indistinguishable from one that is fully checked out.
+         * @description Returns an operational snapshot for the admin dashboard: build info, the runtime environment, process uptime, an overall health flag, per-dependency component status (postgres, redis, s3, smtp, search, ffmpeg, settings_sync), and live PostgreSQL connection-pool counts. Restricted to admins. settings_sync is the settings-version poller that keeps this replica's in-memory instance settings/documents/branding in agreement with the fleet: down means the poll is failing and THIS replica may be serving stale admin-edited state; not_configured (no poller wired — a single-process or worker-role process) never degrades the instance. Always 200 (even when degraded) so the admin can see the degraded state, unlike /readyz which 503s. Reports only operational metadata. The `database` block is sampled at request time and is ABSENT — not zeroed — on a process with no pool wired: a pool reported as 0 of 0 is indistinguishable from one that is fully checked out.
          */
         get: operations["systemStatus"];
         put?: never;
@@ -4662,7 +4662,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Media garbage collection boot facts (admin)
+         * @description Reports whether the daily automatic destructive sweep is enabled (MEDIA_GC_ENABLED), its orphan-ratio circuit breaker (MEDIA_GC_MAX_ORPHAN_PERCENT), and the current bucket-ownership state. Both knobs are deliberately boot-baked — a runtime override would let a settings mistake become an irreversible one — but boot-baked must not mean invisible: without this, learning whether the sweep is armed meant running a manual dry run and reading the side effects. bucket_ownership is the service's CURRENT in-memory state (an adoption shows on the next read), in the same vocabulary the sweep result uses. Read-only; restricted to admins.
+         */
+        get: operations["adminMediaGCConfig"];
         put?: never;
         /**
          * Run media garbage collection (admin)
@@ -7595,6 +7599,18 @@ export interface components {
         AuditLogListResponse: components["schemas"]["PageMeta"] & {
             entries: components["schemas"]["AuditLogEntry"][];
         };
+        /** @description The media garbage collector's boot facts plus its live ownership state (GET /api/v1/admin/media/gc). enabled and max_orphan_percent are boot-baked configuration reported read-only; bucket_ownership is the service's current in-memory state, so an adoption shows on the next read. */
+        MediaGCConfig: {
+            /** @description MEDIA_GC_ENABLED — whether the daily automatic DESTRUCTIVE sweep runs at all. The manual POST stays available either way: an operator asking for a sweep by hand is not the hazard the flag exists for. */
+            enabled: boolean;
+            /** @description MEDIA_GC_MAX_ORPHAN_PERCENT — the circuit breaker. A destructive sweep finding more than this share of scanned objects to be orphans deletes nothing and reports why. 0 disables deletion entirely; 100 lets any ratio through. */
+            max_orphan_percent: number;
+            /**
+             * @description Same vocabulary and meaning as MediaGCResponse.bucket_ownership. Only `owned` and `not-applicable` permit deletion.
+             * @enum {string}
+             */
+            bucket_ownership: "owned" | "unowned" | "conflict" | "not-applicable" | "unknown";
+        };
         /** @description Media garbage-collection request. dry_run defaults to true. */
         MediaGCRequest: {
             /**
@@ -7733,8 +7749,11 @@ export interface components {
         };
         /** @description Operational snapshot for the admin dashboard. No secrets/PII. */
         SystemStatus: {
-            /** @enum {string} */
-            status: "ok" | "degraded";
+            /**
+             * @description draining wins over the other two, exactly as on /readyz: the process has received SIGTERM and is leaving; the page keeps answering 200 through the drain delay so the admin watching a deploy sees the same fact the load balancer acts on.
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "draining";
             software: {
                 /** @example vidra */
                 name: string;
@@ -7788,13 +7807,33 @@ export interface components {
                  */
                 pool_max_conns: number;
             };
+            /** @description This process's CDN purge record: how many invalidation fan-outs have run since boot, the per-key outcomes, and when a run last ended with the edge possibly still serving something. It exists because purge success is otherwise silent and failure one aggregate log line, while promoting media headers to shared-cacheable is gated on purge being demonstrably exercised. ABSENT — not zeroed — when no CDN is wired: zero runs on an edgeless install would read as a purge system that never works. In-process counters, reset by a restart. Never includes keys or URLs. */
+            cdn_purge?: {
+                /**
+                 * Format: int64
+                 * @description Attempted purge runs — one per invalidated video fan-out or single-key asset (avatar, banner, playlist cover).
+                 */
+                runs: number;
+                /**
+                 * Format: int64
+                 * @description Keys the provider accepted invalidation for, across all runs (404 — never cached — counts as accepted).
+                 */
+                keys_purged: number;
+                /** Format: int64 */
+                keys_failed: number;
+                /**
+                 * Format: date-time
+                 * @description When a run last ended incomplete — per-key failures, or a key list known to be short (listing failed / fan-out cap hit). Omitted while every run since boot purged its full key set, so absence is the good news it reads as.
+                 */
+                last_incomplete_run_at?: string;
+            };
         };
         /** @description The mail probe was handed to the relay. "sent" is the only value — a failure is an error response, not a status in here. */
         MailTestResult: {
             /** @enum {string} */
             status: "sent";
         };
-        /** @description One optional subsystem's honest state. enabled is "the operator turned this on"; configured is "the deployment supplies what it needs to work". The two come apart (WHISPER_ENABLED with no endpoint, ATPROTO with no sealing key, MAIL_ENABLED behind a relay nobody set) and the gap is the interesting case, which is why one boolean was not enough. note carries the operator-facing sentence: what the gap is and what closing it buys. It is present when a feature is off (discovery — an operator cannot turn on what they never knew shipped) or enabled-but-unconfigured (a finding), and absent when the feature is on and complete. The key vocabulary is fixed and the list is returned in a stable order: object_storage, mail, search, federation, atproto, atproto_login, malware_scan, captions, live, ipfs, cdn, drm, tracing, metrics, vp9_alternates. A client that does not recognise a key must render it rather than drop it — this list is how an operator discovers a feature the server shipped before the client learned its name. Every row is computed from boot config with ONE exception: cdn's enabled half is the runtime delivery_cdn_enabled setting, because a CDN has no env spelling of "on" (DELIVERY_CDN_BASE_URL is the wiring, the setting is the posture) and a boot-only reading could report nothing but "off" on an instance actively serving through an edge. Its configured half is still boot config, which is what lets the row contradict a switch turned on with nothing behind it. DRM reports the provider's state and the PRESENCE of DRM_KEY_KEK, never the key. The only provider this build ships is clearkey-test, which protects nothing (it hands the content key to any authorised viewer over TLS) and encrypts nothing yet — the note says so, because a green pill next to the word DRM is a sentence an operator repeats to somebody else. DASH is deliberately absent even though vidra produces it (the default cmaf packager writes an MPEG-DASH manifest beside the HLS playlists): packaging format is a per-VIDEO property recorded when that video's tree was written, with no switch and nothing to half-configure, so no (enabled, configured) pair could describe an instance serving both. */
+        /** @description One optional subsystem's honest state. enabled is "the operator turned this on"; configured is "the deployment supplies what it needs to work". The two come apart (WHISPER_ENABLED with no endpoint, ATPROTO with no sealing key, MAIL_ENABLED behind a relay nobody set) and the gap is the interesting case, which is why one boolean was not enough. note carries the operator-facing sentence: what the gap is and what closing it buys. It is present when a feature is off (discovery — an operator cannot turn on what they never knew shipped) or enabled-but-unconfigured (a finding), and absent when the feature is on and complete. The key vocabulary is fixed and the list is returned in a stable order: object_storage, mail, search, federation, atproto, atproto_login, malware_scan, captions, live, ipfs, cdn, drm, tracing, metrics, vp9_alternates. A client that does not recognise a key must render it rather than drop it — this list is how an operator discovers a feature the server shipped before the client learned its name. Every row is computed from boot config with TWO exceptions, both a delivery posture whose only spelling is a runtime setting: cdn's enabled half is the runtime delivery_cdn_enabled setting, because a CDN has no env spelling of "on" (DELIVERY_CDN_BASE_URL is the wiring, the setting is the posture) and a boot-only reading could report nothing but "off" on an instance actively serving through an edge — its configured half is still boot config, which is what lets the row contradict a switch turned on with nothing behind it. And object_storage's NOTE (never its columns) reads the runtime delivery_presign_enabled setting: on an s3 install with the switch off the API proxies every media byte, and the active row's note is where an operator discovers the Advanced-page switch and its CORS precondition. DRM reports the provider's state and the PRESENCE of DRM_KEY_KEK, never the key. The only provider this build ships is clearkey-test, which protects nothing (it hands the content key to any authorised viewer over TLS) and encrypts nothing yet — the note says so IN EVERY STATE, including active: drm is the one row that carries a note while enabled and configured, because a green pill next to the word DRM is a sentence an operator repeats to somebody else. The warning is pinned to the clearkey-test provider value, so a future real provider will not inherit it. DASH is deliberately absent even though vidra produces it (the default cmaf packager writes an MPEG-DASH manifest beside the HLS playlists): packaging format is a per-VIDEO property recorded when that video's tree was written, with no switch and nothing to half-configure, so no (enabled, configured) pair could describe an instance serving both. */
         InfrastructureFeature: {
             /** @example object_storage */
             key: string;
@@ -7802,7 +7841,7 @@ export interface components {
             enabled: boolean;
             /** @description The deployment supplies what the feature needs. */
             configured: boolean;
-            /** @description What to do about it. Absent when the feature is enabled and fully configured. */
+            /** @description What to do about it. Absent when the feature is enabled and fully configured — except drm on the test provider (whose active state is exactly the one that needs the caveat) and object_storage with direct delivery off (whose active state is where the proxying fact and the delivery_presign_enabled switch are discovered). */
             note?: string;
         };
         /** @description The deploy-time shape of this instance. No secrets: no DSN, no S3 keys, no SMTP credentials, no JWT secret, no KEK, no ingest/internal secret. */
@@ -7810,6 +7849,11 @@ export interface components {
             server: {
                 /** @enum {string} */
                 environment: "development" | "test" | "production";
+                /**
+                 * @description VIDRA_ROLE — whether this process runs the background workers and/or serves HTTP. Boot-baked topology, not a credential. A fleet accidentally deployed all-api runs zero workers (no transcodes, no media GC, no search outbox) and is otherwise indistinguishable from a healthy all-in-one install. Reports the role of the process ANSWERING this request — a worker-only process never serves this page.
+                 * @enum {string}
+                 */
+                role: "all" | "api" | "worker";
                 /**
                  * Format: int64
                  * @description The general per-request handler deadline.
@@ -7867,6 +7911,18 @@ export interface components {
                 s3_region: string;
                 s3_use_ssl: boolean;
                 s3_force_path_style: boolean;
+            };
+            /** @description How media bytes leave the deployment when this process is not the one serving them. ABSENT — not empty — when no CDN is wired (DELIVERY_CDN_BASE_URL unset). The purge endpoint template and its token are never reported: an invalidation API routinely carries the credential in the URL. */
+            delivery?: {
+                /** @description DELIVERY_CDN_BASE_URL verbatim. Definitionally public — every viewer's player fetches segments from it — reported so confirming WHICH edge is wired does not need an SSH session. */
+                cdn_base_url: string;
+            };
+            /** @description The live ingest plane's coordinates. ABSENT when FEATURE_LIVE is off; PRESENT (with empty strings) when live is enabled with nothing behind it — the empty coordinates ARE the finding the live feature row's note describes. LIVE_INGEST_SECRET is never included. */
+            live?: {
+                /** @description LIVE_RTMP_URL — already handed verbatim to every streamer on stream creation. */
+                rtmp_url: string;
+                /** @description LIVE_HLS_ROOT — a container path in the same sensitivity class as storage.local_root. */
+                hls_root: string;
             };
             networking: {
                 /** @description The canonical public origin ("" when unset). */
@@ -21839,6 +21895,53 @@ export interface operations {
                 };
             };
             /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminMediaGCConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sweep configuration in force. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaGCConfig"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Media garbage collection is not wired on this process. */
             503: {
                 headers: {
                     [name: string]: unknown;
