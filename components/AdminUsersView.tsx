@@ -21,11 +21,11 @@ import { cn } from "@/lib/cn";
 import { formatBytes, formatMonthYear, relativeTime } from "@/lib/format";
 import { usePagedList } from "@/lib/use-paged-list";
 
-// Accounts per request. The endpoint pages via limit/offset and the published
-// contract caps a page at 100, which is also the page this view has always
-// shown. It is now just the DEFAULT: the pager's rows-per-page picker can take
-// it down to something an operator can actually read through.
-const USERS_PAGE_SIZE = 100;
+// Accounts per request come from the shared list default (lib/use-list-query),
+// so this queue opens on the same page as every other admin list instead of
+// pinning its own. The endpoint pages via limit/offset and caps a page at 200
+// (core internal/httpapi/admin_users.go) — far above anything the pager's
+// rows-per-page picker can ask for, so the server's echo is our own number back.
 
 // The design's role control is a three-way segmented switch (was a <select>).
 const ROLE_OPTIONS: readonly { value: UserRole; label: string }[] = [
@@ -109,7 +109,6 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
   const [filter, setFilter] = useState<QuotaFilter>("all");
 
   const list = usePagedList<AdminUser>({
-    defaultLimit: USERS_PAGE_SIZE,
     filterKeys: ["q"],
     load: (query, signal) =>
       api
