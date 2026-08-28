@@ -62,8 +62,13 @@ const HOURS_PAGE_SIZE = 24;
  */
 const POLL_MS = 60_000;
 
-/** Where the collection switch lives (server placement: page=advanced, section=delivery). */
-const COLLECTION_SETTING_PAGE = "/admin/config/advanced";
+/**
+ * Where the collection switch lives (server placement: page=advanced,
+ * section=delivery). The fragment is the Delivery section's stable anchor
+ * (sectionAnchorId in AdminInstanceConfigView), so "under Delivery" lands on
+ * the promised control instead of the top of the longest config page.
+ */
+const COLLECTION_SETTING_PAGE = "/admin/config/advanced#config-section-delivery";
 const COLLECTION_SETTING_KEY = "qoe_collection_enabled";
 
 // AdminPlaybackHealthView is the admin-only playback-quality page: how long

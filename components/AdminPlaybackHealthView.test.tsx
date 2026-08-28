@@ -235,12 +235,16 @@ describe("PlaybackHealthPanel — empty is the normal initial state", () => {
     expect(await screen.findByText("Collection is switched off")).toBeTruthy();
     expect(screen.getByText("qoe_collection_enabled")).toBeTruthy();
     expect(await screen.findByText("Off")).toBeTruthy();
+    // Anchored to the Delivery section (sectionAnchorId in the config view):
+    // "under Delivery" is a promise, and the bare page URL broke it — the
+    // operator landed at the top of the longest config page instead of at the
+    // control the link named.
     expect(
       screen.getByRole("link", { name: "Advanced config page" }).getAttribute("href"),
-    ).toBe("/admin/config/advanced");
+    ).toBe("/admin/config/advanced#config-section-delivery");
     expect(
       screen.getByRole("link", { name: "Turn it back on under Delivery" }).getAttribute("href"),
-    ).toBe("/admin/config/advanced");
+    ).toBe("/admin/config/advanced#config-section-delivery");
   });
 
   it("keeps 'off' a claim the server made, not a guess, when the switch is unreadable", async () => {
