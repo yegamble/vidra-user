@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { DeviceSetup } from "@/components/e2ee/DeviceSetup";
 import { LockIcon } from "@/components/icons";
@@ -21,8 +21,17 @@ import {
 } from "@/lib/e2ee/envelope";
 import { discardEncryptedDraft, readEncryptedDraft } from "@/lib/e2ee/drafts";
 import { relativeTime } from "@/lib/format";
+import { logger } from "@/lib/logger";
 
 const MAX_MESSAGE_LEN = 5000;
+
+// Client-generated id for a message we send: the outbox key AND the React key of
+// its bubble, so the optimistic render and the persisted record are the same row.
+function newMessageId(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `sent-${Date.now()}-${Math.random()}`;
+}
 
 // A message as shown in the thread. `text` is null when this device could not
 // decrypt the envelope (a graceful per-message undecryptable state, never a crash).
@@ -41,36 +50,66 @@ type DeviceState = "loading" | "needs-setup" | LocalDevice;
 // flagged, not hidden), a composer that fans out per recipient device with a
 // disappearing-message timer, and a safety-number panel for out-of-band
 // verification. It requires a device set up on THIS browser first.
+//
+// The rendered list is the UNION of two sources, because the wire only carries
+// half of it: envelopes addressed to this device (inbound, plus anything our
+// other devices sent us) and this device's own outbox. The fan-out never
+// addresses an envelope to the sending device and the backend returns only
+// self-addressed envelopes, so a sender's own messages exist NOWHERE on the
+// server — without the outbox they vanish on every remount.
 export function EncryptedThreadView({
   conversationId,
-  initialEnvelopes,
+  envelopes,
   recipientId,
   myUserId,
+  onAtBottomChange,
 }: {
   conversationId: string;
-  initialEnvelopes: EncryptedMessage[];
+  envelopes: EncryptedMessage[];
   recipientId?: string;
   myUserId: string;
+  /** Reports whether the reader is at the newest message (read-watermark gate). */
+  onAtBottomChange?: (atBottom: boolean) => void;
 }) {
   const [device, setDevice] = useState<DeviceState>("loading");
   const [messages, setMessages] = useState<ShownMessage[]>([]);
+  // Recovered from the outbox: who we last sent to in this thread.
+  const [lastSentRecipientId, setLastSentRecipientId] = useState<string | undefined>(undefined);
 
-  // The peer to fan out to: the ?to hint, else inferred from an inbound envelope.
+  // The peer to fan out to: the ?to hint, else inferred from an inbound envelope,
+  // else whoever we last sent to here — a sender who has only ever SENT has no
+  // inbound envelope to infer from, and must not be left with a dead composer.
   const effectiveRecipientId =
-    recipientId ?? initialEnvelopes.find((e) => e.sender_user_id !== myUserId)?.sender_user_id;
+    recipientId ??
+    envelopes.find((e) => e.sender_user_id !== myUserId)?.sender_user_id ??
+    lastSentRecipientId;
 
   const decryptAll = useCallback(
-    async (envelopes: EncryptedMessage[]) => {
+    async (list: EncryptedMessage[]) => {
       const engine = await getEngine();
+      const now = Date.now();
       // API returns newest-first; render oldest→newest.
-      const ordered = [...envelopes].reverse();
+      const ordered = [...list].reverse();
       const shown: ShownMessage[] = [];
       for (const env of ordered) {
+        // An envelope kept across polls can outlive its disappearing-message
+        // timer even though the server has already stopped serving it — drop it
+        // here too rather than render a message that is supposed to be gone.
+        if (env.expires_at !== undefined && new Date(env.expires_at).getTime() <= now) continue;
         let text: string | null;
         try {
           text = await engine.decryptEnvelope(env);
-        } catch {
-          text = null; // undecryptable on this device
+        } catch (err) {
+          // Expected for history this device joined too late to read — but it is
+          // also the ONLY trace a real ratchet fault leaves, so name the envelope
+          // instead of swallowing it silently. Debug level: the benign case is
+          // routine. The UI still renders the undecryptable placeholder.
+          logger.debug("e2ee: envelope did not decrypt on this device", {
+            envelope_id: env.id,
+            sender_device_id: env.sender_device_id,
+            error: errorMessage(err, "decrypt failed"),
+          });
+          text = null;
         }
         shown.push({
           key: env.id,
@@ -80,9 +119,30 @@ export function EncryptedThreadView({
           expires_at: env.expires_at,
         });
       }
+      // Our own sends, which the server can never return (see the header). This
+      // cannot double-render: this device gets no self-addressed envelope, and
+      // our OTHER devices — which do receive a real envelope for it — have an
+      // empty outbox for anything sent from here.
+      const own = await engine.ownMessages(conversationId);
+      for (const rec of own) {
+        shown.push({
+          key: rec.id,
+          mine: true,
+          text: rec.text,
+          created_at: rec.created_at,
+          expires_at: rec.expires_at,
+        });
+      }
+      shown.sort((a, b) => {
+        const t = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        if (t !== 0) return t;
+        return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+      });
       setMessages(shown);
+      const lastPeer = own[own.length - 1]?.recipient_user_id;
+      if (lastPeer !== undefined) setLastSentRecipientId(lastPeer);
     },
-    [myUserId],
+    [conversationId, myUserId],
   );
 
   useEffect(() => {
@@ -91,36 +151,54 @@ export function EncryptedThreadView({
       const engine = await getEngine();
       const current = await engine.currentDevice();
       if (!active) return;
-      if (!current) {
-        setDevice("needs-setup");
-        return;
-      }
-      setDevice(current);
-      await decryptAll(initialEnvelopes);
+      setDevice(current ?? "needs-setup");
+      if (!current) return;
       // Keep prekeys topped up so peers can always start a session with us.
       void engine.replenishOneTimeKeys().catch(() => {});
     })();
     return () => {
       active = false;
     };
-    // initialEnvelopes is a stable snapshot from the parent's single load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
 
-  const onSetupReady = useCallback(
-    (d: LocalDevice) => {
-      setDevice(d);
-      void decryptAll(initialEnvelopes);
-      void getEngine().then((e) => e.replenishOneTimeKeys().catch(() => {}));
-    },
-    [decryptAll, initialEnvelopes],
-  );
+  // Decrypt once the device is ready, and again whenever the parent's poll brings
+  // a DIFFERENT set of envelopes. Keyed on the ids rather than the array identity
+  // (which churns every poll); re-decrypting a seen envelope is a cache read.
+  const envelopeIds = envelopes.map((e) => e.id).join(",");
+  useEffect(() => {
+    if (device === "loading" || device === "needs-setup") return;
+    void (async () => {
+      await decryptAll(envelopes);
+    })();
+    // `envelopes` is tracked by envelopeIds — see above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [device, envelopeIds, decryptAll]);
 
-  const onSent = useCallback((text: string, expiresAt?: string) => {
-    setMessages((prev) => [
-      ...prev,
-      { key: `local-${Date.now()}`, mine: true, text, created_at: new Date().toISOString(), expires_at: expiresAt },
-    ]);
+  const onSetupReady = useCallback((d: LocalDevice) => {
+    // Setting the device re-runs the decrypt effect above.
+    setDevice(d);
+    void getEngine().then((e) => e.replenishOneTimeKeys().catch(() => {}));
+  }, []);
+
+  const onSent = useCallback((id: string, text: string, expiresAt?: string) => {
+    setMessages((prev) =>
+      // The composer persists the message BEFORE it renders it, so a decryptAll
+      // racing the send (a poll landing in that window) can already have picked it
+      // up from the outbox. Appending unconditionally would duplicate the React
+      // key until the next decrypt — upsert instead.
+      prev.some((m) => m.key === id)
+        ? prev
+        : [
+            ...prev,
+            {
+              key: id,
+              mine: true,
+              text,
+              created_at: new Date().toISOString(),
+              expires_at: expiresAt,
+            },
+          ],
+    );
   }, []);
 
   return (
@@ -135,7 +213,7 @@ export function EncryptedThreadView({
         <DeviceSetup onReady={onSetupReady} />
       ) : (
         <>
-          <MessageList messages={messages} />
+          <MessageList messages={messages} onAtBottomChange={onAtBottomChange} />
           <Composer
             conversationId={conversationId}
             recipientId={effectiveRecipientId}
@@ -239,11 +317,68 @@ function FingerprintRow({ label, fp }: { label: string; fp: DeviceFingerprint })
   );
 }
 
-function MessageList({ messages }: { messages: ShownMessage[] }) {
+// Within this many px of the bottom → keep sticking to it (matches the plaintext
+// timeline's STICK_THRESHOLD).
+const STICK_THRESHOLD = 120;
+
+// The encrypted view does not own its scroll container — ConversationView wraps
+// the whole thread (lock header, list, composer) in one scroller — so walk up to
+// find it rather than introducing a second, competing scroll area.
+function scrollParentOf(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") return node;
+  }
+  return null;
+}
+
+function MessageList({
+  messages,
+  onAtBottomChange,
+}: {
+  messages: ShownMessage[];
+  onAtBottomChange?: (atBottom: boolean) => void;
+}) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const stickRef = useRef(true);
+  const initializedRef = useRef(false);
+  const prevLenRef = useRef(0);
+  const hasMessages = messages.length > 0;
+
+  // Track whether the reader is near the bottom. Inbound messages now arrive on a
+  // 10s poll, so auto-scrolling unconditionally would yank anyone who has scrolled
+  // up to read history — the same rule MessageTimeline applies to plaintext.
+  // Re-runs when the list stops being empty, which is when the sentinel (and so
+  // the scroll container) first exists.
   useEffect(() => {
+    if (!hasMessages) return;
+    const el = scrollParentOf(bottomRef.current);
+    if (!el) return;
+    const onScroll = () => {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD;
+      stickRef.current = atBottom;
+      onAtBottomChange?.(atBottom);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [hasMessages, onAtBottomChange]);
+
+  useLayoutEffect(() => {
+    const len = messages.length;
+    const grew = len > prevLenRef.current;
+    const lastMine = len > 0 && messages[len - 1].mine;
+    prevLenRef.current = len;
+    if (!initializedRef.current) {
+      // Open pinned to the newest message.
+      if (len === 0) return;
+      initializedRef.current = true;
+      onAtBottomChange?.(true);
+    } else if (!stickRef.current && !(grew && lastMine)) {
+      // Reader is up in the history and this is not their own send — leave them be.
+      return;
+    }
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
+  }, [messages, onAtBottomChange]);
 
   if (messages.length === 0) {
     return (
@@ -301,7 +436,7 @@ function Composer({
   conversationId: string;
   recipientId?: string;
   myUserId: string;
-  onSent: (text: string, expiresAt?: string) => void;
+  onSent: (id: string, text: string, expiresAt?: string) => void;
 }) {
   const [body, setBody] = useState(() => readEncryptedDraft(conversationId) ?? "");
   const [timer, setTimer] = useState<DisappearingOption>("off");
@@ -347,7 +482,22 @@ function Composer({
         envelopes,
         ...(expires !== undefined ? { expires_in_seconds: expires } : {}),
       });
-      onSent(trimmed, res.expires_at);
+      // Record what we sent BEFORE showing it: no envelope was addressed to this
+      // device and the server returns a sender none of its own, so this record is
+      // the only thing that survives a reload. A storage failure must not report
+      // the (accepted) send as failed — the bubble just won't outlive the tab.
+      const id = newMessageId();
+      await engine
+        .recordOwnMessage({
+          id,
+          conversationId,
+          text: trimmed,
+          created_at: res.created_at || new Date().toISOString(),
+          ...(res.expires_at !== undefined ? { expires_at: res.expires_at } : {}),
+          recipient_user_id: recipientId!,
+        })
+        .catch(() => {});
+      onSent(id, trimmed, res.expires_at);
       setBody("");
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {

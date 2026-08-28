@@ -100,6 +100,12 @@ test("two real Olm devices exchange an encrypted DM; the server holds only ciphe
   await pageA.getByRole("button", { name: "Send" }).click();
   await sent;
 
+  // --- A: reload → A still sees what A sent. The server hands the sender back no
+  // envelopes (nothing is addressed to the sending device), so this can only come
+  // from A's own device-local sent-message store.
+  await pageA.reload();
+  await expect(pageA.getByText(plaintext)).toBeVisible();
+
   // --- B: reload the thread → the message decrypts to PLAINTEXT on B's device.
   await pageB.reload();
   await expect(pageB.getByText(plaintext)).toBeVisible();

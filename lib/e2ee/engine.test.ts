@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { api } from "@/lib/api";
+
 import type { CryptoAccount, CryptoProvider } from "./crypto";
 import { E2EEEngine, MIN_ONE_TIME_KEYS, OTK_UPLOAD_BATCH } from "./engine";
 import type { ClaimedDevice } from "./envelope";
-import type { E2EEStore, StoredDevice } from "./store";
+import type { E2EEStore, OwnMessageRecord, StoredDevice } from "./store";
 
 // A deterministic fake Olm account — the crypto seam the engine talks to. It
 // records nothing secret; encrypt/decrypt are trivial so the engine's
@@ -34,6 +36,8 @@ class FakeAccount implements CryptoAccount {
 class MemStore implements E2EEStore {
   record: StoredDevice | null = null;
   plaintexts = new Map<string, string>();
+  // Mirrors the IndexedDB `outbox` store: keyed by "<conversationId> <id>".
+  own = new Map<string, OwnMessageRecord>();
   async load() {
     return this.record;
   }
@@ -43,12 +47,19 @@ class MemStore implements E2EEStore {
   async clear() {
     this.record = null;
     this.plaintexts.clear();
+    this.own.clear();
   }
   async loadPlaintext(envelopeId: string) {
     return this.plaintexts.get(envelopeId) ?? null;
   }
   async savePlaintext(envelopeId: string, plaintext: string) {
     this.plaintexts.set(envelopeId, plaintext);
+  }
+  async saveOwnMessage(rec: OwnMessageRecord) {
+    this.own.set(`${rec.conversationId} ${rec.id}`, rec);
+  }
+  async listOwnMessages(conversationId: string) {
+    return [...this.own.values()].filter((r) => r.conversationId === conversationId);
   }
 }
 
@@ -189,5 +200,122 @@ describe("E2EEEngine", () => {
     expect(result.sender_device_id).toBe("mine-1");
     expect(result.envelopes.map((e) => e.recipient_device_id).sort()).toEqual(["mine-2", "peer-1"]);
     expect(result.skipped).toEqual([]);
+  });
+
+  // The sending device is deliberately excluded from the fan-out (it wrote the
+  // plaintext), and the backend only ever returns envelopes addressed to the
+  // caller's OWN devices — so a sender's list-messages comes back EMPTY for
+  // everything it sent. Without a local record of what we sent, every remount of
+  // the thread loses our side of the conversation. These tests pin the outbox.
+  describe("the sender's own messages", () => {
+    const peerClaim: ClaimedDevice = {
+      device_id: "peer-1",
+      identity_key: "idk-peer",
+      signing_key: "sgk-peer",
+      one_time_key: { key_id: "k", key: "otk" },
+    };
+
+    function routeSendAndList() {
+      route((url) => {
+        if (url.includes("/users/u-peer/e2ee/claim")) {
+          return json({ user_id: "u-peer", claims: [peerClaim] });
+        }
+        if (url.includes("/users/u-me/e2ee/claim")) return json({ user_id: "u-me", claims: [] });
+        if (url.includes("/conversations/conv-1/messages")) {
+          // Exactly what the server hands the SENDER back: nothing.
+          return json({ envelopes: [], limit: 20, offset: 0 });
+        }
+        throw new Error(`unexpected ${url}`);
+      });
+    }
+
+    beforeEach(() => {
+      store.record = {
+        deviceId: "mine-1",
+        deviceName: "Laptop",
+        pickle: "{pickle}",
+        pickleKey: "pk",
+      };
+      routeSendAndList();
+    });
+
+    it("survive a remount even though the server returns the sender no envelopes", async () => {
+      const sent = await engine.encryptMessage("u-peer", "u-me", "meet at noon");
+      expect(sent.envelopes.length).toBeGreaterThan(0);
+      await engine.recordOwnMessage({
+        id: "m1",
+        conversationId: "conv-1",
+        text: "meet at noon",
+        created_at: "2026-01-01T00:00:00.000Z",
+        recipient_user_id: "u-peer",
+      });
+
+      // The server side of the story: the sender's own list is empty.
+      const listed = await api.getConversationMessages("conv-1");
+      expect("envelopes" in listed ? listed.envelopes : null).toEqual([]);
+
+      // A FRESH engine over the SAME store is a page reload / thread remount.
+      const reloaded = new E2EEEngine(provider, store);
+      expect(await reloaded.ownMessages("conv-1")).toEqual([
+        {
+          id: "m1",
+          conversationId: "conv-1",
+          text: "meet at noon",
+          created_at: "2026-01-01T00:00:00.000Z",
+          recipient_user_id: "u-peer",
+        },
+      ]);
+      // …and they stay scoped to their own conversation.
+      expect(await reloaded.ownMessages("conv-2")).toEqual([]);
+    });
+
+    it("are returned oldest→newest with expired (disappearing) ones dropped", async () => {
+      const past = new Date(Date.now() - 60_000).toISOString();
+      const future = new Date(Date.now() + 60_000).toISOString();
+      await engine.recordOwnMessage({
+        id: "m2",
+        conversationId: "conv-1",
+        text: "second",
+        created_at: "2026-01-01T00:00:02.000Z",
+      });
+      await engine.recordOwnMessage({
+        id: "m1",
+        conversationId: "conv-1",
+        text: "first",
+        created_at: "2026-01-01T00:00:01.000Z",
+      });
+      await engine.recordOwnMessage({
+        id: "m3",
+        conversationId: "conv-1",
+        text: "gone",
+        created_at: "2026-01-01T00:00:03.000Z",
+        expires_at: past,
+      });
+      await engine.recordOwnMessage({
+        id: "m4",
+        conversationId: "conv-1",
+        text: "still here",
+        created_at: "2026-01-01T00:00:04.000Z",
+        expires_at: future,
+      });
+
+      expect((await engine.ownMessages("conv-1")).map((r) => r.text)).toEqual([
+        "first",
+        "second",
+        "still here",
+      ]);
+    });
+
+    it("are wiped along with the device by forgetDevice", async () => {
+      await engine.recordOwnMessage({
+        id: "m1",
+        conversationId: "conv-1",
+        text: "meet at noon",
+        created_at: "2026-01-01T00:00:00.000Z",
+      });
+      await engine.forgetDevice();
+      expect(await engine.ownMessages("conv-1")).toEqual([]);
+      expect(store.own.size).toBe(0);
+    });
   });
 });

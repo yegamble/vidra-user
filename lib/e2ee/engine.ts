@@ -9,7 +9,9 @@ import type { EncryptedMessage } from "@/lib/api";
 
 import { type CryptoAccount, type CryptoProvider, getCryptoProvider, randomPickleKey } from "./crypto";
 import { type ClaimedDevice, fanOutEncrypt } from "./envelope";
-import { type E2EEStore, IndexedDBStore } from "./store";
+import { type E2EEStore, IndexedDBStore, type OwnMessageRecord } from "./store";
+
+export type { OwnMessageRecord } from "./store";
 
 /** Keep at least this many unclaimed one-time keys on the backend per device. */
 export const MIN_ONE_TIME_KEYS = 20;
@@ -180,6 +182,34 @@ export class E2EEEngine {
     await this.persist();
     await this.store.savePlaintext(env.id, plaintext);
     return plaintext;
+  }
+
+  /**
+   * recordOwnMessage remembers a message this device just sent. encryptMessage
+   * deliberately excludes the sending device from the fan-out, and the backend
+   * returns only envelopes addressed to the caller's devices — so a sender gets
+   * NOTHING of its own back from the wire. Call this after the send is accepted;
+   * without it, every remount of the thread drops our half of the conversation.
+   */
+  async recordOwnMessage(rec: OwnMessageRecord): Promise<void> {
+    await this.store.saveOwnMessage(rec);
+  }
+
+  /**
+   * ownMessages returns what this device sent in a conversation, oldest→newest,
+   * with expired disappearing messages dropped — mirroring the server, which
+   * filters expired envelopes out of every list response.
+   */
+  async ownMessages(conversationId: string): Promise<OwnMessageRecord[]> {
+    const now = Date.now();
+    const records = await this.store.listOwnMessages(conversationId);
+    return records
+      .filter((r) => r.expires_at === undefined || new Date(r.expires_at).getTime() > now)
+      .sort((a, b) => {
+        const t = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        if (t !== 0) return t;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
   }
 
   private async identityKeyFor(userId: string, deviceId: string): Promise<string> {
