@@ -76,7 +76,8 @@ export function AdminSearch({
 
 /**
  * The page sizes the admin pager offers. Bounded by the backend's list contract
- * (any `limit` in [1,100]); 20 matches the app-wide `PAGE_SIZE` default.
+ * (any `limit` in [1,100]); 10 is the app-wide default a list opens on
+ * (`DEFAULT_LIMIT` in lib/use-list-query.ts).
  */
 export const PAGE_SIZE_OPTIONS = [5, 10, 20, 50, 100] as const;
 

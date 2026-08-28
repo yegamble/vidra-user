@@ -57,7 +57,16 @@ export interface ListQuery extends ListQueryState {
 /** The backend accepts any list limit in [1,100]; anything else is a bug. */
 const MIN_LIMIT = 1;
 const MAX_LIMIT = 100;
-const DEFAULT_LIMIT = 20;
+/**
+ * The page every list surface starts on. Ten rows, not twenty or a hundred:
+ * these are review queues an operator works from the top of, and the endpoints
+ * accept any limit in the range above, so the opening page size is purely a UI
+ * decision. It lives here — the one place every admin/moderation list derives
+ * its window from — so it stays a single decision rather than a literal
+ * copy-pasted into a dozen fetches. Anyone who wants more says so, either with
+ * the pager's rows-per-page picker or with `?limit=` in the URL.
+ */
+const DEFAULT_LIMIT = 10;
 
 function clampLimit(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;

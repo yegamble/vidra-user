@@ -32,9 +32,9 @@ function lastQuery() {
 }
 
 describe("useListQuery", () => {
-  it("defaults to limit 20 / offset 0 / no sort / no filters", () => {
+  it("defaults to limit 10 / offset 0 / no sort / no filters", () => {
     const { result } = renderHook(() => useListQuery());
-    expect(result.current.limit).toBe(20);
+    expect(result.current.limit).toBe(10);
     expect(result.current.offset).toBe(0);
     expect(result.current.sort).toBe("");
     expect(result.current.filters).toEqual({});
