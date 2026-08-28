@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Avatar, Badge, Button, ErrorState, Spinner } from "@/components/ui";
 import { ApiError, api, errorMessage } from "@/lib/api";
@@ -8,8 +8,7 @@ import type { RemoteFollow } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
 import { parseRemoteFollowTarget } from "@/lib/remote-follow";
-
-type Status = "loading" | "error" | "ready";
+import { useApiResource } from "@/lib/use-api-resource";
 
 // RemoteFollowsSection is the federation affordance on /subscriptions (its one
 // home — noted in fix_plan): a "Follow a remote channel" form (name@domain or
@@ -18,37 +17,21 @@ type Status = "loading" | "error" | "ready";
 // accepted follows arrive in the subscriptions feed below as remote cards.
 // Rendered only for a signed-in viewer (the page already gates).
 export function RemoteFollowsSection() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [follows, setFollows] = useState<RemoteFollow[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { status, data, retry, setData } = useApiResource<RemoteFollow[]>((signal) =>
+    api.listRemoteFollows({ limit: FULL_LIST_LIMIT }, signal).then((res) => res.follows),
+  );
+  const follows = data ?? [];
 
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .listRemoteFollows({ limit: FULL_LIST_LIMIT }, controller.signal)
-      .then((res) => {
-        setFollows(res.follows);
-        setStatus("ready");
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
+  const onFollowed = useCallback(
+    (follow: RemoteFollow) =>
+      setData((prev) => [follow, ...(prev ?? []).filter((f) => f.id !== follow.id)]),
+    [setData],
+  );
 
-  const retry = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  const onFollowed = useCallback((follow: RemoteFollow) => {
-    setFollows((prev) => [follow, ...prev.filter((f) => f.id !== follow.id)]);
-  }, []);
-
-  const onUnfollowed = useCallback((id: string) => {
-    setFollows((prev) => prev.filter((f) => f.id !== id));
-  }, []);
+  const onUnfollowed = useCallback(
+    (id: string) => setData((prev) => (prev ?? []).filter((f) => f.id !== id)),
+    [setData],
+  );
 
   return (
     <section
