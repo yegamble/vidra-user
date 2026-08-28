@@ -54,6 +54,10 @@ class OlmAccount implements CryptoAccount {
     return Object.entries(parsed.curve25519).map(([key_id, key]) => ({ key_id, key }));
   }
 
+  hasOutboundSession(identityKey: string): boolean {
+    return this.outbound.has(identityKey);
+  }
+
   encryptFor(device: ClaimedDevice, plaintext: string): OlmCiphertext | null {
     let session = this.outbound.get(device.identity_key);
     if (!session) {

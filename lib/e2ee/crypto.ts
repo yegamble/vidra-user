@@ -24,6 +24,17 @@ export interface CryptoAccount extends SessionEncryptor {
   /** Generate `count` one-time prekeys and mark them published. */
   generateOneTimeKeys(count: number): OneTimeKey[];
   /**
+   * Whether an outbound Olm session ALREADY exists for this peer identity key.
+   *
+   * The engine asks before claiming: a claim is atomic and single-use, so
+   * claiming a key on every send burns one of the peer's prekeys per device per
+   * message. Around thirty sends drain a peer's pool, after which a genuinely
+   * NEW device can no longer establish a session with them. An existing session
+   * needs no key at all (encryptFor reuses it and discards any key handed to it),
+   * so this predicate is what keeps the pool for the devices that need it.
+   */
+  hasOutboundSession(identityKey: string): boolean;
+  /**
    * Decrypt one inbound ciphertext from a sender device (creating an inbound Olm
    * session for a type-0 prekey message). Throws on an undecryptable message —
    * the caller renders a per-message "undecryptable" state, never a crash.

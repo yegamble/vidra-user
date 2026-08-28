@@ -1473,15 +1473,25 @@ export const api = {
    * first (auth). Returns a MessageListResponse for a plaintext conversation and
    * an EncryptedMessageListResponse for an encrypted one (branch on which key is
    * present). A non-participant (or unknown conversation) is 404.
+   *
+   * `before_id` is the keyset cursor for paging UPWARD through history: the page
+   * is the messages strictly older than that message, newest first, ordered on
+   * `(created_at, id)` so it does not shift as new messages arrive. Encrypted
+   * threads page identically. Two traps the backend enforces with a 422:
+   * before_id may NOT be combined with `offset` (the check is on the param being
+   * PRESENT, so even `offset=0` trips it — pass limit only), and the cursor must
+   * be a message of this conversation that is addressed to one of the caller's
+   * own devices. The response carries no total or has_more: a short page (fewer
+   * than `limit` rows) is the only signal that history is exhausted.
    */
   getConversationMessages: (
     conversationId: string,
-    params: PageParams = {},
+    params: PageParams & { before_id?: string } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<MessageListResponse | EncryptedMessageListResponse>(
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { query: pageQuery(params), signal },
+      { query: { ...pageQuery(params), before_id: params.before_id }, signal },
     ),
 
   /**

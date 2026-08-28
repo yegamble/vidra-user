@@ -14,14 +14,24 @@ import type { E2EEStore, OwnMessageRecord, StoredDevice } from "./store";
 class FakeAccount implements CryptoAccount {
   readonly identityKey = "idk-self";
   readonly signingKey = "sgk-self";
+  // Peer identity keys we hold an outbound session with — the fake's stand-in for
+  // Olm's session map. Establishing one consumes the claimed key exactly once,
+  // which is what makes "claim only when there is no session" observable.
+  readonly sessions = new Set<string>();
   fingerprint(): string {
     return this.signingKey;
   }
   generateOneTimeKeys(count: number) {
     return Array.from({ length: count }, (_, i) => ({ key_id: `k${i}`, key: `otk${i}` }));
   }
+  hasOutboundSession(identityKey: string) {
+    return this.sessions.has(identityKey);
+  }
   encryptFor(device: ClaimedDevice, plaintext: string) {
-    if (!device.one_time_key) return null;
+    if (!this.sessions.has(device.identity_key)) {
+      if (!device.one_time_key) return null;
+      this.sessions.add(device.identity_key);
+    }
     return { message_type: 0 as const, ciphertext: `${device.device_id}:${plaintext}` };
   }
   decryptFrom() {
@@ -67,6 +77,19 @@ const provider: CryptoProvider = {
   create: async () => new FakeAccount(),
   restore: async () => new FakeAccount(),
 };
+
+/** One row of a device-directory response (E2EEDevice on the wire). */
+function device(id: string, userId: string, suffix: string) {
+  return {
+    id,
+    user_id: userId,
+    device_name: id,
+    identity_key: `idk-${suffix}`,
+    signing_key: `sgk-${suffix}`,
+    created_at: "t",
+    last_seen_at: "t",
+  };
+}
 
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -163,43 +186,131 @@ describe("E2EEEngine", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // only the count check
   });
 
-  it("encryptMessage fans out to the peer's devices and the caller's OTHER devices", async () => {
-    store.record = {
-      deviceId: "mine-1",
-      deviceName: "Laptop",
-      pickle: "{pickle}",
-      pickleKey: "pk",
-    };
-    const peerClaim: ClaimedDevice = {
-      device_id: "peer-1",
-      identity_key: "idk-peer",
-      signing_key: "sgk-peer",
-      one_time_key: { key_id: "k", key: "otk" },
-    };
-    const myOtherClaim: ClaimedDevice = {
-      device_id: "mine-2",
-      identity_key: "idk-mine-2",
-      signing_key: "sgk-mine-2",
-      one_time_key: { key_id: "k", key: "otk" },
-    };
-    route((url) => {
-      if (url.endsWith("/users/u-peer/e2ee/claim")) {
-        return json({ user_id: "u-peer", claims: [peerClaim] });
-      }
-      if (url.endsWith("/users/u-me/e2ee/claim")) {
-        // Includes my current device (mine-1) which must be excluded from fan-out.
-        return json({
-          user_id: "u-me",
-          claims: [myOtherClaim, { ...peerClaim, device_id: "mine-1" }],
-        });
-      }
-      throw new Error(`unexpected ${url}`);
+  describe("encryptMessage", () => {
+    // The directory rows the read-only device lookups return. `device_id` here is
+    // `id` on the wire — E2EEDevice, not E2EEClaim.
+    const peerDevice = device("peer-1", "u-peer", "peer");
+    const myOtherDevice = device("mine-2", "u-me", "mine-2");
+    const myCurrentDevice = device("mine-1", "u-me", "self");
+
+    // Counts every destructive claim so a test can assert one was NOT made.
+    let claims: string[];
+
+    function routeDirectoryAndClaims(opts: { peer?: unknown[]; mine?: unknown[] } = {}) {
+      const peers = opts.peer ?? [peerDevice];
+      const mine = opts.mine ?? [myOtherDevice, myCurrentDevice];
+      route((url, init) => {
+        if (url.includes("/users/u-peer/e2ee/devices")) return json({ devices: peers });
+        // The caller's own devices come from the self-scoped listing.
+        if (url.endsWith("/api/v1/e2ee/devices") && (init.method ?? "GET") === "GET") {
+          return json({ devices: mine });
+        }
+        const claim = /\/users\/([^/]+)\/e2ee\/claim$/.exec(url);
+        if (claim) {
+          const userId = claim[1];
+          claims.push(userId);
+          const devices = userId === "u-peer" ? peers : mine;
+          return json({
+            user_id: userId,
+            claims: (devices as { id: string; identity_key: string; signing_key: string }[]).map(
+              (d) => ({
+                device_id: d.id,
+                identity_key: d.identity_key,
+                signing_key: d.signing_key,
+                one_time_key: { key_id: "k", key: "otk" },
+              }),
+            ),
+          });
+        }
+        throw new Error(`unexpected ${url}`);
+      });
+    }
+
+    beforeEach(() => {
+      claims = [];
+      store.record = {
+        deviceId: "mine-1",
+        deviceName: "Laptop",
+        pickle: "{pickle}",
+        pickleKey: "pk",
+      };
     });
 
-    const result = await engine.encryptMessage("u-peer", "u-me", "hello");
-    expect(result.sender_device_id).toBe("mine-1");
-    expect(result.envelopes.map((e) => e.recipient_device_id).sort()).toEqual(["mine-2", "peer-1"]);
-    expect(result.skipped).toEqual([]);
+    it("fans out to the peer's devices and the caller's OTHER devices", async () => {
+      routeDirectoryAndClaims();
+      const result = await engine.encryptMessage("u-peer", "u-me", "hello");
+      expect(result.sender_device_id).toBe("mine-1");
+      // mine-1 is this device — it wrote the plaintext and is excluded.
+      expect(result.envelopes.map((e) => e.recipient_device_id).sort()).toEqual([
+        "mine-2",
+        "peer-1",
+      ]);
+      expect(result.skipped).toEqual([]);
+    });
+
+    // Claiming is destructive and unfilterable: the backend hands out one
+    // single-use prekey for EVERY device of the target user. Claiming on every
+    // send drained a peer's pool in ~30 messages, locking genuinely NEW devices
+    // out of ever establishing a session. Once a session exists we need no key.
+    it("does not claim again for a device it already has a session with", async () => {
+      routeDirectoryAndClaims();
+
+      await engine.encryptMessage("u-peer", "u-me", "first");
+      expect(claims).toEqual(["u-peer", "u-me"]);
+
+      // Second send over the SAME sessions: no prekey may be consumed.
+      const second = await engine.encryptMessage("u-peer", "u-me", "second");
+      expect(claims).toEqual(["u-peer", "u-me"]);
+      expect(second.envelopes.map((e) => e.recipient_device_id).sort()).toEqual([
+        "mine-2",
+        "peer-1",
+      ]);
+      expect(second.skipped).toEqual([]);
+    });
+
+    it("claims again only for the user who added a device we cannot reach", async () => {
+      routeDirectoryAndClaims();
+      await engine.encryptMessage("u-peer", "u-me", "first");
+      claims = [];
+
+      // The peer adds a second device; nothing about our side changed.
+      routeDirectoryAndClaims({ peer: [peerDevice, device("peer-2", "u-peer", "peer-2")] });
+      const result = await engine.encryptMessage("u-peer", "u-me", "second");
+
+      expect(claims).toEqual(["u-peer"]); // NOT u-me — every device of ours is reachable
+      expect(result.envelopes.map((e) => e.recipient_device_id).sort()).toEqual([
+        "mine-2",
+        "peer-1",
+        "peer-2",
+      ]);
+    });
+
+    it("reports a device it cannot reach as skipped rather than dropping it", async () => {
+      // The peer's pool is empty: the claim comes back with a null key and there
+      // is no session to fall back on.
+      route((url) => {
+        if (url.includes("/users/u-peer/e2ee/devices")) return json({ devices: [peerDevice] });
+        if (url.endsWith("/api/v1/e2ee/devices")) return json({ devices: [myCurrentDevice] });
+        if (url.includes("/users/u-peer/e2ee/claim")) {
+          return json({
+            user_id: "u-peer",
+            claims: [
+              {
+                device_id: "peer-1",
+                identity_key: "idk-peer",
+                signing_key: "sgk-peer",
+                one_time_key: null,
+              },
+            ],
+          });
+        }
+        throw new Error(`unexpected ${url}`);
+      });
+
+      const result = await engine.encryptMessage("u-peer", "u-me", "hello");
+      expect(result.envelopes).toEqual([]);
+      expect(result.skipped).toEqual(["peer-1"]);
+    });
   });
 
   // The sending device is deliberately excluded from the fan-out (it wrote the
@@ -217,6 +328,12 @@ describe("E2EEEngine", () => {
 
     function routeSendAndList() {
       route((url) => {
+        if (url.includes("/users/u-peer/e2ee/devices")) {
+          return json({ devices: [device("peer-1", "u-peer", "peer")] });
+        }
+        if (url.endsWith("/api/v1/e2ee/devices")) {
+          return json({ devices: [device("mine-1", "u-me", "self")] });
+        }
         if (url.includes("/users/u-peer/e2ee/claim")) {
           return json({ user_id: "u-peer", claims: [peerClaim] });
         }

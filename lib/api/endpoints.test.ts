@@ -1193,6 +1193,15 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/conversations/c1/messages?limit=50");
   });
 
+  it("getConversationMessages sends before_id as the keyset cursor, with no offset", async () => {
+    await api.getConversationMessages("c1", { limit: 100, before_id: "m9" });
+    // No `offset` may ride along: the backend 422s on before_id + offset, and it
+    // checks for the param's PRESENCE, so even offset=0 would be rejected.
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/conversations/c1/messages?limit=100&before_id=m9",
+    );
+  });
+
   it("sendEncryptedMessage POSTs the envelopes + timer to the messages endpoint", async () => {
     await api.sendEncryptedMessage("c1", {
       sender_device_id: "d1",
