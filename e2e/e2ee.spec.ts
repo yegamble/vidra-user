@@ -640,23 +640,24 @@ test("the encrypted thread pages back through history beyond the first 100", asy
   await routeDeviceEndpoints(page);
   await routePeerKeys(page, [{ id: "dev-bob", suffix: "bob" }]);
 
-  // Newest page: messages 200..101 (a FULL 100 → more probably exists).
+  // Two FULL pages (100 each → more probably exists), then an empty one.
   const newest = Array.from({ length: 100 }, (_, i) => historyEnvelope(200 - i));
-  // The page before message 101: 40 rows → a SHORT page, so history ends there.
-  const older = Array.from({ length: 40 }, (_, i) => historyEnvelope(100 - i));
+  const older = Array.from({ length: 100 }, (_, i) => historyEnvelope(100 - i));
 
+  // The POST response's created_at is what lands in the outbox, so this decides
+  // where a sent message sits in history — see the windowing assertions below.
+  let sentAt = new Date().toISOString();
   const cursors: (string | null)[] = [];
   await page.route(ENC_MESSAGES, (route) => {
     if (route.request().method() === "POST") {
       return route.fulfill({
-        json: { conversation_id: "enc1", envelope_count: 1, created_at: new Date().toISOString() },
+        json: { conversation_id: "enc1", envelope_count: 1, created_at: sentAt },
       });
     }
     const before = new URL(route.request().url()).searchParams.get("before_id");
     cursors.push(before);
-    return route.fulfill({
-      json: { envelopes: before ? older : newest, limit: 100, offset: 0 },
-    });
+    const envelopes = before === null ? newest : before === "env-101" ? older : [];
+    return route.fulfill({ json: { envelopes, limit: 100, offset: 0 } });
   });
 
   await gotoEncryptedThread(page);
@@ -668,24 +669,50 @@ test("the encrypted thread pages back through history beyond the first 100", asy
   await expect(page.getByText("message 101", { exact: true })).toBeVisible();
   await expect(page.getByText("message 100", { exact: true })).toHaveCount(0);
 
+  // Two sends that bracket the loaded window: one now (inside any window) and one
+  // dated before the oldest history that will ever be paged in.
+  const composer = page.getByLabel("Write an encrypted message");
+  const send = page.getByRole("button", { name: "Send" });
+  await composer.fill("sent just now");
+  await send.click();
+  await expect(page.getByText("sent just now")).toBeVisible();
+  // The composer clears only once the send has settled — wait for that before
+  // typing the next one, or the second click lands on a still-busy button.
+  await expect(composer).toHaveValue("");
+
+  sentAt = new Date(Date.UTC(2019, 0, 1)).toISOString();
+  await composer.fill("sent long ago");
+  await send.click();
+  await expect(page.getByText("sent long ago")).toBeVisible();
+  await expect(composer).toHaveValue("");
+
   const earlier = page.getByRole("button", { name: "Show earlier messages" });
   await expect(earlier).toBeVisible();
   await earlier.click();
 
   // The older page merged in above the loaded window…
   await expect(page.getByText("message 100", { exact: true })).toBeVisible();
-  await expect(page.getByText("message 61", { exact: true })).toBeVisible();
+  await expect(page.getByText("message 1", { exact: true })).toBeVisible();
   await expect(page.getByText("message 200", { exact: true })).toBeVisible();
   // …fetched with the keyset cursor: the OLDEST envelope we already held.
   expect(cursors).toContain("env-101");
-  // A short page means history is exhausted, so the affordance retires.
-  await expect(earlier).toHaveCount(0);
+  // Still a full page, so there may be more.
+  await expect(earlier).toBeVisible();
 
-  // Our own sends are windowed to the loaded history (they would otherwise float
-  // above unpaged messages); one sent NOW is inside any window and still shows.
-  await page.getByLabel("Write an encrypted message").fill("and one more");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("and one more")).toBeVisible();
+  // Our own messages are bounded to the loaded window. The outbox holds the whole
+  // conversation, so without this the 2019 message would float at the very top of
+  // the thread — above history that has not been paged in yet — as if it were the
+  // oldest thing said. The recent one is inside the window and stays.
+  await expect(page.getByText("sent long ago")).toHaveCount(0);
+  await expect(page.getByText("sent just now")).toBeVisible();
+
+  // Page again: an empty page means history is exhausted, the affordance retires…
+  await earlier.click();
+  await expect(earlier).toHaveCount(0);
+  // …and with no unloaded history left there is no boundary to respect, so the
+  // 2019 message belongs again.
+  await expect(page.getByText("sent long ago")).toBeVisible();
+  await expect(page.getByText("sent just now")).toBeVisible();
 });
 
 test("the devices settings page lists a device and removes it", async ({ page }) => {

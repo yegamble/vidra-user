@@ -378,6 +378,7 @@ function MessageList({
   const scrollerRef = useRef<HTMLElement | null>(null);
   const stickRef = useRef(true);
   const initializedRef = useRef(false);
+  const prevLenRef = useRef(0);
   const prevFirstKeyRef = useRef("");
   const prevLastKeyRef = useRef("");
   // Distance from the bottom captured when the reader asks for older history, so
@@ -412,10 +413,12 @@ function MessageList({
 
   useLayoutEffect(() => {
     const len = messages.length;
+    const grew = len > prevLenRef.current;
     const firstKey = len > 0 ? messages[0].key : "";
     const lastKey = len > 0 ? messages[len - 1].key : "";
     const prevFirst = prevFirstKeyRef.current;
     const prevLast = prevLastKeyRef.current;
+    prevLenRef.current = len;
     prevFirstKeyRef.current = firstKey;
     prevLastKeyRef.current = lastKey;
 
@@ -423,28 +426,39 @@ function MessageList({
       // Open pinned to the newest message.
       if (len === 0) return;
       initializedRef.current = true;
+      anchorRef.current = null;
       onAtBottomChange?.(true);
       bottomRef.current?.scrollIntoView({ block: "end" });
       return;
     }
 
-    // Older history landed ABOVE the reader. Hold their place: without this the
-    // viewport keeps its scrollTop and the content they were reading jumps away.
-    if (firstKey !== prevFirst && lastKey === prevLast) {
-      const anchor = anchorRef.current;
+    // A message the reader just SENT brings them back to the bottom; anything
+    // else only does so while they are already near it. It must have GROWN: a
+    // list that merely shrank — the newest message disappearing on its timer —
+    // can leave one of ours last without anything having been sent.
+    const sentByReader = grew && lastKey !== prevLast && messages[len - 1].mine;
+    const anchor = anchorRef.current;
+
+    if (grew && firstKey !== prevFirst && anchor !== null) {
+      // A page of older history landed ABOVE the reader. Hold their place:
+      // without this the viewport keeps its scrollTop and the content they were
+      // reading jumps away.
       anchorRef.current = null;
       const el = scrollerRef.current;
-      if (el && anchor !== null) el.scrollTop = el.scrollHeight - anchor;
-      return;
+      if (el) el.scrollTop = el.scrollHeight - anchor;
+      // A poll (or a send) can land in the SAME React batch as that page.
+      // Staying put is right for everything except the reader's own message.
+      if (!sentByReader) return;
+    } else if (anchor !== null && !loadingEarlier) {
+      // The request it was captured for has settled without prepending anything
+      // (an empty page, or a failure). Drop it so a stale measurement can never
+      // shift some later, unrelated update.
+      anchorRef.current = null;
     }
 
-    // A message the reader just SENT always brings them back to the bottom;
-    // anything else only does so while they are already near it. Keyed on the
-    // last message CHANGING, so paging in history never counts as a send.
-    const sentByReader = lastKey !== prevLast && len > 0 && messages[len - 1].mine;
     if (!stickRef.current && !sentByReader) return;
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, onAtBottomChange]);
+  }, [messages, onAtBottomChange, loadingEarlier]);
 
   const earlierControl = hasEarlier ? (
     <div className="flex flex-col items-center gap-1.5">
@@ -465,10 +479,19 @@ function MessageList({
   ) : null;
 
   if (messages.length === 0) {
+    // The loaded window can be empty while history still exists behind it — a
+    // disappearing-message thread whose whole recent page has expired. The pager
+    // has to render here too, or that history is unreachable precisely where it
+    // is most likely to be wanted.
     return (
-      <p className="py-8 text-center text-sm text-fg-muted">
-        No messages yet. Encrypted messages you send will appear here.
-      </p>
+      <>
+        {earlierControl}
+        <p className="py-8 text-center text-sm text-fg-muted">
+          {hasEarlier
+            ? "Nothing in this part of the conversation is still available."
+            : "No messages yet. Encrypted messages you send will appear here."}
+        </p>
+      </>
     );
   }
 
@@ -514,10 +537,12 @@ function MessageList({
   );
 }
 
-// PartialDeliveryNotice reports a send that reached only some of the recipient's
-// devices — a device whose one-time keys are exhausted and that we have no
-// session with cannot be encrypted for, and will never receive the message. The
-// send itself succeeded, so the tone is a warning, not a failure, and it is
+// PartialDeliveryNotice reports a send that reached only some of the devices in
+// this conversation — a device whose one-time keys are exhausted and that we
+// have no session with cannot be encrypted for, and will never receive the
+// message. The count spans every device the fan-out targets: the recipient's AND
+// the sender's own other devices, which is why the copy does not say "theirs".
+// The send itself succeeded, so the tone is a warning, not a failure, and it is
 // dismissible: the reader has been told, and the next send replaces it.
 function PartialDeliveryNotice({
   reached,
@@ -535,7 +560,7 @@ function PartialDeliveryNotice({
       className="flex items-start justify-between gap-3 rounded-xl bg-warning/15 px-3.5 py-2.5 text-sm text-warning"
     >
       <p>
-        Encrypted for {reached} of {total} devices.{" "}
+        Encrypted for {reached} of {total} devices in this conversation.{" "}
         {missed === 1 ? "One device has" : `${missed} devices have`} no unused keys left, so{" "}
         {missed === 1 ? "it won’t" : "they won’t"} receive this message.
       </p>
@@ -565,9 +590,10 @@ function Composer({
   const [timer, setTimer] = useState<DisappearingOption>("off");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Set when the last send reached only SOME of the recipient devices. The send
-  // itself succeeded, so this is a notice, not an error — but staying quiet about
-  // it would let a reader believe a device that got nothing has read the message.
+  // Set when the last send reached only SOME of the devices it fanned out to
+  // (the recipient's plus our own other ones). The send itself succeeded, so this
+  // is a notice, not an error — but staying quiet about it would let a sender
+  // believe a device that got nothing can read the message.
   const [partial, setPartial] = useState<{ reached: number; total: number } | null>(null);
 
   // This composer mounts only after the local E2EE device is ready. Its state
