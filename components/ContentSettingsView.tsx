@@ -1,14 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Spinner } from "@/components/ui/Spinner";
 import { errorMessage } from "@/lib/api";
 import type { SensitiveContentPolicy, UpdateProfileRequest } from "@/lib/api";
 import { useInstanceSensitivePolicy } from "@/lib/use-sensitive-policy";
+import { SignInGate } from "@/components/SignInGate";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -34,30 +32,15 @@ const POLICY_LABEL: Record<SensitiveContentPolicy, string> = {
 export function ContentSettingsView() {
   const { status, user } = useSession();
 
-  if (status === "restoring") {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your settings" />
-      </div>
-    );
-  }
   if (status === "anon" || !user) {
     return (
-      <EmptyState
+      <SignInGate
         title="Sign in to manage your content settings"
-        message={
-          <>
-            Your session has ended.{" "}
-            <Link
-              href="/login"
-              className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2"
-            >
-              Sign in
-            </Link>{" "}
-            to change how sensitive content is shown to you.
-          </>
-        }
-      />
+        lead="Your session has ended."
+        restoringLabel="Loading your settings"
+      >
+        to change how sensitive content is shown to you.
+      </SignInGate>
     );
   }
 

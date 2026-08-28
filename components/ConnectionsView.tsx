@@ -1,18 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { Alert } from "@/components/ui/Alert";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toggle } from "@/components/ui/Toggle";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { ATProtoLinkRequest, ATProtoStatus } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { SignInGate } from "@/components/SignInGate";
 
 // The official Bluesky app-passwords settings page. An app password is a
 // scoped, revocable credential distinct from the main account password.
@@ -37,26 +36,14 @@ type Phase = "loading" | "error" | "disabled" | "ready";
 export function ConnectionsView() {
   const { status } = useSession();
 
-  if (status === "restoring") {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your account" />
-      </div>
-    );
-  }
   if (status !== "authed") {
     return (
-      <EmptyState
+      <SignInGate
         title="Sign in to manage connected accounts"
-        message={
-          <>
-            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
-              Sign in
-            </Link>{" "}
-            to connect a Bluesky account for cross-posting.
-          </>
-        }
-      />
+        restoringLabel="Loading your account"
+      >
+        to connect a Bluesky account for cross-posting.
+      </SignInGate>
     );
   }
 

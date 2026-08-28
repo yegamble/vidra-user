@@ -24,6 +24,7 @@ import { useInstanceFeatures } from "@/lib/instance-features";
 import { usePlayerSettings } from "@/lib/player-settings";
 import { resumeFraction } from "@/lib/resume-progress";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { SignInGate } from "@/components/SignInGate";
 
 // LibraryView is the design's Library hub (Vidra App template): a History rail
 // with real resume-progress, a Playlists list, and a Saved list — each bound to
@@ -44,21 +45,9 @@ export function LibraryView() {
         <div className="flex justify-end">
           <PlaylistsLink />
         </div>
-        <EmptyState
-          icon={<LibraryIcon size={24} />}
-          title="Sign in to see your library"
-          message={
-            <>
-              <Link
-                href="/login"
-                className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
-              >
-                Sign in
-              </Link>{" "}
-              to save videos, build playlists, and pick up where you left off.
-            </>
-          }
-        />
+        <SignInGate icon={<LibraryIcon size={24} />} title="Sign in to see your library">
+          to save videos, build playlists, and pick up where you left off.
+        </SignInGate>
       </div>
     );
   }

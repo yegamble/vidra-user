@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { api, userAvatarUrl } from "@/lib/api";
 import type { ConversationSummary } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { SignInGate } from "@/components/SignInGate";
 
 type Status = "loading" | "error" | "ready";
 
@@ -51,20 +52,9 @@ export function ConversationRail({ titleAsH1 }: { titleAsH1: boolean }) {
       <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-6">
         {titleAsH1 ? <InboxTabs active="messages" /> : null}
         {heading}
-        <EmptyState
-          title="Sign in to see your messages"
-          message={
-            <>
-              <Link
-                href="/login"
-                className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
-              >
-                Sign in
-              </Link>{" "}
-              to read and send direct messages.
-            </>
-          }
-        />
+        <SignInGate title="Sign in to see your messages">
+          to read and send direct messages.
+        </SignInGate>
       </div>
     );
   }

@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import type { Notification } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/format";
+import { SignInGate } from "@/components/SignInGate";
 
 type Status = "loading" | "error" | "ready";
 
@@ -147,20 +148,9 @@ export function NotificationsView() {
 
   if (status !== "authed") {
     return (
-      <EmptyState
-        title="Sign in to see your notifications"
-        message={
-          <>
-            <Link
-              href="/login"
-              className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
-            >
-              Sign in
-            </Link>{" "}
-            to see when people follow your channel or comment on your videos.
-          </>
-        }
-      />
+      <SignInGate title="Sign in to see your notifications">
+        to see when people follow your channel or comment on your videos.
+      </SignInGate>
     );
   }
 

@@ -22,6 +22,7 @@ import type {
   ServerSentEvent,
 } from "@/lib/api";
 import { formatDateTime, relativeTime } from "@/lib/format";
+import { useVisiblePoll } from "@/lib/use-visible-poll";
 
 const RUNS_PAGE_SIZE = 25;
 const EVENT_PAGE_SIZE = 50;
@@ -248,19 +249,12 @@ export function AdminJobRunsView({ refreshKey }: { refreshKey: number }) {
   }, [onLiveEvent, streamSeed]);
 
   // REST polling is the explicit fallback whenever the live connection is not
-  // open. Hidden tabs do no work; focus catches up immediately.
-  useEffect(() => {
-    if (status !== "ready" || streamState === "live") return;
-    const refreshIfVisible = () => {
-      if (document.visibilityState === "visible") setReloadKey((key) => key + 1);
-    };
-    const timer = setInterval(refreshIfVisible, POLL_FALLBACK_MS);
-    window.addEventListener("focus", refreshIfVisible);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("focus", refreshIfVisible);
-    };
-  }, [status, streamState]);
+  // open.
+  useVisiblePoll({
+    enabled: status === "ready" && streamState !== "live",
+    intervalMs: POLL_FALLBACK_MS,
+    onPoll: () => setReloadKey((key) => key + 1),
+  });
 
   const hasFilters = useMemo(
     () => Object.values(filters).some((value) => value !== ""),

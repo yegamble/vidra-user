@@ -15,9 +15,9 @@ import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { IconTile } from "@/components/ui/IconTile";
-import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, authApi, errorMessage, userAvatarUrl, userBannerUrl } from "@/lib/api";
 import type { UpdateProfileRequest, User } from "@/lib/api";
+import { SignInGate } from "@/components/SignInGate";
 
 // SettingsGroup is one iOS-style grouped block: an uppercase micro group-header
 // (design-system group-header spec) above a surface-muted rounded card whose
@@ -95,28 +95,15 @@ export function SettingsView() {
     );
   }
 
-  if (status === "restoring") {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your account" />
-      </div>
-    );
-  }
-
   if (status === "anon" || !user) {
     return (
-      <EmptyState
+      <SignInGate
         title="Sign in to manage your account"
-        message={
-          <>
-            Your session has ended.{" "}
-            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
-              Sign in
-            </Link>{" "}
-            to edit your profile.
-          </>
-        }
-      />
+        lead="Your session has ended."
+        restoringLabel="Loading your account"
+      >
+        to edit your profile.
+      </SignInGate>
     );
   }
 

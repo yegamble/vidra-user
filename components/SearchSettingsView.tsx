@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { TrashIcon } from "@/components/icons";
 import { Alert } from "@/components/ui/Alert";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
@@ -14,6 +13,7 @@ import { ApiError, api, errorMessage } from "@/lib/api";
 import type { SearchHistoryEntry, UpdateProfileRequest } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
+import { SignInGate } from "@/components/SignInGate";
 
 // A single per-key preference key on the profile update path. All three ride the
 // existing PATCH /auth/me contract (regenerated UpdateProfileRequest).
@@ -33,30 +33,15 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 export function SearchSettingsView() {
   const { status, user } = useSession();
 
-  if (status === "restoring") {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your settings" />
-      </div>
-    );
-  }
   if (status === "anon" || !user) {
     return (
-      <EmptyState
+      <SignInGate
         title="Sign in to manage your search settings"
-        message={
-          <>
-            Your session has ended.{" "}
-            <Link
-              href="/login"
-              className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2"
-            >
-              Sign in
-            </Link>{" "}
-            to change your search and recommendation preferences.
-          </>
-        }
-      />
+        lead="Your session has ended."
+        restoringLabel="Loading your settings"
+      >
+        to change your search and recommendation preferences.
+      </SignInGate>
     );
   }
 

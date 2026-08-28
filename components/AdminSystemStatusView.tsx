@@ -1,7 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -10,8 +8,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { SystemStatus } from "@/lib/api";
 import { formatUptime, formatVersion } from "@/lib/format";
-
-type Status = "loading" | "error" | "ready";
+import { useApiResource } from "@/lib/use-api-resource";
 
 // AdminSystemStatusView is the admin-only operational dashboard: build info,
 // the runtime environment, uptime, and per-dependency health. Read-only;
@@ -26,30 +23,9 @@ export function AdminSystemStatusView() {
 }
 
 function StatusPanel() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [data, setData] = useState<SystemStatus | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getSystemStatus(controller.signal)
-      .then((res) => {
-        setData(res);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
-
-  const refresh = useCallback(() => {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }, []);
+  const { status, data, retry: refresh } = useApiResource<SystemStatus>((signal) =>
+    api.getSystemStatus(signal),
+  );
 
   if (status === "loading") {
     return (

@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ClockIcon } from "@/components/icons";
@@ -14,8 +13,8 @@ import { api } from "@/lib/api";
 import type { HistoryItem } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
 import { resumeFraction } from "@/lib/resume-progress";
-
-type Status = "loading" | "error" | "ready";
+import { useApiResource } from "@/lib/use-api-resource";
+import { SignInGate } from "@/components/SignInGate";
 
 // WatchHistoryView shows the signed-in user's watch history (most-recently
 // watched first) with a per-item remove and a clear-all control. The session
@@ -25,21 +24,9 @@ export function WatchHistoryView() {
 
   if (status !== "authed") {
     return (
-      <EmptyState
-        icon={<ClockIcon size={24} />}
-        title="Sign in to see your history"
-        message={
-          <>
-            <Link
-              href="/login"
-              className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
-            >
-              Sign in
-            </Link>{" "}
-            to keep track of what you have watched.
-          </>
-        }
-      />
+      <SignInGate icon={<ClockIcon size={24} />} title="Sign in to see your history">
+        to keep track of what you have watched.
+      </SignInGate>
     );
   }
 
@@ -47,35 +34,20 @@ export function WatchHistoryView() {
 }
 
 function History() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [items, setItems] = useState<HistoryItem[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
+  const {
+    status,
+    data,
+    retry,
+    setData: setItems,
+  } = useApiResource<HistoryItem[]>((signal) =>
+    api.getWatchHistory({}, signal).then((res) => res.videos),
+  );
+  const items = data ?? [];
   const [clearing, setClearing] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getWatchHistory({}, controller.signal)
-      .then((res) => {
-        setItems(res.videos);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
-
-  function retry() {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }
 
   async function remove(id: string) {
     const prev = items;
-    setItems((list) => list.filter((it) => it.id !== id)); // optimistic
+    setItems((list) => (list ?? []).filter((it) => it.id !== id)); // optimistic
     try {
       await api.deleteHistoryEntry(id);
     } catch {
@@ -137,7 +109,7 @@ function History() {
               progressFraction={
                 resumeFraction(item.position_seconds, item.duration_seconds) ?? undefined
               }
-              onDeleted={() => setItems((list) => list.filter((it) => it.id !== item.id))}
+              onDeleted={() => setItems((list) => (list ?? []).filter((it) => it.id !== item.id))}
             />
             <div className="flex items-center justify-between gap-2 text-[13px] text-fg-muted">
               <span className="tabular-nums">

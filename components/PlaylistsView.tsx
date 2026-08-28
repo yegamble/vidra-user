@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { PlaylistIcon } from "@/components/icons";
@@ -12,8 +11,8 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Playlist, PlaylistVisibility } from "@/lib/api";
-
-type Status = "loading" | "error" | "ready";
+import { useApiResource } from "@/lib/use-api-resource";
+import { SignInGate } from "@/components/SignInGate";
 
 // PlaylistsView lists the signed-in user's playlists and offers an inline create
 // form. The session lives in memory, so a hard reload lands here signed out.
@@ -22,21 +21,9 @@ export function PlaylistsView() {
 
   if (status !== "authed") {
     return (
-      <EmptyState
-        icon={<PlaylistIcon size={24} />}
-        title="Sign in to see your playlists"
-        message={
-          <>
-            <Link
-              href="/login"
-              className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
-            >
-              Sign in
-            </Link>{" "}
-            to create playlists and organise videos.
-          </>
-        }
-      />
+      <SignInGate icon={<PlaylistIcon size={24} />} title="Sign in to see your playlists">
+        to create playlists and organise videos.
+      </SignInGate>
     );
   }
 
@@ -44,35 +31,20 @@ export function PlaylistsView() {
 }
 
 function Playlists() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
+  const {
+    status,
+    data,
+    retry,
+    setData: setPlaylists,
+  } = useApiResource<Playlist[]>((signal) =>
+    api.getMyPlaylists(signal).then((res) => res.playlists),
+  );
+  const playlists = data ?? [];
 
   const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState<PlaylistVisibility>("private");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getMyPlaylists(controller.signal)
-      .then((res) => {
-        setPlaylists(res.playlists);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
-
-  function retry() {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -82,7 +54,7 @@ function Playlists() {
     setCreateError(null);
     try {
       const pl = await api.createPlaylist({ title: t, visibility });
-      setPlaylists((list) => [pl, ...list]);
+      setPlaylists((list) => [pl, ...(list ?? [])]);
       setTitle("");
       setVisibility("private");
     } catch {
