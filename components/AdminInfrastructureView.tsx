@@ -24,6 +24,16 @@ import { formatBytes, formatDateTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
 
+/**
+ * What VIDRA_ROLE means for THIS process, spelled out because the enum alone
+ * does not say where the background workers went. An unmapped value renders
+ * verbatim — a future role must show up, not vanish.
+ */
+const ROLE_DESCRIPTION: Record<string, string> = {
+  all: "all — this process also runs the background workers",
+  api: "api — background workers run in separate worker processes",
+};
+
 // AdminInfrastructureView is the admin-only DEPLOY-TIME view of this instance:
 // what the operator chose at install time (server limits, storage backend,
 // networking, the backup contract) plus a discovery list of the optional
@@ -91,7 +101,7 @@ export function InfrastructurePanel() {
     );
   }
 
-  const { server, storage, networking, backups } = data;
+  const { server, storage, networking, backups, delivery, live } = data;
 
   return (
     <div className="flex flex-col gap-6">
@@ -115,6 +125,17 @@ export function InfrastructurePanel() {
         description="Runtime environment and the request limits this process enforces."
       >
         <Row label="Environment" value={server.environment} />
+        {/* VIDRA_ROLE — boot-baked topology. Worth a sentence, not just the
+            enum: a fleet accidentally deployed all-api runs zero workers (no
+            transcodes, no media GC) and is otherwise indistinguishable from a
+            healthy all-in-one install. Guarded: an older backend without the
+            field drops the row rather than rendering undefined. */}
+        {server.role ? (
+          <Row
+            label="Process role"
+            value={ROLE_DESCRIPTION[server.role] ?? server.role}
+          />
+        ) : null}
         <Row
           label="Request timeout"
           value={`${server.request_timeout_seconds}s`}
@@ -202,11 +223,33 @@ export function InfrastructurePanel() {
         )}
       </Panel>
 
+      {/* ABSENT when FEATURE_LIVE is off; PRESENT with empty strings when live
+          is enabled with nothing behind it — Row renders "" as "—", so the
+          empty coordinates read as the gap they are, never as zero-facts. The
+          ingest SECRET is never in the payload, only the coordinates every
+          streamer is handed anyway. */}
+      {live ? (
+        <Panel
+          title="Live ingest"
+          description="The live plane's coordinates: where encoders send RTMP and where the segments land."
+        >
+          <Row label="RTMP URL" value={live.rtmp_url} mono />
+          <Row label="HLS root" value={live.hls_root} mono />
+        </Panel>
+      ) : null}
+
       <Panel
         title="Networking"
         description="How browsers and other instances reach this server."
       >
         <Row label="Public address" value={networking.public_base_url} mono />
+        {/* DELIVERY_CDN_BASE_URL verbatim — definitionally public (every
+            viewer's player fetches segments from it), reported so confirming
+            WHICH edge is wired does not need an SSH session. The block is
+            ABSENT when no CDN is wired, so the row drops with it. */}
+        {delivery ? (
+          <Row label="CDN base URL" value={delivery.cdn_base_url} mono />
+        ) : null}
         <Row
           label="Served over HTTPS"
           value={yesNo(networking.https_effective)}
@@ -627,6 +670,10 @@ const FEATURE_CONFIG_PAGE: Record<string, string> = {
   // store: reachability, and any migration in flight. Sending the operator
   // here is sending them to state, not to a control that does not exist.
   object_storage: "/admin/infrastructure",
+  // Deliberately WITHOUT the #config-section-search anchor the Advanced page
+  // exposes: e2e/admin-infrastructure.spec.ts pins this link's exact href, and
+  // e2e specs are never edited to make a change fit. Follow-up: add the anchor
+  // and update the spec together.
   search: "/admin/config/advanced",
   federation: "/admin/config/federation",
   captions: "/admin/config/vod",
@@ -636,8 +683,10 @@ const FEATURE_CONFIG_PAGE: Record<string, string> = {
   // in the Delivery section of Advanced. The other half (DELIVERY_CDN_BASE_URL)
   // is boot config, which is exactly why the row can report a switch turned on
   // with no edge behind it — and why the link still earns its place: that
-  // operator's next move is to turn the switch back off.
-  cdn: "/admin/config/advanced",
+  // operator's next move is to turn the switch back off. The anchor is the
+  // Advanced page's own sectionAnchorId for its Delivery section, so the
+  // operator lands on the toggle instead of the top of a long form.
+  cdn: "/admin/config/advanced#config-section-delivery",
 };
 
 /**
@@ -676,6 +725,16 @@ function FeatureList({ features }: { features: InfrastructureFeature[] }) {
   );
 }
 
+/**
+ * The lead sentence of a note and everything after it. The split is the first
+ * sentence terminator followed by whitespace, so a one-sentence note comes
+ * back with an empty rest and never grows a disclosure it cannot fill.
+ */
+function splitLeadSentence(text: string): [string, string] {
+  const m = /^(.*?[.!?])\s+(\S[\s\S]*)$/.exec(text);
+  return m ? [m[1], m[2]] : [text, ""];
+}
+
 function FeatureRow({ feature }: { feature: InfrastructureFeature }) {
   const { enabled, configured } = feature;
   // Three states, because two booleans that disagree are the interesting case:
@@ -684,6 +743,15 @@ function FeatureRow({ feature }: { feature: InfrastructureFeature }) {
   const variant = !enabled ? "neutral" : configured ? "success" : "warning";
   const label = !enabled ? "Off" : configured ? "Active" : "Needs setup";
   const href = FEATURE_CONFIG_PAGE[feature.key];
+  // The link renders whenever the key has a destination, independent of the
+  // note: a fully Active cdn row — the one whose Enabled half IS a runtime
+  // toggle — previously had no path to its control, because the link only
+  // existed inside the note conditional and a healthy row carries no note.
+  const link = href ? (
+    <Link href={href} className="font-medium text-accent hover:underline">
+      {FEATURE_CONFIG_LINK_LABEL[feature.key] ?? "Open settings"}
+    </Link>
+  ) : null;
 
   return (
     <li className="flex flex-col gap-1 py-3">
@@ -698,27 +766,65 @@ function FeatureRow({ feature }: { feature: InfrastructureFeature }) {
       {/* The server sends a note in two different situations and they do not
           deserve the same framing. For a feature that is OFF the note is
           discovery copy — here is something you could turn on — so it is
-          prefixed "Optional". For one that is ON but unconfigured the note is a
-          finding: mail that cannot deliver is not an optional extra, and
-          labelling it that way would talk an operator out of fixing it. */}
+          prefixed "Optional" and collapsed to its lead sentence: with the
+          default install every row is Off and full paragraphs stack into a
+          wall of text. For one that is ON but unconfigured the note is a
+          finding: mail that cannot deliver is not an optional extra, and a
+          warning earns all its space. */}
       {feature.note ? (
-        <p className="text-[13px] text-fg-muted">
-          {enabled ? "" : "Optional: "}
-          {feature.note}
-          {href ? (
-            <>
-              {" "}
-              <Link
-                href={href}
-                className="font-medium text-accent hover:underline"
-              >
-                {FEATURE_CONFIG_LINK_LABEL[feature.key] ?? "Open settings"}
-              </Link>
-            </>
-          ) : null}
-        </p>
+        enabled ? (
+          <p className="text-[13px] text-fg-muted">
+            {feature.note}
+            {link ? <> {link}</> : null}
+          </p>
+        ) : (
+          <OffNote note={feature.note} link={link} />
+        )
+      ) : link ? (
+        <p className="text-[13px]">{link}</p>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * Discovery copy for a switched-off feature, collapsed to its first sentence
+ * behind a "More" disclosure. The settings link stays OUTSIDE the disclosure:
+ * folding it into the collapsed body would recreate the unreachable-control
+ * problem the link-always change just fixed.
+ */
+function OffNote({
+  note,
+  link,
+}: {
+  note: string;
+  link: React.ReactNode | null;
+}) {
+  const [lead, rest] = splitLeadSentence(note);
+
+  if (!rest) {
+    // One sentence: nothing to disclose, keep the plain paragraph.
+    return (
+      <p className="text-[13px] text-fg-muted">
+        Optional: {note}
+        {link ? <> {link}</> : null}
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1 text-[13px] text-fg-muted">
+      <details className="group">
+        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          Optional: {lead}{" "}
+          {/* The affordance disappears once the rest is showing. */}
+          <span className="font-medium text-accent group-open:hidden">
+            More
+          </span>
+        </summary>
+        <p className="mt-1">{rest}</p>
+      </details>
+      {link ? <p>{link}</p> : null}
+    </div>
   );
 }
 
