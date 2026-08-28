@@ -9,9 +9,59 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
-import type { SystemStatus, SystemStatusDatabase } from "@/lib/api";
-import { formatUptime, formatVersion } from "@/lib/format";
+import type {
+  SystemStatus,
+  SystemStatusCdnPurge,
+  SystemStatusDatabase,
+  SystemStatusRateLimits,
+} from "@/lib/api";
+import { formatDateTime, formatUptime, formatVersion } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
+
+/**
+ * Operator-facing names for the server's probe vocabulary (postgres, redis,
+ * s3, smtp, search, ffmpeg, settings_sync — internal/httpapi/system_probes.go).
+ * An unknown key is humanized rather than dropped, the same contract the
+ * feature list on the Infrastructure page keeps: the server may ship a probe
+ * before this client learns its name, and hiding it would hide a dependency.
+ */
+const COMPONENT_LABEL: Record<string, string> = {
+  postgres: "PostgreSQL",
+  redis: "Redis",
+  s3: "Object storage",
+  smtp: "Outbound mail",
+  search: "Search",
+  ffmpeg: "Media tooling (ffmpeg)",
+  settings_sync: "Settings sync",
+};
+
+/** ok | down | not_configured, said in words rather than wire enums. */
+const COMPONENT_STATUS_LABEL: Record<string, string> = {
+  ok: "OK",
+  down: "Down",
+  not_configured: "Not configured",
+};
+
+function componentLabel(key: string): string {
+  return COMPONENT_LABEL[key] ?? key.replace(/_/g, " ");
+}
+
+function componentStatusLabel(status: string): string {
+  return COMPONENT_STATUS_LABEL[status] ?? status.replace(/_/g, " ");
+}
+
+/**
+ * The overall pill. "draining" wins over the other two exactly as on /readyz:
+ * the process received SIGTERM and keeps answering through the drain delay, so
+ * an admin watching a rolling deploy sees the same fact the load balancer acts
+ * on. Warning tone, not ok/degraded — a deploy in progress is neither health
+ * nor an outage.
+ */
+const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  degraded: { label: "Degraded", className: "bg-danger-surface text-danger" },
+  draining: { label: "Draining", className: "bg-warning/15 text-warning" },
+  ok: { label: "Healthy", className: "bg-success/15 text-success" },
+};
 
 // AdminSystemStatusView is the admin-only operational dashboard: build info,
 // the runtime environment, uptime, and per-dependency health. Read-only;
@@ -45,23 +95,27 @@ export function StatusPanel() {
   }
 
   const componentNames = Object.keys(data.components).sort();
+  const badge = STATUS_BADGE[data.status] ?? STATUS_BADGE.ok;
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
         <span
-          className={
-            data.status === "degraded"
-              ? "inline-flex items-center rounded-full bg-danger-surface px-3 py-1 text-[13px] font-semibold text-danger"
-              : "inline-flex items-center rounded-full bg-success/15 px-3 py-1 text-[13px] font-semibold text-success"
-          }
+          className={`inline-flex items-center rounded-full px-3 py-1 text-[13px] font-semibold ${badge.className}`}
         >
-          {data.status === "degraded" ? "Degraded" : "Healthy"}
+          {badge.label}
         </span>
         <Button variant="secondary" size="sm" onClick={refresh}>
           Refresh
         </Button>
       </div>
+      {data.status === "draining" ? (
+        <p className="text-[13px] leading-relaxed text-fg-muted">
+          This process received a shutdown signal and is leaving. It keeps
+          serving through the drain delay — the same fact /readyz reports to
+          the load balancer during a deploy.
+        </p>
+      ) : null}
 
       <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
         <Row label="Software" value={`${data.software.name} ${formatVersion(data.software.version)}`} />
@@ -94,7 +148,9 @@ export function StatusPanel() {
                             : "bg-success"
                       }`}
                     />
-                    <span className="truncate text-sm font-medium text-fg">{name}</span>
+                    <span className="truncate text-sm font-medium text-fg">
+                      {componentLabel(name)}
+                    </span>
                   </span>
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${
@@ -106,7 +162,7 @@ export function StatusPanel() {
                     }`}
                     title={c.error || undefined}
                   >
-                    {c.status}
+                    {componentStatusLabel(c.status)}
                   </span>
                 </li>
               );
@@ -119,7 +175,76 @@ export function StatusPanel() {
           section is dropped whole rather than rendered as "0 of 0", which is
           indistinguishable from a pool with nothing left. */}
       {data.database ? <DatabasePool pool={data.database} /> : null}
+
+      {/* Guarded even though the current contract always sends it: an older
+          backend that predates the field drops the section, never a crash. */}
+      {data.rate_limits ? <RateLimits limits={data.rate_limits} /> : null}
+
+      {/* ABSENT — not zeroed — when no CDN is wired: absence is the good news
+          it reads as, and zero runs on an edgeless install would read as a
+          purge system that never works. */}
+      {data.cdn_purge ? <CdnPurge purge={data.cdn_purge} /> : null}
     </div>
+  );
+}
+
+/**
+ * The effective rate-limit configuration, read-only. Rate limits are a
+ * deploy-time capacity decision (RATE_LIMIT_* / AUTH_RATE_LIMIT_* env) with no
+ * runtime mutation endpoint by decision, so this section exists for exactly
+ * one job: letting an operator confirm what is actually applied.
+ */
+function RateLimits({ limits }: { limits: SystemStatusRateLimits }) {
+  return (
+    <section aria-label="Rate limits">
+      <h2 className="mb-2 text-[15px] font-bold tracking-tight">Rate limits</h2>
+      <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+        <Row label="Rate limiting" value={limits.enabled ? "On" : "Off"} />
+        {limits.enabled ? (
+          <>
+            <Row
+              label="General budget"
+              value={`${limits.requests} requests / ${limits.window_seconds}s per IP`}
+            />
+            <Row
+              label="Auth budget"
+              value={`${limits.auth_requests} requests / ${limits.window_seconds}s per IP`}
+            />
+          </>
+        ) : null}
+      </dl>
+    </section>
+  );
+}
+
+/**
+ * The CDN purge record: in-process counters since boot (a restart resets
+ * them). Purge success is otherwise silent and failure one aggregate log
+ * line, so this section is where "is invalidation actually working" gets a
+ * visible answer. The incomplete-run marker follows the pool-saturation
+ * idiom: a dated warning, because the edge may still be serving whatever
+ * that run covered.
+ */
+function CdnPurge({ purge }: { purge: SystemStatusCdnPurge }) {
+  return (
+    <section aria-label="CDN purge">
+      <h2 className="mb-2 text-[15px] font-bold tracking-tight">CDN purge</h2>
+      <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+        <Row label="Purge runs since boot" value={String(purge.runs)} />
+        <Row label="Keys purged" value={String(purge.keys_purged)} />
+        <Row label="Keys failed" value={String(purge.keys_failed)} />
+      </dl>
+      {purge.last_incomplete_run_at ? (
+        <p className="mt-2 flex items-start gap-2 text-[13px] leading-relaxed text-warning">
+          <WarningIcon size={15} className="mt-0.5 shrink-0" />
+          <span>
+            A purge run last ended incomplete on{" "}
+            {formatDateTime(purge.last_incomplete_run_at)} — the edge may still
+            be serving something that run was meant to clear.
+          </span>
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -150,16 +275,19 @@ function DatabasePool({ pool }: { pool: SystemStatusDatabase }) {
           <WarningIcon size={15} className="mt-0.5 shrink-0" />
           <span>
             Every connection in this process&rsquo;s pool is checked out, so the next query
-            waits for one to come back. If it stays here, raise the{" "}
+            waits for one to come back. If it stays here, check the{" "}
+            {/* The destination is a read-only report of DB_MAX_CONNS, not a
+                dial — so the sentence promises what that page delivers instead
+                of a "raise the limit" control that is not there. */}
             <Link
               href="/admin/infrastructure"
               className="font-medium underline underline-offset-2"
             >
-              pool limit
+              pool sizing this deployment chose
             </Link>{" "}
-            or shed load — every api and worker process holds its own pool
-            against the same database, so the ceiling is a share of a
-            server-wide budget, not a free dial.
+            (DB_MAX_CONNS) or shed load — every api and worker process holds
+            its own pool against the same database, so the ceiling is a share
+            of a server-wide budget, not a free dial.
           </span>
         </p>
       ) : null}

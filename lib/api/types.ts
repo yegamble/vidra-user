@@ -159,6 +159,14 @@ export type SystemStatus = Schemas["SystemStatus"];
 // connections cannot be told apart from a pool with nothing left), so the
 // presence check belongs at the call site, not inside every field read.
 export type SystemStatusDatabase = NonNullable<SystemStatus["database"]>;
+// The effective rate-limit configuration. Read-only surfacing by decision:
+// rate limits are deploy-time env (RATE_LIMIT_* / AUTH_RATE_LIMIT_*), so the
+// page confirms what applied and offers no control.
+export type SystemStatusRateLimits = SystemStatus["rate_limits"];
+// The CDN purge counters. OPTIONAL on the wire and unwrapped here like the
+// database block: the server omits it entirely when no CDN is wired — zero
+// runs on an edgeless install would read as a purge system that never works.
+export type SystemStatusCdnPurge = NonNullable<SystemStatus["cdn_purge"]>;
 // The deploy-time shape (GET /admin/infrastructure) — what the operator chose
 // at install time, as opposed to SystemStatus's live health. Section types are
 // projected off the parent because the spec declares them inline (no named
@@ -168,6 +176,11 @@ export type InfrastructureServer = InfrastructureStatus["server"];
 export type InfrastructureStorage = InfrastructureStatus["storage"];
 export type InfrastructureNetworking = InfrastructureStatus["networking"];
 export type InfrastructureBackups = InfrastructureStatus["backups"];
+// Optional deploy-shape blocks, unwrapped like SystemStatusDatabase: the
+// server omits delivery when no CDN is wired and live when FEATURE_LIVE is
+// off, so the presence check belongs at the call site.
+export type InfrastructureDelivery = NonNullable<InfrastructureStatus["delivery"]>;
+export type InfrastructureLive = NonNullable<InfrastructureStatus["live"]>;
 export type InfrastructureFeature = Schemas["InfrastructureFeature"];
 export type MailTestResult = Schemas["MailTestResult"];
 export type AdminStats = Schemas["AdminStats"];

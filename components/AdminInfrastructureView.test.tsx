@@ -60,6 +60,7 @@ function infrastructure(
   return {
     server: {
       environment: "production" as const,
+      role: "all" as const,
       request_timeout_seconds: 30,
       stream_request_timeout_seconds: 900,
       body_limit: "8M",
@@ -314,18 +315,192 @@ describe("InfrastructurePanel feature vocabulary", () => {
     expect(features.queryByText("drm")).toBeNull();
   });
 
-  it("links CDN at the page that actually carries its switch, and DRM nowhere", async () => {
+  it("links CDN at the section that actually carries its switch, and DRM nowhere", async () => {
     mocks.getInfrastructure.mockResolvedValue(infrastructure(s3Storage, [cdn, drm]));
     render(<InfrastructurePanel />);
 
     const features = within(await screen.findByRole("region", { name: "Optional features" }));
     // "CDN delivery" is the label of the delivery_cdn_enabled toggle on that
-    // page, so the operator lands on a control with the name they clicked.
+    // page, and the anchor drops the operator at the Delivery section instead
+    // of the top of a long form (AdminInstanceConfigView's sectionAnchorId).
     expect(features.getByRole("link", { name: "Open settings" }).getAttribute("href")).toBe(
-      "/admin/config/advanced",
+      "/admin/config/advanced#config-section-delivery",
     );
     // DRM is boot-env only: a link would send the operator hunting for a switch
     // that is not on any admin page.
     expect(features.getAllByRole("link")).toHaveLength(1);
+  });
+});
+
+describe("InfrastructurePanel process role", () => {
+  it("explains an all-in-one process beside the environment", async () => {
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Server" }));
+    expect(panel.getByText("Process role")).toBeTruthy();
+    expect(panel.getByText(/also runs the background workers/)).toBeTruthy();
+  });
+
+  it("explains an api-only process — the workers live elsewhere", async () => {
+    const base = infrastructure(s3Storage);
+    mocks.getInfrastructure.mockResolvedValue({
+      ...base,
+      server: { ...base.server, role: "api" },
+    });
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Server" }));
+    expect(panel.getByText(/background workers run in separate worker processes/)).toBeTruthy();
+  });
+
+  it("renders an unmapped role verbatim rather than inventing a story", async () => {
+    const base = infrastructure(s3Storage);
+    mocks.getInfrastructure.mockResolvedValue({
+      ...base,
+      server: { ...base.server, role: "worker" },
+    });
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Server" }));
+    expect(panel.getByText("worker")).toBeTruthy();
+  });
+
+  it("omits the row on a backend that predates the field", async () => {
+    const base = infrastructure(s3Storage);
+    mocks.getInfrastructure.mockResolvedValue({
+      ...base,
+      server: { ...base.server, role: undefined },
+    });
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Server" }));
+    expect(panel.getByText("production")).toBeTruthy();
+    expect(panel.queryByText("Process role")).toBeNull();
+  });
+});
+
+describe("InfrastructurePanel delivery and live coordinates", () => {
+  it("reports the CDN base URL when an edge is wired", async () => {
+    mocks.getInfrastructure.mockResolvedValue({
+      ...infrastructure(s3Storage),
+      delivery: { cdn_base_url: "https://cdn.example.test" },
+    });
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Networking" }));
+    expect(panel.getByText("CDN base URL")).toBeTruthy();
+    expect(panel.getByText("https://cdn.example.test")).toBeTruthy();
+  });
+
+  it("omits the CDN row entirely when no CDN is wired", async () => {
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Networking" }));
+    expect(panel.getByText("Public address")).toBeTruthy();
+    expect(panel.queryByText("CDN base URL")).toBeNull();
+  });
+
+  it("reports the live ingest coordinates when the live block is present", async () => {
+    mocks.getInfrastructure.mockResolvedValue({
+      ...infrastructure(s3Storage),
+      live: { rtmp_url: "rtmp://ingest.example.test/live", hls_root: "/var/lib/vidra/live" },
+    });
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Live ingest" }));
+    expect(panel.getByText("rtmp://ingest.example.test/live")).toBeTruthy();
+    expect(panel.getByText("/var/lib/vidra/live")).toBeTruthy();
+  });
+
+  it("renders enabled-but-unwired live coordinates as absent, not zero facts", async () => {
+    // The contract sends the block with EMPTY strings when live is enabled
+    // with nothing behind it — the empty coordinates ARE the finding.
+    mocks.getInfrastructure.mockResolvedValue({
+      ...infrastructure(s3Storage),
+      live: { rtmp_url: "", hls_root: "" },
+    });
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Live ingest" }));
+    expect(panel.getAllByText("—")).toHaveLength(2);
+  });
+
+  it("omits the live panel when the live feature is off", async () => {
+    render(<InfrastructurePanel />);
+
+    expect(await screen.findByRole("region", { name: "Server" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Live ingest" })).toBeNull();
+  });
+});
+
+describe("InfrastructurePanel feature-row links and disclosure", () => {
+  it("links a fully active cdn row at its runtime switch even without a note", async () => {
+    // The failure this guards: the link only rendered inside the note
+    // conditional, so the one row whose Enabled half IS a runtime toggle had
+    // no path to its control exactly when it was on and healthy (no note).
+    mocks.getInfrastructure.mockResolvedValue(
+      infrastructure(s3Storage, [{ key: "cdn", enabled: true, configured: true }]),
+    );
+    render(<InfrastructurePanel />);
+
+    const features = within(await screen.findByRole("region", { name: "Optional features" }));
+    expect(features.getByRole("link", { name: "Open settings" }).getAttribute("href")).toBe(
+      "/admin/config/advanced#config-section-delivery",
+    );
+  });
+
+  it("collapses an Off note to its first sentence behind a More disclosure", async () => {
+    render(<InfrastructurePanel />);
+
+    const features = within(await screen.findByRole("region", { name: "Optional features" }));
+    const summary = features
+      .getByText(/Media is stored on the api container/)
+      .closest("summary");
+    expect(summary).not.toBeNull();
+    // The lead sentence and the disclosure affordance are visible; the rest of
+    // the paragraph waits behind it.
+    expect(summary!.textContent).toContain("More");
+    expect(summary!.textContent).not.toContain("Connect object storage");
+    const details = summary!.closest("details");
+    expect(details!.textContent).toContain("Connect object storage");
+  });
+
+  it("keeps a single-sentence Off note plain — nothing to disclose", async () => {
+    mocks.getInfrastructure.mockResolvedValue(
+      infrastructure(s3Storage, [
+        {
+          key: "tracing",
+          enabled: false,
+          configured: false,
+          note: "Export request traces to an OpenTelemetry collector.",
+        },
+      ]),
+    );
+    render(<InfrastructurePanel />);
+
+    const features = within(await screen.findByRole("region", { name: "Optional features" }));
+    const note = features.getByText(/Optional: Export request traces/);
+    expect(note.closest("details")).toBeNull();
+    expect(features.queryByText("More")).toBeNull();
+  });
+
+  it("keeps an enabled-but-unconfigured finding fully expanded", async () => {
+    // Warnings deserve the space; only discovery copy collapses.
+    mocks.getInfrastructure.mockResolvedValue(
+      infrastructure(s3Storage, [
+        {
+          key: "mail",
+          enabled: true,
+          configured: false,
+          note: "Mail is enabled but no SMTP relay is configured. Password resets and notifications cannot be delivered until one is.",
+        },
+      ]),
+    );
+    render(<InfrastructurePanel />);
+
+    const features = within(await screen.findByRole("region", { name: "Optional features" }));
+    const note = features.getByText(/no SMTP relay is configured/);
+    expect(note.textContent).toContain("cannot be delivered until one is");
+    expect(note.closest("details")).toBeNull();
   });
 });
