@@ -128,18 +128,45 @@ describe("AdminConsole rail", () => {
   });
 });
 
+// The Select's option order: the registry regrouped for a native <select> —
+// console sections first, then More, then the link-outs that exit the console.
+const GROUPED = [
+  ...ADMIN_NAV_PRIMARY.filter((i) => !i.external),
+  ...ADMIN_NAV_MORE,
+  ...ADMIN_NAV.filter((i) => i.external),
+];
+
 describe("AdminTabs select", () => {
   it("offers every registry entry — the moderation destinations included", () => {
     render(<AdminTabs />);
     const select = screen.getByRole("combobox", { name: "Admin section" });
     const options = within(select).getAllByRole("option");
-    expect(options.map((o) => o.getAttribute("value"))).toEqual(ADMIN_NAV.map((i) => i.href));
-    expect(options.map((o) => o.textContent)).toEqual(ADMIN_NAV.map((i) => i.label));
+    expect(options.map((o) => o.getAttribute("value"))).toEqual(GROUPED.map((i) => i.href));
+    expect(options.map((o) => o.textContent)).toEqual(GROUPED.map((i) => i.label));
+    expect(new Set(GROUPED.map((i) => i.href))).toEqual(new Set(ADMIN_NAV.map((i) => i.href)));
     // The regression this registry closes: below `lg` the rail is hidden, so a
     // Select without these two left a phone-bound admin no route to moderation.
     expect(options.map((o) => o.getAttribute("value"))).toEqual(
       expect.arrayContaining(["/moderation", "/moderation/videos"]),
     );
+  });
+
+  it("keeps the registry's grouping — and marks what exits the console", () => {
+    // A flat 14-option list buried the design's primary/More split, and hid
+    // that the two moderation entries leave /admin for a different surface.
+    render(<AdminTabs />);
+    const select = screen.getByRole("combobox", { name: "Admin section" });
+    const groups = within(select).getAllByRole("group");
+    expect(groups.map((g) => g.getAttribute("label"))).toEqual(["Console", "More", "Moderation"]);
+    expect(
+      within(groups[0]).getAllByRole("option").map((o) => o.getAttribute("value")),
+    ).toEqual(ADMIN_NAV_PRIMARY.filter((i) => !i.external).map((i) => i.href));
+    expect(
+      within(groups[1]).getAllByRole("option").map((o) => o.getAttribute("value")),
+    ).toEqual(ADMIN_NAV_MORE.map((i) => i.href));
+    expect(
+      within(groups[2]).getAllByRole("option").map((o) => o.getAttribute("value")),
+    ).toEqual(ADMIN_NAV.filter((i) => i.external).map((i) => i.href));
   });
 
   it("resolves a sub-route to its parent section", () => {
