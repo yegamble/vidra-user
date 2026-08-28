@@ -138,7 +138,8 @@ export const CONFIG_PAGES: readonly ConfigPageDef[] = [
   {
     id: "advanced",
     label: "Advanced",
-    description: "Search, data portability, and low-level settings.",
+    description:
+      "Search, media delivery, data portability, and low-level settings.",
   },
 ] as const;
 
@@ -433,6 +434,17 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
         "How search ranks and what discovery learns: the ranking family, the instance-level personalization, suggestion, and history gates, and how long behavioural events are kept.",
     },
     {
+      // Server id "delivery" (phase-2 storage item 6 / phase-4 delivery items
+      // 2 and 4): the presign + CDN redirect levers and the playback-quality
+      // measurement switch. Curated so the three do not render under an
+      // auto-titled, description-less "Delivery" header — an operator triaging
+      // "where are my viewers' bytes coming from" needs the page to say so.
+      id: "delivery",
+      title: "Delivery",
+      description:
+        "How media bytes reach viewers: whether a public media request is redirected to the object store or a CDN edge instead of being proxied through the API, and whether playback quality is measured.",
+    },
+    {
       // Server id "user_data" (normalized to "user-data"): the account
       // import/export controls. (The W13 remote-search keys the client once
       // stubbed here live on the Federation page — vidra-core homes them there.)
@@ -604,6 +616,18 @@ export const META: Record<string, SettingMeta> = {
     label: "Main instance categories",
     help: "What this instance is mostly about.",
     control: "category-multi",
+    page: "general",
+    section: "identity",
+  },
+  // The operator-defined taxonomy REPLACES the built-in eighteen when it is
+  // non-empty (vidra-core Categories()), so the help says "replaces" rather
+  // than "adds". No suggestion set: the whole point is ids this client cannot
+  // know. The server stays the validation truth (numeric id, non-empty label,
+  // no duplicate id — a bad entry 422s).
+  instance_custom_categories: {
+    label: "Custom categories",
+    help: "Define your own category list, replacing the built-in one entirely while this is non-empty. Write each entry as “id:name” (for example “42:Woodworking”); ids must be numbers and stay unique, and imported videos carry them, so avoid renumbering an id you have already published under.",
+    control: "list",
     page: "general",
     section: "identity",
   },
@@ -782,6 +806,20 @@ export const META: Record<string, SettingMeta> = {
     options: [
       { value: "local", label: "Local only" },
       { value: "all", label: "Local + federated" },
+    ],
+    page: "general",
+    section: "browse",
+  },
+  // An enum, not a flag: the server registers browse_scroll_mode as
+  // KindEnum over button|auto, so it gets the segmented picker like every
+  // other enum key (a plain text row would invite a value the server 422s).
+  browse_scroll_mode: {
+    label: "How lists load more",
+    help: "How a browse list advances past its first page. A button keeps the end of the page reachable; infinite scroll loads as viewers scroll, which strands keyboard users and anything below the list.",
+    control: "enum-segmented",
+    options: [
+      { value: "button", label: "Load-more button" },
+      { value: "auto", label: "Infinite scroll" },
     ],
     page: "general",
     section: "browse",
@@ -1394,6 +1432,39 @@ export const META: Record<string, SettingMeta> = {
     control: "number",
     page: "advanced",
     section: "search",
+  },
+  // ADVANCED / Delivery. Server section "delivery": two redirect levers
+  // (phase-2 storage item 6, phase-4 delivery item 2) plus the measurement
+  // switch that answers whether either helped (phase-4 delivery item 4).
+  //
+  // Both redirect toggles are EFFECTIVE only with their boot-side backing —
+  // an S3 backend for presign, DELIVERY_CDN_BASE_URL for the CDN — and the
+  // help says so, because a toggle that reads "on" while doing nothing is the
+  // failure mode these rows exist to prevent. Neither carries a bootDep note:
+  // the /instance snapshot the config view reads reports no storage backend
+  // and no CDN base URL today (the admin infrastructure endpoint's feature
+  // vocabulary deliberately omits CDN), and inventing a signal the contract
+  // does not carry would be worse than saying it in words.
+  delivery_presign_enabled: {
+    label: "Direct object delivery",
+    help: "Answer public media requests with a redirect to a short-lived signed object-store URL instead of streaming every byte through the API. Applies only to the S3 storage backend — on a local-filesystem install it stays inert. Turning it off sends the next request back through the API.",
+    control: "toggle",
+    page: "advanced",
+    section: "delivery",
+  },
+  delivery_cdn_enabled: {
+    label: "CDN delivery",
+    help: "Answer public media requests with a redirect to the CDN edge instead of streaming every byte through the API. Effective only when the server was booted with DELIVERY_CDN_BASE_URL. Turning it off stops sending viewers to the edge from the next request on, but does not evict what the edge already cached — purge that separately.",
+    control: "toggle",
+    page: "advanced",
+    section: "delivery",
+  },
+  qoe_collection_enabled: {
+    label: "Playback quality measurement",
+    help: "Record how playback actually went for viewers — time to first frame, rebuffering, bitrate switches and errors, attributed to the delivery source that served the bytes. Turning it off blanks the Playback health page from that moment on; already-written rollups stay until retention ages them out.",
+    control: "toggle",
+    page: "advanced",
+    section: "delivery",
   },
   // ADVANCED / User data portability (config-parity W8). Server section
   // "user_data" (normalized to "user-data").
