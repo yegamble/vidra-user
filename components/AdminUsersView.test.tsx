@@ -31,9 +31,9 @@ vi.mock("@/lib/api", () => ({
 import { AdminUsersView } from "@/components/AdminUsersView";
 import { navigation } from "@/lib/test-navigation";
 
-// The instance from the bug report: 4,649 accounts, 100 to a page.
+// The instance from the bug report: 4,649 accounts, 10 to a page.
 const TOTAL = 4649;
-const PAGE = 100;
+const PAGE = 10;
 
 function account(index: number, overrides: Record<string, unknown> = {}) {
   return {
@@ -83,7 +83,7 @@ describe("AdminUsersView pagination", () => {
 
     await screen.findByRole("navigation", { name: "Paginate users" });
     expect(requestedPage(0)).toMatchObject({ limit: PAGE, offset: 0 });
-    expect(screen.getByText("1–100 of 4649")).toBeTruthy();
+    expect(screen.getByText("1–10 of 4649")).toBeTruthy();
     // Nothing before the first page.
     expect(screen.getByRole("button", { name: "Previous" }).hasAttribute("disabled")).toBe(true);
   });
@@ -91,27 +91,27 @@ describe("AdminUsersView pagination", () => {
   it("pages forward and back over limit/offset", async () => {
     mocks.getAdminUsers.mockResolvedValueOnce(page(0, PAGE));
     render(<AdminUsersView />);
-    await screen.findByText("1–100 of 4649");
+    await screen.findByText("1–10 of 4649");
 
     mocks.getAdminUsers.mockResolvedValueOnce(page(PAGE, PAGE));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    await screen.findByText("101–200 of 4649");
+    await screen.findByText("11–20 of 4649");
     expect(requestedPage(1)).toMatchObject({ offset: PAGE });
     // The second page can go both ways.
     expect(screen.getByRole("button", { name: "Previous" }).hasAttribute("disabled")).toBe(false);
 
     mocks.getAdminUsers.mockResolvedValueOnce(page(0, PAGE));
     fireEvent.click(screen.getByRole("button", { name: "Previous" }));
-    await screen.findByText("1–100 of 4649");
+    await screen.findByText("1–10 of 4649");
     expect(requestedPage(2)).toMatchObject({ offset: 0 });
   });
 
   it("stops at the last page", async () => {
-    // 4,649 accounts, 100 to a page: the last page starts at 4,600 and holds 49.
-    mocks.getAdminUsers.mockResolvedValue(page(4600, 49));
+    // 4,649 accounts, 10 to a page: the last page starts at 4,640 and holds 9.
+    mocks.getAdminUsers.mockResolvedValue(page(4640, 9));
     render(<AdminUsersView />);
 
-    await screen.findByText("4601–4649 of 4649");
+    await screen.findByText("4641–4649 of 4649");
     expect(screen.getByRole("button", { name: "Next" }).hasAttribute("disabled")).toBe(true);
   });
 
@@ -130,7 +130,7 @@ describe("AdminUsersView pagination", () => {
   it("changes the page size and starts the new-sized window at the top", async () => {
     mocks.getAdminUsers.mockResolvedValueOnce(page(0, PAGE));
     render(<AdminUsersView />);
-    await screen.findByText("1–100 of 4649");
+    await screen.findByText("1–10 of 4649");
 
     mocks.getAdminUsers.mockResolvedValueOnce({ ...page(0, 20), limit: 20 });
     fireEvent.change(screen.getByRole("combobox", { name: "Rows per page" }), {
@@ -144,10 +144,10 @@ describe("AdminUsersView pagination", () => {
   it("puts the window in the URL, so a page is a link", async () => {
     mocks.getAdminUsers.mockResolvedValue(page(0, PAGE));
     render(<AdminUsersView />);
-    await screen.findByText("1–100 of 4649");
+    await screen.findByText("1–10 of 4649");
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(navigation.lastUrl()).toBe("/admin/users?offset=100");
+    expect(navigation.lastUrl()).toBe("/admin/users?offset=10");
   });
 
   it("keeps the pager on an empty page past the first, so the operator can get back", async () => {
@@ -164,13 +164,13 @@ describe("AdminUsersView search", () => {
   it("resets to the first page when the search changes", async () => {
     mocks.getAdminUsers.mockResolvedValueOnce(page(0, PAGE));
     render(<AdminUsersView />);
-    await screen.findByText("1–100 of 4649");
+    await screen.findByText("1–10 of 4649");
 
     mocks.getAdminUsers.mockResolvedValueOnce(page(PAGE, PAGE));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    await screen.findByText("101–200 of 4649");
+    await screen.findByText("11–20 of 4649");
 
-    // Searching from page 2 must not ask for offset 100 of a result set that has
+    // Searching from page 2 must not ask for offset 10 of a result set that has
     // no page 2 — that would answer with an empty page reading as "no matches".
     mocks.getAdminUsers.mockResolvedValueOnce(page(0, 2, 2));
     fireEvent.change(screen.getByLabelText("Search users"), { target: { value: "ada" } });
@@ -199,7 +199,7 @@ describe("AdminUsersView search", () => {
   it("tracks the total of the filtered set, not the instance", async () => {
     mocks.getAdminUsers.mockResolvedValueOnce(page(0, PAGE));
     render(<AdminUsersView />);
-    await screen.findByText("1–100 of 4649");
+    await screen.findByText("1–10 of 4649");
 
     // The backend counts with the request's own q, so a filtered page reports
     // the size of its own result set.
@@ -207,7 +207,7 @@ describe("AdminUsersView search", () => {
     fireEvent.change(screen.getByLabelText("Search users"), { target: { value: "ada" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    await screen.findByText("1–100 of 250");
+    await screen.findByText("1–10 of 250");
   });
 });
 
@@ -254,9 +254,9 @@ describe("AdminUsersView facet counts", () => {
   it("a facet that empties a page does not claim the instance has none", async () => {
     mocks.getAdminUsers.mockResolvedValue(page(0, PAGE));
     render(<AdminUsersView />);
-    await screen.findByText("1–100 of 4649");
+    await screen.findByText("1–10 of 4649");
 
-    // Not one staff account on this page of 100 regular users.
+    // Not one staff account on this page of 10 regular users.
     fireEvent.click(screen.getByRole("button", { name: /^Staff/ }));
 
     const empties = await screen.findAllByText(

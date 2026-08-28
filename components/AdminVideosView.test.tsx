@@ -91,7 +91,9 @@ const remote = {
 beforeEach(() => {
   navigation.reset("/moderation/videos");
   // 4649 is deliberately NOT the row count: the header must read the server's
-  // total, which is the whole point of this contract change.
+  // total, which is the whole point of this contract change. The echoed limit
+  // is likewise deliberately not the 10 the view asks for — the pager steps by
+  // what the server applied, so "Next" below must land on offset 20, not 10.
   mocks.getAdminVideos.mockResolvedValue({
     videos: [local, remote],
     total: 4649,
@@ -142,8 +144,8 @@ describe("AdminVideosView", () => {
     render(<ToastProvider><AdminVideosView /></ToastProvider>);
     // Two rows on screen, 4,649 on the instance. This line used to read "2".
     expect(await screen.findByText("4649 videos")).toBeTruthy();
-    // And it asks for a real window rather than a fixed limit: 100 with no offset.
-    expect(mocks.getAdminVideos.mock.calls[0][0]).toMatchObject({ limit: 20, offset: 0 });
+    // And it asks for a real window — the shared 10-row default — not a fixed page.
+    expect(mocks.getAdminVideos.mock.calls[0][0]).toMatchObject({ limit: 10, offset: 0 });
   });
 
   it("pages forward with a real offset and remembers it in the URL", async () => {
