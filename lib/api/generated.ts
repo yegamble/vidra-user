@@ -2142,7 +2142,7 @@ export interface paths {
         put?: never;
         /**
          * Open a resumable (chunked) upload session
-         * @description Opens a chunked/resumable upload for a video's original file (owner only). The declared size, filename extension, and the caller's storage quota are validated UP FRONT: a non-video extension is 415, a size beyond UPLOAD_MAX_SIZE is 413, and a size that would exceed the caller's quota is 422 (code quota_exceeded; the rolling-24h daily upload quota answers code daily_quota_exceeded). Returns the upload id, the fixed chunk size to send (every chunk but the last must be exactly this many bytes), the total number of chunks, and the 24h session expiry. Upload each chunk with PUT /api/v1/uploads/{upload_id}/chunks/{n}, then POST /api/v1/uploads/{upload_id}/complete to assemble and finalise the video through the same pipeline as a direct upload. Non-owner/unknown video → 404.
+         * @description Opens a chunked/resumable upload for a video's original file (owner only). The declared size, filename extension, and the caller's storage quota are validated UP FRONT: a non-video extension is 415, a size beyond UPLOAD_MAX_SIZE is 413, and a size that would exceed the caller's quota is 422 (code quota_exceeded; the rolling-24h daily upload quota answers code daily_quota_exceeded). Returns the upload id, the fixed chunk size to send (every chunk but the last must be exactly this many bytes), the total number of chunks, and the 24h session expiry. Upload each chunk with PUT /api/v1/uploads/{upload_id}/chunks/{n}, then POST /api/v1/uploads/{upload_id}/complete, which ACCEPTS the completion (202) and queues the assembly + the same pipeline a direct upload runs; poll GET /api/v1/uploads/{upload_id} until its state is completed or failed. Non-owner/unknown video → 404.
          *
          *     BATCH GUARD (UPLOAD-10): a caller may hold at most UPLOAD_MAX_ACTIVE_SESSIONS_PER_USER active (unfinished, unexpired) upload sessions at once (instance default 5; 0 disables the limit). Opening one past the cap is 429 with the stable code too_many_active_uploads — a batch-upload client should queue and retry once an in-flight session completes or is cancelled (either frees a slot). This is a fairness guard, not a security boundary; batching stays client-orchestrated over these per-video session endpoints (there is no /uploads/batch surface).
          */
@@ -2164,7 +2164,7 @@ export interface paths {
         put?: never;
         /**
          * Open a resumable (chunked) session that replaces a video's source
-         * @description Opens a chunked/resumable upload session whose completion REPLACES the source of an ALREADY PUBLISHED video (config-parity W14; owner, or a moderator/admin). Identical protocol to the plain upload session — upload chunks with PUT /api/v1/uploads/{upload_id}/chunks/{n}, then POST /api/v1/uploads/{upload_id}/complete (which finalises through the replacement flow instead of the publish pipeline and answers 200 with the still-published video + new source file); GET/DELETE on the session work unchanged. The declared size, filename extension, and the video OWNER's storage + rolling-daily quotas are validated up front, and re-checked at completion. Gated by the video_replace_enabled admin setting (403 feature_disabled while off, default off); a video that is not published, still transcoding, or already being replaced answers 409 replace_conflict. The batch guard (429 too_many_active_uploads) applies as for plain sessions.
+         * @description Opens a chunked/resumable upload session whose completion REPLACES the source of an ALREADY PUBLISHED video (config-parity W14; owner, or a moderator/admin). Identical protocol to the plain upload session — upload chunks with PUT /api/v1/uploads/{upload_id}/chunks/{n}, then POST /api/v1/uploads/{upload_id}/complete, which answers 202 and queues the replacement flow instead of the publish pipeline; poll GET /api/v1/uploads/{upload_id} for the outcome. The video keeps serving its PREVIOUS source until the swap lands. GET/DELETE on the session work unchanged. The declared size, filename extension, and the video OWNER's storage + rolling-daily quotas are validated up front, and re-checked at completion. Gated by the video_replace_enabled admin setting (403 feature_disabled while off, default off); a video that is not published, still transcoding, or already being replaced answers 409 replace_conflict. The batch guard (429 too_many_active_uploads) applies as for plain sessions.
          */
         post: operations["createReplaceSession"];
         delete?: never;
@@ -2181,15 +2181,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get a resumable upload's progress (the resume contract)
-         * @description Returns which chunk indices have landed and the byte total so far — the contract a client reads to know which chunks to (re)send after an interruption. Owner only; non-owner/unknown session → 404.
+         * Get a resumable upload's progress and state
+         * @description Returns which chunk indices have landed and the byte total so far — the contract a client reads to know which chunks to (re)send after an interruption — plus the session's lifecycle `state`. After POST .../complete answers 202 this is the POLLING endpoint: the client reads it (every couple of seconds) until `state` is `completed` — then fetches the video for its outcome — or `failed`, where `failure_reason` carries a safe explanation. Owner only; non-owner/unknown session → 404.
          */
         get: operations["getUploadSession"];
         put?: never;
         post?: never;
         /**
          * Cancel a resumable upload
-         * @description Cancels an in-progress upload and drops its chunk blobs. Owner only; non-owner/unknown → 404. Idempotent (cancelling an already-finished session still 204s).
+         * @description Cancels an in-progress upload and drops its chunk blobs. Owner only; non-owner/unknown → 404. Idempotent for a session that is already over: cancelling one that is `cancelled`, `completed` or `failed` still 204s, so a client can always clean up.
+         *
+         *     A session mid-finalize (`queued` or `processing`) is refused with 409: its completion has already been accepted and the pipeline will publish the video, so reporting it cancelled would be untrue — and dropping the chunk blobs under a running assembly would corrupt it. Cancel before completing, or delete the resulting video afterwards.
          */
         delete: operations["cancelUploadSession"];
         options?: never;
@@ -2227,8 +2229,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Complete a resumable upload
-         * @description Assembles the session's chunks in order and runs them through the same AttachOriginal → Process pipeline as a direct upload (probe/scan/ quarantine/transcode), then marks the session completed and drops its chunk blobs. Returns the finalised video exactly like the direct upload (video.state is "published", or "failed" if a configured probe rejected it). Owner only; non-owner/unknown → 404; already finished → 409; missing/mismatched chunks → 422.
+         * Complete a resumable upload (asynchronous)
+         * @description ACCEPTS the completion and returns 202 — it does not wait for the file to be assembled. The request validates cheaply (ownership, session state, every chunk present at its required size, and the caller's storage + rolling-daily quotas) and enqueues a finalize job; a background worker then assembles the chunks in order and runs them through the same AttachOriginal → Process pipeline as a direct upload (probe/scan/quarantine/transcode), or — for a replace-purpose session — through the source-replacement flow.
+         *
+         *     Poll `GET /api/v1/uploads/{upload_id}` until `state` is `completed` (then read `GET /api/v1/videos/{video_id}` for the outcome: "published", or "failed" if a configured probe rejected it) or `failed` (`failure_reason` carries a safe explanation).
+         *
+         *     It used to do the work inline and return the finalised video. That could not be made reliable: assembling, re-uploading, hashing and probing a real video against a remote object store takes minutes, the route carries the general 30s request deadline, and a CDN in front of the origin caps how long a response may take.
+         *
+         *     Idempotent: re-POSTing while the finalize is queued or processing answers 202 with the current state without queueing a second run, and a session that already finished answers 200 with its terminal state. Owner only; non-owner/unknown → 404; cancelled → 409; missing/mismatched chunks → 422.
          */
         post: operations["completeUploadSession"];
         delete?: never;
@@ -14466,6 +14474,15 @@ export interface operations {
             };
             /** @description No such session, or not owned by the caller. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The session is being finalised (state `queued` or `processing`) and can no longer be cancelled. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
