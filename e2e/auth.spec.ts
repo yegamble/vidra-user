@@ -28,7 +28,7 @@ test("signing in shows the account in the header", async ({ page }) => {
   );
 
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Email or username").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
 
@@ -48,13 +48,49 @@ test("shows an error on bad credentials", async ({ page }) => {
   );
 
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Email or username").fill("ada@example.test");
   await page.getByLabel("Password").fill("wrong");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByText("Invalid email or password.")).toBeVisible();
+  // Identifier-neutral: the attempt may have been made with a username.
+  await expect(page.getByText("Invalid email/username or password.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
 });
+
+// The one field feeds two request shapes. Email-shaped input keeps going out as
+// the legacy `email` field so sign-in survives this deploying ahead of the
+// backend; anything else is a username and goes out as `identifier`.
+for (const { name, input, expected } of [
+  {
+    name: "a username signs in via the identifier field",
+    input: "ada",
+    expected: { identifier: "ada", password: "supersecret", cookie_mode: true },
+  },
+  {
+    name: "an email address still signs in via the legacy email field",
+    input: "ada@example.test",
+    expected: { email: "ada@example.test", password: "supersecret", cookie_mode: true },
+  },
+]) {
+  test(name, async ({ page }) => {
+    let body: unknown;
+    await page.route(LOGIN, async (route) => {
+      body = route.request().postDataJSON();
+      await route.fulfill({ json: session });
+    });
+    await page.route(FEED, (route) =>
+      route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+    );
+
+    await page.goto("/login");
+    await page.getByLabel("Email or username").fill(input);
+    await page.getByLabel("Password").fill("supersecret");
+    await page.getByRole("button", { name: "Sign in" }).click();
+
+    await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
+    expect(body).toEqual(expected);
+  });
+}
 
 const RESET = /\/api\/v1\/auth\/password-reset$/;
 
@@ -276,7 +312,7 @@ test("a network failure on login shows a connection message, not a raw error", a
   await page.route(LOGIN, (route) => route.abort());
 
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Email or username").fill("ada@example.test");
   await page.getByLabel("Password").fill("supersecret");
   await page.getByRole("button", { name: "Sign in" }).click();
 
