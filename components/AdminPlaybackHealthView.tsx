@@ -23,6 +23,7 @@ import type {
   QoESourceSummary,
 } from "@/lib/api";
 import { formatCount, formatDateTime, relativeTime } from "@/lib/format";
+import { useVisiblePoll } from "@/lib/use-visible-poll";
 import {
   bucketReportsRenditions,
   DEFAULT_WINDOW_HOURS,
@@ -141,20 +142,11 @@ export function PlaybackHealthPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [limit, offset, reloadKey, windowHours]);
 
-  // Visible tabs only, plus a focus catch-up. A backgrounded admin tab polling
-  // an aggregate nobody is looking at is pure server load.
-  useEffect(() => {
-    if (status !== "ready") return;
-    const refreshIfVisible = () => {
-      if (document.visibilityState === "visible") setReloadKey((key) => key + 1);
-    };
-    const timer = setInterval(refreshIfVisible, POLL_MS);
-    window.addEventListener("focus", refreshIfVisible);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("focus", refreshIfVisible);
-    };
-  }, [status]);
+  useVisiblePoll({
+    enabled: status === "ready",
+    intervalMs: POLL_MS,
+    onPoll: () => setReloadKey((key) => key + 1),
+  });
 
   const refresh = useCallback(() => {
     setReloadKey((key) => key + 1);
