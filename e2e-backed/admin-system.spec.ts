@@ -15,7 +15,11 @@ test("the system-status page reflects the real running stack", async ({ page }) 
 
   // Open the system status page (client-side nav keeps the in-memory session).
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "System" }).click();
+  // Scope to the rail — the console home's section cards reuse the same labels.
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "System" })
+    .click();
 
   // The compose stack has a live postgres + redis, so the snapshot is healthy and
   // lists both real dependencies.

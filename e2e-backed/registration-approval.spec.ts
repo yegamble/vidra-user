@@ -65,7 +65,10 @@ test("a signup files a pending request; approving it creates the account", async
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Registration" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Registration" })
+    .click();
   await expect(page.getByText(email)).toBeVisible();
 
   // Approve → the row flips in place.
@@ -108,7 +111,10 @@ test("rejecting a request records the note and creates no account", async ({ pag
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Registration" }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Registration" })
+    .click();
   await expect(page.getByText(email)).toBeVisible();
 
   await page.getByLabel(`Internal note for ${username}`).fill(`spam signup ${id}`);

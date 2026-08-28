@@ -30,7 +30,10 @@ async function loginAsAdmin(page: Page) {
   // destination "Instance" (→ /admin/config) — the old "Config" tab is only in
   // the hidden AdminTabs at this viewport, so click the rail's "Instance" link.
   await page.getByRole("link", { name: "Admin", exact: true }).click();
-  await page.getByRole("link", { name: "Instance", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Instance", exact: true })
+    .click();
   // /admin/config is a layout route (config-parity W2 IA) — the index
   // redirects to its first page, General, whose identity section is titled
   // "Platform".

@@ -32,6 +32,12 @@ test("an admin promotes then deactivates a user, and it persists", async ({ page
   // Open the admin console (client-side nav keeps the in-memory session) and
   // search for the seeded account (scopes the list to one row).
   await page.getByRole("link", { name: "Admin", exact: true }).click();
+  // The sidebar Admin entry lands on the console home; Users is one rail click
+  // further (scoped — the home's section cards reuse the rail labels).
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Users" })
+    .click();
 
   // The DR11/DR12 users surface renders BOTH layouts in the DOM at once: mobile
   // per-user cards (`lg:hidden`) and the desktop table → detail
@@ -76,6 +82,10 @@ test("an admin promotes then deactivates a user, and it persists", async ({ page
   // fresh AdminUsersView mount refetches from the DB.
   await page.getByRole("banner").locator('a[href="/"]').click();
   await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Admin console" })
+    .getByRole("link", { name: "Users" })
+    .click();
   await searchUsers(page, target.username);
   await desktop.getByRole("button", { name: `Open ${target.username}` }).click();
   await expect(roleGroup().getByRole("button", { name: "Moderator" })).toHaveAttribute(

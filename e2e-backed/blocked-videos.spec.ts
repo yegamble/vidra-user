@@ -51,8 +51,8 @@ test("an admin unblocks a video from the block-list and it persists", async ({ p
   // It drops out of the list immediately…
   await expect(page.locator("article", { hasText: videoTitle })).toHaveCount(0);
 
-  // …and stays out after a fresh refetch (tab away to Reports + back to Blocked videos).
-  await page.getByRole("link", { name: "Reports" }).click();
+  // …and stays out after a fresh refetch (tab away to Queues + back to Blocked videos).
+  await page.getByRole("link", { name: "Queues" }).click();
   await page.getByRole("link", { name: "Blocked videos" }).click();
   await expect(page.locator("article", { hasText: videoTitle })).toHaveCount(0);
 
