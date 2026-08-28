@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import {
   ChevronDownIcon,
   HeartFilledIcon,
@@ -12,7 +13,6 @@ import {
   MoreVerticalIcon,
   PinIcon,
 } from "@/components/icons";
-import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ReportDialog, type ReportKind } from "@/components/ReportButton";
 import { TimestampedText } from "@/components/TimestampedText";
 import { Avatar } from "@/components/ui/Avatar";
@@ -769,29 +769,11 @@ function CommentItem({
             {isRemote && comment.author_domain ? (
               // Origin badge: the author lives on another instance (no local
               // profile to link), plus the shared protocol label.
-              <>
-                <span
-                  className="inline-flex max-w-full items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted"
-                  title={`Federated comment from ${comment.author_domain}`}
-                >
-                  <svg
-                    aria-hidden
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-3 w-3 shrink-0"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                  </svg>
-                  <span className="sr-only">From </span>
-                  <span className="truncate">{comment.author_domain}</span>
-                </span>
-                <ProtocolBadge protocol="activitypub" />
-              </>
+              <FederatedOriginBadge
+                domain={comment.author_domain}
+                title={`Federated comment from ${comment.author_domain}`}
+                withProtocol
+              />
             ) : null}
             {when ? <span className="text-fg-muted">{when}</span> : null}
             {comment.edited ? (

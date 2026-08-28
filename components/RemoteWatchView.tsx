@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import { ExternalLinkIcon, InfoIcon } from "@/components/icons";
-import { ProtocolBadge } from "@/components/ProtocolBadge";
 import { ReportButton } from "@/components/ReportButton";
 import { Button, EmptyState, ErrorState, Spinner, buttonClasses } from "@/components/ui";
 import { ApiError, api, errorMessage, remoteVideoThumbnailUrl } from "@/lib/api";
@@ -98,24 +98,12 @@ export function RemoteWatchView({ id }: { id: string }) {
           {video.title}
         </h1>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-fg-muted">
-          <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-fg-muted">
-            <svg
-              aria-hidden
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-3.5 w-3.5"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-            <span className="sr-only">From </span>
-            {video.domain}
-          </span>
-          <ProtocolBadge protocol="activitypub" />
+          <FederatedOriginBadge
+            domain={video.domain}
+            size="md"
+            truncate={false}
+            withProtocol
+          />
           {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
           {typeof video.duration_seconds === "number" && video.duration_seconds > 0 ? (
             <span className="rounded-md bg-surface-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums text-fg-muted">
