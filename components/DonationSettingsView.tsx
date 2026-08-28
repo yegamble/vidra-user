@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
@@ -13,6 +12,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { Channel, DonationAddress, DonationNetwork } from "@/lib/api";
 import { DONATION_NETWORKS, NETWORK_META, validateDonationAddress } from "@/lib/donation-address";
+import { SignInGate } from "@/components/SignInGate";
 
 const INPUT =
   "focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted disabled:opacity-60";
@@ -31,26 +31,14 @@ type Status = "loading" | "error" | "ready";
 export function DonationSettingsView() {
   const { status } = useSession();
 
-  if (status === "restoring") {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your account" />
-      </div>
-    );
-  }
   if (status !== "authed") {
     return (
-      <EmptyState
+      <SignInGate
         title="Sign in to manage donation addresses"
-        message={
-          <>
-            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
-              Sign in
-            </Link>{" "}
-            to add the crypto addresses shown on your profile and channels.
-          </>
-        }
-      />
+        restoringLabel="Loading your account"
+      >
+        to add the crypto addresses shown on your profile and channels.
+      </SignInGate>
     );
   }
 

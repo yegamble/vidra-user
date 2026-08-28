@@ -1,15 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { QrCode } from "@/components/QrCode";
 import { Alert } from "@/components/ui/Alert";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, authApi, errorMessage } from "@/lib/api";
 import type { MFAStatusResponse, TOTPEnrollmentResponse } from "@/lib/api";
+import { SignInGate } from "@/components/SignInGate";
 
 // SecuritySettingsView is the /settings/security surface: the TOTP two-factor
 // status card (enabled + recovery codes remaining), the enrollment flow
@@ -20,28 +19,18 @@ import type { MFAStatusResponse, TOTPEnrollmentResponse } from "@/lib/api";
 export function SecuritySettingsView() {
   const { status } = useSession();
 
-  if (status === "restoring") {
+  // `!== "authed"` rather than `=== "anon"`: this view used to rely on a
+  // preceding `restoring` branch to catch the boot-time refresh, so testing
+  // only for "anon" here would mount (and 401) the two-factor fetch mid-restore.
+  if (status !== "authed") {
     return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your account" />
-      </div>
-    );
-  }
-
-  if (status === "anon") {
-    return (
-      <EmptyState
+      <SignInGate
         title="Sign in to manage security settings"
-        message={
-          <>
-            Your session has ended.{" "}
-            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
-              Sign in
-            </Link>{" "}
-            to manage two-factor authentication.
-          </>
-        }
-      />
+        lead="Your session has ended."
+        restoringLabel="Loading your account"
+      >
+        to manage two-factor authentication.
+      </SignInGate>
     );
   }
 

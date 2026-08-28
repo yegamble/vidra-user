@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
@@ -13,6 +12,7 @@ import type { E2EEDevice } from "@/lib/api";
 import { getEngine } from "@/lib/e2ee/engine";
 import { formatSafetyNumber } from "@/lib/e2ee/envelope";
 import { relativeTime } from "@/lib/format";
+import { SignInGate } from "@/components/SignInGate";
 
 type Status = "loading" | "error" | "ready";
 
@@ -23,31 +23,15 @@ type Status = "loading" | "error" | "ready";
 export function DevicesView() {
   const { status, user } = useSession();
 
-  if (status === "restoring") {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your account" />
-      </div>
-    );
-  }
-
   if (status === "anon" || !user) {
     return (
-      <EmptyState
+      <SignInGate
         title="Sign in to manage your devices"
-        message={
-          <>
-            Your session has ended.{" "}
-            <Link
-              href="/login"
-              className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
-            >
-              Sign in
-            </Link>{" "}
-            to manage the devices that can read your encrypted messages.
-          </>
-        }
-      />
+        lead="Your session has ended."
+        restoringLabel="Loading your account"
+      >
+        to manage the devices that can read your encrypted messages.
+      </SignInGate>
     );
   }
 

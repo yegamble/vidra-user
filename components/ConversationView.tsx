@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
@@ -8,12 +7,12 @@ import { EncryptedThreadView } from "@/components/e2ee/EncryptedThreadView";
 import { Composer } from "@/components/messaging/Composer";
 import { MessageTimeline } from "@/components/messaging/MessageTimeline";
 import { ThreadHeader } from "@/components/messaging/ThreadHeader";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api } from "@/lib/api";
 import type { EncryptedMessage, Message } from "@/lib/api";
 import type { DisplayMessage } from "@/lib/messaging/grouping";
+import { SignInGate } from "@/components/SignInGate";
 
 const POLL_INTERVAL_MS = 10_000;
 const INITIAL_LIMIT = 100;
@@ -58,20 +57,9 @@ export function ConversationView({
   if (status !== "authed") {
     return (
       <div className="mx-auto w-full max-w-3xl px-4 py-8">
-        <EmptyState
-          title="Sign in to see this conversation"
-          message={
-            <>
-              <Link
-                href="/login"
-                className="focus-ring rounded font-semibold text-fg underline transition-colors hover:text-fg-muted"
-              >
-                Sign in
-              </Link>{" "}
-              to read and send direct messages.
-            </>
-          }
-        />
+        <SignInGate title="Sign in to see this conversation">
+          to read and send direct messages.
+        </SignInGate>
       </div>
     );
   }

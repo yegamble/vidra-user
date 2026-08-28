@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
@@ -13,6 +12,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Playlist, PlaylistVisibility } from "@/lib/api";
 import { useApiResource } from "@/lib/use-api-resource";
+import { SignInGate } from "@/components/SignInGate";
 
 // PlaylistsView lists the signed-in user's playlists and offers an inline create
 // form. The session lives in memory, so a hard reload lands here signed out.
@@ -21,21 +21,9 @@ export function PlaylistsView() {
 
   if (status !== "authed") {
     return (
-      <EmptyState
-        icon={<PlaylistIcon size={24} />}
-        title="Sign in to see your playlists"
-        message={
-          <>
-            <Link
-              href="/login"
-              className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
-            >
-              Sign in
-            </Link>{" "}
-            to create playlists and organise videos.
-          </>
-        }
-      />
+      <SignInGate icon={<PlaylistIcon size={24} />} title="Sign in to see your playlists">
+        to create playlists and organise videos.
+      </SignInGate>
     );
   }
 

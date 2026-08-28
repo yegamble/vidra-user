@@ -1,11 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { Alert } from "@/components/ui/Alert";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
@@ -14,6 +12,7 @@ import { api, errorMessage } from "@/lib/api";
 import type { PlayerSettings, UpdatePlayerSettingsRequest } from "@/lib/api";
 import { PLAYBACK_RATES, rateLabel } from "@/lib/player-rates";
 import { QUALITY_OPTIONS, hydratePlayerSettings } from "@/lib/player-settings";
+import { SignInGate } from "@/components/SignInGate";
 
 type Status = "loading" | "error" | "ready";
 
@@ -28,29 +27,11 @@ type Status = "loading" | "error" | "ready";
 export function PlayerSettingsView() {
   const { status } = useSession();
 
-  if (status === "restoring") {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your account" />
-      </div>
-    );
-  }
   if (status !== "authed") {
     return (
-      <EmptyState
-        title="Sign in to manage playback"
-        message={
-          <>
-            <Link
-              href="/login"
-              className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2"
-            >
-              Sign in
-            </Link>{" "}
-            to set your default playback preferences.
-          </>
-        }
-      />
+      <SignInGate title="Sign in to manage playback" restoringLabel="Loading your account">
+        to set your default playback preferences.
+      </SignInGate>
     );
   }
 

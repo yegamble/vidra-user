@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ServerIcon } from "@/components/icons";
@@ -10,6 +9,7 @@ import { api } from "@/lib/api";
 import type { MutedInstance } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
+import { SignInGate } from "@/components/SignInGate";
 
 // MutedInstancesView lists the federated instances the signed-in user has muted
 // (their videos/comments are hidden from the user's feeds and search) and lets
@@ -22,18 +22,9 @@ export function MutedInstancesView() {
 
   if (status === "anon" || !user) {
     return (
-      <EmptyState
-        title="Sign in to manage muted instances"
-        message={
-          <>
-            Your session has ended.{" "}
-            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
-              Sign in
-            </Link>{" "}
-            to see the instances you have muted.
-          </>
-        }
-      />
+      <SignInGate title="Sign in to manage muted instances" lead="Your session has ended.">
+        to see the instances you have muted.
+      </SignInGate>
     );
   }
 

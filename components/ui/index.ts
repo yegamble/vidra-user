@@ -55,6 +55,7 @@ export { Select, type SelectProps } from "./Select";
 export { Skeleton, type SkeletonProps } from "./Skeleton";
 export { Spinner } from "./Spinner";
 export { Tabs, type TabItem, type TabsProps } from "./Tabs";
+export { TextLink, type TextLinkProps } from "./TextLink";
 export { Textarea, type TextareaProps } from "./Textarea";
 export {
   ToastProvider,

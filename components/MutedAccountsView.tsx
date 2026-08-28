@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { EyeOffIcon } from "@/components/icons";
@@ -10,6 +9,7 @@ import { api } from "@/lib/api";
 import type { MutedAccount } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
+import { SignInGate } from "@/components/SignInGate";
 
 // MutedAccountsView lists the accounts the signed-in user has muted and lets them
 // unmute. The session lives in memory, so a hard reload lands here signed out — we
@@ -19,18 +19,9 @@ export function MutedAccountsView() {
 
   if (status === "anon" || !user) {
     return (
-      <EmptyState
-        title="Sign in to manage muted accounts"
-        message={
-          <>
-            Your session has ended.{" "}
-            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
-              Sign in
-            </Link>{" "}
-            to see the accounts you have muted.
-          </>
-        }
-      />
+      <SignInGate title="Sign in to manage muted accounts" lead="Your session has ended.">
+        to see the accounts you have muted.
+      </SignInGate>
     );
   }
 

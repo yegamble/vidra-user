@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
@@ -11,6 +10,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
 import { useApiResource } from "@/lib/use-api-resource";
+import { SignInGate } from "@/components/SignInGate";
 
 // Human copy for the known notification types (the backend's switchboard keys).
 // A type the backend returns that is not listed here still renders (by its raw
@@ -83,26 +83,11 @@ function orderedTypes(prefs: Record<string, boolean>): string[] {
 export function NotificationPrefsView() {
   const { status } = useSession();
 
-  if (status === "restoring") {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your account" />
-      </div>
-    );
-  }
   if (status !== "authed") {
     return (
-      <EmptyState
-        title="Sign in to manage notifications"
-        message={
-          <>
-            <Link href="/login" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
-              Sign in
-            </Link>{" "}
-            to choose which notifications you receive.
-          </>
-        }
-      />
+      <SignInGate title="Sign in to manage notifications" restoringLabel="Loading your account">
+        to choose which notifications you receive.
+      </SignInGate>
     );
   }
 

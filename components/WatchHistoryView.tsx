@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
@@ -15,6 +14,7 @@ import type { HistoryItem } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
 import { resumeFraction } from "@/lib/resume-progress";
 import { useApiResource } from "@/lib/use-api-resource";
+import { SignInGate } from "@/components/SignInGate";
 
 // WatchHistoryView shows the signed-in user's watch history (most-recently
 // watched first) with a per-item remove and a clear-all control. The session
@@ -24,21 +24,9 @@ export function WatchHistoryView() {
 
   if (status !== "authed") {
     return (
-      <EmptyState
-        icon={<ClockIcon size={24} />}
-        title="Sign in to see your history"
-        message={
-          <>
-            <Link
-              href="/login"
-              className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
-            >
-              Sign in
-            </Link>{" "}
-            to keep track of what you have watched.
-          </>
-        }
-      />
+      <SignInGate icon={<ClockIcon size={24} />} title="Sign in to see your history">
+        to keep track of what you have watched.
+      </SignInGate>
     );
   }
 

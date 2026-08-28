@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 
@@ -8,7 +7,7 @@ import { PageShell } from "@/components/PageShell";
 import { useSession } from "@/components/auth/AuthProvider";
 import { StudioProvider } from "@/components/studio/StudioContext";
 import { StudioNav } from "@/components/studio/StudioNav";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { SignInGate } from "@/components/SignInGate";
 
 // NavGate hides the studio nav in the single-video management mode
 // (`/studio?video=<id>`, the moderator/owner deep link) so that surface reads as
@@ -34,17 +33,9 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
       <div className="w-full max-w-5xl">
         <h1 className="mb-6 text-title sm:text-large-title">Studio</h1>
         {status !== "authed" ? (
-          <EmptyState
-            title="Sign in to use the studio"
-            message={
-              <>
-                <Link href="/login" className="underline hover:text-fg">
-                  Sign in
-                </Link>{" "}
-                to create a channel and publish videos.
-              </>
-            }
-          />
+          <SignInGate title="Sign in to use the studio">
+            to create a channel and publish videos.
+          </SignInGate>
         ) : (
           <StudioProvider>
             <Suspense fallback={null}>

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { UsersIcon } from "@/components/icons";
@@ -13,6 +12,7 @@ import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { useApiResource } from "@/lib/use-api-resource";
+import { SignInGate } from "@/components/SignInGate";
 
 // SubscriptionsView shows the signed-in user's feed of videos from the channels
 // they follow — local channels and accepted remote-channel follows (remote:true
@@ -24,21 +24,9 @@ export function SubscriptionsView() {
 
   if (status !== "authed") {
     return (
-      <EmptyState
-        icon={<UsersIcon size={24} />}
-        title="Sign in to see your subscriptions"
-        message={
-          <>
-            <Link
-              href="/login"
-              className="focus-ring rounded font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
-            >
-              Sign in
-            </Link>{" "}
-            to follow channels and watch their latest videos here.
-          </>
-        }
-      />
+      <SignInGate icon={<UsersIcon size={24} />} title="Sign in to see your subscriptions">
+        to follow channels and watch their latest videos here.
+      </SignInGate>
     );
   }
 
