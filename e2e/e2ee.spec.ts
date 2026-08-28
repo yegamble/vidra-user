@@ -449,7 +449,14 @@ test("sending an encrypted message with a disappearing timer fans out with expir
 
   expect(sentBody).toMatchObject({ sender_device_id: "dev-1", expires_in_seconds: 86400 });
   expect(sentBody.envelopes.length).toBeGreaterThan(0);
-  // Optimistically rendered (my own message is not stored for my current device).
+  await expect(page.getByText("meet at noon")).toBeVisible();
+
+  // …and it SURVIVES a remount. The fan-out never addresses an envelope to the
+  // sending device, and the backend returns only self-addressed envelopes — so
+  // the GET above stays empty (as this route mock faithfully returns) and the
+  // message can only come back from this device's own sent-message store.
+  await page.reload();
+  await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
   await expect(page.getByText("meet at noon")).toBeVisible();
 });
 

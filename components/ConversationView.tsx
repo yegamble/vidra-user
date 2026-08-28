@@ -42,6 +42,26 @@ function mergeMessages(prev: DisplayMessage[], incoming: DisplayMessage[]): Disp
   });
 }
 
+// mergeEnvelopes upserts a poll page into the loaded envelope list, preserving the
+// API's newest-first order. Like mergeMessages it never drops what is already
+// loaded, so a short poll page cannot truncate history. It returns the SAME array
+// when the page brings nothing new, which lets the encrypted view skip a decrypt.
+function mergeEnvelopes(
+  prev: EncryptedMessage[] | null,
+  incoming: EncryptedMessage[],
+): EncryptedMessage[] {
+  if (prev === null) return incoming;
+  const known = new Set(prev.map((e) => e.id));
+  if (incoming.every((e) => known.has(e.id))) return prev;
+  const map = new Map<string, EncryptedMessage>(prev.map((e) => [e.id, e]));
+  for (const e of incoming) map.set(e.id, e);
+  return Array.from(map.values()).sort((a, b) => {
+    const t = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    if (t !== 0) return t;
+    return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+  });
+}
+
 // ConversationView renders a single 1:1 thread. A non-participant or unknown
 // conversation is a 404 from the backend, surfaced as a "not found" state.
 export function ConversationView({
@@ -138,6 +158,10 @@ function Thread({
           void api.markConversationRead(conversationId).catch(() => {});
         } else {
           setEnvelopes(res.envelopes);
+          // An encrypted thread carries an unread badge like any other — the
+          // server counts envelopes, not plaintext — so its read watermark has to
+          // advance here too, or the badge sticks until a plaintext DM arrives.
+          void api.markConversationRead(conversationId).catch(() => {});
         }
         setStatus("ready");
       })
@@ -152,17 +176,30 @@ function Thread({
   // Poll page 1 every 10s while visible; merge by id (server wins), advance the
   // read watermark only when at the bottom and focused (never in the background).
   // Reads only refs + response data + stable setters, so it is a stable callback.
+  // Encrypted threads poll on the SAME cadence — their envelopes are just as live
+  // as plaintext messages, and without this an inbound encrypted message stayed
+  // invisible until a manual reload.
   const poll = useCallback(async () => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     if (inFlightSendsRef.current > 0) return;
     try {
       const res = await api.getConversationMessages(conversationId, { limit: POLL_LIMIT });
       if (!mountedRef.current) return;
-      if (!("messages" in res)) return;
-      setMessages((prev) => mergeMessages(prev, [...res.messages].reverse()));
-      setPeerReadId(res.peer_last_read_message_id);
       pollFailuresRef.current = 0;
       setOffline(false);
+      if (!("messages" in res)) {
+        // Encrypted: hand the merged envelopes down. mergeEnvelopes keeps the same
+        // array when nothing is new, so the decrypt path only re-runs on real news.
+        // There is no at-bottom signal for this branch (the encrypted view owns its
+        // own scroll), so focus alone gates the read watermark.
+        setEnvelopes((prev) => mergeEnvelopes(prev, res.envelopes));
+        if (document.hasFocus()) {
+          void api.markConversationRead(conversationId).catch(() => {});
+        }
+        return;
+      }
+      setMessages((prev) => mergeMessages(prev, [...res.messages].reverse()));
+      setPeerReadId(res.peer_last_read_message_id);
       if (atBottomRef.current && document.hasFocus()) {
         void api.markConversationRead(conversationId).catch(() => {});
       }
@@ -174,7 +211,7 @@ function Thread({
   }, [conversationId]);
 
   useEffect(() => {
-    if (status !== "ready" || envelopes !== null) return;
+    if (status !== "ready") return;
     const interval = setInterval(() => void poll(), POLL_INTERVAL_MS);
     const onFocus = () => void poll();
     window.addEventListener("focus", onFocus);
@@ -182,7 +219,7 @@ function Thread({
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, [status, envelopes, poll]);
+  }, [status, poll]);
 
   const setAtBottom = useCallback((atBottom: boolean) => {
     atBottomRef.current = atBottom;
@@ -317,7 +354,7 @@ function Thread({
           <div className="mx-auto w-full max-w-3xl">
             <EncryptedThreadView
               conversationId={conversationId}
-              initialEnvelopes={envelopes}
+              envelopes={envelopes}
               recipientId={recipientHint}
               myUserId={meId ?? ""}
             />
