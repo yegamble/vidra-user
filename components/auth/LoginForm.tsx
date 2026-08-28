@@ -15,9 +15,10 @@ import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
+import { loginCredentials } from "@/lib/login-identifier";
 
 // LoginForm drives the whole sign-in surface:
-//  - email/password credentials (cookie-mode session);
+//  - email-or-username + password credentials (cookie-mode session);
 //  - the two-factor challenge swap-in when login answers {mfa_required,
 //    mfa_token} — a TOTP or recovery code finishes the login;
 //  - one "Continue with <Provider>" button per configured OIDC provider
@@ -44,7 +45,8 @@ export function LoginForm({
 }) {
   const router = useRouter();
   const { status, login, completeMfaChallenge } = useSession();
-  const [email, setEmail] = useState("");
+  // One field for both sign-in identifiers: an email address or a username.
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(
     oauthError ? oauthErrorMessage(oauthError) : null,
@@ -103,7 +105,10 @@ export function LoginForm({
     setLandingDismissed(true); // a manual attempt supersedes the OAuth landing
     setSubmitting(true);
     try {
-      const outcome = await login({ email, password });
+      // Email-shaped input goes out as the legacy `email` field, anything else
+      // as `identifier` — see lib/login-identifier: it keeps email sign-in
+      // working if this deploys ahead of the backend that added `identifier`.
+      const outcome = await login(loginCredentials(identifier, password));
       if (outcome.status === "mfa_required") {
         // Valid credentials, but the account needs a second factor: no
         // session exists yet — swap to the code entry.
@@ -115,10 +120,12 @@ export function LoginForm({
     } catch (err) {
       setError(
         errorMessage(err, "Something went wrong. Please try again.", {
-          "401": "Invalid email or password.",
-          // Server-side validation reject (e.g. malformed email) — the raw
-          // backend string is "validation failed", which tells a person nothing.
-          "422": "Enter a valid email address and password.",
+          // Identifier-neutral: the attempt may have used a username.
+          "401": "Invalid email/username or password.",
+          // Server-side validation reject (too short/long identifier, missing
+          // password) — the raw backend string is "validation failed", which
+          // tells a person nothing.
+          "422": "Enter your email or username, and your password.",
           // W7 verification hold: valid credentials, account not yet verified.
           email_verification_required:
             "Verify your email address first — check your inbox for the verification link, then sign in again.",
@@ -277,15 +284,19 @@ export function LoginForm({
 
       {errorBanner}
 
+      {/* type="text", not "email": a username is a valid value here, and the
+          browser's built-in email validation would reject one. autoComplete
+          "username" is the correct token for a field that accepts either — it
+          is what password managers expect next to current-password. */}
       <Input
-        id="login-email"
-        name="email"
-        type="email"
-        label="Email"
-        autoComplete="email"
+        id="login-identifier"
+        name="identifier"
+        type="text"
+        label="Email or username"
+        autoComplete="username"
         required
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        value={identifier}
+        onChange={(e) => setIdentifier(e.target.value)}
         className="min-h-12 text-base"
       />
 

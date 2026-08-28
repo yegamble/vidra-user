@@ -335,7 +335,7 @@ export interface paths {
         put?: never;
         /**
          * Log in
-         * @description Verifies credentials and returns an access token. Unknown account and wrong password are reported identically (401) to prevent account enumeration. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
+         * @description Verifies credentials and returns an access token. The account is identified by EXACTLY ONE of `identifier` (an email address or a username) or the legacy `email` field. When an `identifier` matches both one account's email and another account's username, the EMAIL always wins — the owner of an address is the only account that string can reach, so a lookalike username can never shadow someone else's sign-in. Unknown account and wrong password are reported identically (401) to prevent account enumeration. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
          */
         post: operations["login"];
         delete?: never;
@@ -8502,7 +8502,10 @@ export interface components {
             expires_at: string;
         };
         RegisterRequest: {
-            /** @example ada */
+            /**
+             * @description Must not contain `@` or whitespace. Sign-in accepts an email OR a username and resolves the email first, so a username holding `@` could only ever be an unreachable sign-in identifier or a lookalike of another account's address. Usernames created before this rule are unaffected and still sign in normally.
+             * @example ada
+             */
             username: string;
             /** @example ada@example.test */
             email: string;
@@ -8524,7 +8527,10 @@ export interface components {
              * @description The one-time setup token from the server log. Compared in constant time against its stored hash; unrecoverable once the log line is lost (restart the server to mint a fresh one).
              */
             token: string;
-            /** @example ada */
+            /**
+             * @description Must not contain `@` or whitespace — the same rule registration applies, for the same reason (see RegisterRequest.username).
+             * @example ada
+             */
             username: string;
             /** @example ada@example.test */
             email: string;
@@ -8588,9 +8594,18 @@ export interface components {
         FederationFollowerRequestListResponse: components["schemas"]["PageMeta"] & {
             requests: components["schemas"]["FederationFollowerRequest"][];
         };
+        /** @description Send EXACTLY ONE identifier: `identifier` (an email address or a username) or the legacy `email`. Supplying both is a 422 field error on `identifier` — the request would otherwise be ambiguous. Supplying neither is a 422 on `email`. */
         LoginRequest: {
-            /** @example ada@example.test */
-            email: string;
+            /**
+             * @description Legacy email-only sign-in field, still fully supported. Must be a syntactically valid address. Prefer `identifier`.
+             * @example ada@example.test
+             */
+            email?: string;
+            /**
+             * @description An email address OR a username. No format is imposed beyond length, because usernames created before the '@'/whitespace ban may contain anything. When the value matches an account's email address it ALWAYS resolves to that account, never to a different account that holds the same string as its username.
+             * @example ada
+             */
+            identifier?: string;
             /** Format: password */
             password: string;
             /**
@@ -9341,7 +9356,7 @@ export interface operations {
                     "application/json": components["schemas"]["AuthResponse"] | components["schemas"]["MFARequiredResponse"];
                 };
             };
-            /** @description Invalid email or password. */
+            /** @description Invalid credentials — the identifier is unknown or the password is wrong. The two are deliberately indistinguishable. */
             401: {
                 headers: {
                     [name: string]: unknown;
