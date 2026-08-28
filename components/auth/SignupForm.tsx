@@ -8,6 +8,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
 import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
 import { ClockIcon, InfoIcon, MailIcon } from "@/components/icons";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
@@ -257,12 +258,9 @@ export function SignupForm({
       className="flex flex-col gap-4"
     >
       {displayFormError ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {displayFormError}
-        </p>
+        </Alert>
       ) : null}
 
       <Input

@@ -11,6 +11,7 @@ import { ConnectedLogins } from "@/components/auth/ConnectedLogins";
 import { ChevronRightIcon } from "@/components/icons";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { SETTINGS_GROUPS, type SettingsSection } from "@/components/settings/sections";
+import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { IconTile } from "@/components/ui/IconTile";
@@ -273,20 +274,14 @@ function EmailVerificationSection({ email }: { email: string }) {
         </p>
       </div>
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {error}
-        </p>
+        </Alert>
       ) : null}
       {state === "sent" ? (
-        <p
-          role="status"
-          className="rounded-xl bg-success/15 px-3.5 py-2.5 text-sm text-success"
-        >
+        <Alert variant="success">
           Verification email sent. Check your inbox.
-        </p>
+        </Alert>
       ) : (
         <button
           type="button"
@@ -342,12 +337,9 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
         className="flex flex-col gap-3"
       >
         {error ? (
-          <p
-            role="alert"
-            className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-          >
+          <Alert>
             {error}
-          </p>
+          </Alert>
         ) : null}
         <div className="flex flex-col gap-1">
           <label htmlFor="deactivate-password" className="text-sm font-medium text-fg">
@@ -445,12 +437,9 @@ function DeleteAccountSection({
           className="flex flex-col gap-3"
         >
           {error ? (
-            <p
-              role="alert"
-              className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-            >
+            <Alert>
               {error}
-            </p>
+            </Alert>
           ) : null}
           <div className="flex flex-col gap-1">
             <label htmlFor="delete-password" className="text-sm font-medium text-fg">
@@ -584,20 +573,14 @@ function ProfileForm({
       className="flex max-w-xl flex-col gap-4"
     >
       {formError ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {formError}
-        </p>
+        </Alert>
       ) : null}
       {state === "saved" ? (
-        <p
-          role="status"
-          className="rounded-xl bg-success/15 px-3.5 py-2.5 text-sm text-success"
-        >
+        <Alert variant="success">
           Profile saved.
-        </p>
+        </Alert>
       ) : null}
 
       <div className="flex flex-col gap-1">

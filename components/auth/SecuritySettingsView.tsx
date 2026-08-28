@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { QrCode } from "@/components/QrCode";
+import { Alert } from "@/components/ui/Alert";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, authApi, errorMessage } from "@/lib/api";
@@ -144,12 +145,9 @@ function TwoFactorSection() {
   return (
     <div className="flex max-w-xl flex-col gap-4">
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {error}
-        </p>
+        </Alert>
       ) : null}
 
       {loadError ? (

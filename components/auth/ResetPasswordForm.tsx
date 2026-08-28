@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { authApi, errorMessage } from "@/lib/api";
@@ -35,13 +36,10 @@ export function ResetPasswordForm() {
   if (sent) {
     return (
       <div className="flex flex-col gap-4">
-        <p
-          role="status"
-          className="rounded-xl bg-success/15 px-3.5 py-2.5 text-sm text-success"
-        >
+        <Alert variant="success">
           If an account exists for that email, we&apos;ve sent a link to reset your
           password. Check your inbox.
-        </p>
+        </Alert>
         <p className="text-center text-subhead text-fg-muted">
           <Link
             href="/login"
@@ -64,12 +62,9 @@ export function ResetPasswordForm() {
       className="flex flex-col gap-4"
     >
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {error}
-        </p>
+        </Alert>
       ) : null}
 
       <p className="text-sm text-fg-muted">

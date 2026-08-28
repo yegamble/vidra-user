@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { providerDisplayName } from "@/components/auth/OAuthButtons";
+import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, authApi, errorMessage } from "@/lib/api";
 import type { OAuthIdentity } from "@/lib/api";
@@ -72,12 +73,9 @@ export function ConnectedLogins() {
       </div>
 
       {actionError ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {actionError}
-        </p>
+        </Alert>
       ) : null}
 
       {loadError ? (

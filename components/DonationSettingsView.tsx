@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { DonationBadge } from "@/components/DonationBadge";
 import { HeartIcon, PlusIcon } from "@/components/icons";
+import { Alert } from "@/components/ui/Alert";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -239,12 +240,9 @@ function AddAddressForm({
       <h2 className="text-base font-semibold tracking-tight text-fg">Add an address</h2>
 
       {formError ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {formError}
-        </p>
+        </Alert>
       ) : null}
 
       <div className="flex flex-col gap-1">

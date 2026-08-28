@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { BlueskyIcon } from "@/components/icons";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
@@ -75,12 +76,9 @@ export function BlueskyLoginButton({
   return (
     <div className="flex flex-col gap-3">
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {error}
-        </p>
+        </Alert>
       ) : null}
 
       <Input

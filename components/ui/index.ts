@@ -1,5 +1,6 @@
 // Barrel for the component-primitive layer. New surfaces should import from
 // here (`@/components/ui`); the individual files remain importable too.
+export { Alert, type AlertProps, type AlertVariant } from "./Alert";
 export { Avatar } from "./Avatar";
 export { Badge, type BadgeProps, type BadgeVariant, type ProtocolColor } from "./Badge";
 export {

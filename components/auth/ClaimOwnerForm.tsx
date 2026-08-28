@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { AuthWordmark } from "@/components/auth/AuthPage";
 import { useSession } from "@/components/auth/AuthProvider";
 import { CheckIcon, InfoIcon } from "@/components/icons";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { LinkButton } from "@/components/ui/LinkButton";
@@ -148,12 +149,9 @@ export function ClaimOwnerForm({
       ) : null}
 
       {formError ? (
-        <div
-          role="alert"
-          className="flex flex-col gap-2 rounded-xl border border-danger-border bg-danger-surface px-3.5 py-3 text-sm text-danger"
-        >
+        <Alert as="div" className="flex flex-col gap-2">
           {formError}
-        </div>
+        </Alert>
       ) : null}
 
       <Input
