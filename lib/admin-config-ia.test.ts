@@ -70,6 +70,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["instance_is_sensitive", "general", "moderation"],
   ["sensitive_content_policy", "general", "moderation"],
   ["instance_categories", "general", "identity"],
+  ["instance_custom_categories", "general", "identity"],
   ["moderator_languages", "general", "identity"],
   ["default_user_quota_bytes", "vod", "uploads"],
   ["upload_max_size_bytes", "vod", "uploads"],
@@ -81,6 +82,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["broadcast_dismissable", "general", "broadcast"],
   ["default_feed_sort", "general", "browse"],
   ["default_feed_scope", "general", "browse"],
+  ["browse_scroll_mode", "general", "browse"],
   ["default_landing_page", "general", "browse"],
   ["miniature_prefer_author_display_name", "general", "browse"],
   ["default_video_privacy", "vod", "publish_defaults"],
@@ -145,6 +147,9 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["featured_description", "homepage", "featured"],
   ["featured_cta_label", "homepage", "featured"],
   ["featured_label", "homepage", "featured"],
+  ["delivery_presign_enabled", "advanced", "delivery"],
+  ["delivery_cdn_enabled", "advanced", "delivery"],
+  ["qoe_collection_enabled", "advanced", "delivery"],
 ];
 
 describe("config pages", () => {
@@ -469,7 +474,7 @@ describe("W5 browse, landing & player defaults placement", () => {
     expect(META.default_player_autoplay.control).toBe("toggle");
   });
 
-  it("builds the general page with the browse section holding the four keys in META order", () => {
+  it("builds the general page with the browse section holding the five keys in META order", () => {
     const browse = buildPageModel("general", []).find(
       (s) => s.section.id === "browse",
     );
@@ -478,8 +483,23 @@ describe("W5 browse, landing & player defaults placement", () => {
       "default_landing_page",
       "default_feed_sort",
       "default_feed_scope",
+      "browse_scroll_mode",
       "miniature_prefer_author_display_name",
     ]);
+  });
+
+  // browse_scroll_mode is KindEnum server-side (button|auto). Before it had a
+  // META entry it fell through controlFor() to a plain text row — an enum
+  // edited as free text, where every typo is a 422 the operator only sees on
+  // save. The segmented picker is the fix; the options must stay in lockstep
+  // with vidra-core BrowseScrollModeOptions.
+  it("renders browse_scroll_mode as a segmented picker over the backend enum", () => {
+    expect(META.browse_scroll_mode.control).toBe("enum-segmented");
+    expect(META.browse_scroll_mode.options?.map((o) => o.value)).toEqual([
+      "button",
+      "auto",
+    ]);
+    expect(META.browse_scroll_mode.help).toBeTruthy();
   });
 });
 
@@ -657,11 +677,115 @@ describe("server registry mirror (config-parity closure slice)", () => {
   });
 });
 
-describe("transcoding_resolutions list control (config-parity W1/W10)", () => {
-  it("is the only list-kind META key and renders via the list control", () => {
+describe("list-kind META keys (config-parity W1/W10)", () => {
+  it("renders the two server list kinds through the list control", () => {
+    // The ladder carries a suggestion set (the canonical rung heights); the
+    // custom taxonomy deliberately carries none — its whole point is ids this
+    // client cannot know, so the server stays the only validator.
     expect(META.transcoding_resolutions.control).toBe("list");
     expect(META.transcoding_resolutions.options?.map((o) => o.value)).toContain(
       "1080",
     );
+    expect(META.instance_custom_categories.control).toBe("list");
+    expect(META.instance_custom_categories.options).toBeUndefined();
+    expect(
+      Object.entries(META)
+        .filter(([, meta]) => meta.control === "list")
+        .map(([key]) => key)
+        .sort(),
+    ).toEqual(["instance_custom_categories", "transcoding_resolutions"]);
+  });
+});
+
+// The Advanced page's delivery slice. Before these three had META entries they
+// rendered as raw snake_case rows under an auto-titled, description-less
+// header: an unlabeled toggle forest on the one page an operator reaches while
+// something is already wrong. Every row here must carry a label AND help.
+describe("ADVANCED / Delivery (phase-2 item 6, phase-4 items 2 & 4)", () => {
+  const DELIVERY_KEYS = [
+    "delivery_presign_enabled",
+    "delivery_cdn_enabled",
+    "qoe_collection_enabled",
+  ];
+
+  it("places all three under the curated Delivery section, as toggles", () => {
+    for (const key of DELIVERY_KEYS) {
+      expect(placementFor(key), key).toEqual({
+        page: "advanced",
+        section: "delivery",
+      });
+      expect(META[key].control, key).toBe("toggle");
+    }
+    const delivery = PAGE_SECTIONS.advanced.find((s) => s.id === "delivery");
+    expect(delivery?.title).toBe("Delivery");
+    expect(delivery?.description).toContain("media bytes reach viewers");
+  });
+
+  it("builds the section with a real title instead of the humanized key", () => {
+    const rows = DELIVERY_KEYS.map((key) =>
+      setting(key, { type: "bool", page: "advanced", section: "delivery" }),
+    );
+    const section = buildPageModel("advanced", rows).find(
+      (s) => s.section.id === "delivery",
+    );
+    expect(section?.section.title).toBe("Delivery");
+    expect(section?.section.description).not.toBe("");
+    expect(section?.keys).toEqual(DELIVERY_KEYS);
+  });
+
+  // Operator-honest help: each toggle names the boot-side condition that makes
+  // it do anything, because "on" plus "inert" is the state these rows exist to
+  // stop an operator from misreading at 3am.
+  it("names each toggle's real precondition in its help text", () => {
+    expect(META.delivery_presign_enabled.help).toContain("S3 storage backend");
+    expect(META.delivery_cdn_enabled.help).toContain("DELIVERY_CDN_BASE_URL");
+    expect(META.qoe_collection_enabled.help).toContain("Playback health");
+  });
+
+  // No bootDep yet: /instance reports neither the storage backend nor a CDN
+  // base URL, so there is nothing honest to hang isSatisfied() on. When core
+  // adds a CDN row to the infrastructure feature list, wire it here — this
+  // assertion is the reminder that today's answer is "said in words".
+  it("declares no boot dependency it cannot actually check", () => {
+    for (const key of DELIVERY_KEYS) {
+      expect(META[key].bootDep, key).toBeUndefined();
+      expect(bootDepNote(META[key], { features: {} }), key).toBeNull();
+    }
+  });
+});
+
+// Guard against a future orphan key: a server key with no META entry renders
+// with its raw snake_case name for a label and no help at all. The 1:1 test
+// above is the structural guard; this one is the human one — the exception
+// list is empty, so a key that ships unlabeled has to be added here on
+// purpose rather than slipping in unnoticed.
+describe("unlabeled server keys", () => {
+  const KNOWN_UNLABELED: string[] = [];
+
+  it("keeps the deliberately-unlabeled list empty", () => {
+    expect(KNOWN_UNLABELED).toEqual([]);
+    for (const [key] of SERVER_REGISTRY) {
+      if (KNOWN_UNLABELED.includes(key)) continue;
+      const label = META[key]?.label;
+      expect(label, `${key} label`).toBeTruthy();
+      // A label that is just the key humanized is the anti-pattern wearing a
+      // META entry: it has to read as a sentence fragment, not a slug.
+      expect(label, `${key} label is not the raw key`).not.toBe(key);
+    }
+  });
+
+  // The five keys this slice curated. Each one gates production behaviour an
+  // operator cannot infer from the label alone, so help is mandatory for them.
+  it("gives every key added by the delivery/browse slice help text", () => {
+    for (const key of [
+      "browse_scroll_mode",
+      "instance_custom_categories",
+      "delivery_presign_enabled",
+      "delivery_cdn_enabled",
+      "qoe_collection_enabled",
+    ]) {
+      expect(META[key], key).toBeDefined();
+      expect(META[key].help, `${key} help`).toBeTruthy();
+    }
   });
 });
