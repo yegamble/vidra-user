@@ -190,10 +190,10 @@ function Thread({
       if (!("messages" in res)) {
         // Encrypted: hand the merged envelopes down. mergeEnvelopes keeps the same
         // array when nothing is new, so the decrypt path only re-runs on real news.
-        // There is no at-bottom signal for this branch (the encrypted view owns its
-        // own scroll), so focus alone gates the read watermark.
+        // The encrypted view reports its own at-bottom state (onAtBottomChange),
+        // so the watermark advances under exactly the plaintext rule below.
         setEnvelopes((prev) => mergeEnvelopes(prev, res.envelopes));
-        if (document.hasFocus()) {
+        if (atBottomRef.current && document.hasFocus()) {
           void api.markConversationRead(conversationId).catch(() => {});
         }
         return;
@@ -357,6 +357,7 @@ function Thread({
               envelopes={envelopes}
               recipientId={recipientHint}
               myUserId={meId ?? ""}
+              onAtBottomChange={setAtBottom}
             />
           </div>
         </div>

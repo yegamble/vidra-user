@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { DeviceSetup } from "@/components/e2ee/DeviceSetup";
 import { LockIcon } from "@/components/icons";
@@ -62,11 +62,14 @@ export function EncryptedThreadView({
   envelopes,
   recipientId,
   myUserId,
+  onAtBottomChange,
 }: {
   conversationId: string;
   envelopes: EncryptedMessage[];
   recipientId?: string;
   myUserId: string;
+  /** Reports whether the reader is at the newest message (read-watermark gate). */
+  onAtBottomChange?: (atBottom: boolean) => void;
 }) {
   const [device, setDevice] = useState<DeviceState>("loading");
   const [messages, setMessages] = useState<ShownMessage[]>([]);
@@ -178,10 +181,24 @@ export function EncryptedThreadView({
   }, []);
 
   const onSent = useCallback((id: string, text: string, expiresAt?: string) => {
-    setMessages((prev) => [
-      ...prev,
-      { key: id, mine: true, text, created_at: new Date().toISOString(), expires_at: expiresAt },
-    ]);
+    setMessages((prev) =>
+      // The composer persists the message BEFORE it renders it, so a decryptAll
+      // racing the send (a poll landing in that window) can already have picked it
+      // up from the outbox. Appending unconditionally would duplicate the React
+      // key until the next decrypt — upsert instead.
+      prev.some((m) => m.key === id)
+        ? prev
+        : [
+            ...prev,
+            {
+              key: id,
+              mine: true,
+              text,
+              created_at: new Date().toISOString(),
+              expires_at: expiresAt,
+            },
+          ],
+    );
   }, []);
 
   return (
@@ -196,7 +213,7 @@ export function EncryptedThreadView({
         <DeviceSetup onReady={onSetupReady} />
       ) : (
         <>
-          <MessageList messages={messages} />
+          <MessageList messages={messages} onAtBottomChange={onAtBottomChange} />
           <Composer
             conversationId={conversationId}
             recipientId={effectiveRecipientId}
@@ -300,11 +317,68 @@ function FingerprintRow({ label, fp }: { label: string; fp: DeviceFingerprint })
   );
 }
 
-function MessageList({ messages }: { messages: ShownMessage[] }) {
+// Within this many px of the bottom → keep sticking to it (matches the plaintext
+// timeline's STICK_THRESHOLD).
+const STICK_THRESHOLD = 120;
+
+// The encrypted view does not own its scroll container — ConversationView wraps
+// the whole thread (lock header, list, composer) in one scroller — so walk up to
+// find it rather than introducing a second, competing scroll area.
+function scrollParentOf(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") return node;
+  }
+  return null;
+}
+
+function MessageList({
+  messages,
+  onAtBottomChange,
+}: {
+  messages: ShownMessage[];
+  onAtBottomChange?: (atBottom: boolean) => void;
+}) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const stickRef = useRef(true);
+  const initializedRef = useRef(false);
+  const prevLenRef = useRef(0);
+  const hasMessages = messages.length > 0;
+
+  // Track whether the reader is near the bottom. Inbound messages now arrive on a
+  // 10s poll, so auto-scrolling unconditionally would yank anyone who has scrolled
+  // up to read history — the same rule MessageTimeline applies to plaintext.
+  // Re-runs when the list stops being empty, which is when the sentinel (and so
+  // the scroll container) first exists.
   useEffect(() => {
+    if (!hasMessages) return;
+    const el = scrollParentOf(bottomRef.current);
+    if (!el) return;
+    const onScroll = () => {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD;
+      stickRef.current = atBottom;
+      onAtBottomChange?.(atBottom);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [hasMessages, onAtBottomChange]);
+
+  useLayoutEffect(() => {
+    const len = messages.length;
+    const grew = len > prevLenRef.current;
+    const lastMine = len > 0 && messages[len - 1].mine;
+    prevLenRef.current = len;
+    if (!initializedRef.current) {
+      // Open pinned to the newest message.
+      if (len === 0) return;
+      initializedRef.current = true;
+      onAtBottomChange?.(true);
+    } else if (!stickRef.current && !(grew && lastMine)) {
+      // Reader is up in the history and this is not their own send — leave them be.
+      return;
+    }
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
+  }, [messages, onAtBottomChange]);
 
   if (messages.length === 0) {
     return (

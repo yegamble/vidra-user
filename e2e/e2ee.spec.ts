@@ -460,6 +460,71 @@ test("sending an encrypted message with a disappearing timer fans out with expir
   await expect(page.getByText("meet at noon")).toBeVisible();
 });
 
+test("a sender with no inbound messages keeps a working composer without the ?to hint", async ({
+  page,
+}) => {
+  await bootSignedIn(page);
+  await routeDeviceEndpoints(page);
+  await page.route(CLAIM, (route) => {
+    const forPeer = /\/users\/u2\//.test(route.request().url());
+    return route.fulfill({
+      json: {
+        user_id: forPeer ? "u2" : "u1",
+        claims: forPeer
+          ? [
+              {
+                device_id: "dev-bob",
+                identity_key: "idk-bob",
+                signing_key: "SGKBOB",
+                one_time_key: { key_id: "k0", key: "otk0" },
+              },
+            ]
+          : [],
+      },
+    });
+  });
+  await page.route(ENC_MESSAGES, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        json: { conversation_id: "enc1", envelope_count: 1, created_at: new Date().toISOString() },
+      });
+    }
+    return route.fulfill({ json: { envelopes: [], limit: 20, offset: 0 } });
+  });
+
+  await gotoEncryptedThread(page);
+  await page.getByLabel("Device name").fill("This browser");
+  await page.getByRole("button", { name: "Set up this device" }).click();
+  await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
+
+  await page.getByLabel("Write an encrypted message").fill("west gate at six");
+  const first = page.waitForRequest(
+    (req) => ENC_MESSAGES.test(req.url()) && req.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+  await first;
+  await expect(page.getByText("west gate at six")).toBeVisible();
+
+  // Re-open the thread the way the inbox links to it: with NO ?to hint. The server
+  // returns a sender none of its own envelopes, so there is nothing INBOUND to
+  // infer the peer from — only the recipient recorded alongside the sent message
+  // keeps this composer alive instead of stranding it on "Waiting…".
+  await page.goto("/messages/enc1");
+  await expect(page.getByText("west gate at six")).toBeVisible();
+  await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
+  await expect(page.getByText("Waiting for the other device")).toHaveCount(0);
+
+  // The recovered recipient is real, not just truthy: the next send still fans out.
+  await page.getByLabel("Write an encrypted message").fill("bring the map");
+  const second = page.waitForRequest(
+    (req) => ENC_MESSAGES.test(req.url()) && req.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+  const body = (await second).postDataJSON() as { envelopes: unknown[] };
+  expect(body.envelopes.length).toBeGreaterThan(0);
+  await expect(page.getByText("bring the map")).toBeVisible();
+});
+
 test("the devices settings page lists a device and removes it", async ({ page }) => {
   await bootSignedIn(page);
   await page.route(DEVICES, (route) =>
