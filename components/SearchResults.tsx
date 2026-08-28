@@ -6,9 +6,8 @@ import { useState, type ReactNode } from "react";
 
 import { useOptionalSession } from "@/components/auth/AuthProvider";
 import { AccountResultCard, ChannelResultCard } from "@/components/EntityResultCard";
-import { ProtocolBadge } from "@/components/ProtocolBadge";
+import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import { SearchFilters as SearchFilterPanel } from "@/components/SearchFilters";
-import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ListTail } from "@/components/ui/ListTail";
@@ -271,27 +270,12 @@ function SearchResultRow({
           // Federated origin badge (the tri-protocol ribbon's third pinned
           // placement — Badge `federated` wears it on the top edge).
           <span className="relative flex max-w-full">
-            <Badge
-              variant="federated"
+            <FederatedOriginBadge
+              variant="ribbon"
+              domain={video.domain}
               title={`Federated video from ${video.domain}`}
-              className="relative z-10 max-w-full text-[11px]"
-            >
-              <svg
-                aria-hidden
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-3 w-3 shrink-0"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-              </svg>
-              <span className="sr-only">From </span>
-              <span className="truncate">{video.domain}</span>
-            </Badge>
+              className="relative z-10"
+            />
           </span>
         ) : null}
         {video.channel_handle ? (
@@ -356,27 +340,12 @@ function RemoteActorResult({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="truncate text-sm font-semibold text-fg">{actor.handle}</p>
         <span className="flex max-w-full flex-wrap items-center gap-1">
-          <span
-            className="inline-flex w-fit max-w-full items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted"
+          <FederatedOriginBadge
+            domain={actor.domain}
             title={`Federated ${type} from ${actor.domain}`}
-          >
-            <svg
-              aria-hidden
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-3 w-3 shrink-0"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-            <span className="sr-only">From </span>
-            <span className="truncate">{actor.domain}</span>
-          </span>
-          <ProtocolBadge protocol="activitypub" />
+            className="w-fit"
+            withProtocol
+          />
           <span className="text-[11px] text-fg-muted">
             {type === "channel" ? "Remote channel" : "Remote account"}
           </span>

@@ -47,7 +47,7 @@ type Status = "loading" | "error" | "ready";
  * operator reads this in — and deliberately not one of `PAGE_SIZE_OPTIONS`, so
  * the pager offers it as an extra choice rather than misreporting the size.
  */
-const PAGE_SIZE = 24;
+const HOURS_PAGE_SIZE = 24;
 
 /**
  * The rollup worker recomputes every 10 minutes, so nothing this page reads can
@@ -105,7 +105,7 @@ export function PlaybackHealthPanel() {
   const [error, setError] = useState<string | null>(null);
   const [windowHours, setWindowHours] = useState<WindowHours>(DEFAULT_WINDOW_HOURS);
   const [offset, setOffset] = useState(0);
-  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [limit, setLimit] = useState(HOURS_PAGE_SIZE);
   const [reloadKey, setReloadKey] = useState(0);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const collection = useCollectionSwitch();

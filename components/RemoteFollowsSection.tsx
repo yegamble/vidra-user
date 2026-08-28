@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Avatar, Badge, Button, ErrorState, Spinner } from "@/components/ui";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { RemoteFollow } from "@/lib/api";
+import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
 import { parseRemoteFollowTarget } from "@/lib/remote-follow";
 
@@ -24,7 +25,7 @@ export function RemoteFollowsSection() {
   useEffect(() => {
     const controller = new AbortController();
     api
-      .listRemoteFollows({ limit: 100 }, controller.signal)
+      .listRemoteFollows({ limit: FULL_LIST_LIMIT }, controller.signal)
       .then((res) => {
         setFollows(res.follows);
         setStatus("ready");

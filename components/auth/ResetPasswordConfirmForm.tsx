@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ApiError, authApi, errorMessage } from "@/lib/api";
@@ -50,12 +51,9 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
   if (!token || expired) {
     return (
       <div className="flex flex-col gap-4">
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           This reset link is invalid or has expired.
-        </p>
+        </Alert>
         <p className="text-center text-sm text-fg-muted">
           <Link
             href="/reset-password"
@@ -71,12 +69,9 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
   if (done) {
     return (
       <div className="flex flex-col gap-4">
-        <p
-          role="status"
-          className="rounded-xl bg-success/15 px-3.5 py-2.5 text-sm text-success"
-        >
+        <Alert variant="success">
           Your password has been reset. You can now sign in with your new password.
-        </p>
+        </Alert>
         <p className="text-center text-sm text-fg-muted">
           <Link href="/login" className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80">
             Sign in
@@ -96,12 +91,9 @@ export function ResetPasswordConfirmForm({ token }: { token: string }) {
       className="flex flex-col gap-4"
     >
       {formError ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {formError}
-        </p>
+        </Alert>
       ) : null}
 
       <Input

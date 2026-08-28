@@ -5,12 +5,14 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { TrashIcon } from "@/components/icons";
+import { Alert } from "@/components/ui/Alert";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { SearchHistoryEntry, UpdateProfileRequest } from "@/lib/api";
+import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
 
 // A single per-key preference key on the profile update path. All three ride the
@@ -200,7 +202,7 @@ function SearchHistorySection() {
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getSearchHistory({ limit: 100 }, controller.signal)
+      .getSearchHistory({ limit: FULL_LIST_LIMIT }, controller.signal)
       .then((res) => {
         setEntries(res.entries ?? []);
         setStatus("ready");
@@ -275,12 +277,9 @@ function SearchHistorySection() {
       </div>
 
       {actionError ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {actionError}
-        </p>
+        </Alert>
       ) : null}
 
       {status === "loading" ? (

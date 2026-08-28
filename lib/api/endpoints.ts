@@ -3,6 +3,7 @@ import { searchSessionHeaders } from "@/lib/search-session";
 
 import { getAccessToken } from "./auth-store";
 import { ApiError, apiRequest } from "./client";
+import { pageQuery, type PageParams } from "./pagination";
 import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
@@ -265,8 +266,7 @@ export const api = {
         tag: params.tag,
         category: params.category,
         language: params.language,
-        limit: params.limit,
-        offset: params.offset,
+        ...pageQuery(params),
       },
       signal,
     }),
@@ -353,8 +353,7 @@ export const api = {
     apiRequest<VideoSearchResponse>("/api/v1/videos/search", {
       query: {
         q: query,
-        limit: params.limit,
-        offset: params.offset,
+        ...pageQuery(params),
         tag: params.tag,
         category: params.category,
         language: params.language,
@@ -381,7 +380,7 @@ export const api = {
    */
   searchChannels: (query: string, params: SearchParams = {}, signal?: AbortSignal) =>
     apiRequest<ChannelSearchResponse>("/api/v1/search/channels", {
-      query: { q: query, limit: params.limit, offset: params.offset },
+      query: { q: query, ...pageQuery(params) },
       signal,
     }),
 
@@ -394,7 +393,7 @@ export const api = {
    */
   searchAccounts: (query: string, params: SearchParams = {}, signal?: AbortSignal) =>
     apiRequest<AccountSearchResponse>("/api/v1/search/accounts", {
-      query: { q: query, limit: params.limit, offset: params.offset },
+      query: { q: query, ...pageQuery(params) },
       signal,
     }),
 
@@ -489,9 +488,9 @@ export const api = {
    * search service is disabled or unreachable — never a fake empty history, so
    * the settings UI can tell "no history" from "temporarily unavailable".
    */
-  getSearchHistory: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+  getSearchHistory: (params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<SearchHistoryResponse>("/api/v1/me/search-history", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -976,11 +975,11 @@ export const api = {
    * (neither exists server-side yet — W4 dependencies), so neither is surfaced.
    */
   listLivePublicStreams: (
-    params: { limit?: number; offset?: number } = {},
+    params: PageParams = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<LivePublicListResponse>("/api/v1/live", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1172,7 +1171,7 @@ export const api = {
   /** GET /api/v1/me/subscriptions/videos — videos from followed channels (auth). */
   getSubscriptionVideos: (params: SearchParams = {}, signal?: AbortSignal) =>
     apiRequest<VideoFeedResponse>("/api/v1/me/subscriptions/videos", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1184,7 +1183,7 @@ export const api = {
    */
   listFollowedChannels: (params: SearchParams = {}, signal?: AbortSignal) =>
     apiRequest<FollowedChannelsResponse>("/api/v1/me/subscriptions", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1192,7 +1191,7 @@ export const api = {
   getVideoComments: (id: string, params: SearchParams = {}, signal?: AbortSignal) =>
     apiRequest<CommentListResponse>(
       `/api/v1/videos/${encodeURIComponent(id)}/comments`,
-      { query: { limit: params.limit, offset: params.offset }, signal },
+      { query: pageQuery(params), signal },
     ),
 
   /**
@@ -1263,9 +1262,9 @@ export const api = {
     }),
 
   /** GET /api/v1/me/mutes/accounts — the accounts the caller has muted, newest first (auth). */
-  getMutedAccounts: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+  getMutedAccounts: (params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<MutedAccountListResponse>("/api/v1/me/mutes/accounts", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1286,9 +1285,9 @@ export const api = {
     }),
 
   /** GET /api/v1/me/mutes/instances — the instances the caller has muted, newest first (auth). */
-  getMutedInstances: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+  getMutedInstances: (params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<MutedInstanceListResponse>("/api/v1/me/mutes/instances", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1320,9 +1319,9 @@ export const api = {
     apiRequest<RemoteFollow>("/api/v1/me/remote-follows", { method: "POST", body }),
 
   /** GET /api/v1/me/remote-follows — the caller's remote-channel follows, newest first (auth). */
-  listRemoteFollows: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+  listRemoteFollows: (params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<RemoteFollowListResponse>("/api/v1/me/remote-follows", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1371,11 +1370,11 @@ export const api = {
    * block first (admin/moderator).
    */
   getBlockedInstances: (
-    params: { limit?: number; offset?: number } = {},
+    params: PageParams = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<BlockedInstanceListResponse>("/api/v1/admin/instances/blocked", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1406,9 +1405,9 @@ export const api = {
     apiRequest<void>(`/api/v1/me/blocks/${encodeURIComponent(userId)}`, { method: "DELETE" }),
 
   /** GET /api/v1/me/blocks — the accounts the caller has blocked, newest first (auth). */
-  getBlockedUsers: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+  getBlockedUsers: (params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<BlockedUserListResponse>("/api/v1/me/blocks", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1441,9 +1440,9 @@ export const api = {
   },
 
   /** GET /api/v1/me/conversations — the caller's inbox, most-recently-active first (auth). */
-  getConversations: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+  getConversations: (params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<ConversationListResponse>("/api/v1/me/conversations", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1453,12 +1452,12 @@ export const api = {
    */
   getMessages: (
     conversationId: string,
-    params: { limit?: number; offset?: number } = {},
+    params: PageParams = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<MessageListResponse>(
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { query: { limit: params.limit, offset: params.offset }, signal },
+      { query: pageQuery(params), signal },
     ),
 
   /**
@@ -1469,12 +1468,12 @@ export const api = {
    */
   getConversationMessages: (
     conversationId: string,
-    params: { limit?: number; offset?: number } = {},
+    params: PageParams = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<MessageListResponse | EncryptedMessageListResponse>(
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { query: { limit: params.limit, offset: params.offset }, signal },
+      { query: pageQuery(params), signal },
     ),
 
   /**
@@ -1677,7 +1676,7 @@ export const api = {
   /** GET /api/v1/me/saved — the caller's saved videos as cards (auth). */
   getSavedVideos: (params: SearchParams = {}, signal?: AbortSignal) =>
     apiRequest<VideoFeedResponse>("/api/v1/me/saved", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -1700,7 +1699,7 @@ export const api = {
     signal?: AbortSignal,
   ) =>
     apiRequest<WatchHistoryResponse>("/api/v1/me/history", {
-      query: { limit: params.limit, offset: params.offset, progress: params.progress },
+      query: { ...pageQuery(params), progress: params.progress },
       signal,
     }),
 
@@ -1736,11 +1735,11 @@ export const api = {
 
   /** GET /api/v1/me/notifications — the caller's notifications + unread count (auth). */
   getNotifications: (
-    params: { unread?: boolean; limit?: number; offset?: number } = {},
+    params: PageParams & { unread?: boolean } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<NotificationListResponse>("/api/v1/me/notifications", {
-      query: { unread: params.unread, limit: params.limit, offset: params.offset },
+      query: { unread: params.unread, ...pageQuery(params) },
       signal,
     }),
 
@@ -1848,14 +1847,13 @@ export const api = {
    * rejects an unrecognised value with a 400 instead of quietly widening it.
    */
   getReports: (
-    params: { status?: ReportStatusFilter; limit?: number; offset?: number } = {},
+    params: PageParams & { status?: ReportStatusFilter } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<ReportListResponse>("/api/v1/admin/reports", {
       query: {
         status: params.status,
-        limit: params.limit,
-        offset: params.offset,
+        ...pageQuery(params),
       },
       signal,
     }),
@@ -1880,11 +1878,11 @@ export const api = {
    * filters by a username/email substring. Paginated via limit/offset.
    */
   getAdminUsers: (
-    params: { q?: string; limit?: number; offset?: number } = {},
+    params: PageParams & { q?: string } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<AdminUserListResponse>("/api/v1/admin/users", {
-      query: { q: params.q, limit: params.limit, offset: params.offset },
+      query: { q: params.q, ...pageQuery(params) },
       signal,
     }),
 
@@ -1916,11 +1914,11 @@ export const api = {
    * rejected applications" was unaskable.
    */
   getRegistrationRequests: (
-    params: { status?: RegistrationRequestFilter; limit?: number; offset?: number } = {},
+    params: PageParams & { status?: RegistrationRequestFilter } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<RegistrationRequestListResponse>("/api/v1/admin/registration-requests", {
-      query: { status: params.status, limit: params.limit, offset: params.offset },
+      query: { status: params.status, ...pageQuery(params) },
       signal,
     }),
 
@@ -1952,12 +1950,12 @@ export const api = {
    * (federation_follower_approval, config-parity W12; admin only).
    */
   getFederationFollowerRequests: (
-    params: { limit?: number; offset?: number } = {},
+    params: PageParams = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<FederationFollowerRequestListResponse>(
       "/api/v1/admin/federation/follower-requests",
-      { query: { limit: params.limit, offset: params.offset }, signal },
+      { query: pageQuery(params), signal },
     ),
 
   /**
@@ -1986,11 +1984,11 @@ export const api = {
 
   /** GET /api/v1/admin/audit-log — the security audit trail, newest first (admin). */
   getAuditLog: (
-    params: { action?: string; limit?: number; offset?: number } = {},
+    params: PageParams & { action?: string } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<AuditLogListResponse>("/api/v1/admin/audit-log", {
-      query: { action: params.action, limit: params.limit, offset: params.offset },
+      query: { action: params.action, ...pageQuery(params) },
       signal,
     }),
 
@@ -2044,15 +2042,14 @@ export const api = {
    * summary over the whole window and is never paged.
    */
   getPlaybackHealth: (
-    params: { since?: string; until?: string; limit?: number; offset?: number } = {},
+    params: PageParams & { since?: string; until?: string } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<QoEPlaybackHealth>("/api/v1/admin/qoe/playback-health", {
       query: {
         since: params.since,
         until: params.until,
-        limit: params.limit,
-        offset: params.offset,
+        ...pageQuery(params),
       },
       signal,
     }),
@@ -2095,11 +2092,11 @@ export const api = {
    * first (moderator/admin). Paginated via limit/offset.
    */
   getBlockedVideos: (
-    params: { limit?: number; offset?: number } = {},
+    params: PageParams = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<BlockedVideoListResponse>("/api/v1/admin/videos/blocked", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -2109,11 +2106,11 @@ export const api = {
    * limit/offset.
    */
   getBlockedRemoteVideos: (
-    params: { limit?: number; offset?: number } = {},
+    params: PageParams = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<BlockedRemoteVideoListResponse>("/api/v1/admin/remote-videos/blocked", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -2186,8 +2183,7 @@ export const api = {
         has_original: params.hasOriginal,
         has_hls: params.hasHls,
         has_web_files: params.hasWebFiles,
-        limit: params.limit,
-        offset: params.offset,
+        ...pageQuery(params),
       },
       signal,
     }),
@@ -2204,25 +2200,25 @@ export const api = {
    * and the video it's on (moderator/admin). Optional `q` filters by body.
    */
   getAdminComments: (
-    params: { q?: string; limit?: number; offset?: number } = {},
+    params: PageParams & { q?: string } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<AdminCommentListResponse>("/api/v1/admin/comments", {
-      query: { q: params.q, limit: params.limit, offset: params.offset },
+      query: { q: params.q, ...pageQuery(params) },
       signal,
     }),
 
   /** GET /api/v1/admin/watched-words — the watched-words list, newest first (moderator/admin). */
-  getWatchedWords: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+  getWatchedWords: (params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<WatchedWordListResponse>("/api/v1/admin/watched-words", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
   /** GET /api/v1/admin/watched-word-matches — comments flagged by a watched term (mod/admin). */
-  getWatchedWordMatches: (params: { limit?: number; offset?: number } = {}, signal?: AbortSignal) =>
+  getWatchedWordMatches: (params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<WatchedWordMatchListResponse>("/api/v1/admin/watched-word-matches", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -2259,11 +2255,11 @@ export const api = {
    * (QUARANTINE_NEW_UPLOADS), newest first (moderator/admin).
    */
   getQuarantinedVideos: (
-    params: { limit?: number; offset?: number } = {},
+    params: PageParams = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<QuarantinedVideoListResponse>("/api/v1/admin/videos/quarantined", {
-      query: { limit: params.limit, offset: params.offset },
+      query: pageQuery(params),
       signal,
     }),
 
@@ -2437,8 +2433,7 @@ export const api = {
         failure: params.failure,
         created_after: params.createdAfter,
         created_before: params.createdBefore,
-        limit: params.limit,
-        offset: params.offset,
+        ...pageQuery(params),
       },
       signal,
     }),

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, authApi, errorMessage, getInstanceCached } from "@/lib/api";
 import type { AccountArchive, AccountExportStatus, AccountImportSummary } from "@/lib/api";
@@ -170,12 +171,9 @@ function ExportCard() {
       </div>
 
       {actionError ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {actionError}
-        </p>
+        </Alert>
       ) : null}
 
       {view.kind === "loading" ? (
@@ -322,12 +320,9 @@ function ImportCard() {
       </div>
 
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-        >
+        <Alert>
           {error}
-        </p>
+        </Alert>
       ) : null}
 
       <form

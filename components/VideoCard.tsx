@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import { IpfsIcon } from "@/components/icons";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
 import {
@@ -248,27 +248,11 @@ export function VideoCard({
             // edge). The neutral capsule keeps an `fg-muted` domain label; the
             // ribbon carries the "this is remote/federated" signal.
             <span className="mt-1 flex max-w-full">
-              <Badge
-                variant="federated"
+              <FederatedOriginBadge
+                variant="ribbon"
+                domain={video.domain}
                 title={`Federated video from ${video.domain}`}
-                className="max-w-full text-[11px]"
-              >
-                <svg
-                  aria-hidden
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-3 w-3 shrink-0"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                </svg>
-                <span className="sr-only">From </span>
-                <span className="truncate">{video.domain}</span>
-              </Badge>
+              />
             </span>
           ) : null}
         </div>

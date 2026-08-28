@@ -1,5 +1,6 @@
 // Barrel for the component-primitive layer. New surfaces should import from
 // here (`@/components/ui`); the individual files remain importable too.
+export { Alert, type AlertProps, type AlertVariant } from "./Alert";
 export { Avatar } from "./Avatar";
 export { Badge, type BadgeProps, type BadgeVariant, type ProtocolColor } from "./Badge";
 export {
@@ -42,6 +43,7 @@ export { ListTail, type ListTailProps } from "./ListTail";
 export { LoadMoreButton, LoadMoreSentinel, PAGE_SIZE } from "./LoadMoreButton";
 export { Modal, type ModalProps } from "./Modal";
 export { OtpInput, type OtpInputProps } from "./OtpInput";
+export { PillTabs, type PillTabItem, type PillTabsProps } from "./PillTabs";
 export { ProgressBar, type ProgressBarProps } from "./ProgressBar";
 export { Radio, type RadioProps } from "./Radio";
 export {

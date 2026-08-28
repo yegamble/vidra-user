@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { MutedAccount } from "@/lib/api";
+import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
@@ -48,7 +49,7 @@ function MuteList() {
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getMutedAccounts({ limit: 100 }, controller.signal)
+      .getMutedAccounts({ limit: FULL_LIST_LIMIT }, controller.signal)
       .then((res) => {
         setAccounts(res.accounts);
         setStatus("ready");

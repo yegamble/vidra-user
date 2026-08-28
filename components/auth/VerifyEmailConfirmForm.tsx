@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, authApi } from "@/lib/api";
 
@@ -49,12 +50,9 @@ export function VerifyEmailConfirmForm({ token }: { token: string }) {
   if (state === "done") {
     return (
       <div className="flex flex-col gap-4">
-        <p
-          role="status"
-          className="rounded-xl bg-success/15 px-3.5 py-2.5 text-sm text-success"
-        >
+        <Alert variant="success">
           Your email has been verified. Thanks!
-        </p>
+        </Alert>
         <p className="text-center text-sm text-fg-muted">
           <Link href="/" className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80">
             Back to home
@@ -67,14 +65,11 @@ export function VerifyEmailConfirmForm({ token }: { token: string }) {
   // expired / invalid / unexpected error
   return (
     <div className="flex flex-col gap-4">
-      <p
-        role="alert"
-        className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-      >
+      <Alert>
         {state === "expired"
           ? "This verification link is invalid or has expired."
           : "Something went wrong verifying your email. Please try again."}
-      </p>
+      </Alert>
       <p className="text-center text-sm text-fg-muted">
         {status === "authed" ? (
           <Link

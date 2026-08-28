@@ -9,6 +9,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
 import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
 import { LockIcon } from "@/components/icons";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
@@ -162,12 +163,9 @@ export function LoginForm({
       ? "Could not complete the sign-in with the provider. Please try again."
       : null);
   const errorBanner = displayError ? (
-    <p
-      role="alert"
-      className="rounded-xl border border-danger-border bg-danger-surface px-3.5 py-2.5 text-sm text-danger"
-    >
+    <Alert>
       {displayError}
-    </p>
+    </Alert>
   ) : null;
 
   if (mfaToken) {
