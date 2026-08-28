@@ -1442,9 +1442,12 @@ export const META: Record<string, SettingMeta> = {
   // help says so, because a toggle that reads "on" while doing nothing is the
   // failure mode these rows exist to prevent. Neither carries a bootDep note:
   // the /instance snapshot the config view reads reports no storage backend
-  // and no CDN base URL today (the admin infrastructure endpoint's feature
-  // vocabulary deliberately omits CDN), and inventing a signal the contract
-  // does not carry would be worse than saying it in words.
+  // and no CDN base URL today, and inventing a signal the contract does not
+  // carry would be worse than saying it in words. (The admin infrastructure
+  // endpoint DOES report both halves of the CDN pair as of core#116, but it is
+  // an admin-only endpoint this view does not fetch — the Optional features
+  // list on /admin/infrastructure is where that contradiction shows up, and its
+  // CDN row links back here.)
   delivery_presign_enabled: {
     label: "Direct object delivery",
     help: "Answer public media requests with a redirect to a short-lived signed object-store URL instead of streaming every byte through the API. Applies only to the S3 storage backend — on a local-filesystem install it stays inert. Turning it off sends the next request back through the API.",

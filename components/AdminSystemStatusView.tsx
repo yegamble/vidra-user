@@ -1,12 +1,15 @@
 "use client";
 
+import Link from "next/link";
+
+import { WarningIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
-import type { SystemStatus } from "@/lib/api";
+import type { SystemStatus, SystemStatusDatabase } from "@/lib/api";
 import { formatUptime, formatVersion } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
 
@@ -22,7 +25,10 @@ export function AdminSystemStatusView() {
   );
 }
 
-function StatusPanel() {
+// Exported for unit tests (rendered directly, bypassing the RoleGate wrapper —
+// the same pattern InfrastructurePanel uses). Production always enters via
+// AdminSystemStatusView so the admin gate applies.
+export function StatusPanel() {
   const { status, data, retry: refresh } = useApiResource<SystemStatus>((signal) =>
     api.getSystemStatus(signal),
   );
@@ -108,7 +114,56 @@ function StatusPanel() {
           </ul>
         )}
       </section>
+
+      {/* Absent, not zeroed, when this process has no pool attached — so the
+          section is dropped whole rather than rendered as "0 of 0", which is
+          indistinguishable from a pool with nothing left. */}
+      {data.database ? <DatabasePool pool={data.database} /> : null}
     </div>
+  );
+}
+
+/**
+ * The live connection pool. It sits below the dependency list because it
+ * answers the question after that one: postgres being up says nothing about
+ * whether THIS process has a connection left to talk to it with, and a pool
+ * that has run out looks, from the outside, exactly like a slow database.
+ */
+function DatabasePool({ pool }: { pool: SystemStatusDatabase }) {
+  // acquired + idle + constructing == total, and total can never exceed max, so
+  // "acquired pinned at max" is the whole diagnosis. Warning tone, not danger:
+  // one sample at the ceiling is normal under burst — it is a hint about where
+  // to look next, not an outage.
+  const saturated =
+    pool.pool_max_conns > 0 && pool.pool_acquired_conns >= pool.pool_max_conns;
+
+  return (
+    <section aria-label="Database pool">
+      <h2 className="mb-2 text-[15px] font-bold tracking-tight">Database pool</h2>
+      <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+        <Row label="In use" value={`${pool.pool_acquired_conns} of ${pool.pool_max_conns}`} />
+        <Row label="Idle" value={String(pool.pool_idle_conns)} />
+        <Row label="Open connections" value={String(pool.pool_total_conns)} />
+      </dl>
+      {saturated ? (
+        <p className="mt-2 flex items-start gap-2 text-[13px] leading-relaxed text-warning">
+          <WarningIcon size={15} className="mt-0.5 shrink-0" />
+          <span>
+            Every connection in this process&rsquo;s pool is checked out, so the next query
+            waits for one to come back. If it stays here, raise the{" "}
+            <Link
+              href="/admin/infrastructure"
+              className="font-medium underline underline-offset-2"
+            >
+              pool limit
+            </Link>{" "}
+            or shed load — every api and worker process holds its own pool
+            against the same database, so the ceiling is a share of a
+            server-wide budget, not a free dial.
+          </span>
+        </p>
+      ) : null}
+    </section>
   );
 }
 
