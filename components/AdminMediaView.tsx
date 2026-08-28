@@ -3,7 +3,8 @@
 import { useCallback, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
-import { Badge } from "@/components/ui/Badge";
+import { Alert } from "@/components/ui/Alert";
+import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -31,7 +32,9 @@ export function AdminMediaView() {
 
 type Phase = "idle" | "scanning" | "purging";
 
-function MediaGCPanel() {
+// Exported for the component test, which drives the panel directly rather than
+// through RoleGate's session plumbing.
+export function MediaGCPanel() {
   const [phase, setPhase] = useState<Phase>("idle");
   // The most recent dry-run result (the would-delete preview). Cleared once a
   // purge completes (the orphans are gone) or a new dry run starts.
@@ -66,7 +69,10 @@ function MediaGCPanel() {
     try {
       const res = await api.runMediaGC(false);
       setPurged(res);
-      setPreview(null);
+      // A purge a safety rail downgraded deleted nothing, so every orphan is
+      // still there: keep the list on screen instead of clearing it, because the
+      // next question after "it refused" is always "what would it have deleted?".
+      setPreview(res.dry_run ? res : null);
       setArmed(false);
       setConfirmText("");
     } catch (err) {
@@ -101,21 +107,7 @@ function MediaGCPanel() {
         </p>
       ) : null}
 
-      {purged ? (
-        <Card className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <Badge variant="success">Purge complete</Badge>
-            <span className="text-sm text-fg">
-              Deleted {formatCount(purged.deleted)}{" "}
-              {purged.deleted === 1 ? "object" : "objects"}.
-            </span>
-          </div>
-          <p className="text-sm text-fg-muted">
-            Scanned {formatCount(purged.scanned)} stored{" "}
-            {purged.scanned === 1 ? "object" : "objects"}.
-          </p>
-        </Card>
-      ) : null}
+      {purged ? <PurgeResult res={purged} /> : null}
 
       {preview ? (
         <section aria-label="Dry-run result" className="flex flex-col gap-3">
@@ -128,7 +120,29 @@ function MediaGCPanel() {
             <span className="font-medium text-fg">
               {formatCount(orphanCount)} {orphanCount === 1 ? "orphan" : "orphans"} to delete
             </span>
+            <OwnershipBadge ownership={preview.bucket_ownership} />
           </div>
+
+          {/* The dry run already carries the ownership answer, so the admin
+              learns a purge would be refused BEFORE typing PURGE — no second
+              request, and nothing to show when the field is absent. */}
+          {ownershipBlocksDelete(preview.bucket_ownership) ? (
+            <Alert
+              variant="warning"
+              as="div"
+              data-testid="gc-ownership-advisory"
+              className="flex flex-col gap-1.5"
+            >
+              <strong className="font-semibold">
+                A purge would be refused here — it would delete nothing.
+              </strong>
+              <span>
+                Object-store ownership is{" "}
+                <span className="font-mono">{preview.bucket_ownership}</span>.{" "}
+                {ownershipExplanation(preview.bucket_ownership)}
+              </span>
+            </Alert>
+          ) : null}
 
           {orphanCount === 0 ? (
             <Card>
@@ -199,6 +213,154 @@ function MediaGCPanel() {
       ) : null}
     </div>
   );
+}
+
+// What actually became of a REQUESTED purge (dry_run=false). The response's own
+// `dry_run`/`mode` describe the sweep that ran, which is not necessarily the one
+// that was asked for: four safety rails downgrade a delete to a dry run and
+// report 200 with a full orphan list. Reading `deleted` alone is how "Purge
+// complete · Deleted 0 objects" came to mean "your GC has been neutered for
+// months".
+type PurgeOutcome = "deleted" | "breaker" | "forced" | "downgraded";
+
+function purgeOutcome(res: MediaGCResponse): PurgeOutcome {
+  if (res.breaker_tripped) return "breaker";
+  if (res.forced_dry_run) return "forced";
+  // A delete that came back as a dry run without naming a rail: a rail this
+  // build does not know about. Still not a success.
+  if (res.dry_run) return "downgraded";
+  return "deleted";
+}
+
+// PurgeResult reports a completed purge REQUEST. Only an outcome that actually
+// deleted is allowed to look like a success.
+function PurgeResult({ res }: { res: MediaGCResponse }) {
+  const outcome = purgeOutcome(res);
+
+  return (
+    <Card className="flex flex-col gap-3">
+      {outcome === "deleted" ? (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <Badge variant="success">Purge complete</Badge>
+            <span className="text-sm text-fg">
+              Deleted {formatCount(res.deleted)} {res.deleted === 1 ? "object" : "objects"}.
+            </span>
+          </div>
+          <p className="text-sm text-fg-muted">
+            Scanned {formatCount(res.scanned)} stored{" "}
+            {res.scanned === 1 ? "object" : "objects"}.
+          </p>
+        </div>
+      ) : null}
+
+      {outcome === "breaker" ? (
+        <Alert
+          variant="danger"
+          as="div"
+          data-testid="gc-breaker-tripped"
+          className="flex flex-col gap-1.5"
+        >
+          <strong className="font-semibold">
+            Purge stopped by the safety breaker — nothing was deleted.
+          </strong>
+          <span>
+            {formatCount(res.orphans.length)} of the {formatCount(res.scanned)} objects scanned
+            looked like orphans ({res.orphan_percent}%), over this instance&rsquo;s
+            MEDIA_GC_MAX_ORPHAN_PERCENT limit. An implausible orphan share is the shape a
+            wrong reference set makes, so the sweep refused the delete instead of acting on
+            it. Confirm the list below really is garbage before raising the limit.
+          </span>
+        </Alert>
+      ) : null}
+
+      {outcome === "forced" || outcome === "downgraded" ? (
+        <Alert
+          variant="warning"
+          as="div"
+          data-testid="gc-forced-dry-run"
+          className="flex flex-col gap-1.5"
+        >
+          <strong className="font-semibold">
+            Purge downgraded to a dry run — nothing was deleted.
+          </strong>
+          <span>
+            Safety rail: <span className="font-mono">{res.forced_dry_run_reason ?? "unreported"}</span>.{" "}
+            {forcedDryRunHint(res.forced_dry_run_reason)}
+          </span>
+          <span className="text-fg-muted">
+            The sweep itself succeeded: it scanned {formatCount(res.scanned)} objects and found{" "}
+            {formatCount(res.orphans.length)} {res.orphans.length === 1 ? "orphan" : "orphans"},
+            all of which are still in storage.
+          </span>
+        </Alert>
+      ) : null}
+
+      {res.mode || res.bucket_ownership || outcome !== "deleted" ? (
+        <div
+          data-testid="gc-result-context"
+          className="flex flex-wrap items-center gap-2 text-xs text-fg-muted"
+        >
+          {res.mode ? <Badge variant="neutral">Mode: {res.mode}</Badge> : null}
+          <OwnershipBadge ownership={res.bucket_ownership} />
+          {outcome === "deleted" ? null : (
+            <span>
+              Scanned {formatCount(res.scanned)}, deleted {formatCount(res.deleted)}.
+            </span>
+          )}
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+// The ownership pill. Absent on a backend that predates the field — the panel
+// says nothing rather than guessing.
+function OwnershipBadge({ ownership }: { ownership?: MediaGCResponse["bucket_ownership"] }) {
+  if (!ownership) return null;
+  return <Badge variant={OWNERSHIP_VARIANT[ownership] ?? "neutral"}>Storage: {ownership}</Badge>;
+}
+
+// Only `owned` and `not-applicable` permit deletion (mediagc.BucketOwnership.
+// AllowsDelete). The other three each block it, and `unknown` blocks it on
+// purpose: forgetting to resolve ownership has to mean "GC stops deleting".
+const OWNERSHIP_VARIANT: Record<MediaGCResponse["bucket_ownership"], BadgeVariant> = {
+  owned: "success",
+  "not-applicable": "neutral",
+  unowned: "warning",
+  unknown: "warning",
+  conflict: "danger",
+};
+
+function ownershipBlocksDelete(ownership?: MediaGCResponse["bucket_ownership"]): boolean {
+  // An absent field is not a blocked state — it is no answer at all.
+  return ownership === "unowned" || ownership === "conflict" || ownership === "unknown";
+}
+
+function ownershipExplanation(ownership?: MediaGCResponse["bucket_ownership"]): string {
+  switch (ownership) {
+    case "unowned":
+      return "The store carries no ownership marker and was not empty, so whose media is in it has never been established. Adopt the bucket — that writes this instance's identity into the store's .vidra/owner marker — or point this instance at the store it actually owns.";
+    case "conflict":
+      return "The .vidra/owner marker names another Vidra instance, which believes this store is its own. Two instances sweeping one store delete each other's media, so settle which one owns it before purging.";
+    case "unknown":
+      return "This instance never resolved whether the store is its own, and an unresolved answer refuses deletion by design. Check the API's storage configuration and startup logs, then re-run the sweep.";
+    default:
+      return "";
+  }
+}
+
+// The plain-English half of a forced dry run; the machine reason is printed
+// verbatim next to it so an operator can search for it.
+function forcedDryRunHint(reason?: MediaGCResponse["forced_dry_run_reason"]): string {
+  switch (reason) {
+    case "bucket_ownership":
+      return "The object store is not established as this instance's, so destructive sweeps are refused. Adopt the bucket — that writes this instance's identity into the store's .vidra/owner marker — or fix the storage configuration, then purge again.";
+    case "storage_migration_active":
+      return "A storage migration campaign is in flight, so the two stores are deliberately out of step and an object with no database reference is not evidence about either of them (an unanswerable migration check counts as one running). Wait for the campaign to finish, or cancel it, then purge again.";
+    default:
+      return "A safety rail refused the delete. Nothing was removed from storage.";
+  }
 }
 
 // gcError maps an API failure to an honest message. The 503 (storage backend can't

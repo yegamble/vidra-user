@@ -4,19 +4,24 @@ import { cn } from "@/lib/cn";
 
 /**
  * Which tone the message carries. `danger` is the inline form/action failure
- * (the tinted red box under a form); `success` is its confirmation counterpart.
- * Deliberately only two: the block-level "this whole panel failed" state is
- * `ErrorState`, and the transient toast is `Toast` — an Alert is the *inline*
- * message that sits inside a form or a settings section.
+ * (the tinted red box under a form); `success` is its confirmation counterpart;
+ * `warning` is the one in between — the action SUCCEEDED but did not do what
+ * was asked (a purge a safety rail downgraded to a dry run), which must never
+ * be dressed as either a failure or a green tick. Deliberately only three: the
+ * block-level "this whole panel failed" state is `ErrorState`, and the
+ * transient toast is `Toast` — an Alert is the *inline* message that sits
+ * inside a form or a settings section.
  */
-export type AlertVariant = "danger" | "success";
+export type AlertVariant = "danger" | "success" | "warning";
 
 // Danger uses the opaque danger-surface tint plus a border (matching `Badge`'s
-// note: systemRed text cannot clear AA on a 15% red fill); success needs no
-// border because the /15 green already reads as a distinct block.
+// note: systemRed text cannot clear AA on a 15% red fill); success and warning
+// need no border because the /15 fill already reads as a distinct block, and
+// --warning is the deep amber picked to clear AA on exactly that /15 pill.
 const VARIANT: Record<AlertVariant, string> = {
   danger: "border border-danger-border bg-danger-surface text-danger",
   success: "bg-success/15 text-success",
+  warning: "bg-warning/15 text-warning",
 };
 
 /**
@@ -28,6 +33,9 @@ const VARIANT: Record<AlertVariant, string> = {
 const ROLE: Record<AlertVariant, "alert" | "status"> = {
   danger: "alert",
   success: "status",
+  // Assertive like `danger`: a warning exists because the thing the operator
+  // asked for did not happen, and a polite announcement is how that gets missed.
+  warning: "alert",
 };
 
 export type AlertProps = Omit<HTMLAttributes<HTMLElement>, "children"> & {
