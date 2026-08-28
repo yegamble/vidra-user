@@ -15,6 +15,7 @@ import {
   writeHomeShelvesHint,
 } from "@/lib/home-shelves-hint";
 import { isFinished, resumeFraction } from "@/lib/resume-progress";
+import { RAIL_TILE, RAIL_TRACK_STATIC } from "@/lib/rail";
 
 // HomeShelves is the signed-in personalization band that leads the home page
 // (design-system.md "Shelves on Home", Apple-TV pattern): a "Continue watching"
@@ -147,12 +148,9 @@ function HomeShelvesSkeleton({ count }: { count: number }) {
           <div className="mb-4 flex items-baseline">
             <Skeleton className="h-7 w-44" />
           </div>
-          <ul className="scrollbar-none flex gap-4 overflow-x-hidden pb-2">
+          <ul className={RAIL_TRACK_STATIC}>
             {Array.from({ length: 6 }).map((__, j) => (
-              <li
-                key={j}
-                className="w-[min(82vw,20rem)] flex-none sm:w-72 lg:w-64 xl:w-72"
-              >
+              <li key={j} className={RAIL_TILE}>
                 <VideoCardSkeleton />
               </li>
             ))}

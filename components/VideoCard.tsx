@@ -5,25 +5,17 @@ import { useState } from "react";
 
 import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import { IpfsIcon } from "@/components/icons";
+import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
 import { Avatar } from "@/components/ui/Avatar";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
-import {
-  channelAvatarUrl,
-  isSensitiveVideo,
-  remoteVideoThumbnailUrl,
-  videoOriginalUrl,
-  videoThumbnailUrl,
-} from "@/lib/api";
+import { channelAvatarUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
-import { useInstanceFeatures } from "@/lib/instance-features";
 import { miniatureDisplayName } from "@/lib/miniature-name";
-import { usePlayerSettings } from "@/lib/player-settings";
-import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
-import { useRestrictedMode } from "@/lib/device-preferences";
+import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
 
 // Grid video card in the template's language (specs/design/{app,desktop}-template):
 // a borderless rounded-2xl thumbnail on the page background, then a row with the
@@ -60,49 +52,33 @@ export function VideoCard({
   priority?: boolean;
 }) {
   const [removed, setRemoved] = useState(false);
-  // A federated remote card: links to the remote watch surface, shows its
-  // origin-domain badge, and uses the locally cached remote thumbnail. Its
-  // channel_handle is a "name@domain" identity, not a local route, and it has
-  // no local avatar URL (the Avatar falls back to the display-name initial).
-  const isRemote = video.remote === true;
-  const watchHref = isRemote ? `/remote/${video.id}` : `/videos/${video.id}`;
-  // Sensitive-content presentation (spec: instance-platform-info.md): under the
-  // instance `blur` policy a sensitive video's thumbnail is blurred and badged;
-  // under `warn` it is badged only; `display` (and `hide`, which is enforced
-  // server-side, or an unknown policy) applies no client treatment.
-  const policy = useSensitiveContentPolicy();
-  const restrictedMode = useRestrictedMode();
+  // Federation, sensitive-content treatment, Restricted Mode and hover-preview
+  // eligibility — the policy every video tile shares. A remote card links to the
+  // remote watch surface, shows its origin-domain badge, and uses the locally
+  // cached remote thumbnail; its channel_handle is a "name@domain" identity, not
+  // a local route, and it has no local avatar URL (the Avatar falls back to the
+  // display-name initial).
+  const {
+    isRemote,
+    watchHref,
+    restrictedHidden,
+    blurSensitive,
+    markSensitive,
+    previewEligible,
+    previewSrc,
+    posterSrc,
+    duration,
+  } = useVideoCardPresentation(video);
   // Miniature attribution (config-parity W5): when the operator prefers the
   // uploader's display name, the card credits it instead of the channel name
   // (falling back to the channel while the payload lacks the author field —
   // see lib/miniature-name). Same shared instance fetch as the policy above.
   const preferAuthorName =
     useInstanceDefaults()?.miniature_prefer_author_display_name === true;
-  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
-  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
   if (removed) return null;
-  const sensitive = isSensitiveVideo(video);
-  if (sensitive && restrictedMode) {
-    return (
-      <div className="flex aspect-video items-center justify-center rounded-2xl bg-surface-muted px-4 text-center text-sm font-medium text-fg-muted">
-        Hidden by Restricted Mode
-      </div>
-    );
+  if (restrictedHidden) {
+    return <RestrictedModePlaceholder className="aspect-video rounded-2xl px-4 text-sm" />;
   }
-  const blurSensitive = sensitive && policy === "blur";
-  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
-  // The preview is deliberately local-only for now: a federated stream_url may
-  // be HLS and requires the remote hls.js pipeline rather than a raw media src.
-  // Private/password media also needs a video-scoped credential that a card
-  // does not hold. Both cases remain normal thumbnail links.
-  const previewEligible =
-    previewFeatureEnabled &&
-    previewPreferenceEnabled &&
-    !isRemote &&
-    video.state === "published" &&
-    video.privacy !== "private" &&
-    video.privacy !== "password" &&
-    !blurSensitive;
   const channelName = miniatureDisplayName(video, preferAuthorName);
   const avatarSrc =
     !isRemote && video.channel_handle ? channelAvatarUrl(video.channel_handle) : null;
@@ -112,12 +88,6 @@ export function VideoCard({
   const when = relativeTime(video.created_at);
   if (when) meta.push(when);
 
-  // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge
-  // is noise rather than information.
-  const duration =
-    typeof video.duration_seconds === "number" && video.duration_seconds > 0
-      ? video.duration_seconds
-      : null;
   const progressPct =
     typeof progressFraction === "number"
       ? Math.min(100, Math.max(0, Math.round(progressFraction * 1000) / 10))
@@ -129,25 +99,14 @@ export function VideoCard({
           (transition-transform, globally neutralized under reduced-motion) and
           picks up a quiet soft shadow — no heavy elevation. */}
       <div className="overflow-hidden rounded-xl transition-[transform,box-shadow] duration-200 ease-out group-hover/card:scale-[1.02] group-hover/card:shadow-soft active:scale-[0.995]">
-        {/* hasStoryboard is false rather than previewEligible: card payloads
-            carry no has_storyboard flag, so the card cannot know whether one
-            exists and must not guess. Passing the eligibility policy instead
-            made every hover on an eligible card fetch storyboard.vtt, which is
-            a 404 for any video that never had a storyboard generated. The
-            hover scrubber shows timestamps only; the real storyboard belongs
-            to the watch page, where the detail carries the true flag. */}
+        {/* hasStoryboard is false rather than previewEligible — see
+            useVideoCardPresentation for why no card may claim a storyboard. */}
         <VideoCardPreview
           videoId={video.id}
           title={video.title}
           href={watchHref}
-          src={previewEligible ? videoOriginalUrl(video.id) : null}
-          poster={
-            video.has_thumbnail
-              ? isRemote
-                ? remoteVideoThumbnailUrl(video.id)
-                : videoThumbnailUrl(video.id)
-              : null
-          }
+          src={previewSrc}
+          poster={posterSrc}
           duration={duration}
           hasStoryboard={false}
           previewEnabled={previewEligible}

@@ -4,8 +4,7 @@
 // its existing route-mockable retry path.
 
 import type { FeedParams, VideoFeedResponse } from "@/lib/api";
-import { clientIpForwardHeaders } from "@/lib/client-ip.server";
-import { internalApiBaseUrl } from "@/lib/config";
+import { serverJson } from "@/lib/server-json";
 
 export async function getPublicFeed(
   params: FeedParams,
@@ -15,19 +14,14 @@ export async function getPublicFeed(
     if (value !== undefined) query.set(key, String(value));
   }
 
-  try {
-    const res = await fetch(`${internalApiBaseUrl}/api/v1/videos?${query.toString()}`, {
-      // The viewer's IP rides along so vidra-core's per-IP limiter buckets this
-      // read under the viewer rather than under the frontend container — this
-      // is the single hottest server-side read on the instance (one per home
-      // page render). Safe to attach here because the fetch is uncached.
-      headers: { Accept: "application/json", ...(await clientIpForwardHeaders()) },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const feed = (await res.json()) as VideoFeedResponse;
-    return Array.isArray(feed.videos) ? feed : null;
-  } catch {
-    return null;
-  }
+  const feed = await serverJson<VideoFeedResponse>(`/api/v1/videos?${query.toString()}`, {
+    freshness: "no-store",
+    // The viewer's IP rides along so vidra-core's per-IP limiter buckets this
+    // read under the viewer rather than under the frontend container — this
+    // is the single hottest server-side read on the instance (one per home
+    // page render). Safe to attach here because the fetch is uncached.
+    forwardClientIp: true,
+  });
+  // A body without a videos array is a wrong shape, not an empty feed.
+  return feed && Array.isArray(feed.videos) ? feed : null;
 }

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ApiError, api, errorMessage, getInstanceCached } from "@/lib/api";
 import type { Caption, VideoConfigOption } from "@/lib/api";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 // How often to poll an in-progress auto-caption job for its status.
 const AUTO_POLL_MS = 2_000;
@@ -26,9 +27,30 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
   const [language, setLanguage] = useState("");
   const [label, setLabel] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const { run, busy, error } = useAsyncAction(
+    async (chosen: File) => {
+      const created = await api.uploadCaption(videoId, {
+        language: language.trim(),
+        label: label.trim() || undefined,
+        file: chosen,
+      });
+      // Replace-or-add by language, keeping the list sorted.
+      setCaptions((prev) =>
+        sortByLanguage([...prev.filter((c) => c.language !== created.language), created]),
+      );
+      setLanguage("");
+      setLabel("");
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = "";
+    },
+    "Could not upload the caption.",
+    (err) =>
+      err instanceof ApiError && err.status === 422
+        ? "The file must be WebVTT and the language a valid tag (e.g. en, pt-BR)."
+        : null,
+  );
 
   // Whisper auto-caption state. "idle" until requested; "running" while a job is
   // pending/running (drives polling); "done"/"failed" are terminal; "unsupported"
@@ -90,34 +112,10 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
     };
   }, []);
 
-  async function upload(e: React.FormEvent) {
+  function upload(e: React.FormEvent) {
     e.preventDefault();
     if (busy || !file || language.trim() === "") return;
-    setBusy(true);
-    setError(null);
-    try {
-      const created = await api.uploadCaption(videoId, {
-        language: language.trim(),
-        label: label.trim() || undefined,
-        file,
-      });
-      // Replace-or-add by language, keeping the list sorted.
-      setCaptions((prev) =>
-        sortByLanguage([...prev.filter((c) => c.language !== created.language), created]),
-      );
-      setLanguage("");
-      setLabel("");
-      setFile(null);
-      if (fileRef.current) fileRef.current.value = "";
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 422) {
-        setError("The file must be WebVTT and the language a valid tag (e.g. en, pt-BR).");
-      } else {
-        setError(errorMessage(err, "Could not upload the caption."));
-      }
-    } finally {
-      setBusy(false);
-    }
+    void run(file);
   }
 
   async function remove(lang: string) {

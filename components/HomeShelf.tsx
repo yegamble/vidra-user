@@ -1,5 +1,6 @@
 import { VideoCard } from "@/components/VideoCard";
 import type { Video } from "@/lib/api";
+import { RAIL_TILE, RAIL_TRACK } from "@/lib/rail";
 
 // HomeShelf is the Apple-TV shelf recipe (design-system.md "Shelves on Home"):
 // a Title2 section header + a horizontal snap rail of read-only VideoCards. It
@@ -34,12 +35,9 @@ export function HomeShelf({
       </div>
       {/* Horizontal scroll rail: viewport-capped tiles, hidden scrollbar (the
           row scrolls on touch / trackpad; focus order still reaches each card). */}
-      <ul className="scrollbar-none flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
+      <ul className={RAIL_TRACK}>
         {items.map((video, index) => (
-          <li
-            key={video.id}
-            className="w-[min(82vw,20rem)] flex-none snap-start sm:w-72 lg:w-64 xl:w-72"
-          >
+          <li key={video.id} className={RAIL_TILE}>
             <VideoCard video={video} progressFraction={progressFor?.(video, index)} />
           </li>
         ))}

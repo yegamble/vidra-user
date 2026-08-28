@@ -3,23 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
-import {
-  api,
-  isSensitiveVideo,
-  remoteVideoThumbnailUrl,
-  videoOriginalUrl,
-  videoThumbnailUrl,
-} from "@/lib/api";
+import { api } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { useRestrictedMode } from "@/lib/device-preferences";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
-import { useInstanceFeatures } from "@/lib/instance-features";
-import { usePlayerSettings } from "@/lib/player-settings";
-import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
 
 const RELATED_COUNT = 6;
 
@@ -187,64 +179,42 @@ export function RelatedVideos({
 // the feed's VideoCard: one link named by the video title (heading), plus a
 // separate channel link. Thumbnail and title are parallel watch links.
 function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void }) {
-  const isRemote = video.remote === true;
   // ?src=related tags the destination so the watch page emits play_started with
   // context "related" (a non-PII discovery marker; no query text in the URL).
-  const href = isRemote ? `/remote/${video.id}` : `/videos/${video.id}?src=related`;
-  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
-  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
-  const policy = useSensitiveContentPolicy();
-  const restrictedMode = useRestrictedMode();
-  const sensitive = isSensitiveVideo(video);
-  const blurSensitive = sensitive && policy === "blur";
-  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
-  const previewEligible =
-    previewFeatureEnabled &&
-    previewPreferenceEnabled &&
-    !isRemote &&
-    video.state === "published" &&
-    video.privacy !== "private" &&
-    video.privacy !== "password" &&
-    !blurSensitive;
+  const {
+    isRemote,
+    watchHref: href,
+    restrictedHidden,
+    blurSensitive,
+    markSensitive,
+    previewEligible,
+    previewSrc,
+    posterSrc,
+    duration,
+  } = useVideoCardPresentation(video, { localWatchQuery: "?src=related" });
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
   const when = relativeTime(video.created_at);
   if (when) meta.push(when);
 
-  // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge
-  // is noise rather than information.
-  const duration =
-    typeof video.duration_seconds === "number" && video.duration_seconds > 0
-      ? video.duration_seconds
-      : null;
-
-  if (sensitive && restrictedMode) {
+  if (restrictedHidden) {
     return (
-      <div className="flex min-h-[84px] flex-1 items-center justify-center rounded-lg bg-surface-muted px-3 text-center text-xs font-medium text-fg-muted">
-        Hidden by Restricted Mode
-      </div>
+      <RestrictedModePlaceholder className="min-h-[84px] flex-1 rounded-lg px-3 text-xs" />
     );
   }
 
   return (
     <div className="group/card flex gap-3">
       <div className="w-[150px] shrink-0">
-        {/* Related items carry no has_storyboard flag, so this card cannot know
-            whether one exists and does not guess — asserting it made every
-            hover fetch a storyboard.vtt that 404s for a video without one. */}
+        {/* hasStoryboard stays false — see useVideoCardPresentation for why no
+            card may claim a storyboard its payload never advertised. */}
         <VideoCardPreview
           videoId={video.id}
           title={video.title}
           href={href}
-          src={previewEligible ? videoOriginalUrl(video.id) : null}
-          poster={
-            video.has_thumbnail
-              ? isRemote
-                ? remoteVideoThumbnailUrl(video.id)
-                : videoThumbnailUrl(video.id)
-              : null
-          }
+          src={previewSrc}
+          poster={posterSrc}
           duration={duration}
           hasStoryboard={false}
           previewEnabled={previewEligible}

@@ -4,11 +4,12 @@ import { useCallback, useState } from "react";
 
 import { Avatar, Badge, Button, ErrorState, Spinner } from "@/components/ui";
 import { ApiError, api, errorMessage } from "@/lib/api";
-import type { RemoteFollow } from "@/lib/api";
+import type { CreateRemoteFollowRequest, RemoteFollow } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
 import { parseRemoteFollowTarget } from "@/lib/remote-follow";
 import { useApiResource } from "@/lib/use-api-resource";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 // RemoteFollowsSection is the federation affordance on /subscriptions (its one
 // home — noted in fix_plan): a "Follow a remote channel" form (name@domain or
@@ -73,33 +74,30 @@ export function RemoteFollowsSection() {
 
 function FollowRemoteForm({ onFollowed }: { onFollowed: (follow: RemoteFollow) => void }) {
   const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { run, busy, error, setError } = useAsyncAction(
+    async (target: CreateRemoteFollowRequest) => {
+      const follow = await api.createRemoteFollow(target);
+      onFollowed(follow);
+      setValue("");
+    },
+    "Could not follow this channel.",
+    (err) => {
+      if (!(err instanceof ApiError)) return null;
+      if (err.status === 503) return "Federation is disabled on this instance.";
+      if (err.status === 422)
+        return "That channel could not be found. Check the handle or URL and try again.";
+      return null;
+    },
+  );
 
-  async function submit() {
+  function submit() {
     if (busy) return;
     const target = parseRemoteFollowTarget(value);
     if (!target) {
       setError("Enter a name@domain handle or a channel URL.");
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      const follow = await api.createRemoteFollow(target);
-      onFollowed(follow);
-      setValue("");
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 503) {
-        setError("Federation is disabled on this instance.");
-      } else if (err instanceof ApiError && err.status === 422) {
-        setError("That channel could not be found. Check the handle or URL and try again.");
-      } else {
-        setError(errorMessage(err, "Could not follow this channel."));
-      }
-    } finally {
-      setBusy(false);
-    }
+    void run(target);
   }
 
   return (

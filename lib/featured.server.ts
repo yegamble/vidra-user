@@ -11,9 +11,8 @@
 // gates visibility and forwards the admin overrides.
 
 import type { Video } from "@/lib/api";
-import { internalApiBaseUrl } from "@/lib/config";
 import type { InstanceFeaturedBlock } from "@/lib/instance-config.server";
-import { INSTANCE_CONFIG_REVALIDATE_SECONDS } from "@/lib/instance-config.server";
+import { getPublicVideo } from "@/lib/video.server";
 
 /** A resolved, renderable featured banner: the public video plus the admin overrides. */
 export type ResolvedFeatured = {
@@ -39,31 +38,22 @@ export async function resolveFeatured(
   const id = (featured.video_id ?? "").trim();
   if (id === "") return null;
 
-  try {
-    const res = await fetch(
-      `${internalApiBaseUrl}/api/v1/videos/${encodeURIComponent(id)}`,
-      {
-        headers: { Accept: "application/json" },
-        // Match the instance-config cadence: a settings change (or the picked
-        // video going private/unpublished) reflects within about a minute.
-        next: { revalidate: INSTANCE_CONFIG_REVALIDATE_SECONDS },
-      },
-    );
-    if (!res.ok) return null;
-    const video = (await res.json()) as Video;
-    // v1 is local-only, public + published. The detail endpoint carries
-    // privacy/state on local videos (omitted on remote cards), so a remote pick
-    // — or anything not publicly live — fails the gate.
-    if (video.remote === true) return null;
-    if (video.privacy !== "public" || video.state !== "published") return null;
-    return {
-      video,
-      title: featured.title ?? "",
-      description: featured.description ?? "",
-      ctaLabel: featured.cta_label ?? "",
-      label: featured.label === "sponsored" ? "sponsored" : "featured",
-    };
-  } catch {
-    return null;
-  }
+  // The same anonymous public-detail read the watch-page metadata does, on the
+  // same ~60s revalidation window: a settings change (or the picked video going
+  // private/unpublished) reflects within about a minute. Sharing it also means
+  // a home render that already resolved this video pays for one fetch, not two.
+  const video: Video | null = await getPublicVideo(id);
+  if (!video) return null;
+  // v1 is local-only, public + published. The detail endpoint carries
+  // privacy/state on local videos (omitted on remote cards), so a remote pick
+  // — or anything not publicly live — fails the gate.
+  if (video.remote === true) return null;
+  if (video.privacy !== "public" || video.state !== "published") return null;
+  return {
+    video,
+    title: featured.title ?? "",
+    description: featured.description ?? "",
+    ctaLabel: featured.cta_label ?? "",
+    label: featured.label === "sponsored" ? "sponsored" : "featured",
+  };
 }

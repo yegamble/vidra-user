@@ -11,31 +11,20 @@ import { SearchFilters as SearchFilterPanel } from "@/components/SearchFilters";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ListTail } from "@/components/ui/ListTail";
+import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs } from "@/components/ui/Tabs";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
-import {
-  ApiError,
-  api,
-  errorMessage,
-  getAccessToken,
-  isSensitiveVideo,
-  remoteVideoThumbnailUrl,
-  videoOriginalUrl,
-  videoThumbnailUrl,
-} from "@/lib/api";
+import { ApiError, api, errorMessage, getAccessToken } from "@/lib/api";
 import type { AccountSearchResult, Channel, Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { useRestrictedMode } from "@/lib/device-preferences";
 import { resolveBrowseScrollMode } from "@/lib/feed-defaults";
 import { formatCount, formatDuration, pluralize, relativeTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { InstanceSearchBlock } from "@/lib/instance-config.server";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
-import { useInstanceFeatures } from "@/lib/instance-features";
 import { miniatureDisplayName } from "@/lib/miniature-name";
-import { usePlayerSettings } from "@/lib/player-settings";
 import { trackSearchEvent } from "@/lib/search-events";
 import {
   readRemoteSearchResults,
@@ -52,7 +41,7 @@ import {
   type SearchResultType,
 } from "@/lib/search-url";
 import { useAppendingList } from "@/lib/use-appending-list";
-import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
 
 // The search page is a thumbnail-left list, not a browse grid. Matching that
 // geometry during the client fetch prevents the global/grid → spinner → rows
@@ -159,44 +148,34 @@ function SearchResultRow({
   // A federated remote row: links to the remote watch surface, shows its
   // origin-domain badge, and uses the locally cached remote thumbnail. Its
   // channel_handle is a "name@domain" identity, not a local route.
-  const isRemote = video.remote === true;
+  const {
+    isRemote,
+    watchHref,
+    restrictedHidden,
+    blurSensitive,
+    markSensitive,
+    previewEligible,
+    previewSrc,
+    posterSrc,
+    duration,
+  } = useVideoCardPresentation(video);
   // Miniature attribution (config-parity W5): same rule as the grid VideoCard.
   const preferAuthorName =
     useInstanceDefaults()?.miniature_prefer_author_display_name === true;
   const attributionName = miniatureDisplayName(video, preferAuthorName);
-  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
-  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
-  const policy = useSensitiveContentPolicy();
-  const restrictedMode = useRestrictedMode();
-  const sensitive = isSensitiveVideo(video);
-  const blurSensitive = sensitive && policy === "blur";
-  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
-  const previewEligible =
-    previewFeatureEnabled &&
-    previewPreferenceEnabled &&
-    !isRemote &&
-    video.state === "published" &&
-    video.privacy !== "private" &&
-    video.privacy !== "password" &&
-    !blurSensitive;
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
   const when = relativeTime(video.created_at);
   if (when) meta.push(when);
 
-  // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge
-  // is noise rather than information.
-  const duration =
-    typeof video.duration_seconds === "number" && video.duration_seconds > 0
-      ? video.duration_seconds
-      : null;
-
-  if (sensitive && restrictedMode) {
+  if (restrictedHidden) {
     return (
-      <li className="flex min-h-24 items-center justify-center border-b border-border-subtle py-3 text-sm font-medium text-fg-muted">
-        Hidden by Restricted Mode
-      </li>
+      <RestrictedModePlaceholder
+        as="li"
+        variant="row"
+        className="min-h-24 border-b border-border-subtle py-3 text-sm"
+      />
     );
   }
 
@@ -209,21 +188,14 @@ function SearchResultRow({
         className="w-[148px] flex-none sm:w-[220px]"
         onClick={() => onSelect?.()}
       >
-        {/* Search hits carry no has_storyboard flag, so this row cannot know
-            whether one exists and does not guess — asserting it made every
-            hover fetch a storyboard.vtt that 404s for a video without one. */}
+        {/* hasStoryboard stays false — see useVideoCardPresentation for why no
+            card may claim a storyboard its payload never advertised. */}
         <VideoCardPreview
           videoId={video.id}
           title={video.title}
-          href={isRemote ? `/remote/${video.id}` : `/videos/${video.id}`}
-          src={previewEligible ? videoOriginalUrl(video.id) : null}
-          poster={
-            video.has_thumbnail
-              ? isRemote
-                ? remoteVideoThumbnailUrl(video.id)
-                : videoThumbnailUrl(video.id)
-              : null
-          }
+          href={watchHref}
+          src={previewSrc}
+          poster={posterSrc}
           duration={duration}
           hasStoryboard={false}
           previewEnabled={previewEligible}

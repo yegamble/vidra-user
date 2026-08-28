@@ -5,25 +5,16 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronRightIcon, LibraryIcon, PlaylistIcon, PlusIcon } from "@/components/icons";
+import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
-import {
-  api,
-  isSensitiveVideo,
-  playlistThumbnailUrl,
-  remoteVideoThumbnailUrl,
-  videoOriginalUrl,
-  videoThumbnailUrl,
-} from "@/lib/api";
+import { api, playlistThumbnailUrl } from "@/lib/api";
 import type { HistoryItem, Playlist, Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { useRestrictedMode } from "@/lib/device-preferences";
-import { useInstanceFeatures } from "@/lib/instance-features";
-import { usePlayerSettings } from "@/lib/player-settings";
 import { resumeFraction } from "@/lib/resume-progress";
-import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
 import { SignInGate } from "@/components/SignInGate";
 
 // LibraryView is the design's Library hub (Vidra App template): a History rail
@@ -138,58 +129,36 @@ function HistorySection() {
 }
 
 function HistoryRailCard({ item, onDeleted }: { item: HistoryItem; onDeleted: () => void }) {
-  const isRemote = item.remote === true;
-  const href = isRemote ? `/remote/${item.id}` : `/videos/${item.id}`;
-  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
-  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
-  const policy = useSensitiveContentPolicy();
-  const restrictedMode = useRestrictedMode();
-  const sensitive = isSensitiveVideo(item);
-  const blurSensitive = sensitive && policy === "blur";
-  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
-  const previewEligible =
-    previewFeatureEnabled &&
-    previewPreferenceEnabled &&
-    !isRemote &&
-    item.state === "published" &&
-    item.privacy !== "private" &&
-    item.privacy !== "password" &&
-    !blurSensitive;
-  const duration =
-    typeof item.duration_seconds === "number" && item.duration_seconds > 0
-      ? item.duration_seconds
-      : null;
+  const {
+    watchHref: href,
+    restrictedHidden,
+    blurSensitive,
+    markSensitive,
+    previewEligible,
+    previewSrc,
+    posterSrc,
+    duration,
+  } = useVideoCardPresentation(item);
   // Shared finished-aware math: no bar below the resume floor or at >= ~95%
   // watched (finished videos read as unwatched here too).
   const resumeFrac = resumeFraction(item.position_seconds, item.duration_seconds);
   const progressPct =
     resumeFrac === null ? null : Math.min(100, Math.round(resumeFrac * 1000) / 10);
 
-  if (sensitive && restrictedMode) {
-    return (
-      <div className="flex aspect-video items-center justify-center rounded-xl bg-surface-muted px-3 text-center text-xs font-medium text-fg-muted">
-        Hidden by Restricted Mode
-      </div>
-    );
+  if (restrictedHidden) {
+    return <RestrictedModePlaceholder className="aspect-video rounded-xl px-3 text-xs" />;
   }
 
   return (
     <div className="group/card relative">
-      {/* History rows carry no has_storyboard flag, so this card cannot know
-          whether one exists and does not guess — asserting it made every hover
-          fetch a storyboard.vtt that 404s for a video without one. */}
+      {/* hasStoryboard stays false — see useVideoCardPresentation for why no
+          card may claim a storyboard its payload never advertised. */}
       <VideoCardPreview
         videoId={item.id}
         title={item.title}
         href={href}
-        src={previewEligible ? videoOriginalUrl(item.id) : null}
-        poster={
-          item.has_thumbnail
-            ? isRemote
-              ? remoteVideoThumbnailUrl(item.id)
-              : videoThumbnailUrl(item.id)
-            : null
-        }
+        src={previewSrc}
+        poster={posterSrc}
         duration={duration}
         hasStoryboard={false}
         previewEnabled={previewEligible}
@@ -411,55 +380,34 @@ function SavedSection() {
 }
 
 function SavedRow({ video, onDeleted }: { video: Video; onDeleted: () => void }) {
-  const isRemote = video.remote === true;
-  const href = isRemote ? `/remote/${video.id}` : `/videos/${video.id}`;
+  const {
+    isRemote,
+    watchHref: href,
+    restrictedHidden,
+    blurSensitive,
+    markSensitive,
+    previewEligible,
+    previewSrc,
+    posterSrc,
+    duration,
+  } = useVideoCardPresentation(video);
   const channelName = video.channel_display_name || video.channel_handle || "";
-  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
-  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
-  const policy = useSensitiveContentPolicy();
-  const restrictedMode = useRestrictedMode();
-  const sensitive = isSensitiveVideo(video);
-  const blurSensitive = sensitive && policy === "blur";
-  const markSensitive = sensitive && (policy === "blur" || policy === "warn");
-  const previewEligible =
-    previewFeatureEnabled &&
-    previewPreferenceEnabled &&
-    !isRemote &&
-    video.state === "published" &&
-    video.privacy !== "private" &&
-    video.privacy !== "password" &&
-    !blurSensitive;
-  const duration =
-    typeof video.duration_seconds === "number" && video.duration_seconds > 0
-      ? video.duration_seconds
-      : null;
 
-  if (sensitive && restrictedMode) {
-    return (
-      <div className="flex min-h-[72px] items-center justify-center rounded-[9px] bg-surface-muted px-3 text-center text-xs font-medium text-fg-muted">
-        Hidden by Restricted Mode
-      </div>
-    );
+  if (restrictedHidden) {
+    return <RestrictedModePlaceholder className="min-h-[72px] rounded-[9px] px-3 text-xs" />;
   }
 
   return (
     <div className="group/card relative flex items-center gap-3 py-2.5">
       <div className="w-[112px] flex-none">
-        {/* Library rows carry no has_storyboard flag, so this card cannot know
-            whether one exists and does not guess — asserting it made every
-            hover fetch a storyboard.vtt that 404s for a video without one. */}
+        {/* hasStoryboard stays false — see useVideoCardPresentation for why no
+            card may claim a storyboard its payload never advertised. */}
         <VideoCardPreview
           videoId={video.id}
           title={video.title}
           href={href}
-          src={previewEligible ? videoOriginalUrl(video.id) : null}
-          poster={
-            video.has_thumbnail
-              ? isRemote
-                ? remoteVideoThumbnailUrl(video.id)
-                : videoThumbnailUrl(video.id)
-              : null
-          }
+          src={previewSrc}
+          poster={posterSrc}
           duration={duration}
           hasStoryboard={false}
           previewEnabled={previewEligible}

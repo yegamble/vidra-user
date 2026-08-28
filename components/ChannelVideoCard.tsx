@@ -3,15 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
-import { isSensitiveVideo, videoOriginalUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
-import { useInstanceFeatures } from "@/lib/instance-features";
-import { usePlayerSettings } from "@/lib/player-settings";
-import { useRestrictedMode } from "@/lib/device-preferences";
-import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
 
 // ChannelVideoCard is the design's dense channel-grid card (DR6): a compact
 // 11px-radius thumbnail (duration chip only — no IPFS/live overlays), a two-line
@@ -29,56 +26,40 @@ export function ChannelVideoCard({
   onDeleted?: () => void;
 }) {
   const [removed, setRemoved] = useState(false);
-  const watchHref = `/videos/${video.id}`;
-  const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
-  const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
-  const sensitivePolicy = useSensitiveContentPolicy();
-  const restrictedMode = useRestrictedMode();
+  // localOnly: the channel-videos list only ever carries this channel's own
+  // (local) videos, so there is no remote/federated branch to derive here.
+  const {
+    watchHref,
+    restrictedHidden,
+    blurSensitive,
+    markSensitive,
+    previewEligible,
+    previewSrc,
+    posterSrc,
+    duration,
+  } = useVideoCardPresentation(video, { localOnly: true });
 
   if (removed) return null;
 
-  const sensitive = isSensitiveVideo(video);
-  if (sensitive && restrictedMode) {
+  if (restrictedHidden) {
     return (
-      <div className="flex aspect-video items-center justify-center rounded-[11px] bg-surface-muted px-4 text-center text-xs font-medium text-fg-muted">
-        Hidden by Restricted Mode
-      </div>
+      <RestrictedModePlaceholder className="aspect-video rounded-[11px] px-4 text-xs" />
     );
   }
-  const blurSensitive = sensitive && sensitivePolicy === "blur";
-  const markSensitive = sensitive &&
-    (sensitivePolicy === "blur" || sensitivePolicy === "warn");
 
-  const previewEligible =
-    previewFeatureEnabled &&
-    previewPreferenceEnabled &&
-    video.state === "published" &&
-    video.privacy !== "private" &&
-    video.privacy !== "password" &&
-    !blurSensitive;
-
-  // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge is
-  // noise rather than information.
-  const duration =
-    typeof video.duration_seconds === "number" && video.duration_seconds > 0
-      ? video.duration_seconds
-      : null;
   const views = typeof video.views === "number" ? `${formatCount(video.views)} views` : null;
   const age = relativeTime(video.created_at);
 
   return (
     <div className="group/card flex flex-col gap-2">
-      {/* hasStoryboard stays false: a channel listing carries no has_storyboard
-          flag, so the card cannot know whether one exists and does not guess.
-          Claiming it made every hover fetch a storyboard.vtt that 404s for any
-          video that never had one generated. The hover scrubber shows the
-          timestamp alone; frames belong to the watch page, which has the flag. */}
+      {/* hasStoryboard stays false — see useVideoCardPresentation for why no
+          card may claim a storyboard its payload never advertised. */}
       <VideoCardPreview
         videoId={video.id}
         title={video.title}
         href={watchHref}
-        src={previewEligible ? videoOriginalUrl(video.id) : null}
-        poster={video.has_thumbnail ? videoThumbnailUrl(video.id) : null}
+        src={previewSrc}
+        poster={posterSrc}
         duration={duration}
         hasStoryboard={false}
         previewEnabled={previewEligible}

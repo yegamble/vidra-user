@@ -12,8 +12,8 @@
 
 import { cache } from "react";
 
-import { internalApiBaseUrl } from "@/lib/config";
 import { INSTANCE_CONFIG_REVALIDATE_SECONDS } from "@/lib/instance-config.server";
+import { serverJson } from "@/lib/server-json";
 
 export type InstanceHomepageDocument = {
   /** Raw markdown. */
@@ -28,16 +28,10 @@ export type InstanceHomepageDocument = {
  * step). Null when unset, empty, or unreachable.
  */
 export const getInstanceHomepage = cache(async (): Promise<InstanceHomepageDocument | null> => {
-  try {
-    const res = await fetch(`${internalApiBaseUrl}/api/v1/instance/homepage`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: INSTANCE_CONFIG_REVALIDATE_SECONDS },
-    });
-    if (!res.ok) return null;
-    const doc = (await res.json()) as Partial<InstanceHomepageDocument>;
-    if (typeof doc.body !== "string" || doc.body.trim() === "") return null;
-    return { body: doc.body, hash: typeof doc.hash === "string" ? doc.hash : "" };
-  } catch {
-    return null;
-  }
+  const doc = await serverJson<Partial<InstanceHomepageDocument>>("/api/v1/instance/homepage", {
+    freshness: { revalidateSeconds: INSTANCE_CONFIG_REVALIDATE_SECONDS },
+  });
+  // An empty body is a homepage that was never written — not a document.
+  if (!doc || typeof doc.body !== "string" || doc.body.trim() === "") return null;
+  return { body: doc.body, hash: typeof doc.hash === "string" ? doc.hash : "" };
 });

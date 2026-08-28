@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { PlayIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { LiveStreamCard } from "@/lib/api";
+import { RAIL_TILE, RAIL_TRACK } from "@/lib/rail";
 
 // LiveNowRail is the home/feed "Live now" discovery surface (specs/design
 // app+desktop templates): a horizontal rail of the currently-live PUBLIC streams
@@ -47,11 +48,11 @@ export function LiveNowRail() {
       </div>
       {/* Horizontal scroll rail: 240px cards, hidden scrollbar (the row scrolls
           on touch / trackpad; focus order still reaches each card). */}
-      <ul className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul className={RAIL_TRACK}>
         {streams.map((stream) => {
           const channel = stream.channel_display_name || stream.channel_handle;
           return (
-            <li key={stream.id} className="w-[min(82vw,20rem)] flex-none snap-start sm:w-72 lg:w-64 xl:w-72">
+            <li key={stream.id} className={RAIL_TILE}>
               <Link
                 href={`/live/${encodeURIComponent(stream.id)}`}
                 aria-label={`${stream.title}, live now — ${channel}`}
