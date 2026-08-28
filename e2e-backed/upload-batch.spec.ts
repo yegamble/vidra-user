@@ -47,8 +47,9 @@ test("a creator can batch-upload three videos that all persist (chunked)", async
   // unauthenticated read, so pick Public for the whole batch.
   await page.getByLabel("Batch privacy").selectOption("public");
 
-  // Each row uploads through its own chunked session (terminal call: complete,
-  // POST /uploads/:id/complete). Wait for all three "View video" links — one per
+  // Each row uploads through its own chunked session, whose completion POST is
+  // accepted (202) and finalised on the queue the row then polls. Wait for all
+  // three "View video" links — one per
   // finalised video — the third having waited behind the concurrency cap of 2.
   await page.getByRole("button", { name: "Upload 3 videos" }).click();
   await expect(page.getByRole("link", { name: "View video" })).toHaveCount(3, { timeout: 60_000 });

@@ -2,9 +2,20 @@
 //
 // The flow: open a session (POST /videos/:id/upload-session), PUT each chunk of
 // the file sequentially (PUT /uploads/:id/chunks/:n) with per-chunk retry, then
-// complete (POST /uploads/:id/complete) to assemble + finalise the video through
-// the same pipeline as a direct upload. Progress is chunk-accurate (driven by the
-// server's bytes_received). Cancellation aborts the in-flight chunk and rejects
+// complete (POST /uploads/:id/complete) — which ACCEPTS the completion and
+// answers 202 — and poll GET /uploads/:id until the server has assembled and
+// finalised the file.
+//
+// The completion is asynchronous because it cannot be anything else: assembling
+// the chunks back out of object storage, re-uploading the assembled file while
+// hashing it, then probing and decoding it for the thumbnail and storyboard is
+// minutes of work on a remote bucket — far past the API's 30s request deadline,
+// and past a CDN's origin-response cap besides. Uploads used to reach 100% and
+// then 5xx for exactly that reason.
+//
+// Progress is chunk-accurate during the transfer (driven by the server's
+// bytes_received) and switches to the "processing" phase for the poll, which has
+// no byte counter to report. Cancellation aborts the in-flight chunk and rejects
 // as a cancellation (the caller then DELETEs the session); an interruption (a
 // browser refresh) leaves a resumable session recorded in localStorage so the
 // same file, re-picked, can resume from the chunks that already landed.
@@ -18,7 +29,7 @@ import { api } from "./endpoints";
 import { computeFileFingerprint } from "./fingerprint";
 import type { UploadProgress } from "./upload";
 import { UPLOAD_CANCELLED_CODE } from "./upload";
-import type { UploadStatusResponse, UploadVideoResult } from "./types";
+import type { UploadStatusResponse, Video } from "./types";
 
 /** A resumable upload session remembered across an interruption (localStorage). */
 export interface StoredUploadSession {
@@ -39,6 +50,27 @@ export interface StoredUploadSession {
 }
 
 const STORE_KEY = "vidra.upload-sessions";
+
+/** The ApiError code carried when the server finalised the upload as failed. */
+export const UPLOAD_FAILED_CODE = "upload_failed";
+
+/**
+ * The ApiError code carried when server-side processing did not settle inside
+ * the client's overall cap. The upload is NOT necessarily lost — the job may
+ * still finish — so the message says so rather than claiming failure.
+ */
+export const UPLOAD_PROCESSING_TIMEOUT_CODE = "upload_processing_timeout";
+
+/** Default poll interval while the server finalises (before backoff). */
+const DEFAULT_POLL_INTERVAL_MS = 2_000;
+/** The poll interval never grows past this — a stalled bar needs a live signal. */
+const MAX_POLL_INTERVAL_MS = 10_000;
+/**
+ * Overall cap on server-side processing. Generous, because a multi-gigabyte
+ * upload behind a busy queue legitimately takes a while; finite, because a
+ * promise that never settles is a spinner that never stops.
+ */
+const DEFAULT_PROCESSING_TIMEOUT_MS = 30 * 60_000;
 
 function cancelledError(): ApiError {
   return new ApiError({ status: 0, code: UPLOAD_CANCELLED_CODE, message: "upload cancelled" });
@@ -208,12 +240,40 @@ export interface ResumableUploadOptions {
    * scoped to plain uploads. Default "upload".
    */
   mode?: "upload" | "replace";
+  /**
+   * How long to wait between polls of the session while the server finalises
+   * (default 2s, then mild backoff up to 10s). Tests pass 0.
+   */
+  pollIntervalMs?: number;
+  /**
+   * Overall cap on the server-side processing phase (default 30 min). Past it
+   * the promise rejects with UPLOAD_PROCESSING_TIMEOUT_CODE rather than polling
+   * forever; the bytes are safely stored either way.
+   */
+  processingTimeoutMs?: number;
 }
 
-function emit(onProgress: ResumableUploadOptions["onProgress"], loaded: number, total: number): void {
+/**
+ * What a finished resumable upload resolves to: the finalised video, read back
+ * once the server reports the session completed.
+ *
+ * It used to be the completion response's { video, file } pair. The completion
+ * response is now the session's state, so the video is fetched — and `file` is
+ * dropped because nothing consumed it.
+ */
+export interface ResumableUploadResult {
+  video: Video;
+}
+
+function emit(
+  onProgress: ResumableUploadOptions["onProgress"],
+  loaded: number,
+  total: number,
+  phase: "uploading" | "processing" = "uploading",
+): void {
   if (!onProgress) return;
   const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((loaded / total) * 100))) : 0;
-  onProgress({ loaded, total, percent });
+  onProgress({ loaded, total, percent, phase });
 }
 
 // putChunkWithRetry sends one chunk, retrying transient failures with backoff.
@@ -244,19 +304,149 @@ async function putChunkWithRetry(
     : new ApiError({ status: 0, code: "network_error", message: "the upload failed after several retries" });
 }
 
+// completeWithRetry POSTs the completion, retrying transient failures on the
+// same terms a chunk gets. It is now safe to retry for two reasons the old
+// synchronous endpoint could not offer: the call is CHEAP (it validates and
+// enqueues, nothing more), and it is IDEMPOTENT (a second POST for a session
+// already queued/processing returns the current state instead of running the
+// pipeline twice). Losing the response to a transient blip used to strand an
+// upload that had already transferred every byte.
+async function completeWithRetry(
+  uploadId: string,
+  opts: ResumableUploadOptions,
+): Promise<UploadStatusResponse> {
+  const retries = opts.chunkRetries ?? 3;
+  const base = opts.retryBaseMs ?? 500;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    if (opts.signal?.aborted) throw cancelledError();
+    try {
+      return await api.completeUploadSession(uploadId);
+    } catch (err) {
+      if (isCancelled(err)) throw err;
+      if (!isRetriable(err)) throw err;
+      lastErr = err;
+      if (attempt < retries - 1) await abortableDelay(base * 2 ** attempt, opts.signal);
+    }
+  }
+  throw lastErr instanceof ApiError
+    ? lastErr
+    : new ApiError({ status: 0, code: "network_error", message: "could not complete the upload" });
+}
+
 /**
- * resumableUpload runs the full chunked upload for `file` against video `videoId`
- * and returns the finalised video (the same shape as a direct upload). It opens
- * a session (or resumes the one in `opts.resume`), PUTs the missing chunks with
- * retry, and completes. On success the remembered session is forgotten; on a
- * cancellation (aborted signal) it rejects with the cancellation ApiError and
- * leaves cleanup to the caller.
+ * legacyCompletionVideo recognises a PRE-ASYNC backend's completion response.
+ *
+ * Before the completion queue, POST .../complete ran the whole pipeline inline
+ * and answered 201 with { video, file }. This client speaks the new contract, but
+ * the frontend and the API deploy separately — and rolling core back to the
+ * previous release is meant to be a tag flip. Recognising the old shape means
+ * the new frontend keeps working against an old (or rolled-back) core instead of
+ * telling every creator their upload vanished, and it makes "frontend first" a
+ * safe deploy order.
+ *
+ * Returns the finalised video when the body is the legacy shape, else null.
+ */
+function legacyCompletionVideo(body: unknown): Video | null {
+  const video = (body as { video?: unknown } | null | undefined)?.video;
+  if (video && typeof video === "object" && typeof (video as Video).id === "string") {
+    return video as Video;
+  }
+  return null;
+}
+
+/**
+ * awaitFinalized polls the session until the server has finished with it.
+ *
+ * The states it walks are queued → processing → completed | failed. A poll that
+ * fails transiently is NOT fatal: the bytes are already stored and the job is
+ * already queued, so a network blip mid-poll must not be reported as a failed
+ * upload — it just costs another interval. A 4xx (the session vanished, or the
+ * caller lost access) is fatal.
+ *
+ * The interval backs off mildly so a long transcode-heavy queue does not turn
+ * into hundreds of requests, and the whole phase is capped so the promise always
+ * settles.
+ */
+async function awaitFinalized(
+  uploadId: string,
+  first: UploadStatusResponse,
+  opts: ResumableUploadOptions,
+): Promise<UploadStatusResponse> {
+  const base = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const deadline = Date.now() + (opts.processingTimeoutMs ?? DEFAULT_PROCESSING_TIMEOUT_MS);
+  let status = first;
+  let wait = base;
+  let consecutivePollErrors = 0;
+
+  while (status.state === "queued" || status.state === "processing") {
+    if (opts.signal?.aborted) throw cancelledError();
+    if (Date.now() > deadline) {
+      throw new ApiError({
+        status: 0,
+        code: UPLOAD_PROCESSING_TIMEOUT_CODE,
+        message:
+          "the upload is taking longer than expected to process — it may still finish; check Your videos in a few minutes",
+      });
+    }
+    await abortableDelay(wait, opts.signal);
+    try {
+      status = await api.getUploadSession(uploadId, opts.signal);
+      consecutivePollErrors = 0;
+    } catch (err) {
+      if (isCancelled(err)) throw err;
+      // A 4xx means the session is genuinely gone/inaccessible; anything else is
+      // transient and the job is still queued server-side.
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500) throw err;
+      consecutivePollErrors += 1;
+      logger.warn("upload status poll failed", {
+        upload_id: uploadId,
+        consecutive_errors: consecutivePollErrors,
+      });
+    }
+    wait = Math.min(Math.round(wait * 1.5) || base, MAX_POLL_INTERVAL_MS);
+  }
+
+  if (status.state === "failed") {
+    throw new ApiError({
+      status: 0,
+      code: UPLOAD_FAILED_CODE,
+      message:
+        status.failure_reason.trim() !== ""
+          ? status.failure_reason
+          : "the upload could not be processed",
+    });
+  }
+  if (status.state !== "completed") {
+    // "active" (never accepted) or "cancelled" (dropped underneath us).
+    throw new ApiError({
+      status: 0,
+      code: UPLOAD_FAILED_CODE,
+      message: "the upload is no longer available",
+    });
+  }
+  return status;
+}
+
+/**
+ * resumableUpload runs the full chunked upload for `file` against video
+ * `videoId` and resolves with the finalised video. It opens a session (or
+ * resumes the one in `opts.resume`), PUTs the missing chunks with retry,
+ * completes (202), then polls the session until the server has finished
+ * assembling and processing the file and reads the video back.
+ *
+ * On success the remembered session is forgotten. A server-side failure rejects
+ * with UPLOAD_FAILED_CODE carrying the server's own reason; a cancellation
+ * (aborted signal) rejects with the cancellation ApiError and leaves cleanup to
+ * the caller. Note that a resolved video may still be state "failed" — the
+ * session completing means the pipeline RAN, not that the probe liked the file,
+ * exactly as before.
  */
 export async function resumableUpload(
   videoId: string,
   file: File,
   opts: ResumableUploadOptions = {},
-): Promise<UploadVideoResult> {
+): Promise<ResumableUploadResult> {
   if (opts.signal?.aborted) throw cancelledError();
 
   let uploadId: string;
@@ -317,9 +507,24 @@ export async function resumableUpload(
   }
 
   if (opts.signal?.aborted) throw cancelledError();
-  const result = await api.completeUploadSession(uploadId);
-  forgetUploadSession(uploadId);
-  // A completed upload is fully sent — make sure the bar reads 100%.
+
+  // Every byte is on the server — the bar reads 100% from here, and the phase
+  // becomes "processing" so the UI stops implying bytes are still moving.
   emit(opts.onProgress, file.size, file.size);
-  return result;
+  emit(opts.onProgress, file.size, file.size, "processing");
+
+  const accepted = await completeWithRetry(uploadId, opts);
+  // A pre-async backend finalised inline and answered with the video itself.
+  const legacy = legacyCompletionVideo(accepted);
+  if (legacy) {
+    forgetUploadSession(uploadId);
+    return { video: legacy };
+  }
+  const finished = await awaitFinalized(uploadId, accepted, opts);
+  // Only now is the session finished with: forgetting it earlier would drop the
+  // resume record while the server could still fail the finalize.
+  forgetUploadSession(uploadId);
+  // The session says the pipeline ran; the VIDEO says what it decided.
+  const video = await api.getVideo(finished.video_id, undefined, opts.signal);
+  return { video };
 }

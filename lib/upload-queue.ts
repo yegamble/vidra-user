@@ -25,6 +25,8 @@ import type { QuotaStatus } from "@/lib/api";
  *  - over_quota  the preflight marked it as exceeding the storage quota (never
  *                started; the creator frees space or removes it)
  */
+import type { UploadPhase } from "@/lib/api";
+
 export type BatchItemStatus =
   | "queued"
   | "uploading"
@@ -48,6 +50,13 @@ export interface BatchItem {
   total: number;
   /** Whole-number 0–100 progress. */
   percent: number;
+  /**
+   * Which half of the upload the row is in. "processing" starts the moment the
+   * last chunk lands and the server takes over (assembly, storage, probe) — work
+   * that has no byte counter, so the row must say so instead of sitting at a
+   * stalled 100%. Absent until the first progress event.
+   */
+  phase?: UploadPhase;
   /** The finalised video id once done (for the "View" link). */
   videoId?: string;
   /** A safe, user-facing message for a failed row. */
@@ -103,7 +112,14 @@ export type QueueAction =
   | { type: "enqueue"; items: BatchItem[] }
   | { type: "setTitle"; id: string; title: string }
   | { type: "start"; id: string }
-  | { type: "progress"; id: string; loaded: number; total: number; percent: number }
+  | {
+      type: "progress";
+      id: string;
+      loaded: number;
+      total: number;
+      percent: number;
+      phase?: UploadPhase;
+    }
   | { type: "succeed"; id: string; videoId: string }
   | { type: "fail"; id: string; error: string }
   // `requeue` returns an in-flight row to `queued` WITHOUT marking it failed —
@@ -157,6 +173,7 @@ export function queueReducer(state: BatchItem[], action: QueueAction): BatchItem
         loaded: action.loaded,
         total: action.total,
         percent: action.percent,
+        phase: action.phase ?? "uploading",
       });
     }
     case "succeed": {

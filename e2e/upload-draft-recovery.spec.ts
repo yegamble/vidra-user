@@ -122,20 +122,24 @@ test("the studio lists an unfinished upload from the server as a recovery card",
 test("re-picking the file resumes the upload, sending only the missing chunks", async ({ page }) => {
   await studioBase(page);
   await page.route(ME_UPLOADS, (route) => route.fulfill({ json: { uploads: [activeUpload()] } }));
-  // GET the session status → active, chunk 0 already received (of 3).
+  // GET the session status → active, chunk 0 already received (of 3). The same
+  // endpoint is the finalisation poll once the completion is accepted (202), so
+  // it reports "completed" from that point on.
+  let completionAccepted = false;
   await page.route(SESSION, (route) =>
     route.request().method() === "GET"
       ? route.fulfill({
           json: {
             upload_id: "up1",
             video_id: "v1",
-            state: "active",
+            state: completionAccepted ? "completed" : "active",
             size: 10,
             chunk_size: 4,
             total_chunks: 3,
-            received_chunks: [0],
-            bytes_received: 4,
+            received_chunks: completionAccepted ? [0, 1, 2] : [0],
+            bytes_received: completionAccepted ? 10 : 4,
             expires_at: FUTURE,
+            failure_reason: "",
           },
         })
       : route.continue(),
@@ -159,7 +163,27 @@ test("re-picking the file resumes the upload, sending only the missing chunks", 
       },
     });
   });
-  await page.route(COMPLETE, (route) => route.fulfill({ status: 201, json: { video: video() } }));
+  await page.route(COMPLETE, (route) => {
+    completionAccepted = true;
+    return route.fulfill({
+      status: 202,
+      json: {
+        upload_id: "up1",
+        video_id: "v1",
+        state: "queued",
+        size: 10,
+        chunk_size: 4,
+        total_chunks: 3,
+        received_chunks: [0, 1, 2],
+        bytes_received: 10,
+        expires_at: FUTURE,
+        failure_reason: "",
+      },
+    });
+  });
+  await page.route(VIDEO, (route) =>
+    route.request().method() === "GET" ? route.fulfill({ json: video() }) : route.fallback(),
+  );
 
   await page.getByRole("link", { name: "Studio" }).click();
   const row = page.getByRole("listitem").filter({ hasText: "clip.mp4" });

@@ -308,8 +308,10 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
   await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
   // A .mp4 extension gets past the container allow-list, but the bytes are not a
-  // video — the real ffprobe rejects them and the auto-started upload finalises as
-  // "failed" on select, so the honest error surfaces before any Publish.
+  // video — the real ffprobe rejects them, so the auto-started upload's finalize
+  // job publishes nothing and the video lands in "failed". The completion POST
+  // is accepted (202) either way; the honest error surfaces once the client's
+  // poll settles, still before any Publish.
   const uploaded = page.waitForResponse(
     (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );

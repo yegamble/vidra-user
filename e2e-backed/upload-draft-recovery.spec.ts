@@ -83,7 +83,10 @@ test("a server-side upload session appears in the recovery card after reload and
   await expect(row).toBeVisible();
 
   // 4. Resume: re-pick the same file → PUT any missing chunks → complete, which
-  //    assembles the real mp4 and finalises it through the scan/probe pipeline.
+  //    is ACCEPTED (202); the finalize worker then assembles the real mp4 and
+  //    runs it through the scan/probe pipeline. The client polls the session, so
+  //    "Upload finished." appears once the worker is done, not once the POST
+  //    returns.
   const completed = page.waitForResponse(
     (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );

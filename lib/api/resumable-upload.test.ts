@@ -8,7 +8,7 @@ import {
   rememberUploadSession,
   resumableUpload,
 } from "./resumable-upload";
-import type { UploadSessionResponse, UploadStatusResponse } from "./types";
+import type { UploadSessionResponse, UploadStatusResponse, Video } from "./types";
 
 const FUTURE = new Date(Date.now() + 3_600_000).toISOString();
 
@@ -36,18 +36,37 @@ function session(): UploadSessionResponse {
   return { upload_id: "up1", chunk_size: 4, total_chunks: 3, size: 10, expires_at: FUTURE };
 }
 
-function statusFor(received: number[]): UploadStatusResponse {
+function statusFor(
+  received: number[],
+  state: UploadStatusResponse["state"] = "active",
+): UploadStatusResponse {
   const bytes = received.reduce((s, i) => s + (i === 2 ? 2 : 4), 0);
   return {
     upload_id: "up1",
     video_id: "v1",
-    state: "active",
+    state,
     size: 10,
     chunk_size: 4,
     total_chunks: 3,
     received_chunks: [...received].sort((a, b) => a - b),
     bytes_received: bytes,
     expires_at: FUTURE,
+    failure_reason: "",
+  };
+}
+
+function publishedVideo(): Video {
+  return {
+    id: "v1",
+    remote: false,
+    channel_id: "c1",
+    title: "clip",
+    description: "",
+    privacy: "public",
+    state: "published",
+    created_at: FUTURE,
+    is_sensitive: false,
+    sensitive_reason: "",
   };
 }
 
@@ -66,21 +85,11 @@ describe("resumableUpload", () => {
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     vi.spyOn(api, "createUploadSession").mockResolvedValue(session());
-    vi.spyOn(api, "completeUploadSession").mockResolvedValue({
-      video: {
-        id: "v1",
-        remote: false,
-        channel_id: "c1",
-        title: "clip",
-        description: "",
-        privacy: "public",
-        state: "published",
-        created_at: FUTURE,
-        is_sensitive: false,
-        sensitive_reason: "",
-      },
-      file: { id: "f1", kind: "original", content_type: "video/mp4", original_name: "clip.mp4", size_bytes: 1024, created_at: FUTURE },
-    });
+    // Completion is asynchronous: the POST answers 202 with the session's
+    // state. The default mock settles immediately (state "completed") so the
+    // tests whose subject is the chunk protocol stay about the chunk protocol.
+    vi.spyOn(api, "completeUploadSession").mockResolvedValue(statusFor([0, 1, 2], "completed"));
+    vi.spyOn(api, "getVideo").mockResolvedValue(publishedVideo());
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -185,6 +194,98 @@ describe("resumableUpload", () => {
     const err = await resumableUpload("v1", makeFile(), { retryBaseMs: 0 }).catch((e: unknown) => e);
     expect((err as ApiError).status).toBe(409);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // --- asynchronous completion (202 → poll) --------------------------------
+  //
+  // Completion no longer returns the finalised video: the server validates,
+  // enqueues, and answers 202, because assembling + probing the file takes
+  // minutes on a remote object store and cannot fit an HTTP deadline (nor a
+  // CDN's origin-response cap). The client polls the session instead.
+
+  it("polls the session after a 202 and resolves with the finished video", async () => {
+    acceptingChunks();
+    vi.spyOn(api, "completeUploadSession").mockResolvedValue(statusFor([0, 1, 2], "queued"));
+    const poll = vi
+      .spyOn(api, "getUploadSession")
+      .mockResolvedValueOnce(statusFor([0, 1, 2], "processing"))
+      .mockResolvedValueOnce(statusFor([0, 1, 2], "completed"));
+    const getVideo = vi.spyOn(api, "getVideo").mockResolvedValue(publishedVideo());
+
+    const phases: string[] = [];
+    const res = await resumableUpload("v1", makeFile(), {
+      pollIntervalMs: 0,
+      onProgress: (p) => phases.push(p.phase ?? "uploading"),
+    });
+
+    expect(poll).toHaveBeenCalledTimes(2);
+    expect(getVideo).toHaveBeenCalledWith("v1", undefined, undefined);
+    expect(res.video.state).toBe("published");
+    // The UI is told the upload moved from sending bytes to server-side work.
+    expect(phases).toContain("processing");
+    expect(phases.at(-1)).toBe("processing");
+    // A finished upload is forgotten only once it actually finished.
+    expect(findResumableUploadSession({ name: "clip.mp4", size: 10 })).toBeNull();
+  });
+
+  it("rejects with the server's reason when the session ends failed", async () => {
+    acceptingChunks();
+    vi.spyOn(api, "completeUploadSession").mockResolvedValue(statusFor([0, 1, 2], "queued"));
+    vi.spyOn(api, "getUploadSession").mockResolvedValue({
+      ...statusFor([0, 1, 2], "failed"),
+      failure_reason: "the file is not a playable video",
+    });
+
+    const err = await resumableUpload("v1", makeFile(), { pollIntervalMs: 0 }).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).code).toBe("upload_failed");
+    expect((err as ApiError).message).toBe("the file is not a playable video");
+  });
+
+  it("retries a transient failure of the complete POST (it is cheap and idempotent)", async () => {
+    acceptingChunks();
+    const complete = vi
+      .spyOn(api, "completeUploadSession")
+      .mockRejectedValueOnce(new ApiError({ status: 503, code: "unavailable", message: "nope" }))
+      .mockResolvedValue(statusFor([0, 1, 2], "completed"));
+    vi.spyOn(api, "getVideo").mockResolvedValue(publishedVideo());
+
+    const res = await resumableUpload("v1", makeFile(), { retryBaseMs: 0, pollIntervalMs: 0 });
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(res.video.state).toBe("published");
+  });
+
+  it("still works against a pre-async backend that finalises inline", async () => {
+    acceptingChunks();
+    // The old contract: 201 with { video, file } and no session state at all.
+    // The frontend and the API deploy separately (and a core rollback is meant
+    // to be a tag flip), so the new client must not tell every creator their
+    // upload vanished.
+    vi.spyOn(api, "completeUploadSession").mockResolvedValue({
+      video: publishedVideo(),
+      file: { id: "f1" },
+    } as unknown as UploadStatusResponse);
+    const poll = vi.spyOn(api, "getUploadSession");
+
+    const res = await resumableUpload("v1", makeFile(), { pollIntervalMs: 0 });
+    expect(res.video.state).toBe("published");
+    expect(poll).not.toHaveBeenCalled();
+    expect(findResumableUploadSession({ name: "clip.mp4", size: 10 })).toBeNull();
+  });
+
+  it("gives up after the overall processing cap instead of polling forever", async () => {
+    acceptingChunks();
+    vi.spyOn(api, "completeUploadSession").mockResolvedValue(statusFor([0, 1, 2], "queued"));
+    vi.spyOn(api, "getUploadSession").mockResolvedValue(statusFor([0, 1, 2], "processing"));
+
+    const err = await resumableUpload("v1", makeFile(), {
+      pollIntervalMs: 0,
+      processingTimeoutMs: 0,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).code).toBe("upload_processing_timeout");
   });
 
   it("a pre-aborted signal rejects as a cancellation before opening a session", async () => {

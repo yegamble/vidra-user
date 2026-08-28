@@ -867,8 +867,10 @@ export const api = {
     ),
 
   /**
-   * GET /api/v1/uploads/{upload_id} — the resume contract: which chunk indices
-   * have landed (owner only). Read after an interruption to skip received chunks.
+   * GET /api/v1/uploads/{upload_id} — the resume contract (which chunk indices
+   * have landed) AND the session's lifecycle state (owner only). Read after an
+   * interruption to skip received chunks, and polled after the completion POST
+   * answers 202 until `state` is "completed" or "failed".
    */
   getUploadSession: (uploadId: string, signal?: AbortSignal) =>
     apiRequest<UploadStatusResponse>(`/api/v1/uploads/${encodeURIComponent(uploadId)}`, { signal }),
@@ -881,12 +883,18 @@ export const api = {
     apiRequest<void>(`/api/v1/uploads/${encodeURIComponent(uploadId)}`, { method: "DELETE" }),
 
   /**
-   * POST /api/v1/uploads/{upload_id}/complete — assemble the session's chunks and
-   * finalise the video through the same pipeline as a direct upload (auth, owner).
-   * Returns the finalised video (state "published", or "failed" if a probe rejected it).
+   * POST /api/v1/uploads/{upload_id}/complete — ACCEPT the completion (auth,
+   * owner). Answers 202 with the session's state; the assembly and the publish
+   * pipeline run on a queue, because doing them inline meant minutes of work
+   * inside a 30s request deadline (behind a CDN that caps origin response time),
+   * which is why every real upload used to fail at 100%.
+   *
+   * Poll `getUploadSession` until state is "completed" — then read the video for
+   * its outcome — or "failed" (failure_reason explains it). Idempotent: a repeat
+   * POST returns the current state without re-queueing.
    */
   completeUploadSession: (uploadId: string) =>
-    apiRequest<UploadVideoResult>(`/api/v1/uploads/${encodeURIComponent(uploadId)}/complete`, {
+    apiRequest<UploadStatusResponse>(`/api/v1/uploads/${encodeURIComponent(uploadId)}/complete`, {
       method: "POST",
     }),
 
