@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AdminNavLink, ModerationNavLink, RoleNavLink } from "./RoleNavLink";
+import { RoleNavLink } from "./RoleNavLink";
 
 let sessionUser: { id: string; role?: string } | null = null;
 vi.mock("@/components/auth/AuthProvider", () => ({
@@ -42,15 +42,15 @@ describe("RoleNavLink", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("lets an admin through both", () => {
+  it("lets an admin through both role levels", () => {
     sessionUser = { id: "u1", role: "admin" };
     render(
       <>
-        <AdminNavLink />
-        <ModerationNavLink />
+        <RoleNavLink minRole="admin" href="/admin" label="Admin" />
+        <RoleNavLink minRole="moderator" href="/moderation" label="Moderation" />
       </>,
     );
-    expect(screen.getByRole("link", { name: "Admin" }).getAttribute("href")).toBe("/admin/users");
+    expect(screen.getByRole("link", { name: "Admin" }).getAttribute("href")).toBe("/admin");
     expect(screen.getByRole("link", { name: "Moderation" }).getAttribute("href")).toBe(
       "/moderation",
     );
@@ -58,9 +58,11 @@ describe("RoleNavLink", () => {
 
   it("defaults to a focusable nav style and lets a caller restyle it", () => {
     sessionUser = { id: "u1", role: "admin" };
-    const { rerender } = render(<AdminNavLink />);
+    const { rerender } = render(<RoleNavLink minRole="admin" href="/admin" label="Admin" />);
     expect(screen.getByRole("link", { name: "Admin" }).className).toContain("focus-ring");
-    rerender(<AdminNavLink className="block px-4 py-2" />);
+    rerender(
+      <RoleNavLink minRole="admin" href="/admin" label="Admin" className="block px-4 py-2" />,
+    );
     expect(screen.getByRole("link", { name: "Admin" }).className).toBe("block px-4 py-2");
   });
 });
