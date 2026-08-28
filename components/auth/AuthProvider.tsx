@@ -20,7 +20,7 @@ import {
 import type {
   AuthResponse,
   ClaimOwnerRequest,
-  LoginRequest,
+  LoginCredentials,
   RegisterRequest,
   UpdateProfileRequest,
   User,
@@ -54,7 +54,8 @@ export type LoginOutcome =
 interface SessionContextValue {
   user: User | null;
   status: SessionStatus;
-  login: (credentials: Omit<LoginRequest, "cookie_mode">) => Promise<LoginOutcome>;
+  /** Credentials name the account by `identifier` (email or username) or the legacy `email`. */
+  login: (credentials: LoginCredentials) => Promise<LoginOutcome>;
   /** Second half of a two-factor login (TOTP or recovery code). */
   completeMfaChallenge: (mfaToken: string, code: string) => Promise<void>;
   register: (input: Omit<RegisterRequest, "cookie_mode">) => Promise<RegisterOutcome>;
@@ -204,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [scheduleRefresh]);
 
   const login = useCallback(
-    async (credentials: Omit<LoginRequest, "cookie_mode">): Promise<LoginOutcome> => {
+    async (credentials: LoginCredentials): Promise<LoginOutcome> => {
       const res = await authApi.login(credentials);
       // An MFA-enabled account answers {mfa_required, mfa_token} with NO
       // session tokens — the caller must run the challenge step.

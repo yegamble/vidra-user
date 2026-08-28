@@ -77,5 +77,6 @@ export type {
   SensitiveVideoFields,
 } from "./instance-platform";
 export { authApi, beginATProtoLogin, oauthBeginUrl } from "./auth";
+export type { LoginCredentials } from "./auth";
 export { getAccessToken, setAccessToken, setSessionExpiredHandler } from "./auth-store";
 export type * from "./types";

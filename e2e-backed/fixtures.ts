@@ -216,6 +216,23 @@ export async function loginToken(
   return ((await res.json()) as { token: string }).token;
 }
 
+/**
+ * loginTokenByIdentifier logs in through the `identifier` field, which accepts
+ * an email OR a username. Returns "" when the login was refused, so callers can
+ * assert on a refusal instead of blowing up on a missing token.
+ */
+export async function loginTokenByIdentifier(
+  request: APIRequestContext,
+  identifier: string,
+  password: string,
+): Promise<string> {
+  const res = await request.post(`${API_URL}/api/v1/auth/login`, {
+    data: { identifier, password },
+  });
+  if (!res.ok()) return "";
+  return ((await res.json()) as { token?: string }).token ?? "";
+}
+
 /** liveStreams reads a channel's live streams via the API as the owner. */
 export async function liveStreams(
   request: APIRequestContext,

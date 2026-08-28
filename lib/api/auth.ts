@@ -23,6 +23,20 @@ import type {
 } from "./types";
 
 /**
+ * Login credentials carry EXACTLY ONE identifier field — the contract 422s a
+ * body holding both — so this union is what callers should pass rather than
+ * the generated shape, where both fields are independently optional.
+ *
+ * `identifier` accepts an email address OR a username. `email` is the legacy
+ * email-only field and is still sent for email-shaped input, which keeps
+ * sign-in working against a backend deployed before `identifier` existed.
+ */
+type LoginBody = Omit<LoginRequest, "cookie_mode">;
+export type LoginCredentials =
+  | (LoginBody & { email: string; identifier?: never })
+  | (LoginBody & { identifier: string; email?: never });
+
+/**
  * Typed wrappers for the vidra-core auth endpoints.
  *
  * Session endpoints run in COOKIE MODE: register/login send cookie_mode: true
@@ -68,11 +82,13 @@ export const authApi = {
     }),
 
   /**
-   * POST /api/v1/auth/login — exchange credentials for a session. For an
-   * MFA-enabled account valid credentials return {mfa_required, mfa_token}
-   * with NO session tokens — finish at completeMFAChallenge within 5 minutes.
+   * POST /api/v1/auth/login — exchange credentials for a session. The account
+   * is named by exactly one of `identifier` (email OR username) or the legacy
+   * `email`. For an MFA-enabled account valid credentials return
+   * {mfa_required, mfa_token} with NO session tokens — finish at
+   * completeMFAChallenge within 5 minutes.
    */
-  login: (body: Omit<LoginRequest, "cookie_mode">) =>
+  login: (body: LoginCredentials) =>
     apiRequest<AuthResponse | MFARequiredResponse>("/api/v1/auth/login", {
       method: "POST",
       body: { ...body, cookie_mode: true },

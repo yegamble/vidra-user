@@ -57,6 +57,15 @@ describe("authApi + auth-store", () => {
     expect(res.user.username).toBe("ada");
   });
 
+  it("login POSTs a username as `identifier`, never as `email`", async () => {
+    fetchMock.mockResolvedValue(okJson(session));
+    await authApi.login({ identifier: "ada", password: "pw" });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBe(JSON.stringify({ identifier: "ada", password: "pw", cookie_mode: true }));
+    // Sending both identifiers is a 422 at the contract, so exactly one goes out.
+    expect(JSON.parse(init.body as string)).not.toHaveProperty("email");
+  });
+
   it("register POSTs to the register endpoint in cookie mode", async () => {
     fetchMock.mockResolvedValue(okJson(session));
     await authApi.register({ username: "ada", email: "ada@example.test", password: "password1" });
