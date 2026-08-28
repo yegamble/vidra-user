@@ -9,7 +9,10 @@ import type { StoredUploadSession, VideoConfigOption, VideoState } from "@/lib/a
 // MyVideosSection, ManagedVideoView, ChannelManage) all draw on. Extracted
 // verbatim from the pre-split StudioView so behaviour is unchanged.
 
-export type Status = "loading" | "error" | "ready";
+// The studio's five surfaces import `Status` from here; it is the shared
+// loading/error/ready triple under a different name, re-exported rather than
+// re-declared so there is one definition in the codebase, not two.
+export type { ResourceStatus as Status } from "@/lib/use-api-resource";
 // Upload lifecycle. "uploaded" is the file-path-only phase between a finished
 // (auto-started) chunk upload and the creator pressing Publish: the bytes are on
 // the server as a PRIVATE draft, the metadata form is still editable, and no
