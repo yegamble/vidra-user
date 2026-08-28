@@ -112,6 +112,12 @@ function Thread({
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [peerReadId, setPeerReadId] = useState<string | undefined>(undefined);
   const [envelopes, setEnvelopes] = useState<EncryptedMessage[] | null>(null);
+  // Encrypted history paging. The wire carries no total and no has_more, so a
+  // FULL page is the only "there is probably more" signal and a short one is the
+  // end. See the before_id contract on api.getConversationMessages.
+  const [hasEarlier, setHasEarlier] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [earlierError, setEarlierError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [offline, setOffline] = useState(false);
 
@@ -120,10 +126,17 @@ function Thread({
   const inFlightSendsRef = useRef(0);
   const pollFailuresRef = useRef(0);
   const pendingRef = useRef<PendingMessage[]>(pending);
+  // Read by loadEarlier so it can derive the keyset cursor without depending on
+  // (and re-creating itself for) every envelope change.
+  const envelopesRef = useRef<EncryptedMessage[] | null>(null);
 
   useEffect(() => {
     pendingRef.current = pending;
   }, [pending]);
+
+  useEffect(() => {
+    envelopesRef.current = envelopes;
+  }, [envelopes]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -146,6 +159,7 @@ function Thread({
           void api.markConversationRead(conversationId).catch(() => {});
         } else {
           setEnvelopes(res.envelopes);
+          setHasEarlier(res.envelopes.length === INITIAL_LIMIT);
           // An encrypted thread carries an unread badge like any other — the
           // server counts envelopes, not plaintext — so its read watermark has to
           // advance here too, or the badge sticks until a plaintext DM arrives.
@@ -212,6 +226,32 @@ function Thread({
   const setAtBottom = useCallback((atBottom: boolean) => {
     atBottomRef.current = atBottom;
   }, []);
+
+  // Page UPWARD through encrypted history with the before_id keyset cursor: the
+  // oldest envelope we hold (the list is newest-first, so the last one). No
+  // `offset` may ride along — the backend 422s on the two together. The result
+  // goes through the same upsert the poll uses, so order and de-dupe are free.
+  const loadEarlier = useCallback(async () => {
+    const loaded = envelopesRef.current;
+    if (!loaded || loaded.length === 0) return;
+    setLoadingEarlier(true);
+    setEarlierError(null);
+    try {
+      const res = await api.getConversationMessages(conversationId, {
+        limit: INITIAL_LIMIT,
+        before_id: loaded[loaded.length - 1].id,
+      });
+      if (!mountedRef.current) return;
+      if ("messages" in res) return; // not an encrypted thread; nothing to page
+      setEnvelopes((prev) => mergeEnvelopes(prev, res.envelopes));
+      setHasEarlier(res.envelopes.length === INITIAL_LIMIT);
+    } catch {
+      if (!mountedRef.current) return;
+      setEarlierError("Could not load earlier messages.");
+    } finally {
+      if (mountedRef.current) setLoadingEarlier(false);
+    }
+  }, [conversationId]);
 
   function retry() {
     setStatus("loading");
@@ -346,6 +386,10 @@ function Thread({
               recipientId={recipientHint}
               myUserId={meId ?? ""}
               onAtBottomChange={setAtBottom}
+              hasEarlier={hasEarlier}
+              loadingEarlier={loadingEarlier}
+              earlierError={earlierError}
+              onLoadEarlier={loadEarlier}
             />
           </div>
         </div>

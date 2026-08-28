@@ -90,28 +90,42 @@ function encryptedSummary() {
 function installStubCrypto() {
   const enc = (s: string) => btoa(unescape(encodeURIComponent(s)));
   const dec = (s: string) => decodeURIComponent(escape(atob(s)));
-  const makeAccount = (idk: string, sgk: string) => ({
-    identityKey: idk,
-    signingKey: sgk,
-    fingerprint: () => sgk,
-    generateOneTimeKeys: (count: number) =>
-      Array.from({ length: count }, (_, i) => ({ key_id: "k" + i, key: "otk" + i })),
-    encryptFor: (_device: unknown, plaintext: string) => ({
-      message_type: 0,
-      ciphertext: enc(plaintext),
-    }),
-    decryptFrom: (_ik: string, _mt: number, ciphertext: string) => {
-      if (ciphertext === "__undecryptable__") throw new Error("no session");
-      return dec(ciphertext);
-    },
-    serialize: () => JSON.stringify({ idk, sgk }),
-    dispose: () => {},
-  });
+  const makeAccount = (idk: string, sgk: string, established: string[]) => {
+    // Outbound sessions, by peer identity key. Establishing one consumes the
+    // claimed one-time key; afterwards the session is reused and no key is
+    // needed — the real Olm behaviour the engine's claim-avoidance relies on.
+    const sessions = new Set(established);
+    return {
+      identityKey: idk,
+      signingKey: sgk,
+      fingerprint: () => sgk,
+      generateOneTimeKeys: (count: number) =>
+        Array.from({ length: count }, (_, i) => ({ key_id: "k" + i, key: "otk" + i })),
+      hasOutboundSession: (identityKey: string) => sessions.has(identityKey),
+      encryptFor: (
+        device: { identity_key: string; one_time_key: unknown },
+        plaintext: string,
+      ) => {
+        if (!sessions.has(device.identity_key)) {
+          // No session and no key left → unreachable, reported as skipped.
+          if (!device.one_time_key) return null;
+          sessions.add(device.identity_key);
+        }
+        return { message_type: 0, ciphertext: enc(plaintext) };
+      },
+      decryptFrom: (_ik: string, _mt: number, ciphertext: string) => {
+        if (ciphertext === "__undecryptable__") throw new Error("no session");
+        return dec(ciphertext);
+      },
+      serialize: () => JSON.stringify({ idk, sgk, sessions: [...sessions] }),
+      dispose: () => {},
+    };
+  };
   (window as unknown as { __VIDRA_E2EE_CRYPTO__: unknown }).__VIDRA_E2EE_CRYPTO__ = {
-    create: async () => makeAccount("idk-self", "SGKSELFAAAABBBBCCCCDDDDEEEEFFFF00"),
+    create: async () => makeAccount("idk-self", "SGKSELFAAAABBBBCCCCDDDDEEEEFFFF00", []),
     restore: async (pickle: string) => {
-      const p = JSON.parse(pickle) as { idk: string; sgk: string };
-      return makeAccount(p.idk, p.sgk);
+      const p = JSON.parse(pickle) as { idk: string; sgk: string; sessions?: string[] };
+      return makeAccount(p.idk, p.sgk, p.sessions ?? []);
     },
   };
 }
@@ -149,6 +163,58 @@ async function routeDeviceEndpoints(page: Page) {
   });
   await page.route(OTK_UPLOAD, (route) => route.fulfill({ json: { unclaimed: 30 } }));
   await page.route(OTK_COUNT, (route) => route.fulfill({ json: { count: 30 } }));
+}
+
+// One row of the peer's PUBLIC device directory (GET /users/{id}/e2ee/devices).
+// The engine reads this before claiming — the lookup consumes no prekeys, so it
+// can tell "device we already have a session with" from "device we must claim
+// for" and only spend keys on the latter.
+function peerDevice(id: string, suffix: string) {
+  return {
+    id,
+    user_id: "u2",
+    device_name: id,
+    identity_key: `idk-${suffix}`,
+    signing_key: `SGK${suffix.toUpperCase()}0000111122223333444455556677`,
+    created_at: new Date().toISOString(),
+    last_seen_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Route the peer's device directory plus the claim endpoint, and count the
+ * claims so a test can assert one was NOT made. `exhausted` names devices whose
+ * prekey pool is empty (the claim returns a null key for them), which is how a
+ * device becomes unreachable and lands in `skipped`.
+ */
+async function routePeerKeys(
+  page: Page,
+  devices: { id: string; suffix: string }[],
+  opts: { exhausted?: string[] } = {},
+) {
+  const exhausted = new Set(opts.exhausted ?? []);
+  const rows = devices.map((d) => peerDevice(d.id, d.suffix));
+  const claims: string[] = [];
+  await page.route(USER_DEVICES, (route) => route.fulfill({ json: { devices: rows } }));
+  await page.route(CLAIM, (route) => {
+    const url = route.request().url();
+    const forPeer = /\/users\/u2\//.test(url);
+    claims.push(forPeer ? "u2" : "u1");
+    return route.fulfill({
+      json: {
+        user_id: forPeer ? "u2" : "u1",
+        claims: forPeer
+          ? rows.map((d) => ({
+              device_id: d.id,
+              identity_key: d.identity_key,
+              signing_key: d.signing_key,
+              one_time_key: exhausted.has(d.id) ? null : { key_id: "k0", key: "otk0" },
+            }))
+          : [],
+      },
+    });
+  });
+  return claims;
 }
 
 // Open the encrypted thread directly (boot-refresh restores the session; the ?to
@@ -406,24 +472,7 @@ test("sending an encrypted message with a disappearing timer fans out with expir
 }) => {
   await bootSignedIn(page);
   await routeDeviceEndpoints(page);
-  await page.route(CLAIM, (route) => {
-    const forPeer = /\/users\/u2\//.test(route.request().url());
-    return route.fulfill({
-      json: {
-        user_id: forPeer ? "u2" : "u1",
-        claims: forPeer
-          ? [
-              {
-                device_id: "dev-bob",
-                identity_key: "idk-bob",
-                signing_key: "SGKBOB",
-                one_time_key: { key_id: "k0", key: "otk0" },
-              },
-            ]
-          : [],
-      },
-    });
-  });
+  const claims = await routePeerKeys(page, [{ id: "dev-bob", suffix: "bob" }]);
 
   await page.route(ENC_MESSAGES, (route) => {
     if (route.request().method() === "POST") {
@@ -450,6 +499,21 @@ test("sending an encrypted message with a disappearing timer fans out with expir
   expect(sentBody).toMatchObject({ sender_device_id: "dev-1", expires_in_seconds: 86400 });
   expect(sentBody.envelopes.length).toBeGreaterThan(0);
   await expect(page.getByText("meet at noon")).toBeVisible();
+  // Establishing the session cost exactly one claim against the peer.
+  expect(claims).toEqual(["u2"]);
+
+  // A SECOND message reuses that session. Claiming again would burn another of
+  // the peer's single-use prekeys for nothing — about thirty sends drained the
+  // pool, after which a genuinely new device of theirs could never start a
+  // session. No claim may be made here.
+  await page.getByLabel("Write an encrypted message").fill("and again");
+  const resend = page.waitForRequest(
+    (req) => ENC_MESSAGES.test(req.url()) && req.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+  const resent = (await resend).postDataJSON() as { envelopes: unknown[] };
+  expect(resent.envelopes.length).toBeGreaterThan(0);
+  expect(claims).toEqual(["u2"]);
 
   // …and it SURVIVES a remount. The fan-out never addresses an envelope to the
   // sending device, and the backend returns only self-addressed envelopes — so
@@ -460,29 +524,58 @@ test("sending an encrypted message with a disappearing timer fans out with expir
   await expect(page.getByText("meet at noon")).toBeVisible();
 });
 
+test("a send that cannot reach every device says so instead of looking clean", async ({ page }) => {
+  await bootSignedIn(page);
+  await routeDeviceEndpoints(page);
+  // Bob has two devices; the second has no unused prekeys left, and we have no
+  // session with it — so it cannot be encrypted for and will never get this.
+  await routePeerKeys(
+    page,
+    [
+      { id: "dev-bob", suffix: "bob" },
+      { id: "dev-bob-2", suffix: "bob2" },
+    ],
+    { exhausted: ["dev-bob-2"] },
+  );
+  await page.route(ENC_MESSAGES, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        json: { conversation_id: "enc1", envelope_count: 1, created_at: new Date().toISOString() },
+      });
+    }
+    return route.fulfill({ json: { envelopes: [], limit: 20, offset: 0 } });
+  });
+
+  await gotoEncryptedThread(page);
+  await page.getByLabel("Device name").fill("This browser");
+  await page.getByRole("button", { name: "Set up this device" }).click();
+  await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
+
+  await page.getByLabel("Write an encrypted message").fill("half delivered");
+  const send = page.waitForRequest(
+    (req) => ENC_MESSAGES.test(req.url()) && req.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+  const body = (await send).postDataJSON() as { envelopes: unknown[] };
+
+  // The send is NOT blocked — one device did receive it…
+  expect(body.envelopes).toHaveLength(1);
+  await expect(page.getByText("half delivered")).toBeVisible();
+  // …and the partial delivery is stated rather than swallowed.
+  const notice = page.getByRole("status").filter({ hasText: "Encrypted for 1 of 2 devices" });
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("no unused keys left");
+
+  await notice.getByRole("button", { name: "Dismiss" }).click();
+  await expect(notice).toHaveCount(0);
+});
+
 test("a sender with no inbound messages keeps a working composer without the ?to hint", async ({
   page,
 }) => {
   await bootSignedIn(page);
   await routeDeviceEndpoints(page);
-  await page.route(CLAIM, (route) => {
-    const forPeer = /\/users\/u2\//.test(route.request().url());
-    return route.fulfill({
-      json: {
-        user_id: forPeer ? "u2" : "u1",
-        claims: forPeer
-          ? [
-              {
-                device_id: "dev-bob",
-                identity_key: "idk-bob",
-                signing_key: "SGKBOB",
-                one_time_key: { key_id: "k0", key: "otk0" },
-              },
-            ]
-          : [],
-      },
-    });
-  });
+  await routePeerKeys(page, [{ id: "dev-bob", suffix: "bob" }]);
   await page.route(ENC_MESSAGES, (route) => {
     if (route.request().method() === "POST") {
       return route.fulfill({
@@ -523,6 +616,76 @@ test("a sender with no inbound messages keeps a working composer without the ?to
   const body = (await second).postDataJSON() as { envelopes: unknown[] };
   expect(body.envelopes.length).toBeGreaterThan(0);
   await expect(page.getByText("bring the map")).toBeVisible();
+});
+
+// The thread loads the newest 100 envelopes. Everything older used to be
+// unreachable forever — the client only ever sent limit/offset. These build the
+// two pages the keyset cursor walks. Newest first, matching the API.
+function historyEnvelope(n: number) {
+  return {
+    id: `env-${String(n).padStart(3, "0")}`,
+    conversation_id: "enc1",
+    sender_user_id: "u2",
+    sender_device_id: "dev-bob",
+    recipient_device_id: "dev-1",
+    message_type: 0,
+    // Older n = older message; all comfortably in the past so a live send sorts last.
+    created_at: new Date(Date.UTC(2026, 0, 1) + n * 60_000).toISOString(),
+    ciphertext: btoa(`message ${n}`),
+  };
+}
+
+test("the encrypted thread pages back through history beyond the first 100", async ({ page }) => {
+  await bootSignedIn(page);
+  await routeDeviceEndpoints(page);
+  await routePeerKeys(page, [{ id: "dev-bob", suffix: "bob" }]);
+
+  // Newest page: messages 200..101 (a FULL 100 → more probably exists).
+  const newest = Array.from({ length: 100 }, (_, i) => historyEnvelope(200 - i));
+  // The page before message 101: 40 rows → a SHORT page, so history ends there.
+  const older = Array.from({ length: 40 }, (_, i) => historyEnvelope(100 - i));
+
+  const cursors: (string | null)[] = [];
+  await page.route(ENC_MESSAGES, (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        json: { conversation_id: "enc1", envelope_count: 1, created_at: new Date().toISOString() },
+      });
+    }
+    const before = new URL(route.request().url()).searchParams.get("before_id");
+    cursors.push(before);
+    return route.fulfill({
+      json: { envelopes: before ? older : newest, limit: 100, offset: 0 },
+    });
+  });
+
+  await gotoEncryptedThread(page);
+  await page.getByLabel("Device name").fill("This browser");
+  await page.getByRole("button", { name: "Set up this device" }).click();
+
+  // The first page is present; the page before it is not yet.
+  await expect(page.getByText("message 200", { exact: true })).toBeVisible();
+  await expect(page.getByText("message 101", { exact: true })).toBeVisible();
+  await expect(page.getByText("message 100", { exact: true })).toHaveCount(0);
+
+  const earlier = page.getByRole("button", { name: "Show earlier messages" });
+  await expect(earlier).toBeVisible();
+  await earlier.click();
+
+  // The older page merged in above the loaded window…
+  await expect(page.getByText("message 100", { exact: true })).toBeVisible();
+  await expect(page.getByText("message 61", { exact: true })).toBeVisible();
+  await expect(page.getByText("message 200", { exact: true })).toBeVisible();
+  // …fetched with the keyset cursor: the OLDEST envelope we already held.
+  expect(cursors).toContain("env-101");
+  // A short page means history is exhausted, so the affordance retires.
+  await expect(earlier).toHaveCount(0);
+
+  // Our own sends are windowed to the loaded history (they would otherwise float
+  // above unpaged messages); one sent NOW is inside any window and still shows.
+  await page.getByLabel("Write an encrypted message").fill("and one more");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("and one more")).toBeVisible();
 });
 
 test("the devices settings page lists a device and removes it", async ({ page }) => {

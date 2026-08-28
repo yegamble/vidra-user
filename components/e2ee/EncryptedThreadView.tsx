@@ -63,6 +63,10 @@ export function EncryptedThreadView({
   recipientId,
   myUserId,
   onAtBottomChange,
+  hasEarlier = false,
+  loadingEarlier = false,
+  earlierError = null,
+  onLoadEarlier,
 }: {
   conversationId: string;
   envelopes: EncryptedMessage[];
@@ -70,6 +74,11 @@ export function EncryptedThreadView({
   myUserId: string;
   /** Reports whether the reader is at the newest message (read-watermark gate). */
   onAtBottomChange?: (atBottom: boolean) => void;
+  /** Older history exists beyond the loaded window (the parent owns the cursor). */
+  hasEarlier?: boolean;
+  loadingEarlier?: boolean;
+  earlierError?: string | null;
+  onLoadEarlier?: () => void;
 }) {
   const [device, setDevice] = useState<DeviceState>("loading");
   const [messages, setMessages] = useState<ShownMessage[]>([]);
@@ -123,7 +132,18 @@ export function EncryptedThreadView({
       // cannot double-render: this device gets no self-addressed envelope, and
       // our OTHER devices — which do receive a real envelope for it — have an
       // empty outbox for anything sent from here.
-      const own = await engine.ownMessages(conversationId);
+      //
+      // The outbox holds the WHOLE conversation, but only a window of envelopes
+      // is loaded. Bound it to the window, or a message we sent long ago would
+      // float at the top of the thread, detached, above history that has not
+      // been paged in yet. With all history loaded there is no boundary to
+      // respect, so everything belongs.
+      const oldestLoaded = list.length > 0 ? list[list.length - 1].created_at : undefined;
+      const windowStart =
+        hasEarlier && oldestLoaded !== undefined ? new Date(oldestLoaded).getTime() : null;
+      const own = (await engine.ownMessages(conversationId)).filter(
+        (rec) => windowStart === null || new Date(rec.created_at).getTime() >= windowStart,
+      );
       for (const rec of own) {
         shown.push({
           key: rec.id,
@@ -142,7 +162,7 @@ export function EncryptedThreadView({
       const lastPeer = own[own.length - 1]?.recipient_user_id;
       if (lastPeer !== undefined) setLastSentRecipientId(lastPeer);
     },
-    [conversationId, myUserId],
+    [conversationId, myUserId, hasEarlier],
   );
 
   useEffect(() => {
@@ -213,7 +233,14 @@ export function EncryptedThreadView({
         <DeviceSetup onReady={onSetupReady} />
       ) : (
         <>
-          <MessageList messages={messages} onAtBottomChange={onAtBottomChange} />
+          <MessageList
+            messages={messages}
+            onAtBottomChange={onAtBottomChange}
+            hasEarlier={hasEarlier}
+            loadingEarlier={loadingEarlier}
+            earlierError={earlierError}
+            onLoadEarlier={onLoadEarlier}
+          />
           <Composer
             conversationId={conversationId}
             recipientId={effectiveRecipientId}
@@ -335,24 +362,38 @@ function scrollParentOf(el: HTMLElement | null): HTMLElement | null {
 function MessageList({
   messages,
   onAtBottomChange,
+  hasEarlier = false,
+  loadingEarlier = false,
+  earlierError = null,
+  onLoadEarlier,
 }: {
   messages: ShownMessage[];
   onAtBottomChange?: (atBottom: boolean) => void;
+  hasEarlier?: boolean;
+  loadingEarlier?: boolean;
+  earlierError?: string | null;
+  onLoadEarlier?: () => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLElement | null>(null);
   const stickRef = useRef(true);
   const initializedRef = useRef(false);
-  const prevLenRef = useRef(0);
+  const prevFirstKeyRef = useRef("");
+  const prevLastKeyRef = useRef("");
+  // Distance from the bottom captured when the reader asks for older history, so
+  // the prepended page can be anchored to where they were.
+  const anchorRef = useRef<number | null>(null);
   const hasMessages = messages.length > 0;
 
-  // Track whether the reader is near the bottom. Inbound messages now arrive on a
-  // 10s poll, so auto-scrolling unconditionally would yank anyone who has scrolled
-  // up to read history — the same rule MessageTimeline applies to plaintext.
-  // Re-runs when the list stops being empty, which is when the sentinel (and so
-  // the scroll container) first exists.
+  // Track whether the reader is near the bottom. Inbound messages arrive on a 10s
+  // poll, so auto-scrolling unconditionally would yank anyone who has scrolled up
+  // to read history — the same rule MessageTimeline applies to plaintext. Re-runs
+  // when the list stops being empty, which is when the sentinel (and so the
+  // scroll container) first exists.
   useEffect(() => {
     if (!hasMessages) return;
     const el = scrollParentOf(bottomRef.current);
+    scrollerRef.current = el;
     if (!el) return;
     const onScroll = () => {
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD;
@@ -363,22 +404,65 @@ function MessageList({
     return () => el.removeEventListener("scroll", onScroll);
   }, [hasMessages, onAtBottomChange]);
 
+  function requestEarlier() {
+    const el = scrollerRef.current;
+    anchorRef.current = el ? el.scrollHeight - el.scrollTop : null;
+    onLoadEarlier?.();
+  }
+
   useLayoutEffect(() => {
     const len = messages.length;
-    const grew = len > prevLenRef.current;
-    const lastMine = len > 0 && messages[len - 1].mine;
-    prevLenRef.current = len;
+    const firstKey = len > 0 ? messages[0].key : "";
+    const lastKey = len > 0 ? messages[len - 1].key : "";
+    const prevFirst = prevFirstKeyRef.current;
+    const prevLast = prevLastKeyRef.current;
+    prevFirstKeyRef.current = firstKey;
+    prevLastKeyRef.current = lastKey;
+
     if (!initializedRef.current) {
       // Open pinned to the newest message.
       if (len === 0) return;
       initializedRef.current = true;
       onAtBottomChange?.(true);
-    } else if (!stickRef.current && !(grew && lastMine)) {
-      // Reader is up in the history and this is not their own send — leave them be.
+      bottomRef.current?.scrollIntoView({ block: "end" });
       return;
     }
+
+    // Older history landed ABOVE the reader. Hold their place: without this the
+    // viewport keeps its scrollTop and the content they were reading jumps away.
+    if (firstKey !== prevFirst && lastKey === prevLast) {
+      const anchor = anchorRef.current;
+      anchorRef.current = null;
+      const el = scrollerRef.current;
+      if (el && anchor !== null) el.scrollTop = el.scrollHeight - anchor;
+      return;
+    }
+
+    // A message the reader just SENT always brings them back to the bottom;
+    // anything else only does so while they are already near it. Keyed on the
+    // last message CHANGING, so paging in history never counts as a send.
+    const sentByReader = lastKey !== prevLast && len > 0 && messages[len - 1].mine;
+    if (!stickRef.current && !sentByReader) return;
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages, onAtBottomChange]);
+
+  const earlierControl = hasEarlier ? (
+    <div className="flex flex-col items-center gap-1.5">
+      {earlierError ? (
+        <p role="alert" className="text-xs text-danger">
+          {earlierError}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        disabled={loadingEarlier}
+        onClick={requestEarlier}
+        className="focus-ring rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
+      >
+        {loadingEarlier ? "Loading earlier messages…" : "Show earlier messages"}
+      </button>
+    </div>
+  ) : null;
 
   if (messages.length === 0) {
     return (
@@ -389,7 +473,9 @@ function MessageList({
   }
 
   return (
-    <ul className="flex flex-col gap-2.5">
+    <>
+      {earlierControl}
+      <ul className="flex flex-col gap-2.5">
       {messages.map((m) => (
         <li key={m.key} className={"flex " + (m.mine ? "justify-end" : "justify-start")}>
           <div
@@ -422,8 +508,45 @@ function MessageList({
           </div>
         </li>
       ))}
-      <div ref={bottomRef} />
-    </ul>
+        <div ref={bottomRef} />
+      </ul>
+    </>
+  );
+}
+
+// PartialDeliveryNotice reports a send that reached only some of the recipient's
+// devices — a device whose one-time keys are exhausted and that we have no
+// session with cannot be encrypted for, and will never receive the message. The
+// send itself succeeded, so the tone is a warning, not a failure, and it is
+// dismissible: the reader has been told, and the next send replaces it.
+function PartialDeliveryNotice({
+  reached,
+  total,
+  onDismiss,
+}: {
+  reached: number;
+  total: number;
+  onDismiss: () => void;
+}) {
+  const missed = total - reached;
+  return (
+    <div
+      role="status"
+      className="flex items-start justify-between gap-3 rounded-xl bg-warning/15 px-3.5 py-2.5 text-sm text-warning"
+    >
+      <p>
+        Encrypted for {reached} of {total} devices.{" "}
+        {missed === 1 ? "One device has" : `${missed} devices have`} no unused keys left, so{" "}
+        {missed === 1 ? "it won’t" : "they won’t"} receive this message.
+      </p>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="focus-ring shrink-0 rounded font-semibold underline transition-opacity hover:opacity-80"
+      >
+        Dismiss
+      </button>
+    </div>
   );
 }
 
@@ -442,6 +565,10 @@ function Composer({
   const [timer, setTimer] = useState<DisappearingOption>("off");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when the last send reached only SOME of the recipient devices. The send
+  // itself succeeded, so this is a notice, not an error — but staying quiet about
+  // it would let a reader believe a device that got nothing has read the message.
+  const [partial, setPartial] = useState<{ reached: number; total: number } | null>(null);
 
   // This composer mounts only after the local E2EE device is ready. Its state
   // initializer reads the process-memory draft; discard it only after React has
@@ -464,9 +591,10 @@ function Composer({
     if (trimmed === "") return;
     setBusy(true);
     setError(null);
+    setPartial(null);
     try {
       const engine = await getEngine();
-      const { sender_device_id, envelopes } = await engine.encryptMessage(
+      const { sender_device_id, envelopes, skipped } = await engine.encryptMessage(
         recipientId!,
         myUserId,
         trimmed,
@@ -499,6 +627,11 @@ function Composer({
         .catch(() => {});
       onSent(id, trimmed, res.expires_at);
       setBody("");
+      // Only after the send is accepted: a device we could not encrypt for gets
+      // nothing, ever, and the sender is the only one who can know.
+      if (skipped.length > 0) {
+        setPartial({ reached: envelopes.length, total: envelopes.length + skipped.length });
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setError("You can't message this user.");
@@ -518,6 +651,13 @@ function Composer({
         void submit();
       }}
     >
+      {partial ? (
+        <PartialDeliveryNotice
+          reached={partial.reached}
+          total={partial.total}
+          onDismiss={() => setPartial(null)}
+        />
+      ) : null}
       <textarea
         aria-label="Write an encrypted message"
         placeholder="Write an encrypted message…"

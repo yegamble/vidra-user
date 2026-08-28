@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import type { EncryptedMessage } from "@/lib/api";
 
 import { type CryptoAccount, type CryptoProvider, getCryptoProvider, randomPickleKey } from "./crypto";
-import { type ClaimedDevice, fanOutEncrypt } from "./envelope";
+import { type ClaimedDevice, type OneTimeKey, fanOutEncrypt } from "./envelope";
 import { type E2EEStore, IndexedDBStore, type OwnMessageRecord } from "./store";
 
 export type { OwnMessageRecord } from "./store";
@@ -128,9 +128,20 @@ export class E2EEEngine {
   }
 
   /**
-   * encryptMessage claims one prekey per recipient device AND per the caller's
-   * OWN OTHER devices, fans out the ciphertext to all of them, and returns the
-   * send body. The caller's current device is excluded (it wrote the plaintext).
+   * encryptMessage fans one plaintext out to every recipient device AND to the
+   * caller's OWN OTHER devices, and returns the send body. The caller's current
+   * device is excluded (it wrote the plaintext).
+   *
+   * Device discovery is a READ-ONLY directory lookup, and that distinction is
+   * the whole point of this method's shape. Claiming is destructive: the backend
+   * claims one single-use prekey for EVERY device of the target user, with no
+   * way to ask for a subset (POST /users/{id}/e2ee/claim takes no body and no
+   * filter). Claiming on every send therefore burned one of the peer's prekeys
+   * per device per message — roughly thirty messages drained a peer's pool,
+   * after which a genuinely NEW device could no longer start a session with
+   * them. An established outbound session needs no key at all (encryptFor reuses
+   * it and ignores anything handed to it), so we look the devices up first and
+   * claim only for a user who has at least one device we cannot already reach.
    */
   async encryptMessage(
     recipientUserId: string,
@@ -140,16 +151,41 @@ export class E2EEEngine {
     const loaded = await this.ensureLoaded();
     if (!loaded) throw new Error("no E2EE device is set up");
 
-    const [peer, mine] = await Promise.all([
-      api.claimE2EEOneTimeKeys(recipientUserId),
-      api.claimE2EEOneTimeKeys(myUserId),
+    // Neither of these consumes a prekey.
+    const [peerDir, myDir] = await Promise.all([
+      api.listUserE2EEDevices(recipientUserId),
+      api.listMyE2EEDevices(),
     ]);
-    const targets: ClaimedDevice[] = [
-      ...peer.claims,
-      ...mine.claims.filter((c) => c.device_id !== loaded.deviceId),
-    ];
-    // Remember each target's identity key so we can decrypt their replies.
-    for (const t of targets) this.deviceIdentity.set(t.device_id, t.identity_key);
+    const peerDevices = peerDir.devices;
+    const myDevices = myDir.devices.filter((d) => d.id !== loaded.deviceId);
+    // Remember every device's identity key so we can decrypt their replies.
+    for (const d of [...peerDevices, ...myDevices]) {
+      this.deviceIdentity.set(d.id, d.identity_key);
+    }
+
+    // Claim is all-or-nothing per USER, so this is the finest granularity the
+    // contract allows: a user with a device we cannot reach costs one claim,
+    // a user we can already reach entirely costs none.
+    const unreachable = (d: { identity_key: string }) =>
+      !loaded.account.hasOutboundSession(d.identity_key);
+    const [peerClaims, myClaims] = await Promise.all([
+      peerDevices.some(unreachable) ? api.claimE2EEOneTimeKeys(recipientUserId) : null,
+      myDevices.some(unreachable) ? api.claimE2EEOneTimeKeys(myUserId) : null,
+    ]);
+    const claimedKey = new Map<string, OneTimeKey | null>();
+    for (const c of [...(peerClaims?.claims ?? []), ...(myClaims?.claims ?? [])]) {
+      claimedKey.set(c.device_id, c.one_time_key);
+    }
+
+    // A device we already have a session with carries no key — encryptFor takes
+    // the session path. A device with neither is unreachable and lands in
+    // `skipped`, which the composer reports rather than swallowing.
+    const targets: ClaimedDevice[] = [...peerDevices, ...myDevices].map((d) => ({
+      device_id: d.id,
+      identity_key: d.identity_key,
+      signing_key: d.signing_key,
+      one_time_key: claimedKey.get(d.id) ?? null,
+    }));
 
     const { envelopes, skipped } = fanOutEncrypt({
       encryptor: loaded.account,
