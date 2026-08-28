@@ -2,58 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import {
-  GridIcon,
-  type IconProps,
-  ServerIcon,
-  ShieldIcon,
-  UsersIcon,
-  VideoIcon,
-} from "@/components/icons";
 import { Avatar } from "@/components/ui/Avatar";
+import {
+  ADMIN_NAV_MORE,
+  ADMIN_NAV_PRIMARY,
+  type AdminNavItem,
+  isAdminNavItemActive,
+} from "@/lib/admin-nav";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
-type ConsoleItem = {
-  href: string;
-  label: string;
-  Icon: (props: IconProps) => ReactElement;
-  /** Only lit when the path matches exactly (the Overview index). */
-  exact?: boolean;
-  /** Show the live open-reports count badge (the design's red Queues badge). */
-  badge?: boolean;
-};
-
-// The design's five primary console destinations. Overview / Users / Instance are
-// admin routes owned by this console shell; Queues / Content are the moderation
-// surfaces — they link out to /moderation (which keeps its own moderator nav), so
-// they never light up while the console is showing (it renders on /admin/* only).
-const PRIMARY: readonly ConsoleItem[] = [
-  { href: "/admin", label: "Overview", Icon: GridIcon, exact: true },
-  { href: "/admin/users", label: "Users", Icon: UsersIcon },
-  { href: "/moderation", label: "Queues", Icon: ShieldIcon, badge: true },
-  { href: "/moderation/videos", label: "Content", Icon: VideoIcon },
-  { href: "/admin/config", label: "Instance", Icon: ServerIcon },
-];
-
-// The remaining admin sub-surfaces the design's 5-item nav doesn't enumerate.
-// Kept in a quiet "MORE" group so no admin route is stranded (there is no admin
-// bottom-tab bar and the horizontal AdminTabs are hidden at this width).
-const SECONDARY: readonly { href: string; label: string }[] = [
-  { href: "/admin/registration-requests", label: "Registration" },
-  { href: "/admin/federation/follower-requests", label: "Followers" },
-  { href: "/admin/jobs", label: "Jobs" },
-  { href: "/admin/import-peertube", label: "Import" },
-  { href: "/admin/media", label: "Media storage" },
-  { href: "/admin/audit-log", label: "Audit log" },
-  { href: "/admin/system", label: "System" },
-  { href: "/admin/infrastructure", label: "Infrastructure" },
-  { href: "/admin/playback-health", label: "Playback health" },
-];
+// Both groups come from the one admin-nav registry (lib/admin-nav.ts): the
+// design's five primary console destinations (Overview / Users / Instance are
+// admin routes owned by this console shell; Queues / Content link out to the
+// moderation surfaces, which keep their own moderator nav — so they never light
+// up while the console is showing, it renders on /admin/* only), then the quiet
+// "More" group of the remaining admin sub-surfaces the design's 5-item nav does
+// not enumerate, so no admin route is stranded (there is no admin bottom-tab bar
+// and the AdminTabs Select is hidden at this width).
 
 // The open-reports count is capped for display; the exact figure lives on the
 // Overview open-reports callout (and the Moderation queue itself).
@@ -106,16 +75,15 @@ export function AdminConsole() {
       </h2>
 
       <ul className="flex flex-col gap-0.5">
-        {PRIMARY.map((item) => {
-          const active = item.exact
-            ? pathname === item.href
-            : pathname === item.href || pathname?.startsWith(`${item.href}/`);
-          return (
-            <li key={item.href}>
-              <ConsoleLink item={item} active={Boolean(active)} badge={item.badge ? badgeText : null} />
-            </li>
-          );
-        })}
+        {ADMIN_NAV_PRIMARY.map((item) => (
+          <li key={item.href}>
+            <ConsoleLink
+              item={item}
+              active={isAdminNavItemActive(item, pathname)}
+              badge={item.badge ? badgeText : null}
+            />
+          </li>
+        ))}
       </ul>
 
       <div className="mt-5">
@@ -123,8 +91,8 @@ export function AdminConsole() {
           More
         </h2>
         <ul className="flex flex-col gap-0.5">
-          {SECONDARY.map((item) => {
-            const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+          {ADMIN_NAV_MORE.map((item) => {
+            const active = isAdminNavItemActive(item, pathname);
             return (
               <li key={item.href}>
                 <Link
@@ -163,10 +131,12 @@ function ConsoleLink({
   active,
   badge,
 }: {
-  item: ConsoleItem;
+  item: AdminNavItem;
   active: boolean;
   badge: string | null;
 }) {
+  // Only the primary group carries an icon in the registry — the "More" group
+  // is label-only by design, so the glyph is rendered when there is one.
   const { Icon } = item;
   return (
     <Link
@@ -177,7 +147,7 @@ function ConsoleLink({
         active ? "bg-accent/12 text-accent-text" : "text-fg-muted hover:bg-surface-muted hover:text-fg",
       )}
     >
-      <Icon size={16} strokeWidth={1.9} className="shrink-0" />
+      {Icon ? <Icon size={16} strokeWidth={1.9} className="shrink-0" /> : null}
       <span className="truncate">{item.label}</span>
       {badge ? (
         <span className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger-solid px-[5px] text-[10.5px] font-bold tabular-nums text-danger-fg">
