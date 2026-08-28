@@ -1855,6 +1855,22 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ dry_run: false });
   });
 
+  it("getMediaGCConfig GETs the boot facts from the same media/gc path", async () => {
+    await api.getMediaGCConfig();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/media/gc");
+    // A GET, not a sweep: reading the boot facts must never trigger one.
+    expect(init.method).toBe("GET");
+  });
+
+  it("adoptMediaGCBucket POSTs to adopt-bucket with no body", async () => {
+    await api.adoptMediaGCBucket();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/media/gc/adopt-bucket");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
+  });
+
   it("launchPeerTubeImport POSTs the mode + conflict policy (no source credentials)", async () => {
     await api.launchPeerTubeImport({ mode: "dry_run", conflict_policy: "rename" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

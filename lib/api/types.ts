@@ -204,6 +204,10 @@ export type JobEvent = Schemas["JobEvent"];
 export type JobRunsResponse = Schemas["JobRunsResponse"];
 export type JobRunDetailResponse = Schemas["JobRunDetailResponse"];
 export type MediaGCResponse = Schemas["MediaGCResponse"];
+// The collector's boot facts (GET /admin/media/gc): enabled + the breaker limit
+// are boot-baked and read-only; bucket_ownership is live in-memory state.
+export type MediaGCConfig = Schemas["MediaGCConfig"];
+export type MediaGCAdoptBucketResponse = Schemas["MediaGCAdoptBucketResponse"];
 // Media-store migration campaigns (GET /admin/storage/migrations). The state
 // union is projected off the schema rather than re-typed so a new phase added
 // core-side becomes a compile error here instead of a silently unhandled label.

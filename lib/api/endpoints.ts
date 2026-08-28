@@ -27,6 +27,8 @@ import type {
   JobRunState,
   IPFSReconcileResult,
   IPFSStatus,
+  MediaGCAdoptBucketResponse,
+  MediaGCConfig,
   MediaGCResponse,
   QoEPlaybackHealth,
   PeerTubeImportLaunchRequest,
@@ -2483,6 +2485,30 @@ export const api = {
     apiRequest<MediaGCResponse>("/api/v1/admin/media/gc", {
       method: "POST",
       body: { dry_run: dryRun },
+    }),
+
+  /**
+   * GET /api/v1/admin/media/gc — the collector's boot facts (is the daily
+   * automatic destructive sweep enabled, the orphan-ratio breaker limit) plus
+   * its live bucket-ownership state (admin only; read-only — both knobs are
+   * deliberately boot-baked). 503 when GC is not wired on this process; older
+   * backends 404/405, so callers must degrade gracefully.
+   */
+  getMediaGCConfig: (signal?: AbortSignal) =>
+    apiRequest<MediaGCConfig>("/api/v1/admin/media/gc", { signal }),
+
+  /**
+   * POST /api/v1/admin/media/gc/adopt-bucket — write this instance's identity
+   * into the object store's `.vidra/owner` marker so destructive GC is
+   * permitted again (admin only; audited). Idempotent, but it OVERWRITES a
+   * marker naming a different install — on a genuinely shared bucket it takes
+   * ownership away from the other one. 409 = local disk (nothing to adopt),
+   * 502 = the marker could not be written, 503 = no instance identity yet
+   * (migrations not run).
+   */
+  adoptMediaGCBucket: () =>
+    apiRequest<MediaGCAdoptBucketResponse>("/api/v1/admin/media/gc/adopt-bucket", {
+      method: "POST",
     }),
 
   /**
