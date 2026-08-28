@@ -335,6 +335,27 @@ async function completeWithRetry(
 }
 
 /**
+ * legacyCompletionVideo recognises a PRE-ASYNC backend's completion response.
+ *
+ * Before the completion queue, POST .../complete ran the whole pipeline inline
+ * and answered 201 with { video, file }. This client speaks the new contract, but
+ * the frontend and the API deploy separately — and rolling core back to the
+ * previous release is meant to be a tag flip. Recognising the old shape means
+ * the new frontend keeps working against an old (or rolled-back) core instead of
+ * telling every creator their upload vanished, and it makes "frontend first" a
+ * safe deploy order.
+ *
+ * Returns the finalised video when the body is the legacy shape, else null.
+ */
+function legacyCompletionVideo(body: unknown): Video | null {
+  const video = (body as { video?: unknown } | null | undefined)?.video;
+  if (video && typeof video === "object" && typeof (video as Video).id === "string") {
+    return video as Video;
+  }
+  return null;
+}
+
+/**
  * awaitFinalized polls the session until the server has finished with it.
  *
  * The states it walks are queued → processing → completed | failed. A poll that
@@ -493,6 +514,12 @@ export async function resumableUpload(
   emit(opts.onProgress, file.size, file.size, "processing");
 
   const accepted = await completeWithRetry(uploadId, opts);
+  // A pre-async backend finalised inline and answered with the video itself.
+  const legacy = legacyCompletionVideo(accepted);
+  if (legacy) {
+    forgetUploadSession(uploadId);
+    return { video: legacy };
+  }
   const finished = await awaitFinalized(uploadId, accepted, opts);
   // Only now is the session finished with: forgetting it earlier would drop the
   // resume record while the server could still fail the finalize.

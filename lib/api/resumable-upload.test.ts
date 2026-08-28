@@ -257,6 +257,24 @@ describe("resumableUpload", () => {
     expect(res.video.state).toBe("published");
   });
 
+  it("still works against a pre-async backend that finalises inline", async () => {
+    acceptingChunks();
+    // The old contract: 201 with { video, file } and no session state at all.
+    // The frontend and the API deploy separately (and a core rollback is meant
+    // to be a tag flip), so the new client must not tell every creator their
+    // upload vanished.
+    vi.spyOn(api, "completeUploadSession").mockResolvedValue({
+      video: publishedVideo(),
+      file: { id: "f1" },
+    } as unknown as UploadStatusResponse);
+    const poll = vi.spyOn(api, "getUploadSession");
+
+    const res = await resumableUpload("v1", makeFile(), { pollIntervalMs: 0 });
+    expect(res.video.state).toBe("published");
+    expect(poll).not.toHaveBeenCalled();
+    expect(findResumableUploadSession({ name: "clip.mp4", size: 10 })).toBeNull();
+  });
+
   it("gives up after the overall processing cap instead of polling forever", async () => {
     acceptingChunks();
     vi.spyOn(api, "completeUploadSession").mockResolvedValue(statusFor([0, 1, 2], "queued"));
