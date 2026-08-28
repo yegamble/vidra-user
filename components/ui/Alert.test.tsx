@@ -27,6 +27,16 @@ describe("Alert", () => {
     expect(el.className).not.toContain("border");
   });
 
+  // "It worked, but not the way you asked" is neither red nor green: it keeps
+  // the assertive role (it must interrupt) with the amber /15 fill.
+  it("announces the warning tone assertively, with no border", () => {
+    render(<Alert variant="warning">Downgraded to a dry run.</Alert>);
+    const el = screen.getByRole("alert");
+    expect(el.className).toContain("bg-warning/15");
+    expect(el.className).toContain("text-warning");
+    expect(el.className).not.toContain("border");
+  });
+
   it("renders as a div for block content", () => {
     render(
       <Alert as="div">
