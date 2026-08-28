@@ -83,6 +83,13 @@ test("an admin dry-runs, then double-confirms a purge", async ({ page }) => {
   await signIn(page, "admin");
   const bodies: Array<{ dry_run: boolean }> = [];
   await page.route(GC, (route) => {
+    // The panel's mount-time boot-facts read (GET /admin/media/gc) shares the
+    // sweep's URL; answer it separately so `bodies` stays a sweep-only ledger.
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        json: { enabled: true, max_orphan_percent: 25, bucket_ownership: "owned" },
+      });
+    }
     const body = route.request().postDataJSON() as { dry_run: boolean };
     bodies.push(body);
     if (body.dry_run) {
@@ -96,7 +103,9 @@ test("an admin dry-runs, then double-confirms a purge", async ({ page }) => {
   });
   await openMedia(page);
 
-  // Nothing runs until the admin asks for it.
+  // The read-only boot facts render off the GET; no sweep runs until the
+  // admin asks for one.
+  await expect(page.getByText("Automatic daily sweep")).toBeVisible();
   expect(bodies).toHaveLength(0);
 
   // Dry run lists the would-delete orphans.
