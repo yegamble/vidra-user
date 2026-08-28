@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { BlockedInstance } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { useAsyncAction } from "@/lib/use-async-action";
 import { usePagedList } from "@/lib/use-paged-list";
 
 const MAX_REASON_LEN = 2000;
@@ -85,15 +86,8 @@ function InstancesList() {
 function BlockInstanceForm({ onBlocked }: { onBlocked: (instance: BlockedInstance) => void }) {
   const [domain, setDomain] = useState("");
   const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    const trimmedDomain = domain.trim().toLowerCase();
-    if (trimmedDomain === "" || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
+  const { run, busy, error, clearError } = useAsyncAction(
+    async (trimmedDomain: string) => {
       // 204 on success; build the row locally (blocked "now", by the caller)
       // so the list reflects the block without a refetch — the next fetch
       // confirms persistence.
@@ -105,23 +99,22 @@ function BlockInstanceForm({ onBlocked }: { onBlocked: (instance: BlockedInstanc
       });
       setDomain("");
       setReason("");
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 422) {
-        setError("Enter a valid instance domain (a bare hostname, optionally host:port).");
-      } else {
-        setError(errorMessage(err, "Could not block this instance."));
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+    },
+    "Could not block this instance.",
+    (err) =>
+      err instanceof ApiError && err.status === 422
+        ? "Enter a valid instance domain (a bare hostname, optionally host:port)."
+        : null,
+  );
 
   return (
     <form
       className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        const trimmedDomain = domain.trim().toLowerCase();
+        if (trimmedDomain === "" || busy) return;
+        void run(trimmedDomain);
       }}
     >
       <div className="flex flex-wrap gap-2">
@@ -132,7 +125,7 @@ function BlockInstanceForm({ onBlocked }: { onBlocked: (instance: BlockedInstanc
           value={domain}
           onChange={(e) => {
             setDomain(e.target.value);
-            setError(null);
+            clearError();
           }}
           className="focus-ring w-full max-w-xs rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
         />

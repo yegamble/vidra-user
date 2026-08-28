@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { TrashIcon } from "@/components/icons";
-import { ApiError, api, errorMessage } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
+import type { VideoChapter } from "@/lib/api";
 import {
   MAX_CHAPTERS,
   MAX_TITLE_LENGTH,
@@ -13,6 +14,7 @@ import {
   type ChapterDraft,
   type ChapterValidationError,
 } from "@/lib/chapters";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 // Shared token recipe for the compact inline inputs (mirrors CaptionsManager).
 const FIELD =
@@ -44,13 +46,25 @@ export function ChaptersManager({
 }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<ChapterValidationError[]>([]);
   const nextId = useRef(0);
 
   const makeRow = (start = "", title = ""): Row => ({ id: nextId.current++, start, title });
+
+  const { run, busy, error, clearError } = useAsyncAction(
+    async (chapters: VideoChapter[]) => {
+      const res = await api.setVideoChapters(videoId, { chapters });
+      setRows(res.chapters.map((c) => makeRow(formatChapterStart(c.start_seconds), c.title)));
+      setFieldErrors([]);
+      setSaved(true);
+    },
+    "Could not save the chapters.",
+    (err) =>
+      err instanceof ApiError && err.status === 400
+        ? "Those chapters weren't accepted — check the times are in order and before the video ends."
+        : null,
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -90,30 +104,17 @@ export function ChaptersManager({
     setSaved(false);
   }
 
-  async function save() {
+  function save() {
     if (busy) return;
     const result = validateChapters(rows, durationSeconds);
     setFieldErrors(result.errors);
     if (!result.valid) {
-      setError(null);
+      // The per-row messages say what is wrong; a second general one would only
+      // repeat them.
+      clearError();
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.setVideoChapters(videoId, { chapters: result.chapters });
-      setRows(res.chapters.map((c) => makeRow(formatChapterStart(c.start_seconds), c.title)));
-      setFieldErrors([]);
-      setSaved(true);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 400) {
-        setError("Those chapters weren't accepted — check the times are in order and before the video ends.");
-      } else {
-        setError(errorMessage(err, "Could not save the chapters."));
-      }
-    } finally {
-      setBusy(false);
-    }
+    void run(result.chapters);
   }
 
   return (

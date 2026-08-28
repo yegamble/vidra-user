@@ -5,9 +5,10 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { CloseIcon } from "@/components/icons";
-import { ApiError, api, errorMessage } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type { EmbedPrivacyStatus } from "@/lib/api";
 import { normalizeDomain } from "@/lib/embed-privacy";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 const MAX_DOMAINS = 50; // openapi EmbedPrivacy.allowed_domains maxItems.
 
@@ -27,9 +28,21 @@ export function EmbedPrivacyManager({ videoId }: { videoId: string }) {
   const [domains, setDomains] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  const { run, busy, error, setError, clearError } = useAsyncAction(
+    async (body: { status: EmbedPrivacyStatus; allowed_domains?: string[] }) => {
+      const stored = await api.setVideoEmbedPrivacy(videoId, body);
+      setStatus(stored.status);
+      setDomains(stored.allowed_domains ?? []);
+      setSaved(true);
+    },
+    "Could not save the embed settings.",
+    (err) =>
+      err instanceof ApiError && err.status === 400
+        ? "Those embed settings weren't accepted — check the domains are bare hostnames."
+        : null,
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -63,7 +76,7 @@ export function EmbedPrivacyManager({ videoId }: { videoId: string }) {
     }
     setDomains((prev) => [...prev, host]);
     setDraft("");
-    setError(null);
+    clearError();
     setSaved(false);
   }
 
@@ -72,33 +85,14 @@ export function EmbedPrivacyManager({ videoId }: { videoId: string }) {
     setSaved(false);
   }
 
-  async function save() {
+  function save() {
     if (busy) return;
     // A whitelist with no domains would 400 — block it with a clear message.
     if (status === "whitelist" && domains.length === 0) {
       setError("Add at least one domain, or choose a different option.");
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      const body =
-        status === "whitelist"
-          ? { status, allowed_domains: domains }
-          : { status };
-      const stored = await api.setVideoEmbedPrivacy(videoId, body);
-      setStatus(stored.status);
-      setDomains(stored.allowed_domains ?? []);
-      setSaved(true);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 400) {
-        setError("Those embed settings weren't accepted — check the domains are bare hostnames.");
-      } else {
-        setError(errorMessage(err, "Could not save the embed settings."));
-      }
-    } finally {
-      setBusy(false);
-    }
+    void run(status === "whitelist" ? { status, allowed_domains: domains } : { status });
   }
 
   if (!loaded) {
@@ -125,7 +119,7 @@ export function EmbedPrivacyManager({ videoId }: { videoId: string }) {
         onChange={(e) => {
           setStatus(e.target.value as EmbedPrivacyStatus);
           setSaved(false);
-          setError(null);
+          clearError();
         }}
       >
         <option value="enabled">Anywhere</option>

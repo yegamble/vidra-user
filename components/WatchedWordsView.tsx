@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { WatchedWord } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { useAsyncAction } from "@/lib/use-async-action";
 import { usePagedList } from "@/lib/use-paged-list";
 
 const MAX_WORD_LEN = 100;
@@ -64,35 +65,25 @@ function WordsList() {
 
 function AddWordForm({ onAdded }: { onAdded: (word: WatchedWord) => void }) {
   const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    const word = value.trim();
-    if (word === "" || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
+  const { run, busy, error } = useAsyncAction(
+    async (word: string) => {
       const created = await api.addWatchedWord(word);
       onAdded(created);
       setValue("");
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setError("That word is already on the list.");
-      } else {
-        setError(errorMessage(err, "Could not add this word."));
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+    },
+    "Could not add this word.",
+    (err) =>
+      err instanceof ApiError && err.status === 409 ? "That word is already on the list." : null,
+  );
 
   return (
     <form
       className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        const word = value.trim();
+        if (word === "" || busy) return;
+        void run(word);
       }}
     >
       <div className="flex gap-2">
