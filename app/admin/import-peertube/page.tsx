@@ -1,15 +1,20 @@
 import { AdminPeerTubeImportView } from "@/components/AdminPeerTubeImportView";
 import { AdminTabs } from "@/components/AdminTabs";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function AdminImportPeerTubePage() {
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
-      <AdminTabs />
-      <h1 className="mb-1 text-2xl font-bold tracking-tight">Import from PeerTube</h1>
-      <p className="mb-6 text-[13px] text-fg-muted">
-        Migrate an existing PeerTube instance into Vidra. Preview with a dry run, then launch and
-        monitor the one-way import. The source connection comes from the server configuration.
-      </p>
+      <PageHeader
+        above={<AdminTabs />}
+        title="Import from PeerTube"
+        description={
+          <>
+            Migrate an existing PeerTube instance into Vidra. Preview with a dry run, then launch and
+            monitor the one-way import. The source connection comes from the server configuration.
+          </>
+        }
+      />
       <AdminPeerTubeImportView />
     </main>
   );

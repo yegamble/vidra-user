@@ -1,15 +1,16 @@
 import { MutedInstancesView } from "@/components/MutedInstancesView";
 import { MutesTabs } from "@/components/MutesTabs";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function MutedInstancesPage() {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
-      <SettingsBackLink />
-      <h1 className="mb-1 text-title sm:text-large-title">Muted instances</h1>
-      <p className="mb-6 text-[13px] text-fg-muted">
-        Federated instances you have muted. Their videos and comments are hidden from you.
-      </p>
+      <PageHeader
+        above={<SettingsBackLink />}
+        title="Muted instances"
+        description="Federated instances you have muted. Their videos and comments are hidden from you."
+      />
       <MutesTabs />
       <MutedInstancesView />
     </main>
