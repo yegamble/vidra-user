@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
 import { Alert } from "@/components/ui/Alert";
@@ -10,11 +10,18 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api } from "@/lib/api";
-import type { MediaGCResponse } from "@/lib/api";
+import type { MediaGCConfig, MediaGCResponse } from "@/lib/api";
 import { formatCount } from "@/lib/format";
 
 // The user must type this exact word to arm the destructive purge (double-confirm).
 const CONFIRM_WORD = "PURGE";
+// The word for adopting a bucket over another install's marker (conflict only) —
+// deliberately different from PURGE so muscle memory from one cannot arm the other.
+const ADOPT_WORD = "ADOPT";
+// How many orphan keys are rendered as DOM nodes. A breaker-tripped sweep on a
+// real library carries tens of thousands of keys, which as <li> nodes hangs the
+// tab; past the cap the full set is offered as a text download instead.
+const ORPHAN_RENDER_CAP = 500;
 
 // AdminMediaView is the admin-only media garbage-collection panel. A dry run
 // (POST /admin/media/gc, dry_run=true) lists the orphaned storage objects with no
@@ -30,7 +37,7 @@ export function AdminMediaView() {
   );
 }
 
-type Phase = "idle" | "scanning" | "purging";
+type Phase = "idle" | "scanning" | "purging" | "adopting";
 
 // Exported for the component test, which drives the panel directly rather than
 // through RoleGate's session plumbing.
@@ -44,8 +51,23 @@ export function MediaGCPanel() {
   const [error, setError] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  // The collector's boot facts (GET /admin/media/gc). null on a backend that
+  // predates the endpoint — the panel then renders exactly as it did before,
+  // because an absent answer is not a fact about the sweep.
+  const [config, setConfig] = useState<MediaGCConfig | null>(null);
 
   const busy = phase !== "idle";
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    api.getMediaGCConfig(ctrl.signal).then(
+      (cfg) => setConfig(cfg),
+      () => {
+        // Older backend, GC not wired, or unmount: quietly show nothing.
+      },
+    );
+    return () => ctrl.abort();
+  }, []);
 
   const dryRun = useCallback(async () => {
     setPhase("scanning");
@@ -82,16 +104,41 @@ export function MediaGCPanel() {
     }
   }, []);
 
+  // adoptBucket writes this instance's identity into the store's .vidra/owner
+  // marker (POST /admin/media/gc/adopt-bucket). On success the response carries
+  // the post-adoption ownership; reflect it immediately, then re-run the dry
+  // run so every panel re-reads the new state off a fresh sweep.
+  const adoptBucket = useCallback(async () => {
+    setPhase("adopting");
+    setError(null);
+    let ownership: MediaGCResponse["bucket_ownership"];
+    try {
+      const res = await api.adoptMediaGCBucket();
+      ownership = res.bucket_ownership;
+    } catch (err) {
+      setError(adoptError(err));
+      setPhase("idle");
+      return;
+    }
+    setConfig((cfg) => (cfg ? { ...cfg, bucket_ownership: ownership } : cfg));
+    setPhase("idle");
+    await dryRun();
+  }, [dryRun]);
+
   const orphanCount = preview?.orphans.length ?? 0;
 
   return (
     <div className="flex flex-col gap-6">
+      {config ? <BootFacts config={config} /> : null}
+
       <Card className="flex flex-col gap-3">
         <p className="text-sm text-fg-muted">
           Garbage collection sweeps stored media objects (originals, thumbnails,
           storyboards, captions, the HLS tree, playlist covers) and finds those with no
-          database reference. Start with a dry run — nothing is deleted until you confirm
-          a purge. Every sweep is audited.
+          database reference. This panel sweeps by hand: start with a dry run — a manual
+          purge deletes nothing until you confirm it. When media GC is enabled, a daily
+          automatic sweep also deletes orphans on its own; the first sweep after each
+          boot is always a dry run. Every sweep, manual or automatic, is audited.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={() => void dryRun()} disabled={busy}>
@@ -107,7 +154,15 @@ export function MediaGCPanel() {
         </p>
       ) : null}
 
-      {purged ? <PurgeResult res={purged} /> : null}
+      {purged ? (
+        <PurgeResult
+          res={purged}
+          breakerLimit={config?.max_orphan_percent}
+          busy={busy}
+          adopting={phase === "adopting"}
+          onAdopt={adoptBucket}
+        />
+      ) : null}
 
       {preview ? (
         <section aria-label="Dry-run result" className="flex flex-col gap-3">
@@ -141,6 +196,12 @@ export function MediaGCPanel() {
                 <span className="font-mono">{preview.bucket_ownership}</span>.{" "}
                 {ownershipExplanation(preview.bucket_ownership)}
               </span>
+              <AdoptBucketAction
+                ownership={preview.bucket_ownership}
+                busy={busy}
+                adopting={phase === "adopting"}
+                onAdopt={adoptBucket}
+              />
             </Alert>
           ) : null}
 
@@ -154,7 +215,7 @@ export function MediaGCPanel() {
             <>
               <div className="max-h-72 overflow-auto rounded-xl border border-border-subtle">
                 <ul className="divide-y divide-border-subtle">
-                  {preview.orphans.map((key) => (
+                  {preview.orphans.slice(0, ORPHAN_RENDER_CAP).map((key) => (
                     <li
                       key={key}
                       className="px-3 py-1.5 font-mono text-xs break-all text-fg-muted"
@@ -162,8 +223,26 @@ export function MediaGCPanel() {
                       {key}
                     </li>
                   ))}
+                  {orphanCount > ORPHAN_RENDER_CAP ? (
+                    <li className="px-3 py-1.5 text-xs text-fg-muted">
+                      …and {formatCount(orphanCount - ORPHAN_RENDER_CAP)} more — download the
+                      full list below.
+                    </li>
+                  ) : null}
                 </ul>
               </div>
+
+              {orphanCount > ORPHAN_RENDER_CAP ? (
+                <div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => downloadOrphanList(preview.orphans)}
+                  >
+                    Download full list ({formatCount(orphanCount)} keys)
+                  </Button>
+                </div>
+              ) : null}
 
               {!armed ? (
                 <div>
@@ -234,7 +313,20 @@ function purgeOutcome(res: MediaGCResponse): PurgeOutcome {
 
 // PurgeResult reports a completed purge REQUEST. Only an outcome that actually
 // deleted is allowed to look like a success.
-function PurgeResult({ res }: { res: MediaGCResponse }) {
+function PurgeResult({
+  res,
+  breakerLimit,
+  busy,
+  adopting,
+  onAdopt,
+}: {
+  res: MediaGCResponse;
+  /** MEDIA_GC_MAX_ORPHAN_PERCENT when the boot facts answered; undefined otherwise. */
+  breakerLimit?: number;
+  busy: boolean;
+  adopting: boolean;
+  onAdopt: () => Promise<void>;
+}) {
   const outcome = purgeOutcome(res);
 
   return (
@@ -266,10 +358,14 @@ function PurgeResult({ res }: { res: MediaGCResponse }) {
           </strong>
           <span>
             {formatCount(res.orphans.length)} of the {formatCount(res.scanned)} objects scanned
-            looked like orphans ({res.orphan_percent}%), over this instance&rsquo;s
-            MEDIA_GC_MAX_ORPHAN_PERCENT limit. An implausible orphan share is the shape a
-            wrong reference set makes, so the sweep refused the delete instead of acting on
-            it. Confirm the list below really is garbage before raising the limit.
+            looked like orphans (
+            {breakerLimit === undefined
+              ? `${res.orphan_percent}%`
+              : `${res.orphan_percent}% found, limit ${breakerLimit}%`}
+            ), over this instance&rsquo;s MEDIA_GC_MAX_ORPHAN_PERCENT limit. An implausible
+            orphan share is the shape a wrong reference set makes, so the sweep refused the
+            delete instead of acting on it. Confirm the list below really is garbage before
+            raising the limit.
           </span>
         </Alert>
       ) : null}
@@ -293,6 +389,16 @@ function PurgeResult({ res }: { res: MediaGCResponse }) {
             {formatCount(res.orphans.length)} {res.orphans.length === 1 ? "orphan" : "orphans"},
             all of which are still in storage.
           </span>
+          {/* Adoption is the documented way out of the bucket_ownership rail —
+              but only that rail: adopting cannot end a storage migration. */}
+          {res.forced_dry_run_reason === "bucket_ownership" ? (
+            <AdoptBucketAction
+              ownership={res.bucket_ownership}
+              busy={busy}
+              adopting={adopting}
+              onAdopt={onAdopt}
+            />
+          ) : null}
         </Alert>
       ) : null}
 
@@ -315,10 +421,21 @@ function PurgeResult({ res }: { res: MediaGCResponse }) {
 }
 
 // The ownership pill. Absent on a backend that predates the field — the panel
-// says nothing rather than guessing.
+// says nothing rather than guessing. "not-applicable" is rendered in operator
+// words ("local disk"); the raw enum stays reachable in the title attribute.
 function OwnershipBadge({ ownership }: { ownership?: MediaGCResponse["bucket_ownership"] }) {
   if (!ownership) return null;
-  return <Badge variant={OWNERSHIP_VARIANT[ownership] ?? "neutral"}>Storage: {ownership}</Badge>;
+  return (
+    <Badge variant={OWNERSHIP_VARIANT[ownership] ?? "neutral"} title={ownership}>
+      Storage: {ownershipLabel(ownership)}
+    </Badge>
+  );
+}
+
+// Every state except not-applicable is already an operator word; not-applicable
+// is jargon for "media lives on local disk, which needs no ownership marker".
+function ownershipLabel(ownership: MediaGCResponse["bucket_ownership"]): string {
+  return ownership === "not-applicable" ? "local disk" : ownership;
 }
 
 // Only `owned` and `not-applicable` permit deletion (mediagc.BucketOwnership.
@@ -373,4 +490,166 @@ function gcError(err: unknown): string {
     return err.message;
   }
   return "Media garbage collection failed. Please try again.";
+}
+
+// adoptError maps the adopt-bucket failure modes (audited core-side) to what an
+// operator can act on: 409 = local disk (nothing to adopt), 503 = the instance
+// has no identity to stamp yet, 502 = the marker write itself failed.
+function adoptError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 409) {
+      return "Nothing to adopt: this instance stores media on local disk, which needs no ownership marker.";
+    }
+    if (err.status === 503) {
+      return "Adoption failed: this instance has no identity to stamp on the bucket yet — run the database migrations against this database, then try again.";
+    }
+    if (err.status === 502) {
+      return "Adoption failed: the ownership marker could not be written to the object store. Check the storage credentials and connectivity, then try again.";
+    }
+    return err.message;
+  }
+  return "Bucket adoption failed. Please try again.";
+}
+
+// BootFacts — the read-only facts block at the top of the page (the same dl/Row
+// idiom the system-status and infrastructure pages use). Both knobs are
+// deliberately boot-baked, so there is no toggle here and never should be:
+// this block exists because boot-baked must not mean invisible.
+function BootFacts({ config }: { config: MediaGCConfig }) {
+  return (
+    <section aria-label="Media GC configuration" data-testid="gc-boot-facts">
+      <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+        <FactRow
+          label="Automatic daily sweep"
+          value={config.enabled ? "On" : "Off"}
+          detail="set at boot via MEDIA_GC_ENABLED"
+        />
+        <FactRow label="Orphan-ratio breaker" value={`${config.max_orphan_percent}%`} />
+        <FactRow
+          label="Storage ownership"
+          value={ownershipLabel(config.bucket_ownership)}
+          title={config.bucket_ownership}
+        />
+      </dl>
+    </section>
+  );
+}
+
+function FactRow({
+  label,
+  value,
+  detail,
+  title,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  title?: string;
+}) {
+  return (
+    <div className="flex justify-between gap-3 border-b border-border-subtle py-1.5">
+      <dt className="text-fg-muted">{label}</dt>
+      <dd className="text-right text-fg" title={title}>
+        {value}
+        {detail ? <span className="text-fg-muted"> — {detail}</span> : null}
+      </dd>
+    </div>
+  );
+}
+
+// AdoptBucketAction — the "Adopt this bucket" control the advisory copy has
+// been promising. Rendered ONLY for `unowned` (no marker: arm, then confirm)
+// and `conflict` (another install's marker: arm, then type ADOPT — overwriting
+// a marker takes ownership away from a live install, so the loud path stays
+// loud). Never for `unknown` (its remedy is configuration and logs, not a
+// marker write) and never on a healthy install.
+function AdoptBucketAction({
+  ownership,
+  busy,
+  adopting,
+  onAdopt,
+}: {
+  ownership?: MediaGCResponse["bucket_ownership"];
+  busy: boolean;
+  adopting: boolean;
+  onAdopt: () => Promise<void>;
+}) {
+  const [armed, setArmed] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+
+  if (ownership !== "unowned" && ownership !== "conflict") return null;
+  const conflict = ownership === "conflict";
+
+  if (!armed) {
+    return (
+      <div>
+        <Button variant="secondary" size="sm" onClick={() => setArmed(true)} disabled={busy}>
+          Adopt this bucket
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {conflict ? (
+        <span className="text-fg">
+          Adopting overwrites the other install&rsquo;s{" "}
+          <span className="font-mono">.vidra/owner</span> marker and takes ownership of the
+          store away from it — its destructive sweeps will start refusing while yours
+          delete. Settle which instance owns this store first; only if THIS instance is
+          the rightful owner, type <span className="font-mono font-semibold">{ADOPT_WORD}</span>{" "}
+          to confirm.
+        </span>
+      ) : (
+        <span className="text-fg">
+          Adopting writes this instance&rsquo;s identity into the store&rsquo;s{" "}
+          <span className="font-mono">.vidra/owner</span> marker, and every future
+          destructive sweep will trust it. Only adopt a store this instance really owns.
+        </span>
+      )}
+      {conflict ? (
+        <Input
+          label={`Type ${ADOPT_WORD} to confirm`}
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          autoComplete="off"
+          className="max-w-xs"
+        />
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={() => void onAdopt()}
+          disabled={busy || (conflict && confirmText !== ADOPT_WORD)}
+        >
+          {adopting ? "Adopting…" : "Confirm adoption"}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            setArmed(false);
+            setConfirmText("");
+          }}
+          disabled={busy}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// downloadOrphanList hands the FULL orphan set over as a plain-text file (one
+// key per line) — the DOM renders at most ORPHAN_RENDER_CAP of them.
+function downloadOrphanList(keys: string[]) {
+  const blob = new Blob([keys.join("\n") + "\n"], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "media-gc-orphans.txt";
+  a.click();
+  URL.revokeObjectURL(url);
 }
