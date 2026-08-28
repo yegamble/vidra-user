@@ -139,6 +139,40 @@ export function InfrastructurePanel() {
             server.tracing_enabled ? `On (${server.tracing_protocol})` : "Off"
           }
         />
+        {/* Belongs with the request limits rather than with the pool: it is how
+            long this process keeps answering requests after SIGTERM. Zero is
+            the default and is correct on a single node, so it is reported with
+            its consequence attached rather than as a bare "0s" that reads like
+            a value nobody set — behind a load balancer it is a connection reset
+            on a real request at every deploy. */}
+        <Row
+          label="Shutdown drain delay"
+          value={
+            server.drain_delay_seconds === 0
+              ? "None — closes immediately"
+              : humanSeconds(server.drain_delay_seconds)
+          }
+        />
+      </Panel>
+
+      {/* Sizing only. The live counts (how much of this pool is checked out
+          right now) are a probe, so they live on the system status page — this
+          panel is what the deployment ASKED for, which is what makes the live
+          number readable when an operator gets there. */}
+      <Panel
+        title="Database"
+        description="This process's PostgreSQL connection pool. Every api and worker process opens its own, so the server-wide demand is this multiplied by however many are running."
+      >
+        <Row label="Max connections" value={String(server.db_max_conns)} />
+        <Row label="Warm minimum" value={String(server.db_min_conns)} />
+        <Row
+          label="Connection lifetime"
+          value={humanSeconds(server.db_conn_max_lifetime_seconds)}
+        />
+        <Row
+          label="Idle timeout"
+          value={humanSeconds(server.db_conn_max_idle_time_seconds)}
+        />
       </Panel>
 
       <Panel
@@ -562,6 +596,13 @@ const FEATURE_LABEL: Record<string, string> = {
   captions: "Automatic captions",
   live: "Live streaming",
   ipfs: "IPFS mirrors",
+  // Named exactly as the toggle it links to on the Advanced config page, so an
+  // operator who clicks through lands on a control carrying the word they read.
+  cdn: "CDN delivery",
+  // "DRM" alone humanizes to the same three letters, so the fallback would look
+  // deliberate while saying nothing. The suffix is what tells an operator which
+  // of the several things called DRM this row is about.
+  drm: "DRM content protection",
   tracing: "Distributed tracing",
   metrics: "Prometheus metrics",
   vp9_alternates: "VP9 alternate renditions",
@@ -571,8 +612,9 @@ const FEATURE_LABEL: Record<string, string> = {
  * Where an operator goes to act on a feature. Deliberately partial: a link that
  * lands on a page without the promised control is worse than no link at all —
  * the operator hunts for a switch that was never there. The remaining boot-env
- * features (ATProto, malware scanning, tracing, metrics, VP9) still have
- * nowhere to send anyone.
+ * features (ATProto, malware scanning, DRM, tracing, metrics, VP9) still have
+ * nowhere to send anyone: DRM in particular is DRM_PROVIDER plus DRM_KEY_KEK
+ * and nothing else, so its row stays linkless until an admin control exists.
  *
  * Keyed on the server's stable feature vocabulary, so this mapping is the
  * client's to own (the contract fixes the keys, not the destinations).
@@ -590,6 +632,12 @@ const FEATURE_CONFIG_PAGE: Record<string, string> = {
   captions: "/admin/config/vod",
   live: "/admin/config/live",
   ipfs: "/admin/config/ipfs",
+  // The one half of this row that IS a runtime switch: delivery_cdn_enabled,
+  // in the Delivery section of Advanced. The other half (DELIVERY_CDN_BASE_URL)
+  // is boot config, which is exactly why the row can report a switch turned on
+  // with no edge behind it — and why the link still earns its place: that
+  // operator's next move is to turn the switch back off.
+  cdn: "/admin/config/advanced",
 };
 
 /**
@@ -804,6 +852,32 @@ function Row({
       </dd>
     </div>
   );
+}
+
+/**
+ * A second count as the environment spells it: "1h", "5m", "1m 30s". These
+ * knobs are set as durations (DB_CONN_MAX_LIFETIME=1h) and reported as seconds,
+ * so rendering 3600 verbatim asks the reader to divide before they can compare
+ * the page against their own config.
+ *
+ * Not `formatUptime`: that one rounds to whole minutes, which is right for a
+ * process that has been up for days and wrong here — a 15-second drain delay
+ * would render as "0m", the exact value an operator would then go "fix".
+ */
+function humanSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0s";
+  let rest = Math.floor(seconds);
+  const hours = Math.floor(rest / 3600);
+  rest %= 3600;
+  const mins = Math.floor(rest / 60);
+  rest %= 60;
+  const parts: string[] = [];
+  if (hours) parts.push(`${hours}h`);
+  if (mins) parts.push(`${mins}m`);
+  // The remainder is kept whenever it is non-zero, so a value that does not
+  // divide evenly is never silently rounded into one that does.
+  if (rest || parts.length === 0) parts.push(`${rest}s`);
+  return parts.join(" ");
 }
 
 function onOff(on: boolean): string {

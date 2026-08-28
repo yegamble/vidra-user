@@ -154,6 +154,11 @@ export type AuditLogEntry = Schemas["AuditLogEntry"];
 export type AuditLogListResponse = Schemas["AuditLogListResponse"];
 export type SystemStatusComponent = Schemas["ComponentStatus"];
 export type SystemStatus = Schemas["SystemStatus"];
+// The live connection-pool sample. OPTIONAL on the wire and unwrapped here on
+// purpose: the server omits the block entirely when no pool is attached (0 of 0
+// connections cannot be told apart from a pool with nothing left), so the
+// presence check belongs at the call site, not inside every field read.
+export type SystemStatusDatabase = NonNullable<SystemStatus["database"]>;
 // The deploy-time shape (GET /admin/infrastructure) — what the operator chose
 // at install time, as opposed to SystemStatus's live health. Section types are
 // projected off the parent because the spec declares them inline (no named

@@ -44,7 +44,19 @@ const localStorageBackend = {
   s3_force_path_style: false,
 };
 
-function infrastructure(storage: typeof s3Storage | typeof localStorageBackend) {
+type Feature = { key: string; enabled: boolean; configured: boolean; note?: string };
+
+const objectStorageFeature: Feature = {
+  key: "object_storage",
+  enabled: false,
+  configured: false,
+  note: "Media is stored on the api container's filesystem. Connect object storage (STORAGE_BACKEND=s3 plus endpoint, bucket and keys).",
+};
+
+function infrastructure(
+  storage: typeof s3Storage | typeof localStorageBackend,
+  features: Feature[] = [objectStorageFeature],
+) {
   return {
     server: {
       environment: "production" as const,
@@ -55,6 +67,11 @@ function infrastructure(storage: typeof s3Storage | typeof localStorageBackend) 
       metrics_enabled: true,
       tracing_enabled: false,
       tracing_protocol: "grpc",
+      db_max_conns: 10,
+      db_min_conns: 2,
+      db_conn_max_lifetime_seconds: 3600,
+      db_conn_max_idle_time_seconds: 300,
+      drain_delay_seconds: 15,
     },
     storage,
     networking: {
@@ -74,14 +91,7 @@ function infrastructure(storage: typeof s3Storage | typeof localStorageBackend) 
       artifacts_note: "Two families are kept.",
       live_state_note: "Run `vidra doctor` on the host.",
     },
-    features: [
-      {
-        key: "object_storage",
-        enabled: false,
-        configured: false,
-        note: "Media is stored on the api container's filesystem. Connect object storage (STORAGE_BACKEND=s3 plus endpoint, bucket and keys).",
-      },
-    ],
+    features,
   };
 }
 
@@ -241,5 +251,81 @@ describe("InfrastructurePanel storage surfacing", () => {
     expect(panel.getByText(/unknown rather than healthy/)).toBeTruthy();
     // And a migration list that could not be read never implies "none running".
     expect(panel.getByText(/could not be read/)).toBeTruthy();
+  });
+});
+
+describe("InfrastructurePanel pool sizing and drain", () => {
+  it("reports the pool sizing the deployment chose, with the timeouts humanized", async () => {
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Database" }));
+    expect(panel.getByText("10")).toBeTruthy();
+    expect(panel.getByText("2")).toBeTruthy();
+    // 3600 and 300 are how the environment spells them; an operator compares
+    // "1h"/"5m" against what they set without dividing first.
+    expect(panel.getByText("1h")).toBeTruthy();
+    expect(panel.getByText("5m")).toBeTruthy();
+  });
+
+  it("reports the shutdown drain delay next to the other request limits", async () => {
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Server" }));
+    // Sub-minute matters here: the app's formatUptime would render 15s as "0m".
+    expect(panel.getByText("15s")).toBeTruthy();
+  });
+
+  it("does not dress a zero drain delay up as a duration", async () => {
+    const base = infrastructure(s3Storage);
+    mocks.getInfrastructure.mockResolvedValue({
+      ...base,
+      server: { ...base.server, drain_delay_seconds: 0 },
+    });
+    render(<InfrastructurePanel />);
+
+    const panel = within(await screen.findByRole("region", { name: "Server" }));
+    expect(panel.getByText(/closes immediately/)).toBeTruthy();
+  });
+});
+
+describe("InfrastructurePanel feature vocabulary", () => {
+  const cdn: Feature = {
+    key: "cdn",
+    enabled: false,
+    configured: true,
+    note: "This deployment has a CDN base URL, so the edge is wired and the switch is off.",
+  };
+  const drm: Feature = {
+    key: "drm",
+    enabled: false,
+    configured: false,
+    note: "No DRM provider is selected. The only provider this build ships is clearkey-test.",
+  };
+
+  it("names the newest features instead of humanizing their raw keys", async () => {
+    mocks.getInfrastructure.mockResolvedValue(infrastructure(s3Storage, [cdn, drm]));
+    render(<InfrastructurePanel />);
+
+    const features = within(await screen.findByRole("region", { name: "Optional features" }));
+    expect(features.getByText("CDN delivery")).toBeTruthy();
+    expect(features.getByText("DRM content protection")).toBeTruthy();
+    // The fallback would render the wire keys verbatim.
+    expect(features.queryByText("cdn")).toBeNull();
+    expect(features.queryByText("drm")).toBeNull();
+  });
+
+  it("links CDN at the page that actually carries its switch, and DRM nowhere", async () => {
+    mocks.getInfrastructure.mockResolvedValue(infrastructure(s3Storage, [cdn, drm]));
+    render(<InfrastructurePanel />);
+
+    const features = within(await screen.findByRole("region", { name: "Optional features" }));
+    // "CDN delivery" is the label of the delivery_cdn_enabled toggle on that
+    // page, so the operator lands on a control with the name they clicked.
+    expect(features.getByRole("link", { name: "Open settings" }).getAttribute("href")).toBe(
+      "/admin/config/advanced",
+    );
+    // DRM is boot-env only: a link would send the operator hunting for a switch
+    // that is not on any admin page.
+    expect(features.getAllByRole("link")).toHaveLength(1);
   });
 });
