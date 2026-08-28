@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import type { RecommendationItem } from "@/lib/api/types";
 import { t } from "@/lib/i18n";
 import { trackSearchEvent } from "@/lib/search-events";
+import { RAIL_TILE, RAIL_TRACK } from "@/lib/rail";
 
 // HomeRecommendationsRail is the home "For you" / "Trending now" discovery rail
 // (search-service W4), mounted after the primary feed. Like
@@ -96,15 +97,10 @@ function RecommendationRail({
       </div>
       <ul
         ref={listRef}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={RAIL_TRACK}
       >
         {items.map((item, index) => (
-          <li
-            key={item.id}
-            data-video-id={item.id}
-            data-position={index}
-            className="w-[min(82vw,20rem)] flex-none snap-start sm:w-72 lg:w-64 xl:w-72"
-          >
+          <li key={item.id} data-video-id={item.id} data-position={index} className={RAIL_TILE}>
             <VideoCard video={item} />
           </li>
         ))}
