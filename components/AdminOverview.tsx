@@ -8,6 +8,7 @@ import { ChevronRightIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/Badge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
+import { ADMIN_NAV_OVERVIEW } from "@/lib/admin-nav";
 import { api } from "@/lib/api";
 import type { AdminStats, AuditLogEntry, JobsOverview, SystemStatus } from "@/lib/api";
 import { formatBytes, formatCount, formatUptime, formatVersion, relativeTime } from "@/lib/format";
@@ -33,43 +34,12 @@ const AUDIT_PREVIEW = 6;
 // until P19.2, so the Health card reflects exactly the dependencies /admin/system
 // reports, never a fabricated S3/RTMP/IPFS row.
 
-const SECTIONS = [
-  {
-    href: "/admin/users",
-    label: "Users",
-    description: "Search accounts and manage their role and active status.",
-  },
-  {
-    href: "/admin/registration-requests",
-    label: "Registration",
-    description: "Review pending signups and approve or reject them.",
-  },
-  {
-    href: "/admin/config",
-    label: "Configuration",
-    description: "Instance identity, registration, feature toggles, and moderation gates.",
-  },
-  {
-    href: "/admin/jobs",
-    label: "Jobs",
-    description: "Background-work queue depth, stuck workers, and recent failures.",
-  },
-  {
-    href: "/admin/media",
-    label: "Media storage",
-    description: "Garbage-collect stored media objects with no database reference.",
-  },
-  {
-    href: "/admin/audit-log",
-    label: "Audit log",
-    description: "The security audit trail of admin and auth actions.",
-  },
-  {
-    href: "/admin/system",
-    label: "System",
-    description: "Build info, environment, uptime, and dependency health.",
-  },
-];
+// The "Manage" list is the admin-nav registry (lib/admin-nav.ts) minus the
+// entries that explicitly opt out there: this page itself, and the two
+// moderation destinations the open-reports callout below already leads to with
+// a live count. Hand-maintained, this list had quietly fallen four pages behind
+// the rail (Infrastructure, Playback health, Import, Followers were invisible
+// from the Overview).
 
 // AdminOverview is the /admin index: the design's operations dashboard — instance
 // health, background-job queues, a recent audit-log tail, the open-reports
@@ -93,7 +63,7 @@ function OverviewBody() {
           Manage
         </h2>
         <ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
-          {SECTIONS.map((s) => (
+          {ADMIN_NAV_OVERVIEW.map((s) => (
             <li key={s.href}>
               <Link
                 href={s.href}
