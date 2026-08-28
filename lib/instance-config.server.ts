@@ -13,7 +13,7 @@
 import { cache } from "react";
 
 import type { InstanceResponse } from "@/lib/api/types";
-import { internalApiBaseUrl } from "@/lib/config";
+import { serverJson } from "@/lib/server-json";
 
 /** One branding asset slot: "" + is_fallback=true when unset. */
 export type BrandingAsset = {
@@ -165,15 +165,9 @@ export const INSTANCE_CONFIG_REVALIDATE_SECONDS = 60;
  * any failure (backend down, non-JSON, non-2xx) resolves to null and the
  * caller falls back to the hardcoded defaults.
  */
-export const getInstanceConfig = cache(async (): Promise<InstanceConfigSnapshot | null> => {
-  try {
-    const res = await fetch(`${internalApiBaseUrl}/api/v1/instance`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: INSTANCE_CONFIG_REVALIDATE_SECONDS },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as InstanceConfigSnapshot;
-  } catch {
-    return null;
-  }
-});
+export const getInstanceConfig = cache(
+  async (): Promise<InstanceConfigSnapshot | null> =>
+    serverJson<InstanceConfigSnapshot>("/api/v1/instance", {
+      freshness: { revalidateSeconds: INSTANCE_CONFIG_REVALIDATE_SECONDS },
+    }),
+);
