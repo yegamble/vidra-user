@@ -25,7 +25,7 @@ import { usePagedList } from "@/lib/use-paged-list";
 // contract caps a page at 100, which is also the page this view has always
 // shown. It is now just the DEFAULT: the pager's rows-per-page picker can take
 // it down to something an operator can actually read through.
-const PAGE_SIZE = 100;
+const USERS_PAGE_SIZE = 100;
 
 // The design's role control is a three-way segmented switch (was a <select>).
 const ROLE_OPTIONS: readonly { value: UserRole; label: string }[] = [
@@ -109,7 +109,7 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
   const [filter, setFilter] = useState<QuotaFilter>("all");
 
   const list = usePagedList<AdminUser>({
-    defaultLimit: PAGE_SIZE,
+    defaultLimit: USERS_PAGE_SIZE,
     filterKeys: ["q"],
     load: (query, signal) =>
       api

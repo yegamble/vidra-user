@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { CheckIcon, PlusIcon } from "@/components/icons";
 import { api } from "@/lib/api";
+import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 
 // SaveButton toggles a video in the signed-in viewer's library ("watch later").
 // On mount it reads the library to reflect whether this video is already saved;
@@ -19,7 +20,7 @@ export function SaveButton({ videoId }: { videoId: string }) {
     if (status !== "authed") return;
     const controller = new AbortController();
     api
-      .getSavedVideos({ limit: 100 }, controller.signal)
+      .getSavedVideos({ limit: FULL_LIST_LIMIT }, controller.signal)
       .then((res) => setSaved(res.videos.some((v) => v.id === videoId)))
       .catch(() => {
         if (!controller.signal.aborted) setSaved(false);

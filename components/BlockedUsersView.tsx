@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type { BlockedUser } from "@/lib/api";
+import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
 
 type Status = "loading" | "error" | "ready";
@@ -48,7 +49,7 @@ function BlockList() {
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getBlockedUsers({ limit: 100 }, controller.signal)
+      .getBlockedUsers({ limit: FULL_LIST_LIMIT }, controller.signal)
       .then((res) => {
         setUsers(res.users);
         setStatus("ready");

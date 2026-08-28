@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, api, errorMessage, userAvatarUrl } from "@/lib/api";
 import type { Comment } from "@/lib/api";
+import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { buildCommentTree, replyMention } from "@/lib/comments";
 import { useE2EEAvailable } from "@/lib/e2ee/availability";
 import { relativeTime } from "@/lib/format";
@@ -80,7 +81,7 @@ export function CommentsSection({
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getVideoComments(videoId, { limit: 100 }, controller.signal)
+      .getVideoComments(videoId, { limit: FULL_LIST_LIMIT }, controller.signal)
       .then((res) => {
         setComments(res.comments);
         setStatus("ready");

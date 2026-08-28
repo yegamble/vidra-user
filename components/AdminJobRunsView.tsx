@@ -23,7 +23,7 @@ import type {
 } from "@/lib/api";
 import { formatDateTime, relativeTime } from "@/lib/format";
 
-const PAGE_SIZE = 25;
+const RUNS_PAGE_SIZE = 25;
 const EVENT_PAGE_SIZE = 50;
 const POLL_FALLBACK_MS = 10_000;
 const LIVE_REFRESH_DEBOUNCE_MS = 500;
@@ -162,7 +162,7 @@ export function AdminJobRunsView({ refreshKey }: { refreshKey: number }) {
   const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [offset, setOffset] = useState(0);
-  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [limit, setLimit] = useState(RUNS_PAGE_SIZE);
   const [reloadKey, setReloadKey] = useState(0);
   const [listRevision, setListRevision] = useState(0);
   const [streamSeed, setStreamSeed] = useState<string | null>(null);
