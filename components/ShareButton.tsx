@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ShareIcon } from "@/components/icons";
 import { Modal } from "@/components/ui";
 import { formatDuration } from "@/lib/format";
+import { uuidToShortId } from "@/lib/short-id";
 
 const PILL =
   "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
@@ -92,7 +93,12 @@ export function ShareDialog({
   // The dialog only mounts client-side (after a click), so window is available.
   const origin = window.location.origin;
   const startQuery = startAtChecked && atSeconds > 0 ? `?t=${atSeconds}` : "";
-  const watchUrl = `${origin}${watchPath ?? `/videos/${videoId}`}${startQuery}`;
+  // Local videos share as the short /v/<base58 uuid> alias (which 301s to the
+  // canonical watch page); federated cards pass their own watchPath, and a
+  // non-UUID id simply keeps the long form.
+  const shortId = watchPath === undefined ? uuidToShortId(videoId) : null;
+  const watchPathOrShort = watchPath ?? (shortId ? `/v/${shortId}` : `/videos/${videoId}`);
+  const watchUrl = `${origin}${watchPathOrShort}${startQuery}`;
   const embedSnippet = `<iframe src="${origin}/embed/${videoId}${startQuery}" width="560" height="315" frameborder="0" allowfullscreen title="${escapeAttr(title)}"></iframe>`;
 
   async function copy(target: "link" | "embed", text: string) {
