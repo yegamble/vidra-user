@@ -77,4 +77,16 @@ describe("shortIdToUuid", () => {
     expect(shortIdToUuid("zzzzzzzzzzzzzzzzzzzzzz")).toBeNull();
     expect(shortIdToUuid("EjArDZ8v19uX6BigXbAx5pQ")).toBeNull();
   });
+
+  // The contract is null-on-invalid, and the natural caller is
+  // `searchParams.get("v")` / a route param, which is `string | null`. Reading
+  // `.length` off a non-string throws a TypeError, which in a route handler is
+  // a 500 rather than the intended "no such video" — so non-strings must take
+  // the same null path as a malformed id.
+  it("returns null for non-string input instead of throwing", () => {
+    expect(shortIdToUuid(null as unknown as string)).toBeNull();
+    expect(shortIdToUuid(undefined as unknown as string)).toBeNull();
+    expect(shortIdToUuid(123 as unknown as string)).toBeNull();
+    expect(shortIdToUuid({} as unknown as string)).toBeNull();
+  });
 });

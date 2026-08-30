@@ -5,6 +5,7 @@
 // id we already have: no backend field, no migration, and every existing video
 // gets one for free. Pure + dependency-free so it unit-tests in the node
 // environment and can be imported from a route handler or a client component.
+// TWIN: a byte-compatible Go implementation lives in vidra-core internal/shortid — keep the golden vectors in both test suites identical.
 const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // 16 bytes never encode to more than 22 base58 characters (58^22 > 2^128), and
@@ -40,6 +41,10 @@ export function uuidToShortId(id: string): string | null {
 
 /** shortIdToUuid decodes a base58 short id back to a lowercase UUID, or null. */
 export function shortIdToUuid(sid: string): string | null {
+  // Callers hand us URL scraps — `searchParams.get()` and route params are
+  // `string | null` — and reading `.length` off a non-string throws a
+  // TypeError (a 500) instead of the null this function promises.
+  if (typeof sid !== "string") return null;
   if (sid.length < MIN_LEN || sid.length > MAX_LEN) return null;
 
   let leadingZeros = 0;
