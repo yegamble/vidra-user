@@ -89,6 +89,18 @@ test("a short link redirects to the canonical watch page, query intact", async (
   );
 });
 
+test("a legacy /videos/watch/ link redirects to the canonical watch page, query intact", async ({
+  page,
+}) => {
+  await mockWatch(page);
+  // The format vidra-core federation and its Bluesky auto-poster minted; this
+  // app never routed it, so it 404s without the next.config.ts redirect.
+  await page.goto(`/videos/watch/${VIDEO_ID}?t=5`);
+
+  await expect(page).toHaveURL(new RegExp(`/videos/${VIDEO_ID}\\?t=5$`));
+  await expect(page.getByRole("heading", { name: "Short Link Me" })).toBeVisible();
+});
+
 test("an unresolvable short link 404s instead of redirecting", async ({ page }) => {
   const response = await page.goto("/v/not-a-valid-sid");
   expect(response?.status()).toBe(404);
