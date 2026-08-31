@@ -39,11 +39,14 @@ npm run test          # vitest, ~1.4k tests
    spec lacks. If a task needs one, open an issue describing the exact
    contract addition and stop (or ship only the part that degrades
    gracefully without it).
-5. **Design system**: read `design-system.md` before any UI change. SVG icons
-   only (`npm run lint:icons` enforces it — no emoji/glyph icons), design
-   tokens over hardcoded colors (light + dark themes both matter), match
-   existing idioms: `EmptyState`/`ErrorState`/`Spinner`, `Dropdown`
-   `triggerVariant="icon"`, portal patterns for menus/modals.
+5. **Design system**: read `.ralph/specs/design-system.md` before any UI
+   change (it is committed, but not at the repo root — the old bare
+   `design-system.md` reference sent agents hunting for a file that does not
+   exist there). SVG icons only (`npm run lint:icons` enforces it — no
+   emoji/glyph icons), design tokens over hardcoded colors (light + dark
+   themes both matter), match existing idioms:
+   `EmptyState`/`ErrorState`/`Spinner`, `Dropdown` `triggerVariant="icon"`,
+   portal patterns for menus/modals.
 6. **Do not bump dependencies** (Dependabot owns bumps), do not touch
    `.github/workflows`, never commit secrets or `.env` files.
 
