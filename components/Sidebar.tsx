@@ -9,12 +9,13 @@ import { InfoIcon } from "@/components/icons";
 import {
   ADMIN_LINK,
   MODERATION_LINK,
-  NAV_LINKS,
   isActiveNavLink,
+  primaryNavLinks,
   type NavLinkDef,
 } from "@/components/nav-links";
 import { SidebarFollowing } from "@/components/SidebarFollowing";
 import { isStandaloneRoute } from "@/lib/app-shell";
+import { useMessagingAvailable } from "@/lib/messaging/availability";
 
 // The collapse preference is a harmless UI setting (never a secret/token), so
 // localStorage is the right place for it to survive reloads. It is read through
@@ -60,6 +61,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user } = useSession();
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
+  // Called before the standalone/admin early returns so the hook order is stable.
+  const messagingAvailable = useMessagingAvailable();
 
   function toggle() {
     writeCollapsed(!collapsed);
@@ -77,7 +80,7 @@ export function Sidebar() {
     return null;
   }
 
-  const links: NavLinkDef[] = [...NAV_LINKS];
+  const links: NavLinkDef[] = primaryNavLinks(messagingAvailable);
   if (user?.role === "admin" || user?.role === "moderator") links.push(MODERATION_LINK);
   if (user?.role === "admin") links.push(ADMIN_LINK);
 

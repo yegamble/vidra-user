@@ -39,6 +39,11 @@ vi.mock("@/lib/api", () => ({
   errorMessage: () => "Something went wrong.",
   userAvatarUrl: () => null,
   userBannerUrl: () => null,
+  // Pulled in by the shared instance-features store behind the messaging gate on
+  // ReadReceiptsToggle. Never resolves here: an undisclosed document reads as
+  // "messaging available", which is the behaviour these tests assert.
+  getInstanceCached: vi.fn(() => new Promise(() => {})),
+  invalidateInstanceCache: vi.fn(),
 }));
 
 import { SettingsView } from "./SettingsView";

@@ -31,9 +31,10 @@ import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/cn";
 import {
   EMPTY_INSTANCE_ABOUT,
-  api,
   getInstanceAbout,
+  getInstanceCached,
   getVideoConfigCached,
+  invalidateInstanceCache,
   resolveOptionLabel,
 } from "@/lib/api";
 import type {
@@ -93,11 +94,19 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
     // fallback fetch also keeps route-mocked/local environments functional
     // when the Next server cannot reach the API directly.
     const controller = new AbortController();
-    api
-      .getInstance(controller.signal)
-      .then((res) => setInstance(res as ExtendedInstanceResponse))
+    // GET /instance goes through the SHARED per-load cache, not a private fetch:
+    // the app-shell chrome reads the same document for its capability gates, and
+    // two independent requests for one document meant whichever won the race
+    // consumed the response. Cancellation is a local flag (the same idiom as the
+    // video-config effect below) because aborting a shared promise would cancel
+    // it for every other consumer too.
+    let cancelled = false;
+    getInstanceCached()
+      .then((res) => {
+        if (!cancelled) setInstance(res as ExtendedInstanceResponse);
+      })
       .catch(() => {
-        if (!controller.signal.aborted && bootstrap.instance === null) setError(true);
+        if (!cancelled && bootstrap.instance === null) setError(true);
       });
     getInstanceAbout(controller.signal)
       .then(setAbout)
@@ -106,7 +115,10 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
           setAbout(EMPTY_INSTANCE_ABOUT);
         }
       });
-    return () => controller.abort();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [bootstrap.about, bootstrap.instance, reloadKey]);
 
   const hasTaxonomy = Boolean(
@@ -134,6 +146,9 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
         message="Could not load this instance's details."
         onRetry={() => {
           setError(false);
+          // Drop the failed shared document first, or the retry would re-read
+          // the same cache entry instead of refetching.
+          invalidateInstanceCache();
           setReloadKey((key) => key + 1);
         }}
       />

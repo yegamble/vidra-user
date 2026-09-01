@@ -11,6 +11,7 @@ const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const CONVERSATIONS = /\/api\/v1\/me\/conversations(\?|$)/;
 const START_CONVERSATION = /\/api\/v1\/conversations$/;
 const ENC_MESSAGES = /\/api\/v1\/conversations\/enc1\/messages(\?|$)/;
+const INSTANCE = /\/api\/v1\/instance$/;
 const DEVICES = /\/api\/v1\/e2ee\/devices$/;
 const DEVICE_DELETE = /\/api\/v1\/e2ee\/devices\/[^/]+$/;
 const OTK_UPLOAD = /\/api\/v1\/e2ee\/devices\/[^/]+\/one-time-keys$/;
@@ -133,10 +134,28 @@ function installStubCrypto() {
 // Restore the session on a hard navigation via the boot silent-refresh
 // (+ /auth/me), so every test can `goto` straight to its target — deterministic,
 // with no flaky login-form + client-nav chain. Mirrors e2e/session.spec.ts.
+// E2EE availability comes from the PUBLIC instance document: core discloses
+// features.messaging_e2ee (the operator's messaging_e2ee_enabled switch AND
+// messaging_enabled AND the service wired at boot), and the contract is explicit
+// that this flag — not a probe of GET /e2ee/devices, which cannot tell an
+// operator policy decision from a transport failure — is the authoritative signal.
+async function routeInstance(page: Page, e2ee: boolean) {
+  await page.route(INSTANCE, (route) =>
+    route.fulfill({
+      json: {
+        name: "Vidra",
+        federation_enabled: true,
+        features: { messaging: true, messaging_e2ee: e2ee, live: false, downloads: true },
+      },
+    }),
+  );
+}
+
 async function bootSignedIn(page: Page) {
   await page.addInitScript(installStubCrypto);
   await page.route(/\/api\/v1\/auth\/refresh$/, (route) => route.fulfill({ json: session }));
   await page.route(/\/api\/v1\/auth\/me$/, (route) => route.fulfill({ json: session.user }));
+  await routeInstance(page, true);
   await page.route(FEED, (route) =>
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
   );
@@ -227,11 +246,12 @@ async function gotoEncryptedThread(page: Page) {
 // Land signed-in directly on a video's watch page. Rather than the flaky
 // login-form + feed-card-click dance, restore the session on boot via a mocked
 // cookie refresh (+ /auth/me), then navigate straight to the watch page — one
-// deterministic navigation. `devices` decides whether the backend advertises E2EE.
-async function signInToWatch(page: Page, devices: "advertised" | "absent") {
+// deterministic navigation. `e2ee` decides what the instance document discloses.
+async function signInToWatch(page: Page, e2ee: "available" | "unavailable") {
   await page.addInitScript(installStubCrypto);
   await page.route(/\/api\/v1\/auth\/refresh$/, (route) => route.fulfill({ json: session }));
   await page.route(/\/api\/v1\/auth\/me$/, (route) => route.fulfill({ json: session.user }));
+  await routeInstance(page, e2ee === "available");
   await page.route(FEED, (route) =>
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
   );
@@ -245,49 +265,52 @@ async function signInToWatch(page: Page, devices: "advertised" | "absent") {
   await page.route(SAVED, (route) =>
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
   );
-  await page.route(DEVICES, (route) =>
-    devices === "advertised"
-      ? route.fulfill({ json: { devices: [] } })
-      : route.fulfill({
-          status: 404,
-          json: { error: { code: "not_found", message: "no e2ee" } },
-        }),
-  );
+  // The device directory stays routed for the flows that genuinely use it, and
+  // is counted here: deciding availability must cost NO request of its own.
+  let deviceProbes = 0;
+  await page.route(DEVICES, (route) => {
+    if (route.request().method() === "GET") deviceProbes += 1;
+    return route.fulfill({ json: { devices: [] } });
+  });
 
-  const e2eeProbe = page.waitForResponse(
-    (res) => DEVICES.test(res.url()) && res.request().method() === "GET",
+  const disclosure = page.waitForResponse(
+    (res) => INSTANCE.test(res.url()) && res.request().method() === "GET",
   );
   await page.goto("/videos/v1");
-  await e2eeProbe;
+  await disclosure;
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await expect(page.getByText("nice video")).toBeVisible();
+  return () => deviceProbes;
 }
 
-test("the encrypted affordance appears on a comment only when the backend advertises E2EE", async ({
+test("the encrypted affordance appears on a comment only when the instance discloses E2EE", async ({
   page,
 }) => {
-  await signInToWatch(page, "advertised");
+  const deviceProbes = await signInToWatch(page, "available");
   // The comment's contact actions now live behind a "Comment actions" menu
   // (portaled to <body>, so menuitems are looked up at page level).
   const commentRow = page.locator("li", { hasText: "nice video" });
   await commentRow.getByRole("button", { name: "Comment actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Message", exact: true })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Encrypted message" })).toBeVisible();
+  // The answer came off the document the app already fetches, not off a probe.
+  expect(deviceProbes()).toBe(0);
 });
 
-test("the encrypted affordance is hidden when the backend does not advertise E2EE", async ({
+test("the encrypted affordance is hidden when the instance discloses E2EE unavailable", async ({
   page,
 }) => {
-  await signInToWatch(page, "absent");
-  // Open the comment's overflow menu: Message stays, but with no E2EE advertised
-  // the encrypted option is absent.
+  const deviceProbes = await signInToWatch(page, "unavailable");
+  // Open the comment's overflow menu: Message stays (messaging itself is on),
+  // but with E2EE disclosed unavailable the encrypted option is absent.
   const commentRow = page.locator("li", { hasText: "nice video" });
   await commentRow.getByRole("button", { name: "Comment actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Message", exact: true })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Encrypted message" })).toHaveCount(0);
+  expect(deviceProbes()).toBe(0);
 
-  // The same contract gate applies to the inbox composer: an older backend must
-  // not get an encrypted-mode option that it cannot honor.
+  // The same gate applies to the inbox composer: an instance that cannot honor
+  // encrypted mode must not be offered the option.
   await page.route(CONVERSATIONS, (route) =>
     route.fulfill({ json: { conversations: [], limit: 20, offset: 0 } }),
   );

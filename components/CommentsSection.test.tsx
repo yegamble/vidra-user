@@ -21,14 +21,18 @@ let session: { status: string; user?: { username: string } | null };
 vi.mock("@/components/auth/AuthProvider", () => ({ useSession: () => session }));
 
 // The overflow menu launches the report dialog + toast + router; those flows are
-// covered elsewhere. Stub the leaf dialog, the toast provider hook, the E2EE
-// availability probe (so no "Encrypted message" item + no network), and the
+// covered elsewhere. Stub the leaf dialog, the toast provider hook and the
 // router so the composer + mention render in isolation.
 vi.mock("@/components/ReportButton", () => ({ ReportDialog: () => null }));
 vi.mock("@/components/ui/Toast", () => ({
   useToast: () => ({ toast: vi.fn(), dismiss: vi.fn() }),
 }));
-vi.mock("@/lib/e2ee/availability", () => ({ useE2EEAvailable: () => false }));
+// E2EE availability stays stubbed (the real hook is covered in
+// lib/e2ee/availability.test.tsx) but is now SETTABLE. Pinned at a constant
+// `false`, this mock could never observe the encrypted item appearing at all —
+// so it could not have caught a regression that offered it wrongly.
+const e2ee = vi.hoisted(() => ({ available: false as boolean | null }));
+vi.mock("@/lib/e2ee/availability", () => ({ useE2EEAvailable: () => e2ee.available }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const getVideoComments = vi.fn();
@@ -49,9 +53,18 @@ vi.mock("@/lib/api", () => ({
   },
   errorMessage: (_err: unknown, fallback: string) => fallback,
   userAvatarUrl: (id: string) => `/avatar/${id}`,
+  // Pulled in by the shared instance-features store behind the messaging gate.
+  getInstanceCached: vi.fn(() => new Promise(() => {})),
+  invalidateInstanceCache: vi.fn(),
 }));
 
+import { setInstanceFeaturesForTests } from "@/lib/instance-features";
+
 import { CommentsSection } from "./CommentsSection";
+
+function features(overrides: Record<string, unknown> = {}) {
+  return { uploads: true, comments: true, ...overrides } as never;
+}
 
 function mk(id: string, overrides: Partial<Comment> = {}): Comment {
   return {
@@ -79,11 +92,13 @@ function resolveComments(comments: Comment[]) {
 
 afterEach(() => {
   cleanup();
+  setInstanceFeaturesForTests(null);
   vi.clearAllMocks();
 });
 
 beforeEach(() => {
   session = { status: "authed", user: { username: "viewer" } };
+  e2ee.available = false;
 });
 
 describe("CommentsSection reply attribution", () => {
@@ -313,5 +328,61 @@ describe("CommentsSection creator pin + heart", () => {
     expect(await screen.findByText("[deleted]")).toBeTruthy();
     // A tombstone renders no action menu, so no Pin/Heart path exists.
     expect(screen.queryByRole("button", { name: "Comment actions" })).toBeNull();
+  });
+});
+
+describe("CommentsSection contact actions under the instance messaging gate", () => {
+  async function openMenuFor(body: string) {
+    const row = (await screen.findByText(body)).closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Comment actions" }));
+    return row;
+  }
+
+  it("drops Message and Encrypted message when the instance discloses messaging: false", async () => {
+    setInstanceFeaturesForTests(features({ messaging: false }));
+    e2ee.available = true; // even if E2EE were somehow still advertised
+    resolveComments([mk("c1", { body: "bob's comment", author_username: "bob" })]);
+    render(<CommentsSection videoId="v1" />);
+
+    await openMenuFor("bob's comment");
+    expect(screen.queryByRole("menuitem", { name: "Message" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Encrypted message" })).toBeNull();
+    // The rest of the contact menu is untouched — this gate is about messaging,
+    // not about muting, blocking or reporting.
+    expect(screen.getByRole("menuitem", { name: "Mute" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Block" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Report user" })).toBeTruthy();
+  });
+
+  it("drops only Encrypted message when E2EE alone is unavailable", async () => {
+    setInstanceFeaturesForTests(features({ messaging: true }));
+    e2ee.available = false;
+    resolveComments([mk("c1", { body: "bob's comment", author_username: "bob" })]);
+    render(<CommentsSection videoId="v1" />);
+
+    await openMenuFor("bob's comment");
+    expect(screen.getByRole("menuitem", { name: "Message" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Encrypted message" })).toBeNull();
+  });
+
+  // Counter-tests: both disclosed on, and a core too old to disclose either.
+  it("offers both when messaging and E2EE are available", async () => {
+    setInstanceFeaturesForTests(features({ messaging: true }));
+    e2ee.available = true;
+    resolveComments([mk("c1", { body: "bob's comment", author_username: "bob" })]);
+    render(<CommentsSection videoId="v1" />);
+
+    await openMenuFor("bob's comment");
+    expect(screen.getByRole("menuitem", { name: "Message" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Encrypted message" })).toBeTruthy();
+  });
+
+  it("offers Message when the field is absent (a core that predates the disclosure)", async () => {
+    setInstanceFeaturesForTests(features());
+    resolveComments([mk("c1", { body: "bob's comment", author_username: "bob" })]);
+    render(<CommentsSection videoId="v1" />);
+
+    await openMenuFor("bob's comment");
+    expect(screen.getByRole("menuitem", { name: "Message" })).toBeTruthy();
   });
 });

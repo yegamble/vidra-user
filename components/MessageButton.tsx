@@ -6,6 +6,7 @@ import { useState } from "react";
 import { MessageCircleIcon } from "@/components/icons";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useMessagingAvailable } from "@/lib/messaging/availability";
 
 // MessageButton starts (or reopens) the 1:1 conversation with a user and routes
 // to that thread. It's the entry point into messaging from anywhere we already
@@ -30,6 +31,10 @@ export function MessageButton({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The operator can turn direct messaging off instance-wide, and then
+  // POST /conversations answers 403 feature_disabled. Offer nothing rather than
+  // a button whose only possible outcome is "You can't message this user."
+  const messagingAvailable = useMessagingAvailable();
 
   async function open() {
     setBusy(true);
@@ -47,6 +52,8 @@ export function MessageButton({
       setBusy(false);
     }
   }
+
+  if (!messagingAvailable) return null;
 
   const text = busy ? "Opening…" : "Message";
 

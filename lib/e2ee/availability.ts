@@ -1,70 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-import { ApiError, api } from "@/lib/api";
+import { useInstanceFeatures } from "@/lib/instance-features";
 
 // The "no-pretending" rule (spec §5): the encrypted-mode affordance appears ONLY
-// when the backend advertises the E2EE contract. We probe GET /api/v1/e2ee/devices
-// once per session — a non-404 means the route exists (contract present); a 404
-// means an older backend without E2EE. 401 (not signed in) is treated as
-// unavailable without caching, so a later signed-in probe can still succeed.
-
-let cached: boolean | null = null;
-let inflight: Promise<boolean> | null = null;
-
-async function probe(): Promise<boolean> {
-  try {
-    await api.listMyE2EEDevices();
-    cached = true;
-    return true;
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      cached = false; // route genuinely absent — remember it.
-      return false;
-    }
-    // 401/network/other: unknown; do not cache a negative.
-    return false;
-  }
-}
-
-/** probeE2EEAvailable resolves whether the backend advertises the E2EE contract (session-cached). */
-export function probeE2EEAvailable(): Promise<boolean> {
-  if (cached !== null) return Promise.resolve(cached);
-  if (!inflight) {
-    inflight = probe().finally(() => {
-      inflight = null;
-    });
-  }
-  return inflight;
-}
+// when E2EE is actually available. The instance document says so directly —
+// `features.messaging_e2ee` is `messaging_e2ee_enabled` AND `messaging_enabled`
+// AND the service wired at boot — and the OpenAPI contract is explicit that this
+// flag, not a probe, is the authoritative signal.
+//
+// This used to infer availability by calling GET /api/v1/e2ee/devices once per
+// session and reading a 404 as "older backend". A 403 did fall through to false,
+// so a gated-off instance read as unavailable — but only by accident, and the
+// probe was wrong in four ways regardless:
+//   • it collapsed three different situations — disabled by operator policy, not
+//     signed in (401), and a transport failure — into one answer;
+//   • it spent a request per session to learn something the app already fetches;
+//   • it could not answer for a logged-out visitor at all, since it needed auth;
+//   • and it said nothing about `features.messaging`, the coarser switch that
+//     hides the whole surface (see lib/messaging/availability.ts).
 
 /**
  * useE2EEAvailable returns whether encrypted messaging is available: null while
- * probing, then true/false. Only call from a context where the user is signed in
- * (the probe needs auth); anonymous callers get false.
+ * the instance document is still unknown, then true/false. `enabled` is the
+ * caller's own precondition (e.g. "these account controls apply at all"); a
+ * disabled caller gets a plain false and never the pending null.
+ *
+ * Callers render the affordance on an explicit `true` only, so the pending null
+ * is what stops the encrypted option from flashing on and then vanishing.
  */
 export function useE2EEAvailable(enabled: boolean): boolean | null {
-  const [available, setAvailable] = useState<boolean | null>(cached);
-
-  useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    void probeE2EEAvailable().then((ok) => {
-      if (active) setAvailable(ok);
-    });
-    return () => {
-      active = false;
-    };
-  }, [enabled]);
-
-  // Disabled (anonymous) callers never see the affordance; enabled callers get
-  // the probed result (null while probing).
-  return enabled ? available : false;
-}
-
-/** Test seam: reset the module-level availability cache between tests. */
-export function __resetE2EEAvailabilityForTest(): void {
-  cached = null;
-  inflight = null;
+  const features = useInstanceFeatures();
+  if (!enabled) return false;
+  if (features === null) return null;
+  // Absent means "this core predates the disclosure", not "off": treating it as
+  // unavailable would hide E2EE from every instance running an older backend.
+  return features.messaging_e2ee !== false;
 }
