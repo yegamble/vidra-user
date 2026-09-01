@@ -12,16 +12,11 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api } from "@/lib/api";
 import type { SuggestionBanEntry } from "@/lib/api";
 import { formatCount, pluralize, relativeTime } from "@/lib/format";
+import { SEARCH_RETRY_QUALIFIER, SEARCH_SERVICE_DOWN } from "@/lib/search-failure";
 import { useAppendingList } from "@/lib/use-appending-list";
 import { useAsyncAction } from "@/lib/use-async-action";
 
 const MAX_QUERY_LEN = 200;
-
-// One sentence, reused, for "the search service did not answer". It names both
-// causes the contract admits (unreachable OR never configured) and promises
-// nothing about time — see describeSuggestionBanFailure.
-const SEARCH_DOWN =
-  "Vidra could not reach the search service. It may be offline, or not configured on this instance.";
 
 /**
  * SuggestionBansView — the moderator surface for instance-wide autosuggest
@@ -72,7 +67,7 @@ function describeSuggestionBanFailure(err: unknown): LoadFailure {
     if (err.status === 503 || err.code === "search_unavailable") {
       return {
         title: "The search service did not answer",
-        message: `Autosuggest bans are stored by the search service. ${SEARCH_DOWN} Retrying helps only if this is a passing outage; an administrator can check the search service configuration.`,
+        message: `Autosuggest bans are stored by the search service. ${SEARCH_SERVICE_DOWN} ${SEARCH_RETRY_QUALIFIER}`,
         retryable: true,
       };
     }
@@ -106,7 +101,7 @@ function mapMutationError(notDone: string) {
   return (err: unknown): string | null => {
     if (err instanceof ApiError) {
       if (err.status === 503 || err.code === "search_unavailable") {
-        return `${notDone}. ${SEARCH_DOWN}`;
+        return `${notDone}. ${SEARCH_SERVICE_DOWN}`;
       }
       if (err.status === 403 && err.code === "feature_disabled") {
         return `${notDone}. Smart search is switched off on this instance.`;
