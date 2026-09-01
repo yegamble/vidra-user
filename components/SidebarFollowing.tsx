@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { FollowBell } from "@/components/FollowBell";
 import { Avatar } from "@/components/ui/Avatar";
 import { api, channelAvatarUrl } from "@/lib/api";
-import type { FollowedChannel } from "@/lib/api";
+import type { FollowedChannel, NotificationSetting } from "@/lib/api";
 
 // SidebarFollowing renders the "FOLLOWING" group of the desktop sidebar (backport
 // W0.2 template): the local channels the signed-in user follows, each an avatar +
@@ -14,6 +15,11 @@ import type { FollowedChannel } from "@/lib/api";
 // (GET /me/subscriptions → listFollowedChannels); it is quiet by design and
 // renders nothing when signed out, still loading, on error, or with no follows —
 // so it never adds a landmark, an empty heading, or an error surface to the shell.
+//
+// Each expanded row carries the channel's notification bell. Core denormalises
+// `notification_setting` onto EVERY /me/subscriptions row for exactly this — the
+// list renders bell state from the page it already fetched, never a request per
+// row. The collapsed rail stays a pure navigation rail (avatars only).
 //
 // The template also shows a per-channel unread/live dot. The public contract
 // carries no such signal (the Channel payload has no live/unread field, and live
@@ -40,6 +46,14 @@ export function SidebarFollowing({ collapsed }: { collapsed: boolean }) {
     return () => controller.abort();
   }, [status]);
 
+  // Adopt the stored mode so the row keeps painting the bell it just set — the
+  // toggle mutes a subscription, it never removes it from the list.
+  function setBell(id: string, next: NotificationSetting) {
+    setChannels((cur) =>
+      cur.map((c) => (c.id === id ? { ...c, notification_setting: next } : c)),
+    );
+  }
+
   // Guarded on status too, so a signed-out shell renders nothing even if a
   // previous session left channels in state (the render never leaks them).
   if (status !== "authed" || channels.length === 0) return null;
@@ -56,12 +70,12 @@ export function SidebarFollowing({ collapsed }: { collapsed: boolean }) {
       </p>
       <ul aria-labelledby={headingId} className="flex flex-col gap-0.5">
         {channels.map((channel) => (
-          <li key={channel.id}>
+          <li key={channel.id} className="flex items-center gap-0.5">
             <Link
               href={`/channels/${encodeURIComponent(channel.handle)}`}
               title={collapsed ? channel.display_name : undefined}
-              className={`focus-ring flex min-h-11 items-center gap-3 rounded-[12px] py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg ${
-                collapsed ? "justify-center px-1.5" : "px-3"
+              className={`focus-ring flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-[12px] py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg ${
+                collapsed ? "justify-center px-1.5" : "pl-3 pr-1"
               }`}
             >
               <Avatar
@@ -73,6 +87,16 @@ export function SidebarFollowing({ collapsed }: { collapsed: boolean }) {
                 {channel.display_name}
               </span>
             </Link>
+            {collapsed ? null : (
+              <FollowBell
+                handle={channel.handle}
+                channelName={channel.display_name}
+                setting={channel.notification_setting ?? "all"}
+                onChange={(next) => setBell(channel.id, next)}
+                size="sm"
+                className="shrink-0"
+              />
+            )}
           </li>
         ))}
       </ul>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FollowButton } from "@/components/FollowButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { channelAvatarUrl } from "@/lib/api";
+import type { NotificationSetting } from "@/lib/api";
 import { formatCount } from "@/lib/format";
 
 // WatchChannelCard is the channel row under the watch metadata (DR5): the owning
@@ -19,12 +20,15 @@ export function WatchChannelCard({
   name,
   followerCount,
   isFollowing = false,
+  notificationSetting,
   onDelta,
 }: {
   handle: string;
   name: string;
   followerCount: number | null;
   isFollowing?: boolean;
+  /** The caller's bell for this channel, straight off the channel payload. */
+  notificationSetting?: NotificationSetting;
   onDelta?: (delta: number) => void;
 }) {
   return (
@@ -47,7 +51,9 @@ export function WatchChannelCard({
       </Link>
       <FollowButton
         handle={handle}
+        channelName={name}
         initialFollowing={isFollowing}
+        initialNotificationSetting={notificationSetting}
         onDelta={onDelta}
         className="shrink-0 px-4"
       />
