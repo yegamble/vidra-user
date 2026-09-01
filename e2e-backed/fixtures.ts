@@ -1128,3 +1128,80 @@ export async function mutedInstances(
     (await res.json()) as { instances: Array<{ domain: string; muted_at: string }> }
   ).instances;
 }
+
+/**
+ * blockedInstances reads the admin instance blocklist as a moderator/admin.
+ * The list endpoint pages at 20 by default, so ask for the max — a backed run
+ * shares one database with every other blocklist assertion in the suite.
+ */
+export async function blockedInstances(
+  request: APIRequestContext,
+  token: string,
+): Promise<Array<{ domain: string; reason: string; blocked_at: string }>> {
+  const res = await request.get(`${API_URL}/api/v1/admin/instances/blocked?limit=100`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return (
+    (await res.json()) as {
+      instances: Array<{ domain: string; reason: string; blocked_at: string }>;
+    }
+  ).instances;
+}
+
+/**
+ * flagVideoSensitive sets the owner's sensitive flag (and the paired
+ * content-warning text) on a video via PATCH /videos/{id}. Seeded through the
+ * API rather than the studio UI because the studio round trip is already
+ * covered by studio.spec.ts — here the flag is the PRECONDITION, not the
+ * subject. Returns the HTTP status.
+ */
+export async function flagVideoSensitive(
+  request: APIRequestContext,
+  token: string,
+  videoId: string,
+  reason: string,
+): Promise<number> {
+  const res = await request.patch(`${API_URL}/api/v1/videos/${videoId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { is_sensitive: true, sensitive_reason: reason },
+  });
+  return res.status();
+}
+
+/**
+ * setSensitivePolicy writes the caller's per-user sensitive-content override
+ * (PATCH /auth/me). Pass "" to clear it back to inheriting the instance policy.
+ * Only "hide" is enforced server-side (flagged videos drop out of THIS user's
+ * feed/search); warn/blur/display are presentation the frontend applies.
+ * Returns the HTTP status.
+ */
+export async function setSensitivePolicy(
+  request: APIRequestContext,
+  token: string,
+  policy: "hide" | "warn" | "blur" | "display" | "",
+): Promise<number> {
+  const res = await request.patch(`${API_URL}/api/v1/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { sensitive_content_policy: policy },
+  });
+  return res.status();
+}
+
+/**
+ * searchVideoTitles reads the public video search as the given viewer (omit the
+ * token for an anonymous read), returning the matched titles. The sensitive
+ * "hide" policy is applied PER VIEWER inside core here, so the same query
+ * answers differently for two callers — which is exactly what the backed
+ * sensitive-content spec needs as database-side evidence.
+ */
+export async function searchVideoTitles(
+  request: APIRequestContext,
+  query: string,
+  token?: string,
+): Promise<string[]> {
+  const res = await request.get(
+    `${API_URL}/api/v1/videos/search?q=${encodeURIComponent(query)}&limit=100`,
+    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+  );
+  return ((await res.json()) as { videos: Array<{ title: string }> }).videos.map((v) => v.title);
+}
