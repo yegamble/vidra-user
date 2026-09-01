@@ -161,6 +161,64 @@ describe("AdminPeerTubeImportView — launch payload", () => {
     expect(Object.keys(body)).not.toContain("acknowledged_schema_version");
   });
 
+  it("omits media_mode entirely while the selector is left on the server default", async () => {
+    render(<AdminPeerTubeImportView />);
+    await screen.findByRole("button", { name: "Start import" });
+
+    fireEvent.click(startButton());
+
+    await waitFor(() => expect(mocks.launchPeerTubeImport).toHaveBeenCalled());
+    const body = launchBody();
+    // Controls: the keys that MUST be present, so the absence assertion below
+    // cannot pass because the body was empty or undefined.
+    expect(body.mode).toBe("run");
+    expect(body.conflict_policy).toBe("skip");
+    // ABSENT, not "copy" and not "". The instance has a configured default, and
+    // naming a mode here would be this page making the most expensive decision
+    // on the screen on the operator's behalf — the same rule the cutover tick
+    // and the schema sign-off already follow.
+    expect(body).not.toHaveProperty("media_mode");
+    expect(Object.keys(body)).not.toContain("media_mode");
+  });
+
+  it("sends the media mode the operator chose", async () => {
+    render(<AdminPeerTubeImportView />);
+    await screen.findByRole("button", { name: "Start import" });
+
+    fireEvent.change(screen.getByLabelText("Media"), { target: { value: "reference" } });
+    fireEvent.click(startButton());
+
+    await waitFor(() => expect(mocks.launchPeerTubeImport).toHaveBeenCalled());
+    const body = launchBody();
+    expect(body.media_mode).toBe("reference");
+    // Controls: media mode is its own axis — it disturbs neither the run mode,
+    // the conflict policy, nor the schema gate.
+    expect(body.mode).toBe("run");
+    expect(body.conflict_policy).toBe("skip");
+    expect(Object.keys(body)).not.toContain("acknowledged_schema_version");
+  });
+
+  it("warns that reference mode is permanent, and only for reference mode", async () => {
+    render(<AdminPeerTubeImportView />);
+    const select = await screen.findByLabelText("Media");
+    const launch = screen.getByRole("region", { name: "Launch an import" });
+
+    // Copy is the answer for a real migration, so it gets no banner.
+    fireEvent.change(select, { target: { value: "copy" } });
+    expect(within(launch).queryByRole("alert")).toBeNull();
+
+    // Reference copies nothing, so this instance plays out of the source's
+    // bucket for good. Finding that out after the old instance is switched off
+    // is the failure this banner exists to prevent.
+    fireEvent.change(select, { target: { value: "reference" } });
+    const alert = within(launch).getByRole("alert");
+    expect(alert.textContent).toMatch(/never|permanent/i);
+
+    // It clears again: a property of the choice, not a sticky warning.
+    fireEvent.change(select, { target: { value: "none" } });
+    expect(within(launch).queryByRole("alert")).toBeNull();
+  });
+
   it("adopts the in-progress run when the server says one is already active", async () => {
     mocks.launchPeerTubeImport.mockRejectedValue(apiError(409));
     const active = run({ id: "aaaaaaaa-0000-0000-0000-000000000009", state: "running" });
@@ -414,5 +472,91 @@ describe("AdminPeerTubeImportView — report and history", () => {
       .getAllByRole("cell")
       .map((c) => c.textContent);
     expect(videoCells).toEqual(["4", "0", "0", "0", "4", "0"]);
+  });
+
+  it("names each run's media mode in the history, and never guesses one it was not told", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({
+      runs: [
+        run({ id: "eeeeeeee-0000-0000-0000-000000000005", media_mode: "reference" }),
+        run({ id: "ffffffff-0000-0000-0000-000000000006", media_mode: "copy" }),
+        // Launched before core recorded the mode. It took the server default of
+        // the day, which was stored nowhere — so "copy" here would be a
+        // fabricated record rather than a good guess.
+        run({ id: "aaaaaaaa-0000-0000-0000-000000000007", media_mode: "" }),
+      ],
+    });
+
+    render(<AdminPeerTubeImportView />);
+    const history = await screen.findByRole("region", { name: "Import history" });
+    const rows = within(history).getAllByRole("listitem");
+
+    // "Why is my object store this large?" and "why does nothing play?" get
+    // asked long after the run has scrolled out of view, against a list of runs
+    // that otherwise look identical — the same argument that put the cutover
+    // mark on these rows.
+    expect(within(rows[0]).getByText(/Referenced media/)).toBeTruthy();
+    expect(within(rows[1]).getByText(/Media copied/)).toBeTruthy();
+    expect(within(rows[2]).getByText(/not recorded/i)).toBeTruthy();
+    // The pre-#141 run is not badged as a copy run.
+    expect(within(rows[2]).queryByText(/Media copied/)).toBeNull();
+  });
+
+  it("carries the media mode in the run-panel header too", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({
+      runs: [run({ media_mode: "none", report: report({ video: counts({ imported: 3 }) }) })],
+    });
+
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    expect(within(panel).getByText(/Metadata only/)).toBeTruthy();
+  });
+
+  it("surfaces videos that imported with nothing to play, instead of leaving them a table row", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({
+      runs: [
+        run({
+          state: "done",
+          report: report({
+            video: counts({ planned: 140, imported: 140 }),
+            // Core tallies this absence under `imported`: the videos were
+            // inserted, they just carry no file and no playlist.
+            video_no_media: counts({ imported: 140 }),
+          }),
+        }),
+      ],
+    });
+
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+
+    // By every other measure this run is a clean success — 140 videos imported,
+    // nothing failed — and none of them will play. One more number in one more
+    // table row is not how anybody finds that out.
+    const alert = within(panel).getByRole("alert");
+    expect(alert.textContent).toContain("140");
+    expect(alert.textContent).toMatch(/nothing to play/i);
+
+    // Control: the warning is additional to the table, which still carries the row.
+    expect(within(panel).getByRole("rowheader", { name: "video_no_media" })).toBeTruthy();
+  });
+
+  it("says nothing about missing media when every video came across with some", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({
+      runs: [
+        run({
+          state: "done",
+          report: report({
+            video: counts({ planned: 140, imported: 140 }),
+            video_no_media: counts({ imported: 0 }),
+          }),
+        }),
+      ],
+    });
+
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    // A zero belongs in the table, not in a banner. Warnings that fire on
+    // nothing are the ones operators learn to scroll past.
+    expect(within(panel).queryByRole("alert")).toBeNull();
   });
 });

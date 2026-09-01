@@ -39,6 +39,10 @@ type Run = {
   mode: "dry_run" | "run";
   state: "pending" | "running" | "done" | "failed";
   conflict_policy: "skip" | "rename" | "merge" | "fail";
+  // The media handling the run EXECUTED under, resolved by the server at launch.
+  // "" is a run from before core recorded it — the page must admit that rather
+  // than render it as a copy run.
+  media_mode?: "" | "copy" | "reference" | "none";
   source_version?: number;
   acknowledged_schema_version?: number;
   error?: string;
@@ -197,8 +201,11 @@ test("an admin runs a dry run and sees the mapping, counts, and conflicts", asyn
   ).toBeVisible();
   expect(await page.locator('input[type="password"]').count()).toBe(0);
 
-  // Pick a conflict policy, then preview (a dry run writes nothing).
+  // Pick a conflict policy and a media mode, then preview (a dry run writes
+  // nothing). Media mode is per-run precisely so it can be decided here rather
+  // than by restarting the api mid-migration.
   await page.getByLabel("Conflict policy").selectOption("rename");
+  await page.getByLabel("Media").selectOption("copy");
   await page.getByRole("button", { name: "Preview (dry run)" }).click();
 
   // Progress → the plan/mapping report.
@@ -214,8 +221,10 @@ test("an admin runs a dry run and sees the mapping, counts, and conflicts", asyn
   await expect(page.getByRole("heading", { name: /Not migrated/ })).toBeVisible();
   await expect(page.getByText("plugins", { exact: true })).toBeVisible();
 
-  // The launch carried the mode + policy only — never a source credential.
-  expect(launchBody).toEqual({ mode: "dry_run", conflict_policy: "rename" });
+  // The launch carried the mode, policy and chosen media mode — never a source
+  // credential. (The real-import test below leaves the selector alone and
+  // asserts the key is then absent altogether.)
+  expect(launchBody).toEqual({ mode: "dry_run", conflict_policy: "rename", media_mode: "copy" });
 });
 
 test("an admin starts a real import and watches it run to completion", async ({ page }) => {
@@ -239,6 +248,9 @@ test("an admin starts a real import and watches it run to completion", async ({ 
         mode: "run",
         state: "done",
         conflict_policy: "skip",
+        // The server resolved the mode from its own configuration (the launch
+        // below names none) and recorded it on the run.
+        media_mode: "reference",
         source_version: 810,
         report: runReport,
       }),
@@ -263,8 +275,14 @@ test("an admin starts a real import and watches it run to completion", async ({ 
   await expect(
     page.getByText("The migration summary below reflects what was written."),
   ).toBeVisible();
-  // Whole-body equality, so this also proves `source_authoritative` is ABSENT
-  // (not sent as false) when the cutover box was never ticked.
+  // The mode the run executed under is on the run itself. "Why is my object
+  // store this large?" and "why does nothing play?" are asked long after this
+  // row has scrolled away, and reference mode is the answer to both.
+  await expect(runRegion.getByText("Referenced media — source storage")).toBeVisible();
+  // Whole-body equality, so this also proves `source_authoritative` and
+  // `media_mode` are ABSENT — not sent as false, not sent as a guessed mode —
+  // when the cutover box was never ticked and the media selector was left on
+  // the server default.
   expect(launchBody).toEqual({ mode: "run", conflict_policy: "skip" });
 });
 
