@@ -34,14 +34,14 @@ const CONFLICT_POLICIES: { value: PeerTubeImportConflictPolicy; label: string }[
 
 // The media-mode choice, as the operator's own state: "" is "say nothing and
 // take the instance's configured default", which is why it is a select value
-// here and never a value on the wire. Ordered by how far each departs from
-// leaving the server alone.
+// here and never a value on the wire.
 type MediaModeChoice = "" | PeerTubeImportMediaMode;
 
-// Labels state the CONSEQUENCE, not the field value. This is the most
-// expensive decision on the page and the only one whose damage surfaces months
-// later — a copy run costs disk, a reference run costs the ability to ever
-// switch the old instance off, and neither is visible in the counts afterwards.
+// Ordered by how far each departs from leaving the server alone, and labelled
+// for the CONSEQUENCE rather than the field value. This is the most expensive
+// decision on the page and the only one whose damage surfaces months later — a
+// copy run costs disk, a reference run costs the ability to ever switch the old
+// instance off, and neither is visible in the counts afterwards.
 const MEDIA_MODES: { value: MediaModeChoice; label: string }[] = [
   { value: "", label: "Server default — whatever this instance is configured for" },
   { value: "copy", label: "Copy — bring every file into this instance's storage" },
