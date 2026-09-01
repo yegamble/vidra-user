@@ -115,8 +115,10 @@ function ImportPanel() {
   const [activeRun, setActiveRun] = useState<PeerTubeImportRun | null>(null);
   const [conflictPolicy, setConflictPolicy] = useState<PeerTubeImportConflictPolicy>("skip");
   // The cutover decision: whether the source wins where the two sides have
-  // diverged. Deliberately NOT sticky across launches — every run that may
-  // overwrite this instance's rows is ticked for deliberately.
+  // diverged. Unlike the schema sign-off below it is deliberately NOT spent by
+  // the launch it authorised — the operator previews the cutover and then runs
+  // it, and silently unticking it in between would make that real run gap-fill
+  // only, which is the exact failure this control exists to close.
   const [sourceAuthoritative, setSourceAuthoritative] = useState(false);
   // The unverified schema VERSION the admin has signed off on — deliberately a
   // version and not a boolean, mirroring the server's own rule: the gate opens
