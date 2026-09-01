@@ -84,6 +84,8 @@ import type {
   UpdateLiveStreamRequest,
   MessageListResponse,
   Message,
+  MessagingPrefs,
+  UpdateMessagingPrefsRequest,
   UploadAttachmentResponse,
   MutedAccountListResponse,
   MutedInstanceListResponse,
@@ -1574,6 +1576,24 @@ export const api = {
       method: "POST",
       body: messageId ? { message_id: messageId } : undefined,
     }),
+
+  /**
+   * GET /api/v1/me/messaging-prefs — the caller's DM privacy toggles (auth).
+   * `read_receipts` defaults to TRUE server-side, so a fresh account is already
+   * telling its peers when it read them.
+   */
+  getMessagingPrefs: (signal?: AbortSignal) =>
+    apiRequest<MessagingPrefs>("/api/v1/me/messaging-prefs", { signal }),
+
+  /**
+   * PATCH /api/v1/me/messaging-prefs — change the caller's DM privacy toggles
+   * (auth); only the fields present are touched. Returns the full updated prefs,
+   * so callers should adopt the response rather than assume the sent value.
+   * With `read_receipts: false` core stops exposing the caller's read watermark
+   * to peers — one-way: it does not hide the peer's watermark from the caller.
+   */
+  updateMessagingPrefs: (body: UpdateMessagingPrefsRequest) =>
+    apiRequest<MessagingPrefs>("/api/v1/me/messaging-prefs", { method: "PATCH", body }),
 
   /**
    * DELETE /api/v1/messages/{id} — sender-only soft delete (tombstone): the body
