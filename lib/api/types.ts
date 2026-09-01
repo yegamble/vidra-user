@@ -308,6 +308,10 @@ export type Channel = Schemas["Channel"];
 export type ChannelListResponse = Schemas["ChannelListResponse"];
 export type FollowedChannel = Schemas["FollowedChannel"];
 export type FollowedChannelsResponse = Schemas["FollowedChannelsResponse"];
+/** The per-follow notification bell: "all" = every new public video, "none" = muted. */
+export type NotificationSetting = NonNullable<Schemas["Channel"]["notification_setting"]>;
+export type SetFollowNotificationsRequest = Schemas["SetFollowNotificationsRequest"];
+export type FollowNotificationsResponse = Schemas["FollowNotificationsResponse"];
 // The caller's role on a channel (GET /me/channels only): "owner" or "editor".
 export type ChannelRole = NonNullable<Schemas["Channel"]["role"]>;
 

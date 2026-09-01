@@ -53,6 +53,8 @@ import type {
   CreateChannelSyncRequest,
   FederationFollowerRequestListResponse,
   FollowedChannelsResponse,
+  FollowNotificationsResponse,
+  NotificationSetting,
   AddDonationAddressRequest,
   DonationAddress,
   DonationAddressListResponse,
@@ -556,6 +558,22 @@ export const api = {
   /** DELETE /api/v1/channels/{handle}/follow — unfollow a channel (auth; idempotent 204). */
   unfollowChannel: (handle: string) =>
     apiRequest<void>(`/api/v1/channels/${encodeURIComponent(handle)}/follow`, { method: "DELETE" }),
+
+  /**
+   * PUT /api/v1/channels/{handle}/follow/notifications — the per-channel bell
+   * for a channel the caller already follows (auth): "all" = told about every
+   * new public video, "none" = subscription kept, notifications muted. Core
+   * starts every new follow at "all", so without this call a follower's only
+   * escape is the account-wide switch — all channels or none.
+   *
+   * Returns the STORED mode; callers adopt the response rather than assuming
+   * the value they sent. 404 = unknown channel or the caller does not follow it.
+   */
+  setFollowNotifications: (handle: string, notificationSetting: NotificationSetting) =>
+    apiRequest<FollowNotificationsResponse>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/follow/notifications`,
+      { method: "PUT", body: { notification_setting: notificationSetting } },
+    ),
 
   /** GET /api/v1/me/channels — the caller's own channels (auth). */
   getMyChannels: (signal?: AbortSignal) =>

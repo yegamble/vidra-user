@@ -104,6 +104,16 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/instance/about");
   });
 
+  it("setFollowNotifications PUTs the bell mode on the follow, handle-encoded", async () => {
+    await api.setFollowNotifications("grade house", "none");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "http://localhost:8080/api/v1/channels/grade%20house/follow/notifications",
+    );
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ notification_setting: "none" });
+  });
+
   it("contactInstance posts the visitor message", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 202 }));
     await api.contactInstance({

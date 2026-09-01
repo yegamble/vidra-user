@@ -144,7 +144,9 @@ export function ChannelView({ handle }: { handle: string }) {
                 <>
                   <FollowButton
                     handle={channel.handle}
+                    channelName={name}
                     initialFollowing={channel.is_following}
+                    initialNotificationSetting={channel.notification_setting}
                     onDelta={(d) =>
                       setChannel((c) =>
                         c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c,

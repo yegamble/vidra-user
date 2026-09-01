@@ -23,6 +23,11 @@ vi.mock("@/lib/api", () => ({
   api: {
     followChannel: vi.fn().mockResolvedValue(undefined),
     unfollowChannel: vi.fn().mockResolvedValue(undefined),
+    setFollowNotifications: vi
+      .fn()
+      .mockImplementation((_h: string, setting: string) =>
+        Promise.resolve({ notification_setting: setting }),
+      ),
   },
 }));
 
@@ -64,5 +69,37 @@ describe("FollowButton", () => {
     render(<FollowButton handle="grade-house" initialFollowing={true} />);
     expect(screen.getByRole("button", { name: "Following" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Follow" })).toBeNull();
+  });
+});
+
+describe("FollowButton bell", () => {
+  const ON = "Notifications on for grade-house";
+  const OFF = "Notifications off for grade-house";
+
+  it("shows no bell to a viewer who does not follow the channel", () => {
+    render(<FollowButton handle="grade-house" />);
+    expect(screen.getByRole("button", { name: "Follow" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: ON })).toBeNull();
+    expect(screen.queryByRole("button", { name: OFF })).toBeNull();
+  });
+
+  it("seeds the bell from the channel's already-fetched notification_setting", () => {
+    render(
+      <FollowButton handle="grade-house" initialFollowing initialNotificationSetting="none" />,
+    );
+    expect(screen.getByRole("button", { name: OFF })).toBeTruthy();
+    expect(api.setFollowNotifications).not.toHaveBeenCalled();
+  });
+
+  it("gives a fresh follow the bell core gives it, and takes it away on unfollow", async () => {
+    render(<FollowButton handle="grade-house" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Follow" }));
+    // Core starts every new follow at "all"; the bell must say so.
+    await screen.findByRole("button", { name: ON });
+
+    fireEvent.click(screen.getByRole("button", { name: "Following" }));
+    await screen.findByRole("button", { name: "Follow" });
+    expect(screen.queryByRole("button", { name: ON })).toBeNull();
   });
 });
