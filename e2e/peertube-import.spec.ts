@@ -474,7 +474,10 @@ test("an undetectable schema version offers no acknowledgement at all", async ({
   await expect(
     launchSection.getByRole("heading", { name: "No schema version could be read from the source" }),
   ).toBeVisible();
-  // Nothing to name means nothing to tick — this refusal needs a human on the CLI.
-  await expect(launchSection.getByRole("checkbox")).toHaveCount(0);
+  // Nothing to name means no SIGN-OFF to tick — this refusal needs a human on
+  // the CLI. Asked by name, because the unrelated cutover box still stands.
+  await expect(
+    launchSection.getByRole("checkbox", { name: /I accept PeerTube schema/ }),
+  ).toHaveCount(0);
   await expect(page.getByText("peertube-import --force")).toBeVisible();
 });
