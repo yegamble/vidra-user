@@ -160,6 +160,8 @@ import type {
   SearchSuggestionsResponse,
   RecommendationsResponse,
   SearchHistoryResponse,
+  SuggestionBanListResponse,
+  SuggestionBanResponse,
   WatchedWord,
   WatchedWordListResponse,
   WatchedWordMatchListResponse,
@@ -2252,6 +2254,44 @@ export const api = {
   /** DELETE /api/v1/admin/watched-words/{id} — remove a watched term (moderator/admin, idempotent). */
   deleteWatchedWord: (id: string) =>
     apiRequest<void>(`/api/v1/admin/watched-words/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /**
+   * GET /api/v1/admin/search/suggestion-bans — queries suppressed from
+   * instance-wide autosuggest (moderator/admin).
+   *
+   * The envelope is `entries` + `limit` + `offset` and carries NO total, so a
+   * caller can page but can never say how many bans exist. 403 `feature_disabled`
+   * means smart search is off; 503 `search_unavailable` means the search service
+   * is unreachable or not configured. They are different states and read
+   * differently — see `describeSuggestionBanFailure`.
+   */
+  listSuggestionBans: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<SuggestionBanListResponse>("/api/v1/admin/search/suggestion-bans", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /**
+   * PUT /api/v1/admin/search/suggestion-bans/{query} — ban a query from
+   * autosuggest (moderator/admin, idempotent). The search service normalizes the
+   * key, so the response's `normalized_query` — NOT the string sent — is what a
+   * later unban must target; surface it rather than echoing the input.
+   */
+  banSuggestion: (query: string) =>
+    apiRequest<SuggestionBanResponse>(
+      `/api/v1/admin/search/suggestion-bans/${encodeURIComponent(query)}`,
+      { method: "PUT" },
+    ),
+
+  /**
+   * DELETE /api/v1/admin/search/suggestion-bans/{query} — lift a ban
+   * (moderator/admin, idempotent, 204). Pass the entry's `normalized_query`.
+   */
+  unbanSuggestion: (query: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/search/suggestion-bans/${encodeURIComponent(query)}`,
+      { method: "DELETE" },
+    ),
 
   /**
    * POST /api/v1/admin/videos/{id}/block — block a video so it is hidden from

@@ -370,6 +370,16 @@ export type WatchedWordListResponse = Schemas["WatchedWordListResponse"];
 export type CreateWatchedWordRequest = Schemas["CreateWatchedWordRequest"];
 export type WatchedWordMatch = Schemas["WatchedWordMatch"];
 export type WatchedWordMatchListResponse = Schemas["WatchedWordMatchListResponse"];
+/** One query suppressed from instance-wide autosuggest, with its aggregate evidence. */
+export type SuggestionBanEntry = Schemas["SuggestionBanEntry"];
+/**
+ * The suggestion-ban page. Deliberately has NO `total`: the search service
+ * reports the window it returned and nothing more, so no surface may render a
+ * count of banned queries.
+ */
+export type SuggestionBanListResponse = Schemas["SuggestionBanListResponse"];
+/** The ban confirmation — `normalized_query` is the key a later unban must target. */
+export type SuggestionBanResponse = Schemas["SuggestionBanResponse"];
 
 // --- Video update / upload --------------------------------------------------
 export type UpdateVideoRequest = Schemas["UpdateVideoRequest"];
