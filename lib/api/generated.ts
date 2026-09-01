@@ -1512,7 +1512,7 @@ export interface paths {
         put?: never;
         /**
          * Record behavioural search/discovery events
-         * @description Accepts a batch (<= 20) of behavioural events (suggestions shown / selected, search submitted, result clicked, impression, play started, completed), enriches each with the caller's user id, session, and an allow_history flag, and enqueues them for the search service (search-service W4). Optional auth, rate-limited. Never blocks on the search service.
+         * @description Accepts a batch (<= 20) of behavioural events (suggestions shown / selected, search submitted, result clicked, impression, play started, completed), enriches each with the caller's user id, session, an anonymous aggregation subject and an allow_history flag, and enqueues them for the search service (search-service W4). Every one of those identity fields is SERVER-derived: a client-supplied value for any of them is stripped from the event body and never stored. Optional auth, rate-limited. Never blocks on the search service.
          */
         post: operations["recordSearchEvents"];
         delete?: never;
@@ -3098,6 +3098,50 @@ export interface paths {
          * @description Permanently removes a report row (admin purge). Restricted to admins — moderators resolve reports but cannot delete them. Idempotent like the other admin deletes: deleting an unknown or already-deleted report still returns 204. Notifications referencing the report are removed with it. Audited as moderation.report.delete.
          */
         delete: operations["deleteReport"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/search/suggestion-bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List queries suppressed from instance-wide autosuggest
+         * @description The suggestion ban list: query strings currently suppressed from instance-wide autosuggest, with the aggregate counts and first/last-seen window a second operator needs to judge a ban somebody else placed. This is the reversal surface — bans are global and carry no per-viewer state. Restricted to moderators/admins, because banning a query is a moderation action of the same class as blocking a video, not an instance setting. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listSuggestionBans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/search/suggestion-bans/{query}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Suppress a query from instance-wide autosuggest
+         * @description Bans a query string from instance-wide autosuggest. Restricted to moderators/admins. Idempotent — banning the same query twice is one end state, so a retried request cannot double-apply. The search service normalizes the key server-side, so the response echoes the aggregate key that actually moved; that is the key a later unban must target. The action is recorded in the audit log against a fingerprint of the key (the query text itself is user-authored content and never enters audit_log).
+         */
+        put: operations["banSuggestion"];
+        post?: never;
+        /**
+         * Lift a suggestion ban
+         * @description Lifts a suggestion ban. Restricted to moderators/admins. Idempotent (unbanning a query that is not banned still succeeds). It deliberately does NOT put the query back into autosuggest: the search service re-earns suggestibility from real distinct-user counts, so an unban can never promote a string that never cleared the aggregation threshold, and a query with no further traffic never returns. Audited like the ban.
+         */
+        delete: operations["unbanSuggestion"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6923,6 +6967,30 @@ export interface components {
             created_by_username?: string;
             /** Format: date-time */
             created_at: string;
+        };
+        /** @description Confirmation that a query is banned. normalized_query is the aggregate key the search service actually moved (it normalizes the path segment), so it — not the string that was sent — is what a later unban must target. */
+        SuggestionBanResponse: {
+            normalized_query: string;
+            banned: boolean;
+        };
+        /** @description One banned query, with the aggregate evidence a reviewer judges the ban on. Bans are instance-wide; nothing here is per-viewer. */
+        SuggestionBanEntry: {
+            /** @description The aggregate key. Use this value to lift the ban. */
+            normalized_query: string;
+            /** @description The most recent display form of the query, for review. */
+            query: string;
+            /** Format: int64 */
+            total_count: number;
+            distinct_users: number;
+            /** Format: date-time */
+            first_seen: string;
+            /** Format: date-time */
+            last_seen: string;
+        };
+        SuggestionBanListResponse: {
+            entries: components["schemas"]["SuggestionBanEntry"][];
+            limit: number;
+            offset: number;
         };
         WatchedWordListResponse: components["schemas"]["PageMeta"] & {
             words: components["schemas"]["WatchedWord"][];
@@ -17418,6 +17486,174 @@ export interface operations {
             };
             /** @description Malformed report id. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listSuggestionBans: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of banned queries (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionBanListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin, or smart search is switched off on this instance (code feature_disabled). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The search service is not configured on this instance, or is currently unreachable (code search_unavailable). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    banSuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The query to ban, path-escaped. Normalized by the search service. */
+                query: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The query is banned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionBanResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin, or smart search is switched off on this instance (code feature_disabled). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The query is blank, or empty after normalization. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The search service is not configured on this instance, or is currently unreachable (code search_unavailable). The ban did NOT take effect — this is never reported as a success. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unbanSuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The query to unban, path-escaped. Use the normalized_query from the list. */
+                query: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ban is lifted (or was not in place). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin, or smart search is switched off on this instance (code feature_disabled). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The query is blank, or empty after normalization. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The search service is not configured on this instance, or is currently unreachable (code search_unavailable). The ban was NOT lifted. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

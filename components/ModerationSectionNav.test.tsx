@@ -70,6 +70,7 @@ describe("ModerationSectionNav", () => {
       "/moderation/watched-words",
       "/moderation/watched-word-matches",
       "/moderation/instances",
+      "/moderation/autosuggest",
     ]) {
       expect(
         within(rail)
