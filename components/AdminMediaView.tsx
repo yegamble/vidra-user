@@ -493,11 +493,28 @@ function gcError(err: unknown): string {
 }
 
 // adoptError maps the adopt-bucket failure modes (audited core-side) to what an
-// operator can act on: 409 = local disk (nothing to adopt), 503 = the instance
-// has no identity to stamp yet, 502 = the marker write itself failed.
+// operator can act on: 503 = the instance has no identity to stamp yet, 502 =
+// the marker write itself failed, and 409 = one of TWO opposite refusals that
+// the status code alone cannot tell apart, so this reads `code`:
+//
+//   conflict             media lives on local disk; there is no bucket at all.
+//   foreign_media_layout the bucket is full of ANOTHER live instance's media.
+//
+// Collapsing both into the local-disk sentence answered a reference-mode
+// operator's "why was my adoption refused?" with a fact about a disk that is
+// not involved, and sent them looking in the wrong place. An unrecognised 409
+// falls through to the server's own message rather than guessing at either.
 function adoptError(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.status === 409) {
+    if (err.status === 409 && err.code === "foreign_media_layout") {
+      // No `force` escape hatch is offered here on purpose: the override arms
+      // an irreversible sweep against media a live instance is still serving,
+      // and the sweep-level rule that would make it safe does not exist yet.
+      // The two remedies below are the ones that cannot destroy someone's
+      // library, so they are the only ones this panel names.
+      return "Adoption refused: this instance references media stored under another system's key layout — the signature of a reference-mode import, where storage points at the SOURCE instance's own bucket. That instance is most likely still serving those files, and adopting the bucket would let garbage collection delete them. Copy the media into a bucket this instance owns, or retire the source instance first, then adopt.";
+    }
+    if (err.status === 409 && err.code === "conflict") {
       return "Nothing to adopt: this instance stores media on local disk, which needs no ownership marker.";
     }
     if (err.status === 503) {

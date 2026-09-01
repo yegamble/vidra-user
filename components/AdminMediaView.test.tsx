@@ -47,8 +47,8 @@ function config(over: Partial<MediaGCConfig> = {}): MediaGCConfig {
   return { enabled: true, max_orphan_percent: 25, bucket_ownership: "owned", ...over };
 }
 
-function apiError(status: number): ApiError {
-  return new ApiError({ status, code: "error", message: `upstream ${status}` });
+function apiError(status: number, code = "error"): ApiError {
+  return new ApiError({ status, code, message: `upstream ${status}` });
 }
 
 // Drives the panel through the double confirmation into a real purge request
@@ -391,16 +391,24 @@ describe("MediaGCPanel", () => {
     expect(within(downgraded).queryByRole("button", { name: "Adopt this bucket" })).toBeNull();
   });
 
-  it("maps the three adoption failure modes to honest messages", async () => {
-    const cases: Array<[number, RegExp]> = [
-      [409, /local disk/],
-      [503, /migrations/],
-      [502, /could not be written/],
+  it("maps the adoption failure modes to honest messages", async () => {
+    // Status alone is not the answer: core returns TWO different 409s here, and
+    // they are opposite situations. `conflict` means local disk (there is no
+    // bucket, so there is nothing to adopt); `foreign_media_layout` means the
+    // bucket is full of another live instance's media. A 409 whose code this
+    // build does not recognise falls back to the server's own message rather
+    // than guessing at one of the two.
+    const cases: Array<[number, string, RegExp]> = [
+      [409, "conflict", /local disk/],
+      [409, "foreign_media_layout", /another system/],
+      [409, "some_future_refusal", /upstream 409/],
+      [503, "service_unavailable", /migrations/],
+      [502, "bad_gateway", /could not be written/],
     ];
-    for (const [status, message] of cases) {
+    for (const [status, code, message] of cases) {
       cleanup();
       mocks.runMediaGC.mockReset().mockResolvedValue(response({ bucket_ownership: "unowned" }));
-      mocks.adoptMediaGCBucket.mockReset().mockRejectedValue(apiError(status));
+      mocks.adoptMediaGCBucket.mockReset().mockRejectedValue(apiError(status, code));
       render(<MediaGCPanel />);
       fireEvent.click(screen.getByRole("button", { name: "Run dry run" }));
 
@@ -412,6 +420,33 @@ describe("MediaGCPanel", () => {
       // A failed adoption must not silently re-run the sweep as if it worked.
       expect(mocks.runMediaGC).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it("explains a foreign-media-layout refusal instead of claiming local disk", async () => {
+    // The refusal core added for reference-mode imports: STORAGE_* points at the
+    // SOURCE instance's own bucket, so the objects in it belong to an instance
+    // that is probably still serving them. Reporting that as "this instance
+    // stores media on local disk" is not a softer message, it is a false one —
+    // it sends the operator looking for a disk that is not the problem.
+    mocks.runMediaGC.mockResolvedValue(response({ bucket_ownership: "unowned" }));
+    mocks.adoptMediaGCBucket.mockRejectedValue(apiError(409, "foreign_media_layout"));
+    render(<MediaGCPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Run dry run" }));
+
+    const advisory = await screen.findByTestId("gc-ownership-advisory");
+    fireEvent.click(within(advisory).getByRole("button", { name: "Adopt this bucket" }));
+    fireEvent.click(within(advisory).getByRole("button", { name: "Confirm adoption" }));
+
+    const alert = await screen.findByText(/another system/);
+    expect(alert.textContent).toMatch(/reference-mode/i);
+    expect(alert.textContent).toMatch(/still serving|retire|copy the media/i);
+    // The wrong answer must be gone, not merely outranked.
+    expect(screen.queryByText(/local disk/)).toBeNull();
+    // `force: true` overrides this refusal and arms an irreversible sweep
+    // against another instance's media. It is deliberately unreachable from the
+    // UI, so no control here may offer it.
+    expect(screen.queryByRole("button", { name: /force/i })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 
   // --- Orphan list cap -------------------------------------------------------
