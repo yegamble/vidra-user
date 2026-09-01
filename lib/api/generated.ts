@@ -2608,14 +2608,14 @@ export interface paths {
         };
         /**
          * Get my search history
-         * @description Returns the caller's stored search history from the search service (search-service W4). Requires auth. Answers 503 search_unavailable when the search service is disabled or unreachable — never a fake empty history.
+         * @description Returns the caller's stored search history from the search service (search-service W4). Requires auth. Answers 403 feature_disabled when an admin has switched smart search off (search_service_enabled) — a deliberate, permanent state — and 503 search_unavailable when the service is unwired or unreachable, never a fake empty history.
          */
         get: operations["getMySearchHistory"];
         put?: never;
         post?: never;
         /**
          * Clear my entire search history
-         * @description Clears the caller's entire search history in the search service (search-service W4). Requires auth. Answers 503 search_unavailable when the service is down — the delete must not silently fail.
+         * @description Clears the caller's entire search history in the search service (search-service W4). Requires auth. Answers 403 feature_disabled when an admin has switched smart search off (search_service_enabled), and 503 search_unavailable when the service is down — the delete must not silently fail.
          */
         delete: operations["clearMySearchHistory"];
         options?: never;
@@ -2635,7 +2635,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a single search-history entry
-         * @description Removes one normalized query from the caller's search history (search-service W4). Requires auth. Answers 503 search_unavailable when the service is down.
+         * @description Removes one normalized query from the caller's search history (search-service W4). Requires auth. Answers 403 feature_disabled when an admin has switched smart search off (search_service_enabled), and 503 search_unavailable when the service is down.
          */
         delete: operations["deleteMySearchHistoryEntry"];
         options?: never;
@@ -4741,6 +4741,8 @@ export interface paths {
          *     A bucket the api created, or one that was empty when the api started, is marked automatically and never needs this. The bucket that does is one that already held objects — a store carried over from a previous install, a bucket shared with something else, or the destination of a migration in progress — and the missing evidence is an operator saying the media is theirs. Calling this asserts exactly that: from the next sweep onward, every object under the swept prefixes with no database row referencing it is deletable.
          *
          *     Idempotent, and it overwrites a marker belonging to a different install, so on a genuinely shared bucket it takes ownership away from the other one. Restricted to admins; audited (admin.media.gc.adopt_bucket).
+         *
+         *     REFUSED with `409 foreign_media_layout` when this instance references media stored under another system's key layout — the signature of a reference-mode PeerTube import, which points `STORAGE_*` at the SOURCE instance's own bucket. Adopting there arms an irreversible sweep against media that instance is still serving. `force: true` overrides it for an operator whose source is retired, and the override is named in the audit record.
          */
         post: operations["adminMediaGCAdoptBucket"];
         delete?: never;
@@ -7774,6 +7776,14 @@ export interface components {
         StorageMigrationList: {
             /** @description Campaign history, newest first. */
             migrations: components["schemas"]["StorageMigration"][];
+        };
+        /** @description Optional body for the bucket adoption. Omit it entirely for the normal, guarded adoption. */
+        MediaGCAdoptBucketRequest: {
+            /**
+             * @description Adopt even though this instance references media stored under another system's key layout (a reference-mode import). True only once the source instance is retired or its media has been copied across; the override is named in the audit event.
+             * @default false
+             */
+            force: boolean;
         };
         MediaGCAdoptBucketResponse: {
             /**
@@ -14231,6 +14241,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Uploads are switched off on this instance (uploads_enabled). Stable code feature_disabled — a deliberate operator state, not a transient failure, so a client must not offer a retry. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such video, or not owned by the caller. */
             404: {
                 headers: {
@@ -14431,6 +14450,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Uploads are switched off on this instance (uploads_enabled). Stable code feature_disabled — a deliberate operator state, not a transient failure, so a client must not offer a retry. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16166,6 +16194,24 @@ export interface operations {
                     };
                 };
             };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Smart search is switched off on this instance (search_service_enabled). Stable code feature_disabled — a deliberate operator state, distinct from the 503 outage below, so a client must render it as unavailable rather than offering a retry that can never succeed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description The search service is unavailable. */
             503: {
                 headers: {
@@ -16192,6 +16238,24 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Smart search is switched off on this instance (search_service_enabled). Stable code feature_disabled — a deliberate operator state, distinct from the 503 outage below, so a client must render it as unavailable rather than offering a retry that can never succeed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
             };
             /** @description The search service is unavailable. */
             503: {
@@ -16222,6 +16286,24 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Smart search is switched off on this instance (search_service_enabled). Stable code feature_disabled — a deliberate operator state, distinct from the 503 outage below, so a client must render it as unavailable rather than offering a retry that can never succeed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
             };
             /** @description The search service is unavailable. */
             503: {
@@ -22246,7 +22328,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MediaGCAdoptBucketRequest"];
+            };
+        };
         responses: {
             /** @description The marker was written; the instance now owns the store. */
             200: {
@@ -22275,7 +22361,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description This instance stores media on local disk, so there is no bucket to adopt (local storage is exempt from the ownership marker by design). */
+            /** @description Either this instance stores media on local disk, so there is no bucket to adopt (`conflict`; local storage is exempt from the ownership marker by design), or the instance references media under another system's key layout and the adoption was refused (`foreign_media_layout`) — re-send with `force: true` to override. */
             409: {
                 headers: {
                     [name: string]: unknown;
