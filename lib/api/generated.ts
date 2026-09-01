@@ -3949,6 +3949,8 @@ export interface paths {
         /**
          * Start (or get) a direct conversation
          * @description Returns the 1:1 conversation with the recipient, creating it if it does not exist (idempotent). Behind auth. Messaging yourself is 422; an unknown recipient is 404. Pass {encrypted: true} to start the pair's ENCRYPTED conversation instead — a distinct thread whose type is immutable and which stores only opaque per-device ciphertext envelopes (see the E2EE endpoints; the server holds no keys and cannot decrypt).
+         *
+         *     Gated by the instance's messaging_enabled setting (403 feature_disabled while off); {encrypted: true} is additionally gated by messaging_e2ee_enabled. Read GET /api/v1/instance features.messaging and features.messaging_e2ee to hide the affordances in lock-step.
          */
         post: operations["startConversation"];
         delete?: never;
@@ -4141,6 +4143,8 @@ export interface paths {
         /**
          * Register an E2EE device
          * @description Registers a device in the caller's E2EE key directory: a user-visible name plus the device's PUBLIC identity (Curve25519) and signing (Ed25519) keys. All cryptography is client-side (Olm); the server never sees private keys and treats key material as opaque bounded strings. At most 20 devices per user (422 beyond).
+         *
+         *     Every /e2ee/** endpoint is gated by the instance's messaging_e2ee_enabled setting AND messaging_enabled (403 feature_disabled while either is off). Decide availability from GET /api/v1/instance features.messaging_e2ee, not by probing this route.
          */
         post: operations["registerE2EEDevice"];
         delete?: never;
@@ -5175,6 +5179,10 @@ export interface components {
                 comments: boolean;
                 /** @description Whether regular users may download video media. Moderators and admins retain download access when this operator toggle is off. */
                 downloads: boolean;
+                /** @description Whether 1:1 direct messaging is available (messaging_enabled, default true, AND the messaging service wired at boot). While false EVERY /conversations, /messages, /me/messaging-prefs and /attachments route answers 403 feature_disabled, so a client MUST hide the messaging affordances rather than offer controls that fail. */
+                messaging?: boolean;
+                /** @description Whether the end-to-end-encrypted variant of direct messaging is available (messaging_e2ee_enabled, default true, AND messaging above — the E2EE device directory and envelope store exist only to serve conversations, so turning messaging off turns this off with it). While false the /e2ee/** routes answer 403 feature_disabled and no NEW encrypted conversation or envelope is accepted; existing encrypted conversations stay readable. This flag is the authoritative E2EE availability signal — do not infer it by probing GET /e2ee/devices, which cannot tell an operator policy decision from a transport failure. */
+                messaging_e2ee?: boolean;
                 /** @description Whether the yt-dlp platform-URL import path is available (imports on, import_http_enabled on, and the yt-dlp resolver wired on this deployment). */
                 import_http: boolean;
                 /** @description Whether channel auto-sync is available (channel_sync_enabled on, the platform import path on, and the yt-dlp resolver wired). */
@@ -20041,6 +20049,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Direct messaging is disabled on this instance (the operator's `messaging_enabled` setting is off; stable code `feature_disabled`). Read `features.messaging` on GET /api/v1/instance and hide the affordance instead of calling this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     listMessages: {
@@ -20070,6 +20087,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Direct messaging is disabled on this instance (the operator's `messaging_enabled` setting is off; stable code `feature_disabled`). Read `features.messaging` on GET /api/v1/instance and hide the affordance instead of calling this. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -20195,6 +20221,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Direct messaging is disabled on this instance (the operator's `messaging_enabled` setting is off; stable code `feature_disabled`). Read `features.messaging` on GET /api/v1/instance and hide the affordance instead of calling this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such conversation for this caller. */
             404: {
                 headers: {
@@ -20280,6 +20315,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Direct messaging is disabled on this instance (the operator's `messaging_enabled` setting is off; stable code `feature_disabled`). Read `features.messaging` on GET /api/v1/instance and hide the affordance instead of calling this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such attachment for this caller. */
             404: {
                 headers: {
@@ -20315,6 +20359,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Direct messaging is disabled on this instance (the operator's `messaging_enabled` setting is off; stable code `feature_disabled`). Read `features.messaging` on GET /api/v1/instance and hide the affordance instead of calling this. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -20360,6 +20413,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Direct messaging is disabled on this instance (the operator's `messaging_enabled` setting is off; stable code `feature_disabled`). Read `features.messaging` on GET /api/v1/instance and hide the affordance instead of calling this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such message you sent. */
             404: {
                 headers: {
@@ -20395,6 +20457,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Direct messaging is disabled on this instance (the operator's `messaging_enabled` setting is off; stable code `feature_disabled`). Read `features.messaging` on GET /api/v1/instance and hide the affordance instead of calling this. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -20449,6 +20520,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Direct messaging is disabled on this instance (the operator's `messaging_enabled` setting is off; stable code `feature_disabled`). Read `features.messaging` on GET /api/v1/instance and hide the affordance instead of calling this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     updateMessagingPrefs: {
@@ -20482,6 +20562,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Direct messaging is disabled on this instance (the operator's `messaging_enabled` setting is off; stable code `feature_disabled`). Read `features.messaging` on GET /api/v1/instance and hide the affordance instead of calling this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     listMyE2EEDevices: {
@@ -20504,6 +20593,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description End-to-end-encrypted messaging is disabled on this instance (`messaging_e2ee_enabled`, or the `messaging_enabled` master switch above it, is off; stable code `feature_disabled`). Read `features.messaging_e2ee` on GET /api/v1/instance. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -20544,6 +20642,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description End-to-end-encrypted messaging is disabled on this instance (`messaging_e2ee_enabled`, or the `messaging_enabled` master switch above it, is off; stable code `feature_disabled`). Read `features.messaging_e2ee` on GET /api/v1/instance. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Validation failed, or the device limit is reached. */
             422: {
                 headers: {
@@ -20575,6 +20682,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description End-to-end-encrypted messaging is disabled on this instance (`messaging_e2ee_enabled`, or the `messaging_enabled` master switch above it, is off; stable code `feature_disabled`). Read `features.messaging_e2ee` on GET /api/v1/instance. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -20626,6 +20742,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description End-to-end-encrypted messaging is disabled on this instance (`messaging_e2ee_enabled`, or the `messaging_enabled` master switch above it, is off; stable code `feature_disabled`). Read `features.messaging_e2ee` on GET /api/v1/instance. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such device for this caller. */
             404: {
                 headers: {
@@ -20668,6 +20793,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description End-to-end-encrypted messaging is disabled on this instance (`messaging_e2ee_enabled`, or the `messaging_enabled` master switch above it, is off; stable code `feature_disabled`). Read `features.messaging_e2ee` on GET /api/v1/instance. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
