@@ -545,8 +545,9 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
             {pluralize(failedTotal, "entry", "entries")} failed.
           </p>
           <p className="text-sm text-fg-muted">
-            {failed.map((f) => `${f.kind} ${formatCount(f.failed)}`).join(" · ")}. Reaching the end is all the run state
-            reports — check the server logs for these before treating the migration as complete.
+            {failed.map((f) => `${f.kind} ${formatCount(f.failed)}`).join(" · ")}. Reaching the end
+            is all the run state reports — check the server logs for these before treating the
+            migration as complete.
           </p>
         </div>
       ) : null}
