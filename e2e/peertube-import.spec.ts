@@ -253,11 +253,18 @@ test("an admin starts a real import and watches it run to completion", async ({ 
   const runRegion = page.getByRole("region", { name: "Import run" });
   await expect(runRegion.getByRole("heading", { name: "Import run" })).toBeVisible();
 
-  // The poll resolves the run to done → the migration summary renders.
-  await expect(runRegion.getByText("Done")).toBeVisible();
+  // The poll resolves the run to done → the migration summary renders. `state`
+  // is the state of the RUN, not of its contents: this one reached the end with
+  // a video inside it failed, so it is deliberately NOT badged as a success,
+  // and the warning names the family rather than leaving a red cell to be spotted.
+  await expect(runRegion.getByText("Finished with failures")).toBeVisible();
+  await expect(runRegion.getByText("Done")).toHaveCount(0);
+  await expect(runRegion.getByRole("alert")).toContainText("video 1");
   await expect(
     page.getByText("The migration summary below reflects what was written."),
   ).toBeVisible();
+  // Whole-body equality, so this also proves `source_authoritative` is ABSENT
+  // (not sent as false) when the cutover box was never ticked.
   expect(launchBody).toEqual({ mode: "run", conflict_policy: "skip" });
 });
 
