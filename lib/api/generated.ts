@@ -4741,6 +4741,8 @@ export interface paths {
          *     A bucket the api created, or one that was empty when the api started, is marked automatically and never needs this. The bucket that does is one that already held objects — a store carried over from a previous install, a bucket shared with something else, or the destination of a migration in progress — and the missing evidence is an operator saying the media is theirs. Calling this asserts exactly that: from the next sweep onward, every object under the swept prefixes with no database row referencing it is deletable.
          *
          *     Idempotent, and it overwrites a marker belonging to a different install, so on a genuinely shared bucket it takes ownership away from the other one. Restricted to admins; audited (admin.media.gc.adopt_bucket).
+         *
+         *     REFUSED with `409 foreign_media_layout` when this instance references media stored under another system's key layout — the signature of a reference-mode PeerTube import, which points `STORAGE_*` at the SOURCE instance's own bucket. Adopting there arms an irreversible sweep against media that instance is still serving. `force: true` overrides it for an operator whose source is retired, and the override is named in the audit record.
          */
         post: operations["adminMediaGCAdoptBucket"];
         delete?: never;
@@ -7774,6 +7776,14 @@ export interface components {
         StorageMigrationList: {
             /** @description Campaign history, newest first. */
             migrations: components["schemas"]["StorageMigration"][];
+        };
+        /** @description Optional body for the bucket adoption. Omit it entirely for the normal, guarded adoption. */
+        MediaGCAdoptBucketRequest: {
+            /**
+             * @description Adopt even though this instance references media stored under another system's key layout (a reference-mode import). True only once the source instance is retired or its media has been copied across; the override is named in the audit event.
+             * @default false
+             */
+            force: boolean;
         };
         MediaGCAdoptBucketResponse: {
             /**
@@ -22246,7 +22256,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MediaGCAdoptBucketRequest"];
+            };
+        };
         responses: {
             /** @description The marker was written; the instance now owns the store. */
             200: {
@@ -22275,7 +22289,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description This instance stores media on local disk, so there is no bucket to adopt (local storage is exempt from the ownership marker by design). */
+            /** @description Either this instance stores media on local disk, so there is no bucket to adopt (`conflict`; local storage is exempt from the ownership marker by design), or the instance references media under another system's key layout and the adoption was refused (`foreign_media_layout`) — re-send with `force: true` to override. */
             409: {
                 headers: {
                     [name: string]: unknown;
