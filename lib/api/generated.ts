@@ -2608,14 +2608,14 @@ export interface paths {
         };
         /**
          * Get my search history
-         * @description Returns the caller's stored search history from the search service (search-service W4). Requires auth. Answers 503 search_unavailable when the search service is disabled or unreachable — never a fake empty history.
+         * @description Returns the caller's stored search history from the search service (search-service W4). Requires auth. Answers 403 feature_disabled when an admin has switched smart search off (search_service_enabled) — a deliberate, permanent state — and 503 search_unavailable when the service is unwired or unreachable, never a fake empty history.
          */
         get: operations["getMySearchHistory"];
         put?: never;
         post?: never;
         /**
          * Clear my entire search history
-         * @description Clears the caller's entire search history in the search service (search-service W4). Requires auth. Answers 503 search_unavailable when the service is down — the delete must not silently fail.
+         * @description Clears the caller's entire search history in the search service (search-service W4). Requires auth. Answers 403 feature_disabled when an admin has switched smart search off (search_service_enabled), and 503 search_unavailable when the service is down — the delete must not silently fail.
          */
         delete: operations["clearMySearchHistory"];
         options?: never;
@@ -2635,7 +2635,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a single search-history entry
-         * @description Removes one normalized query from the caller's search history (search-service W4). Requires auth. Answers 503 search_unavailable when the service is down.
+         * @description Removes one normalized query from the caller's search history (search-service W4). Requires auth. Answers 403 feature_disabled when an admin has switched smart search off (search_service_enabled), and 503 search_unavailable when the service is down.
          */
         delete: operations["deleteMySearchHistoryEntry"];
         options?: never;
@@ -14241,6 +14241,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Uploads are switched off on this instance (uploads_enabled). Stable code feature_disabled — a deliberate operator state, not a transient failure, so a client must not offer a retry. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No such video, or not owned by the caller. */
             404: {
                 headers: {
@@ -14441,6 +14450,15 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Uploads are switched off on this instance (uploads_enabled). Stable code feature_disabled — a deliberate operator state, not a transient failure, so a client must not offer a retry. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16176,6 +16194,24 @@ export interface operations {
                     };
                 };
             };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Smart search is switched off on this instance (search_service_enabled). Stable code feature_disabled — a deliberate operator state, distinct from the 503 outage below, so a client must render it as unavailable rather than offering a retry that can never succeed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description The search service is unavailable. */
             503: {
                 headers: {
@@ -16202,6 +16238,24 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Smart search is switched off on this instance (search_service_enabled). Stable code feature_disabled — a deliberate operator state, distinct from the 503 outage below, so a client must render it as unavailable rather than offering a retry that can never succeed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
             };
             /** @description The search service is unavailable. */
             503: {
@@ -16232,6 +16286,24 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Smart search is switched off on this instance (search_service_enabled). Stable code feature_disabled — a deliberate operator state, distinct from the 503 outage below, so a client must render it as unavailable rather than offering a retry that can never succeed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
             };
             /** @description The search service is unavailable. */
             503: {
