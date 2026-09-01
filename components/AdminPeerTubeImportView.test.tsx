@@ -125,6 +125,42 @@ describe("AdminPeerTubeImportView — launch payload", () => {
     expect(document.querySelector("input[type=password]")).toBeNull();
   });
 
+  it("omits source_authoritative entirely when the cutover box is left alone", async () => {
+    render(<AdminPeerTubeImportView />);
+    await screen.findByRole("button", { name: "Start import" });
+
+    fireEvent.click(startButton());
+
+    await waitFor(() => expect(mocks.launchPeerTubeImport).toHaveBeenCalled());
+    const body = launchBody();
+    // Controls: the keys that MUST be present, so the absence assertion below
+    // cannot pass because the body was empty or undefined.
+    expect(body.mode).toBe("run");
+    expect(body.conflict_policy).toBe("skip");
+    // ABSENT, not false. The server default is already false; sending an
+    // explicit false would be this page stating a decision nobody made.
+    expect(body).not.toHaveProperty("source_authoritative");
+    expect(Object.keys(body)).not.toContain("source_authoritative");
+  });
+
+  it("sends source_authoritative: true when the cutover box is ticked", async () => {
+    render(<AdminPeerTubeImportView />);
+    const box = await screen.findByRole("checkbox", { name: /the source win/i });
+    expect((box as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(box);
+    fireEvent.click(startButton());
+
+    await waitFor(() => expect(mocks.launchPeerTubeImport).toHaveBeenCalled());
+    const body = launchBody();
+    expect(body.source_authoritative).toBe(true);
+    // Controls: the cutover tick is its own axis — it does not disturb the
+    // mode or the conflict policy, and it is not a schema sign-off.
+    expect(body.mode).toBe("run");
+    expect(body.conflict_policy).toBe("skip");
+    expect(Object.keys(body)).not.toContain("acknowledged_schema_version");
+  });
+
   it("adopts the in-progress run when the server says one is already active", async () => {
     mocks.launchPeerTubeImport.mockRejectedValue(apiError(409));
     const active = run({ id: "aaaaaaaa-0000-0000-0000-000000000009", state: "running" });
@@ -190,9 +226,10 @@ describe("AdminPeerTubeImportView — unverified schema sign-off", () => {
     render(<AdminPeerTubeImportView />);
     await screen.findByText("No schema version could be read from the source");
 
-    // Nothing to name, so there is deliberately nothing to tick — this refusal
-    // is not overrulable from a browser.
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    // Nothing to name, so there is deliberately no SIGN-OFF to tick — this
+    // refusal is not overrulable from a browser. (The unrelated cutover box
+    // still stands, so this asks about the sign-off by name.)
+    expect(screen.queryByRole("checkbox", { name: /I accept PeerTube schema/ })).toBeNull();
     expect(screen.getByText(/peertube-import --force/)).toBeTruthy();
   });
 });
@@ -271,7 +308,7 @@ describe("AdminPeerTubeImportView — report and history", () => {
         run({
           state: "done",
           source_version: 1040,
-          report: report({ video: counts({ planned: 9, imported: 7, skipped: 2 }) }),
+          report: report({ video: counts({ planned: 9, imported: 7, updated: 5, skipped: 2 }) }),
         }),
       ],
     });
@@ -280,10 +317,15 @@ describe("AdminPeerTubeImportView — report and history", () => {
     const panel = await screen.findByRole("region", { name: "Import run" });
 
     expect(within(panel).getByText("PeerTube schema v1040")).toBeTruthy();
+    // Control: nothing inside this run failed, so it keeps the success badge.
+    expect(within(panel).getByText("Done")).toBeTruthy();
+    // `updated` is a column of its own: it is the counter a source-authoritative
+    // re-run increments, and without it such a run reads as having done nothing.
+    expect(within(panel).getByRole("columnheader", { name: "updated" })).toBeTruthy();
     const row = within(panel).getByRole("row", { name: /video/ });
     const cells = within(row).getAllByRole("cell").map((c) => c.textContent);
-    // Column order: planned, imported, skipped, failed, unsupported.
-    expect(cells).toEqual(["9", "7", "2", "0", "0"]);
+    // Column order: planned, imported, updated, skipped, failed, unsupported.
+    expect(cells).toEqual(["9", "7", "5", "2", "0", "0"]);
   });
 
   it("lists the run history newest-first and switches the report on select", async () => {
@@ -306,24 +348,41 @@ describe("AdminPeerTubeImportView — report and history", () => {
     expect(within(panel).getByText("Dry run preview")).toBeTruthy();
   });
 
+  it("marks the source-authoritative runs in the history, and only those", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({
+      runs: [
+        run({ id: "cccccccc-0000-0000-0000-000000000003", source_authoritative: true }),
+        run({ id: "dddddddd-0000-0000-0000-000000000004" }),
+      ],
+    });
+
+    render(<AdminPeerTubeImportView />);
+    const history = await screen.findByRole("region", { name: "Import history" });
+    const rows = within(history).getAllByRole("listitem");
+
+    // "Why did that title change?" is asked weeks later, against a list of
+    // runs that all look alike — so the row itself has to carry the answer.
+    expect(within(rows[0]).getByText("Cutover — source wins")).toBeTruthy();
+    // Control: the gap-filling run beside it is unmarked, so the badge cannot
+    // be something every row renders regardless of the flag.
+    expect(within(rows[1]).queryByText("Cutover — source wins")).toBeNull();
+  });
+
   it("shows the empty state when no import has ever run", async () => {
     render(<AdminPeerTubeImportView />);
     await screen.findByText("No import runs yet");
     expect(screen.queryByRole("region", { name: "Import run" })).toBeNull();
   });
 
-  // CHARACTERIZATION — this pins TODAY'S behaviour, which is wrong.
+  // Was a CHARACTERIZATION test pinning the defect below; this PR fixes it, so
+  // it now asserts the corrected behaviour.
   //
-  // DEFECT (not fixed here, by design): the failure branch in RunPanel keys on
-  // `run.state === "failed"`, which is the state of the RUN, not of its
-  // contents. A run that completed while every single entity inside it failed
-  // is `state: "done"`, so it renders the success branch: a green "Done" badge
-  // over the line "reflects what was written", with no alert and no warning.
-  // The only trace is the per-entity `failed` cell, which an operator has to
-  // notice on their own. A later PR should branch on the report's failed totals
-  // as well as the run state; this test is here so that change is visible as a
-  // deliberate behaviour change rather than an accident.
-  it("renders the completion branch for a done run whose every entity failed", async () => {
+  // The failure branch used to key on `run.state === "failed"`, which is the
+  // state of the RUN, not of its contents. Core keeps `state = 'done'` for a
+  // run that reached the end with per-entity failures — the run did finish — so
+  // a run in which every entity failed rendered the success branch: a green
+  // "Done" badge with no alert, the only signal being a red integer in one cell.
+  it("warns, instead of congratulating, when a done run's entities all failed", async () => {
     mocks.listPeerTubeImports.mockResolvedValue({
       runs: [
         run({
@@ -339,16 +398,21 @@ describe("AdminPeerTubeImportView — report and history", () => {
     render(<AdminPeerTubeImportView />);
     const panel = await screen.findByRole("region", { name: "Import run" });
 
-    expect(within(panel).getByText("Done")).toBeTruthy();
-    expect(within(panel).getByText(/reflects what was written/)).toBeTruthy();
-    // Nothing raises an alarm, even though nothing at all was imported.
-    expect(within(panel).queryByRole("alert")).toBeNull();
-    expect(within(panel).queryByText(/failed/i, { selector: "p" })).toBeNull();
+    // The run reached the end, but nothing in it did — so no success badge.
+    expect(within(panel).queryByText("Done")).toBeNull();
+    expect(within(panel).getByText("Finished with failures")).toBeTruthy();
 
-    // The counts are on screen, and they are the whole of the signal.
+    // The warning names the totals rather than leaving them to be spotted.
+    const alert = within(panel).getByRole("alert");
+    expect(alert.textContent).toContain("6");
+    expect(alert.textContent).toContain("video 4");
+    expect(alert.textContent).toContain("user 2");
+
+    // Control: the warning replaces the success badge, not the report — the
+    // per-entity table is still rendered underneath it.
     const videoCells = within(within(panel).getByRole("row", { name: /video/ }))
       .getAllByRole("cell")
       .map((c) => c.textContent);
-    expect(videoCells).toEqual(["4", "0", "0", "4", "0"]);
+    expect(videoCells).toEqual(["4", "0", "0", "0", "4", "0"]);
   });
 });

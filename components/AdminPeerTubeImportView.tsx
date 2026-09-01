@@ -18,7 +18,7 @@ import type {
   PeerTubeImportMode,
   PeerTubeImportRun,
 } from "@/lib/api";
-import { formatCount, relativeTime } from "@/lib/format";
+import { formatCount, pluralize, relativeTime } from "@/lib/format";
 
 // Poll cadence for a launched (dry-run or real) import while it is still
 // pending/running — one scheduled read per tick, unmount-safe.
@@ -56,8 +56,32 @@ function isUndetectableSchema(run: PeerTubeImportRun | null): boolean {
   return run?.state === "failed" && run.error_code === UNDETECTABLE_SCHEMA;
 }
 
-// The per-entity column order for the report table.
-const COUNT_COLUMNS = ["planned", "imported", "skipped", "failed", "unsupported"] as const;
+// The per-entity column order for the report table. `updated` sits next to
+// `imported` because it is the other half of "what did this run write": core
+// tallies rows it CHANGED to match the source separately from rows it created,
+// and it is the only counter a source-authoritative cutover run moves. Leaving
+// it out made such a run read as having done nothing but skip.
+const COUNT_COLUMNS = [
+  "planned",
+  "imported",
+  "updated",
+  "skipped",
+  "failed",
+  "unsupported",
+] as const;
+
+// The families a report recorded failures for, worst first. Core keeps a run's
+// state at `done` when the run itself reached the end, so per-entity failures
+// live only here — `state` cannot tell a clean migration from one where every
+// row failed.
+function failedFamilies(
+  report: PeerTubeImportRun["report"],
+): { kind: string; failed: number }[] {
+  return Object.entries(report?.entities ?? {})
+    .map(([kind, counts]) => ({ kind, failed: counts.failed ?? 0 }))
+    .filter((f) => f.failed > 0)
+    .sort((a, b) => b.failed - a.failed || a.kind.localeCompare(b.kind));
+}
 
 // AdminPeerTubeImportView is the admin-only "Import from PeerTube" operations
 // page. It launches a DRY-RUN (writes nothing) or a real import against the
@@ -90,6 +114,10 @@ function ImportPanel() {
   // The run we currently show a report/progress for and (while in-flight) poll.
   const [activeRun, setActiveRun] = useState<PeerTubeImportRun | null>(null);
   const [conflictPolicy, setConflictPolicy] = useState<PeerTubeImportConflictPolicy>("skip");
+  // The cutover decision: whether the source wins where the two sides have
+  // diverged. Deliberately NOT sticky across launches — every run that may
+  // overwrite this instance's rows is ticked for deliberately.
+  const [sourceAuthoritative, setSourceAuthoritative] = useState(false);
   // The unverified schema VERSION the admin has signed off on — deliberately a
   // version and not a boolean, mirroring the server's own rule: the gate opens
   // only on exact equality with the version the source currently reports, so a
@@ -173,6 +201,10 @@ function ImportPanel() {
         const run = await api.launchPeerTubeImport({
           mode,
           conflict_policy: conflictPolicy,
+          // Sent ONLY when ticked. The server default is already false, and an
+          // explicit false would be this page stating a write policy the
+          // operator never chose.
+          ...(sourceAuthoritative ? { source_authoritative: true } : {}),
           // Sent ONLY when the tick names the version the source currently
           // reports; omitted entirely in the normal case, leaving the gate up.
           ...(refusedVersion !== null && acknowledgedVersion === refusedVersion
@@ -208,7 +240,15 @@ function ImportPanel() {
         setAcknowledgedVersion(null);
       }
     },
-    [launching, activeRun, conflictPolicy, awaitingAcknowledgement, refusedVersion, acknowledgedVersion],
+    [
+      launching,
+      activeRun,
+      conflictPolicy,
+      sourceAuthoritative,
+      awaitingAcknowledgement,
+      refusedVersion,
+      acknowledgedVersion,
+    ],
   );
 
   if (status === "loading") {
@@ -265,6 +305,12 @@ function ImportPanel() {
             ))}
           </Select>
 
+          <CutoverToggle
+            checked={sourceAuthoritative}
+            disabled={controlsDisabled}
+            onChange={setSourceAuthoritative}
+          />
+
           {refusedVersion !== null ? (
             <UnverifiedSchemaNotice
               version={refusedVersion}
@@ -302,6 +348,40 @@ function ImportPanel() {
       {activeRun ? <RunPanel run={activeRun} /> : null}
 
       <HistorySection runs={runs} activeId={activeRun?.id} onSelect={setActiveRun} />
+    </div>
+  );
+}
+
+// The cutover control. It is labelled for the decision an operator is making —
+// "is this the switchover run?" — rather than for the field it sets, because
+// the workflow this tool is used for is a series of catch-up runs against a
+// still-live PeerTube followed by one final run at the switchover. Every run
+// but that last one should gap-fill; the last one has to carry across the
+// edits, deletions and privacy changes made on the source in between, which
+// otherwise vanish behind counts that look exactly like healthy idempotency.
+function CutoverToggle({
+  checked,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <Checkbox
+        label="Final cutover run — let the source win where it and this instance have diverged"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <p className="text-xs text-fg-muted">
+        Leave this off while you are running repeatedly against a live source: those runs only
+        fill gaps, so anything edited, hidden or deleted on the source since the last run is
+        skipped. Tick it for the switchover run so those changes follow. It updates only the rows
+        this import created — never anything made on Vidra — and never re-downloads media.
+      </p>
     </div>
   );
 }
@@ -409,10 +489,21 @@ function UndetectableSchemaNotice() {
   );
 }
 
+// The mark a source-authoritative run carries wherever it is listed. "Why did
+// that title change?" gets asked weeks later against a history of runs that
+// otherwise look identical, so the answer has to be on the run itself.
+function CutoverBadge({ run }: { run: PeerTubeImportRun }) {
+  if (!run.source_authoritative) return null;
+  return <Badge variant="warning">Cutover — source wins</Badge>;
+}
+
 function RunPanel({ run }: { run: PeerTubeImportRun }) {
   const inFlight = run.state === "pending" || run.state === "running";
   const isDryRun = run.mode === "dry_run";
   const modeLabel = isDryRun ? "Dry run" : "Import";
+  // Per-entity failures, which the run's own state does not reflect.
+  const failed = failedFamilies(run.report);
+  const failedTotal = failed.reduce((n, f) => n + f.failed, 0);
 
   return (
     <section aria-label="Import run" className="flex flex-col gap-4">
@@ -420,7 +511,8 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
         <h2 className="text-[15px] font-bold tracking-tight text-fg">
           {modeLabel} {isDryRun ? "preview" : "run"}
         </h2>
-        <RunStateBadge state={run.state} />
+        <RunStateBadge run={run} />
+        <CutoverBadge run={run} />
         {typeof run.source_version === "number" ? (
           <Badge variant="neutral">PeerTube schema v{run.source_version}</Badge>
         ) : null}
@@ -446,6 +538,19 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
         </p>
       ) : null}
 
+      {!inFlight && run.state !== "failed" && failedTotal > 0 ? (
+        <div role="alert" className="flex flex-col gap-1 rounded-2xl bg-warning/15 p-3">
+          <p className="text-sm font-semibold text-warning">
+            {isDryRun ? "This preview" : "This run"} finished, but {formatCount(failedTotal)}{" "}
+            {pluralize(failedTotal, "entry", "entries")} failed.
+          </p>
+          <p className="text-sm text-fg-muted">
+            {failed.map((f) => `${f.kind} ${formatCount(f.failed)}`).join(" · ")}. Reaching the end is all the run state
+            reports — check the server logs for these before treating the migration as complete.
+          </p>
+        </div>
+      ) : null}
+
       {run.report ? (
         <ReportView report={run.report} isDryRun={isDryRun} />
       ) : !inFlight && run.state !== "failed" ? (
@@ -455,11 +560,18 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
   );
 }
 
-function RunStateBadge({ state }: { state: PeerTubeImportRun["state"] }) {
-  if (state === "done") return <Badge variant="success">Done</Badge>;
-  if (state === "failed") return <Badge variant="danger">Failed</Badge>;
-  if (state === "running") return <Badge variant="accent">Running</Badge>;
-  return <Badge variant="neutral">Pending</Badge>;
+function RunStateBadge({ run }: { run: PeerTubeImportRun }) {
+  if (run.state === "failed") return <Badge variant="danger">Failed</Badge>;
+  if (run.state === "running") return <Badge variant="accent">Running</Badge>;
+  if (run.state === "pending") return <Badge variant="neutral">Pending</Badge>;
+  // `done` is the state of the RUN, not of its contents: core finishes a run
+  // that reached the end even when every entity inside it failed. A success
+  // pill over that reads as a clean migration, so the report decides here.
+  return failedFamilies(run.report).length > 0 ? (
+    <Badge variant="warning">Finished with failures</Badge>
+  ) : (
+    <Badge variant="success">Done</Badge>
+  );
 }
 
 function ReportView({
@@ -594,7 +706,8 @@ function HistorySection({
                 <span className="font-medium text-fg">
                   {run.mode === "dry_run" ? "Dry run" : "Import"}
                 </span>
-                <RunStateBadge state={run.state} />
+                <RunStateBadge run={run} />
+                <CutoverBadge run={run} />
                 <span className="ml-auto text-xs text-fg-muted">{relativeTime(run.created_at)}</span>
               </button>
             </li>
