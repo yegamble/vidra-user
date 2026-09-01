@@ -207,6 +207,20 @@ export const authApi = {
       retryOn401: false,
     }),
 
+  /**
+   * POST /api/v1/auth/logout-all — "sign out everywhere": revokes EVERY active
+   * refresh-token session for the account, not just this browser's (204). The
+   * bearer access token is the credential, so a stale one should silently
+   * refresh and retry (retryOn401 left at its default) — unlike plain logout,
+   * where the cookie is the credential and a 401 is a real answer. Cookies are
+   * still included so the response's Max-Age=0 clears `vidra_refresh` here too.
+   */
+  logoutAll: () =>
+    apiRequest<void>("/api/v1/auth/logout-all", {
+      method: "POST",
+      credentials: "include",
+    }),
+
   /** GET /api/v1/auth/me — the current account (uses the stored bearer token). */
   me: () => apiRequest<User>("/api/v1/auth/me"),
 

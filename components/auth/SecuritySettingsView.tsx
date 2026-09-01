@@ -17,7 +17,7 @@ import { SignInGate } from "@/components/SignInGate";
 // password-confirmed disable flow. The secret and recovery codes exist only in
 // component state — never in logs, URLs, or storage.
 export function SecuritySettingsView() {
-  const { status } = useSession();
+  const { status, logoutEverywhere } = useSession();
 
   // `!== "authed"` rather than `=== "anon"`: this view used to rely on a
   // preceding `restoring` branch to catch the boot-time refresh, so testing
@@ -34,7 +34,87 @@ export function SecuritySettingsView() {
     );
   }
 
-  return <TwoFactorSection />;
+  return (
+    <div className="flex max-w-xl flex-col gap-6">
+      <TwoFactorSection />
+      <SignOutEverywhereSection logoutEverywhere={logoutEverywhere} />
+    </div>
+  );
+}
+
+// SignOutEverywhereSection is the reachable front for POST /auth/logout-all.
+// Without it a user who thinks a device is compromised had two doors: a full
+// password reset, or DEACTIVATING the account — whose own copy advertises "signs
+// you out everywhere", which is how we knew people wanted this and were being
+// routed through the wrong control. Armed-then-confirmed like the danger-zone
+// destructions, because it cannot be undone from the other devices' side.
+// Deliberately NOT a session list — that needs a core endpoint we do not have.
+function SignOutEverywhereSection({
+  logoutEverywhere,
+}: {
+  logoutEverywhere: () => Promise<void>;
+}) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setError(null);
+    setBusy(true);
+    try {
+      // On success every session is revoked INCLUDING this one, so the provider
+      // clears the local store and this view falls back to the sign-in gate.
+      await logoutEverywhere();
+    } catch (err) {
+      setBusy(false);
+      setError(errorMessage(err));
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-base font-semibold tracking-tight text-fg">Signed-in devices</h2>
+        <p className="text-sm text-fg-muted">
+          Signing out of all devices ends every session on every browser and device, including
+          this one. Use it if you think someone else has access to your account &mdash; then sign
+          back in and change your password.
+        </p>
+      </div>
+      {error ? <Alert>{error}</Alert> : null}
+      {armed ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void submit()}
+            className="focus-ring rounded-full bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
+          >
+            {busy ? "Signing out…" : "Yes, sign me out everywhere"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setArmed(false);
+              setError(null);
+            }}
+            className="focus-ring rounded-sm text-sm font-semibold text-fg hover:underline disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setArmed(true)}
+          className="focus-ring self-start rounded-full border border-danger/45 px-4 py-2 text-sm font-semibold text-danger transition-colors hover:bg-danger/10"
+        >
+          Sign out of all devices
+        </button>
+      )}
+    </section>
+  );
 }
 
 type Phase = "status" | "enrolling" | "recovery";

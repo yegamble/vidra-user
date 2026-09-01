@@ -62,6 +62,14 @@ function Probe() {
       >
         Sign in by username
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          void session.logoutEverywhere().catch(() => {});
+        }}
+      >
+        Sign out everywhere
+      </button>
     </>
   );
 }
@@ -157,5 +165,80 @@ describe("AuthProvider", () => {
 
     expect(screen.getByTestId("status").textContent).toBe("authed");
     expect(loginBodies).toEqual([expectedBody]);
+  });
+
+  // "Sign out everywhere" revokes every refresh session server-side, so THIS
+  // tab's session is gone too — the provider must drop the local one through
+  // the same seam deactivate/deleteAccount use, or the UI would keep rendering
+  // an account whose sessions no longer exist.
+  it("revokes every session and clears the local store on sign-out-everywhere", async () => {
+    const calls: { path: string; method?: string }[] = [];
+    fetchMock.mockImplementation((url: string, init: RequestInit) => {
+      const path = new URL(url).pathname;
+      calls.push({ path, method: init.method });
+      if (path === "/api/v1/auth/login") return Promise.resolve(jsonResponse(sessionJson("acc1")));
+      if (path === "/api/v1/auth/logout-all") {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      return Promise.resolve(unauthorized());
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await settlePromises();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+    await settlePromises();
+    expect(getAccessToken()).toBe("acc1");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign out everywhere" }));
+    });
+    await settlePromises();
+
+    expect(
+      calls.some((c) => c.path === "/api/v1/auth/logout-all" && c.method === "POST"),
+    ).toBe(true);
+    expect(getAccessToken()).toBeNull();
+    expect(screen.getByTestId("status").textContent).toBe("anon");
+  });
+
+  // A failed revoke must NOT look like a successful one: the other devices are
+  // still signed in, so the local session stays put and the caller sees the
+  // rejection.
+  it("keeps the local session when the revoke fails", async () => {
+    fetchMock.mockImplementation((url: string) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/v1/auth/login") return Promise.resolve(jsonResponse(sessionJson("acc1")));
+      if (path === "/api/v1/auth/logout-all") {
+        return Promise.resolve(jsonResponse({ error: { code: "internal", message: "boom" } }, 500));
+      }
+      return Promise.resolve(unauthorized());
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await settlePromises();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+    await settlePromises();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign out everywhere" }));
+    });
+    await settlePromises();
+
+    expect(getAccessToken()).toBe("acc1");
+    expect(screen.getByTestId("status").textContent).toBe("authed");
   });
 });

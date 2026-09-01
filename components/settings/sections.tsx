@@ -67,7 +67,7 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         action: "Manage security settings",
         title: "Security",
         short: "Security",
-        desc: "Two-factor authentication and recovery codes.",
+        desc: "Two-factor authentication, recovery codes, and signing out of all devices.",
         color: "gray",
         Icon: LockIcon,
       },
