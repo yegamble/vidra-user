@@ -5180,9 +5180,9 @@ export interface components {
                 /** @description Whether regular users may download video media. Moderators and admins retain download access when this operator toggle is off. */
                 downloads: boolean;
                 /** @description Whether 1:1 direct messaging is available (messaging_enabled, default true, AND the messaging service wired at boot). While false EVERY /conversations, /messages, /me/messaging-prefs and /attachments route answers 403 feature_disabled, so a client MUST hide the messaging affordances rather than offer controls that fail. */
-                messaging?: boolean;
+                messaging: boolean;
                 /** @description Whether the end-to-end-encrypted variant of direct messaging is available (messaging_e2ee_enabled, default true, AND messaging above — the E2EE device directory and envelope store exist only to serve conversations, so turning messaging off turns this off with it). While false the /e2ee/** routes answer 403 feature_disabled and no NEW encrypted conversation or envelope is accepted; existing encrypted conversations stay readable. This flag is the authoritative E2EE availability signal — do not infer it by probing GET /e2ee/devices, which cannot tell an operator policy decision from a transport failure. */
-                messaging_e2ee?: boolean;
+                messaging_e2ee: boolean;
                 /** @description Whether the yt-dlp platform-URL import path is available (imports on, import_http_enabled on, and the yt-dlp resolver wired on this deployment). */
                 import_http: boolean;
                 /** @description Whether channel auto-sync is available (channel_sync_enabled on, the platform import path on, and the yt-dlp resolver wired). */
