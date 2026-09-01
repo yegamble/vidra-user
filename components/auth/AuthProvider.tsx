@@ -70,6 +70,13 @@ interface SessionContextValue {
   /** IRREVERSIBLE hard delete (password re-confirmed); clears the local session. */
   deleteAccount: (password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * "Sign out everywhere": revokes every session of the account server-side and
+   * clears the local one. Rejects (leaving the local session intact) when the
+   * revoke fails — the other devices are still signed in, so the UI must not
+   * imply otherwise.
+   */
+  logoutEverywhere: () => Promise<void>;
   /** Re-fetch the current account (e.g. after email verification flips a flag). */
   reloadUser: () => Promise<void>;
 }
@@ -274,6 +281,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearLocalSession();
   }, [clearLocalSession]);
 
+  const logoutEverywhere = useCallback(async () => {
+    // Deliberately NOT wrapped in try/catch: a failed revoke must surface to
+    // the caller with the session still live, or "signed out everywhere" would
+    // be a lie. On success the backend has revoked this session too, so the
+    // local one goes through the same seam deactivate/deleteAccount use.
+    await authApi.logoutAll();
+    clearLocalSession();
+  }, [clearLocalSession]);
+
   const logout = useCallback(async () => {
     clearLocalSession();
     try {
@@ -299,6 +315,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deactivate,
       deleteAccount,
       logout,
+      logoutEverywhere,
       reloadUser,
     }),
     [
@@ -312,6 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deactivate,
       deleteAccount,
       logout,
+      logoutEverywhere,
       reloadUser,
     ],
   );
