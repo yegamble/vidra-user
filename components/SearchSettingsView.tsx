@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { TrashIcon } from "@/components/icons";
+import { SearchIcon, TrashIcon } from "@/components/icons";
 import { Alert } from "@/components/ui/Alert";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
@@ -13,6 +14,8 @@ import { ApiError, api, errorMessage } from "@/lib/api";
 import type { SearchHistoryEntry, UpdateProfileRequest } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
+import type { InstanceSearchBlock } from "@/lib/instance-config.server";
+import { SEARCH_RETRY_QUALIFIER, SEARCH_SERVICE_DOWN } from "@/lib/search-failure";
 import { SignInGate } from "@/components/SignInGate";
 
 // A single per-key preference key on the profile update path. All three ride the
@@ -24,13 +27,68 @@ type PrefKey =
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+/**
+ * One toggle's INSTANCE-level verdict. Every preference on this page is only
+ * half of a two-factor gate: vidra-core ANDs the user row with an operator
+ * setting before anything happens
+ * (`internal/httpapi/search.go` — `searchAdvanced() && instancePersonalizedSearch()
+ * && prefs.Personalized`, `instancePersonalizedRecs() && prefs.PersonalizedRecs`,
+ * `instanceSearchHistoryEnabled() && prefs.History`). The operator half is
+ * published on `GET /instance` in the `search{}` block, so the page can say so
+ * instead of accepting a tick, answering "Saved." in green, and changing
+ * nothing for ever.
+ */
+type Gate = { allowed: true } | { allowed: false; reason: string };
+
+const GATE_OPEN: Gate = { allowed: true };
+
+/** The one-line reason for an operator switching a whole feature off. */
+const ADMIN_OFF = "Turned off for everyone on this site by the administrator.";
+
+/**
+ * The instance half of each gate. `undefined` means "not gated": an older
+ * backend, a failed /instance fetch, or the mocked e2e suite must never make a
+ * working control look forbidden, which is the same `!== false` reading every
+ * other consumer of this block uses (SearchResults, Header).
+ */
+function instanceGates(search: InstanceSearchBlock | undefined): Record<PrefKey, Gate> {
+  const personalizedSearch: Gate =
+    search?.personalized_search_enabled === false
+      ? { allowed: false, reason: ADMIN_OFF }
+      : // Personalized ranking is additionally mode-gated server-side: simple
+        // mode never applies behavioural signals, whatever the toggles say.
+        search?.mode === "simple"
+        ? {
+            allowed: false,
+            reason:
+              "This site ranks search with simple heuristics, so personalized results are not available.",
+          }
+        : GATE_OPEN;
+  return {
+    search_history_enabled:
+      search?.search_history_enabled === false
+        ? { allowed: false, reason: ADMIN_OFF }
+        : GATE_OPEN,
+    personalized_search_enabled: personalizedSearch,
+    personalized_recommendations_enabled:
+      search?.personalized_recommendations_enabled === false
+        ? { allowed: false, reason: ADMIN_OFF }
+        : GATE_OPEN,
+  };
+}
+
 // SearchSettingsView is the "Search & recommendations" account page
 // (search-service W4): the three per-user personalization/history toggles (PATCH
 // /auth/me) and the caller's stored search history (view + per-item delete +
 // clear-all with a confirm modal). It mirrors the ProfileForm / PlayerSettingsView
 // pattern — a settled signed-out session gets the sign-in prompt; a hard reload
 // shows a loading state until the refresh cookie restores the session.
-export function SearchSettingsView() {
+export function SearchSettingsView({
+  instanceSearch,
+}: {
+  /** The `search{}` block of GET /instance, threaded down by the server page. */
+  instanceSearch?: InstanceSearchBlock;
+}) {
   const { status, user } = useSession();
 
   if (status === "anon" || !user) {
@@ -45,17 +103,20 @@ export function SearchSettingsView() {
     );
   }
 
+  const gates = instanceGates(instanceSearch);
+
   return (
     <div className="flex max-w-xl flex-col gap-8">
       <PreferencesSection
         key={user.id}
+        gates={gates}
         initial={{
           search_history_enabled: user.search_history_enabled ?? true,
           personalized_search_enabled: user.personalized_search_enabled ?? true,
           personalized_recommendations_enabled: user.personalized_recommendations_enabled ?? true,
         }}
       />
-      <SearchHistorySection />
+      <SearchHistorySection instanceEnabled={gates.search_history_enabled.allowed} />
     </div>
   );
 }
@@ -63,13 +124,23 @@ export function SearchSettingsView() {
 // The three preference toggles. Each auto-saves the single changed field on
 // toggle (PATCH /auth/me) and reflects a shared, polite saved-status line; a
 // failed save reverts the toggle and reports the error.
-function PreferencesSection({ initial }: { initial: Record<PrefKey, boolean> }) {
+function PreferencesSection({
+  initial,
+  gates,
+}: {
+  initial: Record<PrefKey, boolean>;
+  gates: Record<PrefKey, Gate>;
+}) {
   const { updateProfile } = useSession();
   const [prefs, setPrefs] = useState<Record<PrefKey, boolean>>(initial);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState<string | null>(null);
 
   async function toggle(key: PrefKey, value: boolean) {
+    // Belt and braces beside the disabled input: a gated preference must never
+    // reach PATCH /auth/me, because the server would accept it and the page
+    // would then report "Saved." for a change with no effect.
+    if (!gates[key].allowed) return;
     setPrefs((p) => ({ ...p, [key]: value }));
     setSaveState("saving");
     setError(null);
@@ -109,6 +180,7 @@ function PreferencesSection({ initial }: { initial: Record<PrefKey, boolean> }) 
         help="Save the searches you make so you can revisit them and get more relevant suggestions. While off, new searches are not stored to your history. Clear existing history below."
         checked={prefs.search_history_enabled}
         onChange={(v) => void toggle("search_history_enabled", v)}
+        gate={gates.search_history_enabled}
       />
       <ToggleRow
         id="pref-personalized-search"
@@ -116,6 +188,7 @@ function PreferencesSection({ initial }: { initial: Record<PrefKey, boolean> }) 
         help="Rank search results using what you've watched and searched before. While off, everyone sees the same results for a query."
         checked={prefs.personalized_search_enabled}
         onChange={(v) => void toggle("personalized_search_enabled", v)}
+        gate={gates.personalized_search_enabled}
       />
       <ToggleRow
         id="pref-personalized-recommendations"
@@ -123,6 +196,7 @@ function PreferencesSection({ initial }: { initial: Record<PrefKey, boolean> }) 
         help="Tailor your home 'For you' rail and related videos to your activity. While off, you'll see trending and related videos that aren't personalized."
         checked={prefs.personalized_recommendations_enabled}
         onChange={(v) => void toggle("personalized_recommendations_enabled", v)}
+        gate={gates.personalized_recommendations_enabled}
       />
 
       <p className="text-xs text-fg-muted">
@@ -134,19 +208,27 @@ function PreferencesSection({ initial }: { initial: Record<PrefKey, boolean> }) 
   );
 }
 
+// One preference row. A row the operator has switched off site-wide renders
+// DISABLED with a visible one-line reason, while still showing the caller's own
+// stored value — both facts matter, and hiding either is what made this page
+// lie. The reason joins the accessible description so it is not colour/position
+// coded only.
 function ToggleRow({
   id,
   label,
   help,
   checked,
   onChange,
+  gate,
 }: {
   id: string;
   label: string;
   help: string;
   checked: boolean;
   onChange: (value: boolean) => void;
+  gate: Gate;
 }) {
+  const reason = gate.allowed ? null : gate.reason;
   return (
     <div className="flex items-start gap-2">
       <input
@@ -154,58 +236,151 @@ function ToggleRow({
         name={id}
         type="checkbox"
         checked={checked}
+        disabled={reason !== null}
         onChange={(e) => onChange(e.target.checked)}
-        aria-describedby={`${id}-help`}
-        className="focus-ring mt-0.5 h-4 w-4 rounded border-border accent-accent"
+        aria-describedby={reason !== null ? `${id}-help ${id}-gate` : `${id}-help`}
+        className="focus-ring mt-0.5 h-4 w-4 rounded border-border accent-accent disabled:opacity-50"
       />
       <div className="flex flex-col">
-        <label htmlFor={id} className="text-sm font-medium text-fg">
+        <label
+          htmlFor={id}
+          className={`text-sm font-medium ${reason !== null ? "text-fg-muted" : "text-fg"}`}
+        >
           {label}
         </label>
         <span id={`${id}-help`} className="text-xs text-fg-muted">
           {help}
         </span>
+        {reason !== null ? (
+          <span id={`${id}-gate`} className="mt-1 text-xs font-medium text-warning">
+            {reason}
+          </span>
+        ) : null}
       </div>
     </div>
   );
 }
 
-type HistoryStatus = "loading" | "ready" | "unavailable" | "error";
+// "off" is the operator having switched search history off site-wide: a
+// deliberate configuration, not a failure, and the one state where no request
+// is made at all.
+type HistoryStatus = "loading" | "ready" | "off" | "error";
+
+type LoadFailure = {
+  /** Undefined falls through to ErrorState's own "Something went wrong". */
+  title?: string;
+  message: string;
+  /** Whether a retry could EVER succeed. A button that cannot work is a lie. */
+  retryable: boolean;
+};
+
+/**
+ * The three failure states core's searchHistoryGate() distinguishes, kept apart
+ * because they ask the reader for three different things. This mirrors
+ * SuggestionBansView's treatment of the same two responses, deliberately:
+ * one HTTP status should not get two different stories in one product.
+ *
+ *  - 503 `search_unavailable` — the search service is down OR was never wired.
+ *    An instance that simply never runs vidra-search is supported, so this is
+ *    frequently PERMANENT. A retry is offered but explicitly qualified. (This
+ *    page previously said "temporarily unavailable … try again in a little
+ *    while" over exactly this response.)
+ *  - 403 `feature_disabled` — the admin turned smart search off. Only an admin
+ *    undoes it, so no retry.
+ *  - 403/401 otherwise — the caller may not read this history. Retrying cannot
+ *    help either.
+ */
+function describeHistoryFailure(err: unknown): LoadFailure {
+  if (err instanceof ApiError) {
+    if (err.status === 503 || err.code === "search_unavailable") {
+      return {
+        title: "The search service did not answer",
+        message: `Your search history is stored by the search service. ${SEARCH_SERVICE_DOWN} ${SEARCH_RETRY_QUALIFIER}`,
+        retryable: true,
+      };
+    }
+    if (err.status === 403 && err.code === "feature_disabled") {
+      return {
+        title: "Smart search is switched off",
+        message:
+          "This instance is not running smart search, so it is not keeping a search history for you. An administrator can turn it on in the instance settings.",
+        retryable: false,
+      };
+    }
+    if (err.status === 403 || err.status === 401) {
+      return {
+        title: "You cannot see this search history",
+        message:
+          "Your account does not have permission to read or change these stored searches. Sign in again if your session has changed.",
+        retryable: false,
+      };
+    }
+  }
+  return { message: "Could not load your search history.", retryable: true };
+}
+
+/** The same three states for a delete/clear that did NOT take effect. */
+function historyMutationError(notDone: string, err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 503 || err.code === "search_unavailable") {
+      return `${notDone}. ${SEARCH_SERVICE_DOWN}`;
+    }
+    if (err.status === 403 && err.code === "feature_disabled") {
+      return `${notDone}. Smart search is switched off on this instance.`;
+    }
+    if (err.status === 403) {
+      return `${notDone}. Your account cannot change these stored searches.`;
+    }
+  }
+  return errorMessage(err, `${notDone}.`);
+}
 
 // The stored search-history list: view, per-item delete, and clear-all behind a
-// confirm modal. A 503 search_unavailable (the honest answer when the search
-// service is down) shows a temporary-unavailable state — never a fake empty
-// history.
-function SearchHistorySection() {
+// confirm modal. Never a fake empty history — a service that did not answer
+// says so, and says whether waiting could possibly help.
+//
+// `instanceEnabled` false means the operator switched search history off for
+// everyone. Nothing new is being recorded, so the list is not fetched at all;
+// clear-all stays reachable because searches stored BEFORE the switch survive
+// (core gates recording on the instance setting, but not the read/delete
+// routes) and erasing them is the whole point of this section.
+function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean }) {
   const [entries, setEntries] = useState<SearchHistoryEntry[]>([]);
-  const [status, setStatus] = useState<HistoryStatus>("loading");
+  const [fetchStatus, setFetchStatus] = useState<HistoryStatus>("loading");
+  const [failure, setFailure] = useState<unknown>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
+    // The one state that issues no request at all. Core does NOT gate the read
+    // route on the instance setting, so this endpoint would answer 200 with
+    // whatever predates the switch — a list that can only mislead about what is
+    // being recorded now.
+    if (!instanceEnabled) return;
     const controller = new AbortController();
     api
       .getSearchHistory({ limit: FULL_LIST_LIMIT }, controller.signal)
       .then((res) => {
         setEntries(res.entries ?? []);
-        setStatus("ready");
+        setFetchStatus("ready");
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
-        // A disabled/unreachable search service answers 503 search_unavailable.
-        if (err instanceof ApiError && err.status === 503) {
-          setStatus("unavailable");
-        } else {
-          setStatus("error");
-        }
+        setFailure(err);
+        setFetchStatus("error");
       });
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [reloadKey, instanceEnabled]);
+
+  // "off" is derived, not stored: the operator's verdict outranks any fetch
+  // state, and deriving it keeps the spinner from flashing before the effect.
+  const status: HistoryStatus = instanceEnabled ? fetchStatus : "off";
+  const problem = status === "error" ? describeHistoryFailure(failure) : null;
 
   function retry() {
-    setStatus("loading");
+    setFetchStatus("loading");
     setReloadKey((k) => k + 1);
   }
 
@@ -220,11 +395,7 @@ function SearchHistorySection() {
     } catch (err) {
       // Restore on failure and report.
       setEntries((prev) => [...prev, entry]);
-      setActionError(
-        err instanceof ApiError && err.status === 503
-          ? "Search history is temporarily unavailable."
-          : errorMessage(err, "Could not remove that search."),
-      );
+      setActionError(historyMutationError("That search was not removed", err));
     }
   }
 
@@ -236,11 +407,7 @@ function SearchHistorySection() {
       setEntries([]);
       setConfirmClear(false);
     } catch (err) {
-      setActionError(
-        err instanceof ApiError && err.status === 503
-          ? "Search history is temporarily unavailable."
-          : errorMessage(err, "Could not clear your history."),
-      );
+      setActionError(historyMutationError("Your history was not cleared", err));
     } finally {
       setClearing(false);
     }
@@ -250,7 +417,7 @@ function SearchHistorySection() {
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold tracking-tight text-fg">Search history</h2>
-        {status === "ready" && entries.length > 0 ? (
+        {status === "off" || (status === "ready" && entries.length > 0) ? (
           <button
             type="button"
             onClick={() => setConfirmClear(true)}
@@ -273,18 +440,20 @@ function SearchHistorySection() {
         </div>
       ) : null}
 
-      {status === "unavailable" ? (
-        <ErrorState
-          title="Search history is temporarily unavailable"
-          message="The search service is offline right now. Try again in a little while."
-          onRetry={retry}
+      {status === "off" ? (
+        <EmptyState
+          icon={<SearchIcon size={24} />}
+          tint="gray"
+          title="This site does not record search history"
+          message="The administrator turned search history off for everyone here, so your searches are no longer saved. Anything stored before that is not listed, but you can still erase it."
         />
       ) : null}
 
-      {status === "error" ? (
+      {problem ? (
         <ErrorState
-          message="Could not load your search history."
-          onRetry={retry}
+          title={problem.title}
+          message={problem.message}
+          onRetry={problem.retryable ? retry : undefined}
         />
       ) : null}
 

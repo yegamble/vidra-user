@@ -128,14 +128,138 @@ describe("SearchSettingsView — history", () => {
     expect(await screen.findByText("You have no saved searches.")).toBeTruthy();
   });
 
-  it("shows a temporarily-unavailable state on a 503", async () => {
-    // The mocked ApiError takes (status, code); cast past the real 1-arg type.
-    const ApiErrorCtor = ApiError as unknown as new (status: number, code: string) => Error;
-    getSearchHistory.mockRejectedValue(new ApiErrorCtor(503, "search_unavailable"));
+});
+
+// The mocked ApiError takes (status, code); cast past the real 1-arg type.
+const apiError = (status: number, code: string) =>
+  new (ApiError as unknown as new (status: number, code: string) => Error)(status, code);
+
+// A 503 from core means "search is down OR was never wired" — on an instance
+// that never runs vidra-search it is PERMANENT. A 403 feature_disabled is a
+// deliberate admin decision. Neither is "try again in a little while".
+describe("SearchSettingsView — 403 and 503 are different history states", () => {
+  it("reads a 503 as the search service, and never promises it is temporary", async () => {
+    getSearchHistory.mockRejectedValue(apiError(503, "search_unavailable"));
     render(<SearchSettingsView />);
-    expect(
-      await screen.findByText("Search history is temporarily unavailable"),
-    ).toBeTruthy();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/search service/i);
+    expect(alert.textContent).not.toMatch(/temporar/i);
+    expect(alert.textContent).not.toMatch(/in a little while/i);
+    // A retry is offered, but qualified: "not configured" never resolves itself.
+    expect(alert.textContent).toMatch(/Retrying helps only if/i);
+    expect(screen.getByRole("button", { name: /try again|retry/i })).toBeTruthy();
+  });
+
+  it("reads a 403 feature_disabled as smart search being switched off, with no retry", async () => {
+    getSearchHistory.mockRejectedValue(apiError(403, "feature_disabled"));
+    render(<SearchSettingsView />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/smart search is switched off/i);
+    expect(screen.queryByRole("button", { name: /try again|retry/i })).toBeNull();
+  });
+
+  it("reads a plain 403 as a permission denial, with no retry", async () => {
+    getSearchHistory.mockRejectedValue(apiError(403, "forbidden"));
+    render(<SearchSettingsView />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/permission/i);
+    expect(alert.textContent).not.toMatch(/smart search is switched off/i);
+    expect(screen.queryByRole("button", { name: /try again|retry/i })).toBeNull();
+  });
+
+  it("keeps a retry on an ordinary failure", async () => {
+    getSearchHistory.mockRejectedValue(apiError(500, "internal"));
+    render(<SearchSettingsView />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/Could not load your search history/i);
+    expect(screen.getByRole("button", { name: /try again|retry/i })).toBeTruthy();
+  });
+});
+
+// Limb A: /instance publishes the operator half of every gate on this page.
+// Core ANDs it with the user row (vidra-core internal/httpapi/search.go), so a
+// user row saying "on" against an instance saying "off" changes nothing — and
+// the page used to answer "Saved." in green anyway.
+describe("SearchSettingsView — instance gates", () => {
+  const ADMIN_OFF = /Turned off for everyone on this site by the administrator/i;
+
+  it("treats an absent search block as ungated (older backend / failed fetch)", async () => {
+    render(<SearchSettingsView />);
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
+    for (const label of [
+      "Keep my search history",
+      "Personalize my search results",
+      "Personalize my recommendations",
+    ]) {
+      expect((screen.getByLabelText(label) as HTMLInputElement).disabled).toBe(false);
+    }
+    expect(screen.queryByText(ADMIN_OFF)).toBeNull();
+  });
+
+  it("disables personalized search, with a reason and no PATCH, when the instance gate is off", async () => {
+    render(<SearchSettingsView instanceSearch={{ personalized_search_enabled: false }} />);
+    const box = screen.getByLabelText("Personalize my search results") as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    // The user's own stored value stays visible — showing both facts is the point.
+    expect(box.checked).toBe(true);
+    expect(screen.getAllByText(ADMIN_OFF).length).toBe(1);
+    fireEvent.click(box);
+    // ...and a change dispatched straight at React's handler, past the disabled
+    // attribute, must not reach PATCH either: the server WOULD accept the write,
+    // and the page would then answer "Saved." for a change with no effect.
+    fireEvent.change(box, { target: { checked: false } });
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(screen.queryByText("Saved.")).toBeNull();
+  });
+
+  it("disables personalized search when the instance ranks with simple mode", () => {
+    render(<SearchSettingsView instanceSearch={{ mode: "simple" }} />);
+    const box = screen.getByLabelText("Personalize my search results") as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    expect(screen.getByText(/simple/i)).toBeTruthy();
+    expect(screen.getByLabelText("Personalize my recommendations")).toHaveProperty(
+      "disabled",
+      false,
+    );
+  });
+
+  it("disables personalized recommendations, with a reason and no PATCH", async () => {
+    render(
+      <SearchSettingsView instanceSearch={{ personalized_recommendations_enabled: false }} />,
+    );
+    const box = screen.getByLabelText("Personalize my recommendations") as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    expect(box.checked).toBe(false);
+    expect(screen.getAllByText(ADMIN_OFF).length).toBe(1);
+    fireEvent.click(box);
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
+    expect(updateProfile).not.toHaveBeenCalled();
+  });
+
+  it("disables the history toggle, fetches no history, and shows no error when history is off site-wide", async () => {
+    render(<SearchSettingsView instanceSearch={{ search_history_enabled: false }} />);
+    const box = screen.getByLabelText("Keep my search history") as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    expect(box.checked).toBe(true);
+    expect(screen.getAllByText(ADMIN_OFF).length).toBe(1);
+
+    expect(await screen.findByText(/does not record search history/i)).toBeTruthy();
+    // Never an error — the operator chose this.
+    expect(screen.queryByRole("alert")).toBeNull();
+    // And never a request: the endpoint would answer 200 with stale entries.
+    await Promise.resolve();
+    expect(getSearchHistory).not.toHaveBeenCalled();
+
+    fireEvent.click(box);
+    expect(updateProfile).not.toHaveBeenCalled();
+  });
+
+  it("still lets the user erase searches stored before history was switched off", async () => {
+    render(<SearchSettingsView instanceSearch={{ search_history_enabled: false }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Clear all" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Clear history" }));
+    await waitFor(() => expect(clearSearchHistory).toHaveBeenCalled());
   });
 });
 
