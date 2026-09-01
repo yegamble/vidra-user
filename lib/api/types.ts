@@ -460,6 +460,12 @@ export type LinkPreview = Schemas["LinkPreview"];
 export type UploadAttachmentResponse = Schemas["UploadAttachmentResponse"];
 export type MarkConversationReadRequest = Schemas["MarkConversationReadRequest"];
 export type MessageListResponse = Schemas["MessageListResponse"];
+// DM privacy toggles (GET/PATCH /api/v1/me/messaging-prefs). Today just the
+// read-receipts switch: core DEFAULTS it on and hides the caller's read
+// watermark from peers when it is off, so this is the opt-out behind the
+// "Seen" marker MessageBubble renders.
+export type MessagingPrefs = Schemas["MessagingPrefs"];
+export type UpdateMessagingPrefsRequest = Schemas["UpdateMessagingPrefsRequest"];
 
 // --- End-to-end encrypted messaging (see .ralph/specs/e2ee.md) --------------
 export type E2EEDevice = Schemas["E2EEDevice"];

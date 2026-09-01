@@ -8,6 +8,7 @@ import { AccountDataSection } from "@/components/auth/AccountDataSection";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyVisibilityToggle } from "@/components/auth/BlueskyVisibilityToggle";
 import { ConnectedLogins } from "@/components/auth/ConnectedLogins";
+import { ReadReceiptsToggle } from "@/components/auth/ReadReceiptsToggle";
 import { ChevronRightIcon } from "@/components/icons";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { SETTINGS_GROUPS, type SettingsSection } from "@/components/settings/sections";
@@ -163,6 +164,7 @@ export function SettingsView() {
       </div>
       <ConnectedLogins />
       <BlueskyVisibilityToggle />
+      <ReadReceiptsToggle />
       <AccountDataSection />
       {/* Header sign-out is hidden on phones (the avatar is the only account
           control there), so settings must offer it — the design's full-width
