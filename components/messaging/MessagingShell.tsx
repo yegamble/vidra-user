@@ -2,8 +2,11 @@
 
 import { usePathname } from "next/navigation";
 
+import { MessageCircleIcon } from "@/components/icons";
 import { PageShell } from "@/components/PageShell";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/cn";
+import { useMessagingAvailable } from "@/lib/messaging/availability";
 
 import { ConversationRail } from "./ConversationRail";
 
@@ -20,6 +23,24 @@ export function MessagingShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   // Any /messages/[id] route (usePathname drops the query string).
   const onThread = pathname !== "/messages";
+  const messagingAvailable = useMessagingAvailable();
+
+  // The nav entry is already gone when the operator turns messaging off, but the
+  // route stays reachable by URL or back button. Say why plainly instead of
+  // mounting a rail and a thread whose every request answers 403.
+  if (!messagingAvailable) {
+    return (
+      <PageShell gutters="desktop" className="flex min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-16">
+          <EmptyState
+            icon={<MessageCircleIcon size={24} />}
+            title="Messaging is turned off"
+            message="This instance's operator has disabled direct messages."
+          />
+        </div>
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell gutters="desktop" className="flex min-h-0">

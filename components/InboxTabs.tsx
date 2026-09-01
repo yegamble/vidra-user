@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/cn";
+import { useMessagingAvailable } from "@/lib/messaging/availability";
 
 export type InboxTab = "notifications" | "messages";
 
@@ -23,6 +24,11 @@ const OPTIONS = [
 // and notifications live in the header bell popover.
 export function InboxTabs({ active, className }: { active: InboxTab; className?: string }) {
   const router = useRouter();
+  // With messaging turned off instance-wide, the Messages half leads to a
+  // surface whose every call answers 403. A one-option switcher is not a
+  // switcher, so the whole control steps aside rather than shrinking to one.
+  const messagingAvailable = useMessagingAvailable();
+  if (!messagingAvailable) return null;
   return (
     <div className={cn("sm:hidden", className)}>
       <SegmentedControl

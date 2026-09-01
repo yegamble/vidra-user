@@ -6,11 +6,22 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
+vi.mock("@/lib/api", () => ({
+  getInstanceCached: vi.fn(() => new Promise(() => {})),
+  invalidateInstanceCache: vi.fn(),
+}));
+
+import { setInstanceFeaturesForTests } from "@/lib/instance-features";
 
 import { InboxTabs } from "./InboxTabs";
 
+function features(overrides: Record<string, unknown> = {}) {
+  return { uploads: true, comments: true, ...overrides } as never;
+}
+
 afterEach(() => {
   cleanup();
+  setInstanceFeaturesForTests(null);
   vi.clearAllMocks();
 });
 
@@ -43,5 +54,27 @@ describe("InboxTabs", () => {
     render(<InboxTabs active="messages" />);
     fireEvent.click(screen.getByRole("button", { name: "Messages" }));
     expect(push).not.toHaveBeenCalled();
+  });
+
+  // With messaging gated off, the Messages half leads to a surface whose every
+  // call 403s. A one-option switcher is not a switcher, so the whole control goes.
+  it("is absent entirely when the instance discloses messaging: false", () => {
+    setInstanceFeaturesForTests(features({ messaging: false }));
+    const { container } = render(<InboxTabs active="notifications" />);
+    expect(screen.queryByRole("group", { name: "Inbox sections" })).toBeNull();
+    expect(container.textContent).toBe("");
+  });
+
+  // Counter-tests: disclosed on, and a core too old to disclose it.
+  it("still renders when the instance discloses messaging: true", () => {
+    setInstanceFeaturesForTests(features({ messaging: true }));
+    render(<InboxTabs active="notifications" />);
+    expect(screen.getByRole("group", { name: "Inbox sections" })).toBeTruthy();
+  });
+
+  it("still renders when the field is absent (a core that predates it)", () => {
+    setInstanceFeaturesForTests(features());
+    render(<InboxTabs active="notifications" />);
+    expect(screen.getByRole("group", { name: "Inbox sections" })).toBeTruthy();
   });
 });

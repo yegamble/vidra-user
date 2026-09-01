@@ -27,6 +27,7 @@ import type { Comment } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { buildCommentTree, replyMention } from "@/lib/comments";
 import { useE2EEAvailable } from "@/lib/e2ee/availability";
+import { useMessagingAvailable } from "@/lib/messaging/availability";
 import { relativeTime } from "@/lib/format";
 
 const MAX_COMMENT_LEN = 2000;
@@ -427,9 +428,12 @@ function CommentItem({
   // A remote author-name snapshot can collide with a local username — never
   // treat a remote comment as the viewer's own.
   const isAuthor = !isRemote && user?.username === comment.author_username;
-  // The "Encrypted message" action only exists when the backend advertises E2EE
-  // (no-pretending rule) — probe only when the local-account controls apply.
+  // The "Encrypted message" action only exists when the instance advertises
+  // E2EE (no-pretending rule) — ask only when the local-account controls apply.
   const e2eeAvailable = useE2EEAvailable(status === "authed" && !isAuthor && authorId !== null);
+  // The coarser switch: with messaging off instance-wide, neither contact action
+  // can succeed.
+  const messagingAvailable = useMessagingAvailable();
   const when = relativeTime(comment.created_at);
 
   function startEdit() {
@@ -716,12 +720,17 @@ function CommentItem({
       moderationItems.push({ label: "Report", onSelect: () => setReporting("comment") });
     } else if (authorId) {
       moderationItems.push({ label: "Mute", disabled: muting, onSelect: () => void mute() });
-      moderationItems.push({ label: "Message", onSelect: () => void openConversation(false) });
-      if (e2eeAvailable === true) {
-        moderationItems.push({
-          label: "Encrypted message",
-          onSelect: () => void openConversation(true),
-        });
+      // The contact actions go when the operator has turned messaging off:
+      // POST /conversations then answers 403 feature_disabled either way. Mute /
+      // Block / Report are unrelated and stay.
+      if (messagingAvailable) {
+        moderationItems.push({ label: "Message", onSelect: () => void openConversation(false) });
+        if (e2eeAvailable === true) {
+          moderationItems.push({
+            label: "Encrypted message",
+            onSelect: () => void openConversation(true),
+          });
+        }
       }
       moderationItems.push({
         label: blocked ? "Blocked" : "Block",

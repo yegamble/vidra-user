@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
+import { useMessagingAvailable } from "@/lib/messaging/availability";
 
 // ReadReceiptsToggle is the /settings opt-out for DM read receipts
 // (GET/PATCH /api/v1/me/messaging-prefs). Core defaults `read_receipts` to
@@ -18,8 +19,14 @@ export function ReadReceiptsToggle() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // With messaging turned off instance-wide, GET/PATCH /me/messaging-prefs both
+  // answer 403 feature_disabled — the control could only ever render its own
+  // "could not load" state. There is no read receipt to opt out of, so the
+  // setting is not offered and nothing is fetched for it.
+  const messagingAvailable = useMessagingAvailable();
 
   useEffect(() => {
+    if (!messagingAvailable) return;
     const controller = new AbortController();
     api
       .getMessagingPrefs(controller.signal)
@@ -30,7 +37,7 @@ export function ReadReceiptsToggle() {
         if (!controller.signal.aborted) setLoadError(true);
       });
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [reloadKey, messagingAvailable]);
 
   async function onToggle(next: boolean) {
     const previous = checked;
@@ -46,6 +53,8 @@ export function ReadReceiptsToggle() {
       setError(errorMessage(err));
     }
   }
+
+  if (!messagingAvailable) return null;
 
   return (
     <section className="flex max-w-xl flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">

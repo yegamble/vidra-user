@@ -10,11 +10,20 @@ vi.mock("@/lib/api", () => ({
     updateMessagingPrefs: (...args: unknown[]) => updateMessagingPrefs(...args),
   },
   errorMessage: () => "Something went wrong.",
+  // Pulled in by the shared instance-features store behind the messaging gate.
+  getInstanceCached: vi.fn(() => new Promise(() => {})),
+  invalidateInstanceCache: vi.fn(),
 }));
+
+import { setInstanceFeaturesForTests } from "@/lib/instance-features";
 
 import { ReadReceiptsToggle } from "./ReadReceiptsToggle";
 
 const LABEL = "Show others when I’ve read their messages";
+
+function features(overrides: Record<string, unknown> = {}) {
+  return { uploads: true, comments: true, ...overrides } as never;
+}
 
 beforeEach(() => {
   getMessagingPrefs.mockResolvedValue({ read_receipts: true });
@@ -25,6 +34,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  setInstanceFeaturesForTests(null);
   vi.clearAllMocks();
 });
 
@@ -74,5 +84,22 @@ describe("ReadReceiptsToggle", () => {
     fireEvent.click(retry);
     const checkbox = (await screen.findByLabelText(LABEL)) as HTMLInputElement;
     expect(checkbox.checked).toBe(true);
+  });
+
+  // With messaging gated off, GET /me/messaging-prefs answers 403, so this
+  // control could only ever render its own error-and-retry. There is no
+  // preference to express: the setting goes, and nothing is fetched for it.
+  it("is absent, and fetches nothing, when the instance discloses messaging: false", () => {
+    setInstanceFeaturesForTests(features({ messaging: false }));
+    const { container } = render(<ReadReceiptsToggle />);
+    expect(container.textContent).toBe("");
+    expect(getMessagingPrefs).not.toHaveBeenCalled();
+  });
+
+  // Counter-test: an instance that never turned messaging off still gets it.
+  it("still renders when the field is absent (a core that predates the disclosure)", async () => {
+    setInstanceFeaturesForTests(features());
+    render(<ReadReceiptsToggle />);
+    expect(await screen.findByLabelText(LABEL)).toBeTruthy();
   });
 });

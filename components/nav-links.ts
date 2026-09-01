@@ -40,6 +40,19 @@ export const NAV_LINKS: readonly NavLinkDef[] = [
   { href: "/studio", label: "Studio", Icon: VideoIcon },
 ] as const;
 
+/** The Messages destination's href — the one primary entry an operator can turn off. */
+export const MESSAGES_HREF = "/messages";
+
+/**
+ * The primary destinations for this instance. When the operator has turned
+ * direct messaging off (GET /instance `features.messaging` === false) every
+ * /conversations route answers 403, so the Messages entry is not offered —
+ * a nav link to a surface that can only fail is worse than no link.
+ */
+export function primaryNavLinks(messagingAvailable: boolean): NavLinkDef[] {
+  return NAV_LINKS.filter((item) => messagingAvailable || item.href !== MESSAGES_HREF);
+}
+
 /** Moderation entry (moderators + admins only). */
 export const MODERATION_LINK: NavLinkDef = {
   href: "/moderation",
