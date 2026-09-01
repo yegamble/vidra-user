@@ -257,6 +257,18 @@ export type PeerTubeImportMode = NonNullable<Schemas["PeerTubeImportLaunchReques
 export type PeerTubeImportConflictPolicy = NonNullable<
   Schemas["PeerTubeImportLaunchRequest"]["conflict_policy"]
 >;
+/**
+ * What a run does with the source's media objects. A LAUNCH may name one of
+ * three; a RUN may additionally report "" — it was launched before core
+ * recorded the mode, and the server default of the day was stored nowhere. The
+ * two are deliberately separate types so nothing can put "" on the wire as a
+ * choice, and nothing can read a recorded mode as if it were always one of the
+ * three.
+ */
+export type PeerTubeImportMediaMode = NonNullable<
+  Schemas["PeerTubeImportLaunchRequest"]["media_mode"]
+>;
+export type PeerTubeImportRunMediaMode = NonNullable<Schemas["PeerTubeImportRun"]["media_mode"]>;
 export type PeerTubeImportCounts = Schemas["PeerTubeImportCounts"];
 export type PeerTubeImportReport = Schemas["PeerTubeImportReport"];
 export type PeerTubeImportRun = Schemas["PeerTubeImportRun"];

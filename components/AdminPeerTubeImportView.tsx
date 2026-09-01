@@ -15,6 +15,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type {
   PeerTubeImportConflictPolicy,
+  PeerTubeImportMediaMode,
   PeerTubeImportMode,
   PeerTubeImportRun,
 } from "@/lib/api";
@@ -30,6 +31,35 @@ const CONFLICT_POLICIES: { value: PeerTubeImportConflictPolicy; label: string }[
   { value: "merge", label: "Merge — fold the source row into the existing Vidra row" },
   { value: "fail", label: "Fail — stop the whole import on the first collision" },
 ];
+
+// The media-mode choice, as the operator's own state: "" is "say nothing and
+// take the instance's configured default", which is why it is a select value
+// here and never a value on the wire.
+type MediaModeChoice = "" | PeerTubeImportMediaMode;
+
+// Ordered by how far each departs from leaving the server alone, and labelled
+// for the CONSEQUENCE rather than the field value. This is the most expensive
+// decision on the page and the only one whose damage surfaces months later — a
+// copy run costs disk, a reference run costs the ability to ever switch the old
+// instance off, and neither is visible in the counts afterwards.
+const MEDIA_MODES: { value: MediaModeChoice; label: string }[] = [
+  { value: "", label: "Server default — whatever this instance is configured for" },
+  { value: "copy", label: "Copy — bring every file into this instance's storage" },
+  { value: "reference", label: "Reference — play from the source's storage, copy nothing" },
+  { value: "none", label: "Metadata only — import no media at all" },
+];
+
+// The recorded mode of a run, for the badge it carries wherever it is listed.
+// A run reports "" when it predates core recording this, and an absent field is
+// the same admission from a server older still: both are "not recorded", and
+// neither may be rendered as `copy`. Guessing the common case would put a
+// fabricated fact in the migration history, which is worse than an honest gap
+// precisely because nobody would go back and check it.
+const RUN_MEDIA_MODE_LABELS: Record<PeerTubeImportMediaMode, string> = {
+  copy: "Media copied",
+  reference: "Referenced media — source storage",
+  none: "Metadata only",
+};
 
 function isInFlight(run: PeerTubeImportRun | null): run is PeerTubeImportRun {
   return run !== null && (run.state === "pending" || run.state === "running");
@@ -120,6 +150,12 @@ function ImportPanel() {
   // it, and silently unticking it in between would make that real run gap-fill
   // only, which is the exact failure this control exists to close.
   const [sourceAuthoritative, setSourceAuthoritative] = useState(false);
+  // What this run does with the source's media objects. It was boot
+  // configuration until core made it a launch field: changing it used to mean
+  // editing the env file and restarting the api, in the middle of a migration.
+  // "" is not a fourth mode — it is the operator declining to override, and it
+  // sends no key at all.
+  const [mediaMode, setMediaMode] = useState<MediaModeChoice>("");
   // The unverified schema VERSION the admin has signed off on — deliberately a
   // version and not a boolean, mirroring the server's own rule: the gate opens
   // only on exact equality with the version the source currently reports, so a
@@ -207,6 +243,10 @@ function ImportPanel() {
           // explicit false would be this page stating a write policy the
           // operator never chose.
           ...(sourceAuthoritative ? { source_authoritative: true } : {}),
+          // Sent ONLY when the operator picked a mode. Omitted, the instance's
+          // configured default stands; naming one here by default would be this
+          // page silently deciding whether the migration copies bytes.
+          ...(mediaMode !== "" ? { media_mode: mediaMode } : {}),
           // Sent ONLY when the tick names the version the source currently
           // reports; omitted entirely in the normal case, leaving the gate up.
           ...(refusedVersion !== null && acknowledgedVersion === refusedVersion
@@ -247,6 +287,7 @@ function ImportPanel() {
       activeRun,
       conflictPolicy,
       sourceAuthoritative,
+      mediaMode,
       awaitingAcknowledgement,
       refusedVersion,
       acknowledgedVersion,
@@ -307,6 +348,8 @@ function ImportPanel() {
             ))}
           </Select>
 
+          <MediaModeField value={mediaMode} disabled={controlsDisabled} onChange={setMediaMode} />
+
           <CutoverToggle
             checked={sourceAuthoritative}
             disabled={controlsDisabled}
@@ -350,6 +393,62 @@ function ImportPanel() {
       {activeRun ? <RunPanel run={activeRun} /> : null}
 
       <HistorySection runs={runs} activeId={activeRun?.id} onSelect={setActiveRun} />
+    </div>
+  );
+}
+
+// The media-mode control. The three modes are not variations on one another and
+// the copy has to say so: they differ in what the operator is left owning when
+// the migration is over. Copy is the answer for an actual migration — it costs
+// time and twice the disk while both instances run, and it ends with a source
+// that can be switched off. Reference ends with one that cannot, ever, because
+// nothing was moved; that is the fact this field exists to state up front,
+// since every signal an operator gets afterwards (a fast run, full counts,
+// videos that play) looks like success. Metadata only is a rehearsal.
+function MediaModeField({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: MediaModeChoice;
+  disabled: boolean;
+  onChange: (mode: MediaModeChoice) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <Select
+        label="Media"
+        hint="What this run does with the source's video files. It is set per run — you do not have to restart the server to change it between runs."
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value as MediaModeChoice)}
+      >
+        {MEDIA_MODES.map((m) => (
+          <option key={m.value} value={m.value}>
+            {m.label}
+          </option>
+        ))}
+      </Select>
+      <p className="text-xs text-fg-muted">
+        Copy is the migration: every file is streamed into this instance&rsquo;s own storage, so it
+        is slow and needs the space on both sides while you cut over — but when it finishes, the
+        old instance can be switched off. Reference moves nothing; it records the source&rsquo;s
+        object keys and plays from that same storage. Metadata only writes no media at all, for
+        rehearsing the mapping.
+      </p>
+      {value === "reference" ? (
+        <div role="alert" className="flex flex-col gap-1 rounded-2xl bg-warning/15 p-3">
+          <p className="text-sm font-semibold text-warning">
+            Reference mode does not migrate your media, and there is no later step that does.
+          </p>
+          <p className="text-sm text-fg-muted">
+            This instance will depend on the source&rsquo;s object storage to play these videos for
+            as long as they exist, so that storage can never be turned off and playback breaks the
+            day it goes away. Choose copy if the point of this migration is to decommission the old
+            instance.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -499,6 +598,30 @@ function CutoverBadge({ run }: { run: PeerTubeImportRun }) {
   return <Badge variant="warning">Cutover — source wins</Badge>;
 }
 
+// The mark a run's media mode carries wherever it is listed, for exactly the
+// reason CutoverBadge above carries the cutover one: "why is my object store
+// this large?" and "why does nothing play?" are asked weeks later, against a
+// history of runs that otherwise look identical, and the answer has to be on
+// the run itself. Unlike the cutover flag there is no unremarkable default to
+// stay quiet about — every run handled media somehow — so this always renders,
+// including the admission that a pre-#141 run never recorded which way it went.
+function MediaModeBadge({ run }: { run: PeerTubeImportRun }) {
+  const label = run.media_mode ? RUN_MEDIA_MODE_LABELS[run.media_mode] : undefined;
+  if (!label) return <Badge variant="neutral">Media mode not recorded</Badge>;
+  // Reference is the one that ties this instance to storage it does not own.
+  return <Badge variant={run.media_mode === "reference" ? "warning" : "neutral"}>{label}</Badge>;
+}
+
+// Videos that landed with NOTHING to play. Core counts the absence under
+// `imported` — they were inserted and tallied as imported videos, so every
+// other number on the report calls them a success and the gap only shows when
+// somebody presses play. On an HLS-only source in copy mode that is every
+// video, which is why this gets the failure banner's treatment rather than one
+// more row in a table nobody reads to the bottom.
+function noPlayableMedia(report: PeerTubeImportRun["report"]): number {
+  return report?.entities?.video_no_media?.imported ?? 0;
+}
+
 function RunPanel({ run }: { run: PeerTubeImportRun }) {
   const inFlight = run.state === "pending" || run.state === "running";
   const isDryRun = run.mode === "dry_run";
@@ -506,6 +629,7 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
   // Per-entity failures, which the run's own state does not reflect.
   const failed = failedFamilies(run.report);
   const failedTotal = failed.reduce((n, f) => n + f.failed, 0);
+  const noMedia = noPlayableMedia(run.report);
 
   return (
     <section aria-label="Import run" className="flex flex-col gap-4">
@@ -515,6 +639,7 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
         </h2>
         <RunStateBadge run={run} />
         <CutoverBadge run={run} />
+        <MediaModeBadge run={run} />
         {typeof run.source_version === "number" ? (
           <Badge variant="neutral">PeerTube schema v{run.source_version}</Badge>
         ) : null}
@@ -550,6 +675,21 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
             {failed.map((f) => `${f.kind} ${formatCount(f.failed)}`).join(" · ")}. Reaching the end
             is all the run state reports — check the server logs for these before treating the
             migration as complete.
+          </p>
+        </div>
+      ) : null}
+
+      {!inFlight && noMedia > 0 ? (
+        <div role="alert" className="flex flex-col gap-1 rounded-2xl bg-warning/15 p-3">
+          <p className="text-sm font-semibold text-warning">
+            {formatCount(noMedia)} {pluralize(noMedia, "video", "videos")}{" "}
+            {isDryRun ? "would arrive" : "arrived"} with nothing to play.
+          </p>
+          <p className="text-sm text-fg-muted">
+            They count as imported videos and appear in the catalogue like any other — the absence
+            shows up only when somebody presses play. This is what copy mode does to an HLS-only
+            source: PeerTube hangs HLS renditions off the streaming playlist rather than the
+            progressive files this importer copies, and only reference mode carries the HLS tree.
           </p>
         </div>
       ) : null}
@@ -711,6 +851,7 @@ function HistorySection({
                 </span>
                 <RunStateBadge run={run} />
                 <CutoverBadge run={run} />
+                <MediaModeBadge run={run} />
                 <span className="ml-auto text-xs text-fg-muted">{relativeTime(run.created_at)}</span>
               </button>
             </li>
