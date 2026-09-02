@@ -1,17 +1,10 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { CheckIcon } from "@/components/icons";
-import { anchoredPosition } from "@/lib/anchored-position";
+import { usePlayerPopup } from "@/components/player/use-player-popup";
 import { cn } from "@/lib/cn";
 
 export interface PlayerMenuItem<T extends string | number> {
@@ -56,93 +49,22 @@ export function PlayerMenu<T extends string | number>({
   onSelect: (value: T) => void;
   variant?: PlayerMenuVariant;
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const {
+    open,
+    container,
+    rootRef,
+    buttonRef,
+    popupRef,
+    openPopup,
+    closePopup,
+    popupStyle,
+  } = usePlayerPopup();
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const overlay = variant === "overlay";
-  // Portal target + fixed coordinates (the Wave D pattern, see
-  // lib/anchored-position). The player stage is `overflow-hidden` and only ~185px
-  // tall on a phone, so an `absolute` menu inside it was CLIPPED: 7 of the speed
-  // ladder's 12 rungs rendered above the video's top edge and could not be
-  // reached at all. Fixed-positioned in a portal, the menu is bounded by the
-  // viewport instead. While the player is fullscreen the portal must land INSIDE
-  // the fullscreen element — nothing under <body> is painted in that state.
-  const [container, setContainer] = useState<HTMLElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   // On the overlay the visible text is a compact tail (aria-label carries the
   // full name); the legacy bar shows the full label as its visible text (and so
   // as its accessible name, unchanged).
   const visibleText = overlay ? (buttonText ?? buttonLabel) : buttonLabel;
-
-  const measure = useCallback(() => {
-    const trigger = buttonRef.current;
-    const menu = menuRef.current;
-    if (!trigger || !menu) return;
-    const next = anchoredPosition(
-      trigger.getBoundingClientRect(),
-      { width: menu.offsetWidth, height: menu.offsetHeight },
-      { width: window.innerWidth, height: window.innerHeight },
-      // The trigger sits in the control bar on the player's bottom edge, so
-      // "above" is the natural side; anchoredPosition flips it down only when
-      // the space above genuinely cannot hold the menu.
-      { align: "end", prefer: "above" },
-    );
-    // Reuse the previous object when nothing moved: this runs on every scroll
-    // event, and a fresh object each time would re-render the menu (and every
-    // row) continuously while the user scrolls it.
-    setPos((prev) => (prev && prev.top === next.top && prev.left === next.left ? prev : next));
-  }, []);
-
-  // Resolving the portal target in the OPEN handler rather than in an effect
-  // keeps it a single render (and avoids a setState-in-effect cascade).
-  const portalTarget = () => (document.fullscreenElement as HTMLElement | null) ?? document.body;
-  const openMenu = useCallback(() => {
-    setContainer(portalTarget());
-    setOpen(true);
-  }, []);
-  const closeMenu = useCallback(() => {
-    setOpen(false);
-    setContainer(null);
-    setPos(null);
-  }, []);
-
-  // Re-resolve the target if fullscreen is entered or left with the menu open:
-  // the two roots are disjoint, so a menu left under <body> simply vanishes.
-  useEffect(() => {
-    if (!open) return;
-    const onFullscreenChange = () => setContainer(portalTarget());
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, [open]);
-
-  // useLayoutEffect, not useEffect: the position is measured and applied before
-  // the browser paints, so the menu never flashes at the viewport origin. Do NOT
-  // add a `visibility: hidden` guard for the unmeasured frame — setPos from a
-  // layout effect makes React flush the pending focus effect below while the
-  // menu is still hidden, and focus() is a silent no-op on a visibility:hidden
-  // subtree. Focus then never entered the menu, so its own key handler never saw
-  // Escape and the menu would not close. jsdom does not model this; only a real
-  // browser catches it (e2e/hls.spec.ts).
-  useLayoutEffect(() => {
-    if (!open || !container) return;
-    measure();
-  }, [open, container, items.length, measure]);
-
-  // Keep the fixed menu pinned to its trigger: capture-phase scroll catches any
-  // scrolling ancestor, resize re-runs the flip (phone rotation into landscape
-  // fullscreen is the case that matters here).
-  useEffect(() => {
-    if (!open) return;
-    const onReflow = () => measure();
-    window.addEventListener("scroll", onReflow, true);
-    window.addEventListener("resize", onReflow);
-    return () => {
-      window.removeEventListener("scroll", onReflow, true);
-      window.removeEventListener("resize", onReflow);
-    };
-  }, [open, measure]);
 
   // Focus the checked entry when the menu OPENS — keyed on `open` ALONE.
   //
@@ -170,21 +92,6 @@ export function PlayerMenu<T extends string | number>({
     itemRefs.current[checked >= 0 ? checked : 0]?.focus();
   }, [open, container]);
 
-  // Close on a click/tap outside the menu.
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(e: PointerEvent) {
-      const target = e.target as Node;
-      // The menu is portaled out of rootRef, so a press inside it must still
-      // count as inside — otherwise picking a rung would close before the click.
-      if (rootRef.current?.contains(target)) return;
-      if (menuRef.current?.contains(target)) return;
-      closeMenu();
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open, closeMenu]);
-
   function moveFocus(from: number, delta: number) {
     const next = (from + delta + items.length) % items.length;
     itemRefs.current[next]?.focus();
@@ -192,7 +99,7 @@ export function PlayerMenu<T extends string | number>({
 
   function select(value: T) {
     onSelect(value);
-    closeMenu();
+    closePopup();
     buttonRef.current?.focus();
   }
 
@@ -205,11 +112,11 @@ export function PlayerMenu<T extends string | number>({
         aria-expanded={open}
         aria-label={overlay ? buttonLabel : undefined}
         title={overlay ? buttonLabel : undefined}
-        onClick={() => (open ? closeMenu() : openMenu())}
+        onClick={() => (open ? closePopup() : openPopup())}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" && !open) {
             e.preventDefault();
-            openMenu();
+            openPopup();
           }
         }}
         className={cn(
@@ -225,21 +132,17 @@ export function PlayerMenu<T extends string | number>({
       {open && container
         ? createPortal(
             <div
-              ref={menuRef}
+              ref={popupRef}
               role="menu"
               aria-label={menuLabel}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
                   e.stopPropagation();
-                  closeMenu();
+                  closePopup();
                   buttonRef.current?.focus();
                 }
               }}
-              style={{
-                position: "fixed",
-                top: pos?.top ?? 0,
-                left: pos?.left ?? 0,
-              }}
+              style={popupStyle}
               className="z-50 max-h-[min(16rem,calc(100vh-1rem))] w-40 overflow-y-auto overscroll-contain rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
             >
               {items.map((item, i) => (
