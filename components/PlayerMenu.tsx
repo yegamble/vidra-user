@@ -117,6 +117,14 @@ export function PlayerMenu<T extends string | number>({
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, [open]);
 
+  // useLayoutEffect, not useEffect: the position is measured and applied before
+  // the browser paints, so the menu never flashes at the viewport origin. Do NOT
+  // add a `visibility: hidden` guard for the unmeasured frame — setPos from a
+  // layout effect makes React flush the pending focus effect below while the
+  // menu is still hidden, and focus() is a silent no-op on a visibility:hidden
+  // subtree. Focus then never entered the menu, so its own key handler never saw
+  // Escape and the menu would not close. jsdom does not model this; only a real
+  // browser catches it (e2e/hls.spec.ts).
   useLayoutEffect(() => {
     if (!open || !container) return;
     measure();
@@ -223,7 +231,7 @@ export function PlayerMenu<T extends string | number>({
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
                   e.stopPropagation();
-                  setOpen(false);
+                  closeMenu();
                   buttonRef.current?.focus();
                 }
               }}
@@ -231,9 +239,6 @@ export function PlayerMenu<T extends string | number>({
                 position: "fixed",
                 top: pos?.top ?? 0,
                 left: pos?.left ?? 0,
-                // Hidden for the single frame between mount and measurement, so the
-                // menu never flashes at the viewport origin before it is placed.
-                visibility: pos ? "visible" : "hidden",
               }}
               className="z-50 max-h-[min(16rem,calc(100vh-1rem))] w-40 overflow-y-auto overscroll-contain rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
             >
