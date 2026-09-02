@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { anchoredPosition } from "@/lib/anchored-position";
 import { cn } from "@/lib/cn";
 
 /** A selectable menu row. */
@@ -116,27 +117,14 @@ export function Dropdown({
     const trigger = triggerRef.current;
     const menu = menuRef.current;
     if (!trigger || !menu) return;
-    const t = trigger.getBoundingClientRect();
-    const menuH = menu.offsetHeight;
-    const menuW = menu.offsetWidth;
-    const margin = 8; // viewport edge keep-out
-    const gap = 4; // trigger↔menu gap (matches the old mt-1/mb-1)
-    const spaceBelow = window.innerHeight - t.bottom - margin;
-    const spaceAbove = t.top - margin;
-    const up = spaceBelow < menuH && spaceAbove > spaceBelow;
-    let end = align === "end";
-    if (end && t.right - menuW < margin && t.left + menuW <= window.innerWidth - margin) {
-      end = false;
-    } else if (!end && t.left + menuW > window.innerWidth - margin && t.right - menuW >= margin) {
-      end = true;
-    }
-    const rawTop = up ? t.top - menuH - gap : t.bottom + gap;
-    const rawLeft = end ? t.right - menuW : t.left;
-    // Clamp fully inside the viewport so a trigger near an edge can't push the
-    // menu (or its last item) off-screen.
-    const top = Math.max(margin, Math.min(rawTop, window.innerHeight - menuH - margin));
-    const left = Math.max(margin, Math.min(rawLeft, window.innerWidth - menuW - margin));
-    setPos({ top, left });
+    setPos(
+      anchoredPosition(
+        trigger.getBoundingClientRect(),
+        { width: menu.offsetWidth, height: menu.offsetHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+        { align },
+      ),
+    );
   }, [align]);
 
   useLayoutEffect(() => {
