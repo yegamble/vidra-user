@@ -242,7 +242,19 @@ test("the watch page passes axe in theater mode (reflowed layout)", async ({ pag
 
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
-  await page.getByRole("button", { name: "Theater mode" }).click();
+  // Theater sits in the "⋮" overflow menu at this stage width (see
+  // e2e/player-theater.spec.ts); axe still runs on the reflowed layout.
+  const bar = page.getByTestId("player-controls");
+  const inBar = bar.getByRole("button", { name: "Theater mode", exact: true });
+  if ((await inBar.count()) > 0) {
+    await inBar.click();
+  } else {
+    await page.getByRole("button", { name: "More player options" }).click();
+    await page
+      .getByRole("menu", { name: "More player options" })
+      .getByRole("menuitemcheckbox", { name: "Theater mode", exact: true })
+      .click();
+  }
   await expect(page.locator("[data-theater='on']")).toBeVisible();
   await expectNoSevereViolations(page);
 });

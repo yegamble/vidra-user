@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, Ref } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -10,6 +10,8 @@ export type OverlayButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "
   label: string;
   /** Reflected as aria-pressed for toggle controls (mute, captions, PiP, theater). */
   pressed?: boolean;
+  /** Forwarded to the button (React 19 passes `ref` as a plain prop). */
+  ref?: Ref<HTMLButtonElement>;
 };
 
 /**
@@ -24,10 +26,12 @@ export function OverlayButton({
   type = "button",
   className,
   children,
+  ref,
   ...props
 }: OverlayButtonProps) {
   return (
     <button
+      ref={ref}
       type={type}
       aria-label={label}
       title={label}

@@ -12,6 +12,11 @@ import {
 
 import { EndCard } from "@/components/player/EndCard";
 import { OverlayButton } from "@/components/player/OverlayButton";
+import {
+  PlayerOverflowMenu,
+  type OverflowChoiceGroup,
+  type OverflowToggle,
+} from "@/components/player/PlayerOverflowMenu";
 import { SeekBar } from "@/components/player/SeekBar";
 import { VolumeControl } from "@/components/player/VolumeControl";
 import { QualityMenu } from "@/components/QualityMenu";
@@ -19,6 +24,7 @@ import { SpeedMenu } from "@/components/SpeedMenu";
 import { api, videoThumbnailUrl, type Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
+import { qualityKey } from "@/lib/quality-id";
 import { primeInstanceDefaults } from "@/lib/instance-defaults";
 import {
   readStartOnOpen,
@@ -29,6 +35,8 @@ import {
   toggleAutoplay,
 } from "@/lib/player-autoplay";
 import {
+  PLAYBACK_RATES,
+  rateLabel,
   readStoredRate,
   serverRate,
   stepPlaybackRate,
@@ -613,12 +621,79 @@ export function VideoPlayer({
   // truncated, beside the time readout. Null before the first chapter / no chapters.
   const currentChapterTitle = chapters?.chapterAt(currentTime)?.title ?? null;
 
+  // The overflow menu carries the FULL tier-able control set, not just the part
+  // the current stage width happens to have hidden. It is portaled to the
+  // viewport (see usePlayerPopup), so container queries cannot reach it to prune
+  // per-tier — and "everything is always in here" is a stronger guarantee than
+  // arithmetic anyway: no control can become unreachable at any stage width.
+  // The bar duplicates a few of these at wide tiers, which is what YouTube's
+  // settings gear does too; the roles differ (button vs menuitem*), so no
+  // accessible name is ambiguous.
+  const overflowToggles: OverflowToggle[] = [
+    { id: "mute", label: muted ? "Unmute" : "Mute", pressed: muted, onToggle: toggleMute },
+    ...(tracks.length > 0
+      ? [{ id: "captions", label: "Captions", pressed: captionsOn, onToggle: toggleCaptions }]
+      : []),
+    ...(variant === "watch"
+      ? [
+          {
+            id: "autoplay",
+            label: "Autoplay next",
+            pressed: autoplayEnabled,
+            onToggle: onToggleAutoplay,
+          },
+          { id: "theater", label: "Theater mode", pressed: theater, onToggle: () => toggleTheater() },
+        ]
+      : []),
+    ...(pipSupported
+      ? [
+          {
+            id: "pip",
+            label: "Picture-in-picture",
+            pressed: pipActive,
+            onToggle: togglePip,
+          },
+        ]
+      : []),
+  ];
+
+  const overflowGroups: OverflowChoiceGroup[] = [
+    {
+      id: "speed",
+      label: "Playback speed",
+      value: String(speed),
+      items: PLAYBACK_RATES.map((rate) => ({ value: String(rate), label: rateLabel(rate) })),
+      onSelect: (value) => setSpeed(Number(value)),
+    },
+    ...(playback.levels.length > 0
+      ? [
+          {
+            id: "quality",
+            label: "Playback quality",
+            value: qualityKey(playback.currentQuality),
+            items: playback.levels.map((l) => ({ value: l.value, label: l.label })),
+            onSelect: (value: string) => {
+              const picked = playback.levels.find((l) => l.value === value);
+              if (picked) playback.setQuality(picked.id);
+            },
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div
       ref={containerRef}
       data-testid="video-player"
       className={cn(
-        "relative w-full select-none overflow-hidden bg-black",
+        // @container/stage: every breakpoint below is a query on the PLAYER's
+        // own width, never the viewport's. The stage's width is not a function
+        // of the viewport — the sidebar, the lg two-column split, theater and
+        // fullscreen all change it — which is why viewport breakpoints put the
+        // WORST overflow at 640px, where `sm:` revealed more controls at the
+        // exact width the sidebar made the player narrower (356px stage, 200px
+        // more bar). Container queries make the tiers track the real budget.
+        "@container/stage relative w-full select-none overflow-hidden bg-black",
         variant === "embed" ? "h-full" : "aspect-video rounded-2xl",
       )}
       onPointerMove={bump}
@@ -689,23 +764,32 @@ export function VideoPlayer({
             )}
           </OverlayButton>
 
-          <VolumeControl
-            volume={volume}
-            muted={muted}
-            onToggleMute={toggleMute}
-            onSetVolume={applyVolume}
-          />
+          {/* Mute joins the bar at a 480px stage; below that it lives in the
+              overflow menu (a phone's hardware volume covers the common case). */}
+          <div className="hidden @min-[480px]/stage:contents">
+            <VolumeControl
+              volume={volume}
+              muted={muted}
+              onToggleMute={toggleMute}
+              onSetVolume={applyVolume}
+            />
+          </div>
 
-          <span className="px-0.5 text-[11px] font-medium tabular-nums text-white/90 sm:text-xs">
+          {/* Elapsed always; the "/ total" tail costs ~46px on a long video and is
+              held back until the stage can afford it. The total is never lost to
+              assistive tech — SeekBar's aria-valuetext reads "X of Y". */}
+          <span className="whitespace-nowrap px-0.5 text-[11px] font-medium tabular-nums text-white sm:text-xs">
             {formatDuration(currentTime)}
-            <span className="text-white/50">/</span>
-            {formatDuration(duration)}
+            <span className="hidden @min-[420px]/stage:inline">
+              <span className="text-white/70">/</span>
+              {formatDuration(duration)}
+            </span>
           </span>
 
           {/* Current chapter title (CORE-15): muted + truncated, held off the
               narrowest phone bar (< sm) so it never crowds the core controls. */}
           {currentChapterTitle ? (
-            <span className="hidden min-w-0 max-w-[8rem] truncate px-0.5 text-[11px] text-white/70 sm:inline-block md:max-w-[14rem]">
+            <span className="hidden min-w-0 max-w-[8rem] truncate px-0.5 text-[11px] text-white/70 @min-[900px]/stage:inline-block @min-[1100px]/stage:max-w-[14rem]">
               {currentChapterTitle}
             </span>
           ) : null}
@@ -719,6 +803,7 @@ export function VideoPlayer({
               its snapshot flows through the same useSyncExternalStore wiring as
               the end card, so SSR/first-client render is stable. */}
           {variant === "watch" ? (
+            <div className="hidden @min-[700px]/stage:contents">
             <OverlayButton
               label={autoplayEnabled ? "Autoplay next is on" : "Autoplay next is off"}
               pressed={autoplayEnabled}
@@ -729,6 +814,7 @@ export function VideoPlayer({
                 <path d="M10 9.5v5l4-2.5z" fill="currentColor" stroke="none" />
               </svg>
             </OverlayButton>
+            </div>
           ) : null}
 
           {tracks.length > 0 ? (
@@ -740,16 +826,22 @@ export function VideoPlayer({
             </OverlayButton>
           ) : null}
 
-          <SpeedMenu speed={speed} onSelect={setSpeed} variant="overlay" />
+          <div className="hidden @min-[480px]/stage:contents">
+            <SpeedMenu speed={speed} onSelect={setSpeed} variant="overlay" />
+          </div>
 
-          <QualityMenu
-            levels={playback.levels}
-            currentQuality={playback.currentQuality}
-            activeHeight={playback.activeHeight}
-            pending={playback.pending}
-            onSelect={playback.setQuality}
-            variant="overlay"
-          />
+          {/* "Auto (1080p)" is 123px wide — the single widest control in the bar,
+              and the one that clipped Fullscreen even on a 1024px desktop. */}
+          <div className="hidden @min-[820px]/stage:contents">
+            <QualityMenu
+              levels={playback.levels}
+              currentQuality={playback.currentQuality}
+              activeHeight={playback.activeHeight}
+              pending={playback.pending}
+              onSelect={playback.setQuality}
+              variant="overlay"
+            />
+          </div>
 
           {/* Theater is a watch-page layout mode and only reflows the two-column
               stage at lg+, so the toggle appears only there (below lg the page is
@@ -757,7 +849,7 @@ export function VideoPlayer({
               crowd the phone control bar). display:contents keeps it a flush flex
               item without an extra box. */}
           {variant === "watch" ? (
-            <div className="hidden lg:contents">
+            <div className="hidden @min-[860px]/stage:contents">
               <OverlayButton
                 label="Theater mode"
                 pressed={theater}
@@ -780,7 +872,7 @@ export function VideoPlayer({
               held off the narrowest phone bar (< sm) so it never crowds the
               always-visible core controls. */}
           {pipSupported ? (
-            <div className="hidden sm:contents">
+            <div className="hidden @min-[700px]/stage:contents">
               <OverlayButton
                 label={pipActive ? "Exit picture-in-picture" : "Picture-in-picture"}
                 pressed={pipActive}
@@ -793,6 +885,8 @@ export function VideoPlayer({
               </OverlayButton>
             </div>
           ) : null}
+
+          <PlayerOverflowMenu toggles={overflowToggles} groups={overflowGroups} />
 
           <OverlayButton
             label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}

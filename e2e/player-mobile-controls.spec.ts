@@ -33,7 +33,16 @@ async function mockWatchPage(page: Page) {
     }),
   );
   await page.route(ORIGINAL, (route) => route.abort());
-  await page.route(CAPTIONS, (route) => route.fulfill({ json: { captions: [] } }));
+  await page.route(CAPTIONS, (route) =>
+    route.fulfill({
+      json: {
+        captions: [{ language: "en", label: "English", created_at: new Date().toISOString() }],
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/videos\/v1\/captions\/en$/, (route) =>
+    route.fulfill({ contentType: "text/vtt", body: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHi\n" }),
+  );
   await page.route(COMMENTS, (route) =>
     route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }),
   );
@@ -52,21 +61,19 @@ for (const [label, width, height] of [
     await page.goto("/videos/v1");
     await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
 
-    await page.getByRole("button", { name: "Speed: 1×" }).click();
-    const menu = page.getByRole("menu", { name: "Playback speed" });
+    // At a phone-width stage the speed ladder lives in the overflow menu.
+    await page.getByRole("button", { name: "More player options" }).click();
+    const menu = page.getByRole("menu", { name: "More player options" });
     await expect(menu).toBeVisible();
-    const rows = menu.getByRole("menuitemradio");
+    const rows = menu.getByRole("group", { name: "Playback speed" }).getByRole("menuitemradio");
     await expect(rows).toHaveCount(12);
 
-    // Every rung must be reachable: inside the viewport, and scrollable into
-    // view within the menu's own scroll box rather than clipped by an ancestor.
     const offscreen = await page.evaluate(() => {
       const m = document.querySelector('[role="menu"]') as HTMLElement;
       const box = m.getBoundingClientRect();
       const bad: string[] = [];
       if (box.top < 0 || box.left < 0 || box.right > window.innerWidth) bad.push("menu box");
       for (const r of Array.from(m.querySelectorAll('[role="menuitemradio"]'))) {
-        // Scroll each row into the menu's own viewport, then check the page.
         r.scrollIntoView({ block: "nearest" });
         const b = r.getBoundingClientRect();
         if (b.top < 0 || b.bottom > window.innerHeight || b.width === 0 || b.height === 0) {
@@ -77,14 +84,18 @@ for (const [label, width, height] of [
     });
     expect(offscreen, "speed options rendered outside the viewport").toEqual([]);
 
-    // And the extremes of the ladder are actually clickable, not just present.
+    // The extremes of the ladder are actually clickable, not merely present.
     await rows.filter({ hasText: "4×" }).click();
-    await expect(page.getByRole("button", { name: "Speed: 4×" })).toBeVisible();
+    await expect
+      .poll(() => page.locator("video").evaluate((el: HTMLVideoElement) => el.playbackRate))
+      .toBe(4);
   });
 }
 
-test("the speed menu escapes the player's overflow-hidden stage", async ({ page }) => {
-  await page.setViewportSize({ width: 360, height: 740 });
+test("the player's menus escape the overflow-hidden stage", async ({ page }) => {
+  // 900px viewport -> a stage wide enough for the bar's own Speed menu, so this
+  // covers BOTH popup paths (PlayerMenu and the overflow menu) in one place.
+  await page.setViewportSize({ width: 900, height: 700 });
   await mockWatchPage(page);
   await page.goto("/videos/v1");
   await page.getByRole("button", { name: "Speed: 1×" }).click();
@@ -105,3 +116,80 @@ test("the speed menu escapes the player's overflow-hidden stage", async ({ page 
   expect(geo.position).toBe("fixed");
   expect(geo.menuTop).toBeGreaterThanOrEqual(0);
 });
+
+// The control BAR. Its intrinsic width used to exceed the stage at every width
+// below ~1024px, and the surplus was silently eaten by the stage's
+// `overflow-hidden` — Fullscreen first, then PiP and Quality. The two
+// non-obvious widths are kept deliberately:
+//   640px  — the sidebar appears exactly where the old `sm:` breakpoints
+//            revealed MORE controls, so the stage NARROWS to ~356px while the
+//            bar demands ~200px more. This was the worst case, worse than 320.
+//   1024px — the row had zero slack, so an "Auto (1080p)" quality label clipped
+//            Fullscreen on a desktop.
+// e2e/responsive.spec.ts cannot see any of this: `overflow-hidden` stops the
+// overflow ever reaching document.scrollWidth, so it reports a clean viewport
+// while five controls are invisible.
+for (const [label, width, height] of [
+  ["small phone", 320, 640],
+  ["phone", 390, 844],
+  ["breakpoint edge", 640, 900],
+  ["tablet", 768, 1024],
+  ["small desktop", 1024, 800],
+  ["desktop", 1280, 900],
+] as const) {
+  test(`no control is clipped out of the player at ${label} (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await mockWatchPage(page);
+    await page.goto("/videos/v1");
+    await expect(page.getByTestId("player-controls")).toBeVisible();
+
+    const report = await page.evaluate(() => {
+      const stage = document.querySelector('[data-testid="video-player"]')!.getBoundingClientRect();
+      const bar = document.querySelector('[data-testid="player-controls"]')!;
+      const clipped: string[] = [];
+      for (const el of Array.from(bar.querySelectorAll("button, [role=slider]"))) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue; // tiered out by design
+        if (r.left < stage.left - 0.5 || r.right > stage.right + 0.5) {
+          clipped.push(el.getAttribute("aria-label") || (el.textContent || "").trim());
+        }
+      }
+      return { stageWidth: Math.round(stage.width), clipped };
+    });
+    expect(report.clipped, `controls clipped outside the player stage`).toEqual([]);
+  });
+
+  test(`every control stays reachable at ${label} (${width}px)`, async ({ page }) => {
+    // Tiering a control out of the bar is only acceptable if it lands in the
+    // overflow menu. Assert the union, not the bar.
+    await page.setViewportSize({ width, height });
+    await mockWatchPage(page);
+    await page.goto("/videos/v1");
+    await expect(page.getByTestId("player-controls")).toBeVisible();
+
+    const bar = page.getByTestId("player-controls");
+    const inBar = async (name: string) =>
+      (await bar.getByRole("button", { name, exact: true }).count()) > 0;
+
+    await page.getByRole("button", { name: "More player options" }).click();
+    const menu = page.getByRole("menu", { name: "More player options" });
+    await expect(menu).toBeVisible();
+
+    for (const name of ["Mute", "Captions", "Autoplay next", "Theater mode"]) {
+      const reachable =
+        (await inBar(name)) ||
+        (await inBar("Autoplay next is on")) ||
+        (await menu.getByRole("menuitemcheckbox", { name, exact: true }).count()) > 0;
+      expect(reachable, `${name} is unreachable at ${width}px`).toBe(true);
+    }
+    // Speed is a graded choice: reachable either as the bar's menu button or as
+    // a radio group in the overflow menu.
+    const speedReachable =
+      (await bar.getByRole("button", { name: /^Speed:/ }).count()) > 0 ||
+      (await menu.getByRole("group", { name: "Playback speed" }).count()) > 0;
+    expect(speedReachable, `Speed is unreachable at ${width}px`).toBe(true);
+
+    // Fullscreen is never tiered out — it is the control the old bar clipped.
+    await expect(bar.getByRole("button", { name: "Fullscreen" })).toBeVisible();
+  });
+}
