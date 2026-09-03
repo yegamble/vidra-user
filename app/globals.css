@@ -83,6 +83,24 @@
     0 12px 40px rgb(0 0 0 / 0.35)
   );
 
+  /*
+   * The lit edge. A blurred rectangle is not glass: what reads as glass is a
+   * 1px specular highlight along the TOP edge plus a shallow 135deg sheen,
+   * which together imply a light source above and in front of the panel — the
+   * Apple TV / visionOS material. Without them the chrome reads as "the page,
+   * but foggy"; with them it reads as a pane held above the page.
+   *
+   * Both are DECORATIVE: they carry no state and no meaning, and no text is
+   * ever placed on them. That is what lets them be dropped wholesale under
+   * Increase Contrast, Reduce Transparency and forced colors, where the
+   * material becomes an opaque panel instead (see the fallbacks below).
+   *
+   * The sheen is a colour stop rather than a whole gradient because
+   * `light-dark()` is defined for <color> only — it cannot switch an <image>.
+   */
+  --chrome-highlight: light-dark(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.28));
+  --chrome-sheen: light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.06));
+
   /* foreground / text */
   --fg: light-dark(#18181b, #f4f4f5); /* primary text */
   --fg-muted: light-dark(#5f5f68, #a1a1aa); /* secondary text — AA on every surface (darkened for the gray canvas) */
@@ -208,6 +226,20 @@
   --shadow-soft: 0 8px 30px rgb(0 0 0 / 0.06);
   --shadow-soft-strong: 0 8px 30px rgb(0 0 0 / 0.1);
 
+  /*
+   * Concentric radius scale. Radii are CONCENTRIC, not per-component: a child's
+   * corner must nest inside its parent's or the gap between the two curves
+   * visibly pinches (the Apple HIG "nested corners" rule). Fixing the ladder
+   * here is what makes that checkable — an arbitrary `rounded-[24px]` beside a
+   * `rounded-[22px]` parent is exactly the drift these tokens exist to stop.
+   * Tailwind v4 emits a `rounded-*` utility per --radius-* token.
+   */
+  --radius-btn: 10px;
+  --radius-input: 12px;
+  --radius-card: 16px;
+  --radius-dialog: 20px;
+  --radius-sheet: 22px;
+
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
@@ -275,6 +307,19 @@ body {
  * filtering a readable translucent/solid fallback.
  */
 .glass-chrome {
+  /*
+   * Deliberately does NOT set `position`. The lit-edge pseudo-element below
+   * positions against this element via the containing block that
+   * backdrop-filter itself establishes for absolutely-positioned descendants
+   * — so no `position: relative` is needed, and setting one would be actively
+   * harmful: this repo's cn() is a plain concat with no tailwind-merge, and
+   * this rule is emitted AFTER Tailwind's utilities, so `position: relative`
+   * here silently beat the `sticky` on the Header and the Sidebar. The header
+   * then scrolled away with the page (e2e/apple-ux.spec.ts caught it: the
+   * banner's y was -600 after a 600px scroll). Same failure class as the
+   * documented `p-0` icon squeeze — same-group declarations resolve by
+   * stylesheet order, not by what the className string looks like.
+   */
   border: 1px solid var(--chrome-border);
   background: var(--surface-raised);
   box-shadow: var(--chrome-shadow);
@@ -285,6 +330,37 @@ body {
     background: var(--chrome);
     -webkit-backdrop-filter: blur(24px) saturate(1.35);
     backdrop-filter: blur(24px) saturate(1.35);
+  }
+
+  /*
+   * The lit edge: a 1px specular highlight on the top edge plus a 135deg sheen
+   * falling away over the first ~46% of the panel. Drawn as a pseudo-element
+   * rather than extra box-shadows on .glass-chrome itself so that the flush
+   * header variant, which zeroes the element's own box-shadow, keeps its
+   * highlight.
+   *
+   * z-index: -1 puts it above the element's background but BELOW its content —
+   * text must never sit on the sheen, or its contrast becomes a function of a
+   * decorative gradient. That works without `isolation: isolate` because
+   * backdrop-filter already establishes a stacking context on the parent, and
+   * this rule only exists inside the @supports block that guarantees it.
+   *
+   * It inherits the radius so it tracks .glass-chrome-flush (radius 0), the
+   * sidebar sheet and the tab bar without a second set of values.
+   */
+  .glass-chrome::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      135deg,
+      var(--chrome-sheen) 0%,
+      rgb(255 255 255 / 0) 46%
+    );
+    box-shadow: inset 0 1px 0 0 var(--chrome-highlight);
   }
 }
 
@@ -483,6 +559,11 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
+
+  /* The highlight and sheen are decorative; drop them with the translucency. */
+  .glass-chrome::before {
+    display: none;
+  }
 }
 
 @media (prefers-contrast: more) {
@@ -491,6 +572,11 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
     background: var(--surface-raised);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+
+  /* The highlight and sheen are decorative; drop them with the translucency. */
+  .glass-chrome::before {
+    display: none;
   }
 }
 
@@ -501,5 +587,10 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
     box-shadow: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+
+  /* The highlight and sheen are decorative; drop them with the translucency. */
+  .glass-chrome::before {
+    display: none;
   }
 }

@@ -90,7 +90,7 @@ export function Sidebar() {
     // the 1.5rem gap the old floating (inset) header's offset left behind.
     <nav
       aria-label="Primary"
-      className={`glass-chrome sticky top-[4.25rem] mb-3 ml-3 mt-3 hidden max-h-[calc(100vh-5rem)] shrink-0 flex-col justify-between gap-2 self-start overflow-y-auto rounded-[22px] p-2 transition-[width] duration-200 motion-reduce:transition-none sm:flex ${
+      className={`glass-chrome sticky top-[4.25rem] mb-3 ml-3 mt-3 hidden max-h-[calc(100vh-5rem)] shrink-0 flex-col justify-between gap-2 self-start overflow-y-auto rounded-sheet p-2 transition-[width] duration-200 motion-reduce:transition-none sm:flex ${
         collapsed ? "w-16" : "w-56"
       }`}
     >
