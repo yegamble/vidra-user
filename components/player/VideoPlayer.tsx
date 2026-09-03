@@ -803,7 +803,7 @@ export function VideoPlayer({
               its snapshot flows through the same useSyncExternalStore wiring as
               the end card, so SSR/first-client render is stable. */}
           {variant === "watch" ? (
-            <div className="hidden @min-[620px]/stage:contents">
+            <div className="hidden @min-[700px]/stage:contents">
             <OverlayButton
               label={autoplayEnabled ? "Autoplay next is on" : "Autoplay next is off"}
               pressed={autoplayEnabled}
@@ -849,7 +849,7 @@ export function VideoPlayer({
               crowd the phone control bar). display:contents keeps it a flush flex
               item without an extra box. */}
           {variant === "watch" ? (
-            <div className="hidden @min-[620px]/stage:contents">
+            <div className="hidden @min-[860px]/stage:contents">
               <OverlayButton
                 label="Theater mode"
                 pressed={theater}
@@ -872,7 +872,7 @@ export function VideoPlayer({
               held off the narrowest phone bar (< sm) so it never crowds the
               always-visible core controls. */}
           {pipSupported ? (
-            <div className="hidden @min-[620px]/stage:contents">
+            <div className="hidden @min-[700px]/stage:contents">
               <OverlayButton
                 label={pipActive ? "Exit picture-in-picture" : "Picture-in-picture"}
                 pressed={pipActive}
