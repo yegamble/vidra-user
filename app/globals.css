@@ -97,9 +97,28 @@
    *
    * The sheen is a colour stop rather than a whole gradient because
    * `light-dark()` is defined for <color> only — it cannot switch an <image>.
+   *
+   * LIGHT IS DELIBERATELY ZERO, and that is a measurement, not an oversight.
+   * `--chrome` in light composites to rgb(253,253,253) over the canvas; white
+   * at 0.5 over that is 254. Measured with vs without the layer, the global max
+   * delta across a 1440x900 viewport was 4/255 — a single antialiased pixel on
+   * the sidebar's corner. Worse, the same white over a DARK backdrop (the
+   * header crossing a dark thumbnail) jumps 28 steps, so a non-zero light value
+   * is invisible at rest and flashes a bright diagonal only when dark media
+   * scrolls under it. In light the border and shadow already carry the
+   * separation; a lit edge is a dark-theme affordance here.
+   *
+   * The dark sheen is 0.03, and the number is load-bearing. The app's one
+   * hand-tuned contrast pair (`bg-accent/12 text-accent-text`) is the FIRST row
+   * of both navs, so it sits at the hot end of this 135deg gradient. Sampled on
+   * the real page against #8a87ff: 5.32:1 with no sheen, 5.00:1 at 0.03,
+   * 4.81:1 at 0.045, 4.6:1 at 0.06 — so anything above 0.03 breaks the >=5.0
+   * contract the spec states for that pair. axe cannot police this: axe-core
+   * does not read pseudo-element backgrounds, so it keeps reporting the
+   * pre-sheen number. Re-derive by hand on any change.
    */
-  --chrome-highlight: light-dark(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.28));
-  --chrome-sheen: light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.06));
+  --chrome-highlight: light-dark(rgb(255 255 255 / 0), rgb(255 255 255 / 0.28));
+  --chrome-sheen: light-dark(rgb(255 255 255 / 0), rgb(255 255 255 / 0.03));
 
   /* foreground / text */
   --fg: light-dark(#18181b, #f4f4f5); /* primary text */
@@ -227,17 +246,20 @@
   --shadow-soft-strong: 0 8px 30px rgb(0 0 0 / 0.1);
 
   /*
-   * Concentric radius scale. Radii are CONCENTRIC, not per-component: a child's
-   * corner must nest inside its parent's or the gap between the two curves
-   * visibly pinches (the Apple HIG "nested corners" rule). Fixing the ladder
-   * here is what makes that checkable — an arbitrary `rounded-[24px]` beside a
-   * `rounded-[22px]` parent is exactly the drift these tokens exist to stop.
-   * Tailwind v4 emits a `rounded-*` utility per --radius-* token.
+   * The nav-chrome panel radius, as a token rather than an arbitrary value:
+   * the tab bar was `rounded-[24px]` beside a `rounded-[22px]` sidebar, which is
+   * the drift this stops. Radii are CONCENTRIC — a child's corner must nest
+   * inside its parent's (the Apple HIG nested-corners rule), which is why the
+   * tab bar's cell is 17px: 22 minus the 4px `p-1` and the 1px border.
+   *
+   * Only the radius actually used is defined. The published system's full
+   * ladder (--r-btn 10 / --r-input 12 / --r-card 16 / --r-dialog 20 / --r-sheet
+   * 22 / --r-full 999) belongs with the migration that adopts it — Tailwind v4
+   * requires the `--radius-*` namespace to emit utilities, so the rename is a
+   * deliberate fork and is recorded in .ralph/specs/design-system.md rather
+   * than inferred. Shipping four unused tokens would be half a migration, which
+   * is worse than either end state.
    */
-  --radius-btn: 10px;
-  --radius-input: 12px;
-  --radius-card: 16px;
-  --radius-dialog: 20px;
   --radius-sheet: 22px;
 
   --color-canvas: var(--canvas);
@@ -360,6 +382,19 @@ body {
       var(--chrome-sheen) 0%,
       rgb(255 255 255 / 0) 46%
     );
+  }
+
+  /*
+   * The 1px specular highlight is a FLOATING-panel affordance, so it is scoped
+   * to the floating box. .ralph/specs/design-system.md defines the flush header
+   * by what it drops — radius, ring, shadow — in favour of a single bottom
+   * hairline; adding a lit top edge back would make it a third box. It is also
+   * physically wrong: the header is pinned to y=0 with nothing above it for a
+   * light source to be, and on a notched phone the line lands inside the
+   * status-bar strip. The header keeps the sheen, which is a property of the
+   * material rather than of the box.
+   */
+  .glass-chrome:not(.glass-chrome-flush)::before {
     box-shadow: inset 0 1px 0 0 var(--chrome-highlight);
   }
 }

@@ -130,7 +130,24 @@ labels, selected captions) and the tinted `bg-accent/12` active-pill recipe use
 `accent-text`, tuned (`#4f4dcb` light / `#8a87ff` dark) so `bg-accent/12
 text-accent-text` clears AA even over the gray canvas (≈5.0:1) — fills, focus
 rings, and large/bold accents use `accent`. axe remains the authority —
-recompute on any token change. (Operator custom-accent overrides only set
+recompute on any token change.
+
+**Amended 2026-09-03 (glass lit edge).** The dark-mode active-pill recipe now
+composites over `--chrome-sheen` as well: the active item is the first row of
+both navs, so it sits at the hot end of the sheen's 135° gradient. Sampled from
+a screenshot of the real page against `#8a87ff`, worst point on the pill:
+
+| `--chrome-sheen` (dark) | worst-point ratio |
+| --- | --- |
+| 0 (no sheen) | 5.32:1 |
+| **0.03 (shipped)** | **5.00:1** |
+| 0.045 | 4.81:1 |
+| 0.06 | ~4.6:1 |
+
+0.03 is therefore a ceiling, not a preference — anything above it breaks the
+≈5.0:1 contract stated above for that pair. **axe cannot police this**:
+axe-core's colour-contrast check does not read pseudo-element backgrounds, so it
+keeps reporting the pre-sheen number. Re-derive by hand on any change. (Operator custom-accent overrides only set
 `--accent`/`--accent-fg`; extending them to `--accent-text` is a config-wave
 follow-up.)
 
@@ -454,6 +471,48 @@ same material plus `.glass-chrome-flush`, which drops the radius, the ring, and
 the shadow in favour of a single bottom hairline — is the app header, which
 spans the viewport edge to edge with no top or side gutter. A new surface picks
 one of these two; it does not invent a third box.
+
+**The lit edge (added 2026-09-03).** The material carries a 1px specular
+highlight on its top edge (`--chrome-highlight`, dark 0.28) and a shallow 135°
+sheen (`--chrome-sheen`, dark 0.03 — see the contrast ceiling above), drawn by a
+`.glass-chrome::before` layer. Both are
+decorative — no text sits on them (the layer is `z-index: -1`, below content) —
+and all three accessibility fallbacks `display: none` the layer outright.
+
+Three rules that are load-bearing, each of which was a bug first:
+
+1. **The highlight belongs to the floating box only.** It is scoped to
+   `.glass-chrome:not(.glass-chrome-flush)`. A lit top edge is a floating-panel
+   affordance; the flush header is defined above by dropping exactly those, it
+   is pinned to y=0 with nothing above it to be lit by, and on a notched phone
+   the line would land inside the status-bar strip. The header keeps the sheen,
+   which is a property of the material rather than of the box.
+2. **`.glass-chrome` must never set `position`.** The pseudo-element positions
+   against the containing block `backdrop-filter` already establishes. Setting
+   `position: relative` in `globals.css` silently beats a `sticky` utility at
+   the call site — `cn()` has no tailwind-merge and `globals.css` is emitted
+   after Tailwind's utilities — and the header stops sticking. Consequently
+   **any element taking `.glass-chrome` must carry its own positioned utility**
+   (`sticky` or `relative`); relying on `backdrop-filter` alone is undefended
+   outside Chromium.
+3. **An element taking `.glass-chrome` must not itself scroll.** An `inset: 0`
+   pseudo whose containing block is a scroll container scrolls with the content,
+   so the highlight leaves the viewport on the first scroll. Put `overflow-y-auto`
+   on an inner wrapper (see `components/Sidebar.tsx`).
+
+Light-mode values are deliberately **zero**. `--chrome` composites to
+rgb(253,253,253) there, so white-on-white measured a global max delta of 4/255
+across a 1440×900 viewport — and a non-zero value flashes a bright diagonal only
+when dark media scrolls under the header. In light, the border and shadow carry
+the separation; the lit edge is a dark-theme affordance.
+
+**Radius token fork.** Tailwind v4 only emits `rounded-*` utilities from the
+`--radius-*` namespace, so the in-product token is `--radius-sheet: 22px` while
+the published system names the same value `--r-sheet`. The fork is deliberate.
+Only the radius with a call site is defined; the rest of the published ladder
+(`--r-btn` 10 / `--r-input` 12 / `--r-card` 16 / `--r-dialog` 20 / `--r-full`
+999) lands with the migration that adopts it. Nav-chrome children are
+concentric: the tab bar's cell is 17px = 22 − (4px `p-1` + 1px border).
 
 ## Component primitives (`components/ui/`)
 
