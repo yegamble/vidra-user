@@ -99,10 +99,10 @@ export function BottomTabBar() {
         aria-label="Primary"
         className="sticky bottom-0 z-30 bg-gradient-to-t from-canvas via-canvas/95 to-transparent px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2 sm:hidden"
       >
-        <ul className="glass-chrome flex items-stretch justify-around rounded-[24px] p-1">
+        <ul className="glass-chrome relative flex items-stretch justify-around rounded-sheet p-1">
           {TABS.map((tab) => {
             const active = isTabActive(tab, pathname);
-            const cellClass = `focus-ring relative mx-auto flex h-14 w-full max-w-20 flex-col items-center justify-center gap-1 rounded-[18px] transition-colors ${
+            const cellClass = `focus-ring relative mx-auto flex h-14 w-full max-w-20 flex-col items-center justify-center gap-1 rounded-[17px] transition-colors ${
               active
                 ? "bg-accent/12 text-accent-text"
                 : "text-fg-muted hover:bg-surface-muted/70 hover:text-fg"

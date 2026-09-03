@@ -267,6 +267,60 @@ test.describe("Apple HIG polish at desktop width", () => {
     await expectNoHorizontalScroll(page);
   });
 
+  test("the glass lit edge sits below content, skips the flush box, and drops out under the a11y fallbacks", async ({
+    page,
+  }) => {
+    await mockHome(page);
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Recent videos", level: 1 })).toBeVisible();
+
+    const sidebar = page.getByRole("navigation", { name: "Primary" });
+    const banner = page.getByRole("banner");
+
+    // The floating box carries the 1px specular highlight; the flush header
+    // deliberately does not (it is defined by dropping floating affordances,
+    // and there is nothing above a viewport-pinned bar to be lit by).
+    const edge = await sidebar.evaluate((el) => {
+      const b = getComputedStyle(el, "::before");
+      return { display: b.display, z: b.zIndex, shadow: b.boxShadow, w: b.width };
+    });
+    expect(edge.display).not.toBe("none");
+    // Negative z is what keeps the sheen out of every glyph's foreground.
+    expect(edge.z).toBe("-1");
+    expect(edge.shadow).not.toBe("none");
+    // Sized to the panel, which only holds while the panel itself never scrolls.
+    expect(parseFloat(edge.w)).toBeGreaterThan(0);
+    await expect
+      .poll(async () => sidebar.evaluate((el) => el.scrollHeight - el.clientHeight))
+      .toBeLessThanOrEqual(1);
+
+    expect(
+      await banner.evaluate((el) => getComputedStyle(el, "::before").boxShadow),
+      "the flush header must not take the floating box's lit edge",
+    ).toBe("none");
+
+    // All three fallbacks drop the decorative layer entirely.
+    const litEdgeDisplay = () =>
+      sidebar.evaluate((el) => getComputedStyle(el, "::before").display);
+    for (const media of [{ forcedColors: "active" as const }, { contrast: "more" as const }]) {
+      await page.emulateMedia(media);
+      expect(await litEdgeDisplay(), `the lit edge must not survive ${JSON.stringify(media)}`).toBe(
+        "none",
+      );
+    }
+    await page.emulateMedia({ forcedColors: null, contrast: null });
+
+    // Playwright's emulateMedia has no reducedTransparency knob, so drive that
+    // one through CDP — it is the fallback most likely to be quietly dropped.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
+    });
+    expect(await litEdgeDisplay(), "the lit edge must not survive Reduce Transparency").toBe("none");
+    await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+    await cdp.detach();
+  });
+
   test("keeps sticky chrome separated and the collapsed rail free of overflow", async ({
     page,
   }) => {

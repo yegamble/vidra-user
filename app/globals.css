@@ -83,6 +83,43 @@
     0 12px 40px rgb(0 0 0 / 0.35)
   );
 
+  /*
+   * The lit edge. A blurred rectangle is not glass: what reads as glass is a
+   * 1px specular highlight along the TOP edge plus a shallow 135deg sheen,
+   * which together imply a light source above and in front of the panel — the
+   * Apple TV / visionOS material. Without them the chrome reads as "the page,
+   * but foggy"; with them it reads as a pane held above the page.
+   *
+   * Both are DECORATIVE: they carry no state and no meaning, and no text is
+   * ever placed on them. That is what lets them be dropped wholesale under
+   * Increase Contrast, Reduce Transparency and forced colors, where the
+   * material becomes an opaque panel instead (see the fallbacks below).
+   *
+   * The sheen is a colour stop rather than a whole gradient because
+   * `light-dark()` is defined for <color> only — it cannot switch an <image>.
+   *
+   * LIGHT IS DELIBERATELY ZERO, and that is a measurement, not an oversight.
+   * `--chrome` in light composites to rgb(253,253,253) over the canvas; white
+   * at 0.5 over that is 254. Measured with vs without the layer, the global max
+   * delta across a 1440x900 viewport was 4/255 — a single antialiased pixel on
+   * the sidebar's corner. Worse, the same white over a DARK backdrop (the
+   * header crossing a dark thumbnail) jumps 28 steps, so a non-zero light value
+   * is invisible at rest and flashes a bright diagonal only when dark media
+   * scrolls under it. In light the border and shadow already carry the
+   * separation; a lit edge is a dark-theme affordance here.
+   *
+   * The dark sheen is 0.03, and the number is load-bearing. The app's one
+   * hand-tuned contrast pair (`bg-accent/12 text-accent-text`) is the FIRST row
+   * of both navs, so it sits at the hot end of this 135deg gradient. Sampled on
+   * the real page against #8a87ff: 5.32:1 with no sheen, 5.00:1 at 0.03,
+   * 4.81:1 at 0.045, 4.6:1 at 0.06 — so anything above 0.03 breaks the >=5.0
+   * contract the spec states for that pair. axe cannot police this: axe-core
+   * does not read pseudo-element backgrounds, so it keeps reporting the
+   * pre-sheen number. Re-derive by hand on any change.
+   */
+  --chrome-highlight: light-dark(rgb(255 255 255 / 0), rgb(255 255 255 / 0.28));
+  --chrome-sheen: light-dark(rgb(255 255 255 / 0), rgb(255 255 255 / 0.03));
+
   /* foreground / text */
   --fg: light-dark(#18181b, #f4f4f5); /* primary text */
   --fg-muted: light-dark(#5f5f68, #a1a1aa); /* secondary text — AA on every surface (darkened for the gray canvas) */
@@ -208,6 +245,23 @@
   --shadow-soft: 0 8px 30px rgb(0 0 0 / 0.06);
   --shadow-soft-strong: 0 8px 30px rgb(0 0 0 / 0.1);
 
+  /*
+   * The nav-chrome panel radius, as a token rather than an arbitrary value:
+   * the tab bar was `rounded-[24px]` beside a `rounded-[22px]` sidebar, which is
+   * the drift this stops. Radii are CONCENTRIC — a child's corner must nest
+   * inside its parent's (the Apple HIG nested-corners rule), which is why the
+   * tab bar's cell is 17px: 22 minus the 4px `p-1` and the 1px border.
+   *
+   * Only the radius actually used is defined. The published system's full
+   * ladder (--r-btn 10 / --r-input 12 / --r-card 16 / --r-dialog 20 / --r-sheet
+   * 22 / --r-full 999) belongs with the migration that adopts it — Tailwind v4
+   * requires the `--radius-*` namespace to emit utilities, so the rename is a
+   * deliberate fork and is recorded in .ralph/specs/design-system.md rather
+   * than inferred. Shipping four unused tokens would be half a migration, which
+   * is worse than either end state.
+   */
+  --radius-sheet: 22px;
+
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
@@ -275,6 +329,19 @@ body {
  * filtering a readable translucent/solid fallback.
  */
 .glass-chrome {
+  /*
+   * Deliberately does NOT set `position`. The lit-edge pseudo-element below
+   * positions against this element via the containing block that
+   * backdrop-filter itself establishes for absolutely-positioned descendants
+   * — so no `position: relative` is needed, and setting one would be actively
+   * harmful: this repo's cn() is a plain concat with no tailwind-merge, and
+   * this rule is emitted AFTER Tailwind's utilities, so `position: relative`
+   * here silently beat the `sticky` on the Header and the Sidebar. The header
+   * then scrolled away with the page (e2e/apple-ux.spec.ts caught it: the
+   * banner's y was -600 after a 600px scroll). Same failure class as the
+   * documented `p-0` icon squeeze — same-group declarations resolve by
+   * stylesheet order, not by what the className string looks like.
+   */
   border: 1px solid var(--chrome-border);
   background: var(--surface-raised);
   box-shadow: var(--chrome-shadow);
@@ -285,6 +352,50 @@ body {
     background: var(--chrome);
     -webkit-backdrop-filter: blur(24px) saturate(1.35);
     backdrop-filter: blur(24px) saturate(1.35);
+  }
+
+  /*
+   * The lit edge: a 1px specular highlight on the top edge plus a 135deg sheen
+   * falling away over the first ~46% of the panel. Drawn as a pseudo-element
+   * rather than extra box-shadows on .glass-chrome itself so that the flush
+   * header variant, which zeroes the element's own box-shadow, keeps its
+   * highlight.
+   *
+   * z-index: -1 puts it above the element's background but BELOW its content —
+   * text must never sit on the sheen, or its contrast becomes a function of a
+   * decorative gradient. That works without `isolation: isolate` because
+   * backdrop-filter already establishes a stacking context on the parent, and
+   * this rule only exists inside the @supports block that guarantees it.
+   *
+   * It inherits the radius so it tracks .glass-chrome-flush (radius 0), the
+   * sidebar sheet and the tab bar without a second set of values.
+   */
+  .glass-chrome::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      135deg,
+      var(--chrome-sheen) 0%,
+      rgb(255 255 255 / 0) 46%
+    );
+  }
+
+  /*
+   * The 1px specular highlight is a FLOATING-panel affordance, so it is scoped
+   * to the floating box. .ralph/specs/design-system.md defines the flush header
+   * by what it drops — radius, ring, shadow — in favour of a single bottom
+   * hairline; adding a lit top edge back would make it a third box. It is also
+   * physically wrong: the header is pinned to y=0 with nothing above it for a
+   * light source to be, and on a notched phone the line lands inside the
+   * status-bar strip. The header keeps the sheen, which is a property of the
+   * material rather than of the box.
+   */
+  .glass-chrome:not(.glass-chrome-flush)::before {
+    box-shadow: inset 0 1px 0 0 var(--chrome-highlight);
   }
 }
 
@@ -483,6 +594,11 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
+
+  /* The highlight and sheen are decorative; drop them with the translucency. */
+  .glass-chrome::before {
+    display: none;
+  }
 }
 
 @media (prefers-contrast: more) {
@@ -491,6 +607,11 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
     background: var(--surface-raised);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+
+  /* The highlight and sheen are decorative; drop them with the translucency. */
+  .glass-chrome::before {
+    display: none;
   }
 }
 
@@ -501,5 +622,10 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
     box-shadow: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+
+  /* The highlight and sheen are decorative; drop them with the translucency. */
+  .glass-chrome::before {
+    display: none;
   }
 }

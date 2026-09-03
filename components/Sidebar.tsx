@@ -88,13 +88,19 @@ export function Sidebar() {
     // Sticky offset = the flush header's sm height (3.5rem) + the same 0.75rem
     // gap the panel keeps in flow, so it parks directly under the bar instead of
     // the 1.5rem gap the old floating (inset) header's offset left behind.
+    // The panel itself must NOT scroll: an `inset: 0` pseudo-element (the glass
+    // lit edge) whose containing block is a scroll container scrolls WITH the
+    // content, so the highlight left the viewport the moment a tall sidebar
+    // scrolled — measured at 1440x420, the top row went rgb(96,96,97) ->
+    // rgb(31,31,32) at scrollTop 60. Scrolling an inner wrapper keeps the glass
+    // box a fixed height, and keeps the scrollbar out of the rounded corner.
     <nav
       aria-label="Primary"
-      className={`glass-chrome sticky top-[4.25rem] mb-3 ml-3 mt-3 hidden max-h-[calc(100vh-5rem)] shrink-0 flex-col justify-between gap-2 self-start overflow-y-auto rounded-[22px] p-2 transition-[width] duration-200 motion-reduce:transition-none sm:flex ${
+      className={`glass-chrome sticky top-[4.25rem] mb-3 ml-3 mt-3 hidden max-h-[calc(100vh-5rem)] shrink-0 flex-col justify-between gap-2 self-start rounded-sheet p-2 transition-[width] duration-200 motion-reduce:transition-none sm:flex ${
         collapsed ? "w-16" : "w-56"
       }`}
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
         <ul className="flex flex-col gap-0.5">
           {links.map((item) => (
             <li key={item.href}>
