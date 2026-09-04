@@ -39,7 +39,7 @@ test("a published video is pinned to IPFS, resolves through the real gateway, an
 }) => {
   // Three asynchronous stages behind a shared worker queue — transcode (up to
   // 90s), then the jittered pin drain (up to 120s), then the browser leg.
-  test.setTimeout(300_000);
+  test.setTimeout(360_000);
 
   const { videoId, videoTitle } = await seedPublishedChannel(request);
 

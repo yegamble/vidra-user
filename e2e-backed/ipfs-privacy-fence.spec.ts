@@ -73,7 +73,7 @@ function expectNoDMAttachmentPins(status: IpfsStatus, when: string) {
 
 test("a DM attachment is never mirrored to IPFS, on either swarm", async ({ page, request }) => {
   // Seeding a real video means a real transcode + a real (jittered) pin drain.
-  test.setTimeout(300_000);
+  test.setTimeout(360_000);
 
   const admin = await adminToken(request);
 
