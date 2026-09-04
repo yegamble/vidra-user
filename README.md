@@ -75,7 +75,7 @@ asserted in tests so a restyle cannot silently rename a control.
 
 | Need | Why |
 |------|-----|
-| Node.js 24+ + npm | Runtime and package manager (CI runs Node 24, image builds on `node:26-alpine`, `@types/node` ^26) |
+| Node.js 24+ + npm | Runtime and package manager (CI runs Node 24, image builds on `node:26-alpine`, `@types/node` ^26). Pinned in `package.json` `engines` and `.nvmrc` — run `nvm use` to match. |
 | `npx playwright install chromium` | Required before running any Playwright suite |
 | Docker (optional) | For the production image or a local backend stack |
 | A running `vidra-core` stack | Only for the backend-backed e2e suite |
@@ -141,10 +141,10 @@ Three layers:
 - **Unit / component** — `npm run test` runs Vitest against the `*.test.ts(x)` files
   colocated in `lib/`, `components/`, and `app/`.
 - **Mocked e2e** — `npm run e2e` runs the Playwright `chromium` project over `e2e/`
-  (94 specs). Every network call is intercepted; **no backend is required**. This is the
+  (97 specs). Every network call is intercepted; **no backend is required**. This is the
   suite `npm run ci` runs.
 - **Backend-backed e2e** — `npm run e2e:backed` runs the `backend-backed` project over
-  `e2e-backed/` (71 specs). It needs a live `vidra-core` stack and an app built against
+  `e2e-backed/` (75 specs). It needs a live `vidra-core` stack and an app built against
   it, and seeds a deterministic admin via a `backed-setup` project (`admin.setup.ts`). See
   `.ralph/AGENT.md` for the full recipe.
 
