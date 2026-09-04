@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import type { Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { watchPath } from "@/lib/watch-path";
 
 import {
   ROW_ACTION,
@@ -395,7 +396,7 @@ export function VideoRow({
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">
-          <Link href={`/videos/${video.id}`} className="hover:underline">
+          <Link href={watchPath(video)} className="hover:underline">
             {video.title}
           </Link>
         </p>

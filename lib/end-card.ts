@@ -3,6 +3,7 @@
 // (lib/end-card.test.ts) and shared by the EndCard component + the player shell.
 
 import type { Video } from "@/lib/api";
+import { watchPath } from "@/lib/watch-path";
 
 /** Default autoplay-next countdown length, in seconds (PLAY-08). */
 export const END_CARD_COUNTDOWN_SECONDS = 8;
@@ -23,7 +24,7 @@ export function pickNextVideo(related: readonly Video[] | null | undefined): Vid
  * RelatedRow's own linking so a remote "next" is never sent to the local route.
  */
 export function nextVideoHref(video: Video): string {
-  return video.remote === true ? `/remote/${video.id}` : `/videos/${video.id}`;
+  return video.remote === true ? `/remote/${video.id}` : watchPath(video);
 }
 
 /**

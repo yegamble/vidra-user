@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import type { ActiveUpload, Video } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { watchPath } from "@/lib/watch-path";
 
 // UploadRecoveryCard — server-side draft recovery (UPLOAD-02/03). On studio load
 // it reads GET /api/v1/me/uploads (the SERVER's list of the caller's unfinished
@@ -214,7 +215,7 @@ function RecoveryRow({
         <span role="status" className="text-success">
           Upload finished.{" "}
           {doneVideo.state === "published" ? (
-            <Link href={`/videos/${doneVideo.id}`} className="font-semibold underline">
+            <Link href={watchPath(doneVideo)} className="font-semibold underline">
               View “{doneVideo.title}”
             </Link>
           ) : (

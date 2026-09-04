@@ -11,6 +11,7 @@ import { useRestrictedMode } from "@/lib/device-preferences";
 import { useInstanceFeatures } from "@/lib/instance-features";
 import { usePlayerSettings } from "@/lib/player-settings";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { watchPath } from "@/lib/watch-path";
 
 export type VideoCardPresentation = {
   /** A federated remote card: remote watch route, cached remote poster, no local channel route. */
@@ -92,7 +93,7 @@ export function useVideoCardPresentation(
   const isRemote = options.localOnly === true ? false : video.remote === true;
   const watchHref = isRemote
     ? `/remote/${video.id}`
-    : `/videos/${video.id}${options.localWatchQuery ?? ""}`;
+    : watchPath(video, options.localWatchQuery ?? "");
 
   const sensitive = isSensitiveVideo(video);
   const blurSensitive = sensitive && policy === "blur";

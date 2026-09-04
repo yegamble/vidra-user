@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/playback-token-store";
 import { decideEmbed, type EmbedContext } from "@/lib/embed-privacy";
 import { parseStartTime } from "@/lib/start-time";
+import { watchPath } from "@/lib/watch-path";
 
 // The embed-privacy gate outcome (CORE-17): whether this framing may show the
 // video at all, decided before the detail is fetched. "open" ⇒ proceed to the
@@ -180,7 +181,7 @@ function EmbedVideo({
         playbackToken={playbackToken}
       >
         <Link
-          href={`/videos/${video.id}`}
+          href={watchPath(video)}
           target="_blank"
           rel="noopener noreferrer"
           className="absolute left-0 top-0 z-30 max-w-full truncate rounded-br-lg bg-black/60 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white"

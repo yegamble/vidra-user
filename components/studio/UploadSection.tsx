@@ -35,6 +35,7 @@ import { formatBytes, formatDateTime, formatDuration } from "@/lib/format";
 import { logger } from "@/lib/logger";
 import { isAcceptedVideoFile, videoAcceptAttr } from "@/lib/upload-accept";
 import { titleFromFilename } from "@/lib/upload-queue";
+import { watchPath } from "@/lib/watch-path";
 import {
   IMPORT_STAGES,
   importActiveStage,
@@ -982,7 +983,7 @@ export function UploadSection({
         result.state === "published" ? (
           <p role="status" className="text-sm text-success">
             Published!{" "}
-            <Link href={`/videos/${result.id}`} className="font-semibold underline">
+            <Link href={watchPath(result)} className="font-semibold underline">
               View “{result.title}”
             </Link>
           </p>

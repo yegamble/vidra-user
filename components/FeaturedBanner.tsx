@@ -4,6 +4,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { channelAvatarUrl, videoThumbnailUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
+import { watchPath } from "@/lib/watch-path";
 
 // FeaturedBanner is the admin-controlled home masthead (spec: WAVE C2 — the only
 // intentional "featured" slot; the accidental latest-upload hero was removed in
@@ -39,7 +40,7 @@ export function FeaturedBanner({
   ctaLabel?: string;
   label: "featured" | "sponsored";
 }) {
-  const href = `/videos/${video.id}`;
+  const href = watchPath(video);
   const heading = (title && title.trim()) || video.title;
   const blurb = (description && description.trim()) || video.description || "";
   const cta = (ctaLabel && ctaLabel.trim()) || "Watch now";
