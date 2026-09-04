@@ -76,11 +76,15 @@ test("the share dialog offers the short /v/ link, with an optional start time", 
   );
 });
 
-test("a short link redirects to the canonical watch page, query intact", async ({ page }) => {
+test("a short link lands on the watch page and STAYS short, query intact", async ({ page }) => {
   await mockWatch(page);
   await page.goto(`/v/${SID}?t=90`);
 
-  await expect(page).toHaveURL(new RegExp(`/videos/${VIDEO_ID}\\?t=90$`));
+  // /v/ still 301s to the canonical /videos/{uuid} route — that is what renders,
+  // and the stream assertion below is what proves it — but the watch page then
+  // rewrites the address bar back to the short alias, so a viewer never sees a
+  // raw UUID and what they copy out of the bar is the shareable link.
+  await expect(page).toHaveURL(new RegExp(`/v/${SID}\\?t=90$`));
   await expect(page.getByRole("heading", { name: "Short Link Me" })).toBeVisible();
   // The preserved ?t= still rides the stream src as a native media fragment.
   await expect(page.locator("video")).toHaveAttribute(
@@ -97,7 +101,8 @@ test("a legacy /videos/watch/ link redirects to the canonical watch page, query 
   // app never routed it, so it 404s without the next.config.ts redirect.
   await page.goto(`/videos/watch/${VIDEO_ID}?t=5`);
 
-  await expect(page).toHaveURL(new RegExp(`/videos/${VIDEO_ID}\\?t=5$`));
+  // next.config.ts redirects to /videos/{uuid}, which then shows the short alias.
+  await expect(page).toHaveURL(new RegExp(`/v/${SID}\\?t=5$`));
   await expect(page.getByRole("heading", { name: "Short Link Me" })).toBeVisible();
 });
 

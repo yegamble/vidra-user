@@ -48,7 +48,9 @@ test("blocking a user refuses direct messages until unblocked", async ({ page, r
   await openCommentActions();
   await page.getByRole("menuitem", { name: "Message", exact: true }).click();
   await expect(page.getByText("You can't message this user.")).toBeVisible();
-  await expect(page).toHaveURL(/\/videos\/[^/]+$/); // did NOT navigate to a thread
+  // did NOT navigate to a thread. Either watch-page spelling counts: the page
+  // renders at /videos/{uuid} and then shows its /v/{sid} short alias.
+  await expect(page).toHaveURL(/\/(videos|v)\/[^/]+$/);
 
   // Persistence: the block appears on the blocked-accounts page (a fresh API read).
   await page.getByRole("button", { name: "Open account menu" }).click();
