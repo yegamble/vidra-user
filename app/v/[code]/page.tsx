@@ -24,6 +24,15 @@ import { buildWatchMetadata } from "@/lib/watch-metadata";
 //
 // Nothing links here yet. Cards, the share dialog and the canonical stay on
 // /videos/{uuid} until the flip, so this route is additive.
+//
+// THERE IS DELIBERATELY NO loading.tsx HERE, and adding one silently breaks the
+// 404. A loading boundary puts the segment behind Suspense, so Next streams the
+// shell and commits a 200 before this component runs — notFound() then renders
+// the not-found UI inside an already-200 response. Measured against a real
+// build: with loading.tsx /v/not-a-valid-sid answers 200, without it 404, and
+// e2e/short-url.spec.ts asserts the 404. Restoring the skeleton needs the shape
+// check to move somewhere that runs before streaming (middleware), not a
+// loading file.
 
 // classify keeps the two encodings' handling in one place so the page body and
 // generateMetadata cannot drift on which is which.
