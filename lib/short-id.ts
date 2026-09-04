@@ -77,21 +77,3 @@ export function shortIdToUuid(sid: string): string | null {
   ].join("-");
 }
 
-/**
- * shortWatchUrl returns the short alias for the canonical watch URL the browser
- * is currently showing, or null when the address bar should be left alone.
- *
- * The watch page is routed at /videos/{uuid} and stays that way: og:/oEmbed
- * metadata, the RSS guid and core's own URL parsing all key on it, and /v/{sid}
- * is a 301 alias back to it. What this supports is DISPLAY — the address bar
- * showing the 22-character link a viewer would actually paste instead of a raw
- * UUID. Every other route that renders a watch surface (embed, live, remote) is
- * left alone, and so is a path naming a different video, which is what the
- * browser still shows during the render-before-navigation window.
- */
-export function shortWatchUrl(videoId: string, pathname: string, search: string): string | null {
-  const sid = uuidToShortId(videoId);
-  if (sid === null) return null;
-  if (pathname !== `/videos/${videoId}`) return null;
-  return `/v/${sid}${search}`;
-}

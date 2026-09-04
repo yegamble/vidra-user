@@ -102,9 +102,6 @@ export function WatchView({
   // non-recent default_feed_sort would silently reinterpret a bare /?tag=…
   // as the operator's default sort. null (defaults not landed / no backend)
   // reproduces the shipped recent/local baseline, i.e. the pre-W5 URLs.
-  // Show the short share link in the address bar. Display only — the route,
-  // and every URL the page's metadata advertises, stays /videos/{uuid}.
-  useShortWatchUrl(id ?? "");
   const instanceDefaults = useInstanceDefaults();
   // The signed-in viewer, so the comments section can offer the creator
   // pin/heart controls when this is the video owner's own channel (owner-only
@@ -126,6 +123,13 @@ export function WatchView({
   // short code and therefore never had one.
   const [lockedVideoId, setLockedVideoId] = useState<string | null>(null);
   const [video, setVideo] = useState<Video | null>(seed);
+  // Show the canonical short link in the address bar when this page was reached
+  // by uuid. Display only — /videos/{uuid} stays the route React is rendering.
+  // Driven by the FETCHED document, not the route param, so it also works for an
+  // owner-private video: the anonymous server fetch fails, but the client fetch
+  // with a session succeeds and carries the code.
+  useShortWatchUrl(video?.short_code);
+
   const [reloadKey, setReloadKey] = useState(0);
   // A minted, video-scoped playback token for a password-protected video
   // (CORE-17). Held in memory only (the module playback-token store + this state
@@ -596,6 +600,7 @@ export function WatchView({
             <AddToPlaylistButton videoId={video.id} />
             <ShareButton
               videoId={video.id}
+              shortCode={video.short_code}
               title={video.title}
               getCurrentTime={() => playerRef.current?.currentTime ?? 0}
             />

@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { api, videoThumbnailUrl } from "@/lib/api";
 import type { ChannelStatsResponse, Video, VideoStatsResponse } from "@/lib/api";
 import { formatCount } from "@/lib/format";
+import { watchPath } from "@/lib/watch-path";
 
 import { StateBadge, type Status } from "./shared";
 import { DistributionCard } from "./DistributionCard";
@@ -183,7 +184,7 @@ function LatestVideoCard({ handle }: { handle: string }) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">
-              <Link href={`/videos/${video.id}`} className="hover:underline">
+              <Link href={watchPath(video)} className="hover:underline">
                 {video.title}
               </Link>
             </p>

@@ -29,11 +29,19 @@ describe("end-card helpers", () => {
   });
 
   describe("nextVideoHref", () => {
-    it("routes a local video to /videos/{id}", () => {
+    it("routes a local video with a short code to /v/{code}", () => {
+      expect(nextVideoHref(vid("v9", { short_code: "abcdefghijk" }))).toBe("/v/abcdefghijk");
+    });
+    it("falls back to /videos/{id} when the card carries no code", () => {
       expect(nextVideoHref(vid("v9"))).toBe("/videos/v9");
     });
     it("routes a remote card to /remote/{id}", () => {
       expect(nextVideoHref(vid("r3", { remote: true }))).toBe("/remote/r3");
+    });
+    // A remote row's short_code comes back as "" from core's UNION feed
+    // queries, and an empty code must never become "/v/".
+    it("routes a remote card to /remote even with an empty code", () => {
+      expect(nextVideoHref(vid("r4", { remote: true, short_code: "" }))).toBe("/remote/r4");
     });
   });
 

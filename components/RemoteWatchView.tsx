@@ -13,6 +13,7 @@ import type { RemoteVideo } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
 import { useRemotePlayback } from "@/lib/use-playback-engine";
 import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
+import { watchPath } from "@/lib/watch-path";
 
 type Status = "loading" | "error" | "notfound" | "ready";
 
@@ -41,7 +42,7 @@ export function RemoteWatchView({ id }: { id: string }) {
 
   function playQueuedNext() {
     if (!queuedNext) return;
-    router.push(queuedNext.remote === true ? `/remote/${queuedNext.id}` : `/videos/${queuedNext.id}`);
+    router.push(queuedNext.remote === true ? `/remote/${queuedNext.id}` : watchPath(queuedNext));
   }
 
   useEffect(() => {

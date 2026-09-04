@@ -17,6 +17,7 @@
 import type { Metadata } from "next";
 
 import type { Video } from "@/lib/api/types";
+import { watchPath } from "@/lib/watch-path";
 import { brandingAssetUrl, twitterSiteHandle } from "@/lib/branding";
 import { apiBaseUrl } from "@/lib/config";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
@@ -40,7 +41,11 @@ export function metaDescription(raw: string | undefined | null): string {
 /** The oembed discovery href for a local watch URL (Wave F F3), or null. */
 export function oembedDiscoveryUrl(video: Video, origin: string | null | undefined): string | null {
   if (!origin) return null;
-  const canonical = `${origin}/videos/${encodeURIComponent(video.id)}`;
+  // The SAME url the page declares canonical — an unfurler passes this href
+  // back verbatim, so the two must not disagree. vidra-core#154 taught
+  // parseLocalVideoURL the 11-character form, so /v/{code} resolves there; a
+  // video with no code still yields /videos/{uuid}, which it has always parsed.
+  const canonical = `${origin}${watchPath(video)}`;
   return `${apiBaseUrl}/services/oembed?url=${encodeURIComponent(canonical)}&format=json`;
 }
 
@@ -70,13 +75,25 @@ export function buildWatchMetadata(
   // when we know the request origin AND the video resolved public (a null video
   // returned {} above, so private/unknown videos never advertise an oembed).
   const oembed = oembedDiscoveryUrl(video, origin);
-  if (oembed !== null) {
-    metadata.alternates = { types: { "application/json+oembed": [{ url: oembed, title }] } };
-  }
+  // The canonical is the short form when the video has a code, and BARE — no
+  // `?t=`, which names a moment in a video rather than a different video. Note
+  // the address-bar rewrite keeps `?t=` while this strips it; the two rules are
+  // easy to invert and mean opposite things.
+  //
+  // Relative on purpose: metadataBase (set above from the request origin, which
+  // honours x-forwarded-host) resolves it to an absolute URL. A canonical
+  // carrying the wrong host is worse than none at all — a crawler silently
+  // ignores it.
+  const canonical = watchPath(video);
+  metadata.alternates = {
+    canonical,
+    ...(oembed !== null ? { types: { "application/json+oembed": [{ url: oembed, title }] } } : {}),
+  };
 
   metadata.openGraph = {
     title,
     type: "video.other",
+    url: canonical,
     ...(description !== "" ? { description } : {}),
     ...(image !== null ? { images: [{ url: image }] } : {}),
   };

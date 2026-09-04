@@ -42,6 +42,7 @@ import {
 } from "@/lib/search-url";
 import { useAppendingList } from "@/lib/use-appending-list";
 import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
+import { watchPath } from "@/lib/watch-path";
 
 // The search page is a thumbnail-left list, not a browse grid. Matching that
 // geometry during the client fetch prevents the global/grid → spinner → rows
@@ -230,7 +231,7 @@ function SearchResultRow({
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
         <Link
-          href={isRemote ? `/remote/${video.id}` : `/videos/${video.id}`}
+          href={isRemote ? `/remote/${video.id}` : watchPath(video)}
           onClick={onSelect}
           className="focus-ring rounded-md"
         >
