@@ -6,7 +6,13 @@
 // gets one for free. Pure + dependency-free so it unit-tests in the node
 // environment and can be imported from a route handler or a client component.
 // TWIN: a byte-compatible Go implementation lives in vidra-core internal/shortid — keep the golden vectors in both test suites identical.
-const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+// Exported because the STORED short code (videos.short_code, an opaque
+// 11-character id the backend mints) is spelled in the same alphabet and its
+// validator must agree with this one character for character. The two are
+// otherwise unrelated: a stored code encodes nothing, while the sids here are a
+// reversible re-encoding of a video's UUID. Never decode one as the other.
+// TWIN: vidra-core exports the same constant as shortid.Alphabet.
+export const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // 16 bytes never encode to more than 22 base58 characters (58^22 > 2^128), and
 // never to fewer than 16 (all-zero bytes each cost one '1'). Bounding the

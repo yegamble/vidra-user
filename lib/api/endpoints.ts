@@ -288,6 +288,17 @@ export const api = {
     apiRequest<Video>(`/api/v1/videos/${encodeURIComponent(id)}`, { token, signal }),
 
   /**
+   * GET /api/v1/videos/resolve?code= — the same video detail, named by its
+   * opaque short code instead of its uuid. Core runs it through the identical
+   * visibility path, so a password-protected video answers 401
+   * `password_required` here exactly as it does by id — and that 401 carries
+   * the video's uuid, which is what lets an unlock prompt on a /v/{code} page
+   * reach POST /videos/{id}/unlock.
+   */
+  getVideoByCode: (code: string, token?: string, signal?: AbortSignal) =>
+    apiRequest<Video>(`/api/v1/videos/resolve?code=${encodeURIComponent(code)}`, { token, signal }),
+
+  /**
    * POST /api/v1/videos/{id}/playback-session — the one call the player makes
    * before it plays (phase-4 delivery item 1). Answers which manifests exist,
    * the packaging format they describe, the ladder rungs, a session id for

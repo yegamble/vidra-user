@@ -24,3 +24,19 @@ export const getPublicVideo = cache(
       freshness: { revalidateSeconds: PUBLIC_VIDEO_REVALIDATE_SECONDS },
     }),
 );
+
+/**
+ * Fetch one video by its opaque short code, server-side and anonymous. Never
+ * throws; a locked, private or unknown video resolves to null exactly as the
+ * by-id fetch does.
+ *
+ * The code is the identifier the /v/{code} route carries, and core answers it
+ * through the same visibility and detail path as GET /videos/{id} — so a page
+ * built on this sees precisely what the by-id page sees.
+ */
+export const getPublicVideoByCode = cache(
+  async (code: string): Promise<Video | null> =>
+    serverJson<Video>(`/api/v1/videos/resolve?code=${encodeURIComponent(code)}`, {
+      freshness: { revalidateSeconds: PUBLIC_VIDEO_REVALIDATE_SECONDS },
+    }),
+);

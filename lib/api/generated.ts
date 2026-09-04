@@ -1521,6 +1521,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve a public identifier to a video
+         * @description Returns exactly what GET /videos/{id} returns, for a video named by one of the two public identifiers that are not its uuid. Give exactly one of the query parameters.
+         *     `code` is the opaque 11-character short_code that the public /v/{code} watch URL is built from.
+         *     `legacy_uuid` is a uuid from a URL this instance no longer mints: either its own /videos/watch/{uuid} form, which remote ActivityPub servers still hold, or the SOURCE uuid of a video imported from a PeerTube instance — the value that instance's /w/{shortUUID} links decode to. That second case is what keeps an imported instance's existing links working after its domain is pointed at Vidra. This instance's own id namespace wins if a value somehow appears in both.
+         *     Visibility, password and moderator/admin rules are decided by the same code path as GET /videos/{id}, so the ways of naming one video cannot diverge.
+         *     Naming no identifier, or both, is 400 — a caller mistake with nothing to hide. But an identifier that is malformed and one that simply resolves to nothing BOTH answer 404, never 400: a distinguishable reply would let an unauthenticated caller tell a real unknown code from a badly-formed one, and an unlisted video is protected by the obscurity of its code alone.
+         *     This endpoint is a static sibling of /videos/config and /videos/search rather than /videos/by-code/{code}, because that shape does not resolve unambiguously against /videos/{id}/{subresource}.
+         */
+        get: operations["resolveVideo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}": {
         parameters: {
             query?: never;
@@ -5090,6 +5115,15 @@ export interface components {
                     /** @example must be a valid email */
                     message: string;
                 }[];
+                /**
+                 * Format: uuid
+                 * @description The video a password_required 401 refers to. Present ONLY on that code.
+                 *     It is not a leak: a password_required response already admits the video exists — that is its documented purpose — and the caller reached it by presenting one of the video's public identifiers already. Nor is it a credential: every read path re-runs the same password gate keyed on this id, so holding it opens nothing without the password or a playback token.
+                 *     It is present because a caller who arrived by short code has no other way to reach POST /videos/{id}/unlock, which is keyed on the uuid.
+                 */
+                video_id?: string;
+                /** @description The same video's short code, alongside video_id and under the same reasoning. Present ONLY on password_required. */
+                short_code?: string;
             };
         };
         InstanceResponse: {
@@ -5693,6 +5727,11 @@ export interface components {
         Video: {
             /** Format: uuid */
             id: string;
+            /**
+             * @description The video's opaque 11-character public id, minted by the database and immutable. It is what the public /v/{code} watch URL is built from, and it can be resolved with GET /videos/by-code/{code}.
+             *     Present on every LOCAL view: the detail response, create/update, and the feed, search, subscriptions, channel, saved, history and playlist cards. Omitted only on remote federated cards, which have no local code and link out via watch_url instead.
+             */
+            short_code?: string;
             /** @description Whether this card is a federated REMOTE video. Local videos are always false. Remote cards (subscriptions feed, search, and the public feed with scope=all) omit the local-only fields (channel_id, privacy, state) and instead carry domain, watch_url, and optionally stream_url; their metadata detail lives at GET /remote-videos/{id} and their cached poster at GET /remote-videos/{id}/thumbnail. */
             remote: boolean;
             /**
@@ -12668,6 +12707,58 @@ export interface operations {
             };
             /** @description More than 20 events, or an unsupported event type. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resolveVideo: {
+        parameters: {
+            query?: {
+                /** @description The video's short_code. Mutually exclusive with legacy_uuid. */
+                code?: string;
+                /** @description A video uuid from an older public URL, or an imported PeerTube video's source uuid. Mutually exclusive with code. */
+                legacy_uuid?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The video. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Video"];
+                };
+            };
+            /** @description Neither identifier was given, or both were. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The video is password protected and the caller presented no valid credential. Error code "password_required". */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No video is named by that identifier, the identifier is malformed, or the video is not visible to this caller. The three are deliberately indistinguishable. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
