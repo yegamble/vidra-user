@@ -49,10 +49,28 @@ export async function generateMetadata({
   return buildWatchMetadata(video, instance, origin);
 }
 
+// queryString rebuilds the incoming query for the legacy redirect.
+//
+// The route handler this file replaces forwarded req.nextUrl.search verbatim. A
+// page never sees the raw string, so it is reassembled from searchParams —
+// and it MUST be, because `?t=` start times ride on these links: dropping it
+// silently starts every shared timestamp link from zero.
+function queryString(sp: Record<string, string | string[] | undefined>): string {
+  const out = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string") out.append(k, v);
+    else if (Array.isArray(v)) for (const one of v) out.append(k, one);
+  }
+  const s = out.toString();
+  return s === "" ? "" : `?${s}`;
+}
+
 export default async function ShortCodeWatchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ code: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { code } = await params;
   const what = classify(code);
@@ -61,7 +79,7 @@ export default async function ShortCodeWatchPage({
     // Unchanged behaviour, and deliberately not resolved to a short code here:
     // /videos/{uuid} is still the canonical watch URL, so sending the viewer
     // anywhere else would move the canonical ahead of the rest of the system.
-    permanentRedirect(`/videos/${what.uuid}`);
+    permanentRedirect(`/videos/${what.uuid}${queryString(await searchParams)}`);
   }
   if (what.kind === "unknown") {
     // Neither encoding. 404 without spending a backend round trip.

@@ -38,7 +38,7 @@ describe("ShortCodeWatchPage", () => {
     const video = { id: UUID, short_code: CODE, title: "Seeded" } as Video;
     mocks.getPublicVideoByCode.mockResolvedValue(video);
 
-    const page = await ShortCodeWatchPage({ params: Promise.resolve({ code: CODE }) });
+    const page = await ShortCodeWatchPage({ params: Promise.resolve({ code: CODE }), searchParams: Promise.resolve({}) });
     const watchView = page.props.children;
 
     expect(mocks.getPublicVideoByCode).toHaveBeenCalledWith(CODE);
@@ -51,7 +51,7 @@ describe("ShortCodeWatchPage", () => {
   // could not reach their own unlisted video by its short link.
   it("still renders when the anonymous seed is null", async () => {
     mocks.getPublicVideoByCode.mockResolvedValue(null);
-    const page = await ShortCodeWatchPage({ params: Promise.resolve({ code: CODE }) });
+    const page = await ShortCodeWatchPage({ params: Promise.resolve({ code: CODE }), searchParams: Promise.resolve({}) });
     expect(page.props.children.props).toMatchObject({ code: CODE, initialVideo: null });
     expect(mocks.notFound).not.toHaveBeenCalled();
   });
@@ -61,7 +61,7 @@ describe("ShortCodeWatchPage", () => {
   it("redirects a legacy derived sid to the canonical watch URL", async () => {
     const sid = uuidToShortId(UUID)!;
     await expect(
-      ShortCodeWatchPage({ params: Promise.resolve({ code: sid }) }),
+      ShortCodeWatchPage({ params: Promise.resolve({ code: sid }), searchParams: Promise.resolve({}) }),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.permanentRedirect).toHaveBeenCalledWith(`/videos/${UUID}`);
     expect(mocks.getPublicVideoByCode).not.toHaveBeenCalled();
@@ -70,9 +70,34 @@ describe("ShortCodeWatchPage", () => {
   it("404s anything that is neither encoding, without a backend round trip", async () => {
     for (const bad of ["nope", "abcdefghij0", UUID, ""]) {
       await expect(
-        ShortCodeWatchPage({ params: Promise.resolve({ code: bad }) }),
+        ShortCodeWatchPage({ params: Promise.resolve({ code: bad }), searchParams: Promise.resolve({}) }),
       ).rejects.toThrow("NEXT_NOT_FOUND");
       expect(mocks.getPublicVideoByCode).not.toHaveBeenCalled();
     }
+  });
+
+  // ?t= start times ride on these links. The route handler this page replaced
+  // forwarded req.nextUrl.search verbatim; a page never sees the raw string, so
+  // dropping it here would silently start every shared timestamp link at zero.
+  it("carries the query string through the legacy redirect", async () => {
+    const sid = uuidToShortId(UUID)!;
+    await expect(
+      ShortCodeWatchPage({
+        params: Promise.resolve({ code: sid }),
+        searchParams: Promise.resolve({ t: "90" }),
+      }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+    expect(mocks.permanentRedirect).toHaveBeenCalledWith(`/videos/${UUID}?t=90`);
+  });
+
+  it("keeps repeated query values on the legacy redirect", async () => {
+    const sid = uuidToShortId(UUID)!;
+    await expect(
+      ShortCodeWatchPage({
+        params: Promise.resolve({ code: sid }),
+        searchParams: Promise.resolve({ tag: ["a", "b"], t: "5" }),
+      }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+    expect(mocks.permanentRedirect).toHaveBeenCalledWith(`/videos/${UUID}?tag=a&tag=b&t=5`);
   });
 });
