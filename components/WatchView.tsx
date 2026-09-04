@@ -183,8 +183,16 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   // Content-addressed IPFS HLS master, present only when the detail carries a
   // pinned HLS CID + gateway AND the video has a transcoded ladder (IPFS
   // playback is HLS). Drives whether the source bar is offered at all.
+  //
+  // The `ipfs` object IS the detail's pinned signal — it is emitted only for a
+  // public+published video whose ledger row is state='pinned' on the PUBLIC swarm.
+  // This deliberately does NOT gate on `ipfs_pinned`: that flag is a CARD/FEED
+  // field ("Drives the IPFS thumbnail badge on card/feed views"), set by the list
+  // handlers only, and GET /videos/{id} never sends it — so requiring it here hid
+  // the bar on every real backend while the mocked spec, which fabricated the
+  // flag, stayed green. e2e-backed/ipfs.spec.ts is the live-mirror regression test.
   const ipfsMasterUrl = ipfsHlsMasterUrl(video?.ipfs);
-  const ipfsAvailable = Boolean(video?.ipfs_pinned && ipfsMasterUrl && video?.hls_url);
+  const ipfsAvailable = Boolean(ipfsMasterUrl && video?.hls_url);
 
   useEffect(() => {
     const controller = new AbortController();

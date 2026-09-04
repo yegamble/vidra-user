@@ -567,11 +567,17 @@ export async function videoComments(
   ).comments;
 }
 
-/** videoDetail reads a video's public detail (title/description/taxonomy/HLS) via the API. */
-export async function videoDetail(
-  request: APIRequestContext,
-  videoId: string,
-): Promise<{
+/**
+ * VideoDetail is the subset of GET /api/v1/videos/{id} the backed suite reads.
+ *
+ * `ipfs` is the DETAIL view's pinned-mirror signal: core emits a CID only for a
+ * public+published video whose ledger row is state='pinned' on the PUBLIC swarm
+ * (vidra-core internal/ipfsmirror/service.go VideoPins). `ipfs_pinned` is a
+ * CARD/FEED field (openapi: "Drives the IPFS thumbnail badge on card/feed
+ * views") and the detail handler never sets it — it is typed here only so a spec
+ * can say so out loud rather than accidentally depending on it.
+ */
+type VideoDetail = {
   title: string;
   description: string;
   category?: string;
@@ -582,20 +588,17 @@ export async function videoDetail(
   renditions?: Array<{ height: number; width: number }>;
   packaging_format?: "hls-ts" | "cmaf";
   dash_url?: string;
-}> {
+  ipfs_pinned?: boolean;
+  ipfs?: { original_cid?: string; hls_cid?: string; gateway_url?: string };
+};
+
+/** videoDetail reads a video's public detail (title/description/taxonomy/HLS) via the API. */
+export async function videoDetail(
+  request: APIRequestContext,
+  videoId: string,
+): Promise<VideoDetail> {
   const res = await request.get(`${API_URL}/api/v1/videos/${videoId}`);
-  return (await res.json()) as {
-    title: string;
-    description: string;
-    category?: string;
-    language?: string;
-    license?: string;
-    tags?: string[];
-    hls_url?: string;
-    renditions?: Array<{ height: number; width: number }>;
-    packaging_format?: "hls-ts" | "cmaf";
-    dash_url?: string;
-  };
+  return (await res.json()) as VideoDetail;
 }
 
 /**
@@ -653,6 +656,86 @@ export async function waitForHls(
     }
     await new Promise((r) => setTimeout(r, 1_000));
   }
+}
+
+/**
+ * waitForIpfsPin polls a video's public detail until the IPFS mirror has pinned
+ * its HLS tree — i.e. the detail carries `ipfs.hls_cid` + `ipfs.gateway_url`,
+ * which is what the watch page's IPFS source bar is built from. Returns the
+ * detail. Requires the backed stack to run with IPFS_ENABLED=true AND
+ * TRANSCODING_ENABLED=true (the ipfs-backed job in frontend-e2e-backed.yml sets
+ * both); fails loudly after the deadline instead of passing on mocks.
+ *
+ * Call it AFTER waitForHls: the HLS pin is armed by the transcode-completion
+ * hook (vidra-core internal/ipfsmirror/service.go OnTranscodeComplete), so there
+ * is nothing to wait for until the ladder exists.
+ *
+ * Budget: pinning is asynchronous and un-leadered — the drain worker ticks every
+ * 10s after a randomised start (vidra-core cmd/api/main.go runIPFSMirrorWorker),
+ * and each pass adds+pins at most 8 rows, of which one video contributes five
+ * (original, hls, thumbnail, storyboard, storyboard_vtt). Under a shared queue
+ * that is several ticks, hence the generous default.
+ */
+export async function waitForIpfsPin(
+  request: APIRequestContext,
+  videoId: string,
+  timeoutMs = 120_000,
+): Promise<Awaited<ReturnType<typeof videoDetail>>> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const detail = await videoDetail(request, videoId);
+    if (detail.ipfs?.hls_cid && detail.ipfs.gateway_url) return detail;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `video ${videoId} was not IPFS-pinned within ${timeoutMs}ms (ipfs=${JSON.stringify(
+          detail.ipfs ?? null,
+        )}) — is the backed stack running with IPFS_ENABLED=true and a reachable kubo node?`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+}
+
+/** One media class's pin tally from GET /api/v1/ipfs/status (schema IPFSClassPinCounts). */
+export type IpfsClassCounts = {
+  media_class: string;
+  pinned: number;
+  pending: number;
+  failed: number;
+  unpinned: number;
+};
+
+/** The subset of GET /api/v1/ipfs/status (schema IPFSStatus) the backed suite reads. */
+export type IpfsStatus = {
+  enabled: boolean;
+  node_reachable: boolean;
+  gateway_url: string;
+  pins: { pinned: number; pending: number; failed: number; unpinned: number };
+  by_class: IpfsClassCounts[];
+  networks: {
+    public: { enabled: boolean; by_class: IpfsClassCounts[] };
+    private: { enabled: boolean; by_class: IpfsClassCounts[] };
+  };
+};
+
+/**
+ * ipfsStatus reads the admin IPFS mirror status (GET /api/v1/ipfs/status,
+ * admin-only) — whether the mirror is on, the node is reachable, and the pin
+ * tally overall + per media class. `by_class` is a GROUP BY over the pin ledger,
+ * so a class appears there only once a row exists for it: an ABSENT class is
+ * proof nothing of that kind was ever enqueued.
+ */
+export async function ipfsStatus(
+  request: APIRequestContext,
+  token: string,
+): Promise<IpfsStatus> {
+  const res = await request.get(`${API_URL}/api/v1/ipfs/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok()) {
+    throw new Error(`GET /ipfs/status answered ${res.status()}: ${await res.text()}`);
+  }
+  return (await res.json()) as IpfsStatus;
 }
 
 /**
