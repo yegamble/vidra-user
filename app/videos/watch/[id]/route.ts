@@ -1,4 +1,5 @@
 import { getPublicVideoByLegacyUUID } from "@/lib/video.server";
+import { watchPath } from "@/lib/watch-path";
 
 // /videos/watch/{uuid} is the legacy watch path, and it carries TWO namespaces:
 //
@@ -29,11 +30,12 @@ export async function GET(
   // next.config rule had for an unresolvable id: the watch page renders and
   // reports "not found" itself, and a private video still reaches its owner
   // through the authenticated client fetch. Never worse than before.
-  const target = video === null ? id : video.id;
+  //
+  // A resolved video goes straight to its canonical /v/{code} — one hop, not
+  // two via /videos/{uuid}, which now renders rather than redirects.
+  const search = new URL(req.url).search;
+  const location = video === null ? `/videos/${encodeURIComponent(id)}${search}` : watchPath(video, search);
 
-  // 302 while the canonical is mid-migration; see app/w/[sid]/route.ts.
-  return new Response(null, {
-    status: 302,
-    headers: { location: `/videos/${target}${new URL(req.url).search}` },
-  });
+  // Still 302, NOT 301; see app/w/[sid]/route.ts for why.
+  return new Response(null, { status: 302, headers: { location } });
 }
