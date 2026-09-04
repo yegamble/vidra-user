@@ -146,7 +146,6 @@ import type {
   UpdateUserRequest,
   UpdatePlaylistRequest,
   UpdateVideoRequest,
-  UploadVideoResult,
   CreateUploadSessionRequest,
   UploadSessionResponse,
   UploadStatusResponse,
@@ -786,29 +785,6 @@ export const api = {
   deleteVideo: (id: string) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  /**
-   * POST /api/v1/videos/{id}/file — upload the original file (auth, owner). The
-   * multipart body moves the draft to processing and (with no prober) publishes it.
-   * The ONE XHR-based call (fetch cannot report request-body progress):
-   * `onProgress` receives determinate byte progress, and aborting `signal`
-   * cancels the transfer (the promise rejects with the "upload_cancelled"
-   * ApiError — see isUploadCancelled). Errors carry the same ApiError envelope
-   * as every apiRequest call.
-   */
-  uploadVideoFile: (
-    videoId: string,
-    file: File,
-    onProgress?: (progress: UploadProgress) => void,
-    signal?: AbortSignal,
-  ) => {
-    const form = new FormData();
-    form.append("file", file);
-    return uploadWithProgress<UploadVideoResult>(
-      `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(videoId)}/file`,
-      form,
-      { token: getAccessToken(), onProgress, signal },
-    );
-  },
 
   /**
    * POST /api/v1/videos/{id}/thumbnail — set a custom poster image (auth, owner,
@@ -1144,16 +1120,6 @@ export const api = {
       body: { password },
     }),
 
-  /**
-   * PUT /api/v1/videos/{id}/passwords — replace a video's whole password set
-   * (owner). 1–20 entries, each 6–100 characters (else 400). Returns the stored
-   * set (id + created_at).
-   */
-  replaceVideoPasswords: (id: string, passwords: string[]) =>
-    apiRequest<VideoPasswords>(`/api/v1/videos/${encodeURIComponent(id)}/passwords`, {
-      method: "PUT",
-      body: { passwords },
-    }),
 
   /**
    * DELETE /api/v1/videos/{id}/passwords/{passwordId} — remove one password
@@ -1489,19 +1455,6 @@ export const api = {
       signal,
     }),
 
-  /**
-   * GET /api/v1/conversations/{id}/messages — a conversation's messages, newest
-   * first (auth). A non-participant (or unknown conversation) is 404.
-   */
-  getMessages: (
-    conversationId: string,
-    params: PageParams = {},
-    signal?: AbortSignal,
-  ) =>
-    apiRequest<MessageListResponse>(
-      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { query: pageQuery(params), signal },
-    ),
 
   /**
    * GET /api/v1/conversations/{id}/messages — a conversation's messages, newest
@@ -2092,6 +2045,12 @@ export const api = {
    * GET /api/v1/admin/storage/migrations/{id} — one campaign (admin only).
    * The single-campaign view is the only one that carries the per-state
    * `objects` breakdown; the list omits it.
+   *
+   * UNREACHABLE FROM THE UI as of 2026-09: AdminInfrastructureView renders the
+   * LIST (getStorageMigrations) but never a per-campaign detail, so the
+   * `objects` breakdown this endpoint exists to deliver has no surface. Kept
+   * deliberately — this is a missing admin view, not dead code, and deleting
+   * the wrapper would erase the only evidence of the gap.
    */
   getStorageMigration: (id: string, signal?: AbortSignal) =>
     apiRequest<StorageMigration>(

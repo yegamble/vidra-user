@@ -218,15 +218,9 @@ describe("api endpoints", () => {
 
     fetchMock.mockClear();
     await api.addVideoPassword("v1", "secret9");
-    let init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ password: "secret9" });
-
-    fetchMock.mockClear();
-    await api.replaceVideoPasswords("v1", ["one-pass", "two-pass"]);
-    init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
-    expect(init.method).toBe("PUT");
-    expect(JSON.parse(init.body as string)).toEqual({ passwords: ["one-pass", "two-pass"] });
 
     fetchMock.mockClear();
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
@@ -722,54 +716,6 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
-  it("uploadVideoFile POSTs multipart form data via XHR (no JSON content-type)", async () => {
-    // The one XHR-based call (byte-level progress; see lib/api/upload.ts) —
-    // stub a minimal XMLHttpRequest instead of fetch.
-    class FakeXHR {
-      static last: FakeXHR | null = null;
-      method = "";
-      url = "";
-      headers: Record<string, string> = {};
-      body: unknown = undefined;
-      status = 0;
-      responseText = "";
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      onabort: (() => void) | null = null;
-      upload: { onprogress: ((e: unknown) => void) | null } = { onprogress: null };
-      constructor() {
-        FakeXHR.last = this;
-      }
-      open(method: string, url: string): void {
-        this.method = method;
-        this.url = url;
-      }
-      setRequestHeader(name: string, value: string): void {
-        this.headers[name.toLowerCase()] = value;
-      }
-      send(body?: unknown): void {
-        this.body = body;
-      }
-      abort(): void {
-        this.onabort?.();
-      }
-    }
-    vi.stubGlobal("XMLHttpRequest", FakeXHR);
-
-    const file = new File(["x"], "clip.mp4", { type: "video/mp4" });
-    const promise = api.uploadVideoFile("v1", file);
-    const xhr = FakeXHR.last as FakeXHR;
-    expect(xhr.url).toBe("http://localhost:8080/api/v1/videos/v1/file");
-    expect(xhr.method).toBe("POST");
-    expect(xhr.body).toBeInstanceOf(FormData);
-    expect((xhr.body as FormData).get("file")).toBeInstanceOf(File);
-    expect(xhr.headers["content-type"]).toBeUndefined();
-    xhr.status = 200;
-    xhr.responseText = JSON.stringify({ video: { id: "v1" } });
-    xhr.onload?.();
-    await expect(promise).resolves.toMatchObject({ video: { id: "v1" } });
-  });
-
   it("createLiveStream POSTs the metadata to the channel live endpoint", async () => {
     await api.createLiveStream("ada", {
       title: "Show",
@@ -1157,11 +1103,6 @@ describe("api endpoints", () => {
   it("getConversations targets the inbox endpoint with pagination", async () => {
     await api.getConversations({ limit: 20 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/conversations?limit=20");
-  });
-
-  it("getMessages targets a conversation's messages with pagination", async () => {
-    await api.getMessages("c1", { limit: 50 });
-    expect(calledUrl()).toBe("http://localhost:8080/api/v1/conversations/c1/messages?limit=50");
   });
 
   it("sendMessage POSTs the body to a conversation's messages", async () => {
