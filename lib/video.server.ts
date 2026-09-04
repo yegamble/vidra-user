@@ -40,3 +40,19 @@ export const getPublicVideoByCode = cache(
       freshness: { revalidateSeconds: PUBLIC_VIDEO_REVALIDATE_SECONDS },
     }),
 );
+
+/**
+ * Resolve a uuid from an OLDER public URL to the video it now names,
+ * server-side and anonymous. Never throws.
+ *
+ * Two namespaces reach this and both are uuids, so core serves them with one
+ * lookup: this instance's own id (the /videos/watch/{uuid} form remote
+ * ActivityPub servers still hold) and the SOURCE uuid of a video imported from
+ * a PeerTube instance, which is what its /w/{shortUUID} links decode to.
+ */
+export const getPublicVideoByLegacyUUID = cache(
+  async (uuid: string): Promise<Video | null> =>
+    serverJson<Video>(`/api/v1/videos/resolve?legacy_uuid=${encodeURIComponent(uuid)}`, {
+      freshness: { revalidateSeconds: PUBLIC_VIDEO_REVALIDATE_SECONDS },
+    }),
+);

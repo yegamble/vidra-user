@@ -19,20 +19,12 @@ const nextConfig: NextConfig = {
         destination: "/studio/analytics",
         permanent: true,
       },
-      // Legacy watch-URL format. vidra-core mints `/videos/watch/{uuid}` in
-      // its ActivityPub objects and Bluesky auto-posts, but this frontend has
-      // only ever routed `/videos/{id}` — so every federated/cross-posted link
-      // 404s without this. Core STILL emits that form on main (federation
-      // outbox + collections, and the ATProto worker), so this is not a rescue
-      // for old links: it is currently the only thing making federated links
-      // work at all, and it cannot be removed until core mints `/videos/{id}`.
-      // Next preserves the query string on redirects, so `?t=` start times
-      // survive the hop.
-      {
-        source: "/videos/watch/:id",
-        destination: "/videos/:id",
-        permanent: true,
-      },
+      // NOTE: /videos/watch/:id is NOT handled here any more. It moved to
+      // app/videos/watch/[id]/route.ts, because a static rewrite cannot do what
+      // that path now needs: the uuid in it may be this instance's own id OR the
+      // SOURCE uuid of a video imported from PeerTube, and only a backend lookup
+      // can tell them apart. Rewriting blindly to /videos/:id was right for the
+      // first and 404'd every one of the second.
     ];
   },
   async headers() {
