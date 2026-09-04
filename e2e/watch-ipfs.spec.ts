@@ -19,8 +19,11 @@ const SAMPLE_MASTER = [
   "",
 ].join("\n");
 
-function detailWithIpfs() {
+// `pinnedFlag` mirrors the ONE way the real and the historically-mocked payloads
+// differ: a live core sends the `ipfs` object with no `ipfs_pinned` key at all.
+function detailWithIpfs(pinnedFlag = true) {
   return {
+    ...(pinnedFlag ? { ipfs_pinned: true } : {}),
     id: "v1",
     channel_id: "c1",
     title: "Mirrored Clip",
@@ -33,15 +36,17 @@ function detailWithIpfs() {
     duration_seconds: 42,
     hls_url: "/api/v1/videos/v1/hls/master.m3u8",
     renditions: [{ height: 720, width: 1280 }],
-    ipfs_pinned: true,
     ipfs: { hls_cid: HLS_CID, gateway_url: GATEWAY },
   };
 }
 
 // Shared hermetic mocks: detail + the always-present watch reads + the server HLS
 // ladder (segments aborted — we assert chrome/state, not frames).
-async function mockWatch(page: import("@playwright/test").Page) {
-  await page.route(DETAIL, (route) => route.fulfill({ json: detailWithIpfs() }));
+async function mockWatch(
+  page: import("@playwright/test").Page,
+  detail: object = detailWithIpfs(),
+) {
+  await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());
   await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
     route.fulfill({ json: { captions: [] } }),
@@ -69,6 +74,25 @@ test("defaults to the server source with a peer-free bar and a 'Use IPFS' toggle
   await expect(page.getByRole("button", { name: "Use IPFS" })).toBeVisible();
   // No fabricated peer count anywhere on the surface.
   await expect(page.getByText(/peer/i)).toHaveCount(0);
+});
+
+// REGRESSION (verified 2026-09-03 against a live IPFS-enabled vidra-core): a real
+// detail response carries the `ipfs` object and NO `ipfs_pinned` key. That flag is
+// a CARD/FEED field — OpenAPI: "Drives the IPFS thumbnail badge on card/feed
+// views" — attached by the list handlers only; handleGetVideo attaches just the
+// `ipfs` object, whose CIDs are already emitted exclusively for a public+published
+// video pinned on the PUBLIC swarm. WatchView used to require the flag, so the
+// whole IPFS surface was dead against every real backend while this mocked suite,
+// which fabricated it, stayed green. The live counterpart is e2e-backed/ipfs.spec.ts.
+test("offers the mirror on a REAL core payload: CIDs present, no ipfs_pinned flag", async ({
+  page,
+}) => {
+  await mockWatch(page, detailWithIpfs(false));
+  await page.goto("/videos/v1");
+
+  await expect(page.getByRole("heading", { name: "Mirrored Clip" })).toBeVisible();
+  await expect(page.getByText("Playing from server (HLS)")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use IPFS" })).toBeVisible();
 });
 
 test("opting into IPFS probes the gateway and, on success, plays from the mirror", async ({

@@ -21,9 +21,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Runs the WHOLE backed suite twice — once per storage backend. Everything the
+  # suite already does with bytes (hls-playback, avatar, channel-banner, captions,
+  # upload-*) is an object-store round trip, so re-running it against MinIO turns
+  # the existing specs into real S3 proofs for free. Before this leg, S3 had ZERO
+  # browser coverage anywhere in the repo: every backed run used the compose
+  # default STORAGE_BACKEND=local, so a bug that only bites on the S3 path
+  # (key shape, content-type, ranged reads, presign) could not fail any test here.
   e2e-backed:
+    name: e2e-backed (${{ matrix.storage }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      # Both legs must report independently: an S3-only regression must neither be
+      # masked by, nor mask, a local-disk one.
+      fail-fast: false
+      matrix:
+        include:
+          # The historical leg — the compose default, unchanged.
+          - storage: local
+            profiles: --profile core
+            storage_env: ""
+          # The same suite against the compose `storage` profile's MinIO. These are
+          # the exact keys vidra-core/docker-compose.yml documents for this (the
+          # api CREATES the bucket at boot when it is missing, so there is no
+          # seeding step), with the in-network endpoint because it is the API
+          # container — not the runner — that talks to MinIO.
+          - storage: s3
+            profiles: --profile core --profile storage
+            storage_env: >-
+              STORAGE_BACKEND=s3
+              STORAGE_S3_ENDPOINT=minio:9000
+              STORAGE_S3_BUCKET=vidra-media
+              STORAGE_S3_ACCESS_KEY=vidra
+              STORAGE_S3_SECRET_KEY=vidra-dev-secret
+              STORAGE_S3_USE_SSL=false
+              STORAGE_S3_FORCE_PATH_STYLE=true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0 (vidra-user)
         with:
@@ -61,9 +94,11 @@ jobs:
       # to yt-dlp, which is not installed in this image, regressing those tests.
       # Channel auto-sync (W2.U5) needs yt-dlp on, so it gets its OWN isolated job
       # (channel-sync-backed, below) that does not run the URL-import specs.
+      # matrix.storage_env is empty on the local leg, so the command below is
+      # byte-for-byte the historical one there.
       - name: Start vidra-core stack
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
+        run: ${{ matrix.storage_env }} RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose ${{ matrix.profiles }} up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
@@ -75,7 +110,7 @@ jobs:
             sleep 2
           done
           echo "::error::vidra-core API did not become healthy in time"
-          docker compose --profile core logs --no-color | tail -200
+          docker compose ${{ matrix.profiles }} logs --no-color | tail -200
           exit 1
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -105,18 +140,26 @@ jobs:
           # server-component fetch fails fast — which silently disables the
           # server-resolved featured banner in this backed run.
           E2E_API_URL: http://localhost:8080
-        run: npm run e2e:backed
+        # `npm run e2e:backed` takes no path filter, so it runs the WHOLE
+        # e2e-backed/ directory — including the @ipfs specs, which need the kubo
+        # node this stack does not start and would burn ~8 minutes per leg timing
+        # out against a mirror that was never meant to exist here. Excluded by
+        # TAG rather than by a self-skip inside the specs: the ipfs-backed job
+        # runs ONLY those two files, so a self-skip would let the one job that
+        # exists to exercise IPFS go green having executed nothing.
+        run: npm run e2e:backed -- --grep-invert @ipfs
 
       - name: Tail backend logs on failure
         if: failure()
         working-directory: .core
-        run: docker compose --profile core logs --no-color | tail -200
+        run: docker compose ${{ matrix.profiles }} logs --no-color | tail -200
 
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-backed-report
+          # Per-leg name: two matrix jobs cannot upload to one artifact name.
+          name: playwright-backed-report-${{ matrix.storage }}
           path: |
             playwright-report/
             test-results/
@@ -197,6 +240,120 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-channel-sync-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  # IPFS media mirroring (P19). Its OWN isolated stack, for two reasons: the
+  # compose `ipfs` profile has to be up (a whole extra kubo node), and IPFS_ENABLED
+  # changes what every OTHER spec's video detail carries, so folding it into the
+  # main matrix would silently re-test 73 specs under a different backend posture.
+  #
+  # THE PROFILE ALONE DOES NOTHING. `--profile ipfs` starts the kubo node; the
+  # mirror stays off until IPFS_ENABLED=true, and IPFS_API_URL + IPFS_GATEWAY_URL
+  # are then BOTH required or the api refuses to boot (vidra-core
+  # internal/config/config.go validateIPFS). They are passed explicitly here rather
+  # than leaned on as compose defaults, so this job says what it depends on.
+  #
+  # IPFS_GATEWAY_URL uses 127.0.0.1, NOT localhost: kubo runs a subdomain gateway
+  # for the `localhost` hostname and answers /ipfs/<cid> there with a 301 to
+  # http://<cid>.ipfs.localhost:9090/. Chromium resolves *.localhost to loopback,
+  # but Playwright's Node-side request context need not, and the redirect would
+  # make the spec's gateway assertions depend on the runner's resolver. A raw IP
+  # host serves the PATH gateway directly. The value reaches the browser verbatim
+  # (core echoes it as `ipfs.gateway_url`), so it must be host-reachable — the kubo
+  # service publishes its gateway on 127.0.0.1:9090.
+  #
+  # The node's own default IPFS_PUBLIC_NETWORK=false is kept: a local-only swarm,
+  # so CI fixtures are pinned and resolved without ever being announced to the real
+  # public IPFS network. TRANSCODING_ENABLED=true because the HLS pin is armed by
+  # the transcode-completion hook — with no ladder there is nothing to mirror.
+  ipfs-backed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0 (vidra-user)
+        with:
+          persist-credentials: false
+
+      - name: Check out vidra-core (public — no token needed)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: yegamble/vidra-core
+          path: .core
+          persist-credentials: false
+
+      # OWNER_CLAIM_TOKEN: same admin-bootstrap seam as the jobs above — this job's
+      # backed-setup dependency runs ensureAdmin too, and the privacy-fence spec
+      # additionally needs that admin to read GET /api/v1/ipfs/status.
+      - name: Start vidra-core stack (IPFS mirror + transcoding enabled)
+        working-directory: .core
+        run: RATE_LIMIT_ENABLED=false OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret TRANSCODING_ENABLED=true IPFS_ENABLED=true IPFS_API_URL=http://ipfs:5001 IPFS_GATEWAY_URL=http://127.0.0.1:9090 docker compose --profile core --profile ipfs up -d --build
+
+      - name: Wait for the API to be healthy
+        working-directory: .core
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then
+              echo "api healthy after ${i} tries"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::vidra-core API did not become healthy in time"
+          docker compose --profile core --profile ipfs logs --no-color | tail -200
+          exit 1
+
+      # Fail here, with the kubo logs, rather than 4 minutes later inside a spec
+      # that is waiting for a pin that can never land.
+      - name: Wait for the IPFS gateway to answer
+        working-directory: .core
+        run: |
+          for i in $(seq 1 60); do
+            # The empty-file CID: always resolvable on any node, so a 200 means the
+            # gateway is serving rather than that some block happens to be local.
+            if curl -fsS http://127.0.0.1:9090/ipfs/bafkqaaa >/dev/null 2>&1; then
+              echo "ipfs gateway ready after ${i} tries"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the kubo IPFS gateway did not answer on 127.0.0.1:9090 in time"
+          docker compose --profile core --profile ipfs logs --no-color ipfs | tail -200
+          exit 1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build against the live backend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+        run: npm run build
+
+      - name: Run the IPFS backed specs only
+        env:
+          # Same server-side base URL contract as the jobs above.
+          E2E_API_URL: http://localhost:8080
+        run: npm run e2e:backed -- e2e-backed/ipfs.spec.ts e2e-backed/ipfs-privacy-fence.spec.ts
+
+      - name: Tail backend logs on failure
+        if: failure()
+        working-directory: .core
+        run: docker compose --profile core --profile ipfs logs --no-color | tail -200
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-ipfs-report
           path: |
             playwright-report/
             test-results/
