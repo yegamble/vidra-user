@@ -140,7 +140,14 @@ jobs:
           # server-component fetch fails fast — which silently disables the
           # server-resolved featured banner in this backed run.
           E2E_API_URL: http://localhost:8080
-        run: npm run e2e:backed
+        # `npm run e2e:backed` takes no path filter, so it runs the WHOLE
+        # e2e-backed/ directory — including the @ipfs specs, which need the kubo
+        # node this stack does not start and would burn ~8 minutes per leg timing
+        # out against a mirror that was never meant to exist here. Excluded by
+        # TAG rather than by a self-skip inside the specs: the ipfs-backed job
+        # runs ONLY those two files, so a self-skip would let the one job that
+        # exists to exercise IPFS go green having executed nothing.
+        run: npm run e2e:backed -- --grep-invert @ipfs
 
       - name: Tail backend logs on failure
         if: failure()
