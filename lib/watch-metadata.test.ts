@@ -137,6 +137,9 @@ describe("buildWatchMetadata", () => {
   it("adds an oembed discovery alternate pointing at the canonical watch URL", () => {
     const md = buildWatchMetadata(video(), instance(), "https://tube.example");
     expect(md.alternates).toEqual({
+      // The fixture carries no short_code, so the canonical is the uuid form —
+      // the same url the oembed href embeds. The two must never disagree.
+      canonical: "/videos/v1",
       types: {
         "application/json+oembed": [
           {
@@ -151,8 +154,36 @@ describe("buildWatchMetadata", () => {
   });
 
   it("omits the oembed alternate when the request origin is unknown", () => {
-    expect(buildWatchMetadata(video(), instance())).not.toHaveProperty("alternates");
-    expect(buildWatchMetadata(video(), instance(), null)).not.toHaveProperty("alternates");
+    // The oembed href must be absolute, so without an origin there is none.
+    // The CANONICAL survives: it is relative and resolved against the page's
+    // own URL, so it cannot carry a wrong host — which is the one way a
+    // canonical does damage.
+    for (const md of [buildWatchMetadata(video(), instance()), buildWatchMetadata(video(), instance(), null)]) {
+      expect(md.alternates?.types).toBeUndefined();
+      expect(md.alternates?.canonical).toBe("/videos/v1");
+    }
+  });
+
+  it("declares the short code as canonical when the video has one", () => {
+    const md = buildWatchMetadata(
+      video({ short_code: "abcdefghijk" } as Partial<Video>),
+      instance(),
+      "https://tube.example",
+    );
+    expect(md.alternates?.canonical).toBe("/v/abcdefghijk");
+    expect(md.openGraph?.url).toBe("/v/abcdefghijk");
+  });
+
+  // A start time names a moment in a video, not a different video, so it must
+  // never reach the canonical. (The address-bar rewrite keeps it — opposite
+  // rule, easy to invert.)
+  it("keeps the canonical bare", () => {
+    const md = buildWatchMetadata(
+      video({ short_code: "abcdefghijk" } as Partial<Video>),
+      instance(),
+      "https://tube.example",
+    );
+    expect(md.alternates?.canonical).not.toContain("?");
   });
 
   it("never advertises oembed for a missing (private/unknown) video", () => {

@@ -9,13 +9,19 @@ test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 // A REAL uuid: /v/ short ids only exist for uuid video ids, which is what the
 // backend issues (the other mocked specs use synthetic ids like "v1").
 const VIDEO_ID = "6f2a1c3d-4b5e-4f60-8a71-9c0d2e3f4a5b";
+// The LEGACY derived sid (22 chars), still served by /v/ as a redirect.
 const SID = uuidToShortId(VIDEO_ID) as string;
+// The STORED short code (11 chars) — the canonical form. Overridden per-spec
+// rather than in a shared fixture: adding a code to the shared fixtures would
+// change what every other mocked watch spec links to.
+const CODE = "abcdefghijk";
 
 const DETAIL = new RegExp(`/api/v1/videos/${VIDEO_ID}$`);
 const ORIGINAL = new RegExp(`/api/v1/videos/${VIDEO_ID}/original`);
 
 const detail = {
   id: VIDEO_ID,
+  short_code: CODE,
   channel_id: "c1",
   title: "Short Link Me",
   description: "",
@@ -60,15 +66,15 @@ test("the share dialog offers the short /v/ link, with an optional start time", 
 
   const origin = await page.evaluate(() => window.location.origin);
   const link = dialog.getByLabel("Watch page link", { exact: true });
-  await expect(link).toHaveValue(`${origin}/v/${SID}`);
+  await expect(link).toHaveValue(`${origin}/v/${CODE}`);
 
   const copyLink = dialog.getByRole("button", { name: "Copy watch page link" });
   await copyLink.click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${origin}/v/${SID}`);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${origin}/v/${CODE}`);
 
   // "Start at" appends ?t=<seconds> to the short link too.
   await dialog.getByRole("checkbox", { name: "Start at 1:35" }).check();
-  await expect(link).toHaveValue(`${origin}/v/${SID}?t=95`);
+  await expect(link).toHaveValue(`${origin}/v/${CODE}?t=95`);
 
   // The embed snippet keeps the plain video id (the embed route is not aliased).
   await expect(dialog.getByLabel("Embed code", { exact: true })).toHaveValue(
@@ -76,15 +82,18 @@ test("the share dialog offers the short /v/ link, with an optional start time", 
   );
 });
 
-test("a short link lands on the watch page and STAYS short, query intact", async ({ page }) => {
+test("a LEGACY short link lands on the watch page and ends on the canonical code", async ({
+  page,
+}) => {
   await mockWatch(page);
   await page.goto(`/v/${SID}?t=90`);
 
-  // /v/ still 301s to the canonical /videos/{uuid} route — that is what renders,
-  // and the stream assertion below is what proves it — but the watch page then
-  // rewrites the address bar back to the short alias, so a viewer never sees a
-  // raw UUID and what they copy out of the bar is the shareable link.
-  await expect(page).toHaveURL(new RegExp(`/v/${SID}\\?t=90$`));
+  // The whole chain in one assertion: the legacy 22-character sid redirects to
+  // /videos/{uuid}, which renders, and the watch page then rewrites the address
+  // bar to the CANONICAL 11-character code. A viewer never sees a raw uuid, and
+  // what they copy out of the bar is the same url the page declares canonical —
+  // not the older derived form they arrived on.
+  await expect(page).toHaveURL(new RegExp(`/v/${CODE}\\?t=90$`));
   await expect(page.getByRole("heading", { name: "Short Link Me" })).toBeVisible();
   // The preserved ?t= still rides the stream src as a native media fragment.
   await expect(page.locator("video")).toHaveAttribute(
@@ -101,8 +110,10 @@ test("a legacy /videos/watch/ link redirects to the canonical watch page, query 
   // app never routed it, so it 404s without the next.config.ts redirect.
   await page.goto(`/videos/watch/${VIDEO_ID}?t=5`);
 
-  // next.config.ts redirects to /videos/{uuid}, which then shows the short alias.
-  await expect(page).toHaveURL(new RegExp(`/v/${SID}\\?t=5$`));
+  // The route handler cannot resolve it here (a server-side fetch, which
+  // page.route does not intercept), so it falls back to /videos/{uuid} — the
+  // old behaviour — and the watch page rewrites the bar to the canonical code.
+  await expect(page).toHaveURL(new RegExp(`/v/${CODE}\\?t=5$`));
   await expect(page.getByRole("heading", { name: "Short Link Me" })).toBeVisible();
 });
 

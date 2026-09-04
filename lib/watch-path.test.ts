@@ -30,4 +30,12 @@ describe("watchPath", () => {
     );
     expect(watchPath({ id: ID } as Video, "?src=related")).toBe(`/videos/${ID}?src=related`);
   });
+
+  // The oembed discovery url embeds this as a query PARAMETER, where an
+  // unescaped space truncates the value. The previous inline construction
+  // encoded the id; this must not quietly stop.
+  it("encodes the identifier it emits", () => {
+    expect(watchPath({ id: "a b" } as Video)).toBe("/videos/a%20b");
+    expect(watchPath({ id: "x", short_code: "a b" } as Video)).toBe("/v/a%20b");
+  });
 });

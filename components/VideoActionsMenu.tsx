@@ -192,6 +192,7 @@ export function VideoActionsMenu({
       {dialog === "share" ? (
         <ShareDialog
           videoId={video.id}
+          shortCode={video.short_code}
           title={video.title}
           atSeconds={0}
           watchPath={video.remote === true ? `/remote/${video.id}` : undefined}

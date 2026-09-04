@@ -23,7 +23,11 @@ export type Nameable = Pick<Video, "id"> & { short_code?: string };
  * and have no local code, so their callers branch before reaching this.
  */
 export function watchPath(video: Nameable, query = ""): string {
+  // Both identifiers are encoded. A uuid and a base58 code are unaffected, but
+  // the id is not always one of those — synthetic ids reach this in tests and
+  // mocked runs, and the oembed discovery url this feeds is a query PARAMETER,
+  // where an unescaped space silently truncates the value.
   const code = video.short_code;
-  if (code !== undefined && code !== "") return `/v/${code}${query}`;
-  return `/videos/${video.id}${query}`;
+  if (code !== undefined && code !== "") return `/v/${encodeURIComponent(code)}${query}`;
+  return `/videos/${encodeURIComponent(video.id)}${query}`;
 }

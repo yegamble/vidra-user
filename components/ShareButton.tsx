@@ -5,7 +5,7 @@ import { useState } from "react";
 import { ShareIcon } from "@/components/icons";
 import { Modal } from "@/components/ui";
 import { formatDuration } from "@/lib/format";
-import { uuidToShortId } from "@/lib/short-id";
+import { watchPath as localWatchPath } from "@/lib/watch-path";
 
 const PILL =
   "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
@@ -31,10 +31,13 @@ function escapeAttr(s: string): string {
 // plus a copyable <iframe> embed snippet. Sharing is public — no auth gate.
 export function ShareButton({
   videoId,
+  shortCode,
   title,
   getCurrentTime,
 }: {
   videoId: string;
+  /** The video's short code, so the shared link is the canonical /v/{code}. */
+  shortCode?: string;
   title: string;
   /** Reads the player's current position in seconds (for "Start at"). */
   getCurrentTime?: () => number;
@@ -60,6 +63,7 @@ export function ShareButton({
       {open ? (
         <ShareDialog
           videoId={videoId}
+          shortCode={shortCode}
           title={title}
           atSeconds={atSeconds}
           onClose={() => setOpen(false)}
@@ -71,6 +75,7 @@ export function ShareButton({
 
 export function ShareDialog({
   videoId,
+  shortCode,
   title,
   atSeconds,
   onClose,
@@ -78,6 +83,8 @@ export function ShareDialog({
   allowEmbed = true,
 }: {
   videoId: string;
+  /** The video's short code, when the caller has the document. */
+  shortCode?: string;
   title: string;
   atSeconds: number;
   onClose: () => void;
@@ -93,12 +100,15 @@ export function ShareDialog({
   // The dialog only mounts client-side (after a click), so window is available.
   const origin = window.location.origin;
   const startQuery = startAtChecked && atSeconds > 0 ? `?t=${atSeconds}` : "";
-  // Local videos share as the short /v/<base58 uuid> alias (which 301s to the
-  // canonical watch page); federated cards pass their own watchPath, and a
-  // non-UUID id simply keeps the long form.
-  const shortId = watchPath === undefined ? uuidToShortId(videoId) : null;
-  const watchPathOrShort = watchPath ?? (shortId ? `/v/${shortId}` : `/videos/${videoId}`);
-  const watchUrl = `${origin}${watchPathOrShort}${startQuery}`;
+  // A local video shares as /v/{code} — the SAME url the page declares
+  // canonical. Previously this derived a sid from the uuid; that form still
+  // resolves, but emitting it here would put a second short form in circulation
+  // for every link anyone copies.
+  //
+  // Federated cards pass their own watchPath override (/remote/{id}), and a
+  // video with no code falls back to /videos/{uuid}, which still works.
+  const localPath = localWatchPath({ id: videoId, short_code: shortCode });
+  const watchUrl = `${origin}${watchPath ?? localPath}${startQuery}`;
   const embedSnippet = `<iframe src="${origin}/embed/${videoId}${startQuery}" width="560" height="315" frameborder="0" allowfullscreen title="${escapeAttr(title)}"></iframe>`;
 
   async function copy(target: "link" | "embed", text: string) {
