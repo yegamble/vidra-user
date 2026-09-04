@@ -15,6 +15,12 @@ export class ApiError extends Error {
   readonly code: string;
   readonly requestId?: string;
   readonly fields?: FieldError[];
+  /**
+   * The video a `password_required` 401 refers to. Core sends it ONLY on that
+   * code, and it is what lets an unlock prompt reached by short code find the
+   * uuid that POST /videos/{id}/unlock is keyed on.
+   */
+  readonly videoId?: string;
 
   constructor(args: {
     status: number;
@@ -22,6 +28,7 @@ export class ApiError extends Error {
     message: string;
     requestId?: string;
     fields?: FieldError[];
+    videoId?: string;
   }) {
     super(args.message);
     this.name = "ApiError";
@@ -29,6 +36,7 @@ export class ApiError extends Error {
     this.code = args.code;
     this.requestId = args.requestId;
     this.fields = args.fields;
+    this.videoId = args.videoId;
   }
 }
 
@@ -92,6 +100,7 @@ export function apiErrorFromBody(status: number, text: string): ApiError {
   let message = `request failed with status ${status}`;
   let requestId: string | undefined;
   let fields: FieldError[] | undefined;
+  let videoId: string | undefined;
   try {
     const body = JSON.parse(text) as Partial<ApiErrorEnvelope>;
     if (body.error) {
@@ -99,11 +108,12 @@ export function apiErrorFromBody(status: number, text: string): ApiError {
       message = body.error.message || message;
       requestId = body.error.request_id;
       fields = body.error.fields;
+      videoId = body.error.video_id;
     }
   } catch {
     // Non-JSON or empty body — keep the generic message.
   }
-  return new ApiError({ status, code, message, requestId, fields });
+  return new ApiError({ status, code, message, requestId, fields, videoId });
 }
 
 async function toApiError(res: Response): Promise<ApiError> {

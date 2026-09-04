@@ -80,7 +80,21 @@ const RESUME_MIN_SECONDS = 5;
 // retry path. For a signed-in viewer it records watch progress (so the video
 // enters their history and can be resumed) and offers a Resume control from the
 // saved position.
-export function WatchView({ id, initialVideo = null }: { id: string; initialVideo?: Video | null }) {
+export function WatchView({
+  id,
+  code,
+  initialVideo = null,
+}: {
+  /** The video's uuid, when the route knew it. */
+  id?: string;
+  /** The video's short code, when the page was reached as /v/{code}. */
+  code?: string;
+  initialVideo?: Video | null;
+}) {
+  // Exactly one of id/code names the video. `subject` is whichever the route
+  // supplied: it keys the playback-token store and the navigated-away reset, so
+  // both stay consistent within a page without caring which name was used.
+  const subject = id ?? code ?? "";
   // The instance browse defaults (config-parity W5). The tag chips below link
   // to the recent feed filtered by tag; feedHref keeps ?sort= only when it
   // differs from the effective default, so the URL must be built against the
@@ -90,7 +104,7 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   // reproduces the shipped recent/local baseline, i.e. the pre-W5 URLs.
   // Show the short share link in the address bar. Display only — the route,
   // and every URL the page's metadata advertises, stays /videos/{uuid}.
-  useShortWatchUrl(id);
+  useShortWatchUrl(id ?? "");
   const instanceDefaults = useInstanceDefaults();
   // The signed-in viewer, so the comments section can offer the creator
   // pin/heart controls when this is the video owner's own channel (owner-only
@@ -100,8 +114,17 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
     resolveLandingPage(instanceDefaults),
     instanceDefaults,
   );
-  const seed = initialVideo?.id === id ? initialVideo : null;
+  // The server seed belongs to this page only if it names the same video by the
+  // same identifier the route carried; a mismatch means the seed is a previous
+  // video's and must not paint.
+  const seed =
+    initialVideo !== null && (id !== undefined ? initialVideo.id === id : initialVideo.short_code === code)
+      ? initialVideo
+      : null;
   const [status, setStatus] = useState<Status>(seed ? "ready" : "loading");
+  // The uuid a password_required 401 handed back, when the page was reached by
+  // short code and therefore never had one.
+  const [lockedVideoId, setLockedVideoId] = useState<string | null>(null);
   const [video, setVideo] = useState<Video | null>(seed);
   const [reloadKey, setReloadKey] = useState(0);
   // A minted, video-scoped playback token for a password-protected video
@@ -200,8 +223,11 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
 
   useEffect(() => {
     const controller = new AbortController();
-    api
-      .getVideo(id, playbackToken ?? undefined, controller.signal)
+    const fetchVideo =
+      id !== undefined
+        ? api.getVideo(id, playbackToken ?? undefined, controller.signal)
+        : api.getVideoByCode(code ?? "", playbackToken ?? undefined, controller.signal);
+    fetchVideo
       .then((v) => {
         setVideo(v);
         setStatus("ready");
@@ -213,6 +239,9 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
         // error state (a plain unknown id is still 404).
         if (err instanceof ApiError && err.status === 401 && err.code === "password_required") {
           setVideo(null);
+          // Reached by short code there is no uuid yet, and the unlock POST is
+          // keyed on one. Core puts it on this 401 for exactly that reason.
+          if (err.videoId !== undefined) setLockedVideoId(err.videoId);
           setStatus("locked");
         } else if (err instanceof ApiError && err.status === 404) {
           setVideo(null);
@@ -225,7 +254,7 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
         }
       });
     return () => controller.abort();
-  }, [id, reloadKey, playbackToken, seed]);
+  }, [id, code, reloadKey, playbackToken, seed]);
 
   // Emit video.play_started once per watched local video (search-service W4),
   // tagged with the discovery context this page was opened from. Best-effort
@@ -244,24 +273,24 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   // repaints the player once the detail returns 200 with the token.
   const handleUnlocked = useCallback(
     (token: string) => {
-      storePlaybackToken(id, token);
+      storePlaybackToken(subject, token);
       setPlaybackToken(token);
       setStatus("loading");
     },
-    [id],
+    [subject],
   );
 
   // Navigating to another video drops the previous one's token: reset the state
   // (render-phase, so the refetch starts token-less) and clear the store entry
   // (unmount / id-change cleanup). A shared tab never carries an unlocked video forward.
-  const [seenId, setSeenId] = useState(id);
-  if (seenId !== id) {
-    setSeenId(id);
+  const [seenId, setSeenId] = useState(subject);
+  if (seenId !== subject) {
+    setSeenId(subject);
     if (playbackToken !== null) setPlaybackToken(null);
     // A sensitive-content confirmation never carries over to another video.
     if (sensitiveAccepted) setSensitiveAccepted(false);
   }
-  useEffect(() => () => clearPlaybackToken(id), [id]);
+  useEffect(() => () => clearPlaybackToken(subject), [subject]);
 
   const hasTaxonomy = Boolean(video && (video.category || video.language || video.license));
   useEffect(() => {
@@ -373,7 +402,7 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   if (status === "locked") {
     return (
       <div className="mx-auto w-full max-w-2xl">
-        <PasswordUnlockPanel videoId={id} onUnlocked={handleUnlocked} />
+        <PasswordUnlockPanel videoId={id ?? lockedVideoId ?? ""} onUnlocked={handleUnlocked} />
       </div>
     );
   }
