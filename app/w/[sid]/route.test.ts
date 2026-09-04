@@ -13,6 +13,7 @@ import { GET } from "./route";
 const PT_SID = "8uCPfDJ7ApQgMVqaKzEyPW";
 const PT_UUID = "3caf7bea-5ceb-4959-81a0-b44d184e897c";
 const VIDRA_ID = "9c9de5e8-0a1e-484a-b099-e80766180a6d";
+const CODE = "abcdefghijk";
 
 function req(url: string) {
   return new Request(url) as unknown as Parameters<typeof GET>[0];
@@ -22,7 +23,7 @@ describe("GET /w/[sid]", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("resolves a PeerTube shortUUID to the imported video and redirects", async () => {
-    mocks.getPublicVideoByLegacyUUID.mockResolvedValue({ id: VIDRA_ID } as Video);
+    mocks.getPublicVideoByLegacyUUID.mockResolvedValue({ id: VIDRA_ID, short_code: CODE } as Video);
 
     const res = await GET(req(`https://tube.example/w/${PT_SID}`), {
       params: Promise.resolve({ sid: PT_SID }),
@@ -31,16 +32,16 @@ describe("GET /w/[sid]", () => {
     // Resolved by the SOURCE uuid the sid decodes to, not by the sid itself.
     expect(mocks.getPublicVideoByLegacyUUID).toHaveBeenCalledWith(PT_UUID);
     expect(res.status).toBe(302);
-    // ...and lands on the id Vidra minted, which is NOT the source uuid.
-    expect(res.headers.get("location")).toBe(`/videos/${VIDRA_ID}`);
+    // ...and lands on the CANONICAL short code — one hop, not two via the uuid.
+    expect(res.headers.get("location")).toBe(`/v/${CODE}`);
   });
 
   it("carries the query string, so a shared ?t= start time survives", async () => {
-    mocks.getPublicVideoByLegacyUUID.mockResolvedValue({ id: VIDRA_ID } as Video);
+    mocks.getPublicVideoByLegacyUUID.mockResolvedValue({ id: VIDRA_ID, short_code: CODE } as Video);
     const res = await GET(req(`https://tube.example/w/${PT_SID}?t=90`), {
       params: Promise.resolve({ sid: PT_SID }),
     });
-    expect(res.headers.get("location")).toBe(`/videos/${VIDRA_ID}?t=90`);
+    expect(res.headers.get("location")).toBe(`/v/${CODE}?t=90`);
   });
 
   it("404s a sid that is not a PeerTube shortUUID, without asking the backend", async () => {
@@ -61,14 +62,25 @@ describe("GET /w/[sid]", () => {
     expect(res.status).toBe(404);
   });
 
-  // 302 while the canonical is moving: a 301 is cached forever and this target
-  // becomes /v/{code} at the flip.
+  // Still 302: a 301 is cached by browsers and CDNs indefinitely, and /v/{code}
+  // has not yet served a request in production. The 301 is spent only once the
+  // flip is on beta cleanly.
   it("redirects temporarily, not permanently", async () => {
-    mocks.getPublicVideoByLegacyUUID.mockResolvedValue({ id: VIDRA_ID } as Video);
+    mocks.getPublicVideoByLegacyUUID.mockResolvedValue({ id: VIDRA_ID, short_code: CODE } as Video);
     const res = await GET(req(`https://tube.example/w/${PT_SID}`), {
       params: Promise.resolve({ sid: PT_SID }),
     });
     expect(res.status).not.toBe(301);
     expect(res.status).toBe(302);
+  });
+
+  // A video with no code (an older row, or one core did not send it for) still
+  // reaches its watch page by uuid.
+  it("falls back to the uuid form when the resolved video has no code", async () => {
+    mocks.getPublicVideoByLegacyUUID.mockResolvedValue({ id: VIDRA_ID } as Video);
+    const res = await GET(req(`https://tube.example/w/${PT_SID}`), {
+      params: Promise.resolve({ sid: PT_SID }),
+    });
+    expect(res.headers.get("location")).toBe(`/videos/${VIDRA_ID}`);
   });
 });

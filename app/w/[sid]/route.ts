@@ -1,5 +1,6 @@
 import { peertubeShortUUIDToUUID } from "@/lib/peertube-short-uuid";
 import { getPublicVideoByLegacyUUID } from "@/lib/video.server";
+import { watchPath } from "@/lib/watch-path";
 
 // /w/{shortUUID} is PeerTube's public watch path. After an operator imports a
 // PeerTube instance and points its domain at Vidra, every link anyone ever
@@ -29,17 +30,20 @@ export async function GET(
   const video = await getPublicVideoByLegacyUUID(sourceUUID);
   if (video === null) return new Response("Not found", { status: 404 });
 
-  // 302, not 301, while the canonical watch URL is mid-migration. A permanent
-  // redirect is cached by the browser forever, and this target is about to
-  // become /v/{code}: baking in today's answer would leave every one of these
-  // links taking an extra hop for good. It becomes 301 at the flip, pointing
-  // straight at the final URL.
+  // Straight to the canonical /v/{code} — one hop, not two. Before the flip
+  // this pointed at /videos/{uuid}, which now renders rather than redirects, so
+  // going via it would leave the viewer on a non-canonical URL until the
+  // client-side rewrite caught up.
+  //
+  // Still 302, NOT 301. A permanent redirect is cached by browsers and CDNs
+  // indefinitely, and /v/{code} has not yet served a request in production.
+  // Spend the 301 only once the flip is on beta cleanly.
   //
   // The query string rides along so a shared `?t=` start time survives. Read
   // via the standard URL API rather than req.nextUrl, which exists only on a
   // NextRequest and is undefined for the plain Request a unit test constructs.
   return new Response(null, {
     status: 302,
-    headers: { location: `/videos/${video.id}${new URL(req.url).search}` },
+    headers: { location: watchPath(video, new URL(req.url).search) },
   });
 }

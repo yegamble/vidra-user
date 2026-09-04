@@ -5,6 +5,7 @@ import { uuidToShortId } from "@/lib/short-id";
 
 const mocks = vi.hoisted(() => ({
   getPublicVideoByCode: vi.fn(),
+  getPublicVideo: vi.fn(),
   watchView: vi.fn(() => null),
   permanentRedirect: vi.fn(() => {
     throw new Error("NEXT_REDIRECT");
@@ -15,7 +16,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/components/WatchView", () => ({ WatchView: mocks.watchView }));
-vi.mock("@/lib/video.server", () => ({ getPublicVideoByCode: mocks.getPublicVideoByCode }));
+vi.mock("@/lib/video.server", () => ({
+  getPublicVideoByCode: mocks.getPublicVideoByCode,
+  getPublicVideo: mocks.getPublicVideo,
+}));
 vi.mock("@/lib/instance-config.server", () => ({
   getInstanceConfig: vi.fn().mockResolvedValue(null),
 }));
@@ -56,15 +60,29 @@ describe("ShortCodeWatchPage", () => {
     expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
-  // The legacy band keeps its permanent redirect to the canonical watch URL.
-  // Those links are published and their 301s are cached in viewers' browsers.
-  it("redirects a legacy derived sid to the canonical watch URL", async () => {
+  // The legacy band resolves to the CANONICAL short code in one hop. Going via
+  // /videos/{uuid} would strand the viewer on a non-canonical URL, because that
+  // route renders rather than redirecting.
+  it("sends a legacy derived sid straight to the canonical short code", async () => {
     const sid = uuidToShortId(UUID)!;
+    mocks.getPublicVideo.mockResolvedValue({ id: UUID, short_code: CODE } as Video);
+    await expect(
+      ShortCodeWatchPage({ params: Promise.resolve({ code: sid }), searchParams: Promise.resolve({}) }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+    // Resolved by the uuid the sid decodes to, not by the sid.
+    expect(mocks.getPublicVideo).toHaveBeenCalledWith(UUID);
+    expect(mocks.permanentRedirect).toHaveBeenCalledWith(`/v/${CODE}`);
+  });
+
+  // Unresolvable covers a private/locked video and the mocked e2e runs, where
+  // no backend answers at all. Falling back to the old target is never worse.
+  it("falls back to /videos/{uuid} when the legacy sid cannot be resolved", async () => {
+    const sid = uuidToShortId(UUID)!;
+    mocks.getPublicVideo.mockResolvedValue(null);
     await expect(
       ShortCodeWatchPage({ params: Promise.resolve({ code: sid }), searchParams: Promise.resolve({}) }),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.permanentRedirect).toHaveBeenCalledWith(`/videos/${UUID}`);
-    expect(mocks.getPublicVideoByCode).not.toHaveBeenCalled();
   });
 
   it("404s anything that is neither encoding, without a backend round trip", async () => {
@@ -81,6 +99,7 @@ describe("ShortCodeWatchPage", () => {
   // dropping it here would silently start every shared timestamp link at zero.
   it("carries the query string through the legacy redirect", async () => {
     const sid = uuidToShortId(UUID)!;
+    mocks.getPublicVideo.mockResolvedValue(null);
     await expect(
       ShortCodeWatchPage({
         params: Promise.resolve({ code: sid }),
@@ -92,6 +111,7 @@ describe("ShortCodeWatchPage", () => {
 
   it("keeps repeated query values on the legacy redirect", async () => {
     const sid = uuidToShortId(UUID)!;
+    mocks.getPublicVideo.mockResolvedValue(null);
     await expect(
       ShortCodeWatchPage({
         params: Promise.resolve({ code: sid }),

@@ -6,7 +6,8 @@ import { getInstanceConfig } from "@/lib/instance-config.server";
 import { getRequestOrigin } from "@/lib/request-origin";
 import { isShortCode } from "@/lib/short-code";
 import { shortIdToUuid } from "@/lib/short-id";
-import { getPublicVideoByCode } from "@/lib/video.server";
+import { getPublicVideo, getPublicVideoByCode } from "@/lib/video.server";
+import { watchPath } from "@/lib/watch-path";
 import { buildWatchMetadata } from "@/lib/watch-metadata";
 
 // /v/{code} serves TWO encodings, told apart by length because their ranges do
@@ -85,10 +86,18 @@ export default async function ShortCodeWatchPage({
   const what = classify(code);
 
   if (what.kind === "legacy") {
-    // Unchanged behaviour, and deliberately not resolved to a short code here:
-    // /videos/{uuid} is still the canonical watch URL, so sending the viewer
-    // anywhere else would move the canonical ahead of the rest of the system.
-    permanentRedirect(`/videos/${what.uuid}${queryString(await searchParams)}`);
+    // Resolve to the canonical /v/{code} in one hop. Before the flip this sent
+    // the viewer to /videos/{uuid}; that URL now RENDERS rather than
+    // redirecting, so going via it would strand them on a non-canonical URL
+    // until the client-side rewrite caught up.
+    //
+    // A failed lookup still falls back to /videos/{uuid} — the old behaviour —
+    // which covers a private or password-protected video (the anonymous fetch
+    // fails, the owner's client fetch succeeds) and the mocked e2e runs, where
+    // no backend answers at all.
+    const query = queryString(await searchParams);
+    const video = await getPublicVideo(what.uuid);
+    permanentRedirect(video !== null ? watchPath(video, query) : `/videos/${what.uuid}${query}`);
   }
   if (what.kind === "unknown") {
     // Neither encoding. 404 without spending a backend round trip.
