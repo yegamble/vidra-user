@@ -323,6 +323,32 @@ body {
 }
 
 /*
+ * Pointer cursor on interactive controls.
+ *
+ * Tailwind v3's preflight shipped `button, [role="button"] { cursor: pointer }`.
+ * v4 dropped it to match the bare browser default, so after the upgrade every
+ * button in the app — every control that is not an <a> — rendered under the
+ * ordinary arrow and nothing looked clickable. This is the preflight rule put
+ * back, which is why it belongs here rather than on a component.
+ *
+ * @layer base is load-bearing, not decoration. Unlayered CSS beats EVERY
+ * layered rule whatever the source order, and Tailwind's utilities are
+ * layered — so a bare `button { cursor: pointer }` in this file could not be
+ * overridden by `cursor-wait` or `cursor-default` on an individual button.
+ * (The same trap a `position` declaration here once sprang on `sticky`.)
+ *
+ * Disabled controls are excluded on both spellings: :disabled for real form
+ * elements, aria-disabled for the div/span controls that cannot carry it.
+ */
+@layer base {
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not(:disabled):not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+}
+
+/*
  * Shared elevated navigation material used by the app header, desktop
  * sidebar, and phone tab bar. Keeping this as one class makes the functional
  * layer consistent across breakpoints and gives browsers without backdrop
