@@ -60,6 +60,7 @@ import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { logger } from "@/lib/logger";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { trackSearchEvent } from "@/lib/search-events";
+import { useShortWatchUrl } from "@/lib/use-short-watch-url";
 import { parseStartTime } from "@/lib/start-time";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 import { useRestrictedMode } from "@/lib/device-preferences";
@@ -87,6 +88,9 @@ export function WatchView({ id, initialVideo = null }: { id: string; initialVide
   // non-recent default_feed_sort would silently reinterpret a bare /?tag=…
   // as the operator's default sort. null (defaults not landed / no backend)
   // reproduces the shipped recent/local baseline, i.e. the pre-W5 URLs.
+  // Show the short share link in the address bar. Display only — the route,
+  // and every URL the page's metadata advertises, stays /videos/{uuid}.
+  useShortWatchUrl(id);
   const instanceDefaults = useInstanceDefaults();
   // The signed-in viewer, so the comments section can offer the creator
   // pin/heart controls when this is the video owner's own channel (owner-only
