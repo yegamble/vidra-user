@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => {
     updateVideo: vi.fn(),
     deleteVideo: vi.fn(),
     resumableUpload: vi.fn(),
+    getUploadSession: vi.fn(),
+    findResumableUploadSession: vi.fn(),
   };
 });
 
@@ -31,11 +33,12 @@ vi.mock("@/lib/api", () => ({
     createVideoDraft: mocks.createVideoDraft,
     updateVideo: mocks.updateVideo,
     deleteVideo: mocks.deleteVideo,
+    getUploadSession: mocks.getUploadSession,
   },
   channelAvatarUrl: () => "",
   channelBannerUrl: () => "",
   errorMessage: (_error: unknown, fallback: string) => fallback,
-  findResumableUploadSession: () => null,
+  findResumableUploadSession: mocks.findResumableUploadSession,
   forgetUploadSession: () => {},
   isSensitiveVideo: () => false,
   isUploadCancelled: (err: unknown) =>
@@ -89,6 +92,10 @@ beforeEach(() => {
   });
   mocks.updateVideo.mockResolvedValue({ id: "v1", title: "clip", state: "published" });
   mocks.deleteVideo.mockResolvedValue(undefined);
+  // No unfinished session by default — the resume banner is opt-in per test.
+  mocks.cancelUploadSession.mockResolvedValue(undefined);
+  mocks.findResumableUploadSession.mockReturnValue(null);
+  mocks.getUploadSession.mockResolvedValue({ state: "active" });
 });
 
 afterEach(() => {
@@ -397,6 +404,76 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
     await waitFor(() => expect(mocks.deleteVideo).toHaveBeenCalledWith("draft-9"));
+  });
+
+  it("reopening the sheet after a cancel starts a fresh pick, not a dead details step", async () => {
+    // Regression: openSheet() lumped "cancelled" in with uploading/uploaded/error
+    // and sent all four to the details step. After a cancel there is no draft and
+    // no picked file, so details rendered with Publish disabled (draftId === null),
+    // no file card (so no Cancel), and no Back — Back only renders for source ===
+    // "url". Reopening repeated it: the creator could not reach Publish again
+    // without remounting the whole Studio tab.
+    mocks.resumableUpload.mockImplementation(
+      (_id: string, _file: File, opts: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          opts.signal.addEventListener("abort", () =>
+            reject(new mocks.FakeApiError({ status: 0, code: "upload_cancelled", message: "x" })),
+          );
+        }),
+    );
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFile();
+    await waitFor(() => expect(mocks.createVideoDraft).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
+    await waitFor(() => expect(screen.getByLabelText("Video file")).toBeTruthy());
+
+    // Close the sheet and reopen it the way the creator does: "+ Upload video".
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByLabelText("Video file")).toBeNull());
+    openSheet();
+
+    // The file picker is reachable again — not a details step with nothing on it.
+    await waitFor(() => expect(screen.getByLabelText("Video file")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
+  });
+
+  it("cancelling a RESUMED upload returns to the pick step", async () => {
+    // Regression: startAutoUpload's cancel branch called resetFileToPick(), but
+    // resumeUpload's did not — it set state to "cancelled" and returned, leaving the
+    // sheet on the details step it had just switched to. The draft is deleted by
+    // then, so Publish is disabled and there is no Back: stuck immediately, without
+    // even closing the sheet.
+    mocks.findResumableUploadSession.mockReturnValue({
+      uploadId: "up-1",
+      videoId: "v-resume",
+      filename: "clip.mp4",
+    });
+    mocks.resumableUpload.mockImplementation(
+      (_id: string, _file: File, opts: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          opts.signal.addEventListener("abort", () =>
+            reject(new mocks.FakeApiError({ status: 0, code: "upload_cancelled", message: "x" })),
+          );
+        }),
+    );
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+
+    openSheet();
+    pickFile();
+    // A matching unfinished session holds the pick step and offers Resume.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Resume upload" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Resume upload" }));
+    await waitFor(() => expect(mocks.resumableUpload).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
+    // The orphaned draft is cleaned up AND the creator is back at the picker.
+    await waitFor(() => expect(mocks.deleteVideo).toHaveBeenCalledWith("v-resume"));
+    await waitFor(() => expect(screen.getByLabelText("Video file")).toBeTruthy());
   });
 
   it("reveals the content-warning field only when sensitive is on, and sends it on Publish", async () => {

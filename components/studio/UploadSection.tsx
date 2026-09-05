@@ -783,15 +783,17 @@ export function UploadSection({
   // at the pick step; reopening while an upload is in flight — or after an
   // error/cancel — lands on the details step where the progress/outcome lives.
   function openSheet() {
-    if (
-      state === "uploading" ||
-      state === "uploaded" ||
-      state === "error" ||
-      state === "cancelled"
-    ) {
+    // "cancelled" deliberately does NOT reopen on the details step. The other three
+    // still have something there to return to — bytes in flight, a finished upload
+    // awaiting Publish, an error with a Retry. A cancel has none: the draft was
+    // deleted and the file dropped, so details would render with Publish disabled
+    // (draftId === null), no file card to cancel, and no Back (Back only renders for
+    // source === "url"). That is a dead end the creator can only escape by leaving
+    // the tab, so a cancel reopens as a fresh pick.
+    if (state === "uploading" || state === "uploaded" || state === "error") {
       setStep("details");
     } else {
-      if (state === "done") {
+      if (state === "done" || state === "cancelled") {
         setState("idle");
         setResult(null);
       }
@@ -933,6 +935,10 @@ export function UploadSection({
         void api.deleteVideo(cand.videoId).catch(() => {});
         setResumeCandidate(null);
         setState("cancelled");
+        // Same reset as startAutoUpload's cancel branch: without it the sheet stays
+        // on the details step with the draft already deleted, so Publish is disabled
+        // and there is no Back — stuck the moment the resumed upload is cancelled.
+        resetFileToPick();
         return;
       }
       if (err instanceof ApiError && err.status === 404) {
