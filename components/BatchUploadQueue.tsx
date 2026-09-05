@@ -122,7 +122,7 @@ export function BatchUploadQueue({
   const [quotaLoaded, setQuotaLoaded] = useState(false);
   // Bumped to re-run the orchestration effect after a row settles or a backoff
   // window elapses (so the next queued row starts).
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
 
   // Which ids are actively being processed (guards the effect against
   // double-starting a row before the reducer reflects its "uploading" status).
@@ -131,6 +131,9 @@ export function BatchUploadQueue({
   const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const backoffUntilRef = useRef(0);
   const seededRef = useRef(false);
+  // Keep server identity across transport failures; retrying a row must not
+  // create another draft and abandon the chunks already uploaded.
+  const attemptsRef = useRef(new Map<string, { videoId: string; uploadId?: string }>());
   // Latest values read by the async run loop (kept fresh without restarting it).
   const itemsRef = useRef(items);
   const handleRef = useRef(handle);
@@ -183,20 +186,29 @@ export function BatchUploadQueue({
   // re-queues (backoff); every other error fails the row (retryable).
   const runOne = useCallback(async (item: BatchItem, controller: AbortController) => {
     dispatch({ type: "start", id: item.id });
-    let draftId: string | null = null;
-    let sessionId: string | null = null;
+    const previous = attemptsRef.current.get(item.id);
+    let draftId: string | null = previous?.videoId ?? null;
+    let sessionId: string | null = previous?.uploadId ?? null;
     try {
-      const draft = await api.createVideoDraft(handleRef.current, {
-        title: item.title.trim() || titleFromFilename(item.file.name),
-        privacy: privacyRef.current,
-      });
-      draftId = draft.id;
+      if (!draftId) {
+        const draft = await api.createVideoDraft(handleRef.current, {
+          title: item.title.trim() || titleFromFilename(item.file.name),
+          privacy: privacyRef.current,
+        });
+        draftId = draft.id;
+        attemptsRef.current.set(item.id, { videoId: draftId });
+      }
       if (controller.signal.aborted) {
-        void api.deleteVideo(draft.id).catch(() => {});
+        await api.deleteVideo(draftId);
+        attemptsRef.current.delete(item.id);
         dispatch({ type: "cancel", id: item.id });
         return;
       }
-      const res = await resumableUpload(draft.id, item.file, {
+      const resume = sessionId
+        ? await api.getUploadSession(sessionId, controller.signal)
+        : undefined;
+      const res = await resumableUpload(draftId, item.file, {
+        resume,
         onProgress: (p) =>
           dispatch({
             type: "progress",
@@ -209,27 +221,33 @@ export function BatchUploadQueue({
         signal: controller.signal,
         onSessionOpened: (sid) => {
           sessionId = sid;
+          attemptsRef.current.set(item.id, { videoId: draftId!, uploadId: sid });
         },
       });
       // A dead upload must never read as done (the false-success guard).
       if (res.video.state === "failed") {
         dispatch({ type: "fail", id: item.id, error: FAILED_STATE_ERROR });
       } else {
+        attemptsRef.current.delete(item.id);
         dispatch({ type: "succeed", id: item.id, videoId: res.video.id });
         onUploadedRef.current?.();
       }
     } catch (err) {
       if (isUploadCancelled(err)) {
-        if (sessionId) {
-          void api.cancelUploadSession(sessionId).catch(() => {});
-          forgetUploadSession(sessionId);
+        try {
+          if (sessionId) {
+            await api.cancelUploadSession(sessionId);
+            forgetUploadSession(sessionId);
+          }
+          if (draftId) await api.deleteVideo(draftId);
+          attemptsRef.current.delete(item.id);
+          dispatch({ type: "cancel", id: item.id });
+        } catch (cleanupError) {
+          dispatch({ type: "fail", id: item.id, error: batchUploadError(cleanupError) });
         }
-        if (draftId) void api.deleteVideo(draftId).catch(() => {});
-        dispatch({ type: "cancel", id: item.id });
       } else if (isActiveSessionLimit(err)) {
-        // The per-user active-session cap: wait for a slot, don't fail. Drop the
-        // just-created draft (no session opened) so the retry starts clean.
-        if (draftId) void api.deleteVideo(draftId).catch(() => {});
+        // Keep the draft/session while waiting for capacity, just as for a
+        // transport retry. Deleting it could race a server-accepted request.
         backoffUntilRef.current = Date.now() + LIMIT_BACKOFF_MS;
         dispatch({ type: "requeue", id: item.id });
         const timer = setTimeout(() => {
@@ -261,7 +279,7 @@ export function BatchUploadQueue({
       controllersRef.current.set(item.id, controller);
       void runOne(item, controller);
     }
-  }, [items, started, runOne]);
+  }, [items, started, runOne, tick]);
 
   // Abort every in-flight upload + clear pending timers on unmount.
   useEffect(() => {
