@@ -31,4 +31,13 @@ test("subscribing from a video card persists the follow", async ({ page, request
   await page.getByRole("button", { name: "Follow", exact: true }).click();
   await expect(page.getByRole("button", { name: "Following" })).toBeVisible();
   expect(await followerCount(request, handle)).toBe(1);
+
+  // Restoring the cookie session must refresh viewer-specific channel fields.
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Following", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Following", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Follow", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Follow", exact: true })).toBeVisible();
+  expect(await followerCount(request, handle)).toBe(0);
 });

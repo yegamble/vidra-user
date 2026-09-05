@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { PlaylistIcon } from "@/components/icons";
@@ -13,52 +13,43 @@ import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { PlaylistDetail, PlaylistVisibility } from "@/lib/api";
+import { useApiResource } from "@/lib/use-api-resource";
 
-type Status = "loading" | "error" | "notfound" | "ready";
 
 // PlaylistDetailView shows a playlist and its videos. Owner-only controls (remove
 // item, delete playlist) appear when the playlist is one of the viewer's own.
 export function PlaylistDetailView({ id }: { id: string }) {
+  const { status, user } = useSession();
+  if (status === "restoring") return <Spinner label="Loading playlist" />;
+  // Session changes also discard pending optimistic edits and editor state.
+  return <PlaylistForViewer key={`${id}:${status}:${user?.id ?? ""}`} id={id} />;
+}
+
+function PlaylistForViewer({ id }: { id: string }) {
   const router = useRouter();
-  const { status: session } = useSession();
-  const [status, setStatus] = useState<Status>("loading");
-  const [playlist, setPlaylist] = useState<PlaylistDetail | null>(null);
-  const [isOwner, setIsOwner] = useState(false);
+  const { status: session, user } = useSession();
+  const { status, data: playlist, retry, setData: setPlaylist } = useApiResource<PlaylistDetail | null>(async (signal) => {
+    if (signal.aborted || session === "restoring") return new Promise(() => {});
+    try {
+      return await api.getPlaylist(id, signal);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return null;
+      throw err;
+    }
+  }, [id, session, user?.id]);
+  const { data: owned } = useApiResource<boolean>(async (signal) => {
+    if (signal.aborted || session === "restoring") return new Promise(() => {});
+    if (session !== "authed") return false;
+    try {
+      const res = await api.getMyPlaylists(signal);
+      return res.playlists.some((p) => p.id === id);
+    } catch {
+      return false; // Preserve the owner-control guard when ownership cannot be read.
+    }
+  }, [id, session, user?.id]);
+  const isOwner = owned === true;
   const [editing, setEditing] = useState(false);
   const [reordering, setReordering] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getPlaylist(id, controller.signal)
-      .then((p) => {
-        setPlaylist(p);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setStatus(err instanceof ApiError && err.status === 404 ? "notfound" : "error");
-      });
-    return () => controller.abort();
-  }, [id, reloadKey]);
-
-  useEffect(() => {
-    if (session !== "authed") return;
-    const controller = new AbortController();
-    api
-      .getMyPlaylists(controller.signal)
-      .then((res) => setIsOwner(res.playlists.some((p) => p.id === id)))
-      .catch(() => {
-        // Ownership is best-effort; without it the controls just stay hidden.
-      });
-    return () => controller.abort();
-  }, [session, id]);
-
-  function retry() {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }
 
   async function removeItem(videoId: string) {
     if (!playlist) return;
@@ -116,7 +107,7 @@ export function PlaylistDetailView({ id }: { id: string }) {
       </div>
     );
   }
-  if (status === "notfound") {
+  if (status === "ready" && playlist === null) {
     return (
       <EmptyState
         icon={<PlaylistIcon size={24} />}

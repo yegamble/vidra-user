@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
@@ -17,8 +17,8 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, channelAvatarUrl, channelBannerUrl } from "@/lib/api";
 import type { Channel, Video } from "@/lib/api";
 import { formatCount, formatMonthYear, pluralize } from "@/lib/format";
+import { useApiResource } from "@/lib/use-api-resource";
 
-type Status = "loading" | "notfound" | "error" | "ready";
 type Section = "videos" | "about";
 
 // Channel-grid sort. Both keys ride on `created_at`, the one card field the
@@ -32,39 +32,41 @@ const CHANNEL_SORTS: { sort: ChannelSort; label: string }[] = [
   { sort: "oldest", label: "Oldest" },
 ];
 
-// ChannelView loads a channel and its videos client-side. The page mounts it with
-// key={handle} so the initial status is "loading" (no synchronous setState in the
-// effect) and a new handle gives a fresh load.
+// Channel reads include viewer-specific follow state and video visibility.
+// Wait for restoration and discard data when the session identity changes.
 export function ChannelView({ handle }: { handle: string }) {
+  const { status, user } = useSession();
+  if (status === "restoring") return <Spinner label="Loading channel" />;
+  // Session changes also discard pending optimistic edits and editor state.
+  return <ChannelForViewer key={`${handle}:${status}:${user?.id ?? ""}`} handle={handle} />;
+}
+
+function ChannelForViewer({ handle }: { handle: string }) {
   const { user, status: sessionStatus } = useSession();
-  const [status, setStatus] = useState<Status>("loading");
-  const [channel, setChannel] = useState<Channel | null>(null);
-  const [videos, setVideos] = useState<Video[]>([]);
+  const { status, data, retry, setData } = useApiResource<{
+    channel: Channel | null;
+    videos: Video[];
+  }>(async (signal) => {
+    if (signal.aborted || sessionStatus === "restoring") return new Promise(() => {});
+    try {
+      const [channel, list] = await Promise.all([
+        api.getChannel(handle, signal),
+        api.listChannelVideos(handle, undefined, signal),
+      ]);
+      return { channel, videos: list.videos };
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return { channel: null, videos: [] };
+      throw err;
+    }
+  }, [handle, sessionStatus, user?.id]);
+  const channel = data?.channel ?? null;
+  const videos = useMemo(() => data?.videos ?? [], [data]);
   // The channel-videos contract has no limit/offset (the backend returns the
   // full list), so "Load more" is a client-side reveal in PAGE_SIZE chunks.
   // Switch to server paging if/when the contract grows pagination params.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [reloadKey, setReloadKey] = useState(0);
   const [sort, setSort] = useState<ChannelSort>("latest");
   const [section, setSection] = useState<Section>("videos");
-
-  useEffect(() => {
-    const controller = new AbortController();
-    Promise.all([
-      api.getChannel(handle, controller.signal),
-      api.listChannelVideos(handle, undefined, controller.signal),
-    ])
-      .then(([ch, list]) => {
-        setChannel(ch);
-        setVideos(list.videos);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setStatus(err instanceof ApiError && err.status === 404 ? "notfound" : "error");
-      });
-    return () => controller.abort();
-  }, [handle, reloadKey]);
 
   // "latest" keeps the backend's natural (newest-first) order untouched;
   // "oldest" sorts a copy ascending by the always-present created_at.
@@ -79,11 +81,6 @@ export function ChannelView({ handle }: { handle: string }) {
     setVisibleCount(PAGE_SIZE); // reveal the top of the re-sorted list
   }
 
-  function retry() {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }
-
   if (status === "loading") {
     return (
       <div className="flex justify-center py-24">
@@ -91,7 +88,7 @@ export function ChannelView({ handle }: { handle: string }) {
       </div>
     );
   }
-  if (status === "notfound") {
+  if (status === "ready" && channel === null) {
     return <EmptyState title="Channel not found" message={`No channel @${handle} exists.`} />;
   }
   if (status === "error" || channel === null) {
@@ -148,9 +145,10 @@ export function ChannelView({ handle }: { handle: string }) {
                     initialFollowing={channel.is_following}
                     initialNotificationSetting={channel.notification_setting}
                     onDelta={(d) =>
-                      setChannel((c) =>
-                        c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c,
-                      )
+                      setData((current) => current?.channel ? {
+                        ...current,
+                        channel: { ...current.channel, follower_count: Math.max(0, current.channel.follower_count + d) },
+                      } : current)
                     }
                   />
                   <SupportButton
@@ -209,7 +207,7 @@ export function ChannelView({ handle }: { handle: string }) {
                     <ChannelVideoCard
                       video={video}
                       onDeleted={() =>
-                        setVideos((cur) => cur.filter((v) => v.id !== video.id))
+                        setData((current) => current ? { ...current, videos: current.videos.filter((v) => v.id !== video.id) } : current)
                       }
                     />
                   </li>
