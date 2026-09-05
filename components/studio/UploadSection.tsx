@@ -182,6 +182,7 @@ export function UploadSection({
   // ref lets the upload's completion callback see the request without a re-render.
   const [publishPending, setPublishPending] = useState(false);
   const publishPendingRef = useRef(false);
+  const releaseCompletionRef = useRef<(() => void) | null>(null);
   // Client-side, display-only technical metadata read from a hidden <video>
   // element (duration/resolution) plus the File's own size/type. Never sent to
   // the API — the server probes authoritatively. null until (and if) it resolves.
@@ -266,6 +267,26 @@ export function UploadSection({
   // rejects as a cancellation, handled in the catch blocks below).
   function cancelUpload() {
     abortRef.current?.abort();
+  }
+
+  // Bytes can finish before the creator enters a schedule. Keep the server
+  // draft unfinalized until its metadata PATCH succeeds, regardless of speed.
+  async function waitForPublish(signal: AbortSignal) {
+    if (publishPendingRef.current) return;
+    setState("uploaded");
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        signal.removeEventListener("abort", abort);
+        releaseCompletionRef.current = null;
+      };
+      const abort = () => {
+        cleanup();
+        reject(new ApiError({ status: 0, code: "upload_cancelled", message: "upload cancelled" }));
+      };
+      if (signal.aborted) { abort(); return; }
+      signal.addEventListener("abort", abort, { once: true });
+      releaseCompletionRef.current = () => { cleanup(); resolve(); };
+    });
   }
 
   // finishWithVideo applies the state-based outcome: a returned video may be
@@ -573,11 +594,9 @@ export function UploadSection({
       if (stale) await discardSession(stale);
       setResumeCandidate(null);
 
-      // Title only + EXPLICIT private: the instance default privacy is ambiguous,
-      // and privacy is the one thing keeping an auto-published upload out of
-      // public view until the creator presses Publish. The publish-timing opt-in
-      // rides along when set (sticky from a previous attempt) so the flag is on
-      // the video BEFORE upload completion — that is what makes the server hold it.
+      // Start private while the creator edits details. Finalization waits for
+      // Publish to persist metadata, so a fast transfer cannot beat a schedule.
+      // Keep a sticky publish-timing choice on the draft as well.
       const draft = await api.createVideoDraft(handle, {
         title: draftTitle,
         privacy: "private",
@@ -595,6 +614,7 @@ export function UploadSection({
         return;
       }
       const res = await resumableUpload(draft.id, file, {
+        beforeComplete: () => waitForPublish(controller.signal),
         onProgress: (p) => {
           setProgress(p.percent);
           setBytes({ loaded: p.loaded, total: p.total });
@@ -669,10 +689,8 @@ export function UploadSection({
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  // publishFileMetadata is Publish for the file path: apply the form metadata to
-  // the auto-created draft (PATCH) and go live. If the upload has finished, the
-  // outcome is derived at once; if it is still in flight, the PATCH lands now and
-  // completion (in startAutoUpload) finalises when the bytes arrive.
+  // Persist metadata before releasing finalization. Transfer may still be in
+  // flight or already waiting at the completion gate; both use the same order.
   async function publishFileMetadata() {
     const id = draftIdRef.current ?? draftId;
     if (!id || publishPendingRef.current) return;
@@ -709,6 +727,8 @@ export function UploadSection({
         // never misses it.
         publishPendingRef.current = true;
         setPublishPending(true);
+        setState("uploading");
+        releaseCompletionRef.current?.();
       }
     } catch (err) {
       // A 422 (e.g. publish_at on an already-published video, or a bad title)
@@ -1229,7 +1249,7 @@ export function UploadSection({
                             <LoaderIcon size={14} className="animate-spin" aria-hidden="true" />{" "}
                             Processing…
                           </span>
-                        ) : state === "uploading" && !publishPending ? (
+                        ) : (state === "uploading" || releaseCompletionRef.current) && !publishPending ? (
                           <Button
                             variant="secondary"
                             size="sm"
@@ -1279,7 +1299,11 @@ export function UploadSection({
                           </span>
                         </div>
                       ) : null}
-                      {state === "uploading" && uploadPhase === "processing" ? (
+                      {state === "uploaded" && releaseCompletionRef.current ? (
+                        <p role="status" className="text-[12.5px] text-fg-muted">
+                          Upload ready — save your details with Publish to begin processing.
+                        </p>
+                      ) : state === "uploading" && uploadPhase === "processing" ? (
                         <p className="text-[12.5px] text-fg-muted">
                           Upload complete — we’re processing your video. This can take a few minutes
                           for a large file; you can keep filling in the details.
@@ -1542,7 +1566,7 @@ export function UploadSection({
                         <Button variant="secondary" size="sm" onClick={() => void retryImport()}>
                           Retry import
                         </Button>
-                      ) : source === "file" && pickedFile ? (
+                      ) : source === "file" && pickedFile && !releaseCompletionRef.current ? (
                         // A failed draft-create/upload keeps the picked file — retry
                         // restarts the auto-upload without re-choosing the file.
                         <Button variant="secondary" size="sm" onClick={retryUpload}>

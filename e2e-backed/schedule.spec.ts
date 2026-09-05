@@ -40,21 +40,8 @@ test("a scheduled publish persists publish_at and parks the video as scheduled",
 
   await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
-  // Publish a real (tiny) video with a future schedule. Selecting the file
-  // AUTO-STARTS the upload, and finalising it server-side publishes the
-  // (private) draft — after which publish_at is rejected (422). So HOLD the
-  // browser's `complete` POST until the schedule PATCH has landed on the
-  // still-draft video, then release it: the POST answers 202 and the finalize
-  // worker then parks the processed video as "scheduled". Holding the POST is
-  // still the right gate — nothing is queued until it goes through.
-  let releaseComplete!: () => void;
-  const completeGate = new Promise<void>((r) => {
-    releaseComplete = r;
-  });
-  await page.route(/\/api\/v1\/uploads\/[^/]+\/complete$/, async (route) => {
-    await completeGate;
-    await route.continue();
-  });
+  // Let the real transfer finish before entering metadata. The application
+  // must keep the draft unfinalized until Publish saves the schedule.
   const completed = page.waitForResponse(
     (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
@@ -64,10 +51,13 @@ test("a scheduled publish persists publish_at and parks the video as scheduled",
     mimeType: "video/mp4",
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
+  await expect(page.getByText(
+    "Upload ready — save your details with Publish to begin processing.",
+    { exact: true },
+  )).toBeVisible();
   await page.getByLabel("Video title").fill(videoTitle);
   await page.getByLabel("Schedule publish").fill(scheduleLocal);
   await publishViaStudioUI(page);
-  releaseComplete();
   await completed;
 
   // The honest outcome: scheduled, never "Published!".
@@ -122,18 +112,7 @@ test("moving a schedule from the edit surface persists the new publish_at", asyn
 
   await createChannelViaStudioUI(page, handle, `Channel ${id}`);
 
-  // Same gated-complete choreography as above: the schedule PATCH must land
-  // before the completion POST is allowed through (nothing is queued until it
-  // is), because a finalised upload publishes the draft, after which publish_at
-  // is rejected.
-  let releaseComplete!: () => void;
-  const completeGate = new Promise<void>((r) => {
-    releaseComplete = r;
-  });
-  await page.route(/\/api\/v1\/uploads\/[^/]+\/complete$/, async (route) => {
-    await completeGate;
-    await route.continue();
-  });
+  // Exercise the same ordinary completed-transfer flow for rescheduling.
   const completed = page.waitForResponse(
     (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
@@ -143,10 +122,13 @@ test("moving a schedule from the edit surface persists the new publish_at", asyn
     mimeType: "video/mp4",
     buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
   });
+  await expect(page.getByText(
+    "Upload ready — save your details with Publish to begin processing.",
+    { exact: true },
+  )).toBeVisible();
   await page.getByLabel("Video title").fill(videoTitle);
   await page.getByLabel("Schedule publish").fill("2030-01-02T12:30");
   await publishViaStudioUI(page);
-  releaseComplete();
   await completed;
   await expect(
     page.getByText("is scheduled — it will publish automatically", { exact: false }),

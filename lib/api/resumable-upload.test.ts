@@ -106,6 +106,28 @@ describe("resumableUpload", () => {
     });
   }
 
+  it("uploads bytes but waits for metadata approval before completion", async () => {
+    acceptingChunks();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const beforeComplete = vi.fn(() => gate);
+    const running = resumableUpload("v1", makeFile(), { beforeComplete });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(beforeComplete).toHaveBeenCalledTimes(1);
+    expect(api.completeUploadSession).not.toHaveBeenCalled();
+    release();
+    await running;
+    expect(api.completeUploadSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not complete when the metadata gate rejects", async () => {
+    acceptingChunks();
+    await expect(resumableUpload("v1", makeFile(), {
+      beforeComplete: async () => { throw new Error("metadata not saved"); },
+    })).rejects.toThrow("metadata not saved");
+    expect(api.completeUploadSession).not.toHaveBeenCalled();
+  });
+
   it("opens a session, PUTs every chunk in order, and completes", async () => {
     acceptingChunks();
     const seen: number[] = [];
