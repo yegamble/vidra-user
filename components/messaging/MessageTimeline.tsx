@@ -26,6 +26,10 @@ export function MessageTimeline({
   onRetry,
   onDiscard,
   onAtBottomChange,
+  hasEarlier = false,
+  loadingEarlier = false,
+  earlierError,
+  onLoadEarlier,
 }: {
   messages: DisplayMessage[];
   meId?: string;
@@ -36,6 +40,10 @@ export function MessageTimeline({
   onRetry: (clientId: string) => void;
   onDiscard: (clientId: string) => void;
   onAtBottomChange?: (atBottom: boolean) => void;
+  hasEarlier?: boolean;
+  loadingEarlier?: boolean;
+  earlierError?: string | null;
+  onLoadEarlier?: () => void;
 }) {
   const items = useMemo(
     () => buildTimeline(messages, { meId, peerReadId, unreadCount }),
@@ -46,6 +54,9 @@ export function MessageTimeline({
   const stickRef = useRef(true); // near the bottom → stick on new messages
   const initializedRef = useRef(false);
   const prevLenRef = useRef(0);
+  const prevFirstRef = useRef<string | undefined>(undefined);
+  const prevLastRef = useRef<string | undefined>(undefined);
+  const anchorRef = useRef<number | null>(null);
   const [showPill, setShowPill] = useState(false);
   const [newCount, setNewCount] = useState(0);
 
@@ -60,6 +71,10 @@ export function MessageTimeline({
     const len = messages.length;
     const last = len > 0 ? messages[len - 1] : undefined;
     const lastMine = last ? last.sender_id === meId : false;
+    const previousFirst = prevFirstRef.current;
+    const previousLast = prevLastRef.current;
+    prevFirstRef.current = messages[0]?.id;
+    prevLastRef.current = last?.id;
 
     if (!initializedRef.current) {
       if (len > 0) {
@@ -75,12 +90,22 @@ export function MessageTimeline({
     const delta = len - prevLenRef.current;
     prevLenRef.current = len;
 
-    if (stickRef.current || (grew && lastMine)) {
+    const sentByReader = grew && lastMine && last?.id !== previousLast;
+    // Use the same distance-from-bottom anchor as encrypted history. Prepending
+    // old messages must neither jump to my last message nor count as new mail.
+    if (grew && messages[0]?.id !== previousFirst && anchorRef.current !== null) {
+      el.scrollTop = el.scrollHeight - anchorRef.current;
+      anchorRef.current = null;
+      if (!sentByReader) return;
+    } else if (!loadingEarlier) {
+      anchorRef.current = null;
+    }
+    if (stickRef.current || sentByReader) {
       el.scrollTop = el.scrollHeight;
     } else if (grew && !lastMine) {
       setNewCount((n) => n + delta);
     }
-  }, [messages, meId, onAtBottomChange]);
+  }, [messages, meId, onAtBottomChange, loadingEarlier]);
 
   function onScroll() {
     const el = scrollRef.current;
@@ -110,6 +135,23 @@ export function MessageTimeline({
         aria-label={`Conversation with ${otherName}`}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4"
       >
+        {hasEarlier ? (
+          <div className="flex flex-col items-center gap-1.5">
+            {earlierError ? <p role="alert" className="text-xs text-danger">{earlierError}</p> : null}
+            <button
+              type="button"
+              disabled={loadingEarlier}
+              onClick={() => {
+                const el = scrollRef.current;
+                anchorRef.current = el ? el.scrollHeight - el.scrollTop : null;
+                onLoadEarlier?.();
+              }}
+              className="focus-ring min-h-11 rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
+            >
+              {loadingEarlier ? "Loading earlier messages…" : "Show earlier messages"}
+            </button>
+          </div>
+        ) : null}
         {items.length === 0 ? (
           <p className="py-8 text-center text-sm text-fg-muted">
             No messages yet. Say hello.
