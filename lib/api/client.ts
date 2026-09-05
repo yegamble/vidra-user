@@ -253,14 +253,21 @@ export function restoreSession(): Promise<AuthResponse | null> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
-        const body: RefreshRequest = { cookie_mode: true };
-        const res = await doRequest<AuthResponse>(
-          REFRESH_PATH,
-          { method: "POST", body, credentials: "include" },
-          null,
-        );
-        setAccessToken(res.token);
-        return res;
+        const rotate = async () => {
+          const body: RefreshRequest = { cookie_mode: true };
+          const res = await doRequest<AuthResponse>(
+            REFRESH_PATH,
+            { method: "POST", body, credentials: "include" },
+            null,
+          );
+          setAccessToken(res.token);
+          return res;
+        };
+        // The cookie is shared across tabs, unlike refreshInFlight. Wait for
+        // another tab's Set-Cookie before sending ours: replaying its previous
+        // token causes the backend to revoke the user's sessions.
+        const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+        return locks ? await locks.request("vidra-refresh-cookie", rotate) : await rotate();
       } catch {
         return null;
       } finally {

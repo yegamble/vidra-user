@@ -268,6 +268,31 @@ describe("restoreSession", () => {
     expect(a?.token).toBe("fresh");
     expect(b?.token).toBe("fresh");
   });
+
+  it("waits for the shared cookie lock before sending a refresh", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const request = vi.fn(async (_name: string, callback: () => Promise<unknown>) => {
+      await held;
+      return callback();
+    });
+    vi.stubGlobal("navigator", { locks: { request } });
+    fetchMock.mockResolvedValue(sessionJson("after-other-tab"));
+    const pending = restoreSession();
+    await Promise.resolve();
+    expect(fetchMock).not.toHaveBeenCalled();
+    release();
+    expect((await pending)?.token).toBe("after-other-tab");
+    expect(request).toHaveBeenCalledWith("vidra-refresh-cookie", expect.any(Function));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not bypass a rejected cross-tab lock with an uncoordinated refresh", async () => {
+    vi.stubGlobal("navigator", { locks: { request: vi.fn().mockRejectedValue(new Error("lock denied")) } });
+    fetchMock.mockResolvedValue(sessionJson("unsafe"));
+    await expect(restoreSession()).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("apiRequest 401 → silent refresh → retry", () => {
