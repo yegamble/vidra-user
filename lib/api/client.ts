@@ -1,3 +1,4 @@
+import { requestId } from "./request-id";
 import { absoluteApiBaseUrl } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { activeTraceFields, injectTraceContext } from "@/lib/observability/trace";
@@ -135,7 +136,7 @@ async function doRequest<T>(
 ): Promise<T> {
   const method = opts.method ?? "GET";
   const url = buildUrl(path, opts.query);
-  const correlationId = crypto.randomUUID();
+  const correlationId = requestId();
 
   // A FormData body is a multipart upload: let the browser set the
   // content-type (with its boundary) and send it as-is, no JSON encoding.

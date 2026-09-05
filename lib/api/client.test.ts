@@ -67,6 +67,15 @@ describe("apiRequest", () => {
     expect(headers.authorization).toBeUndefined();
   });
 
+  it("can fetch an HTTPS embed's API when an HTTP ancestor removes randomUUID", async () => {
+    vi.stubGlobal("crypto", { getRandomValues: crypto.getRandomValues.bind(crypto) });
+    fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
+    await expect(apiRequest("/api/v1/instance")).resolves.toEqual({ ok: true });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["x-correlation-id"])
+      .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
   it("sends a bearer token and JSON body when provided", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
     await apiRequest("/x", { method: "POST", token: "secret", body: { a: 1 } });
