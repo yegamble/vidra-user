@@ -138,17 +138,9 @@ export async function createChannelViaStudioUI(
 }
 
 /**
- * startStudioUpload opens the "Upload video" sheet, selects the file (which
- * AUTO-STARTS the resumable upload — create session → PUT chunks → complete —
- * the instant a single file is chosen), and fills the title on the details
- * stage. Publish then only applies the metadata.
- *
- * Completion is ASYNCHRONOUS: the `complete` POST answers 202 ("accepted") and a
- * background worker assembles and processes the file, so the POST returning is
- * no longer the signal that a finished video exists. This waits for the POST and
- * then for the file card's "Uploaded" state, which is the client's own report
- * that the session finished — the deterministic point at which a caller may
- * Publish and expect an immediate outcome.
+ * Transfer the file bytes and fill the details while finalization waits for
+ * Publish. This lets scheduling and privacy metadata reach the draft before
+ * the asynchronous processing worker can publish it.
  */
 export async function startStudioUpload(
   page: Page,
@@ -166,20 +158,15 @@ export async function startStudioUpload(
     privacy?: "public" | "unlisted" | "private";
   },
 ): Promise<void> {
-  const uploaded = page.waitForResponse(
-    (r) =>
-      /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
-  );
   await page.getByRole("button", { name: "Upload video" }).click();
   await page.getByLabel("Video file").setInputFiles({
     name: opts.name ?? "clip.mp4",
     mimeType: opts.mimeType ?? "video/mp4",
     buffer: opts.buffer,
   });
-  await uploaded;
-  // 202 only means the work was queued. Wait for the client to report the
-  // session finished (the file card flips from "Processing…" to "Uploaded").
-  await expect(page.getByText("Uploaded", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(
+    "Upload ready — save your details with Publish to begin processing.",
+  )).toBeVisible({ timeout: 60_000 });
   // The title prefilled from the filename on the (now-visible) details stage —
   // overwrite it with the caller's title.
   await page.getByLabel("Video title").fill(opts.title);
@@ -188,13 +175,7 @@ export async function startStudioUpload(
   }
 }
 
-/**
- * publishViaStudioUI clicks the studio Publish button and waits for the metadata
- * PATCH that applies it. In the auto-start flow the file upload already finished
- * (startStudioUpload waited for the "Uploaded" state), so Publish just PATCHes
- * the form and derives the outcome. Works for both immediate and scheduled publishes (the
- * outcome differs; the PATCH is the shared signal).
- */
+/** Save metadata and release processing; callers assert the final outcome. */
 export async function publishViaStudioUI(page: Page): Promise<void> {
   const patched = page.waitForResponse(
     (r) =>
