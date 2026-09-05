@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, render, renderHook, waitFor } from "@testing-library/react";
+import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
@@ -13,6 +14,7 @@ const hlsMock = vi.hoisted(() => ({
   // that engine can run here, and it lives inside the chunk — which is why a
   // "no" arrives asynchronously, after selection has provisionally picked it.
   supported: true,
+  manageMedia: false,
   instances: [] as Array<{
     config: Record<string, unknown>;
     currentLevel: number;
@@ -68,13 +70,26 @@ vi.mock("hls.js", () => {
     loadSource(source: string) {
       this.source = source;
     }
+    media: HTMLMediaElement | null = null;
     attachMedia(media: HTMLMediaElement) {
-      void media;
+      this.media = media;
+      if (hlsMock.manageMedia) {
+        // hls.js can attach MSE through a child <source>. On detach it removes
+        // the element src too when that child still names its owned blob URL.
+        const source = document.createElement("source");
+        source.src = "blob:hls-owned";
+        media.removeAttribute("src");
+        media.append(source);
+      }
     }
     startLoad() {}
     recoverMediaError() {}
     destroy() {
       this.destroyed = true;
+      if (hlsMock.manageMedia && this.media?.querySelector("source")) {
+        this.media.removeAttribute("src");
+        this.media.querySelector("source")?.remove();
+      }
     }
   }
 
@@ -94,6 +109,7 @@ let beaconed: QoEEventInput[] = [];
 beforeEach(() => {
   hlsMock.instances.length = 0;
   hlsMock.supported = true;
+  hlsMock.manageMedia = false;
   localStorage.clear();
   Reflect.deleteProperty(navigator, "connection");
   Object.defineProperty(window, "MediaSource", {
@@ -605,6 +621,26 @@ describe("federated playback", () => {
 // is the ONLY place a media credential may come from.
 describe("the playback session drives the source", () => {
   const VIDEO = { id: "video-1", hls_url: "/detail/master.m3u8" };
+
+  it("keeps the rendered original after a no-HLS session tears down a stale tree", async () => {
+    hlsMock.manageMedia = true;
+    let release!: (session: PlaybackSession) => void;
+    vi.spyOn(api, "createVideoPlaybackSession").mockReturnValue(
+      new Promise<PlaybackSession>((resolve) => { release = resolve; }),
+    );
+    function Player() {
+      const ref = useRef<HTMLVideoElement>(null);
+      const playback = useHlsPlayback(ref, VIDEO, null);
+      return <video ref={ref} src={playback.src} data-testid="media" />;
+    }
+    const view = render(<Player />);
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    await act(async () => release({ session_id: "session", video_id: VIDEO.id }));
+    expect(hlsMock.instances[0].destroyed).toBe(true);
+    expect(view.getByTestId("media").getAttribute("src")).toBe(
+      "http://localhost:8080/api/v1/videos/video-1/original",
+    );
+  });
 
   it("plays the session's manifest, not the detail's", async () => {
     sessionMock.video = { ...sessionMock.video, hls_url: "/session/master.m3u8?v=gen7" };

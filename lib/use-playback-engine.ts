@@ -479,6 +479,15 @@ function usePlaybackEngine(
   const src =
     mode === "native-hls" ? nativeHls : mode === "progressive" ? progressive : undefined;
 
+  useEffect(() => {
+    const el = videoRef.current;
+    // React commits the direct src before the previous HLS effect cleans up.
+    // hls.js may detach its child <source> and remove that newly committed src,
+    // leaving an empty player. Reconcile after teardown, without reloading an
+    // already-correct source or touching the blob owned by an active HLS engine.
+    if (el && src && el.getAttribute("src") !== src) el.setAttribute("src", src);
+  }, [src, videoRef]);
+
   return {
     mode,
     src,
