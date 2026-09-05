@@ -11,6 +11,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Channel, ChannelStatsResponse, Video, VideoStatsResponse } from "@/lib/api";
 import { formatCount } from "@/lib/format";
+import { useApiResource } from "@/lib/use-api-resource";
 
 import { type Status } from "./shared";
 import { useStudio } from "./StudioContext";
@@ -96,26 +97,24 @@ export function AnalyticsView() {
 
 // ChannelScope — the current channel's aggregated totals + 30-day chart.
 function ChannelScope({ handle, name }: { handle: string; name: string }) {
-  const [status, setStatus] = useState<Status>("loading");
-  const [stats, setStats] = useState<ChannelStatsResponse | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    if (handle === "") return;
-    const controller = new AbortController();
-    api
-      .getChannelStats(handle, controller.signal)
-      .then((res) => {
-        setStats(res);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [handle, reloadKey]);
+  // useApiResource derives status from the CURRENT deps instead of storing it, which
+  // is load-bearing here: this component gets no `key` from its render site (unlike
+  // VideoStatsSection below), so a studio channel switch updates it in place. With a
+  // stored status the section relabelled to the new handle while still showing the
+  // previous channel's totals until the refetch landed.
+  const {
+    status,
+    data: stats,
+    retry,
+  } = useApiResource<ChannelStatsResponse>(
+    // An empty handle means the studio has not resolved a channel yet. Never settling
+    // holds the spinner, which is what the previous early-return did.
+    (signal) =>
+      handle === ""
+        ? new Promise<ChannelStatsResponse>(() => {})
+        : api.getChannelStats(handle, signal),
+    [handle],
+  );
 
   if (status === "loading") {
     return (
@@ -126,13 +125,7 @@ function ChannelScope({ handle, name }: { handle: string; name: string }) {
   }
   if (status === "error" || !stats) {
     return (
-      <ErrorState
-        message="Could not load this channel's stats."
-        onRetry={() => {
-          setStatus("loading");
-          setReloadKey((k) => k + 1);
-        }}
-      />
+      <ErrorState message="Could not load this channel's stats." onRetry={retry} />
     );
   }
 
@@ -170,25 +163,14 @@ function AllChannelsScope({
   channels: Channel[];
   onPickChannel: (handle: string) => void;
 }) {
-  const [status, setStatus] = useState<Status>("loading");
-  const [stats, setStats] = useState<AllChannelsStats | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getAllChannelsStats(controller.signal)
-      .then((res) => {
-        setStats(res);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channels.map((c) => c.handle).join(","), reloadKey]);
+  // Same derived-status reasoning as ChannelScope. Passing the joined handles as the
+  // dep also retires the exhaustive-deps suppression this effect used to need.
+  const handleKey = channels.map((c) => c.handle).join(",");
+  const {
+    status,
+    data: stats,
+    retry,
+  } = useApiResource<AllChannelsStats>((signal) => getAllChannelsStats(signal), [handleKey]);
 
   if (status === "loading") {
     return (
@@ -199,13 +181,7 @@ function AllChannelsScope({
   }
   if (status === "error" || !stats) {
     return (
-      <ErrorState
-        message="Could not load your all-channel stats."
-        onRetry={() => {
-          setStatus("loading");
-          setReloadKey((k) => k + 1);
-        }}
-      />
+      <ErrorState message="Could not load your all-channel stats." onRetry={retry} />
     );
   }
 
