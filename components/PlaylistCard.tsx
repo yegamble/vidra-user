@@ -1,8 +1,9 @@
+import { PlaylistCoverImage } from "@/components/PlaylistCoverImage";
 import Link from "next/link";
 
 import { PlaylistIcon } from "@/components/icons";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
-import { playlistThumbnailUrl, type Playlist } from "@/lib/api";
+import { type Playlist } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 
 // PlaylistCard is the grid card for a playlist (used on /playlists): the uploaded
@@ -19,9 +20,8 @@ export function PlaylistCard({ playlist }: { playlist: Playlist }) {
       >
         <div className="media-placeholder relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl transition-[transform,box-shadow] duration-200 ease-out group-hover:scale-[1.02] group-hover:shadow-soft">
           {playlist.has_thumbnail ? (
-            // eslint-disable-next-line @next/next/no-img-element -- backend-served cover, not a static asset
-            <img
-              src={playlistThumbnailUrl(playlist.id)}
+            <PlaylistCoverImage
+              playlistId={playlist.id}
               alt=""
               className="h-full w-full object-cover"
             />

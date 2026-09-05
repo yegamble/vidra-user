@@ -1,5 +1,6 @@
 "use client";
 
+import { PlaylistCoverImage } from "@/components/PlaylistCoverImage";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -10,7 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
-import { api, playlistThumbnailUrl } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { HistoryItem, Playlist, Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { resumeFraction } from "@/lib/resume-progress";
@@ -293,9 +294,8 @@ function PlaylistRow({ playlist }: { playlist: Playlist }) {
     >
       <div className="media-placeholder relative flex h-12 w-[84px] flex-none items-center justify-center overflow-hidden rounded-[9px]">
         {playlist.has_thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element -- backend-served cover
-          <img
-            src={playlistThumbnailUrl(playlist.id)}
+          <PlaylistCoverImage
+            playlistId={playlist.id}
             alt=""
             className="h-full w-full object-cover"
           />
