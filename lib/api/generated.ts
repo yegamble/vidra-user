@@ -2397,7 +2397,7 @@ export interface paths {
         };
         /**
          * List a video's caption tracks
-         * @description Returns the WebVTT caption tracks for a public, published video (metadata only; fetch the file from the per-language endpoint). No auth required. A non-public/unpublished or unknown video is 404.
+         * @description Returns WebVTT track metadata under the video media visibility rules: published public/unlisted videos are open; private videos require their owner, and unpublished videos require owner/staff authorization. Password videos require owner/staff credentials or a valid playback token. Fetch bytes from the per-language endpoint. Unknown or hidden videos are 404.
          */
         get: operations["listCaptions"];
         put?: never;
@@ -2421,7 +2421,7 @@ export interface paths {
         };
         /**
          * Download a caption track (WebVTT)
-         * @description Serves the WebVTT file for a public, published video's caption in the given language. No auth required. An unknown video or language is 404.
+         * @description Serves a WebVTT track under the same visibility rules as video playback, including unlisted access and authorized private reads. Password videos require owner/staff credentials or a valid playback token. An unknown or hidden video or language is 404.
          */
         get: operations["downloadCaption"];
         put?: never;
@@ -15443,7 +15443,7 @@ export interface operations {
                     "application/json": components["schemas"]["CaptionListResponse"];
                 };
             };
-            /** @description No such public, published video. */
+            /** @description No such accessible video. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -15542,7 +15542,7 @@ export interface operations {
                     "text/vtt": string;
                 };
             };
-            /** @description No such public video or caption. */
+            /** @description No such accessible video or caption. */
             404: {
                 headers: {
                     [name: string]: unknown;
