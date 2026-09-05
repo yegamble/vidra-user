@@ -106,7 +106,7 @@ export function WatchView({
   // The signed-in viewer, so the comments section can offer the creator
   // pin/heart controls when this is the video owner's own channel (owner-only
   // client gating; the server independently authorizes editors/moderators too).
-  const { user } = useSession();
+  const { user, status: sessionStatus } = useSession();
   const tagFeedDefaults = feedDefaultsForLanding(
     resolveLandingPage(instanceDefaults),
     instanceDefaults,
@@ -226,6 +226,9 @@ export function WatchView({
   const ipfsAvailable = Boolean(ipfsMasterUrl && video?.hls_url);
 
   useEffect(() => {
+    // A hard navigation restores the bearer asynchronously. Reading before it
+    // settles makes an owner-private link stick on an anonymous 404.
+    if (sessionStatus === "restoring") return;
     const controller = new AbortController();
     const fetchVideo =
       id !== undefined
@@ -258,7 +261,7 @@ export function WatchView({
         }
       });
     return () => controller.abort();
-  }, [id, code, reloadKey, playbackToken, seed]);
+  }, [id, code, reloadKey, playbackToken, seed, sessionStatus, user?.id]);
 
   // Emit video.play_started once per watched local video (search-service W4),
   // tagged with the discovery context this page was opened from. Best-effort

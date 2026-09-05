@@ -6,13 +6,15 @@
 // content-warning text. The page's heavy children are stubbed — this exercises
 // only the gate branch inside WatchView itself.
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Video } from "@/lib/api";
 
 const mocks = vi.hoisted(() => ({
   policy: null as string | null,
+  session: { user: null as { id: string } | null, status: "anon" },
+  getVideoByCode: vi.fn(),
   getVideo: vi.fn(),
   getChannel: vi.fn(),
   getCaptions: vi.fn(),
@@ -37,7 +39,7 @@ vi.mock("next/link", () => ({
 
 // Session: anonymous viewer (the gate does not depend on being signed in).
 vi.mock("@/components/auth/AuthProvider", () => ({
-  useSession: () => ({ user: null }),
+  useSession: () => mocks.session,
 }));
 
 // The gate's effective policy — the unit under variation here.
@@ -87,6 +89,7 @@ vi.mock("@/lib/api", () => {
     ApiError: MockApiError,
     api: {
       getVideo: mocks.getVideo,
+      getVideoByCode: mocks.getVideoByCode,
       getChannel: mocks.getChannel,
       getCaptions: mocks.getCaptions,
       getWatchProgress: mocks.getWatchProgress,
@@ -162,6 +165,7 @@ function renderWatch(v: Video) {
 
 beforeEach(() => {
   mocks.policy = null;
+  mocks.session = { user: null, status: "anon" };
 });
 
 afterEach(() => {
@@ -205,5 +209,38 @@ describe("WatchView sensitive gate", () => {
 
     expect(screen.queryByText("This video contains sensitive content")).toBeNull();
     expect(screen.getByTestId("player")).toBeTruthy();
+  });
+});
+
+
+describe("WatchView session restoration", () => {
+  it.each(["uuid", "short code"])("waits for the owner session before resolving a private %s link", async (kind) => {
+    mocks.session = { user: null, status: "restoring" };
+    const privateVideo = video({ privacy: "private", is_sensitive: false });
+    mocks.getVideo.mockResolvedValue(privateVideo);
+    mocks.getVideoByCode.mockResolvedValue(privateVideo);
+    mocks.getChannel.mockReturnValue(new Promise(() => {}));
+    mocks.getCaptions.mockResolvedValue({ captions: [] });
+    mocks.getWatchProgress.mockReturnValue(new Promise(() => {}));
+    const props = kind === "uuid" ? { id: "v1" } : { code: "stored-code" };
+    const view = render(<WatchView {...props} />);
+    expect(mocks.getVideo).not.toHaveBeenCalled();
+    expect(mocks.getVideoByCode).not.toHaveBeenCalled();
+    expect(screen.getByTestId("stub-skeleton")).toBeTruthy();
+
+    mocks.session = { user: { id: "owner" }, status: "authed" };
+    view.rerender(<WatchView {...props} />);
+    await waitFor(() => expect(screen.getByTestId("player")).toBeTruthy());
+    expect(kind === "uuid" ? mocks.getVideo : mocks.getVideoByCode).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves an anonymous link once restoration settles signed out", async () => {
+    mocks.session = { user: null, status: "restoring" };
+    mocks.getVideo.mockResolvedValue(video({ is_sensitive: false }));
+    const view = render(<WatchView id="v1" />);
+    expect(mocks.getVideo).not.toHaveBeenCalled();
+    mocks.session = { user: null, status: "anon" };
+    view.rerender(<WatchView id="v1" />);
+    await waitFor(() => expect(screen.getByTestId("player")).toBeTruthy());
   });
 });
