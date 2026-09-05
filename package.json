@@ -13,6 +13,7 @@
     "lint:icons": "node scripts/check-no-emoji.mjs",
     "typecheck": "tsc --noEmit",
     "codegen": "node scripts/codegen.mjs",
+    "check:contract": "node scripts/check-contract.mjs",
     "generate:icons": "node scripts/generate-icons.mjs",
     "design:shots": "node scripts/design-shots.mjs",
     "test": "vitest run",
