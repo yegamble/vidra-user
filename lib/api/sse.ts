@@ -1,3 +1,4 @@
+import { requestId } from "./request-id";
 import { absoluteApiBaseUrl } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { activeTraceFields, injectTraceContext } from "@/lib/observability/trace";
@@ -67,7 +68,7 @@ async function openOnce(
   token: string | null,
   signal: AbortSignal,
 ): Promise<Response> {
-  const correlationId = crypto.randomUUID();
+  const correlationId = requestId();
   const headers: Record<string, string> = {
     accept: "text/event-stream",
     "cache-control": "no-cache",

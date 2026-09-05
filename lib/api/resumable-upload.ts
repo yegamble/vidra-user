@@ -1,3 +1,4 @@
+import { requestId } from "./request-id";
 // Resumable (chunked) upload orchestration for the studio's original-file upload.
 //
 // The flow: open a session (POST /videos/:id/upload-session), PUT each chunk of
@@ -159,7 +160,7 @@ async function putUploadChunk(
   signal?: AbortSignal,
 ): Promise<UploadStatusResponse> {
   const url = `${apiBaseUrl}/api/v1/uploads/${encodeURIComponent(uploadId)}/chunks/${n}`;
-  const correlationId = crypto.randomUUID();
+  const correlationId = requestId();
   const token = getAccessToken();
   const headers: Record<string, string> = {
     accept: "application/json",

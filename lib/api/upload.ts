@@ -1,3 +1,4 @@
+import { requestId } from "./request-id";
 // XHR-based multipart upload with determinate progress and cancellation.
 //
 // fetch() cannot observe request-body upload progress, so the one flow that
@@ -80,7 +81,7 @@ export function uploadWithProgress<T>(
       return;
     }
 
-    const correlationId = crypto.randomUUID();
+    const correlationId = requestId();
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.setRequestHeader("accept", "application/json");
