@@ -30,6 +30,7 @@ import { buildCommentTree, replyMention } from "@/lib/comments";
 import { useE2EEAvailable } from "@/lib/e2ee/availability";
 import { useMessagingAvailable } from "@/lib/messaging/availability";
 import { relativeTime } from "@/lib/format";
+import { useSettledSession } from "@/lib/use-settled-session";
 
 const MAX_COMMENT_LEN = 2000;
 
@@ -83,7 +84,7 @@ export function CommentsSection({
   // answers: GET /videos/{id}/comments filters out the accounts (and remote
   // instances) the CALLER has muted or blocked, and it can only do that if the
   // request carries the caller's token.
-  const { status: sessionStatus } = useSession();
+  const { settled, viewerKey } = useSettledSession();
 
   useEffect(() => {
     // Wait for the session restore to settle. Firing on mount sent the request
@@ -93,7 +94,8 @@ export function CommentsSection({
     // effect never re-ran, so every hard load of the watch page undid the mute.
     // "restoring" always settles to "authed" or "anon", so this delays the read
     // rather than skipping it, and the spinner already covers the wait.
-    if (sessionStatus === "restoring") return;
+    // `useSettledSession` is the shared seam for that wait — see its docblock.
+    if (!settled) return;
     const controller = new AbortController();
     api
       .getVideoComments(videoId, { limit: FULL_LIST_LIMIT }, controller.signal)
@@ -106,7 +108,7 @@ export function CommentsSection({
         setStatus("error");
       });
     return () => controller.abort();
-  }, [videoId, reloadKey, sessionStatus]);
+  }, [videoId, reloadKey, settled, viewerKey]);
 
   function retry() {
     setStatus("loading");

@@ -32,14 +32,17 @@ describe("useSettledSession", () => {
     expect(result.current.viewerId).toBe("u-1");
   });
 
-  it("gives restoring, anonymous and signed-in viewers three different keys", () => {
+  it("keys a restoring viewer as anonymous, so a server-rendered seed is not thrown away", () => {
+    // The seed was fetched with no viewer, so it IS the anonymous answer. A
+    // third "restoring" key would retire it on every load, for everybody.
     session = { status: "restoring", user: null };
     const restoring = renderHook(() => useSettledSession()).result.current.viewerKey;
     session = { status: "anon", user: null };
     const anon = renderHook(() => useSettledSession()).result.current.viewerKey;
     session = { status: "authed", user: { id: "u-1" } };
     const authed = renderHook(() => useSettledSession()).result.current.viewerKey;
-    expect(new Set([restoring, anon, authed]).size).toBe(3);
+    expect(restoring).toBe(anon);
+    expect(authed).not.toBe(anon);
   });
 
   it("changes the key when the identity changes, so a viewer-scoped effect re-runs", () => {

@@ -20,11 +20,20 @@ export interface SettledSession {
   /** The signed-in account's id, or null (anonymous, or not settled yet). */
   viewerId: string | null;
   /**
-   * The ONE value to put in a viewer-scoped effect's dependency list. It
-   * changes exactly when the answer the server would give changes identity:
-   * restoring → anonymous, restoring → this account, this account → another.
-   * It deliberately does NOT change when the account's own profile is edited,
-   * because that does not change who the server is filtering for.
+   * WHO the server would answer as, as a dependency-list value: `"anon"` or
+   * `"authed:<id>"`. It changes exactly when the answer's identity changes —
+   * a sign-in, a sign-out, or a switch between two accounts — and deliberately
+   * NOT when the account's own profile is edited, which does not change who
+   * the server is filtering for.
+   *
+   * It reads `"anon"` while the session is still restoring, which is not a
+   * hole: `settled` is what holds the request back. It is deliberate, and it
+   * is what makes a server-rendered first page usable. That page was fetched
+   * with no viewer, so it IS the anonymous answer; keying it `"anon"` lets a
+   * visitor who turns out to be anonymous keep the seed and issue no browser
+   * request at all, while a signed-in one replaces it with exactly one request
+   * that carries their token. A third "restoring" value would throw the seed
+   * away for everybody.
    */
   viewerKey: string;
 }
@@ -58,11 +67,13 @@ export interface SettledSession {
  * }, [videoId, viewerKey]);
  * ```
  *
- * `settled` delays the read rather than skipping it — "restoring" always
- * settles to "authed" or "anon" — and `viewerKey` is what makes the delayed
- * read actually happen, and happen again after a sign-in or a sign-out.
- * Depending on `viewerKey` rather than on the raw `status` also covers the
- * account switch that never passes through "anon".
+ * BOTH are needed and neither alone is enough. `settled` delays the read
+ * rather than skipping it — "restoring" always settles to "authed" or "anon" —
+ * and it must be in the dependency list too, or the read would never fire for
+ * a visitor who settles to anonymous (whose `viewerKey` never changed).
+ * `viewerKey` is what re-runs the read across a sign-in, a sign-out, and the
+ * account switch that never passes through "anon", which depending on the raw
+ * `status` would miss.
  *
  * This intentionally goes through `useSession` (which throws outside an
  * `AuthProvider`) rather than `useOptionalSession`: a viewer-scoped read
@@ -81,7 +92,7 @@ export function useSettledSession(): SettledSession {
       // `authed:` with an empty id still differs from "anon", so a session
       // mocked as `{ status }` alone (the component tests' shape) does not
       // collapse a signed-in viewer onto the anonymous one.
-      viewerKey: status === "authed" ? `authed:${viewerId ?? ""}` : status,
+      viewerKey: status === "authed" ? `authed:${viewerId ?? ""}` : "anon",
     }),
     [status, viewerId],
   );

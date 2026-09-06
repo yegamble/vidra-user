@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
 import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
@@ -12,6 +11,7 @@ import { api } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { useSettledSession } from "@/lib/use-settled-session";
 import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
 
 const RELATED_COUNT = 6;
@@ -53,14 +53,15 @@ export function RelatedVideos({
   // in sent the request with no Authorization header and a muted author's video
   // appeared in the rail, the mute only taking effect after a client-side
   // navigation. Waiting for the session to settle is what makes the one request
-  // that goes out carry the viewer it is filtered for; `status` is a dependency
-  // so the rail also refreshes across sign-in and sign-out.
-  const { status } = useSession();
+  // that goes out carry the viewer it is filtered for. `useSettledSession` is
+  // the shared seam for that wait, and its `viewerKey` is what refreshes the
+  // rail across sign-in and sign-out.
+  const { settled, viewerKey } = useSettledSession();
 
   const { id, channel_handle: channelHandle, channel_id: channelId, category } = video;
 
   useEffect(() => {
-    if (status === "restoring") return;
+    if (!settled) return;
     const controller = new AbortController();
     let cancelled = false;
 
@@ -121,7 +122,7 @@ export function RelatedVideos({
       cancelled = true;
       controller.abort();
     };
-  }, [status, id, channelHandle, channelId, category, onFirstRelated]);
+  }, [settled, viewerKey, id, channelHandle, channelId, category, onFirstRelated]);
 
   // While loading, hold the rail's lg-column width with skeleton rows instead
   // of returning null — otherwise the player column renders full-width and

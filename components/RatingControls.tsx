@@ -8,6 +8,7 @@ import { ThumbsDownIcon, ThumbsUpIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { RatingValue, VideoRating } from "@/lib/api";
 import { formatCount } from "@/lib/format";
+import { useSettledSession } from "@/lib/use-settled-session";
 
 // RatingControls shows a video's like/dislike counts and lets an authenticated
 // viewer set, switch, or clear their rating. The server is the source of truth:
@@ -15,6 +16,7 @@ import { formatCount } from "@/lib/format";
 // the rating you already hold clears it (toggle).
 export function RatingControls({ videoId }: { videoId: string }) {
   const { status } = useSession();
+  const { settled, viewerKey } = useSettledSession();
   const [rating, setRating] = useState<VideoRating | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -27,7 +29,8 @@ export function RatingControls({ videoId }: { videoId: string }) {
     // as if they had never rated, and the effect never re-ran to correct it.
     // "restoring" always settles to "authed" or "anon", so this delays the read
     // rather than skipping it (the control renders nothing until it lands).
-    if (status === "restoring") return;
+    // `useSettledSession` is the shared seam for that wait — see its docblock.
+    if (!settled) return;
     const controller = new AbortController();
     api
       .getVideoRating(videoId, controller.signal)
@@ -36,7 +39,7 @@ export function RatingControls({ videoId }: { videoId: string }) {
         // Leave rating null on error; the control simply does not render.
       });
     return () => controller.abort();
-  }, [videoId, status]);
+  }, [videoId, settled, viewerKey]);
 
   if (rating === null) return null;
   const authed = status === "authed";
