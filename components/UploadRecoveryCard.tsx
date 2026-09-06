@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { LoaderIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
+import { ErrorState } from "@/components/ui/ErrorState";
 import {
   ApiError,
   api,
@@ -22,8 +23,8 @@ import { watchPath } from "@/lib/watch-path";
 // resumable sessions — the source of truth, surviving a refresh or a different
 // device where localStorage never had the record) and offers, per session, to
 // Resume (re-pick the file, verified by fingerprint) or Discard (DELETE the
-// session server-side). Same surface-muted vocabulary as StudioStorageCard; a
-// load failure or an empty list hides it (never a faked recovery surface).
+// session server-side). Same surface-muted vocabulary as StudioStorageCard;
+// an empty authoritative list hides it; a failed check remains retryable.
 
 // expiresInLabel renders a future ISO instant as a short "expires in 23h"
 // countdown (the session's 24h TTL). "expired"/"" for a past/unparseable time.
@@ -55,6 +56,8 @@ function pickedFileMatches(file: File, upload: ActiveUpload, fingerprint: string
 
 export function UploadRecoveryCard({ onResumed }: { onResumed?: () => void }) {
   const [uploads, setUploads] = useState<ActiveUpload[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,15 +65,27 @@ export function UploadRecoveryCard({ onResumed }: { onResumed?: () => void }) {
       .listMyUploads(undefined, controller.signal)
       .then((res) => setUploads(res.uploads))
       .catch(() => {
-        // Non-blocking: on any failure the card simply doesn't render.
+        // A failed check says nothing about whether recoverable uploads exist.
+        if (!controller.signal.aborted) setLoadError(true);
       });
     return () => controller.abort();
-  }, []);
+  }, [reloadKey]);
 
   function removeRow(uploadId: string) {
     setUploads((list) => (list ? list.filter((u) => u.upload_id !== uploadId) : list));
   }
 
+  if (loadError) {
+    return (
+      <section aria-label="Unfinished uploads">
+        <ErrorState
+          title="Could not check unfinished uploads"
+          message="Your uploads may still be available. Retry to check for uploads you can resume."
+          onRetry={() => { setLoadError(false); setReloadKey((key) => key + 1); }}
+        />
+      </section>
+    );
+  }
   if (!uploads || uploads.length === 0) return null;
 
   return (
@@ -111,6 +126,8 @@ function RecoveryRow({
   onRemoved: () => void;
 }) {
   const [phase, setPhase] = useState<RowPhase>("idle");
+  const [discarding, setDiscarding] = useState(false);
+  const [sessionDiscarded, setSessionDiscarded] = useState(false);
   const [progress, setProgress] = useState(0);
   const [bytes, setBytes] = useState<{ loaded: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +147,7 @@ function RecoveryRow({
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking the same file after a mismatch
-    if (!file || phase === "resuming") return;
+    if (!file || phase === "resuming" || discarding || sessionDiscarded) return;
     setError(null);
 
     let fingerprint = "";
@@ -198,14 +215,29 @@ function RecoveryRow({
     }
   }
 
-  // Discard abandons the session: DELETE it (drops its chunk blobs) and best-effort
-  // delete its orphaned draft video, then drop the row.
+  // Do not erase the recovery row until both operations actually succeed.
+  // Once cancelled, only draft cleanup can be retried; resuming is no longer safe.
   async function discard() {
-    if (phase === "resuming") return;
-    await api.cancelUploadSession(upload.upload_id).catch(() => {});
-    forgetUploadSession(upload.upload_id);
-    void api.deleteVideo(upload.video_id).catch(() => {});
-    onRemoved();
+    if (phase === "resuming" || discarding) return;
+    setDiscarding(true);
+    setError(null);
+    let cancelled = sessionDiscarded;
+    try {
+      if (!cancelled) {
+        await api.cancelUploadSession(upload.upload_id);
+        cancelled = true;
+        setSessionDiscarded(true);
+        forgetUploadSession(upload.upload_id);
+      }
+      await api.deleteVideo(upload.video_id);
+      onRemoved();
+    } catch {
+      setError(cancelled
+        ? "Upload cancelled, but its draft could not be deleted. Retry Discard to finish cleanup."
+        : "Could not discard this upload. Please try again.");
+    } finally {
+      setDiscarding(false);
+    }
   }
 
   if (phase === "done" && doneVideo) {
@@ -254,7 +286,7 @@ function RecoveryRow({
           {formatBytes(shownBytes.loaded)} of {formatBytes(shownBytes.total)}
         </span>
       </div>
-      {error ? <p className="text-xs text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         {phase === "resuming" ? (
           <>
@@ -276,6 +308,7 @@ function RecoveryRow({
             <Button
               size="sm"
               aria-label={`Resume ${upload.filename}`}
+              disabled={discarding || sessionDiscarded}
               onClick={() => inputRef.current?.click()}
             >
               Resume upload
@@ -284,6 +317,7 @@ function RecoveryRow({
               variant="secondary"
               size="sm"
               aria-label={`Discard ${upload.filename}`}
+              disabled={discarding}
               onClick={() => void discard()}
             >
               Discard
@@ -291,6 +325,7 @@ function RecoveryRow({
             <input
               ref={inputRef}
               type="file"
+              disabled={discarding || sessionDiscarded}
               accept="video/*"
               tabIndex={-1}
               aria-hidden="true"
