@@ -413,3 +413,38 @@ describe("CommentsSection deletion recovery", () => {
     expect(deleteComment).toHaveBeenLastCalledWith("c1");
   });
 });
+
+describe("CommentsSection viewer-scoped filtering (A12 / SOC-02)", () => {
+  // The comment list's mute/block filtering is PER VIEWER and applied by the
+  // server: GET /videos/{id}/comments only knows who is asking if the request
+  // carries the viewer's token. Fetching while the session is still being
+  // restored sends the request anonymously, so the server hides nothing and the
+  // muted account's comments come back on every hard page load — the mute looks
+  // like it works only for as long as the client-side filter survives.
+  it("does not request the list until the session has resolved", async () => {
+    session = { status: "restoring" };
+    resolveComments([mk("c1")]);
+    const { rerender } = render(<CommentsSection videoId="v1" />);
+
+    // Nothing may go out yet: an anonymous read is the wrong read, not an early one.
+    await waitFor(() => expect(screen.getByLabelText("Loading comments")).toBeTruthy());
+    expect(getVideoComments).not.toHaveBeenCalled();
+
+    session = { status: "authed", user: { username: "viewer" } };
+    rerender(<CommentsSection videoId="v1" />);
+    await screen.findByText("body-c1");
+    expect(getVideoComments).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches once for an anonymous visitor, after the restore attempt settles", async () => {
+    session = { status: "restoring" };
+    resolveComments([mk("c1")]);
+    const { rerender } = render(<CommentsSection videoId="v1" />);
+    expect(getVideoComments).not.toHaveBeenCalled();
+
+    session = { status: "anon" };
+    rerender(<CommentsSection videoId="v1" />);
+    await screen.findByText("body-c1");
+    expect(getVideoComments).toHaveBeenCalledTimes(1);
+  });
+});

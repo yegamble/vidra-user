@@ -79,8 +79,21 @@ export function CommentsSection({
   const [status, setStatus] = useState<Status>("loading");
   const [comments, setComments] = useState<Comment[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  // Which comments this list may show is a PER-VIEWER question the server
+  // answers: GET /videos/{id}/comments filters out the accounts (and remote
+  // instances) the CALLER has muted or blocked, and it can only do that if the
+  // request carries the caller's token.
+  const { status: sessionStatus } = useSession();
 
   useEffect(() => {
+    // Wait for the session restore to settle. Firing on mount sent the request
+    // ANONYMOUSLY — the token is restored asynchronously from the refresh
+    // cookie — so the server had no viewer to filter for and returned the
+    // muted/blocked authors' comments to the very person who hid them. The
+    // effect never re-ran, so every hard load of the watch page undid the mute.
+    // "restoring" always settles to "authed" or "anon", so this delays the read
+    // rather than skipping it, and the spinner already covers the wait.
+    if (sessionStatus === "restoring") return;
     const controller = new AbortController();
     api
       .getVideoComments(videoId, { limit: FULL_LIST_LIMIT }, controller.signal)
@@ -93,7 +106,7 @@ export function CommentsSection({
         setStatus("error");
       });
     return () => controller.abort();
-  }, [videoId, reloadKey]);
+  }, [videoId, reloadKey, sessionStatus]);
 
   function retry() {
     setStatus("loading");
@@ -548,7 +561,15 @@ function CommentItem({
     setBlocking(true);
     try {
       await api.blockUser(authorId);
-      setBlocked(true); // a block doesn't hide content, so keep the comment; reflect the state
+      // The comment stays put and the control reflects the blocked state — the
+      // behaviour e2e/blocks.spec.ts and e2e-backed/blocks.spec.ts pin. Note
+      // that this differs from Mute, which removes the comment immediately, and
+      // that the SERVER filters a blocked author out of this viewer's list on
+      // the next load either way (blockUser's contract: "their comments are
+      // filtered from comment lists, per-viewer, exactly like mutes"). So the
+      // row disappears on reload regardless; whether it should also go now is a
+      // product call, not a bug fix, and is left to its owner.
+      setBlocked(true);
     } catch {
       // Leave things as-is on failure.
     } finally {
