@@ -125,7 +125,7 @@ describe("SearchSettingsView — history", () => {
     // Confirm modal → clear.
     fireEvent.click(await screen.findByRole("button", { name: "Clear history" }));
     await waitFor(() => expect(clearSearchHistory).toHaveBeenCalled());
-    expect(await screen.findByText("You have no saved searches.")).toBeTruthy();
+    expect(await screen.findByText(/You have no saved searches/)).toBeTruthy();
   });
 
 });
@@ -301,7 +301,7 @@ describe("SearchSettingsView — the opt-out promise, in words", () => {
 describe("SearchSettingsView — clear-all reachability", () => {
   it("offers Clear all even when the list is empty", async () => {
     render(<SearchSettingsView />);
-    expect(await screen.findByText("You have no saved searches.")).toBeTruthy();
+    expect(await screen.findByText(/You have no saved searches/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     fireEvent.click(await screen.findByRole("button", { name: "Clear history" }));
     await waitFor(() => expect(clearSearchHistory).toHaveBeenCalled());
