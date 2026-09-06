@@ -8,6 +8,10 @@ import type {
   AuthResponse,
   ChangePasswordRequest,
   ClaimOwnerRequest,
+  EmailChangeConfirmed,
+  EmailChangeConfirmRequest,
+  EmailChangeRequest,
+  EmailChangeState,
   EmailVerificationConfirmRequest,
   LoginRequest,
   MFARequiredResponse,
@@ -239,6 +243,53 @@ export const authApi = {
    */
   changePassword: (body: ChangePasswordRequest) =>
     apiRequest<void>("/api/v1/auth/me/password", { method: "POST", body }),
+
+  /**
+   * POST /api/v1/auth/me/email-change — step one of the two-step address
+   * change: re-verify the CURRENT password and have a single-use token mailed
+   * to the NEW address (202). The account keeps its current address until that
+   * token is confirmed. 403 wrong password, 409 either a password-less
+   * (OAuth/ATProto-only) account or an address already in use on the instance,
+   * 422 malformed or the address the account already has.
+   */
+  requestEmailChange: (body: EmailChangeRequest) =>
+    apiRequest<EmailChangeState>("/api/v1/auth/me/email-change", { method: "POST", body }),
+
+  /**
+   * GET /api/v1/auth/me/email-change — the pending address change, if any.
+   * Always 200: "nothing pending" is a state, not an error.
+   */
+  getEmailChange: (signal?: AbortSignal) =>
+    apiRequest<EmailChangeState>("/api/v1/auth/me/email-change", { signal }),
+
+  /**
+   * POST /api/v1/auth/me/email-change/resend — re-send the confirmation for the
+   * address already pending, superseding the previous token (202). No password:
+   * the pending request already records that one was proven, and the message
+   * can only go where that request said. 404 when nothing is pending.
+   */
+  resendEmailChange: () =>
+    apiRequest<EmailChangeState>("/api/v1/auth/me/email-change/resend", { method: "POST" }),
+
+  /**
+   * DELETE /api/v1/auth/me/email-change — cancel the pending change and kill
+   * its token (204). 404 when nothing was pending.
+   */
+  cancelEmailChange: () =>
+    apiRequest<void>("/api/v1/auth/me/email-change", { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/auth/me/email-change/confirm — spend the token from the
+   * message and switch the address (200, returning the new one). Requires the
+   * bearer token as well: the mail token proves the mailbox, the session proves
+   * the account, and a token issued to a DIFFERENT account is refused exactly
+   * like an unknown one (400).
+   */
+  confirmEmailChange: (body: EmailChangeConfirmRequest) =>
+    apiRequest<EmailChangeConfirmed>("/api/v1/auth/me/email-change/confirm", {
+      method: "POST",
+      body,
+    }),
 
   /**
    * POST /api/v1/auth/me/deactivate — disable the current account after

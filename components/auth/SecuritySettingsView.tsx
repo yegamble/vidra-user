@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ChangeEmailSection } from "@/components/auth/ChangeEmailSection";
 import { ChangePasswordSection } from "@/components/auth/ChangePasswordSection";
 import { QrCode } from "@/components/QrCode";
 import { Alert } from "@/components/ui/Alert";
@@ -38,6 +39,10 @@ export function SecuritySettingsView() {
   return (
     <div className="flex max-w-xl flex-col gap-6">
       <TwoFactorSection />
+      {/* Email then password: the address is how the account is recovered, so
+          it is the more consequential of the two, and both are gated on the
+          same current-password proof. */}
+      <ChangeEmailSection />
       {/* Password sits next to the devices control because they are the same
           decision: changing the password signs the other devices out. */}
       <ChangePasswordSection />

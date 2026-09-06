@@ -13,6 +13,14 @@ vi.mock("@/lib/api", () => ({
     beginTOTPEnrollment: vi.fn(),
     verifyTOTPEnrollment: vi.fn(),
     disableTOTP: vi.fn(),
+    // The Email card mounts alongside the two-factor one and reads its pending
+    // state on mount. Stubbed as "nothing pending" so this view's own
+    // assertions are unaffected by it.
+    getEmailChange: vi.fn(async () => ({ pending: false })),
+    requestEmailChange: vi.fn(),
+    resendEmailChange: vi.fn(),
+    cancelEmailChange: vi.fn(),
+    changePassword: vi.fn(),
   },
   ApiError: class ApiError extends Error {},
   errorMessage: () => "Something went wrong.",
