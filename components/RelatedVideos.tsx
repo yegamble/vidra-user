@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useSession } from "@/components/auth/AuthProvider";
 import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
@@ -45,10 +46,21 @@ export function RelatedVideos({
   onFirstRelated?: (video: Video | null) => void;
 }) {
   const [related, setRelated] = useState<Video[] | null>(null);
+  // This rail is filtered PER VIEWER by core's hydration predicate: a muted or
+  // blocked author's videos are dropped for this viewer and nobody else. Asking
+  // before the refresh cookie has been redeemed therefore asks as the WRONG
+  // person — observed in Chromium against a live core, a hard load while signed
+  // in sent the request with no Authorization header and a muted author's video
+  // appeared in the rail, the mute only taking effect after a client-side
+  // navigation. Waiting for the session to settle is what makes the one request
+  // that goes out carry the viewer it is filtered for; `status` is a dependency
+  // so the rail also refreshes across sign-in and sign-out.
+  const { status } = useSession();
 
   const { id, channel_handle: channelHandle, channel_id: channelId, category } = video;
 
   useEffect(() => {
+    if (status === "restoring") return;
     const controller = new AbortController();
     let cancelled = false;
 
@@ -109,7 +121,7 @@ export function RelatedVideos({
       cancelled = true;
       controller.abort();
     };
-  }, [id, channelHandle, channelId, category, onFirstRelated]);
+  }, [status, id, channelHandle, channelId, category, onFirstRelated]);
 
   // While loading, hold the rail's lg-column width with skeleton rows instead
   // of returning null — otherwise the player column renders full-width and

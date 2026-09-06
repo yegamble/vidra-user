@@ -66,6 +66,13 @@ vi.mock("@/lib/device-preferences", () => ({
   useRestrictedMode: () => previewMocks.restrictedMode,
 }));
 
+// The session the rail sees. "anon" is the settled default, so every existing
+// case keeps the behaviour it was written for.
+let sessionStatus: "restoring" | "anon" | "authed" = "anon";
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useSession: () => ({ status: sessionStatus, user: null }),
+}));
+
 vi.mock("@/lib/api", () => ({
   api: {
     getVideoRecommendations: vi.fn(),
@@ -107,6 +114,7 @@ afterEach(() => {
   previewMocks.sensitivePolicy = "display";
   previewMocks.restrictedMode = false;
   previewMocks.props.clear();
+  sessionStatus = "anon";
 });
 
 describe("RelatedVideos recommendations endpoint", () => {
@@ -255,5 +263,43 @@ describe("RelatedVideos inline preview integration", () => {
 
     expect(previewMocks.props.get("next")?.previewEnabled).toBe(false);
     expect(String(previewMocks.props.get("next")?.posterClassName)).toContain("blur-2xl");
+  });
+});
+
+// The related rail is filtered PER VIEWER by core's hydration predicate — a
+// muted or blocked author's videos are dropped for that viewer and nobody else.
+// Asking before the session exists therefore asks as the wrong person.
+//
+// Observed in real Chromium against a live core: hard-loading a watch page while
+// signed in sent GET /videos/{id}/recommendations with NO Authorization header,
+// and a video by an author the viewer had muted rendered in the rail. The mute
+// only reappeared as an exclusion after a client-side navigation.
+describe("RelatedVideos session settling", () => {
+  it("does not fetch while the session is still restoring", async () => {
+    sessionStatus = "restoring";
+    const current = video("current", "Current video");
+    getVideoRecommendations.mockResolvedValue({
+      items: [video("a", "One")],
+      personalized: false,
+      source: "search",
+    } as never);
+    render(<RelatedVideos video={current} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(getVideoRecommendations).not.toHaveBeenCalled();
+    expect(listChannelVideos).not.toHaveBeenCalled();
+    expect(getFeed).not.toHaveBeenCalled();
+  });
+
+  it("fetches once the session has settled", async () => {
+    sessionStatus = "authed";
+    const current = video("current", "Current video");
+    getVideoRecommendations.mockResolvedValue({
+      items: [video("a", "One")],
+      personalized: true,
+      source: "search",
+    } as never);
+    render(<RelatedVideos video={current} />);
+    expect(await screen.findByText("One")).toBeTruthy();
+    expect(getVideoRecommendations).toHaveBeenCalledTimes(1);
   });
 });
