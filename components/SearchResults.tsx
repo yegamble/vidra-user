@@ -41,6 +41,7 @@ import {
   type SearchResultType,
 } from "@/lib/search-url";
 import { useAppendingList } from "@/lib/use-appending-list";
+import { useSettledOptionalSession } from "@/lib/use-settled-session";
 import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
 import { watchPath } from "@/lib/watch-path";
 
@@ -373,9 +374,18 @@ function VideoResults({
   // they are a different question ("what does this pasted link point at") with a
   // different answer shape, and they are not paginated.
   const [remote, setRemote] = useState<RemoteSearchResult[]>([]);
+  // A search answer is PER VIEWER: core drops the accounts this caller has
+  // muted or blocked, and ranks personally for a signed-in caller whose
+  // instance and preference allow it. Asking before the refresh cookie has
+  // been redeemed asks as an anonymous visitor, and the page never re-asks —
+  // so the muted author's videos stay on screen. `useSettledOptionalSession`
+  // rather than the strict variant because this component also renders with
+  // no AuthProvider above it (see its docblock), where no viewer can arrive.
+  const viewer = useSettledOptionalSession();
 
   const list = useAppendingList<Video>({
     queryKey: searchFilterKey(query, filters),
+    viewer,
     load: (window, signal) =>
       api
         .searchVideos(
@@ -550,7 +560,11 @@ function EntityResults<T>({
   itemKey: (item: T) => string;
   renderItem: (item: T) => ReactNode;
 }) {
-  const list = useAppendingList<T>({ queryKey: query, load });
+  // Channel and account search are per-viewer too (SearchPublic /
+  // SearchPublicAccounts take the viewer and drop what they have muted or
+  // blocked), so they wait for the session exactly as the video tab does.
+  const viewer = useSettledOptionalSession();
+  const list = useAppendingList<T>({ queryKey: query, viewer, load });
 
   if (list.status === "loading") return <EntityResultsSkeleton />;
   if (list.status === "error") return <ErrorState message={error} onRetry={list.reload} />;

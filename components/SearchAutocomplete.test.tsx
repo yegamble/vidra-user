@@ -26,6 +26,14 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+// The session in context. null is the shipped default for this file: the box
+// is rendered bare here, with no AuthProvider above it, which is exactly what
+// useOptionalSession answers null for.
+let optionalSession: { status: string; user: { id: string } | null } | null = null;
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useOptionalSession: () => optionalSession,
+}));
+
 import { api } from "@/lib/api";
 import type { SearchSuggestion } from "@/lib/api/types";
 
@@ -48,6 +56,7 @@ afterEach(() => {
   vi.useRealTimers();
   nav.pathname = "/";
   nav.params = new URLSearchParams();
+  optionalSession = null;
 });
 
 function renderBox(props: Partial<React.ComponentProps<typeof SearchAutocomplete>> = {}) {
@@ -544,5 +553,69 @@ describe("SearchAutocomplete — global focus shortcuts", () => {
   it("announces the shortcut to assistive tech on the header input", () => {
     renderBox();
     expect(combobox().getAttribute("aria-keyshortcuts")).toBe("Meta+K Control+K /");
+  });
+});
+
+// GET /search/suggestions is PER VIEWER: a signed-in caller whose instance and
+// preference allow it gets their own past searches back as `history`-typed
+// personal suggestions, and the whole set is ranked for them. Asking before
+// the refresh cookie has been redeemed asks as an anonymous visitor — and the
+// answer is then CACHED per prefix, so the anonymous set outlives the restore.
+describe("SearchAutocomplete session settling", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  it("does not ask for suggestions while the session is still restoring", () => {
+    optionalSession = { status: "restoring", user: null };
+    getSearchSuggestions.mockResolvedValue(response([s("anything")]));
+    renderBox();
+    const input = combobox();
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "ab" } });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(getSearchSuggestions).not.toHaveBeenCalled();
+  });
+
+  it("asks exactly once when the session settles", () => {
+    optionalSession = { status: "restoring", user: null };
+    getSearchSuggestions.mockResolvedValue(response([s("anything")]));
+    const { rerender } = renderBox();
+    const input = combobox();
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "ab" } });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    rerender(<SearchAutocomplete />);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(getSearchSuggestions).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not serve one viewer the suggestions cached for another", () => {
+    // The per-prefix cache is what makes this more than a timing bug: an
+    // anonymous answer taken once would be replayed to the signed-in viewer
+    // for the rest of the tab's life.
+    optionalSession = { status: "anon", user: null };
+    getSearchSuggestions.mockResolvedValue(response([s("anonymous answer")]));
+    const { rerender } = renderBox();
+    const input = combobox();
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "ab" } });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(getSearchSuggestions).toHaveBeenCalledTimes(1);
+
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    getSearchSuggestions.mockResolvedValue(response([s("their own history", { type: "history" })]));
+    rerender(<SearchAutocomplete />);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(getSearchSuggestions).toHaveBeenCalledTimes(2);
   });
 });

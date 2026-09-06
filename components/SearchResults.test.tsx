@@ -85,6 +85,15 @@ vi.mock("@/lib/api/video-config", () => ({
 // exercise the authed/anonymous help-text and follow affordances (W13).
 let mockedToken: string | null = null;
 
+// The session in context. null is the shipped default for this file: these
+// tests render SearchResults bare, with no AuthProvider above it, which is
+// exactly what useOptionalSession answers null for — and a read with no
+// provider can never be waiting for one.
+let optionalSession: { status: string; user: { id: string } | null } | null = null;
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useOptionalSession: () => optionalSession,
+}));
+
 vi.mock("@/lib/api", () => ({
   api: {
     searchVideos: vi.fn(),
@@ -578,5 +587,56 @@ describe("SearchResults result types", () => {
 
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.getByText("Search for videos")).toBeTruthy();
+  });
+});
+
+// GET /videos/search, /search/channels and /search/accounts are all filtered
+// PER VIEWER by core: the accounts this caller muted or blocked drop out, and
+// the ranking is personalized for a signed-in caller whose instance and
+// preference allow it. A request that goes out before the refresh cookie has
+// been redeemed carries no Authorization header, so the server answers as an
+// anonymous visitor and the muted author's videos come back — and the search
+// page never re-asks.
+describe("SearchResults session settling", () => {
+  beforeEach(() => {
+    optionalSession = null;
+  });
+
+  afterEach(() => {
+    optionalSession = null;
+  });
+
+  it("does not search while the session is still restoring", async () => {
+    optionalSession = { status: "restoring", user: null };
+    searchVideos.mockResolvedValue({ query: "cats", videos: [video("v1", "Cats")], total: 1 } as never);
+    render(<SearchResults query="cats" filters={{}} type="videos" />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(searchVideos).not.toHaveBeenCalled();
+  });
+
+  it("searches exactly once when the session settles", async () => {
+    optionalSession = { status: "restoring", user: null };
+    searchVideos.mockResolvedValue({ query: "cats", videos: [video("v1", "Cats")], total: 1 } as never);
+    const { rerender } = render(<SearchResults query="cats" filters={{}} type="videos" />);
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    rerender(<SearchResults query="cats" filters={{}} type="videos" />);
+    expect(await screen.findByText("Cats")).toBeTruthy();
+    expect(searchVideos).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not list channels while the session is still restoring", async () => {
+    optionalSession = { status: "restoring", user: null };
+    searchChannels.mockResolvedValue({ channels: [], total: 0 } as never);
+    render(<SearchResults query="cats" filters={{}} type="channels" />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(searchChannels).not.toHaveBeenCalled();
+  });
+
+  it("does not list accounts while the session is still restoring", async () => {
+    optionalSession = { status: "restoring", user: null };
+    searchAccounts.mockResolvedValue({ accounts: [], total: 0 } as never);
+    render(<SearchResults query="cats" filters={{}} type="accounts" />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(searchAccounts).not.toHaveBeenCalled();
   });
 });
