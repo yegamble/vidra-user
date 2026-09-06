@@ -17,7 +17,6 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 
 /** Renders children with no session in context at all. */
 function NoProvider({ children }: { children: React.ReactNode }) {
-  optionalSession = null;
   return <>{children}</>;
 }
 
@@ -92,6 +91,7 @@ describe("useSettledOptionalSession", () => {
     // Mirrors useOptionalSession: for a component that also renders bare, "no
     // session" is a valid answer, not a programming error — and a read with no
     // provider above it can never be delayed into one.
+    optionalSession = null;
     const { result } = renderHook(() => useSettledOptionalSession(), {
       wrapper: NoProvider,
     });

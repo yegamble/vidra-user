@@ -46,3 +46,31 @@ export function searchSessionHeaders(): Record<string, string> {
   const id = getSearchSessionId();
   return id ? { [SEARCH_SESSION_HEADER]: id } : {};
 }
+
+/**
+ * The header that tells vidra-core this client emits its OWN
+ * `search.submitted` through POST /search/events, so core must not emit the
+ * routed one for the same request.
+ *
+ * Without it a browser search writes two `query_log` rows in vidra-search: the
+ * client's batch — which is the row that reaches the user's own search-history
+ * page, because that ingest path is the only one that sets `allow_history` —
+ * and core's own emit behind the very `GET /videos/search` the browser just
+ * made. Both land in the same table, so the search double-counted `use_count`
+ * and doubled the rows a k-anonymity floor reads; a "Load more" added another,
+ * because the routed emit fires per REQUEST rather than per search.
+ *
+ * Only a client knows whether it will send the event, which is why it is a
+ * declaration rather than something core could infer: an API consumer sends no
+ * batch, and must keep the routed emit as the only record of its searches.
+ */
+export const SEARCH_EVENTS_HEADER = "X-Vidra-Search-Events";
+
+/**
+ * clientSearchEventHeaders is the header bag for a search request whose
+ * behavioural record the CLIENT emits (SearchResults, via trackSearchEvent).
+ * Do not spread it into a request that will not be followed by that event.
+ */
+export function clientSearchEventHeaders(): Record<string, string> {
+  return { [SEARCH_EVENTS_HEADER]: "client" };
+}
