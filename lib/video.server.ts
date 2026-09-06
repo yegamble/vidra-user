@@ -10,9 +10,33 @@ import { cache } from "react";
 import type { Video } from "@/lib/api/types";
 import { serverJson } from "@/lib/server-json";
 
-// Watch metadata may lag a title/thumbnail edit by up to a minute — the same
-// freshness window the instance-config snapshot accepts.
-export const PUBLIC_VIDEO_REVALIDATE_SECONDS = 60;
+// UNCACHED, deliberately. These three reads used to revalidate on a 60-second
+// window, accepting that "watch metadata may lag a title/thumbnail edit by up to
+// a minute". A moderation hide is not a lag: Next's data cache does not replace
+// a cached successful body with a FAILED revalidation, so the last good copy is
+// served indefinitely. A16 slice 2 measured a blocked video's title, og:*,
+// canonical og:url, og:image, an <h1> and the whole serialized video document
+// coming back for 30 requests over 175 seconds while GET /api/v1/videos/{id}
+// answered 404 to the same anonymous caller throughout — a URL never rendered
+// before the block was clean, which is what identifies the mechanism. A
+// JavaScript visitor still ended on "Video not found" because the client
+// re-fetches; a crawler, a link-preview unfurler or a no-JS reader got the video
+// back. Blocks, privacy changes (public -> private/unlisted) and deletion all
+// share this path.
+//
+// Shortening the window would have fixed nothing — once revalidation starts
+// failing, ANY window leaks forever — and tag-based invalidation would need
+// vidra-core to call back into the frontend, which it has no way to do. So the
+// document is read with no-store, exactly as lib/server-json.ts describes the
+// freshness knob: "a document whose staleness is a correctness bug".
+//
+// The cost, stated plainly: one uncached GET /api/v1/videos/{id} per watch-page
+// RENDER (not two — React cache() still deduplicates generateMetadata and the
+// page body within one pass), where before, concurrent views of the same video
+// could share one backend read for up to a minute. On a hot video that is the
+// difference between ~1 request/minute and one per view. WatchView's own client
+// fetch is unchanged.
+export const PUBLIC_VIDEO_FRESHNESS = "no-store" as const;
 
 /**
  * Fetch one video's public detail document server-side (anonymous — no bearer
@@ -21,7 +45,7 @@ export const PUBLIC_VIDEO_REVALIDATE_SECONDS = 60;
 export const getPublicVideo = cache(
   async (id: string): Promise<Video | null> =>
     serverJson<Video>(`/api/v1/videos/${encodeURIComponent(id)}`, {
-      freshness: { revalidateSeconds: PUBLIC_VIDEO_REVALIDATE_SECONDS },
+      freshness: PUBLIC_VIDEO_FRESHNESS,
     }),
 );
 
@@ -37,7 +61,7 @@ export const getPublicVideo = cache(
 export const getPublicVideoByCode = cache(
   async (code: string): Promise<Video | null> =>
     serverJson<Video>(`/api/v1/videos/resolve?code=${encodeURIComponent(code)}`, {
-      freshness: { revalidateSeconds: PUBLIC_VIDEO_REVALIDATE_SECONDS },
+      freshness: PUBLIC_VIDEO_FRESHNESS,
     }),
 );
 
@@ -53,6 +77,6 @@ export const getPublicVideoByCode = cache(
 export const getPublicVideoByLegacyUUID = cache(
   async (uuid: string): Promise<Video | null> =>
     serverJson<Video>(`/api/v1/videos/resolve?legacy_uuid=${encodeURIComponent(uuid)}`, {
-      freshness: { revalidateSeconds: PUBLIC_VIDEO_REVALIDATE_SECONDS },
+      freshness: PUBLIC_VIDEO_FRESHNESS,
     }),
 );

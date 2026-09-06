@@ -28,6 +28,7 @@ export function NotificationTypeIcon({ type }: { type: string }) {
     case "message":
       return <MessageCircleIcon size={16} />;
     case "video_rejected":
+    case "video_blocked":
     case "report_resolved":
       return <ShieldIcon size={16} />;
     case "new_report":
@@ -51,6 +52,7 @@ const NOTIF_CHIP: Record<string, string> = {
   comment_reply: "bg-accent/12 text-accent",
   message: "bg-tile-green/12 text-tile-green",
   video_rejected: "bg-tile-red/12 text-tile-red",
+  video_blocked: "bg-tile-red/12 text-tile-red",
   report_resolved: "bg-tile-orange/12 text-tile-orange",
   new_report: "bg-tile-red/12 text-tile-red",
   new_video: "bg-accent/12 text-accent",
@@ -110,14 +112,32 @@ export function describeNotification(n: Notification): {
     };
   }
   if (n.type === "video_rejected") {
-    // A moderator rejected the quarantined upload. The moderator's identity and
-    // the rejection reason are never exposed by the contract — the honest copy
-    // says what happened and points at the studio, where the failed row lives.
+    // A moderator rejected the quarantined upload. The moderator's identity is
+    // never exposed, but the REASON now is (migration 0130): the reject dialog
+    // has always collected one and it used to be discarded, so the creator was
+    // told their upload was refused and never why. When the moderator wrote
+    // nothing the copy is exactly what it was.
     const upload = n.video_title ? `your upload “${n.video_title}”` : "your upload";
+    const note = n.moderation_note?.trim();
     return {
       lead: "A moderator",
-      rest: ` rejected ${upload} — it was not published`,
+      rest: ` rejected ${upload} — it was not published${note ? `: ${note}` : ""}`,
       href: "/studio",
+    };
+  }
+  if (n.type === "video_blocked") {
+    // Distinct from video_rejected in every way that matters to the person
+    // reading it: this video WAS published, it is now hidden from everyone
+    // including its owner, and a moderator can lift the block. No reason is
+    // carried — block reasons are staff-only until that ruling is settled — so
+    // the copy states the fact and links to the Studio list, which is the one
+    // place the creator can still see the video (badged "blocked"); the watch
+    // page 404s for them like it does for everyone else.
+    const what = n.video_title ? `“${n.video_title}”` : "one of your videos";
+    return {
+      lead: "A moderator",
+      rest: ` blocked ${what} — it is no longer available to viewers`,
+      href: "/studio/content",
     };
   }
   if (n.type === "report_resolved") {

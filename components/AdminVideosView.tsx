@@ -514,6 +514,17 @@ function InfoCell({ video }: { video: AdminVideo }) {
       {video.external_link ? <Pill className="bg-surface-strong text-fg-muted">External link</Pill> : null}
       {video.state !== "published" ? <Pill className="bg-warning/15 text-warning">{video.state}</Pill> : null}
       {video.blocked ? <Pill className="bg-danger/15 text-danger">Blocked</Pill> : null}
+      {/* The moderator's own rejection note. A rejected video has left the
+          quarantine queue, so this row is the only staff surface it still
+          appears on — and until migration 0130 the note was discarded outright
+          while the reject dialog said it was "recorded in the audit trail".
+          Staff-only: the creator gets the same text on their notification, and
+          nobody else sees this endpoint at all. */}
+      {video.moderation_note ? (
+        <span className="w-full pt-1 text-xs text-fg-muted">
+          <span className="font-semibold text-danger">Rejected:</span> {video.moderation_note}
+        </span>
+      ) : null}
       {!video.is_local && video.origin_domain ? (
         <span className="w-full truncate pt-1 text-xs text-fg-muted" title={video.origin_domain}>{video.origin_domain}</span>
       ) : null}

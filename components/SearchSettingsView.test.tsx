@@ -292,6 +292,23 @@ describe("SearchSettingsView — the opt-out promise, in words", () => {
     expect(screen.getByText(/90 days/i)).toBeTruthy();
     expect(screen.getByText(/before you turned it off/i)).toBeTruthy();
   });
+
+  // Clear all used to ANONYMISE the search service's raw rows; vidra-search#37
+  // made it delete them. The page said "unlinks the rest from your account",
+  // which now understates what the button does — and understating a deletion is
+  // as wrong as overstating one, because it is the sentence a reader uses to
+  // decide whether pressing it is enough.
+  it("says Clear all deletes the raw records rather than unlinking them", async () => {
+    render(<SearchSettingsView />);
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
+    expect(screen.getByText(/deletes your stored searches/i)).toBeTruthy();
+    expect(screen.getByText(/not just your name from them/i)).toBeTruthy();
+    // And it is equally honest about what it CANNOT delete: the aggregate
+    // counters, which expire rather than being edited.
+    expect(screen.getByText(/recomputed without you within a day/i)).toBeTruthy();
+    expect(screen.getByText(/expire within 8 days/i)).toBeTruthy();
+    expect(screen.queryByText(/unlinks the rest from your account/i)).toBeNull();
+  });
 });
 
 // An opted-out user's history list is empty by construction — and the rows that

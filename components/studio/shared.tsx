@@ -130,6 +130,21 @@ export function StateBadge({ state }: { state: VideoState }) {
   );
 }
 
+// BlockedBadge marks a video a moderator has taken down. It sits ALONGSIDE the
+// state badge rather than replacing it, because a block changes neither state
+// nor privacy — the row would be lying if it swapped "published" for "blocked",
+// and the creator needs both facts to understand that unblocking restores the
+// video exactly as it was. Deliberately carries no reason: the moderator's prose
+// is staff-only (an open product ruling), and a placeholder implying one exists
+// would be worse than silence.
+export function BlockedBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full bg-danger-surface px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-danger">
+      blocked
+    </span>
+  );
+}
+
 // taxonomyFields builds the optional metadata part of a create/update request,
 // including only the non-empty selections. Empty is omitted (not sent as ""),
 // which both keeps create payloads clean and avoids the backend's 422 on an

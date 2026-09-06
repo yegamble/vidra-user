@@ -80,6 +80,51 @@ describe("describeNotification", () => {
     expect(rest).not.toContain("started following");
     expect(href).toBe("/videos/v-1");
   });
+
+  // The reject route has always collected a reason and, until migration 0130,
+  // dropped it — so this copy used to say the reason is "never exposed by the
+  // contract". It is now the creator's only explanation of why their upload was
+  // refused, and a notification that omits it wastes the only thing the
+  // moderator was asked to write.
+  it("renders video_rejected with the moderator's note when there is one", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({
+        type: "video_rejected",
+        video_id: "v-1",
+        video_title: "Clip",
+        moderation_note: "Music you do not hold the rights to.",
+      }),
+    );
+    expect(lead).toBe("A moderator");
+    expect(rest).toContain("Clip");
+    expect(rest).toContain("Music you do not hold the rights to.");
+    expect(href).toBe("/studio");
+  });
+
+  it("renders video_rejected without a note exactly as before", () => {
+    const { rest } = describeNotification(
+      notif({ type: "video_rejected", video_id: "v-1", video_title: "Clip" }),
+    );
+    expect(rest).toContain("was not published");
+    expect(rest).not.toContain("—  ");
+  });
+
+  // A block is NOT a rejection: it takes down content that was live, it is
+  // reversible, and the video is hidden from its owner too. Rendering it with
+  // the rejection copy would tell a creator their upload never published, which
+  // is false, and the type-union switch falling through to "started following"
+  // is this repo's most-repeated frontend bug.
+  it("renders video_blocked as a take-down of a published video, without a reason", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({ type: "video_blocked", video_id: "v-1", video_title: "Clip" }),
+    );
+    expect(lead).toBe("A moderator");
+    expect(rest).toContain("Clip");
+    expect(rest).toContain("blocked");
+    expect(rest).not.toContain("started following");
+    expect(rest).not.toContain("rejected");
+    expect(href).toBe("/studio/content");
+  });
 });
 
 describe("notification pref labels", () => {
@@ -94,6 +139,7 @@ describe("notification pref labels", () => {
       "new_video",
       "report_resolved",
       "video_rejected",
+      "video_blocked",
     ]) {
       expect(TYPE_LABELS[type], `missing TYPE_LABELS entry for ${type}`).toBeDefined();
     }

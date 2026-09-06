@@ -220,9 +220,12 @@ function PreferencesSection({
         of this instance configures — 90 days unless they change it — and is
         removed on request. Turning a control off works from that moment onward:
         activity recorded before you turned it off keeps the link to your account
-        until it ages out. To remove it now, use Clear all below, which
-        erases your stored searches immediately and unlinks the rest from your
-        account.
+        until it ages out. To remove it now, use Clear all below: it deletes
+        your stored searches and the search service&apos;s raw records of them
+        outright — not just your name from them. The anonymous popularity totals
+        this site keeps are recomputed without you within a day, except the
+        trending counters, which cannot be edited and instead expire within 8
+        days.
       </p>
     </section>
   );
@@ -366,10 +369,11 @@ function historyMutationError(notDone: string, err: unknown): string {
 // routes) and erasing them is the whole point of this section.
 //
 // Clear-all is offered on an EMPTY list too, for the same reason and a stronger
-// one: this list is `user_search_history` alone, while the clear also anonymizes
-// the raw query_log and behavior_events rows the search service keeps and erases
-// core's own search_outbox copy of the query text — rows this list has never
-// shown. An empty list therefore does not mean there is nothing to clear, and
+// one: this list is `user_search_history` alone, while the clear also DELETES
+// the raw query_log and behavior_events rows the search service keeps (they used
+// to be anonymised in place; vidra-search#37 made the clear a real delete) and
+// erases core's own search_outbox copy of the query text — rows this list has
+// never shown. An empty list therefore does not mean there is nothing to clear, and
 // the users whose list is empty because they opted out are exactly the ones with
 // the strongest claim on the control. It stays hidden while the list is loading
 // or has failed, where a click would race an unknown state.

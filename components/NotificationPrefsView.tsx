@@ -49,6 +49,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Rejected uploads",
     help: "A moderator rejects one of your held uploads.",
   },
+  video_blocked: {
+    label: "Blocked videos",
+    help: "A moderator blocks one of your published videos, hiding it from viewers.",
+  },
   caption_ready: {
     label: "Captions ready",
     help: "Auto-captions finish for one of your videos.",
@@ -66,6 +70,7 @@ const TYPE_ORDER = [
   "new_report",
   "report_resolved",
   "video_rejected",
+  "video_blocked",
   "caption_ready",
 ];
 

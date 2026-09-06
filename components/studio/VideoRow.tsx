@@ -29,6 +29,7 @@ import { formatDateTime } from "@/lib/format";
 import { watchPath } from "@/lib/watch-path";
 
 import {
+  BlockedBadge,
   ROW_ACTION,
   type RowMode,
   StateBadge,
@@ -402,6 +403,7 @@ export function VideoRow({
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
           <StateBadge state={video.state ?? "draft"} />
+          {video.blocked ? <BlockedBadge /> : null}
           {video.privacy === "public" ? (
             <span className="text-fg-muted">Public</span>
           ) : (
@@ -417,6 +419,12 @@ export function VideoRow({
           <p className="mt-1 text-xs text-warning">
             Held for review — this instance reviews new uploads before they go public. Only you and
             the moderators can see it until it is approved.
+          </p>
+        ) : null}
+        {video.blocked ? (
+          <p className="mt-1 text-xs text-danger">
+            Blocked by moderation — this video is not available to viewers, including you, until a
+            moderator lifts the block. Nothing else about it has changed.
           </p>
         ) : null}
       </div>
