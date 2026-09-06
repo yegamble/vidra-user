@@ -42,8 +42,6 @@ const pinComment = vi.fn();
 const unpinComment = vi.fn();
 const heartComment = vi.fn();
 const unheartComment = vi.fn();
-const muteAccount = vi.fn();
-const blockUser = vi.fn();
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
   api: {
@@ -54,8 +52,6 @@ vi.mock("@/lib/api", () => ({
     unpinComment: (...args: unknown[]) => unpinComment(...args),
     heartComment: (...args: unknown[]) => heartComment(...args),
     unheartComment: (...args: unknown[]) => unheartComment(...args),
-    muteAccount: (...args: unknown[]) => muteAccount(...args),
-    blockUser: (...args: unknown[]) => blockUser(...args),
   },
   errorMessage: (_err: unknown, fallback: string) => fallback,
   userAvatarUrl: (id: string) => `/avatar/${id}`,
@@ -450,26 +446,5 @@ describe("CommentsSection viewer-scoped filtering (A12 / SOC-02)", () => {
     rerender(<CommentsSection videoId="v1" />);
     await screen.findByText("body-c1");
     expect(getVideoComments).toHaveBeenCalledTimes(1);
-  });
-
-  it("hides the author's comments as soon as they are blocked, exactly as muting does", async () => {
-    session = { status: "authed", user: { username: "viewer" } };
-    resolveComments([
-      mk("c1", { author_id: "bob-id", author_username: "bob", body: "from bob" }),
-      mk("c2", { author_id: "ada-id", author_username: "ada", body: "from ada" }),
-    ]);
-    blockUser.mockResolvedValue(undefined);
-    render(<CommentsSection videoId="v1" />);
-
-    const bobRow = (await screen.findByText("from bob")).closest("li") as HTMLElement;
-    fireEvent.click(within(bobRow).getByRole("button", { name: "Comment actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Block" }));
-
-    await waitFor(() => expect(blockUser).toHaveBeenCalledWith("bob-id"));
-    // The server filters a blocked author's comments out of the list for the
-    // blocker, exactly like a mute (blockUser's contract). Leaving the comment
-    // on screen until the next load makes the block look like it did nothing.
-    await waitFor(() => expect(screen.queryByText("from bob")).toBeNull());
-    expect(screen.getByText("from ada")).toBeTruthy();
   });
 });

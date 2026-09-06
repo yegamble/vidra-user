@@ -142,10 +142,7 @@ export function CommentsSection({
   // consistent with keeping the rest of the list stable).
   const onUnpinned = (updated: Comment) =>
     setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
-  // One hide rule, two ways to reach it: muting and blocking both remove that
-  // author's comments from THIS viewer's list, matching what the server returns
-  // on the next load.
-  const onHideAuthor = (authorId: string) =>
+  const onMutedAuthor = (authorId: string) =>
     setComments((prev) => prev.filter((x) => x.author_id !== authorId));
   // An instance mute hides ALL of that origin's comments for the caller.
   const onMutedInstance = (domain: string) =>
@@ -199,7 +196,7 @@ export function CommentsSection({
               onHearted={onHearted}
               onPinned={onPinned}
               onUnpinned={onUnpinned}
-              onHideAuthor={onHideAuthor}
+              onMutedAuthor={onMutedAuthor}
               onMutedInstance={onMutedInstance}
             />
           ))}
@@ -389,7 +386,7 @@ function CommentItem({
   onHearted,
   onPinned,
   onUnpinned,
-  onHideAuthor,
+  onMutedAuthor,
   onMutedInstance,
 }: {
   comment: Comment;
@@ -412,7 +409,7 @@ function CommentItem({
   onHearted: (updated: Comment) => void;
   onPinned: (updated: Comment) => void;
   onUnpinned: (updated: Comment) => void;
-  onHideAuthor: (authorId: string) => void;
+  onMutedAuthor: (authorId: string) => void;
   onMutedInstance: (domain: string) => void;
 }) {
   const { user, status } = useSession();
@@ -540,7 +537,7 @@ function CommentItem({
     setMuting(true);
     try {
       await api.muteAccount(authorId);
-      onHideAuthor(authorId);
+      onMutedAuthor(authorId);
     } catch {
       // Leave the comment in place on failure.
       setMuting(false);
@@ -564,12 +561,15 @@ function CommentItem({
     setBlocking(true);
     try {
       await api.blockUser(authorId);
+      // The comment stays put and the control reflects the blocked state — the
+      // behaviour e2e/blocks.spec.ts and e2e-backed/blocks.spec.ts pin. Note
+      // that this differs from Mute, which removes the comment immediately, and
+      // that the SERVER filters a blocked author out of this viewer's list on
+      // the next load either way (blockUser's contract: "their comments are
+      // filtered from comment lists, per-viewer, exactly like mutes"). So the
+      // row disappears on reload regardless; whether it should also go now is a
+      // product call, not a bug fix, and is left to its owner.
       setBlocked(true);
-      // A block hides the blocked account's comments from the blocker exactly
-      // as a mute does (blockUser's contract; the list query applies the same
-      // per-viewer filter). Leaving the comment on screen until the next load
-      // made the block look like it had done nothing.
-      onHideAuthor(authorId);
     } catch {
       // Leave things as-is on failure.
     } finally {
@@ -658,7 +658,7 @@ function CommentItem({
                 onHearted={onHearted}
                 onPinned={onPinned}
                 onUnpinned={onUnpinned}
-                onHideAuthor={onHideAuthor}
+                onMutedAuthor={onMutedAuthor}
                 onMutedInstance={onMutedInstance}
               />
             ))}
