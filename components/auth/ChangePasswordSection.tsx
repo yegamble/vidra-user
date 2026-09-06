@@ -24,6 +24,7 @@ const MIN_PASSWORD_LENGTH = 8;
  * endpoint.
  */
 export function ChangePasswordSection() {
+  const titleId = useId();
   const currentId = useId();
   const nextId = useId();
   const confirmId = useId();
@@ -90,9 +91,18 @@ export function ChangePasswordSection() {
   }
 
   return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
+    // aria-labelledby makes this a NAMED region. It matters here specifically:
+    // when two-factor is on, its "turn off" form has a "Current password" field
+    // too, so the page carries two identically-labelled inputs and the section
+    // name is what tells them apart to a screen reader.
+    <section
+      aria-labelledby={titleId}
+      className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4"
+    >
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold tracking-tight text-fg">Password</h2>
+        <h2 id={titleId} className="text-base font-semibold tracking-tight text-fg">
+          Password
+        </h2>
         <p className="text-sm text-fg-muted">
           Changing your password signs you out of every other device. This one stays signed in.
         </p>

@@ -48,6 +48,14 @@ async function signIn(page: Page) {
 // Reach /settings/security via client-side nav so the in-memory session survives.
 // (The URL assertion matters: /settings also has a "Security" card heading, so a
 // heading-only wait can pass before the navigation actually completes.)
+// The two-factor DISABLE form's "Current password" is no longer the only field
+// with that label on this page: the Password card (change your password) has one
+// too, and both are correctly labelled "Current password" — so an unscoped
+// getByLabel trips strict mode. Scope to the card that owns the disable button.
+function twoFactorDisableCard(page: Page) {
+  return page.locator("section").filter({ hasText: "Turn off two-factor authentication" });
+}
+
 async function openSecuritySettings(page: Page) {
   await page.getByRole("button", { name: "Open account menu" }).click();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
@@ -163,7 +171,7 @@ test("disabling requires the password and returns the card to Off", async ({ pag
   await expect(page.getByText("On", { exact: true })).toBeVisible();
   await expect(page.getByText("8 recovery codes left.")).toBeVisible();
 
-  await page.getByLabel("Current password").fill("supersecret");
+  await twoFactorDisableCard(page).getByLabel("Current password").fill("supersecret");
   await page.getByRole("button", { name: "Turn off two-factor authentication" }).click();
 
   await expect(page.getByText("Off", { exact: true })).toBeVisible();
@@ -183,7 +191,7 @@ test("a wrong disable password surfaces the 403 without changing the status", as
   );
 
   await openSecuritySettings(page);
-  await page.getByLabel("Current password").fill("wrong");
+  await twoFactorDisableCard(page).getByLabel("Current password").fill("wrong");
   await page.getByRole("button", { name: "Turn off two-factor authentication" }).click();
 
   await expect(page.getByText("Incorrect password.")).toBeVisible();

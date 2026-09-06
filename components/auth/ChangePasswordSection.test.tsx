@@ -111,6 +111,14 @@ describe("ChangePasswordSection", () => {
     expect((await screen.findByRole("alert")).textContent).toBeTruthy();
   });
 
+  it("is a named region, so its Current password field is distinguishable from two-factor's", () => {
+    render(<ChangePasswordSection />);
+    // When two-factor is on, /settings/security carries a SECOND, correctly
+    // labelled "Current password" input. The region name is what tells a screen
+    // reader (and a test) which one it is on.
+    expect(screen.getByRole("region", { name: "Password" })).toBeTruthy();
+  });
+
   it("labels every field and marks the inputs as passwords for password managers", () => {
     render(<ChangePasswordSection />);
     const current = screen.getByLabelText(CURRENT) as HTMLInputElement;
