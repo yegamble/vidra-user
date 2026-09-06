@@ -265,3 +265,121 @@ describe("AdminUsersView facet counts", () => {
     expect(empties.length).toBeGreaterThan(0);
   });
 });
+
+// A hard-deleted account is not a deactivated one. The A12 deletion slice found
+// the console listing a tombstone as `deleted-<suffix>` with working Reactivate
+// and Delete actions: Reactivate republished a public profile for an account
+// that had asked to be erased, restoring nothing, and Delete on an already-gone
+// row is a 404. Core now refuses the reactivation (422) and reports deleted_at;
+// this is the half that stops the operator being offered the action at all.
+describe("AdminUsersView tombstones", () => {
+  const deleted = () =>
+    account(0, {
+      username: "deleted-312a3b06",
+      display_name: "",
+      is_active: false,
+      deleted_at: "2026-09-05T10:00:00Z",
+    });
+
+  it("labels a deleted account Deleted, not Deactivated", async () => {
+    mocks.getAdminUsers.mockResolvedValue({ users: [deleted()], total: 1, limit: PAGE, offset: 0 });
+    render(<AdminUsersView />);
+
+    // The table row's own status cell — not the "Deactivated" facet chip, which
+    // is a filter label and stays whatever the page holds.
+    const row = await screen.findByRole("button", { name: "Open deleted-312a3b06" });
+    expect(row.textContent).toContain("Deleted");
+    expect(row.textContent).not.toContain("Deactivated");
+  });
+
+  it("offers no Reactivate and no Delete on a tombstone", async () => {
+    mocks.getAdminUsers.mockResolvedValue({ users: [deleted()], total: 1, limit: PAGE, offset: 0 });
+    render(<AdminUsersView />);
+    await screen.findByRole("button", { name: "Open deleted-312a3b06" });
+
+    expect(screen.queryAllByRole("button", { name: /^Reactivate/ })).toHaveLength(0);
+    expect(screen.queryAllByRole("button", { name: /^Delete .* permanently$/ })).toHaveLength(0);
+    // The row is still there to read, and it says why nothing can be done to it.
+    expect(screen.getAllByText(/permanently deleted/i).length).toBeGreaterThan(0);
+  });
+
+  it("still offers both actions on a merely deactivated account", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [account(0, { is_active: false, deleted_at: null })],
+      total: 1,
+      limit: PAGE,
+      offset: 0,
+    });
+    render(<AdminUsersView />);
+
+    expect((await screen.findAllByRole("button", { name: /^Reactivate/ })).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /permanently$/ }).length).toBeGreaterThan(0);
+  });
+});
+
+// PATCH /admin/users/{id} has accepted email_verified and bypass_quarantine
+// since §10/§11, and the console displayed both as read-only facts — an admin
+// could see that an account was unverified or quarantine-exempt and had no way
+// to change it without curl.
+describe("AdminUsersView account flags", () => {
+  it("marks an address verified and revokes it again", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [account(0, { email_verified: false })],
+      total: 1,
+      limit: PAGE,
+      offset: 0,
+    });
+    mocks.updateAdminUser.mockResolvedValue(account(0, { email_verified: true }));
+    render(<AdminUsersView />);
+
+    const [toggle] = await screen.findAllByRole("switch", { name: /Email verified for person0/ });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(mocks.updateAdminUser).toHaveBeenCalledWith("user-0", { email_verified: true }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("switch", { name: /Email verified for person0/ })[0].getAttribute("aria-checked"),
+      ).toBe("true"),
+    );
+
+    fireEvent.click(screen.getAllByRole("switch", { name: /Email verified for person0/ })[0]);
+    await waitFor(() =>
+      expect(mocks.updateAdminUser).toHaveBeenLastCalledWith("user-0", { email_verified: false }),
+    );
+  });
+
+  it("exempts an account from the new-upload quarantine", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [account(0, { bypass_quarantine: false })],
+      total: 1,
+      limit: PAGE,
+      offset: 0,
+    });
+    mocks.updateAdminUser.mockResolvedValue(account(0, { bypass_quarantine: true }));
+    render(<AdminUsersView />);
+
+    const [toggle] = await screen.findAllByRole("switch", {
+      name: /Exempt person0 from new-upload quarantine/,
+    });
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(mocks.updateAdminUser).toHaveBeenCalledWith("user-0", { bypass_quarantine: true }),
+    );
+  });
+
+  it("offers neither flag on a tombstone", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [account(0, { deleted_at: "2026-09-05T10:00:00Z", is_active: false })],
+      total: 1,
+      limit: PAGE,
+      offset: 0,
+    });
+    render(<AdminUsersView />);
+    await screen.findByRole("button", { name: "Open person0" });
+
+    expect(screen.queryAllByRole("switch")).toHaveLength(0);
+  });
+});

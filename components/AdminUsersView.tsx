@@ -15,6 +15,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { FilterChipGroup } from "@/components/ui/FilterChips";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
+import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminUser, UserRole } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -40,7 +41,13 @@ const GIB = 1024 ** 3;
 
 type QuotaFilter = "all" | "staff" | "deactivated";
 
-type QuotaPatch = { role?: UserRole; is_active?: boolean; storage_quota_bytes?: number | null };
+type UserPatch = {
+  role?: UserRole;
+  is_active?: boolean;
+  email_verified?: boolean;
+  bypass_quarantine?: boolean;
+  storage_quota_bytes?: number | null;
+};
 
 // useUserActions centralises the per-user mutations (role / active / quota PATCH,
 // and the hard DELETE) so the mobile card and the desktop detail drive the exact
@@ -54,7 +61,7 @@ function useUserActions(
   const [error, setError] = useState<string | null>(null);
 
   const save = useCallback(
-    async (patch: QuotaPatch) => {
+    async (patch: UserPatch) => {
       setSaving(true);
       setError(null);
       try {
@@ -312,6 +319,76 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
 }
 
 // SelfPill — the "you" marker on the current admin's own row.
+// A hard-deleted account keeps its row — anonymised — so an admin can see that
+// it existed. Nothing can be done TO it: core refuses `is_active: true` on a
+// tombstone (422) and the hard delete is already spent, so the console offers
+// neither action rather than offering one that 422s and one that 404s.
+function isTombstone(user: AdminUser) {
+  return user.deleted_at != null;
+}
+
+// The copy that replaces the actions on a tombstone, so the absence reads as a
+// rule rather than a missing control.
+function TombstoneNotice() {
+  return (
+    <p className="text-[11.5px] leading-relaxed text-fg-muted">
+      This account was permanently deleted. Its username, address and profile are
+      gone and cannot be restored, so it can be neither reactivated nor deleted
+      again — the row is kept only as a record.
+    </p>
+  );
+}
+
+// FlagToggles — the two per-account flags PATCH /admin/users/{id} has always
+// accepted and the console could previously only display: the admin override of
+// email verification (§10) and the QUARANTINE_NEW_UPLOADS exemption (§11).
+// Hidden on a tombstone, where every field they describe is already erased.
+function FlagToggles({
+  user,
+  saving,
+  onSave,
+}: {
+  user: AdminUser;
+  saving: boolean;
+  onSave: (patch: UserPatch) => Promise<void>;
+}) {
+  if (isTombstone(user)) return null;
+  return (
+    <div className="mt-3.5 flex flex-col gap-3 rounded-2xl bg-surface-muted p-4">
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold text-fg">Email verified</span>
+          <span className="block text-[11.5px] leading-relaxed text-fg-muted">
+            Marks the address confirmed without the token round-trip. Turning it
+            off revokes the confirmation.
+          </span>
+        </span>
+        <Toggle
+          checked={user.email_verified}
+          disabled={saving}
+          label={`Email verified for ${user.username}`}
+          onChange={(next) => void onSave({ email_verified: next })}
+        />
+      </div>
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold text-fg">Skip upload review</span>
+          <span className="block text-[11.5px] leading-relaxed text-fg-muted">
+            Exempts this account from new-upload quarantine, so its uploads
+            publish directly. No effect while quarantine is off instance-wide.
+          </span>
+        </span>
+        <Toggle
+          checked={user.bypass_quarantine}
+          disabled={saving}
+          label={`Exempt ${user.username} from new-upload quarantine`}
+          onChange={(next) => void onSave({ bypass_quarantine: next })}
+        />
+      </div>
+    </div>
+  );
+}
+
 function SelfPill() {
   return (
     <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-accent-fg">
@@ -409,7 +486,7 @@ function UsersTable({
                     u.is_active ? "text-success" : "text-fg-muted",
                   )}
                 >
-                  {u.is_active ? "Active" : "Deactivated"}
+                  {isTombstone(u) ? "Deleted" : u.is_active ? "Active" : "Deactivated"}
                 </span>
               </button>
             </li>
@@ -446,6 +523,7 @@ function UserDetail({
 
   const used = user.storage_used_bytes ?? 0;
   const quota = user.storage_quota_bytes ?? null;
+  const deleted = isTombstone(user);
 
   return (
     <div className="flex flex-col gap-6">
@@ -480,27 +558,33 @@ function UserDetail({
             joined {formatMonthYear(user.created_at)}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="tonal"
-            size="sm"
-            aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
-            disabled={isSelf || saving}
-            onClick={() => void save({ is_active: !user.is_active })}
-          >
-            {user.is_active ? "Deactivate" : "Reactivate"}
-          </Button>
-          {!deleteArmed ? (
-            <Button
-              variant="danger-outline"
-              size="sm"
-              aria-label={`Delete ${user.username} permanently`}
-              disabled={isSelf || saving}
-              onClick={() => setDeleteArmed(true)}
-            >
-              Delete account
-            </Button>
-          ) : null}
+        <div className="flex max-w-[19rem] flex-wrap items-center gap-2">
+          {deleted ? (
+            <TombstoneNotice />
+          ) : (
+            <>
+              <Button
+                variant="tonal"
+                size="sm"
+                aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
+                disabled={isSelf || saving}
+                onClick={() => void save({ is_active: !user.is_active })}
+              >
+                {user.is_active ? "Deactivate" : "Reactivate"}
+              </Button>
+              {!deleteArmed ? (
+                <Button
+                  variant="danger-outline"
+                  size="sm"
+                  aria-label={`Delete ${user.username} permanently`}
+                  disabled={isSelf || saving}
+                  onClick={() => setDeleteArmed(true)}
+                >
+                  Delete account
+                </Button>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
 
@@ -510,7 +594,7 @@ function UserDetail({
           <div className="rounded-2xl bg-surface-muted p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-[13.5px] font-semibold text-fg">Role</span>
-              {isSelf ? (
+              {isSelf || deleted ? (
                 <RolePill role={user.role} />
               ) : (
                 <SegmentedControl
@@ -526,6 +610,8 @@ function UserDetail({
           </div>
 
           <QuotaCard user={user} used={used} quota={quota} saving={saving} onSave={save} boxed />
+
+          <FlagToggles user={user} saving={saving} onSave={save} />
 
           <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
             {isSelf
@@ -586,7 +672,7 @@ function UserDetail({
             k="Status"
             v={
               <span className={user.is_active ? "text-success" : "text-fg-muted"}>
-                {user.is_active ? "Active" : "Deactivated"}
+                {deleted ? "Deleted" : user.is_active ? "Active" : "Deactivated"}
               </span>
             }
           />
@@ -640,6 +726,7 @@ function UserRow({
   // for lean fixtures so a partial mock never crashes the row.
   const used = user.storage_used_bytes ?? 0;
   const quota = user.storage_quota_bytes ?? null;
+  const deleted = isTombstone(user);
 
   return (
     <article className="rounded-2xl bg-surface-muted p-4">
@@ -652,7 +739,7 @@ function UserRow({
             <RolePill role={user.role} />
             {user.is_active ? null : (
               <span className="inline-flex items-center rounded-full bg-danger-surface px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-danger">
-                deactivated
+                {deleted ? "deleted" : "deactivated"}
               </span>
             )}
           </div>
@@ -672,7 +759,7 @@ function UserRow({
           (the backend forbids self-demote), so the own row shows a static pill. */}
       <div className="mt-3.5 flex items-center justify-between gap-3">
         <span className="text-[13px] font-semibold text-fg">Role</span>
-        {isSelf ? (
+        {isSelf || deleted ? (
           <RolePill role={user.role} />
         ) : (
           <SegmentedControl
@@ -688,32 +775,40 @@ function UserRow({
 
       <QuotaCard user={user} used={used} quota={quota} saving={saving} onSave={save} />
 
+      <FlagToggles user={user} saving={saving} onSave={save} />
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
-          variant="tonal"
-          size="sm"
-          aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
-          disabled={isSelf || saving}
-          onClick={() => void save({ is_active: !user.is_active })}
-        >
-          {user.is_active ? "Deactivate" : "Reactivate"}
-        </Button>
-        {!deleteArmed ? (
-          <Button
-            variant="danger-outline"
-            size="sm"
-            aria-label={`Delete ${user.username} permanently`}
-            disabled={isSelf || saving}
-            onClick={() => setDeleteArmed(true)}
-          >
-            Delete permanently
-          </Button>
-        ) : null}
-        {isSelf ? (
-          <span className="text-xs text-fg-muted">
-            You can&apos;t change your own role or status, or delete your own account.
-          </span>
-        ) : null}
+        {deleted ? (
+          <TombstoneNotice />
+        ) : (
+          <>
+            <Button
+              variant="tonal"
+              size="sm"
+              aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
+              disabled={isSelf || saving}
+              onClick={() => void save({ is_active: !user.is_active })}
+            >
+              {user.is_active ? "Deactivate" : "Reactivate"}
+            </Button>
+            {!deleteArmed ? (
+              <Button
+                variant="danger-outline"
+                size="sm"
+                aria-label={`Delete ${user.username} permanently`}
+                disabled={isSelf || saving}
+                onClick={() => setDeleteArmed(true)}
+              >
+                Delete permanently
+              </Button>
+            ) : null}
+            {isSelf ? (
+              <span className="text-xs text-fg-muted">
+                You can&apos;t change your own role or status, or delete your own account.
+              </span>
+            ) : null}
+          </>
+        )}
       </div>
 
       {deleteArmed ? (
