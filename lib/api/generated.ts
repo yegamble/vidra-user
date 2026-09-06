@@ -2913,7 +2913,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_rejected) mapped to whether it is delivered. Types never configured default to enabled. The new_report type is only ever delivered to admins/moderators, but the switch is visible to everyone.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected) mapped to whether it is delivered. Types never configured default to enabled. The new_report type is only ever delivered to admins/moderators, but the switch is visible to everyone.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -3461,7 +3461,7 @@ export interface paths {
         put?: never;
         /**
          * Reject a quarantined upload
-         * @description Fails a quarantined video: it never publishes and no publish side effects run. The owner is notified (a video_rejected notification; the moderator's identity is not exposed) and the optional reason is recorded in the audit trail. Restricted to moderators/admins. Only a video currently in the quarantined state can be rejected. Audited.
+         * @description Fails a quarantined video: it never publishes and no publish side effects run. The owner is notified (a video_rejected notification; the moderator's identity is not exposed) and the optional reason is STORED as the video's moderation note: it is delivered to the creator on that notification (`moderation_note`) and read back by staff on the moderation-inventory row (GET /admin/videos). It is deliberately NOT what the audit trail records — the security ledger keeps only a stable classification and whether prose was supplied, because free-form text can carry personal data. Restricted to moderators/admins. Only a video currently in the quarantined state can be rejected. Audited.
          */
         post: operations["rejectQuarantinedVideo"];
         delete?: never;
@@ -5866,6 +5866,8 @@ export interface components {
              * @description The scheduled publish time. Present on the detail, create/update, and owner (studio) channel-list views once a schedule was set; omitted otherwise. The server publishes the video (running the same side effects as a direct publish) when this time arrives.
              */
             publish_at?: string;
+            /** @description True when a moderator has blocked this video. Present ONLY on the owner/editor channel-management listing (GET /channels/{handle}/videos read by someone who can manage the channel), and only when true. A block changes neither state nor privacy, so without this field that listing shows a taken-down video as "published" while it 404s for everyone including its owner. Public surfaces never contain a blocked video at all. The block REASON is deliberately not exposed here — it is staff-only. */
+            blocked?: boolean;
             /**
              * Format: date-time
              * @description When the video was FIRST published elsewhere (a PeerTube import's originallyPublishedAt, or a date the creator set). Present on the detail and create/update views when known; omitted for anything first published on this instance, where created_at is the only date.
@@ -6692,10 +6694,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one; the moderator's identity is never included); caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). It is deliberately neutral — neither the moderator nor the block reason is included, and it carries no moderation_note; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
-            type: "follow" | "comment" | "comment_reply" | "message" | "new_video" | "new_report" | "report_resolved" | "video_rejected" | "caption_ready";
+            type: "follow" | "comment" | "comment_reply" | "message" | "new_video" | "new_report" | "report_resolved" | "video_rejected" | "video_blocked" | "caption_ready";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -6736,6 +6738,8 @@ export interface components {
              * @enum {string}
              */
             report_target_type?: "video" | "comment" | "account" | "remote_video" | "message";
+            /** @description The moderator's written reason for rejecting a quarantined upload — video_rejected notifications ONLY, and absent when the moderator supplied none. It is the creator's only explanation of why their upload was refused. A video_blocked notification never carries one: block reasons are staff-only. */
+            moderation_note?: string;
         };
         NotificationListResponse: components["schemas"]["PageMeta"] & {
             notifications: components["schemas"]["Notification"][];
@@ -6761,6 +6765,7 @@ export interface components {
              *       "new_report": true,
              *       "new_video": true,
              *       "report_resolved": true,
+             *       "video_blocked": true,
              *       "video_rejected": true
              *     }
              */
@@ -6770,7 +6775,7 @@ export interface components {
         };
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_rejected. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }
@@ -7060,6 +7065,8 @@ export interface components {
             size_bytes: number;
             /** @description Whether the video is currently blocked (hidden from public surfaces). */
             blocked: boolean;
+            /** @description The moderator's written reason for REJECTING this upload out of quarantine (staff-only). Absent when the video was never rejected or the moderator supplied no reason, and always absent on a federated row. This is the staff read-back of the note the reject dialog collects; the same text reaches the creator on their video_rejected notification. A block reason is not carried here — that lives on the block list (GET /admin/videos/blocked). */
+            moderation_note?: string;
             /**
              * Format: int64
              * @description Like count. Always 0 for a federated row, which has no local ratings.
