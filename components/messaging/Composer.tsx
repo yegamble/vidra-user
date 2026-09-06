@@ -12,24 +12,33 @@ const MAX_MESSAGE_LEN = 5000;
 // The char counter only appears when the body is close to the cap (quiet until
 // it matters), matching the spec's 4500 threshold.
 const COUNTER_THRESHOLD = 4500;
-const MAX_ATTACHMENTS = 4; // Messenger-parity 30 lands with core D6; 4 until then.
-const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MiB, matching the backend cap.
+const MAX_ATTACHMENTS = 30;
+const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024; // 100 MiB, matching the backend cap.
 const MAX_TEXTAREA_PX = 144; // ~6 lines, then the textarea scrolls internally.
 
-// A file is allowed if it is an image, video, audio clip, or PDF (the backend
-// attachment allowlist). Checked client-side for an instant error; the backend
-// re-checks (415) authoritatively.
+// Match the shipped plaintext DM contract; the server still validates and scans
+// every upload before returning an attachment ID.
+const DOCUMENT_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+];
+const ATTACHMENT_ACCEPT = ["image/*", "video/*", "audio/*", ...DOCUMENT_TYPES].join(",");
 function isAllowedAttachment(file: File): boolean {
   const t = file.type;
   return (
-    t.startsWith("image/") || t.startsWith("video/") || t.startsWith("audio/") || t === "application/pdf"
+    t.startsWith("image/") || t.startsWith("video/") || t.startsWith("audio/") || DOCUMENT_TYPES.includes(t)
   );
 }
 
 // uploadErrorMessage maps a backend attachment-upload failure to friendly copy.
 function uploadErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.status === 413) return "Too large (max 25 MiB).";
+    if (err.status === 413) return "Too large (max 100 MiB).";
     if (err.status === 415) return "Unsupported type.";
     if (err.status === 422) return "Couldn't be attached.";
     if (err.status === 503) return "Attachments unavailable.";
@@ -146,17 +155,18 @@ export function Composer({
     if (!files || files.length === 0) return;
     setError(null);
     const remaining = MAX_ATTACHMENTS - pending.length;
-    if (remaining <= 0) {
+    if (files.length > remaining) {
       setError(`You can attach at most ${MAX_ATTACHMENTS} files.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
-    for (const file of Array.from(files).slice(0, remaining)) {
+    for (const file of Array.from(files)) {
       if (!isAllowedAttachment(file)) {
-        setError("That file type isn't supported. Images, video, audio, and PDFs only.");
+        setError("That file type isn't supported. Images, video, audio, PDFs, and Word, PowerPoint, or Excel documents only.");
         continue;
       }
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        setError("That file is too large (max 25 MiB).");
+        setError("That file is too large (max 100 MiB).");
         continue;
       }
       const localId = crypto.randomUUID();
@@ -304,7 +314,7 @@ export function Composer({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,video/*,audio/*,application/pdf"
+          accept={ATTACHMENT_ACCEPT}
           multiple
           onChange={(e) => onFilesChosen(e.target.files)}
           className="hidden"
