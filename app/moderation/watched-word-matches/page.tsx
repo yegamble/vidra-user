@@ -6,7 +6,7 @@ export default function WatchedWordMatchesPage() {
     <main className="min-w-0 flex-1">
       <PageHeader
         title="Word matches"
-        description="Comments flagged by the watched-words list when they were posted, newest first."
+        description="Comments and videos flagged by the watched-words list when they were posted or edited, newest first. Flagging records a match for review — it does not hide the content."
       />
       <WatchedWordMatchesView />
     </main>
