@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ChangePasswordSection } from "@/components/auth/ChangePasswordSection";
 import { QrCode } from "@/components/QrCode";
 import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
@@ -37,6 +38,9 @@ export function SecuritySettingsView() {
   return (
     <div className="flex max-w-xl flex-col gap-6">
       <TwoFactorSection />
+      {/* Password sits next to the devices control because they are the same
+          decision: changing the password signs the other devices out. */}
+      <ChangePasswordSection />
       <SignOutEverywhereSection logoutEverywhere={logoutEverywhere} />
     </div>
   );

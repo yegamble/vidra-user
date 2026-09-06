@@ -472,6 +472,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the current account's password
+         * @description Rotates the authenticated account's password after re-verifying the CURRENT one, so a stolen access token alone cannot take the account over. On success every OTHER session is revoked — access tokens included, because access tokens are bound to their session — while the caller's own session continues, and a best-effort "your password was changed" notice is emailed to the account address. The new password must satisfy the same policy as registration and the password reset, and must differ from the current one. An account with no password at all (OAuth/ATProto-only) is refused 409 and directed to the password-reset flow, which can set one. Rate limited alongside login and the reset endpoints. Requires a bearer access token.
+         */
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me/deactivate": {
         parameters: {
             query?: never;
@@ -7132,6 +7152,19 @@ export interface components {
              */
             daily_quota_bytes: number | null;
         };
+        /** @description Current-password re-verification plus the replacement. Neither value is ever echoed back or logged. */
+        ChangePasswordRequest: {
+            /**
+             * Format: password
+             * @description The account's current password, for confirmation.
+             */
+            current_password: string;
+            /**
+             * Format: password
+             * @description The replacement password. Same policy as registration and the password reset, and must differ from the current one.
+             */
+            new_password: string;
+        };
         /** @description Password confirmation for the irreversible account hard delete (a stolen access token alone must not be able to destroy the account). */
         DeleteAccountRequest: {
             /** Format: password */
@@ -9907,6 +9940,73 @@ export interface operations {
             };
             /** @description Validation failed. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description The password was changed and every other session was signed out. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The supplied current password is incorrect. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The account has no password to change (OAuth/ATProto-only). Use the password-reset flow to set one. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (missing field, new password too short or too long, or the same as the current one). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests (auth rate limit). */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

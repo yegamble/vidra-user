@@ -6,6 +6,7 @@ import type {
   AccountExportStatus,
   AccountImportSummary,
   AuthResponse,
+  ChangePasswordRequest,
   ClaimOwnerRequest,
   EmailVerificationConfirmRequest,
   LoginRequest,
@@ -227,6 +228,17 @@ export const authApi = {
   /** PATCH /api/v1/auth/me — update the current account's profile; returns it. */
   updateMe: (body: UpdateProfileRequest) =>
     apiRequest<User>("/api/v1/auth/me", { method: "PATCH", body }),
+
+  /**
+   * POST /api/v1/auth/me/password — change the signed-in account's password by
+   * supplying the current one (bearer required). 204 on success, and every
+   * OTHER session is revoked server-side — access tokens included, because they
+   * are session-bound — while this session keeps working. 403 when the current
+   * password is wrong, 409 when the account has no password at all
+   * (OAuth/ATProto-only: use the reset flow), 422 on the password policy.
+   */
+  changePassword: (body: ChangePasswordRequest) =>
+    apiRequest<void>("/api/v1/auth/me/password", { method: "POST", body }),
 
   /**
    * POST /api/v1/auth/me/deactivate — disable the current account after
