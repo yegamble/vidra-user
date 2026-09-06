@@ -21,6 +21,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Comments",
     help: "Someone comments on one of your videos.",
   },
+  comment_reply: {
+    label: "Replies",
+    help: "Someone replies to a comment you wrote (on any video).",
+  },
   follow: {
     label: "New followers",
     help: "Someone starts following one of your channels.",
@@ -55,6 +59,7 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
 // after them, alphabetically.
 const TYPE_ORDER = [
   "comment",
+  "comment_reply",
   "follow",
   "new_video",
   "message",

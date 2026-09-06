@@ -32,6 +32,38 @@ describe("describeNotification", () => {
     expect(href).toBe("/admin");
   });
 
+  // The regression this slice exists for: a reply used to notify only the
+  // video's owner, so the person being answered saw nothing. Rendering it as a
+  // plain "commented on" would reintroduce the same confusion in the UI — the
+  // copy has to say it was a reply to YOUR comment and name who wrote it.
+  it("renders comment_reply as an answer to your comment, naming the replier", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({
+        type: "comment_reply",
+        actor: { username: "cara", display_name: "Cara" },
+        video_id: "v-1",
+        video_title: "Clip",
+        comment_id: "c-2",
+      }),
+    );
+    expect(lead).toBe("Cara");
+    expect(rest).toContain("replied to your comment");
+    expect(rest).toContain("Clip");
+    expect(rest).not.toContain("commented on your video");
+    expect(href).toBe("/videos/v-1");
+  });
+
+  it("still renders comment as a comment on YOUR video, distinct from a reply", () => {
+    const comment = describeNotification(
+      notif({ type: "comment", actor: { username: "bob", display_name: "" }, video_id: "v-1", video_title: "Clip" }),
+    );
+    const reply = describeNotification(
+      notif({ type: "comment_reply", actor: { username: "bob", display_name: "" }, video_id: "v-1", video_title: "Clip" }),
+    );
+    expect(comment.rest).toContain("commented on");
+    expect(reply.rest).not.toBe(comment.rest);
+  });
+
   it("renders new_video as the channel publishing, linking to the video", () => {
     const { lead, rest, href } = describeNotification(
       notif({
@@ -55,6 +87,7 @@ describe("notification pref labels", () => {
     for (const type of [
       "caption_ready",
       "comment",
+      "comment_reply",
       "follow",
       "message",
       "new_report",

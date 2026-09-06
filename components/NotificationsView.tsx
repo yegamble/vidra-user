@@ -24,6 +24,7 @@ type Status = "loading" | "error" | "ready";
 export function NotificationTypeIcon({ type }: { type: string }) {
   switch (type) {
     case "comment":
+    case "comment_reply":
     case "message":
       return <MessageCircleIcon size={16} />;
     case "video_rejected":
@@ -47,6 +48,7 @@ export function NotificationTypeIcon({ type }: { type: string }) {
 const NOTIF_CHIP: Record<string, string> = {
   follow: "bg-tile-blue/12 text-tile-blue",
   comment: "bg-accent/12 text-accent",
+  comment_reply: "bg-accent/12 text-accent",
   message: "bg-tile-green/12 text-tile-green",
   video_rejected: "bg-tile-red/12 text-tile-red",
   report_resolved: "bg-tile-orange/12 text-tile-orange",
@@ -83,6 +85,20 @@ export function describeNotification(n: Notification): {
     return {
       lead: actor,
       rest: ` commented on ${n.video_title || "your video"}`,
+      href: n.video_id ? `/videos/${n.video_id}` : "#",
+    };
+  }
+  if (n.type === "comment_reply") {
+    // Someone answered a comment the recipient WROTE — a different event from
+    // "commented on your video", and usually on someone else's video, so the
+    // copy names the thread's video rather than implying ownership. The link
+    // goes to that video: comment-level anchors do not exist yet (replies are
+    // collapsed behind "View N replies"), so a #comment-… fragment would be a
+    // promise the watch page cannot keep.
+    const where = n.video_title ? ` on “${n.video_title}”` : "";
+    return {
+      lead: actor,
+      rest: ` replied to your comment${where}`,
       href: n.video_id ? `/videos/${n.video_id}` : "#",
     };
   }
@@ -149,7 +165,8 @@ export function NotificationsView() {
   if (status !== "authed") {
     return (
       <SignInGate title="Sign in to see your notifications">
-        to see when people follow your channel or comment on your videos.
+        to see when people follow your channel, comment on your videos, or reply
+        to you.
       </SignInGate>
     );
   }
