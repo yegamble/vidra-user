@@ -5,11 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const changePassword = vi.fn();
 vi.mock("@/lib/api", () => ({
   authApi: { changePassword: (...args: unknown[]) => changePassword(...args) },
+  // Mirrors the real ApiError's constructor shape so the component's
+  // `instanceof` + `.status` branches are exercised exactly as they are in
+  // production (tsc type-checks against the real class, not this stand-in).
   ApiError: class ApiError extends Error {
     status: number;
-    constructor(status: number) {
-      super("api");
-      this.status = status;
+    code: string;
+    constructor(args: { status: number; code: string; message: string }) {
+      super(args.message);
+      this.status = args.status;
+      this.code = args.code;
     }
   },
   errorMessage: () => "Something went wrong.",
@@ -75,7 +80,7 @@ describe("ChangePasswordSection", () => {
   });
 
   it("names the wrong current password rather than a generic failure", async () => {
-    changePassword.mockRejectedValue(new ApiError(403));
+    changePassword.mockRejectedValue(new ApiError({ status: 403, code: "forbidden", message: "incorrect password" }));
     render(<ChangePasswordSection />);
     fill({ current: "wrong", next: "evenmoresecret", confirm: "evenmoresecret" });
     fireEvent.click(screen.getByRole("button", { name: SUBMIT }));
@@ -87,7 +92,7 @@ describe("ChangePasswordSection", () => {
   });
 
   it("points a password-less (OAuth-only) account at the reset flow on 409", async () => {
-    changePassword.mockRejectedValue(new ApiError(409));
+    changePassword.mockRejectedValue(new ApiError({ status: 409, code: "conflict", message: "no password set" }));
     render(<ChangePasswordSection />);
     fill({ current: "supersecret", next: "evenmoresecret", confirm: "evenmoresecret" });
     fireEvent.click(screen.getByRole("button", { name: SUBMIT }));
@@ -98,7 +103,7 @@ describe("ChangePasswordSection", () => {
   });
 
   it("surfaces the policy failure from the API on 422", async () => {
-    changePassword.mockRejectedValue(new ApiError(422));
+    changePassword.mockRejectedValue(new ApiError({ status: 422, code: "validation_failed", message: "too short" }));
     render(<ChangePasswordSection />);
     fill({ current: "supersecret", next: "evenmoresecret", confirm: "evenmoresecret" });
     fireEvent.click(screen.getByRole("button", { name: SUBMIT }));
