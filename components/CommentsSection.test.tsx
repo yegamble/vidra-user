@@ -42,6 +42,8 @@ const pinComment = vi.fn();
 const unpinComment = vi.fn();
 const heartComment = vi.fn();
 const unheartComment = vi.fn();
+const muteAccount = vi.fn();
+const blockUser = vi.fn();
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
   api: {
@@ -52,6 +54,8 @@ vi.mock("@/lib/api", () => ({
     unpinComment: (...args: unknown[]) => unpinComment(...args),
     heartComment: (...args: unknown[]) => heartComment(...args),
     unheartComment: (...args: unknown[]) => unheartComment(...args),
+    muteAccount: (...args: unknown[]) => muteAccount(...args),
+    blockUser: (...args: unknown[]) => blockUser(...args),
   },
   errorMessage: (_err: unknown, fallback: string) => fallback,
   userAvatarUrl: (id: string) => `/avatar/${id}`,
@@ -411,5 +415,61 @@ describe("CommentsSection deletion recovery", () => {
     await waitFor(() => expect(screen.queryByText("keep until confirmed")).toBeNull());
     expect(deleteComment).toHaveBeenCalledTimes(2);
     expect(deleteComment).toHaveBeenLastCalledWith("c1");
+  });
+});
+
+describe("CommentsSection viewer-scoped filtering (A12 / SOC-02)", () => {
+  // The comment list's mute/block filtering is PER VIEWER and applied by the
+  // server: GET /videos/{id}/comments only knows who is asking if the request
+  // carries the viewer's token. Fetching while the session is still being
+  // restored sends the request anonymously, so the server hides nothing and the
+  // muted account's comments come back on every hard page load — the mute looks
+  // like it works only for as long as the client-side filter survives.
+  it("does not request the list until the session has resolved", async () => {
+    session = { status: "restoring" };
+    resolveComments([mk("c1")]);
+    const { rerender } = render(<CommentsSection videoId="v1" />);
+
+    // Nothing may go out yet: an anonymous read is the wrong read, not an early one.
+    await waitFor(() => expect(screen.getByLabelText("Loading comments")).toBeTruthy());
+    expect(getVideoComments).not.toHaveBeenCalled();
+
+    session = { status: "authed", user: { username: "viewer" } };
+    rerender(<CommentsSection videoId="v1" />);
+    await screen.findByText("body-c1");
+    expect(getVideoComments).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches once for an anonymous visitor, after the restore attempt settles", async () => {
+    session = { status: "restoring" };
+    resolveComments([mk("c1")]);
+    const { rerender } = render(<CommentsSection videoId="v1" />);
+    expect(getVideoComments).not.toHaveBeenCalled();
+
+    session = { status: "anon" };
+    rerender(<CommentsSection videoId="v1" />);
+    await screen.findByText("body-c1");
+    expect(getVideoComments).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the author's comments as soon as they are blocked, exactly as muting does", async () => {
+    session = { status: "authed", user: { username: "viewer" } };
+    resolveComments([
+      mk("c1", { author_id: "bob-id", author_username: "bob", body: "from bob" }),
+      mk("c2", { author_id: "ada-id", author_username: "ada", body: "from ada" }),
+    ]);
+    blockUser.mockResolvedValue(undefined);
+    render(<CommentsSection videoId="v1" />);
+
+    const bobRow = (await screen.findByText("from bob")).closest("li") as HTMLElement;
+    fireEvent.click(within(bobRow).getByRole("button", { name: "Comment actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Block" }));
+
+    await waitFor(() => expect(blockUser).toHaveBeenCalledWith("bob-id"));
+    // The server filters a blocked author's comments out of the list for the
+    // blocker, exactly like a mute (blockUser's contract). Leaving the comment
+    // on screen until the next load makes the block look like it did nothing.
+    await waitFor(() => expect(screen.queryByText("from bob")).toBeNull());
+    expect(screen.getByText("from ada")).toBeTruthy();
   });
 });

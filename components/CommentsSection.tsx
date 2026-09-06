@@ -79,8 +79,21 @@ export function CommentsSection({
   const [status, setStatus] = useState<Status>("loading");
   const [comments, setComments] = useState<Comment[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  // Which comments this list may show is a PER-VIEWER question the server
+  // answers: GET /videos/{id}/comments filters out the accounts (and remote
+  // instances) the CALLER has muted or blocked, and it can only do that if the
+  // request carries the caller's token.
+  const { status: sessionStatus } = useSession();
 
   useEffect(() => {
+    // Wait for the session restore to settle. Firing on mount sent the request
+    // ANONYMOUSLY — the token is restored asynchronously from the refresh
+    // cookie — so the server had no viewer to filter for and returned the
+    // muted/blocked authors' comments to the very person who hid them. The
+    // effect never re-ran, so every hard load of the watch page undid the mute.
+    // "restoring" always settles to "authed" or "anon", so this delays the read
+    // rather than skipping it, and the spinner already covers the wait.
+    if (sessionStatus === "restoring") return;
     const controller = new AbortController();
     api
       .getVideoComments(videoId, { limit: FULL_LIST_LIMIT }, controller.signal)
@@ -93,7 +106,7 @@ export function CommentsSection({
         setStatus("error");
       });
     return () => controller.abort();
-  }, [videoId, reloadKey]);
+  }, [videoId, reloadKey, sessionStatus]);
 
   function retry() {
     setStatus("loading");
@@ -129,7 +142,10 @@ export function CommentsSection({
   // consistent with keeping the rest of the list stable).
   const onUnpinned = (updated: Comment) =>
     setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
-  const onMutedAuthor = (authorId: string) =>
+  // One hide rule, two ways to reach it: muting and blocking both remove that
+  // author's comments from THIS viewer's list, matching what the server returns
+  // on the next load.
+  const onHideAuthor = (authorId: string) =>
     setComments((prev) => prev.filter((x) => x.author_id !== authorId));
   // An instance mute hides ALL of that origin's comments for the caller.
   const onMutedInstance = (domain: string) =>
@@ -183,7 +199,7 @@ export function CommentsSection({
               onHearted={onHearted}
               onPinned={onPinned}
               onUnpinned={onUnpinned}
-              onMutedAuthor={onMutedAuthor}
+              onHideAuthor={onHideAuthor}
               onMutedInstance={onMutedInstance}
             />
           ))}
@@ -373,7 +389,7 @@ function CommentItem({
   onHearted,
   onPinned,
   onUnpinned,
-  onMutedAuthor,
+  onHideAuthor,
   onMutedInstance,
 }: {
   comment: Comment;
@@ -396,7 +412,7 @@ function CommentItem({
   onHearted: (updated: Comment) => void;
   onPinned: (updated: Comment) => void;
   onUnpinned: (updated: Comment) => void;
-  onMutedAuthor: (authorId: string) => void;
+  onHideAuthor: (authorId: string) => void;
   onMutedInstance: (domain: string) => void;
 }) {
   const { user, status } = useSession();
@@ -524,7 +540,7 @@ function CommentItem({
     setMuting(true);
     try {
       await api.muteAccount(authorId);
-      onMutedAuthor(authorId);
+      onHideAuthor(authorId);
     } catch {
       // Leave the comment in place on failure.
       setMuting(false);
@@ -548,7 +564,12 @@ function CommentItem({
     setBlocking(true);
     try {
       await api.blockUser(authorId);
-      setBlocked(true); // a block doesn't hide content, so keep the comment; reflect the state
+      setBlocked(true);
+      // A block hides the blocked account's comments from the blocker exactly
+      // as a mute does (blockUser's contract; the list query applies the same
+      // per-viewer filter). Leaving the comment on screen until the next load
+      // made the block look like it had done nothing.
+      onHideAuthor(authorId);
     } catch {
       // Leave things as-is on failure.
     } finally {
@@ -637,7 +658,7 @@ function CommentItem({
                 onHearted={onHearted}
                 onPinned={onPinned}
                 onUnpinned={onUnpinned}
-                onMutedAuthor={onMutedAuthor}
+                onHideAuthor={onHideAuthor}
                 onMutedInstance={onMutedInstance}
               />
             ))}
