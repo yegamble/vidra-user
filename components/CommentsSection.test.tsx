@@ -42,6 +42,8 @@ const pinComment = vi.fn();
 const unpinComment = vi.fn();
 const heartComment = vi.fn();
 const unheartComment = vi.fn();
+const muteAccount = vi.fn();
+const blockUser = vi.fn();
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
   api: {
@@ -52,6 +54,8 @@ vi.mock("@/lib/api", () => ({
     unpinComment: (...args: unknown[]) => unpinComment(...args),
     heartComment: (...args: unknown[]) => heartComment(...args),
     unheartComment: (...args: unknown[]) => unheartComment(...args),
+    muteAccount: (...args: unknown[]) => muteAccount(...args),
+    blockUser: (...args: unknown[]) => blockUser(...args),
   },
   errorMessage: (_err: unknown, fallback: string) => fallback,
   userAvatarUrl: (id: string) => `/avatar/${id}`,
@@ -101,6 +105,8 @@ afterEach(() => {
 beforeEach(() => {
   session = { status: "authed", user: { username: "viewer" } };
   e2ee.available = false;
+  muteAccount.mockResolvedValue(undefined);
+  blockUser.mockResolvedValue(undefined);
 });
 
 describe("CommentsSection reply attribution", () => {
@@ -446,5 +452,64 @@ describe("CommentsSection viewer-scoped filtering (A12 / SOC-02)", () => {
     rerender(<CommentsSection videoId="v1" />);
     await screen.findByText("body-c1");
     expect(getVideoComments).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Block and Mute sit in the same overflow menu, and the server treats them the
+// same way for comments: blockUser's contract is "their comments are filtered
+// from comment lists, per-viewer, exactly like mutes", so the row is gone on
+// the next load either way. Only the SPOT behaviour differed — Mute removed
+// the comment, Block left it in place reading "Blocked" — which asked the
+// reader to believe two controls with the same effect had different ones.
+// The owner has ruled that Block removes it too.
+describe("CommentsSection block removes the author's comments at once", () => {
+  async function openMenuFor(body: string) {
+    const row = (await screen.findByText(body)).closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Comment actions" }));
+    return row;
+  }
+
+  it("removes every comment by the blocked author, and nobody else's", async () => {
+    resolveComments([
+      mk("c1", { body: "bob first", author_id: "u-bob", author_username: "bob" }),
+      mk("c2", { body: "bob second", author_id: "u-bob", author_username: "bob" }),
+      mk("c3", { body: "alice speaks", author_id: "u-alice", author_username: "alice" }),
+    ]);
+    render(<CommentsSection videoId="v1" />);
+
+    await openMenuFor("bob first");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Block" }));
+
+    await waitFor(() => expect(blockUser).toHaveBeenCalledWith("u-bob"));
+    await waitFor(() => expect(screen.queryByText("bob first")).toBeNull());
+    expect(screen.queryByText("bob second")).toBeNull();
+    expect(screen.getByText("alice speaks")).toBeTruthy();
+  });
+
+  it("matches what Mute already does, so the two controls read alike", async () => {
+    resolveComments([
+      mk("c1", { body: "bob first", author_id: "u-bob", author_username: "bob" }),
+      mk("c3", { body: "alice speaks", author_id: "u-alice", author_username: "alice" }),
+    ]);
+    render(<CommentsSection videoId="v1" />);
+
+    await openMenuFor("bob first");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mute" }));
+
+    await waitFor(() => expect(muteAccount).toHaveBeenCalledWith("u-bob"));
+    await waitFor(() => expect(screen.queryByText("bob first")).toBeNull());
+    expect(screen.getByText("alice speaks")).toBeTruthy();
+  });
+
+  it("leaves the comment in place when the block request fails", async () => {
+    blockUser.mockRejectedValue(new Error("network"));
+    resolveComments([mk("c1", { body: "bob first", author_id: "u-bob", author_username: "bob" })]);
+    render(<CommentsSection videoId="v1" />);
+
+    await openMenuFor("bob first");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Block" }));
+
+    await waitFor(() => expect(blockUser).toHaveBeenCalled());
+    expect(screen.getByText("bob first")).toBeTruthy();
   });
 });

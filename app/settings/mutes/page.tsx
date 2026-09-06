@@ -9,7 +9,7 @@ export default function MutedAccountsPage() {
       <PageHeader
         above={<SettingsBackLink />}
         title="Muted accounts"
-        description="Accounts you have muted. Their comments are hidden from you."
+        description="Accounts you have muted. Their videos and comments are hidden from you."
       />
       <MutesTabs />
       <MutedAccountsView />

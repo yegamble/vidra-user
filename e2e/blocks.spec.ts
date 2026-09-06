@@ -67,7 +67,7 @@ async function signIn(page: Page) {
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 }
 
-test("blocking a comment's author posts the block and reflects it", async ({ page }) => {
+test("blocking a comment's author posts the block and removes their comments", async ({ page }) => {
   await signIn(page);
 
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
@@ -75,7 +75,12 @@ test("blocking a comment's author posts the block and reflects it", async ({ pag
   await page.route(COMMENTS, (route) =>
     route.fulfill({
       json: {
-        comments: [comment("cb", "hi from bob", "u-bob", "bob", "Bob Jones")],
+        comments: [
+          comment("cb", "hi from bob", "u-bob", "bob", "Bob Jones"),
+          // A second author, so the assertion below can tell "the blocked
+          // author's rows went" from "the list emptied".
+          comment("ca", "hi from alice", "u-alice", "alice", "Alice Ng"),
+        ],
         limit: 20,
         offset: 0,
       },
@@ -99,7 +104,7 @@ test("blocking a comment's author posts the block and reflects it", async ({ pag
   await page.getByRole("heading", { name: "Watch Me" }).click();
   await expect(page.getByText("hi from bob")).toBeVisible();
 
-  // Block bob from his comment → POST fires; the button reflects the blocked state.
+  // Block bob from his comment → POST fires; his rows leave the thread.
   const blocked = page.waitForResponse(
     (r) => BLOCK_ONE.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
@@ -111,11 +116,16 @@ test("blocking a comment's author posts the block and reflects it", async ({ pag
   await page.getByRole("menuitem", { name: "Block", exact: true }).click();
   await blocked;
   expect(blockedId).toBe("u-bob");
-  // The comment stays (a block doesn't hide content); reopening the menu shows
-  // the control now reflects the blocked state.
-  await expect(page.getByText("hi from bob")).toBeVisible();
-  await bobRow.getByRole("button", { name: "Comment actions" }).click();
-  await expect(page.getByRole("menuitem", { name: "Blocked" })).toBeVisible();
+  // The blocked author's comments go at once, exactly as Mute's do. This spec
+  // used to pin the opposite ("the comment stays; the control reads Blocked"),
+  // and it is changed here on the OWNER'S RULING, not to make a change fit: the
+  // server already filters a blocked author out of this viewer's comment list
+  // on the next load (the same per-viewer predicate it applies to mutes), so
+  // the row disappeared on reload regardless — leaving it until then only made
+  // two controls with the same effect look like they had different ones.
+  await expect(page.getByText("hi from bob")).toBeHidden();
+  // Alice's comment is untouched: the removal is scoped to the blocked author.
+  await expect(page.getByText("hi from alice")).toBeVisible();
 });
 
 test("the blocked-accounts page lists blocked accounts and unblocks them", async ({ page }) => {
