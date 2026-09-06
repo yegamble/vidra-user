@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
@@ -110,5 +110,48 @@ describe("AccountDataSection feature flags", () => {
     );
     expect(screen.getByText("Export your data")).toBeDefined();
     expect(screen.getByText("Import an archive")).toBeDefined();
+  });
+});
+
+// The import summary is the only account of what an import did, so its wording
+// has to survive both reasons a follow can go uncreated. vidra-core counts an
+// already-existing follow as skipped (it is `:execrows` with ON CONFLICT DO
+// NOTHING), so "skipped (channel not on this instance)" asserted a cause the
+// summary cannot know.
+describe("AccountDataSection import summary", () => {
+  async function importWith(summary: Record<string, unknown>) {
+    mocks.importAccountArchive.mockResolvedValue(summary);
+    const { container } = render(<AccountDataSection />);
+    await waitFor(() => expect(screen.getByLabelText("Archive file (JSON)")).toBeDefined());
+    const input = screen.getByLabelText("Archive file (JSON)") as HTMLInputElement;
+    const file = new File([JSON.stringify({ vidra_export: { version: 1 }, profile: {} })],
+      "archive.json", { type: "application/json" });
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Import archive" }));
+    await waitFor(() => expect(screen.getByText("Import finished.")).toBeDefined());
+    return container.textContent ?? "";
+  }
+
+  const base = {
+    profile_applied: true,
+    playlists_created: 0,
+    playlist_items_added: 0,
+    playlist_items_skipped: 0,
+    follows_created: 0,
+    follows_skipped: 0,
+    notification_prefs_applied: 0,
+    notification_prefs_skipped: 0,
+    skipped_sections: {},
+  };
+
+  it("does not blame a skipped follow on a missing channel", async () => {
+    const text = await importWith({ ...base, follows_created: 0, follows_skipped: 1 });
+    expect(text).toContain("1 skipped");
+    expect(text).not.toContain("channel not on this instance");
+  });
+
+  it("still reports created follows", async () => {
+    const text = await importWith({ ...base, follows_created: 2, follows_skipped: 0 });
+    expect(text).toContain("2 created");
   });
 });

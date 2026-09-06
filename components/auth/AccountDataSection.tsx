@@ -380,10 +380,15 @@ function ImportSummaryView({ summary }: { summary: AccountImportSummary }) {
             ? `, ${summary.playlist_items_skipped} items skipped (video not on this instance)`
             : ""}
         </li>
+        {/* A follow can go uncreated for two reasons the summary cannot tell
+            apart: the channel is not on this instance, or the account already
+            follows it (vidra-core counts both as skipped). Naming only the
+            first told importers their follow had been lost when it was
+            already in place. */}
         <li>
           Follows: {summary.follows_created} created
           {summary.follows_skipped > 0
-            ? `, ${summary.follows_skipped} skipped (channel not on this instance)`
+            ? `, ${summary.follows_skipped} skipped (already followed, or the channel is not on this instance)`
             : ""}
         </li>
         <li>
