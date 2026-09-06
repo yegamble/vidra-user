@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useSession } from "@/components/auth/AuthProvider";
 import { VideoCard } from "@/components/VideoCard";
 import { api } from "@/lib/api";
 import type { RecommendationItem } from "@/lib/api/types";
@@ -25,8 +26,20 @@ import { RAIL_TILE, RAIL_TRACK } from "@/lib/rail";
 export function HomeRecommendationsRail() {
   const [items, setItems] = useState<RecommendationItem[]>([]);
   const [personalized, setPersonalized] = useState(false);
+  // Wait for the session to settle before asking. On a hard load the refresh
+  // cookie is still being redeemed while this mounts, and firing then sent the
+  // request as the WRONG viewer: observed in Chromium against a live core, a
+  // signed-in visitor's hard load produced two calls — one carrying the
+  // Authorization header, one not, because the provider re-renders the tree as
+  // the session resolves — and the anonymous answer landed last. The rail is
+  // the one surface that reads `personalized`, so that showed the generic list
+  // under "Trending now" on every hard load and the personalized one only after
+  // a client-side navigation. `status` is part of the effect's dependencies so
+  // it also refetches across sign-in and sign-out.
+  const { status } = useSession();
 
   useEffect(() => {
+    if (status === "restoring") return;
     const controller = new AbortController();
     api
       .getHomeRecommendations({ limit: 12 }, controller.signal)
@@ -39,7 +52,7 @@ export function HomeRecommendationsRail() {
         if (!controller.signal.aborted) setItems([]);
       });
     return () => controller.abort();
-  }, []);
+  }, [status]);
 
   if (items.length === 0) return null;
 
