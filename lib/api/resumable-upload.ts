@@ -225,6 +225,8 @@ export interface ResumableUploadOptions {
    * a caller can DELETE the session if it later cancels.
    */
   onSessionOpened?: (uploadId: string) => void;
+  /** Wait for caller metadata to persist before finalization can publish the draft. */
+  beforeComplete?: () => Promise<void>;
   /**
    * A precomputed file fingerprint to send on session create. When omitted it is
    * computed from the file (SHA-256 over size + first/last 1 MiB). Ignored on a
@@ -507,6 +509,9 @@ export async function resumableUpload(
     emit(opts.onProgress, bytesReceived, file.size);
   }
 
+  if (opts.signal?.aborted) throw cancelledError();
+
+  await opts.beforeComplete?.();
   if (opts.signal?.aborted) throw cancelledError();
 
   // Every byte is on the server — the bar reads 100% from here, and the phase

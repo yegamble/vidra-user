@@ -579,13 +579,17 @@ test("a creator can upload and publish a video", async ({ page }) => {
   await mockChunkedUpload(page, video());
   await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
 
+  let completions = 0;
+  page.on("request", (request) => {
+    if (COMPLETE.test(request.url()) && request.method() === "POST") completions += 1;
+  });
   await gotoStudioTab(page, "Content");
   await openUpload(page);
   // Selecting the file auto-starts the upload: a title-only, explicitly private
-  // draft, then the resumable transfer. It finalises to the "Uploaded" file-card
-  // state (the mocked chunk completes at once), all before any Publish.
+  // draft, then the resumable transfer. Finalization waits for Publish.
   await pickFile(page, { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from("test") });
-  await expect(page.getByText("Uploaded", { exact: true })).toBeVisible();
+  await expect(page.getByText("Upload ready — save your details with Publish to begin processing.")).toBeVisible();
+  expect(completions).toBe(0);
   // The title prefilled from the filename; the creator overrides it + fills the rest.
   await expect(page.getByLabel("Video title")).toHaveValue("clip");
   await page.getByLabel("Video title").fill("My clip");
@@ -598,6 +602,7 @@ test("a creator can upload and publish a video", async ({ page }) => {
 
   await expect(page.getByText("Published!")).toBeVisible();
   await expect(page.getByRole("link", { name: /View .*My clip/ })).toBeVisible();
+  expect(completions).toBe(1);
   // The auto-create carried ONLY the filename title + explicit private.
   expect(draftBody).toEqual({ title: "clip", privacy: "private" });
   // The typed metadata travelled on the Publish PATCH.
@@ -750,13 +755,17 @@ test("a failed upload is reported as a processing failure, not Published!", asyn
 
   await gotoStudioTab(page, "Content");
   await openUpload(page);
-  // The upload auto-completes as state="failed" (probe/scan rejected it) — the
-  // honest error surfaces right after select, never "Published!".
+  // Processing after Publish rejects the file; the failure must stay visible.
   await pickFile(page, {
     name: "clip.mp4",
     mimeType: "video/mp4",
     buffer: Buffer.from("not really a video"),
   });
+
+  await page.route(VIDEO, (route) => route.request().method() === "PATCH"
+    ? route.fulfill({ json: video({ state: "draft" }) }) : route.fallback());
+  await expect(page.getByText("Upload ready — save your details with Publish to begin processing.")).toBeVisible();
+  await page.getByRole("button", { name: "Publish" }).click();
 
   await expect(
     page.getByText("Processing failed — the file could not be published", { exact: false }),

@@ -90,7 +90,7 @@ beforeEach(() => {
     video: { id: "v1", title: "clip", state: "published" },
     file: { kind: "original" },
   });
-  mocks.updateVideo.mockResolvedValue({ id: "v1", title: "clip", state: "published" });
+  mocks.updateVideo.mockReset().mockResolvedValue({ id: "v1", title: "clip", state: "published" });
   mocks.deleteVideo.mockResolvedValue(undefined);
   // No unfinished session by default — the resume banner is opt-in per test.
   mocks.cancelUploadSession.mockResolvedValue(undefined);
@@ -194,6 +194,31 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
     expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*");
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
     expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*");
+  });
+
+  it("keeps completed bytes in draft until scheduling metadata saves, including retry", async () => {
+    const completed = vi.fn();
+    mocks.resumableUpload.mockImplementation(async (_id, _file, options) => {
+      await options.beforeComplete?.();
+      completed();
+      return { video: { id: "v1", title: "Scheduled", state: "scheduled" } };
+    });
+    mocks.updateVideo.mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ id: "v1", title: "Scheduled", state: "draft" });
+    render(<UploadSection channels={[channel]} config={null} />);
+    openSheet();
+    pickFile();
+    await waitFor(() => expect(mocks.resumableUpload).toHaveBeenCalled());
+    expect(completed).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Schedule publish"), { target: { value: "2030-01-02T12:30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await screen.findByRole("alert");
+    expect(completed).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(completed).toHaveBeenCalledTimes(1));
+    expect(mocks.createVideoDraft).toHaveBeenCalledTimes(1);
+    expect(mocks.updateVideo).toHaveBeenLastCalledWith("v1", expect.objectContaining({ publish_at: new Date("2030-01-02T12:30").toISOString() }));
+    expect(await screen.findByText(/is scheduled — it will publish automatically/)).toBeTruthy();
   });
 
   it("auto-starts the upload on file select (title-only private draft) and Publish PATCHes metadata", async () => {
@@ -482,7 +507,7 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
       video: { id: "v1", title: "clip", state: "published" },
       file: { kind: "original" },
     });
-    mocks.updateVideo.mockResolvedValue({ id: "v1", title: "clip", state: "published" });
+    mocks.updateVideo.mockReset().mockResolvedValue({ id: "v1", title: "clip", state: "published" });
     render(<UploadSection channels={[channel]} config={null} />);
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
 

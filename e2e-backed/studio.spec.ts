@@ -311,7 +311,7 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
   // video — the real ffprobe rejects them, so the auto-started upload's finalize
   // job publishes nothing and the video lands in "failed". The completion POST
   // is accepted (202) either way; the honest error surfaces once the client's
-  // poll settles, still before any Publish.
+  // poll settles after Publish releases processing.
   const uploaded = page.waitForResponse(
     (r) => /\/uploads\/[^/]+\/complete$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
@@ -321,6 +321,8 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
     mimeType: "video/mp4",
     buffer: Buffer.from("these bytes are not a real video container"),
   });
+  await expect(page.getByText("Upload ready — save your details with Publish to begin processing.")).toBeVisible();
+  await page.getByRole("button", { name: "Publish" }).click();
   await uploaded;
 
   await expect(
@@ -329,8 +331,7 @@ test("a rejected upload is reported as failed, not published", async ({ page, re
   await expect(page.getByText("Published!")).toHaveCount(0);
 
   // Persisted: the owner's channel list shows the video in state "failed". The
-  // rejection happened BEFORE any Publish, so the auto-created draft still
-  // carries its filename-derived title ("clip"), never the form title.
+  // unchanged form title is the filename-derived title ("clip").
   const token = await loginToken(request, email, password);
   const mine = await channelVideos(request, handle, token);
   expect(mine).toHaveLength(1);
