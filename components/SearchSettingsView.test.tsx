@@ -125,7 +125,7 @@ describe("SearchSettingsView — history", () => {
     // Confirm modal → clear.
     fireEvent.click(await screen.findByRole("button", { name: "Clear history" }));
     await waitFor(() => expect(clearSearchHistory).toHaveBeenCalled());
-    expect(await screen.findByText("You have no saved searches.")).toBeTruthy();
+    expect(await screen.findByText(/You have no saved searches/)).toBeTruthy();
   });
 
 });
@@ -213,15 +213,27 @@ describe("SearchSettingsView — instance gates", () => {
     expect(screen.queryByText("Saved.")).toBeNull();
   });
 
-  it("disables personalized search when the instance ranks with simple mode", () => {
+  // BOTH personalization toggles are mode-gated, and the recommendations one was
+  // the honest-copy hole: vidra-core computes `personalized` for the home and
+  // related rails as `searchAdvanced() && instancePersonalizedRecs() && ...`
+  // (core#168), so in the shipped `simple` default the control is exactly as
+  // inert as its search sibling — and it accepted a click and said "Saved."
+  it("disables BOTH personalization toggles when the instance ranks with simple mode", async () => {
     render(<SearchSettingsView instanceSearch={{ mode: "simple" }} />);
-    const box = screen.getByLabelText("Personalize my search results") as HTMLInputElement;
-    expect(box.disabled).toBe(true);
-    expect(screen.getByText(/simple/i)).toBeTruthy();
-    expect(screen.getByLabelText("Personalize my recommendations")).toHaveProperty(
-      "disabled",
+    for (const label of ["Personalize my search results", "Personalize my recommendations"]) {
+      const box = screen.getByLabelText(label) as HTMLInputElement;
+      expect(box.disabled).toBe(true);
+      fireEvent.click(box);
+      fireEvent.change(box, { target: { checked: !box.checked } });
+    }
+    expect(screen.getAllByText(/simple heuristics/i).length).toBe(2);
+    // The history control is untouched by the mode: it stores rows, it does not rank.
+    expect((screen.getByLabelText("Keep my search history") as HTMLInputElement).disabled).toBe(
       false,
     );
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(screen.queryByText("Saved.")).toBeNull();
   });
 
   it("disables personalized recommendations, with a reason and no PATCH", async () => {
@@ -260,6 +272,48 @@ describe("SearchSettingsView — instance gates", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Clear all" }));
     fireEvent.click(await screen.findByRole("button", { name: "Clear history" }));
     await waitFor(() => expect(clearSearchHistory).toHaveBeenCalled());
+  });
+});
+
+// The A13 opt-out ruling made this page's copy load-bearing: the promise it
+// states is now the promise the server keeps, so the words are tested.
+describe("SearchSettingsView — the opt-out promise, in words", () => {
+  it("says what turning all three off does to collection, not just to serving", async () => {
+    render(<SearchSettingsView />);
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
+    // The rule: nothing left active → stored as a signed-out visitor's are.
+    expect(screen.getByText(/none of them is active for you/i)).toBeTruthy();
+    expect(screen.getByText(/signed-out visitor/i)).toBeTruthy();
+  });
+
+  it("is honest that earlier activity is not retroactively unlinked", async () => {
+    render(<SearchSettingsView />);
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
+    expect(screen.getByText(/90 days/i)).toBeTruthy();
+    expect(screen.getByText(/before you turned it off/i)).toBeTruthy();
+  });
+});
+
+// An opted-out user's history list is empty by construction — and the rows that
+// still name them live in ledgers this list never shows. Hiding the one control
+// that erases those rows behind "the list is non-empty" left exactly the users
+// who most want it with no way to reach it.
+describe("SearchSettingsView — clear-all reachability", () => {
+  it("offers Clear all even when the list is empty", async () => {
+    render(<SearchSettingsView />);
+    expect(await screen.findByText(/You have no saved searches/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Clear history" }));
+    await waitFor(() => expect(clearSearchHistory).toHaveBeenCalled());
+  });
+
+  it("does not offer it while the list is still loading or has failed", async () => {
+    let resolve: (v: unknown) => void = () => {};
+    getSearchHistory.mockReturnValueOnce(new Promise((r) => (resolve = r)) as never);
+    render(<SearchSettingsView />);
+    expect(screen.queryByRole("button", { name: "Clear all" })).toBeNull();
+    resolve({ entries: [], limit: 100, offset: 0 });
+    expect(await screen.findByRole("button", { name: "Clear all" })).toBeTruthy();
   });
 });
 

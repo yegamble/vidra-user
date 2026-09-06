@@ -52,28 +52,38 @@ const ADMIN_OFF = "Turned off for everyone on this site by the administrator.";
  * other consumer of this block uses (SearchResults, Header).
  */
 function instanceGates(search: InstanceSearchBlock | undefined): Record<PrefKey, Gate> {
-  const personalizedSearch: Gate =
-    search?.personalized_search_enabled === false
-      ? { allowed: false, reason: ADMIN_OFF }
-      : // Personalized ranking is additionally mode-gated server-side: simple
-        // mode never applies behavioural signals, whatever the toggles say.
-        search?.mode === "simple"
-        ? {
-            allowed: false,
-            reason:
-              "This site ranks search with simple heuristics, so personalized results are not available.",
-          }
-        : GATE_OPEN;
+  // BOTH personalization controls are mode-gated server-side, and for the same
+  // reason: simple mode never applies behavioural signals, whatever the toggles
+  // say. Core computes the search flag as `searchAdvanced() &&
+  // instancePersonalizedSearch() && ...` and the rails' flag as `searchAdvanced()
+  // && instancePersonalizedRecs() && ...` (core#168 added the second half). The
+  // recommendations toggle carried no such gate here, so on the shipped `simple`
+  // default it accepted a click, said "Saved." in green, and changed nothing —
+  // the exact failure the search toggle's gate exists to prevent.
+  const simpleMode = search?.mode === "simple";
+  const modeOff = (what: string): Gate => ({
+    allowed: false,
+    reason: `This site ranks search with simple heuristics, so personalized ${what} are not available.`,
+  });
   return {
     search_history_enabled:
       search?.search_history_enabled === false
         ? { allowed: false, reason: ADMIN_OFF }
-        : GATE_OPEN,
-    personalized_search_enabled: personalizedSearch,
+        : // Deliberately NOT mode-gated: history stores rows, it does not rank
+          // them, and it works identically in both modes.
+          GATE_OPEN,
+    personalized_search_enabled:
+      search?.personalized_search_enabled === false
+        ? { allowed: false, reason: ADMIN_OFF }
+        : simpleMode
+          ? modeOff("results")
+          : GATE_OPEN,
     personalized_recommendations_enabled:
       search?.personalized_recommendations_enabled === false
         ? { allowed: false, reason: ADMIN_OFF }
-        : GATE_OPEN,
+        : simpleMode
+          ? modeOff("recommendations")
+          : GATE_OPEN,
   };
 }
 
@@ -163,7 +173,13 @@ function PreferencesSection({
         <p className="text-[13px] text-fg-muted">
           Vidra can use your searches and what you watch to tailor suggestions,
           search results, and your home recommendations. These controls are yours —
-          turn any of them off at any time.
+          turn any of them off at any time, and each one feeds only its own
+          feature. Once none of them is active for you, your searches and plays
+          stop being recorded against your account altogether: from that moment
+          they are stored the way a signed-out visitor&rsquo;s are, counted once
+          toward the anonymous totals this site uses to decide what is popular,
+          and never linked back to you. A control this site has switched off
+          collects nothing either — it is greyed out below with the reason.
         </p>
       </div>
 
@@ -201,8 +217,12 @@ function PreferencesSection({
 
       <p className="text-xs text-fg-muted">
         Retention: your search activity is kept only as long as the administrator
-        of this instance configures, and is removed on request. Clearing your
-        history below deletes your stored searches immediately.
+        of this instance configures — 90 days unless they change it — and is
+        removed on request. Turning a control off works from that moment onward:
+        activity recorded before you turned it off keeps the link to your account
+        until it ages out. To remove it now, use Clear all below, which
+        erases your stored searches immediately and unlinks the rest from your
+        account.
       </p>
     </section>
   );
@@ -344,6 +364,15 @@ function historyMutationError(notDone: string, err: unknown): string {
 // clear-all stays reachable because searches stored BEFORE the switch survive
 // (core gates recording on the instance setting, but not the read/delete
 // routes) and erasing them is the whole point of this section.
+//
+// Clear-all is offered on an EMPTY list too, for the same reason and a stronger
+// one: this list is `user_search_history` alone, while the clear also anonymizes
+// the raw query_log and behavior_events rows the search service keeps and erases
+// core's own search_outbox copy of the query text — rows this list has never
+// shown. An empty list therefore does not mean there is nothing to clear, and
+// the users whose list is empty because they opted out are exactly the ones with
+// the strongest claim on the control. It stays hidden while the list is loading
+// or has failed, where a click would race an unknown state.
 function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean }) {
   const [entries, setEntries] = useState<SearchHistoryEntry[]>([]);
   const [fetchStatus, setFetchStatus] = useState<HistoryStatus>("loading");
@@ -417,7 +446,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold tracking-tight text-fg">Search history</h2>
-        {status === "off" || (status === "ready" && entries.length > 0) ? (
+        {status === "off" || status === "ready" ? (
           <button
             type="button"
             onClick={() => setConfirmClear(true)}
@@ -458,7 +487,10 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
       ) : null}
 
       {status === "ready" && entries.length === 0 ? (
-        <p className="text-sm text-fg-muted">You have no saved searches.</p>
+        <p className="text-sm text-fg-muted">
+          You have no saved searches. Clear all still erases any earlier activity
+          this site holds under your account.
+        </p>
       ) : null}
 
       {status === "ready" && entries.length > 0 ? (
