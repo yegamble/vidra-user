@@ -2,10 +2,24 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useSettledSession } from "@/lib/use-settled-session";
+import { useSettledOptionalSession, useSettledSession } from "@/lib/use-settled-session";
 
-let session: { status: string; user?: { id: string } | null } = { status: "restoring" };
-vi.mock("@/components/auth/AuthProvider", () => ({ useSession: () => session }));
+type FakeSession = { status: string; user?: { id: string } | null };
+
+let session: FakeSession = { status: "restoring" };
+// `optionalSession` doubles as the "no provider" switch: null is exactly what
+// useOptionalSession returns outside an AuthProvider.
+let optionalSession: FakeSession | null = { status: "anon", user: null };
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useSession: () => session,
+  useOptionalSession: () => optionalSession,
+}));
+
+/** Renders children with no session in context at all. */
+function NoProvider({ children }: { children: React.ReactNode }) {
+  optionalSession = null;
+  return <>{children}</>;
+}
 
 describe("useSettledSession", () => {
   it("reports NOT settled while the boot-time refresh is in flight", () => {
@@ -70,5 +84,32 @@ describe("useSettledSession", () => {
     session = { status: "anon" };
     const anon = renderHook(() => useSettledSession()).result.current.viewerKey;
     expect(authed).not.toBe(anon);
+  });
+});
+
+describe("useSettledOptionalSession", () => {
+  it("treats the absence of a provider as a settled anonymous viewer", () => {
+    // Mirrors useOptionalSession: for a component that also renders bare, "no
+    // session" is a valid answer, not a programming error — and a read with no
+    // provider above it can never be delayed into one.
+    const { result } = renderHook(() => useSettledOptionalSession(), {
+      wrapper: NoProvider,
+    });
+    expect(result.current.settled).toBe(true);
+    expect(result.current.authed).toBe(false);
+    expect(result.current.viewerKey).toBe("anon");
+  });
+
+  it("waits for the session when a provider IS above it", () => {
+    optionalSession = { status: "restoring", user: null };
+    const { result } = renderHook(() => useSettledOptionalSession());
+    expect(result.current.settled).toBe(false);
+  });
+
+  it("carries the viewer's identity once signed in", () => {
+    optionalSession = { status: "authed", user: { id: "u-9" } };
+    const { result } = renderHook(() => useSettledOptionalSession());
+    expect(result.current.settled).toBe(true);
+    expect(result.current.viewerId).toBe("u-9");
   });
 });

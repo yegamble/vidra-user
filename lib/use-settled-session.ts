@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
+import { useOptionalSession, useSession } from "@/components/auth/AuthProvider";
 
 /**
  * The shape a viewer-scoped client-side read needs from the session, and
@@ -82,7 +82,27 @@ export interface SettledSession {
  * using `useOptionalSession` directly.
  */
 export function useSettledSession(): SettledSession {
-  const { status, user } = useSession();
+  return useSettledFrom(useSession());
+}
+
+/**
+ * useSettledOptionalSession — `useSettledSession` for a component that also
+ * renders with no `AuthProvider` above it, the same pair `useOptionalSession`
+ * forms with `useSession`.
+ *
+ * No provider means no viewer can ever arrive, so it reports a SETTLED
+ * anonymous viewer: delaying a read for a session that will never land would
+ * hang the surface instead of guarding it.
+ */
+export function useSettledOptionalSession(): SettledSession {
+  return useSettledFrom(useOptionalSession() ?? SETTLED_ANON);
+}
+
+/** What "no AuthProvider above" means: an anonymous viewer, already settled. */
+const SETTLED_ANON = { status: "anon" as const, user: null };
+
+function useSettledFrom(session: { status: string; user?: { id: string } | null }): SettledSession {
+  const { status, user } = session;
   const viewerId = status === "authed" ? (user?.id ?? null) : null;
   return useMemo<SettledSession>(
     () => ({

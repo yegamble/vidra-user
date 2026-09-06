@@ -228,3 +228,77 @@ describe("useAppendingList", () => {
     expect(text("rows")).toBe("fetched");
   });
 });
+
+describe("useAppendingList — holding a viewer-scoped list until the session settles", () => {
+  const restoring = { settled: false, viewerKey: "anon" };
+  const anon = { settled: true, viewerKey: "anon" };
+  const authed = { settled: true, viewerKey: "authed:u-1" };
+
+  it("issues no request while the session is still restoring", async () => {
+    const load = vi.fn(async () => ({ items: rows("a") }) as AppendingPage<Row>);
+    render(<List queryKey="q" viewer={restoring} load={load} />);
+    await act(async () => {});
+    expect(load).not.toHaveBeenCalled();
+    expect(screen.getByTestId("status").textContent).toBe("loading");
+  });
+
+  it("fetches exactly once when the session settles anonymous", async () => {
+    const load = vi.fn(async () => ({ items: rows("a") }) as AppendingPage<Row>);
+    const { rerender } = render(<List queryKey="q" viewer={restoring} load={load} />);
+    await act(async () => {});
+    rerender(<List queryKey="q" viewer={anon} load={load} />);
+    await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("a"));
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches exactly once when the session settles signed in", async () => {
+    const load = vi.fn(async () => ({ items: rows("a") }) as AppendingPage<Row>);
+    const { rerender } = render(<List queryKey="q" viewer={restoring} load={load} />);
+    await act(async () => {});
+    rerender(<List queryKey="q" viewer={authed} load={load} />);
+    await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("a"));
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a server-rendered seed for a visitor who settles anonymous, with NO request", async () => {
+    const load = vi.fn(async () => ({ items: rows("z") }) as AppendingPage<Row>);
+    const seed: AppendingPage<Row> = { items: rows("a", "b"), total: 2 };
+    const { rerender } = render(
+      <List queryKey="q" viewer={restoring} initialPage={seed} load={load} />,
+    );
+    expect(screen.getByTestId("rows").textContent).toBe("a,b");
+    rerender(<List queryKey="q" viewer={anon} initialPage={seed} load={load} />);
+    await act(async () => {});
+    expect(load).not.toHaveBeenCalled();
+    expect(screen.getByTestId("rows").textContent).toBe("a,b");
+  });
+
+  it("replaces an anonymous seed with exactly one viewer-scoped request when the viewer signs in", async () => {
+    const load = vi.fn(async () => ({ items: rows("z") }) as AppendingPage<Row>);
+    const seed: AppendingPage<Row> = { items: rows("a", "b"), total: 2 };
+    const { rerender } = render(
+      <List queryKey="q" viewer={restoring} initialPage={seed} load={load} />,
+    );
+    rerender(<List queryKey="q" viewer={authed} initialPage={seed} load={load} />);
+    await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("z"));
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("retires an anonymous seed for a viewer who was ALREADY signed in at mount", async () => {
+    // A client-side navigation mounts the list with the session already
+    // settled. The seed is still the anonymous answer, so pinning it to the
+    // mount-time key would leave a signed-in viewer looking at it forever.
+    const load = vi.fn(async () => ({ items: rows("z") }) as AppendingPage<Row>);
+    const seed: AppendingPage<Row> = { items: rows("a", "b"), total: 2 };
+    render(<List queryKey="q" viewer={authed} initialPage={seed} load={load} />);
+    await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("z"));
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves lists with no viewer fetching on mount, exactly as before", async () => {
+    const load = vi.fn(async () => ({ items: rows("a") }) as AppendingPage<Row>);
+    render(<List queryKey="q" load={load} />);
+    await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("a"));
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+});

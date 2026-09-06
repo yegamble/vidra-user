@@ -93,6 +93,31 @@ export interface UseAppendingListOptions<T> {
    */
   initialPage?: AppendingPage<T> | null;
   /**
+   * Present when this list's answer is VIEWER-SCOPED — pass
+   * `useSettledSession()` whole. Absent means the list is the same for
+   * everybody and nothing below applies.
+   *
+   * It does three things at once, and all three are needed:
+   *
+   *  1. No request goes out until `settled`. Sending before the boot-time
+   *     silent refresh has finished means sending with no `Authorization`
+   *     header, and the server then answers as an anonymous visitor —
+   *     unfiltered by this viewer's own mutes and blocks. Holding HERE rather
+   *     than inside `load` is what keeps it to one request: a `load` that
+   *     resolved late or never would leave the list either stuck in `loading`
+   *     or one round trip poorer.
+   *  2. `viewerKey` joins the query signature, so the list re-asks when the
+   *     viewer changes — a sign-in, a sign-out, an account switch.
+   *  3. `initialPage` is understood as the ANONYMOUS first page, because a
+   *     server render has no viewer. It is therefore kept for a visitor who
+   *     settles anonymous — no browser request at all — and retired for one
+   *     who settles signed in, who gets exactly one request carrying their
+   *     token. This is why the seed is pinned to the anonymous key rather than
+   *     to whatever key happened to be current at mount: arriving already
+   *     signed in (a client-side navigation) must still replace it.
+   */
+  viewer?: { settled: boolean; viewerKey: string };
+  /**
    * Fetch one window. Held in a ref and re-read on every fetch, so an inline
    * arrow is fine and it is deliberately not a dependency.
    */
@@ -143,13 +168,21 @@ const NO_ITEMS: unknown[] = [];
  * callers stop remounting themselves on a filter key.
  */
 export function useAppendingList<T>(options: UseAppendingListOptions<T>): AppendingList<T> {
-  const { queryKey, pageSize = PAGE_SIZE, initialPage, load } = options;
+  const { queryKey, pageSize = PAGE_SIZE, initialPage, viewer, load } = options;
+  // The query signature the fetch effect actually keys on: the caller's, plus
+  // WHO is asking when that changes the answer. NUL joins them because it
+  // cannot occur in either half.
+  const fetchKey = viewer ? `${queryKey}\u0000${viewer.viewerKey}` : queryKey;
+  const ready = viewer ? viewer.settled : true;
 
   // The SSR seed belongs to the key that was current at mount and to attempt 0.
   // Pinning the key here (rather than reacting to the prop) is what keeps a
   // later re-render carrying the same seed from resurrecting page one under
-  // rows already appended past it.
-  const seededKey = useRef(initialPage ? queryKey : null);
+  // rows already appended past it. For a viewer-scoped list the key it belongs
+  // to is the ANONYMOUS one whatever the current viewer is, because the server
+  // that rendered it had no viewer.
+  const seedKey = initialPage ? (viewer ? `${queryKey}\u0000anon` : queryKey) : null;
+  const seededKey = useRef(seedKey);
 
   const loadRef = useRef(load);
   useEffect(() => {
@@ -162,7 +195,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
   const [loaded, setLoaded] = useState<Loaded<T> | null>(() =>
     initialPage
       ? {
-          key: queryKey,
+          key: seedKey ?? queryKey,
           attempt: 0,
           items: initialPage.items,
           total: initialPage.total,
@@ -181,9 +214,13 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
   const [moreStatus, setMoreStatus] = useState<AppendingMoreStatus>("idle");
 
   useEffect(() => {
+    // The session has not settled: sending now would ask the server a
+    // viewer-scoped question as nobody. See `ready` for why this is here and
+    // not inside `load`.
+    if (!ready) return;
     // The seeded first page is already on screen; only an explicit reload
     // (attempt > 0) re-fetches it.
-    if (seededKey.current === queryKey && attempt === 0) return;
+    if (seededKey.current === fetchKey && attempt === 0) return;
     // Any other query retires the seed for good. Without this, navigating away
     // and back would match the seed's key again while `loaded` had long since
     // been overwritten — and the effect would skip a fetch the list needs,
@@ -198,7 +235,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
       .then((page) => {
         if (controller.signal.aborted) return;
         setLoaded({
-          key: queryKey,
+          key: fetchKey,
           attempt,
           items: page.items,
           total: page.total,
@@ -216,13 +253,13 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
       .catch((err: unknown) => {
         void err;
         if (controller.signal.aborted) return;
-        setFailed({ key: queryKey, attempt });
+        setFailed({ key: fetchKey, attempt });
       });
     return () => controller.abort();
-  }, [queryKey, attempt, pageSize]);
+  }, [fetchKey, attempt, pageSize, ready]);
 
-  const current = loaded?.key === queryKey && loaded.attempt === attempt ? loaded : null;
-  const errored = failed?.key === queryKey && failed.attempt === attempt;
+  const current = loaded?.key === fetchKey && loaded.attempt === attempt ? loaded : null;
+  const errored = failed?.key === fetchKey && failed.attempt === attempt;
   const status: AppendingStatus = current ? "ready" : errored ? "error" : "loading";
 
   const loadMore = useCallback(() => {
@@ -243,7 +280,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
           // A page that landed after the query moved on belongs to a list nobody
           // is looking at any more; dropping it is what stops results for the
           // previous search appending under the new one.
-          if (!prev || prev.key !== queryKey || prev.attempt !== attempt) return prev;
+          if (!prev || prev.key !== fetchKey || prev.attempt !== attempt) return prev;
           const items = [...prev.items, ...page.items];
           return {
             ...prev,
@@ -262,7 +299,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
         setMoreStatus("idle");
       })
       .catch(() => setMoreStatus("error"));
-  }, [attempt, current, pageSize, queryKey]);
+  }, [attempt, current, fetchKey, pageSize]);
 
   const reload = useCallback(() => {
     setMoreStatus("idle");

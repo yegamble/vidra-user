@@ -26,6 +26,13 @@ vi.mock("@/components/VideoCard", () => ({
 vi.mock("@/components/VideoGrid", () => ({
   VideoGrid: ({ children }: { children: React.ReactNode }) => <ul>{children}</ul>,
 }));
+// The session the feed sees. The default keeps every pre-existing case on the
+// settled path they were written for.
+let sessionStatus: "restoring" | "anon" | "authed" = "anon";
+let sessionUser: { id: string } | null = null;
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useSession: () => ({ status: sessionStatus, user: sessionUser }),
+}));
 
 import { VideoFeed } from "./VideoFeed";
 
@@ -158,5 +165,59 @@ describe("VideoFeed auto-load (browse_scroll_mode)", () => {
     // and a sentinel that retried itself would loop.
     expect(await screen.findByRole("button", { name: "Load more" })).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("Could not load more videos.");
+  });
+});
+
+// The public feed is filtered PER VIEWER by core: ListPublicVideosSorted drops
+// the authors this caller has muted or blocked, the instances they have muted,
+// and (per-viewer since 0100) sensitive videos under their own policy override.
+// A request that leaves before the refresh cookie has been redeemed carries no
+// Authorization header, so the server has no viewer to filter for and hands
+// back the muted author's videos to the person who hid them.
+//
+// The home page's first page is SERVER-rendered, and a server render has no
+// viewer, so that seed is the ANONYMOUS answer: it is kept for a visitor who
+// settles anonymous (no browser request at all) and replaced by exactly one
+// viewer-scoped request for one who settles signed in.
+describe("VideoFeed session settling", () => {
+  const videos = Array.from({ length: 20 }, (_, i) => video(i));
+
+  beforeEach(() => {
+    sessionStatus = "anon";
+    sessionUser = null;
+  });
+
+  it("does not fetch while the session is still restoring", async () => {
+    sessionStatus = "restoring";
+    mocks.getFeed.mockResolvedValue(page(videos, 21));
+    render(<VideoFeed sort="recent" />);
+    await act(async () => {});
+    expect(mocks.getFeed).not.toHaveBeenCalled();
+  });
+
+  it("fetches exactly once when the session settles anonymous", async () => {
+    sessionStatus = "anon";
+    mocks.getFeed.mockResolvedValue(page(videos, 21));
+    render(<VideoFeed sort="recent" />);
+    expect(await screen.findByText("Video 1")).toBeTruthy();
+    expect(mocks.getFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the server-rendered seed for an anonymous visitor and asks for nothing", async () => {
+    sessionStatus = "anon";
+    mocks.getFeed.mockResolvedValue(page(videos, 21));
+    render(<VideoFeed sort="recent" initialPage={page(videos, 21)} />);
+    await act(async () => {});
+    expect(screen.getByText("Video 1")).toBeTruthy();
+    expect(mocks.getFeed).not.toHaveBeenCalled();
+  });
+
+  it("replaces the anonymous seed with one viewer-scoped request for a signed-in viewer", async () => {
+    sessionStatus = "authed";
+    sessionUser = { id: "u-1" };
+    mocks.getFeed.mockResolvedValue(page([video(99)], 1));
+    render(<VideoFeed sort="recent" initialPage={page(videos, 21)} />);
+    expect(await screen.findByText("Video 99")).toBeTruthy();
+    expect(mocks.getFeed).toHaveBeenCalledTimes(1);
   });
 });
