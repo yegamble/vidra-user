@@ -61,6 +61,7 @@ import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { logger } from "@/lib/logger";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { trackSearchEvent } from "@/lib/search-events";
+import { useSettledSession } from "@/lib/use-settled-session";
 import { useShortWatchUrl } from "@/lib/use-short-watch-url";
 import { parseStartTime } from "@/lib/start-time";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
@@ -107,7 +108,10 @@ export function WatchView({
   // The signed-in viewer, so the comments section can offer the creator
   // pin/heart controls when this is the video owner's own channel (owner-only
   // client gating; the server independently authorizes editors/moderators too).
-  const { user, status: sessionStatus } = useSession();
+  const { user } = useSession();
+  // The shared seam for "don't ask a viewer-scoped question before you know
+  // who the viewer is" — see lib/use-settled-session.ts.
+  const { settled, viewerKey } = useSettledSession();
   const tagFeedDefaults = feedDefaultsForLanding(
     resolveLandingPage(instanceDefaults),
     instanceDefaults,
@@ -230,7 +234,7 @@ export function WatchView({
   useEffect(() => {
     // A hard navigation restores the bearer asynchronously. Reading before it
     // settles makes an owner-private link stick on an anonymous 404.
-    if (sessionStatus === "restoring") return;
+    if (!settled) return;
     const controller = new AbortController();
     const fetchVideo =
       id !== undefined
@@ -263,7 +267,7 @@ export function WatchView({
         }
       });
     return () => controller.abort();
-  }, [id, code, reloadKey, playbackToken, seed, sessionStatus, user?.id]);
+  }, [id, code, reloadKey, playbackToken, seed, settled, viewerKey]);
 
   // Emit video.play_started once per watched local video (search-service W4),
   // tagged with the discovery context this page was opened from. Best-effort
@@ -323,6 +327,16 @@ export function WatchView({
   const channelHandleForFetch = video?.channel_handle ?? null;
   useEffect(() => {
     if (!channelHandleForFetch) return;
+    // `is_following` on this payload is PER VIEWER, and this read does NOT
+    // inherit the video read's wait: for a public video the page is
+    // server-rendered, and that seed paints on the first render, so the handle
+    // is here before the refresh cookie has been redeemed. Firing then asked
+    // as an anonymous visitor, and the Follow button rendered "Follow" for a
+    // channel the viewer already follows on every hard load — the known
+    // "FollowButton ignored the shipped is_following flag" failure class,
+    // reached by a different route. `viewerKey` is a dependency so the state
+    // also corrects itself across a sign-in and a sign-out.
+    if (!settled) return;
     const controller = new AbortController();
     api
       .getChannel(channelHandleForFetch, controller.signal)
@@ -331,7 +345,7 @@ export function WatchView({
         /* No follower count / account-scope source if the read fails. */
       });
     return () => controller.abort();
-  }, [channelHandleForFetch]);
+  }, [channelHandleForFetch, settled, viewerKey]);
 
   // Reset the IPFS source + channel when navigating to another video (React's
   // "adjust state on prop change" render-phase pattern — the same component stays

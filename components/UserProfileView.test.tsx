@@ -16,13 +16,24 @@ vi.mock("@/lib/api", () => ({
   userBannerUrl: () => "",
 }));
 
+// The session in context. null is the shipped default for this file: the view
+// is rendered bare here, with no AuthProvider above it, which is exactly what
+// useOptionalSession answers null for.
+let optionalSession: { status: string; user: { id: string } | null } | null = null;
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useOptionalSession: () => optionalSession,
+}));
+
 vi.mock("@/lib/format", () => ({
   formatCount: (n: number) => String(n),
   formatMonthYear: () => "Jul 2026",
   pluralize: (_n: number, word: string) => word,
 }));
 
-import { UserProfileView } from "./UserProfileView";
+import { UserProfileLoader, UserProfileView } from "./UserProfileView";
+import { api } from "@/lib/api";
+
+const getUserProfile = vi.mocked(api.getUserProfile);
 import type { PublicUserProfile } from "@/lib/api";
 
 function profile(overrides: Partial<PublicUserProfile> = {}): PublicUserProfile {
@@ -59,5 +70,35 @@ describe("UserProfileView Bluesky row", () => {
     fireEvent.click(screen.getByRole("button", { name: "About" }));
     expect(screen.queryByText("Bluesky")).toBeNull();
     expect(screen.queryByRole("link", { name: /bsky/i })).toBeNull();
+  });
+});
+
+// GET /users/{username}/profile answers differently for the profile's OWNER:
+// core resolves it from the account row rather than the public projection, and
+// only that branch exposes the linked Bluesky handle. A read that goes out
+// before the refresh cookie has been redeemed is anonymous, so an owner
+// hard-loading their own profile got the visitor's view of it and the page
+// never re-asked.
+describe("UserProfileLoader session settling", () => {
+  afterEach(() => {
+    optionalSession = null;
+  });
+
+  it("does not read the profile while the session is still restoring", async () => {
+    optionalSession = { status: "restoring", user: null };
+    getUserProfile.mockResolvedValue(profile());
+    render(<UserProfileLoader username="ada" />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(getUserProfile).not.toHaveBeenCalled();
+  });
+
+  it("reads it exactly once when the session settles", async () => {
+    optionalSession = { status: "restoring", user: null };
+    getUserProfile.mockResolvedValue(profile());
+    const { rerender } = render(<UserProfileLoader username="ada" />);
+    optionalSession = { status: "authed", user: { id: "u1" } };
+    rerender(<UserProfileLoader username="ada" />);
+    expect(await screen.findByText("Ada")).toBeTruthy();
+    expect(getUserProfile).toHaveBeenCalledTimes(1);
   });
 });

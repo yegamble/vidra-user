@@ -18,6 +18,14 @@ vi.mock("@/lib/api", () => ({
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
+// The session in context. null is the shipped default for this file: the
+// dialog is rendered bare here, with no AuthProvider above it, which is
+// exactly what useOptionalSession answers null for.
+let optionalSession: { status: string; user: { id: string } | null } | null = null;
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useOptionalSession: () => optionalSession,
+}));
+
 import { DownloadDialog } from "@/components/DownloadButton";
 import type { VideoDownloadFile } from "@/lib/api";
 
@@ -208,5 +216,39 @@ describe("DownloadDialog", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Could not download this file.");
     expect(screen.getByRole("dialog", { name: "Download" })).toBeTruthy();
+  });
+});
+
+// What GET /videos/{id}/download offers is PER VIEWER: videoForDownload resolves
+// the file set for the caller, so an owner (and a video whose download policy
+// is not "everyone") sees a different list from an anonymous visitor. The
+// dialog opens over a server-rendered watch page, so it could mount before the
+// refresh cookie had been redeemed and take the anonymous answer for good.
+describe("DownloadDialog session settling", () => {
+  beforeEach(() => {
+    optionalSession = null;
+  });
+
+  afterEach(() => {
+    optionalSession = null;
+  });
+
+  it("does not ask for the file list while the session is still restoring", async () => {
+    optionalSession = { status: "restoring", user: null };
+    mocks.getVideoDownloads.mockResolvedValue({ files });
+    render(<DownloadDialog videoId="video-1" onClose={() => {}} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.getVideoDownloads).not.toHaveBeenCalled();
+  });
+
+  it("asks exactly once when the session settles", async () => {
+    optionalSession = { status: "restoring", user: null };
+    mocks.getVideoDownloads.mockResolvedValue({ files });
+    const { rerender } = render(
+      <DownloadDialog videoId="video-1" onClose={() => {}} />,
+    );
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    rerender(<DownloadDialog videoId="video-1" onClose={() => {}} />);
+    await waitFor(() => expect(mocks.getVideoDownloads).toHaveBeenCalledTimes(1));
   });
 });

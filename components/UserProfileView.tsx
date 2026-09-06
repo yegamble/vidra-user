@@ -11,12 +11,21 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, userAvatarUrl, userBannerUrl } from "@/lib/api";
 import type { PublicUserProfile } from "@/lib/api";
 import { formatMonthYear } from "@/lib/format";
+import { useSettledOptionalSession } from "@/lib/use-settled-session";
 
 export function UserProfileLoader({ username }: { username: string }) {
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [status, setStatus] = useState<"loading" | "notfound" | "error" | "ready">("loading");
+  // This read answers differently for the profile's OWNER: core resolves an
+  // owner's own profile from the account row rather than the public
+  // projection, and only that branch exposes the linked Bluesky handle. Going
+  // out before the refresh cookie has been redeemed asks as a visitor, and the
+  // page never re-asked. `useSettledOptionalSession` because the view is also
+  // rendered bare, where no viewer can arrive.
+  const { settled, viewerKey } = useSettledOptionalSession();
 
   useEffect(() => {
+    if (!settled) return;
     const controller = new AbortController();
     api.getUserProfile(username, controller.signal)
       .then((value) => {
@@ -28,7 +37,7 @@ export function UserProfileLoader({ username }: { username: string }) {
         setStatus(err instanceof ApiError && err.status === 404 ? "notfound" : "error");
       });
     return () => controller.abort();
-  }, [username]);
+  }, [username, settled, viewerKey]);
 
   if (status === "loading") return <div className="flex justify-center py-24"><Spinner label="Loading profile" /></div>;
   if (status === "notfound") return <EmptyState title="Profile not found" message="This profile is private or does not exist." />;
