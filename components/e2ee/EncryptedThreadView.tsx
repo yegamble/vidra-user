@@ -93,6 +93,9 @@ export function EncryptedThreadView({
     envelopes.find((e) => e.sender_user_id !== myUserId)?.sender_user_id ??
     lastSentRecipientId;
 
+  // The id of the device set up on THIS browser, once it is known.
+  const localDeviceId = typeof device === "object" ? device.device_id : null;
+
   const decryptAll = useCallback(
     async (list: EncryptedMessage[]) => {
       const engine = await getEngine();
@@ -101,6 +104,25 @@ export function EncryptedThreadView({
       const ordered = [...list].reverse();
       const shown: ShownMessage[] = [];
       for (const env of ordered) {
+        // The list endpoint answers for the ACCOUNT, not for this browser: it
+        // returns every envelope addressed to ANY of the caller's devices (core
+        // joins the recipient device on user_id and takes no device parameter).
+        // A send fans out one envelope per device, so on a two-device account
+        // every message arrives here twice — once encrypted for this device and
+        // once for the other one, which this device can never open. Rendering
+        // the second copy as "can't be decrypted" would duplicate every message
+        // in the thread AND drown the one case that placeholder exists for: an
+        // envelope addressed HERE that will not open. Keep only what was
+        // addressed to this device. A missing id means an older core that does
+        // not report addressing — keep the envelope rather than hide a message.
+        if (
+          localDeviceId !== null &&
+          env.recipient_device_id !== undefined &&
+          env.recipient_device_id !== "" &&
+          env.recipient_device_id !== localDeviceId
+        ) {
+          continue;
+        }
         // An envelope kept across polls can outlive its disappearing-message
         // timer even though the server has already stopped serving it — drop it
         // here too rather than render a message that is supposed to be gone.
@@ -162,7 +184,7 @@ export function EncryptedThreadView({
       const lastPeer = own[own.length - 1]?.recipient_user_id;
       if (lastPeer !== undefined) setLastSentRecipientId(lastPeer);
     },
-    [conversationId, myUserId, hasEarlier],
+    [conversationId, myUserId, hasEarlier, localDeviceId],
   );
 
   useEffect(() => {
