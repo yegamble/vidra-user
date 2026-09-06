@@ -110,6 +110,33 @@ afterEach(() => {
 });
 
 describe("AdminVideosView", () => {
+  // A16 slice 2: the quarantine UI told the moderator the rejection reason was
+  // "recorded in the audit trail", and a sweep of all 290 text/JSON columns
+  // found it nowhere — the note was discarded. Core now stores it and the
+  // inventory row carries it, which is the only staff surface a rejected video
+  // still appears on (it has left the quarantine queue by then). A row that
+  // dropped the field would leave the moderator with the same nothing.
+  it("shows the rejection note on a rejected video, and only when there is one", async () => {
+    mocks.getAdminVideos.mockResolvedValue({
+      videos: [
+        { ...local, state: "failed", moderation_note: "Third-party music, no rights." },
+        remote,
+      ],
+      total: 2,
+      limit: 20,
+      offset: 0,
+    });
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+    expect(await screen.findByText(/Third-party music, no rights\./)).toBeTruthy();
+    expect(screen.getByText(/Rejected:/)).toBeTruthy();
+  });
+
+  it("shows no rejection note when the video was never rejected", async () => {
+    render(<ToastProvider><AdminVideosView /></ToastProvider>);
+    expect(await screen.findByText("Local film")).toBeTruthy();
+    expect(screen.queryByText(/Rejected:/)).toBeNull();
+  });
+
   it("renders PeerTube-style inventory facts and recovery actions", async () => {
     render(<ToastProvider><AdminVideosView /></ToastProvider>);
 
