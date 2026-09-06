@@ -206,3 +206,10 @@ describe("EndCard", () => {
     }
   });
 });
+
+it("retains playlist context when advancing", () => {
+  render(<EndCard nextVideo={NEXT} nextHref="/videos/v2?playlist=p1" autoplayEnabled={false}
+    onToggleAutoplay={() => {}} onReplay={() => {}} onDismiss={() => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: "Play now" }));
+  expect(push).toHaveBeenCalledWith("/videos/v2?playlist=p1");
+});

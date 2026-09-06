@@ -197,3 +197,10 @@ describe("VideoCard metadata", () => {
     expect(screen.queryByRole("link", { name: "Ada Remote" })).toBeNull();
   });
 });
+
+it("carries playlist context on both watch links", () => {
+  const video = { id: "v1", title: "Playlist video", created_at: "2026-09-05", has_thumbnail: false } as Video;
+  render(<VideoCard video={video} playlistId="private/list" />);
+  expect(screen.getByRole("link", { name: "Playlist video" }).getAttribute("href")).toContain("?playlist=private%2Flist");
+  expect(mocks.previewProps?.href).toContain("?playlist=private%2Flist");
+});

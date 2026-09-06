@@ -95,6 +95,7 @@ export function VideoPlayer({
   tracks = [],
   poster,
   nextVideo = null,
+  nextHref,
   hlsMasterOverride = null,
   playbackToken = null,
   overlay = null,
@@ -134,6 +135,7 @@ export function VideoPlayer({
    * a plain replay affordance with no countdown.
    */
   nextVideo?: Video | null;
+  nextHref?: string;
   onPlay?: () => void;
   onTimeUpdate?: () => void;
   onPause?: () => void;
@@ -911,6 +913,7 @@ export function VideoPlayer({
       {ended ? (
         <EndCard
           nextVideo={nextVideo}
+          nextHref={nextHref}
           autoplayEnabled={autoplayEnabled}
           onToggleAutoplay={toggleAutoplay}
           onReplay={replayVideo}

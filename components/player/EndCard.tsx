@@ -29,12 +29,14 @@ import {
 // the card; the shell restores focus to the player controls on dismiss.
 export function EndCard({
   nextVideo,
+  nextHref,
   autoplayEnabled,
   onToggleAutoplay,
   onReplay,
   onDismiss,
 }: {
   nextVideo: Video | null;
+  nextHref?: string;
   /** The effective autoplay-next preference (session store); gates the countdown. */
   autoplayEnabled: boolean;
   onToggleAutoplay: () => void;
@@ -54,8 +56,8 @@ export function EndCard({
   const counting = nextVideo !== null && autoplayEnabled && !cancelled;
 
   const goNext = useCallback(() => {
-    if (nextVideo) router.push(nextVideoHref(nextVideo));
-  }, [nextVideo, router]);
+    if (nextVideo) router.push(nextHref ?? nextVideoHref(nextVideo));
+  }, [nextVideo, nextHref, router]);
 
   // Reset the countdown to the top exactly when it (re)starts — the React-endorsed
   // "adjust state during render" pattern (guarded so it converges), so there is no
