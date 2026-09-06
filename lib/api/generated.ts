@@ -492,6 +492,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/me/email-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the pending email change, if any
+         * @description Returns the account's pending email change: which address is awaiting confirmation, when it was requested, and when the confirmation stops working. An expired request is not pending. Always 200 — "nothing pending" is a state, not an error. Deliberately NOT behind the strict auth limiter, so loading the settings page cannot exhaust a budget shared with sign-in. Requires a bearer access token.
+         */
+        get: operations["getEmailChange"];
+        put?: never;
+        /**
+         * Request a change of the current account's email address
+         * @description Starts the two-step email change. Re-verifies the CURRENT password (a stolen access token alone must not be able to move the address an account is recovered through) and mails a single-use, expiring token to the NEW address, which is the possession proof a password cannot give. The account's live address is UNCHANGED until that token is confirmed, and the pending state is readable here with GET. A second request supersedes the first, killing its token. The address is refused when it already resolves to another account's sign-in identifier — its email OR its username, because sign-in accepts both with email taking precedence, so an address equal to somebody's username would shadow their sign-in. Rate limited alongside login, the reset and the password change. Requires a bearer access token.
+         */
+        post: operations["requestEmailChange"];
+        /**
+         * Cancel the pending email change
+         * @description Drops the pending request and kills its confirmation token. 404 when nothing was pending, rather than reporting success for a no-op. Requires a bearer access token.
+         */
+        delete: operations["cancelEmailChange"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me/email-change/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-send the pending email-change confirmation
+         * @description Issues a fresh confirmation for the address already pending, superseding the previous token. It takes no body and does NOT re-ask for the password: the pending request is itself the record that the password was proven, and the message can only ever go to the address that request already named. Rate limited alongside login. Requires a bearer access token.
+         */
+        post: operations["resendEmailChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me/email-change/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm a pending email change
+         * @description Consumes the single-use token delivered to the new address and switches the account onto it, marking it verified — the token IS the possession proof, so the account can never end up holding an unverified address. The switch is one statement, so it is atomic and a second confirmation cannot also succeed. A best-effort notice is mailed to the OLD address: the only signal that reaches a user whose address was taken from them. Other sessions are deliberately NOT revoked — the address is not a credential, and the change is already gated on the password. Requires a bearer access token as well as the token: the mail token proves possession of the mailbox, the session proves whose account it is, and a token issued to a DIFFERENT account is refused exactly like an unknown one. Rate limited alongside login.
+         */
+        post: operations["confirmEmailChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me/deactivate": {
         parameters: {
             query?: never;
@@ -7165,6 +7233,53 @@ export interface components {
              */
             new_password: string;
         };
+        /** @description Current-password re-verification plus the requested new address. The password is never echoed back or logged, and neither address appears in the audit trail. */
+        EmailChangeRequest: {
+            /**
+             * Format: password
+             * @description The account's current password, for confirmation.
+             */
+            current_password: string;
+            /**
+             * Format: email
+             * @description The address to move to. It must differ from the current one and must not already resolve to another account's email or username.
+             * @example ada.new@example.test
+             */
+            new_email: string;
+        };
+        /** @description The pending email change, readable only by the account itself. It never carries the confirmation token — that exists only in the message sent to the new address. */
+        EmailChangeState: {
+            /** @description Whether a confirmation is outstanding. */
+            pending: boolean;
+            /**
+             * Format: email
+             * @description The address awaiting confirmation. Omitted when nothing is pending.
+             */
+            new_email?: string;
+            /**
+             * Format: date-time
+             * @description When the change was requested. Omitted when nothing is pending.
+             */
+            requested_at?: string;
+            /**
+             * Format: date-time
+             * @description When the confirmation stops working. Omitted when nothing is pending; an expired request is not pending.
+             */
+            expires_at?: string;
+        };
+        /** @description The single-use token delivered to the new address. */
+        EmailChangeConfirmRequest: {
+            /** @description The confirmation token from the message. */
+            token: string;
+        };
+        /** @description The address the account holds after a successful confirmation. */
+        EmailChangeConfirmed: {
+            /**
+             * Format: email
+             * @example ada.new@example.test
+             */
+            email: string;
+        };
         /** @description Password confirmation for the irreversible account hard delete (a stolen access token alone must not be able to destroy the account). */
         DeleteAccountRequest: {
             /** Format: password */
@@ -9997,6 +10112,256 @@ export interface operations {
                 };
             };
             /** @description Validation failed (missing field, new password too short or too long, or the same as the current one). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests (auth rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getEmailChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pending state (possibly "nothing pending"). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeState"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    requestEmailChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description The request was recorded and the confirmation was mailed to the new address. The account's live address is unchanged. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeState"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The supplied current password is incorrect. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Either the account has no password to re-verify (OAuth/ATProto-only — use the password-reset flow to set one), or the requested address is already in use on this instance as another account's email or username. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed: the address is malformed, or it is the one the account already has. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests (auth rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancelEmailChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pending request was cancelled and its token is dead. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No email change is pending. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resendEmailChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A fresh confirmation was mailed to the pending address. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeState"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No email change is pending. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests (auth rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    confirmEmailChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailChangeConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description The address was changed; the account now holds it, verified. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeConfirmed"];
+                };
+            };
+            /** @description The token is unknown, already used, expired, or was issued to a different account — deliberately one answer for all four. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The address was claimed by another account between the request and the confirmation. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (the token is required). */
             422: {
                 headers: {
                     [name: string]: unknown;

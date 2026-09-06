@@ -8,7 +8,7 @@ export default function SecuritySettingsPage() {
       <PageHeader
         above={<SettingsBackLink />}
         title="Security"
-        description="Two-factor authentication and signed-in devices for your account."
+        description="Your email address, password, two-factor authentication and signed-in devices."
       />
       <SecuritySettingsView />
     </main>
