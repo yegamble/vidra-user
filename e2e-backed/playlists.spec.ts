@@ -5,7 +5,6 @@ import {
   registerUser,
   seedPublishedChannel,
   TINY_MP4_BASE64,
-  TINY_PNG_BASE64,
   uniqueId,
 } from "./fixtures";
 
@@ -193,10 +192,10 @@ test("an owner can reorder playlist items, and the order persists", async ({ pag
 });
 
 // Proves the playlist COVER round trip against a real vidra-core + PostgreSQL: an
-// owner creates a PUBLIC playlist, uploads a PNG cover from the detail page, and
-// the cover then serves as image/png through the public thumbnail endpoint — DB
-// evidence that POST /playlists/:id/thumbnail persisted the stored object.
-test("a playlist cover uploaded from the detail page persists", async ({ page, request }) => {
+// owner creates a playlist, uploads a decodable PNG cover, and reloads it.
+// Public covers permit anonymous reads; private covers remain owner-only.
+for (const visibility of ["public", "private"] as const) {
+test(`a ${visibility} playlist cover uploaded from the detail page persists`, async ({ page, request }) => {
   const id = uniqueId();
   const title = `Cover Mix ${id}`;
 
@@ -207,10 +206,10 @@ test("a playlist cover uploaded from the detail page persists", async ({ page, r
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
 
-  // Create a PUBLIC playlist so the cover is readable via the public API.
+  // Exercise owner-only cover bytes as well as anonymous public delivery.
   await openPlaylists(page);
   await page.getByLabel("Playlist title").fill(title);
-  await page.getByLabel("Visibility").selectOption("public");
+  await page.getByLabel("Visibility").selectOption(visibility);
   const created = page.waitForResponse(
     (r) => /\/api\/v1\/playlists$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
@@ -228,15 +227,18 @@ test("a playlist cover uploaded from the detail page persists", async ({ page, r
   await page.getByLabel("Cover image").setInputFiles({
     name: "cover.png",
     mimeType: "image/png",
-    buffer: Buffer.from(TINY_PNG_BASE64, "base64"),
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC", "base64"),
   });
   await uploaded;
   await expect(page.getByRole("img", { name: "Current cover" })).toBeVisible();
+  await page.reload();
+  await expect.poll(() => page.getByRole("img", { name: "Current cover" })
+    .evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
 
-  // Persisted: the playlist id is in the URL; the public thumbnail endpoint now
-  // serves the stored cover as image/png (a fresh, unauthenticated API read).
+  // A fresh anonymous read must retain the playlist visibility boundary.
   const playlistId = page.url().split("/playlists/")[1];
   const res = await request.get(`${API_URL}/api/v1/playlists/${playlistId}/thumbnail`);
-  expect(res.status()).toBe(200);
-  expect(res.headers()["content-type"]).toContain("image/png");
+  expect(res.status()).toBe(visibility === "private" ? 404 : 200);
+  if (visibility === "public") expect(res.headers()["content-type"]).toContain("image/png");
 });
+}

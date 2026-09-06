@@ -259,7 +259,7 @@ test("the owner can upload and remove a playlist cover from the detail page", as
     }
     if (method === "DELETE") return route.fulfill({ status: 204, body: "" });
     // GET: the cache-busted <img> preview after upload.
-    return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from([137, 80, 78, 71]) });
+    return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC", "base64") });
   });
 
   await goToPlaylists(page);
@@ -276,7 +276,7 @@ test("the owner can upload and remove a playlist cover from the detail page", as
   await page.getByLabel("Cover image").setInputFiles({
     name: "cover.png",
     mimeType: "image/png",
-    buffer: Buffer.from([137, 80, 78, 71]),
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC", "base64"),
   });
   await uploaded;
   await expect(cover.getByRole("img", { name: "Current cover" })).toBeVisible();
@@ -321,13 +321,14 @@ test("playlist cards render the uploaded cover image when set", async ({ page })
     route.fulfill({ json: { playlists: [{ ...playlist("p1", "Covered Mix", 2), has_thumbnail: true }] } }),
   );
   await page.route(THUMBNAIL, (route) =>
-    route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from([137, 80, 78, 71]) }),
+    route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC", "base64") }),
   );
 
   await goToPlaylists(page);
   const card = page.getByRole("main").getByRole("listitem").filter({ hasText: "Covered Mix" });
-  // The cover is decorative (alt=""), so match the backend image by its src.
-  await expect(card.locator('img[src*="/api/v1/playlists/p1/thumbnail"]')).toBeVisible();
+  // The cover is decorative; authenticated delivery uses a decoded object URL.
+  await expect.poll(() => card.locator("img").evaluate((img: HTMLImageElement) =>
+    img.complete && img.naturalWidth > 0)).toBe(true);
 });
 
 test("a signed-in viewer can add a video to a playlist from the watch page", async ({ page }) => {

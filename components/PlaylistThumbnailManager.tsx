@@ -1,8 +1,9 @@
 "use client";
 
+import { PlaylistCoverImage } from "@/components/PlaylistCoverImage";
 import { useRef, useState } from "react";
 
-import { ApiError, api, errorMessage, playlistThumbnailUrl } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 
 // PlaylistThumbnailManager lets a playlist's owner upload/replace or remove its
 // cover image, on the playlist detail page. Mirrors ThumbnailManager: a
@@ -65,7 +66,6 @@ export function PlaylistThumbnailManager({
     }
   }
 
-  const src = shown ? `${playlistThumbnailUrl(playlistId)}?v=${version}` : null;
 
   return (
     <section
@@ -73,10 +73,10 @@ export function PlaylistThumbnailManager({
       className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4"
     >
       <p className="text-[15px] font-bold tracking-tight">Cover image</p>
-      {src ? (
-        // eslint-disable-next-line @next/next/no-img-element -- backend-served cover, not a static asset
-        <img
-          src={src}
+      {shown ? (
+        <PlaylistCoverImage
+          playlistId={playlistId}
+          version={version}
           alt="Current cover"
           className="aspect-video w-48 rounded-xl bg-surface-muted object-cover"
         />

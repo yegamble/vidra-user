@@ -1842,6 +1842,22 @@ export const api = {
       body: { video_ids: videoIds },
     }),
 
+  // Private playlist covers require bearer-authenticated bytes, like DM attachments.
+  fetchPlaylistThumbnail: async (id: string, signal?: AbortSignal): Promise<Blob> => {
+    const res = await fetch(`${apiBaseUrl}/api/v1/playlists/${encodeURIComponent(id)}/thumbnail`, {
+      headers: getAccessToken() ? { authorization: `Bearer ${getAccessToken() as string}` } : {},
+      signal,
+    });
+    if (!res.ok) {
+      throw new ApiError({
+        status: res.status,
+        code: "cover_unavailable",
+        message: "could not load this cover",
+      });
+    }
+    return res.blob();
+  },
+
   /**
    * POST /api/v1/playlists/{id}/thumbnail — set a playlist's cover image (auth,
    * owner, multipart). Replaces any previous cover. JPEG/PNG/WebP else 415.
