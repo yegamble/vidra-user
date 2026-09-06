@@ -15,6 +15,7 @@ import {
 } from "@/components/icons";
 import { ReportDialog, type ReportKind } from "@/components/ReportButton";
 import { TimestampedText } from "@/components/TimestampedText";
+import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
@@ -402,6 +403,7 @@ function CommentItem({
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
   const [heartBusy, setHeartBusy] = useState(false);
   const [muting, setMuting] = useState(false);
@@ -460,12 +462,15 @@ function CommentItem({
   }
 
   async function remove() {
+    if (busy) return;
+    setDeleteError(null);
     setBusy(true);
     try {
       await api.deleteComment(comment.id);
       onDeleted(comment.id);
-    } catch {
-      // Leave the comment in place on failure.
+    } catch (err) {
+      // Keep the comment until deletion is confirmed; retry is an explicit action.
+      setDeleteError(errorMessage(err, "Could not delete your comment. Please try again."));
       setBusy(false);
     }
   }
@@ -890,6 +895,8 @@ function CommentItem({
           )}
         </div>
       </div>
+
+      {deleteError ? <Alert className="ml-[46px]">{deleteError}</Alert> : null}
 
       {/* Inline reply composer / sign-in prompt, aligned under the comment body. */}
       {replying ? (

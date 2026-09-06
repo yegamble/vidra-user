@@ -37,6 +37,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const getVideoComments = vi.fn();
 const postComment = vi.fn();
+const deleteComment = vi.fn();
 const pinComment = vi.fn();
 const unpinComment = vi.fn();
 const heartComment = vi.fn();
@@ -46,6 +47,7 @@ vi.mock("@/lib/api", () => ({
   api: {
     getVideoComments: (...args: unknown[]) => getVideoComments(...args),
     postComment: (...args: unknown[]) => postComment(...args),
+    deleteComment: (...args: unknown[]) => deleteComment(...args),
     pinComment: (...args: unknown[]) => pinComment(...args),
     unpinComment: (...args: unknown[]) => unpinComment(...args),
     heartComment: (...args: unknown[]) => heartComment(...args),
@@ -384,5 +386,30 @@ describe("CommentsSection contact actions under the instance messaging gate", ()
 
     await openMenuFor("bob's comment");
     expect(screen.getByRole("menuitem", { name: "Message" })).toBeTruthy();
+  });
+});
+
+
+describe("CommentsSection deletion recovery", () => {
+  it("keeps a failed deletion visible, explains the failure, and retries only on demand", async () => {
+    resolveComments([mk("c1", { body: "keep until confirmed", author_username: "viewer" })]);
+    deleteComment.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    render(<CommentsSection videoId="v1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not delete your comment. Please try again.");
+    expect(screen.getByText("keep until confirmed")).toBeTruthy();
+    expect(deleteComment).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(false);
+
+    let finish!: () => void;
+    deleteComment.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("keep until confirmed")).toBeTruthy();
+    finish();
+    await waitFor(() => expect(screen.queryByText("keep until confirmed")).toBeNull());
+    expect(deleteComment).toHaveBeenCalledTimes(2);
+    expect(deleteComment).toHaveBeenLastCalledWith("c1");
   });
 });
