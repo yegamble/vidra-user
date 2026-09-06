@@ -7266,8 +7266,9 @@ export interface components {
             playlist_items_added: number;
             /** @description Items whose video does not exist on this instance. */
             playlist_items_skipped: number;
+            /** @description Follows this import actually created. */
             follows_created: number;
-            /** @description Follows of channels not present locally. */
+            /** @description Follows the import did NOT create: the channel is not present locally (unknown or remote handle), or the caller already follows it. follows_created + follows_skipped equals the archive's follow count. */
             follows_skipped: number;
             notification_prefs_applied: number;
             /** @description Preferences for notification types this build does not know. */

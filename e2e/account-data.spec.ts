@@ -172,8 +172,13 @@ test("importing an archive renders the returned per-category summary", async ({ 
   await expect(
     page.getByText("Playlists: 2 created, 5 items added, 1 items skipped (video not on this instance)"),
   ).toBeVisible();
+  // A follow can go uncreated for two reasons the summary cannot tell apart:
+  // the channel is not local, or the account already follows it (vidra-core
+  // counts both as skipped). The copy names both.
   await expect(
-    page.getByText("Follows: 3 created, 2 skipped (channel not on this instance)"),
+    page.getByText(
+      "Follows: 3 created, 2 skipped (already followed, or the channel is not on this instance)",
+    ),
   ).toBeVisible();
   await expect(page.getByText("Notification preferences: 4 applied")).toBeVisible();
   await expect(
