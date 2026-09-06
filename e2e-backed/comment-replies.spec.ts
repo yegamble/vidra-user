@@ -73,6 +73,34 @@ test("posting a comment then replying to it persists the thread", async ({ page,
   expect(parent?.parent_id).toBeNull();
   expect(reply?.parent_id).toBe(parent?.id);
   expect(reply?.author_username).toBe(`fan${id}`);
+
+  // A real network failure must be visible and must not remove persisted content.
+  const replyRow = replies.locator("li", { hasText: replyBody }).first();
+  await page.context().setOffline(true);
+  try {
+    await replyRow.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(replyRow.getByRole("alert")).toContainText("Check your connection");
+    await expect(replyRow.getByText(replyBody)).toBeVisible();
+    await expect(replyRow.getByRole("button", { name: "Delete", exact: true })).toBeEnabled();
+  } finally {
+    await page.context().setOffline(false);
+  }
+  expect((await videoComments(request, videoId)).some((c) => c.id === reply?.id)).toBe(true);
+
+  // Explicit retry succeeds at the real service boundary, then a fresh read and
+  // UI reload agree. The parent remains; only the confirmed reply disappears.
+  const deleted = page.waitForResponse(
+    (r) => r.url().endsWith(`/comments/${reply?.id}`) && r.request().method() === "DELETE",
+  );
+  await replyRow.getByRole("button", { name: "Delete", exact: true }).click();
+  expect((await deleted).status()).toBe(204);
+  const remaining = await videoComments(request, videoId);
+  expect(remaining.some((c) => c.id === reply?.id)).toBe(false);
+  expect(remaining.some((c) => c.id === parent?.id)).toBe(true);
+  await page.reload();
+  await expect(commentsRegion.getByText(parentBody)).toBeVisible();
+  await expect(commentsRegion.getByText(replyBody)).toHaveCount(0);
+
 });
 
 // Proves reply-to-reply attribution end to end against a real vidra-core +
