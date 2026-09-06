@@ -112,7 +112,7 @@ function Thread({
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [peerReadId, setPeerReadId] = useState<string | undefined>(undefined);
   const [envelopes, setEnvelopes] = useState<EncryptedMessage[] | null>(null);
-  // Encrypted history paging. The wire carries no total and no has_more, so a
+  // History paging. The wire carries no total and no has_more, so a
   // FULL page is the only "there is probably more" signal and a short one is the
   // end. See the before_id contract on api.getConversationMessages.
   const [hasEarlier, setHasEarlier] = useState(false);
@@ -154,6 +154,7 @@ function Thread({
       .then((res) => {
         if ("messages" in res) {
           setMessages(mergeMessages([], [...res.messages].reverse()));
+          setHasEarlier(res.messages.length === INITIAL_LIMIT);
           setPeerReadId(res.peer_last_read_message_id);
           setEnvelopes(null);
           void api.markConversationRead(conversationId).catch(() => {});
@@ -227,31 +228,34 @@ function Thread({
     atBottomRef.current = atBottom;
   }, []);
 
-  // Page UPWARD through encrypted history with the before_id keyset cursor: the
-  // oldest envelope we hold (the list is newest-first, so the last one). No
-  // `offset` may ride along — the backend 422s on the two together. The result
-  // goes through the same upsert the poll uses, so order and de-dupe are free.
+  // Both thread types page from the oldest loaded ID. Plaintext is held
+  // oldest-first, envelopes newest-first; never mix before_id with offset.
   const loadEarlier = useCallback(async () => {
     const loaded = envelopesRef.current;
-    if (!loaded || loaded.length === 0) return;
+    const oldest = loaded ? loaded[loaded.length - 1]?.id : messages[0]?.id;
+    if (!oldest || loadingEarlier) return;
     setLoadingEarlier(true);
     setEarlierError(null);
     try {
       const res = await api.getConversationMessages(conversationId, {
         limit: INITIAL_LIMIT,
-        before_id: loaded[loaded.length - 1].id,
+        before_id: oldest,
       });
       if (!mountedRef.current) return;
-      if ("messages" in res) return; // not an encrypted thread; nothing to page
-      setEnvelopes((prev) => mergeEnvelopes(prev, res.envelopes));
-      setHasEarlier(res.envelopes.length === INITIAL_LIMIT);
+      if ("messages" in res) {
+        setMessages((prev) => mergeMessages(prev, [...res.messages].reverse()));
+        setHasEarlier(res.messages.length === INITIAL_LIMIT);
+      } else {
+        setEnvelopes((prev) => mergeEnvelopes(prev, res.envelopes));
+        setHasEarlier(res.envelopes.length === INITIAL_LIMIT);
+      }
     } catch {
       if (!mountedRef.current) return;
       setEarlierError("Could not load earlier messages.");
     } finally {
       if (mountedRef.current) setLoadingEarlier(false);
     }
-  }, [conversationId]);
+  }, [conversationId, messages, loadingEarlier]);
 
   function retry() {
     setStatus("loading");
@@ -397,6 +401,10 @@ function Thread({
         <>
           <MessageTimeline
             messages={displayMessages}
+            hasEarlier={hasEarlier}
+            loadingEarlier={loadingEarlier}
+            earlierError={earlierError}
+            onLoadEarlier={loadEarlier}
             meId={meId}
             peerReadId={peerReadId}
             unreadCount={unreadCount}

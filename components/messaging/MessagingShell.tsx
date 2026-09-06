@@ -43,7 +43,7 @@ export function MessagingShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <PageShell gutters="desktop" className="flex min-h-0">
+    <PageShell data-messaging-shell="" gutters="desktop" className="flex min-h-0">
       <div
         className={cn(
           "min-h-0 flex-col lg:flex lg:w-[360px] lg:flex-none lg:shrink-0 lg:border-r lg:border-border-subtle",

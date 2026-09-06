@@ -655,3 +655,14 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
     display: none;
   }
 }
+
+/* Messaging panes own scrolling. A min-height-only body expands with history,
+ * making scroll anchoring and the pinned composer ineffective. Keep the root
+ * flex row shrinkable on these routes; header/banner/tab heights stay intrinsic. */
+body:has([data-messaging-shell]) {
+  height: 100dvh;
+  overflow: hidden;
+}
+body:has([data-messaging-shell]) > div:has(> #main-content) {
+  min-height: 0;
+}
