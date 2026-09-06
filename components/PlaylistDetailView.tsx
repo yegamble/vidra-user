@@ -182,6 +182,7 @@ function PlaylistForViewer({ id }: { id: string }) {
             <li key={video.id} className="flex flex-col gap-2">
               <VideoCard
                 video={video}
+                playlistId={id}
                 onDeleted={() =>
                   setPlaylist((p) =>
                     p ? { ...p, videos: p.videos.filter((v) => v.id !== video.id) } : p,

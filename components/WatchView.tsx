@@ -1,5 +1,6 @@
 "use client";
 
+import { usePlaylistNext } from "@/lib/use-playlist-next";
 import Link from "next/link";
 import {
   useCallback,
@@ -209,7 +210,8 @@ export function WatchView({
   const queuedNextVideo = playbackQueue.find(
     (item) => !video || item.id !== video.id || Boolean(item.remote) !== Boolean(video.remote),
   );
-  const nextVideo = queuedNextVideo ?? relatedNextVideo;
+  const playlist = usePlaylistNext(video?.id);
+  const nextVideo = playlist.active ? playlist.next : queuedNextVideo ?? relatedNextVideo;
 
   // Content-addressed IPFS HLS master, present only when the detail carries a
   // pinned HLS CID + gateway AND the video has a transcoded ladder (IPFS
@@ -540,6 +542,7 @@ export function WatchView({
                 videoRef={playerRef}
                 startAt={startAt}
                 nextVideo={nextVideo}
+                nextHref={playlist.href}
                 hlsMasterOverride={hlsMasterOverride}
                 playbackToken={playbackToken}
                 overlay={playerOverlay}
@@ -565,6 +568,10 @@ export function WatchView({
             </>
           )}
         </div>
+
+        {playlist.active && playlist.status === "error" ? (
+          <ErrorState message="Could not load this playlist. Playback continuation is unavailable." onRetry={playlist.retry} />
+        ) : null}
 
         <div className="flex flex-col gap-3">
           <h1 className="text-balance text-title2 sm:text-title">{video.title}</h1>
@@ -691,6 +698,7 @@ function Player({
   videoRef,
   startAt,
   nextVideo,
+  nextHref,
   hlsMasterOverride,
   playbackToken,
   overlay,
@@ -699,6 +707,7 @@ function Player({
   videoRef: RefObject<HTMLVideoElement | null>;
   startAt: number | null;
   nextVideo: Video | null;
+  nextHref?: string;
   hlsMasterOverride: string | null;
   playbackToken: string | null;
   overlay: ReactNode;
@@ -826,6 +835,7 @@ function Player({
           startAt={startAt}
           tracks={tracks}
           nextVideo={nextVideo}
+          nextHref={nextHref}
           hlsMasterOverride={hlsMasterOverride}
           playbackToken={playbackToken}
           overlay={overlay}

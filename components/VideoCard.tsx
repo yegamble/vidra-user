@@ -33,6 +33,7 @@ export function VideoCard({
   progressFraction,
   onDeleted,
   priority = false,
+  playlistId,
 }: {
   video: Video;
   /**
@@ -50,6 +51,7 @@ export function VideoCard({
   onDeleted?: () => void;
   /** Eager/high-priority poster for the first above-the-fold feed row. */
   priority?: boolean;
+  playlistId?: string;
 }) {
   const [removed, setRemoved] = useState(false);
   // Federation, sensitive-content treatment, Restricted Mode and hover-preview
@@ -60,7 +62,7 @@ export function VideoCard({
   // display-name initial).
   const {
     isRemote,
-    watchHref,
+    watchHref: baseWatchHref,
     restrictedHidden,
     blurSensitive,
     markSensitive,
@@ -69,6 +71,7 @@ export function VideoCard({
     posterSrc,
     duration,
   } = useVideoCardPresentation(video);
+  const watchHref = playlistId ? `${baseWatchHref}?playlist=${encodeURIComponent(playlistId)}` : baseWatchHref;
   // Miniature attribution (config-parity W5): when the operator prefers the
   // uploader's display name, the card credits it instead of the channel name
   // (falling back to the channel while the payload lacks the author field —

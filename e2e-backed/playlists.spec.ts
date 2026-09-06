@@ -189,6 +189,19 @@ test("an owner can reorder playlist items, and the order persists", async ({ pag
   await openPlaylists(page);
   await page.getByRole("link", { name: /Order Mix/ }).click();
   await expect(page.getByRole("button", { name: `Move ${bTitle} up` })).toBeDisabled();
+
+  // Playback follows the saved order across reload and end-card navigation.
+  await page.getByRole("heading", { name: bTitle, exact: true }).click();
+  await page.waitForURL((url) => url.searchParams.get("playlist") === plId);
+  await page.reload();
+  const player = page.locator("#main-content video").first();
+  await player.evaluate(async (video: HTMLVideoElement) => { video.muted = true; await video.play(); });
+  const end = page.getByRole("group", { name: "Up next", exact: true });
+  await expect(end.getByText(aTitle, { exact: true })).toBeVisible({ timeout: 30_000 });
+  await end.getByRole("button", { name: "Play now", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: aTitle, exact: true })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("playlist")).toBe(plId);
+
 });
 
 // Proves the playlist COVER round trip against a real vidra-core + PostgreSQL: an
