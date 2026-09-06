@@ -7202,9 +7202,11 @@ export interface components {
             created_at: string;
             /**
              * Format: date-time
-             * @description When this account was hard-deleted, or null for a live account. A deleted account stays listed as an anonymised tombstone (`deleted-<suffix>`) so an admin can see it, but deletion is permanent: PATCH with `is_active: true` on such a row is refused with 422, and the console offers no reactivate action for it.
+             * @description When this account was hard-deleted, or null for a live account. A deleted account stays listed as an anonymised tombstone (`deleted-<suffix>`) so an admin can see it, but deletion is permanent: PATCH with `is_active: true` on such a row is refused with 422, and the console offers no reactivate action for it. Every other admin write to a tombstone is refused the same way.
              */
             deleted_at: string | null;
+            /** @description Whether this account is THE instance owner — the account that redeemed the first-run setup token. There is no owner ROLE: the owner holds `admin` like any other administrator, so this flag is the only thing that identifies it. Another administrator cannot demote, deactivate or delete it (422 `owner_protected`), and nobody can remove the last active administrator (422 `last_admin`). False for every account on an instance claimed before the marker existed whose owner could not be determined. */
+            is_owner: boolean;
         };
         AdminUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["AdminUser"][];

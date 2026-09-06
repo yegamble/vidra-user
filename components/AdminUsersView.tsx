@@ -49,6 +49,59 @@ type UserPatch = {
   storage_quota_bytes?: number | null;
 };
 
+/**
+ * A16 guards. Three actions on an account — changing its role, switching it off,
+ * and deleting it — are refused by core in three cases, and the console must say
+ * so rather than offer a control that 422s:
+ *
+ *  - your own account (the shipped self guard),
+ *  - THE instance owner, when you are not it (`is_owner`, core 0131): there is
+ *    no owner role, so before this flag an ordinary admin could demote the
+ *    person who installed the instance, and did — with HTTP 200,
+ *  - the last active administrator, whoever asks.
+ *
+ * The quota and the two account flags are deliberately NOT gated: core accepts
+ * them on the owner and on your own account, because neither can lock anybody
+ * out. The server refuses regardless of what this file renders; disabling the
+ * control is how an admin learns the rule before being rejected by it.
+ */
+type Gate = { allowed: true } | { allowed: false; reason: string };
+
+const GATE_OPEN: Gate = { allowed: true };
+
+const SELF_REASON = "You can't change your own role or status, or delete your own account.";
+const OWNER_REASON =
+  "This is the instance owner's account — the account that completed first-run setup. Another administrator can't change its role, deactivate it or delete it.";
+const LAST_ADMIN_REASON =
+  "This is the last active administrator on this site. Promote another admin first, or nobody would be able to reach this console.";
+
+/**
+ * Whether the loaded rows are the WHOLE instance. The accounts endpoint filters
+ * by search text only — there is no role or status parameter — so a searched or
+ * paged view cannot prove how many admins exist, and a "last admin" claim there
+ * would be a guess. In that state the control stays enabled and core answers.
+ */
+function rosterIsComplete(loaded: number, total: number, query: string) {
+  return query.trim() === "" && total <= loaded;
+}
+
+function accountGuard(
+  user: AdminUser,
+  { isSelf, users, total, query }: { isSelf: boolean; users: AdminUser[]; total: number; query: string },
+): Gate {
+  if (isSelf) return { allowed: false, reason: SELF_REASON };
+  if (user.is_owner) return { allowed: false, reason: OWNER_REASON };
+  if (!rosterIsComplete(users.length, total, query)) return GATE_OPEN;
+  const liveAdmins = users.filter(
+    (u) => u.role === "admin" && u.is_active && u.deleted_at == null,
+  );
+  const targetIsLive = user.role === "admin" && user.is_active && user.deleted_at == null;
+  if (targetIsLive && liveAdmins.length <= 1) {
+    return { allowed: false, reason: LAST_ADMIN_REASON };
+  }
+  return GATE_OPEN;
+}
+
 // useUserActions centralises the per-user mutations (role / active / quota PATCH,
 // and the hard DELETE) so the mobile card and the desktop detail drive the exact
 // same real endpoints without duplicating the request/error handling.
@@ -193,6 +246,13 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
 
   const selected = selectedId ? users.find((u) => u.id === selectedId) ?? null : null;
 
+  // One guard per account, from the loaded rows. Recomputed with the page, so
+  // promoting a second admin releases the last-admin gate on the next render.
+  const guardFor = useCallback(
+    (u: AdminUser) => accountGuard(u, { isSelf: u.id === currentUserId, users, total, query }),
+    [currentUserId, users, total, query],
+  );
+
   const pager = (
     <AdminPagination
       total={total}
@@ -283,6 +343,7 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
                   <UserRow
                     user={u}
                     isSelf={u.id === currentUserId}
+                    guard={guardFor(u)}
                     onUpdated={onUpdated}
                     onDeleted={onDeleted}
                   />
@@ -297,6 +358,7 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
               <UserDetail
                 user={selected}
                 isSelf={selected.id === currentUserId}
+                guard={guardFor(selected)}
                 onBack={() => setSelectedId(null)}
                 onUpdated={onUpdated}
                 onDeleted={onDeleted}
@@ -397,6 +459,21 @@ function SelfPill() {
   );
 }
 
+// OwnerPill — the instance owner marker (core `is_owner`, 0131). There is no
+// owner ROLE, so without this badge the account that installed the instance is
+// indistinguishable from any admin it later promoted — which is exactly how it
+// came to be demotable.
+function OwnerPill() {
+  return (
+    <span
+      title="The account that completed first-run setup"
+      className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted ring-1 ring-inset ring-border"
+    >
+      owner
+    </span>
+  );
+}
+
 /* ── Desktop table ─────────────────────────────────────────────────────────── */
 
 const TABLE_GRID = "grid-cols-[1.4fr_1fr_110px_130px_120px_90px]";
@@ -468,6 +545,7 @@ function UsersTable({
                         {u.username}
                       </span>
                       {isSelf ? <SelfPill /> : null}
+                      {u.is_owner ? <OwnerPill /> : null}
                     </span>
                     <span className="block truncate text-[11.5px] text-fg-muted">@{u.username}</span>
                   </span>
@@ -507,12 +585,14 @@ function UsersTable({
 function UserDetail({
   user,
   isSelf,
+  guard,
   onBack,
   onUpdated,
   onDeleted,
 }: {
   user: AdminUser;
   isSelf: boolean;
+  guard: Gate;
   onBack: () => void;
   onUpdated: (updated: AdminUser) => void;
   onDeleted: (id: string) => void;
@@ -542,6 +622,7 @@ function UserDetail({
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-fg">{user.display_name || user.username}</h2>
             {isSelf ? <SelfPill /> : null}
+            {user.is_owner ? <OwnerPill /> : null}
             <RolePill role={user.role} />
           </div>
           <p className="mt-1 text-[13px] text-fg-muted">
@@ -567,7 +648,7 @@ function UserDetail({
                 variant="tonal"
                 size="sm"
                 aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
-                disabled={isSelf || saving}
+                disabled={!guard.allowed || saving}
                 onClick={() => void save({ is_active: !user.is_active })}
               >
                 {user.is_active ? "Deactivate" : "Reactivate"}
@@ -577,7 +658,7 @@ function UserDetail({
                   variant="danger-outline"
                   size="sm"
                   aria-label={`Delete ${user.username} permanently`}
-                  disabled={isSelf || saving}
+                  disabled={!guard.allowed || saving}
                   onClick={() => setDeleteArmed(true)}
                 >
                   Delete account
@@ -594,7 +675,7 @@ function UserDetail({
           <div className="rounded-2xl bg-surface-muted p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-[13.5px] font-semibold text-fg">Role</span>
-              {isSelf || deleted ? (
+              {!guard.allowed || deleted ? (
                 <RolePill role={user.role} />
               ) : (
                 <SegmentedControl
@@ -614,9 +695,9 @@ function UserDetail({
           <FlagToggles user={user} saving={saving} onSave={save} />
 
           <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
-            {isSelf
-              ? "You can't change your own role or status, or delete your own account."
-              : "Deletion is permanent and audited. Deactivating is the reversible alternative — it revokes the account's sessions and hides its content without destroying it."}
+            {guard.allowed
+              ? "Deletion is permanent and audited. Deactivating is the reversible alternative — it revokes the account's sessions and hides its content without destroying it."
+              : guard.reason}
           </p>
 
           {deleteArmed ? (
@@ -708,11 +789,13 @@ function Fact({ k, v }: { k: string; v: React.ReactNode }) {
 function UserRow({
   user,
   isSelf,
+  guard,
   onUpdated,
   onDeleted,
 }: {
   user: AdminUser;
   isSelf: boolean;
+  guard: Gate;
   onUpdated: (updated: AdminUser) => void;
   onDeleted: (id: string) => void;
 }) {
@@ -736,6 +819,7 @@ function UserRow({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-semibold tracking-tight text-fg">{user.username}</span>
             {isSelf ? <SelfPill /> : null}
+            {user.is_owner ? <OwnerPill /> : null}
             <RolePill role={user.role} />
             {user.is_active ? null : (
               <span className="inline-flex items-center rounded-full bg-danger-surface px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-danger">
@@ -759,7 +843,7 @@ function UserRow({
           (the backend forbids self-demote), so the own row shows a static pill. */}
       <div className="mt-3.5 flex items-center justify-between gap-3">
         <span className="text-[13px] font-semibold text-fg">Role</span>
-        {isSelf || deleted ? (
+        {!guard.allowed || deleted ? (
           <RolePill role={user.role} />
         ) : (
           <SegmentedControl
@@ -786,7 +870,7 @@ function UserRow({
               variant="tonal"
               size="sm"
               aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
-              disabled={isSelf || saving}
+              disabled={!guard.allowed || saving}
               onClick={() => void save({ is_active: !user.is_active })}
             >
               {user.is_active ? "Deactivate" : "Reactivate"}
@@ -796,17 +880,15 @@ function UserRow({
                 variant="danger-outline"
                 size="sm"
                 aria-label={`Delete ${user.username} permanently`}
-                disabled={isSelf || saving}
+                disabled={!guard.allowed || saving}
                 onClick={() => setDeleteArmed(true)}
               >
                 Delete permanently
               </Button>
             ) : null}
-            {isSelf ? (
-              <span className="text-xs text-fg-muted">
-                You can&apos;t change your own role or status, or delete your own account.
-              </span>
-            ) : null}
+            {guard.allowed ? null : (
+              <span className="text-xs text-fg-muted">{guard.reason}</span>
+            )}
           </>
         )}
       </div>

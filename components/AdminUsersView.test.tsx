@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -381,5 +381,158 @@ describe("AdminUsersView account flags", () => {
     await screen.findByRole("button", { name: "Open person0" });
 
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
+  });
+});
+
+/** The desktop console pane, so a query cannot match the mobile card list too. */
+function desktop() {
+  return within(screen.getByTestId("admin-users-desktop"));
+}
+
+// A16: an ordinary admin demoted the instance owner and got 200 from core.
+// `is_owner` now marks that account, and the console must refuse to offer the
+// three actions the server refuses — with the reason, not a silently dead
+// control. The server refuses regardless of the DOM; this is the half that
+// stops an admin discovering the rule by being rejected.
+describe("AdminUsersView owner protection", () => {
+  const owner = (overrides: Record<string, unknown> = {}) =>
+    account(0, { id: "owner-1", username: "mona", role: "admin", is_owner: true, ...overrides });
+  const otherAdmin = (overrides: Record<string, unknown> = {}) =>
+    account(1, { id: "admin-2", username: "avery", role: "admin", ...overrides });
+
+  it("badges the owner and nobody else", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [owner(), otherAdmin()],
+      total: 2,
+      limit: PAGE,
+      offset: 0,
+    });
+    render(<AdminUsersView />);
+
+    const ownerRow = await screen.findByRole("button", { name: "Open mona" });
+    expect(ownerRow.textContent).toContain("owner");
+    expect(screen.getByRole("button", { name: "Open avery" }).textContent).not.toContain("owner");
+  });
+
+  it("disables role, deactivation and deletion on the owner, and says why", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [owner(), otherAdmin()],
+      total: 2,
+      limit: PAGE,
+      offset: 0,
+    });
+    render(<AdminUsersView />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open mona" }));
+
+    expect((desktop().getByRole("button", { name: "Deactivate mona" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((desktop().getByRole("button", { name: "Delete mona permanently" }) as HTMLButtonElement).disabled).toBe(true);
+    // The three-way role control is replaced by a static pill, exactly as it is
+    // for the admin's own row.
+    expect(desktop().queryByRole("radiogroup", { name: "Role for mona" })).toBeNull();
+    expect(desktop().queryByText(/instance owner/i)).not.toBeNull();
+  });
+
+  it("leaves the quota and the two flags editable on the owner", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [owner({ email_verified: false }), otherAdmin()],
+      total: 2,
+      limit: PAGE,
+      offset: 0,
+    });
+    mocks.updateAdminUser.mockResolvedValue(owner({ email_verified: true }));
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open mona" }));
+
+    const toggle = desktop().getByRole("switch", { name: /Email verified for mona/ });
+    expect((toggle as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(mocks.updateAdminUser).toHaveBeenCalledWith("owner-1", { email_verified: true }),
+    );
+  });
+
+  it("does not restrain a plain admin who is not the owner", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [owner(), otherAdmin()],
+      total: 2,
+      limit: PAGE,
+      offset: 0,
+    });
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open avery" }));
+
+    expect((desktop().getByRole("button", { name: "Deactivate avery" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((desktop().getByRole("button", { name: "Delete avery permanently" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+// The last-admin guard's console half. It is deliberately conservative: the
+// accounts endpoint filters by search text only, so a paged or searched view
+// cannot prove how many admins the instance has, and claiming "last admin"
+// there would be a guess. The server refuses either way.
+describe("AdminUsersView last-admin guard", () => {
+  const soleAdmin = () => account(0, { id: "admin-9", username: "mona", role: "admin" });
+
+  it("disables the guarded actions on the only admin when the page is the whole instance", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [soleAdmin(), account(1, { username: "bob" })],
+      total: 2,
+      limit: PAGE,
+      offset: 0,
+    });
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open mona" }));
+
+    expect((desktop().getByRole("button", { name: "Deactivate mona" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((desktop().getByRole("button", { name: "Delete mona permanently" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(desktop().queryByText(/last active administrator/i)).not.toBeNull();
+  });
+
+  it("says nothing about the last admin when the page is only part of the instance", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [account(0, { id: "admin-9", username: "solo", role: "admin" })],
+      total: 4649,
+      limit: PAGE,
+      offset: 0,
+    });
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open solo" }));
+
+    // One admin on this page proves nothing about the other 4,648 accounts.
+    expect((desktop().getByRole("button", { name: "Deactivate solo" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(desktop().queryByText(/last active administrator/i)).toBeNull();
+  });
+
+  it("releases the guard once a second live admin is on the page", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [
+        account(0, { id: "admin-8", username: "mona", role: "admin" }),
+        account(1, { id: "admin-9", username: "avery", role: "admin" }),
+      ],
+      total: 2,
+      limit: PAGE,
+      offset: 0,
+    });
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open avery" }));
+
+    expect((desktop().getByRole("button", { name: "Deactivate avery" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not count a deactivated admin as the safety net", async () => {
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [
+        account(0, { id: "admin-8", username: "mona", role: "admin" }),
+        account(1, { id: "admin-9", username: "avery", role: "admin", is_active: false }),
+      ],
+      total: 2,
+      limit: PAGE,
+      offset: 0,
+    });
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open mona" }));
+
+    expect((desktop().getByRole("button", { name: "Deactivate mona" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
