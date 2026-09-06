@@ -9,6 +9,7 @@ import { Button, EmptyState, ErrorState, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import type { LiveStream } from "@/lib/api";
 import { useLivePlayback } from "@/lib/use-playback-engine";
+import { useSettledOptionalSession } from "@/lib/use-settled-session";
 
 type Status = "loading" | "error" | "notfound" | "ready";
 
@@ -25,6 +26,12 @@ const OFFLINE_POLL_MS = 15_000;
 export function LiveWatchView({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [stream, setStream] = useState<LiveStream | null>(null);
+  // A PRIVATE stream is visible only to its owner (and the channel's content
+  // managers); core 404s it for everyone else. Reading before the refresh
+  // cookie has been redeemed reads anonymously, so the owner's own stream page
+  // landed on "not found" and the effect never re-ran to correct it.
+  // `useSettledOptionalSession` because the view is also rendered bare.
+  const { settled, viewerKey } = useSettledOptionalSession();
 
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -42,10 +49,11 @@ export function LiveWatchView({ id }: { id: string }) {
   );
 
   useEffect(() => {
+    if (!settled) return;
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
-  }, [load]);
+  }, [load, settled, viewerKey]);
 
   // While the stream is offline, quietly re-poll so it flips to the player the
   // moment the publisher connects. Stops once live/ended (or unmounted).

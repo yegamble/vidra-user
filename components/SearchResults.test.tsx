@@ -70,6 +70,16 @@ vi.mock("@/lib/device-preferences", () => ({
 
 // The filter panel's taxonomy: its own module, so the `@/lib/api` mock below
 // does not cover it. Resolving keeps the category/language selects enabled.
+// The behavioural event the results page emits for a submitted search. It is
+// now the ONLY record of a browser search: core skips its routed emit when the
+// request declares the client sends this (see lib/search-session.ts), so a lost
+// one is a search that vanishes from the instance's own analytics AND from the
+// user's search-history page.
+const trackSearchEvent = vi.fn();
+vi.mock("@/lib/search-events", () => ({
+  trackSearchEvent: (...args: unknown[]) => trackSearchEvent(...args),
+}));
+
 vi.mock("@/lib/api/video-config", () => ({
   getVideoConfigCached: vi.fn(() =>
     Promise.resolve({
@@ -84,6 +94,15 @@ vi.mock("@/lib/api/video-config", () => ({
 // The current access token the mocked auth store reports; tests flip it to
 // exercise the authed/anonymous help-text and follow affordances (W13).
 let mockedToken: string | null = null;
+
+// The session in context. null is the shipped default for this file: these
+// tests render SearchResults bare, with no AuthProvider above it, which is
+// exactly what useOptionalSession answers null for — and a read with no
+// provider can never be waiting for one.
+let optionalSession: { status: string; user: { id: string } | null } | null = null;
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useOptionalSession: () => optionalSession,
+}));
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -578,5 +597,119 @@ describe("SearchResults result types", () => {
 
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.getByText("Search for videos")).toBeTruthy();
+  });
+});
+
+// GET /videos/search, /search/channels and /search/accounts are all filtered
+// PER VIEWER by core: the accounts this caller muted or blocked drop out, and
+// the ranking is personalized for a signed-in caller whose instance and
+// preference allow it. A request that goes out before the refresh cookie has
+// been redeemed carries no Authorization header, so the server answers as an
+// anonymous visitor and the muted author's videos come back — and the search
+// page never re-asks.
+describe("SearchResults session settling", () => {
+  beforeEach(() => {
+    optionalSession = null;
+  });
+
+  afterEach(() => {
+    optionalSession = null;
+  });
+
+  it("does not search while the session is still restoring", async () => {
+    optionalSession = { status: "restoring", user: null };
+    searchVideos.mockResolvedValue({ query: "cats", videos: [video("v1", "Cats")], total: 1 } as never);
+    render(<SearchResults query="cats" filters={{}} type="videos" />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(searchVideos).not.toHaveBeenCalled();
+  });
+
+  it("searches exactly once when the session settles", async () => {
+    optionalSession = { status: "restoring", user: null };
+    searchVideos.mockResolvedValue({ query: "cats", videos: [video("v1", "Cats")], total: 1 } as never);
+    const { rerender } = render(<SearchResults query="cats" filters={{}} type="videos" />);
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    rerender(<SearchResults query="cats" filters={{}} type="videos" />);
+    expect(await screen.findByText("Cats")).toBeTruthy();
+    expect(searchVideos).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not list channels while the session is still restoring", async () => {
+    optionalSession = { status: "restoring", user: null };
+    searchChannels.mockResolvedValue({ channels: [], total: 0 } as never);
+    render(<SearchResults query="cats" filters={{}} type="channels" />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(searchChannels).not.toHaveBeenCalled();
+  });
+
+  it("does not list accounts while the session is still restoring", async () => {
+    optionalSession = { status: "restoring", user: null };
+    searchAccounts.mockResolvedValue({ accounts: [], total: 0 } as never);
+    render(<SearchResults query="cats" filters={{}} type="accounts" />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(searchAccounts).not.toHaveBeenCalled();
+  });
+});
+
+describe("SearchResults emits exactly one search.submitted per submitted search", () => {
+  function submitted() {
+    return trackSearchEvent.mock.calls.filter(
+      ([e]) => (e as { type: string }).type === "search.submitted",
+    );
+  }
+
+  it("emits one for a results-page load", async () => {
+    searchVideos.mockResolvedValue({
+      query: "grading",
+      videos: [video("v1", "Match one")],
+      total: 1,
+    } as never);
+    render(<SearchResults query="grading" />);
+    await screen.findByRole("heading", { name: "Match one" });
+    expect(submitted()).toHaveLength(1);
+    expect(submitted()[0][0]).toMatchObject({ type: "search.submitted", query: "grading", count: 1 });
+  });
+
+  it("emits one more when a facet changes the query, and none for the page that follows", async () => {
+    searchVideos.mockImplementation((_q, params) =>
+      Promise.resolve({
+        videos:
+          (params?.offset ?? 0) === 0
+            ? [video("v1", "Match one")]
+            : [video("v2", "Match two")],
+        total: 2,
+        has_more: (params?.offset ?? 0) === 0,
+        limit: 20,
+        offset: params?.offset ?? 0,
+      } as never),
+    );
+    const { rerender } = render(<SearchResults query="grading" />);
+    await screen.findByRole("heading", { name: "Match one" });
+    expect(submitted()).toHaveLength(1);
+
+    // A facet change is a NEW search: it resets to page one and is recorded.
+    rerender(<SearchResults query="grading" filters={{ category: "7" }} />);
+    await waitFor(() => expect(submitted()).toHaveLength(2));
+
+    // Paging is NOT: the reader did not issue a second search, and core is no
+    // longer writing a row for the request either.
+    fireEvent.click(await screen.findByRole("button", { name: "Load more" }));
+    await screen.findByRole("heading", { name: "Match two" });
+    expect(submitted()).toHaveLength(2);
+  });
+
+  it("emits one — not two — across the session settling on a hard load", async () => {
+    optionalSession = { status: "restoring", user: null };
+    searchVideos.mockResolvedValue({
+      query: "grading",
+      videos: [video("v1", "Match one")],
+      total: 1,
+    } as never);
+    const { rerender } = render(<SearchResults query="grading" />);
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    rerender(<SearchResults query="grading" />);
+    await screen.findByRole("heading", { name: "Match one" });
+    expect(submitted()).toHaveLength(1);
+    optionalSession = null;
   });
 });

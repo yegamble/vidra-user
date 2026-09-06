@@ -30,6 +30,7 @@ import { buildCommentTree, replyMention } from "@/lib/comments";
 import { useE2EEAvailable } from "@/lib/e2ee/availability";
 import { useMessagingAvailable } from "@/lib/messaging/availability";
 import { relativeTime } from "@/lib/format";
+import { useSettledSession } from "@/lib/use-settled-session";
 
 const MAX_COMMENT_LEN = 2000;
 
@@ -83,7 +84,7 @@ export function CommentsSection({
   // answers: GET /videos/{id}/comments filters out the accounts (and remote
   // instances) the CALLER has muted or blocked, and it can only do that if the
   // request carries the caller's token.
-  const { status: sessionStatus } = useSession();
+  const { settled, viewerKey } = useSettledSession();
 
   useEffect(() => {
     // Wait for the session restore to settle. Firing on mount sent the request
@@ -93,7 +94,8 @@ export function CommentsSection({
     // effect never re-ran, so every hard load of the watch page undid the mute.
     // "restoring" always settles to "authed" or "anon", so this delays the read
     // rather than skipping it, and the spinner already covers the wait.
-    if (sessionStatus === "restoring") return;
+    // `useSettledSession` is the shared seam for that wait — see its docblock.
+    if (!settled) return;
     const controller = new AbortController();
     api
       .getVideoComments(videoId, { limit: FULL_LIST_LIMIT }, controller.signal)
@@ -106,7 +108,7 @@ export function CommentsSection({
         setStatus("error");
       });
     return () => controller.abort();
-  }, [videoId, reloadKey, sessionStatus]);
+  }, [videoId, reloadKey, settled, viewerKey]);
 
   function retry() {
     setStatus("loading");
@@ -142,7 +144,12 @@ export function CommentsSection({
   // consistent with keeping the rest of the list stable).
   const onUnpinned = (updated: Comment) =>
     setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
-  const onMutedAuthor = (authorId: string) =>
+  // Mute and Block both hide an account's comments from this viewer — the
+  // server applies the same per-viewer filter to both on the next load — so
+  // they remove the rows the same way here. They used to differ on the spot
+  // (Block left the comment reading "Blocked"), which asked the reader to
+  // believe two controls with the same effect had different ones.
+  const onHiddenAuthor = (authorId: string) =>
     setComments((prev) => prev.filter((x) => x.author_id !== authorId));
   // An instance mute hides ALL of that origin's comments for the caller.
   const onMutedInstance = (domain: string) =>
@@ -196,7 +203,7 @@ export function CommentsSection({
               onHearted={onHearted}
               onPinned={onPinned}
               onUnpinned={onUnpinned}
-              onMutedAuthor={onMutedAuthor}
+              onHiddenAuthor={onHiddenAuthor}
               onMutedInstance={onMutedInstance}
             />
           ))}
@@ -386,7 +393,7 @@ function CommentItem({
   onHearted,
   onPinned,
   onUnpinned,
-  onMutedAuthor,
+  onHiddenAuthor,
   onMutedInstance,
 }: {
   comment: Comment;
@@ -409,7 +416,7 @@ function CommentItem({
   onHearted: (updated: Comment) => void;
   onPinned: (updated: Comment) => void;
   onUnpinned: (updated: Comment) => void;
-  onMutedAuthor: (authorId: string) => void;
+  onHiddenAuthor: (authorId: string) => void;
   onMutedInstance: (domain: string) => void;
 }) {
   const { user, status } = useSession();
@@ -421,7 +428,6 @@ function CommentItem({
   const [heartBusy, setHeartBusy] = useState(false);
   const [muting, setMuting] = useState(false);
   const [blocking, setBlocking] = useState(false);
-  const [blocked, setBlocked] = useState(false);
   const [editing, setEditing] = useState(false);
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState(comment.body);
@@ -537,7 +543,7 @@ function CommentItem({
     setMuting(true);
     try {
       await api.muteAccount(authorId);
-      onMutedAuthor(authorId);
+      onHiddenAuthor(authorId);
     } catch {
       // Leave the comment in place on failure.
       setMuting(false);
@@ -561,15 +567,15 @@ function CommentItem({
     setBlocking(true);
     try {
       await api.blockUser(authorId);
-      // The comment stays put and the control reflects the blocked state — the
-      // behaviour e2e/blocks.spec.ts and e2e-backed/blocks.spec.ts pin. Note
-      // that this differs from Mute, which removes the comment immediately, and
-      // that the SERVER filters a blocked author out of this viewer's list on
-      // the next load either way (blockUser's contract: "their comments are
-      // filtered from comment lists, per-viewer, exactly like mutes"). So the
-      // row disappears on reload regardless; whether it should also go now is a
-      // product call, not a bug fix, and is left to its owner.
-      setBlocked(true);
+      // Remove the author's comments at once, exactly as Mute does. The server
+      // filters a blocked author out of this viewer's comment list on the next
+      // load either way (blockUser's contract: "their comments are filtered
+      // from comment lists, per-viewer, exactly like mutes"), so the row goes
+      // on reload regardless — leaving it on screen until then only made two
+      // controls with the same effect look like they had different ones. The
+      // owner ruled that they should read alike. (There is no "Blocked" state
+      // left to render on the item afterwards: the item is gone.)
+      onHiddenAuthor(authorId);
     } catch {
       // Leave things as-is on failure.
     } finally {
@@ -658,7 +664,7 @@ function CommentItem({
                 onHearted={onHearted}
                 onPinned={onPinned}
                 onUnpinned={onUnpinned}
-                onMutedAuthor={onMutedAuthor}
+                onHiddenAuthor={onHiddenAuthor}
                 onMutedInstance={onMutedInstance}
               />
             ))}
@@ -758,11 +764,7 @@ function CommentItem({
           });
         }
       }
-      moderationItems.push({
-        label: blocked ? "Blocked" : "Block",
-        disabled: blocking || blocked,
-        onSelect: () => void block(),
-      });
+      moderationItems.push({ label: "Block", disabled: blocking, onSelect: () => void block() });
       moderationItems.push({ label: "Report user", onSelect: () => setReporting("account") });
       moderationItems.push({ label: "Report", onSelect: () => setReporting("comment") });
     }

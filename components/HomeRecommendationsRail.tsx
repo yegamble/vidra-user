@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { useSession } from "@/components/auth/AuthProvider";
 import { VideoCard } from "@/components/VideoCard";
 import { api } from "@/lib/api";
 import type { RecommendationItem } from "@/lib/api/types";
 import { t } from "@/lib/i18n";
 import { trackSearchEvent } from "@/lib/search-events";
 import { RAIL_TILE, RAIL_TRACK } from "@/lib/rail";
+import { useSettledSession } from "@/lib/use-settled-session";
 
 // HomeRecommendationsRail is the home "For you" / "Trending now" discovery rail
 // (search-service W4), mounted after the primary feed. Like
@@ -34,12 +34,12 @@ export function HomeRecommendationsRail() {
   // the session resolves — and the anonymous answer landed last. The rail is
   // the one surface that reads `personalized`, so that showed the generic list
   // under "Trending now" on every hard load and the personalized one only after
-  // a client-side navigation. `status` is part of the effect's dependencies so
-  // it also refetches across sign-in and sign-out.
-  const { status } = useSession();
+  // a client-side navigation. `useSettledSession` is the shared seam for that
+  // wait, and its `viewerKey` is what refetches across sign-in and sign-out.
+  const { settled, viewerKey } = useSettledSession();
 
   useEffect(() => {
-    if (status === "restoring") return;
+    if (!settled) return;
     const controller = new AbortController();
     api
       .getHomeRecommendations({ limit: 12 }, controller.signal)
@@ -52,7 +52,7 @@ export function HomeRecommendationsRail() {
         if (!controller.signal.aborted) setItems([]);
       });
     return () => controller.abort();
-  }, [status]);
+  }, [settled, viewerKey]);
 
   if (items.length === 0) return null;
 

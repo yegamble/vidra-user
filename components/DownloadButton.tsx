@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DownloadIcon } from "@/components/icons";
 import { Button, Checkbox, Modal, Radio } from "@/components/ui";
 import { api, errorMessage, type Video, type VideoDownloadFile } from "@/lib/api";
+import { useSettledOptionalSession } from "@/lib/use-settled-session";
 import { formatBytes } from "@/lib/format";
 import { useVideoActionPermissions } from "@/lib/use-video-action-permissions";
 
@@ -86,6 +87,9 @@ export function DownloadDialog({
   playbackToken?: string | null;
   onClose: () => void;
 }) {
+  // `useSettledOptionalSession` rather than the strict variant: the dialog is
+  // also rendered bare in unit tests, where no viewer can ever arrive.
+  const { settled, viewerKey } = useSettledOptionalSession();
   const [files, setFiles] = useState<VideoDownloadFile[]>([]);
   const [mode, setMode] = useState<DownloadMode>("video");
   const [selectedUrl, setSelectedUrl] = useState("");
@@ -109,6 +113,13 @@ export function DownloadDialog({
   const selected = files.find((file) => file.url === selectedUrl);
 
   useEffect(() => {
+    // What this endpoint offers is PER VIEWER — videoForDownload resolves the
+    // file set for the caller, so the owner of a private video, and any video
+    // whose download policy is narrower than "everyone", get a different list
+    // from an anonymous visitor. The dialog opens over a server-rendered watch
+    // page, so it can mount before the refresh cookie has been redeemed;
+    // asking then took the anonymous answer and kept it.
+    if (!settled) return;
     const controller = new AbortController();
     api
       .getVideoDownloads(videoId, playbackToken ?? undefined, controller.signal)
@@ -135,7 +146,7 @@ export function DownloadDialog({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [playbackToken, videoId]);
+  }, [playbackToken, videoId, settled, viewerKey]);
 
   function selectMode(next: DownloadMode) {
     setMode(next);

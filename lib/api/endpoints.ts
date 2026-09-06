@@ -1,5 +1,5 @@
 import { apiBaseUrl } from "@/lib/config";
-import { searchSessionHeaders } from "@/lib/search-session";
+import { clientSearchEventHeaders, searchSessionHeaders } from "@/lib/search-session";
 
 import { getAccessToken } from "./auth-store";
 import { ApiError, apiRequest } from "./client";
@@ -366,9 +366,17 @@ export const api = {
    * filters (category/language/license/tag) narrow results to local videos; an
    * unknown category/language/license value is a 422 (the selects are populated
    * from the same GET /videos/config taxonomy, so the UI never sends one).
+   *
+   * Carries the client-emits-its-own-event declaration, because the results
+   * page follows every page-one search with its own `search.submitted`
+   * (SearchResults → trackSearchEvent). Without it core emits a second one for
+   * the same search — see clientSearchEventHeaders. This endpoint is only ever
+   * called from that page; a caller that would NOT emit the event must not
+   * reuse it.
    */
   searchVideos: (query: string, params: SearchVideosParams = {}, signal?: AbortSignal) =>
     apiRequest<VideoSearchResponse>("/api/v1/videos/search", {
+      headers: clientSearchEventHeaders(),
       query: {
         q: query,
         ...pageQuery(params),

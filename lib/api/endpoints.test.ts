@@ -298,6 +298,18 @@ describe("api endpoints", () => {
     expect((authed.headers as Record<string, string>).authorization).toBe("Bearer pt-unlock");
   });
 
+  it("searchVideos declares that the client emits its own search.submitted", async () => {
+    // Without this declaration a browser search writes TWO query_log rows in
+    // vidra-search: the client's POST /search/events batch AND the routed
+    // search.submitted core emits behind this very request. The header is what
+    // tells core to leave the record to the client — see vidra-core's
+    // searchEventsHeader for why the client is the only party that can know.
+    await api.searchVideos("cats");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/videos/search?q=cats");
+    expect((init.headers as Record<string, string>)["X-Vidra-Search-Events"]).toBe("client");
+  });
+
   it("createLivePlaybackSession POSTs to the live endpoint", async () => {
     await api.createLivePlaybackSession("ls1");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

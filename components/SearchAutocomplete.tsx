@@ -21,6 +21,7 @@ import type { SearchSuggestion } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { trackSearchEvent } from "@/lib/search-events";
+import { useSettledOptionalSession } from "@/lib/use-settled-session";
 import {
   readSearchFilters,
   readSearchType,
@@ -208,6 +209,11 @@ function useSearchCombobox({
 
   const cacheRef = useRef<Map<string, SearchSuggestion[]>>(new Map());
   const seqRef = useRef(0);
+  // Who the suggestions are for. `useSettledOptionalSession` rather than the
+  // strict variant because the box is also rendered with no AuthProvider above
+  // it, where no viewer can ever arrive.
+  const { settled, viewerKey } = useSettledOptionalSession();
+
   const focusedRef = useRef(false);
   const shownForRef = useRef<string | null>(null);
 
@@ -259,6 +265,14 @@ function useSearchCombobox({
   useEffect(() => {
     if (suggestionsEnabled === false) return;
     if (composing) return;
+    // A suggestion set is PER VIEWER — a signed-in caller gets their own past
+    // searches back as `history`-typed personal suggestions, ranked for them —
+    // so asking before the refresh cookie has been redeemed asks as an
+    // anonymous visitor. Worse than a one-off here: the answer is cached per
+    // prefix, so the anonymous set would be replayed for the rest of the tab's
+    // life. `viewerKey` is in the dependencies and the cache is dropped with
+    // it, below.
+    if (!settled) return;
     const prefix = debounced.trim();
     const seq = ++seqRef.current;
 
@@ -272,7 +286,12 @@ function useSearchCombobox({
       return;
     }
 
-    const cached = cacheGet(cacheRef.current, prefix);
+    // Every cache entry is keyed by VIEWER as well as prefix. Keying by prefix
+    // alone would let a sign-in (or a sign-out) inherit the previous viewer's
+    // personal suggestions for the rest of the tab's life; the LRU ages the
+    // superseded viewer's entries out on its own, so nothing has to be cleared.
+    const key = `${viewerKey}\u0000${prefix}`;
+    const cached = cacheGet(cacheRef.current, key);
     if (cached) {
       Promise.resolve().then(() => {
         if (seq !== seqRef.current) return;
@@ -287,7 +306,7 @@ function useSearchCombobox({
       .then((res) => {
         if (seq !== seqRef.current) return; // a newer request superseded this one
         const list = res.suggestions ?? [];
-        cacheSet(cacheRef.current, prefix, list);
+        cacheSet(cacheRef.current, key, list);
         applyResults(prefix, list);
       })
       .catch(() => {
@@ -295,7 +314,7 @@ function useSearchCombobox({
         // box, and don't churn the popup open/closed.
       });
     return () => controller.abort();
-  }, [debounced, suggestionsEnabled, composing, applyResults, closePopup]);
+  }, [debounced, suggestionsEnabled, composing, settled, viewerKey, applyResults, closePopup]);
 
   // Viewport-aware flip for the header pill's popup (measured pre-paint on open).
   // The mobile sheet ignores it.
@@ -387,8 +406,9 @@ function useSearchCombobox({
     if (!s || s.type !== "history") return;
     const next = suggestions.filter((_, i) => i !== index);
     setSuggestions(next);
-    const key = debounced.trim();
-    if (key) cacheSet(cacheRef.current, key, next);
+    const prefix = debounced.trim();
+    // Same viewer-scoped key the fetch effect writes under.
+    if (prefix) cacheSet(cacheRef.current, `${viewerKey}\u0000${prefix}`, next);
     setActiveIndex((prev) => {
       if (prev < 0) return prev;
       if (index < prev) return prev - 1;
