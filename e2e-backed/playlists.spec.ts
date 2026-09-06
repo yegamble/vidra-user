@@ -66,6 +66,11 @@ test("create a playlist, add a video from the watch page, then remove it", async
   await page.getByRole("link", { name: /My Mix/ }).click();
   await expect(page.getByRole("heading", { name: videoTitle })).toBeVisible();
 
+  // A hard reload must restore the owner session before reading a private playlist.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: videoTitle })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+
   // Removing it persists: gone after navigating away and back.
   const removed = page.waitForResponse(
     (r) => /\/videos\/[^/]+$/.test(r.url()) && r.request().method() === "DELETE" && r.ok(),
