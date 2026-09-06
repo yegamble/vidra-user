@@ -174,11 +174,12 @@ function PreferencesSection({
           Vidra can use your searches and what you watch to tailor suggestions,
           search results, and your home recommendations. These controls are yours —
           turn any of them off at any time, and each one feeds only its own
-          feature. Turn all three off and your searches and plays stop being
-          recorded against your account altogether: from that moment they are
-          stored the way a signed-out visitor&rsquo;s are, counted once toward the
-          anonymous totals this site uses to decide what is popular, and never
-          linked back to you.
+          feature. Once none of them is active for you, your searches and plays
+          stop being recorded against your account altogether: from that moment
+          they are stored the way a signed-out visitor&rsquo;s are, counted once
+          toward the anonymous totals this site uses to decide what is popular,
+          and never linked back to you. A control this site has switched off
+          collects nothing either — it is greyed out below with the reason.
         </p>
       </div>
 

@@ -281,8 +281,8 @@ describe("SearchSettingsView — the opt-out promise, in words", () => {
   it("says what turning all three off does to collection, not just to serving", async () => {
     render(<SearchSettingsView />);
     await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
-    // The rule: all three off → stored as a signed-out visitor's are.
-    expect(screen.getByText(/turn all three off/i)).toBeTruthy();
+    // The rule: nothing left active → stored as a signed-out visitor's are.
+    expect(screen.getByText(/none of them is active for you/i)).toBeTruthy();
     expect(screen.getByText(/signed-out visitor/i)).toBeTruthy();
   });
 
