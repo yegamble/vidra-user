@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Spinner } from "@/components/ui/Spinner";
 import { TrashIcon } from "@/components/icons";
 import { ApiError, api } from "@/lib/api";
 import type { VideoChapter } from "@/lib/api";
@@ -34,8 +36,8 @@ function errorKey(index: number, field: ChapterValidationError["field"]): string
 // studio's per-video edit surface. Rows of start (m:ss) + title, add/remove, with
 // client-side validation mirroring the PUT contract (ascending starts, before the
 // duration, 1–120 char titles, ≤100 rows). Save replaces the whole set; an empty
-// set clears all chapters. Degrades to an empty, editable list if the initial
-// fetch fails.
+// set clears all chapters. Loading must succeed before a whole-set replacement
+// is allowed, or a failed read could silently erase existing chapters.
 export function ChaptersManager({
   videoId,
   durationSeconds,
@@ -45,7 +47,11 @@ export function ChaptersManager({
   durationSeconds?: number;
 }) {
   const [rows, setRows] = useState<Row[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [loadedVideoId, setLoadedVideoId] = useState<string | null>(null);
+  const [failedVideoId, setFailedVideoId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const loadError = failedVideoId === videoId;
+  const loaded = loadedVideoId === videoId && !loadError;
   const [saved, setSaved] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<ChapterValidationError[]>([]);
   const nextId = useRef(0);
@@ -71,16 +77,17 @@ export function ChaptersManager({
     api
       .getVideoChapters(videoId, undefined, controller.signal)
       .then((res) => {
+        if (controller.signal.aborted) return;
         setRows(res.chapters.map((c) => makeRow(formatChapterStart(c.start_seconds), c.title)));
-        setLoaded(true);
+        setLoadedVideoId(videoId);
+        setFailedVideoId(null);
       })
       .catch(() => {
-        // No chapters to edit yet (or the fetch failed) — start from an empty,
-        // still-editable list rather than blocking the surface.
-        if (!controller.signal.aborted) setLoaded(true);
+        // A failed read gives no evidence that the stored set is empty.
+        if (!controller.signal.aborted) setFailedVideoId(videoId);
       });
     return () => controller.abort();
-  }, [videoId]);
+  }, [videoId, reloadKey]);
 
   const errorMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -94,7 +101,7 @@ export function ChaptersManager({
   }
 
   function addRow() {
-    if (rows.length >= MAX_CHAPTERS) return;
+    if (!loaded || rows.length >= MAX_CHAPTERS) return;
     setRows((prev) => [...prev, makeRow()]);
     setSaved(false);
   }
@@ -105,7 +112,7 @@ export function ChaptersManager({
   }
 
   function save() {
-    if (busy) return;
+    if (!loaded || busy) return;
     const result = validateChapters(rows, durationSeconds);
     setFieldErrors(result.errors);
     if (!result.valid) {
@@ -127,7 +134,20 @@ export function ChaptersManager({
         </p>
       </div>
 
-      {rows.length > 0 ? (
+      {loadError ? (
+        <ErrorState
+          title="Could not load chapters"
+          message="Retry to load the existing chapters before making changes."
+          onRetry={() => {
+            setFailedVideoId(null);
+            setLoadedVideoId(null);
+            setSaved(false);
+            setReloadKey((key) => key + 1);
+          }}
+        />
+      ) : !loaded ? <Spinner label="Loading chapters" /> : null}
+
+      {loaded && rows.length > 0 ? (
         <ul className="flex flex-col gap-2">
           {rows.map((row, i) => {
             const startError = errorMap.get(errorKey(i, "start"));
@@ -195,11 +215,11 @@ export function ChaptersManager({
           variant="secondary"
           size="sm"
           onClick={addRow}
-          disabled={rows.length >= MAX_CHAPTERS}
+          disabled={!loaded || rows.length >= MAX_CHAPTERS}
         >
           Add chapter
         </Button>
-        <Button type="button" size="sm" onClick={() => void save()} disabled={busy}>
+        <Button type="button" size="sm" onClick={() => void save()} disabled={!loaded || busy}>
           {busy ? "Saving…" : "Save chapters"}
         </Button>
         {saved ? (

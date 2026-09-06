@@ -12,6 +12,36 @@ beforeEach(() => {
 });
 
 describe("ChaptersManager", () => {
+  it("prevents replacing unknown chapters until the initial read completes", async () => {
+    vi.spyOn(api, "getVideoChapters").mockReturnValue(new Promise(() => {}));
+    const put = vi.spyOn(api, "setVideoChapters");
+    render(<ChaptersManager videoId="v1" />);
+    expect(screen.getByRole("button", { name: "Save chapters" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Add chapter" })).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Save chapters" }));
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed read and retries the authoritative set before editing", async () => {
+    vi.spyOn(api, "getVideoChapters")
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce({ chapters: [{ start_seconds: 0, title: "Existing intro" }] });
+    const put = vi.spyOn(api, "setVideoChapters").mockResolvedValue({
+      chapters: [{ start_seconds: 0, title: "Edited intro" }],
+    });
+    render(<ChaptersManager videoId="v1" />);
+    await screen.findByText("Could not load chapters");
+    expect(screen.queryByText("No chapters yet.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save chapters" })).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByDisplayValue("Existing intro");
+    fireEvent.change(screen.getByLabelText("Chapter 1 title"), { target: { value: "Edited intro" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save chapters" }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith("v1", {
+      chapters: [{ start_seconds: 0, title: "Edited intro" }],
+    }));
+  });
+
   it("loads and renders the video's existing chapters as editable rows", async () => {
     vi.spyOn(api, "getVideoChapters").mockResolvedValue({
       chapters: [

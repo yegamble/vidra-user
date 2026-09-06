@@ -175,6 +175,20 @@ test("a creator can add chapters that persist and show on the watch page", async
   const stored = await videoChapters(request, vid!.id);
   expect(stored).toEqual([{ start_seconds: 0, title: "Intro" }]);
 
+  // A failed read must not present an empty set that Save could overwrite.
+  const chapterPath = `**/api/v1/videos/${vid!.id}/chapters`;
+  await page.route(chapterPath, (route) => route.abort("internetdisconnected"));
+  await page.reload();
+  await page.getByRole("listitem").filter({ hasText: videoTitle })
+    .getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByText("Could not load chapters", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save chapters" })).toBeDisabled();
+  await page.unroute(chapterPath);
+  await page.getByRole("alert").filter({ hasText: "Could not load chapters" })
+    .getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByLabel("Chapter 1 title")).toHaveValue("Intro");
+  expect(await videoChapters(request, vid!.id)).toEqual(stored);
+
   // A fresh load of the watch page refetches the chapters (has_chapters flipped
   // true) and renders the current-chapter title beside the time readout.
   await page.goto(`/videos/${vid!.id}`);
@@ -220,12 +234,17 @@ test("a creator can replace their video's thumbnail", async ({ page, request }) 
   await page.getByLabel("Thumbnail image").setInputFiles({
     name: "poster.png",
     mimeType: "image/png",
-    // A minimal valid PNG header + IHDR; the backend stores the bytes as-is and
-    // serves them with a content type derived from the .png extension.
-    buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    // A decodable PNG, so the browser assertion proves usable image bytes.
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+      "base64",
+    ),
   });
   await thumbPosted;
   await expect(page.getByRole("img", { name: "Current thumbnail" })).toBeVisible();
+
+  await expect.poll(() => page.getByRole("img", { name: "Current thumbnail" })
+    .evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
 
   // Persisted: the stored thumbnail is served as image/png (a custom upload, not the
   // ffmpeg-generated JPEG) — read back through the public thumbnail endpoint.
