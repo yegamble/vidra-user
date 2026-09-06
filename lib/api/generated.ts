@@ -5097,7 +5097,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a user's role / active flag / storage quota (admin)
-         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422). An unknown id is 404. Deactivating revokes the user's sessions. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited).
+         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited).
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -7193,6 +7193,11 @@ export interface components {
             storage_used_bytes: number;
             /** Format: date-time */
             created_at: string;
+            /**
+             * Format: date-time
+             * @description When this account was hard-deleted, or null for a live account. A deleted account stays listed as an anonymised tombstone (`deleted-<suffix>`) so an admin can see it, but deletion is permanent: PATCH with `is_active: true` on such a row is refused with 422, and the console offers no reactivate action for it.
+             */
+            deleted_at: string | null;
         };
         AdminUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["AdminUser"][];
