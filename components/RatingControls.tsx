@@ -19,6 +19,15 @@ export function RatingControls({ videoId }: { videoId: string }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    // Wait for the session restore to settle. `my_rating` is PER VIEWER and is
+    // resolved by the server from the request's bearer token, but the token is
+    // restored asynchronously from the refresh cookie — so firing on mount sent
+    // the read ANONYMOUSLY and the server answered `my_rating: null`. On every
+    // hard reload of the watch page the viewer's own like rendered unpressed,
+    // as if they had never rated, and the effect never re-ran to correct it.
+    // "restoring" always settles to "authed" or "anon", so this delays the read
+    // rather than skipping it (the control renders nothing until it lands).
+    if (status === "restoring") return;
     const controller = new AbortController();
     api
       .getVideoRating(videoId, controller.signal)
@@ -27,7 +36,7 @@ export function RatingControls({ videoId }: { videoId: string }) {
         // Leave rating null on error; the control simply does not render.
       });
     return () => controller.abort();
-  }, [videoId]);
+  }, [videoId, status]);
 
   if (rating === null) return null;
   const authed = status === "authed";
