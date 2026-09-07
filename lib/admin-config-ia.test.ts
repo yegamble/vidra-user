@@ -829,11 +829,57 @@ describe("ADVANCED / Delivery (phase-2 item 6, phase-4 items 2 & 4)", () => {
       expect(wiringWarnNote(undefined, unwired)).toBeNull();
     });
 
+    // A17 / ADM-03: the two capabilities whose dependency is a boot-only
+    // deployment fact the admin cannot see from this page. Turning either on
+    // without it produces a switch that reads "on" and does nothing — for live,
+    // measured: with FEATURE_LIVE_ENABLED=true and no LIVE_RTMP_URL, POST
+    // /channels/{handle}/live answers 201 with a stream key and NO rtmp_url, so
+    // a creator gets a key and nowhere to publish it.
+    //
+    // Both are `warn`, never bootDep: an on-but-inert toggle has to stay
+    // flippable back off, which bootDep's disabled row would prevent.
+    const liveUnwired: InfrastructureWiringInfo = {
+      features: [{ key: "live", enabled: true, configured: false }],
+    };
+    const liveWired: InfrastructureWiringInfo = {
+      features: [{ key: "live", enabled: true, configured: true }],
+    };
+    const whisperUnwired: InfrastructureWiringInfo = {
+      features: [{ key: "captions", enabled: false, configured: false }],
+    };
+    const whisperWired: InfrastructureWiringInfo = {
+      features: [{ key: "captions", enabled: true, configured: true }],
+    };
+
+    it("warns on live streaming when the ingest plane is not wired", () => {
+      const note = wiringWarnNote(META.live_enabled, liveUnwired);
+      expect(note).toContain("LIVE_RTMP_URL");
+      expect(note).toContain("LIVE_HLS_ROOT");
+      expect(note).toContain("Infrastructure");
+      expect(wiringWarnNote(META.live_enabled, liveWired)).toBeNull();
+    });
+
+    it("warns on automatic transcription when no transcription backend is wired", () => {
+      const note = wiringWarnNote(META.transcription_enabled, whisperUnwired);
+      expect(note).toContain("WHISPER_ENDPOINT");
+      expect(note).toContain("Infrastructure");
+      expect(wiringWarnNote(META.transcription_enabled, whisperWired)).toBeNull();
+    });
+
+    it("degrades silently for the two new checks as well", () => {
+      for (const key of ["live_enabled", "transcription_enabled"]) {
+        expect(wiringWarnNote(META[key], null), key).toBeNull();
+        expect(wiringWarnNote(META[key], {}), key).toBeNull();
+        expect(wiringWarnNote(META[key], { features: [] }), key).toBeNull();
+      }
+    });
+
     // The admin-only fetch is spent only where a warn check can consume it.
-    it("marks only the advanced page as needing the infrastructure snapshot", () => {
+    it("marks the pages that carry a wiring check", () => {
       expect(pageHasWiringChecks("advanced")).toBe(true);
+      expect(pageHasWiringChecks("live")).toBe(true);
+      expect(pageHasWiringChecks("vod")).toBe(true);
       expect(pageHasWiringChecks("general")).toBe(false);
-      expect(pageHasWiringChecks("vod")).toBe(false);
     });
   });
 });
