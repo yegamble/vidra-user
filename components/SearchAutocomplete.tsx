@@ -22,6 +22,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { trackSearchEvent } from "@/lib/search-events";
 import { useSettledOptionalSession } from "@/lib/use-settled-session";
+import { useViewerModeration } from "@/lib/use-viewer-moderation";
 import {
   readSearchFilters,
   readSearchType,
@@ -77,6 +78,34 @@ function cacheSet(
  *  ordering within each bucket is preserved. */
 function orderSuggestions(list: SearchSuggestion[]): SearchSuggestion[] {
   return [...list].sort((a, b) => (TYPE_ORDER[a.type] ?? 0) - (TYPE_ORDER[b.type] ?? 0));
+}
+
+/** Drop the channel suggestions that name an account this viewer has muted or
+ *  blocked (A16 ruling). It has to happen here and not in core: autocomplete is
+ *  served straight out of vidra-search's index, which stores static eligibility
+ *  and never per-viewer state — the property that makes the ranked-ids contract
+ *  visibility-safe in the first place. A channel suggestion links straight to
+ *  the channel page, so leaving it was a complete route back to everything the
+ *  mute hid.
+ *
+ *  Only channel suggestions are droppable, and that is a data limit rather than
+ *  a decision: a suggestion carries `channel_handle` for a channel and
+ *  `video_id` for a video, so a video suggestion names no account this client
+ *  could match. Query and tag suggestions are text with no owner at all and are
+ *  deliberately untouched — they are what the instance's users have searched
+ *  for, not who published it.
+ *
+ *  An empty `hidden` set (an anonymous visitor, or a read that failed) keeps
+ *  every suggestion: the degraded direction is showing more, never hiding a
+ *  stranger's channel. */
+function withoutHiddenAccounts(
+  list: SearchSuggestion[],
+  hidden: ReadonlySet<string>,
+): SearchSuggestion[] {
+  if (hidden.size === 0) return list;
+  return list.filter(
+    (s) => !(s.type === "channel" && s.channel_handle && hidden.has(s.channel_handle.toLowerCase())),
+  );
 }
 
 /** Bold the first case-insensitive occurrence of the typed prefix (realestate
@@ -212,7 +241,13 @@ function useSearchCombobox({
   // Who the suggestions are for. `useSettledOptionalSession` rather than the
   // strict variant because the box is also rendered with no AuthProvider above
   // it, where no viewer can ever arrive.
-  const { settled, viewerKey } = useSettledOptionalSession();
+  const session = useSettledOptionalSession();
+  const { settled, viewerKey } = session;
+  // ...and who this viewer has muted or blocked. Read ONCE per settled session
+  // and shared at module scope, so no keystroke costs a request; the Set's
+  // identity is stable, which is what lets it sit in `applyResults`' deps
+  // without re-running the fetch effect on every render.
+  const { hiddenChannelHandles } = useViewerModeration(session);
 
   const focusedRef = useRef(false);
   const shownForRef = useRef<string | null>(null);
@@ -236,27 +271,39 @@ function useSearchCombobox({
   // Publish a resolved suggestion set (reordered for display), open only while
   // focused with results, announce the count, and emit suggestions_shown once
   // per distinct prefix actually shown.
-  const applyResults = useCallback((prefix: string, list: SearchSuggestion[]) => {
-    const ordered = orderSuggestions(list);
-    setSuggestions(ordered);
-    setActiveIndex(-1);
-    const shouldOpen = focusedRef.current && ordered.length > 0;
-    setOpen(shouldOpen);
-    if (shouldOpen) {
-      setLiveMessage(
-        ordered.length === 1
-          ? t("search.suggestionsOne")
-          : t("search.suggestionsMany", { count: ordered.length }),
-      );
-      if (shownForRef.current !== prefix) {
-        shownForRef.current = prefix;
-        trackSearchEvent({ type: "search.suggestions_shown", query: prefix, count: ordered.length });
+  const applyResults = useCallback(
+    (prefix: string, list: SearchSuggestion[]) => {
+      const ordered = withoutHiddenAccounts(orderSuggestions(list), hiddenChannelHandles);
+      setSuggestions(ordered);
+      setActiveIndex(-1);
+      const shouldOpen = focusedRef.current && ordered.length > 0;
+      setOpen(shouldOpen);
+      if (shouldOpen) {
+        setLiveMessage(
+          ordered.length === 1
+            ? t("search.suggestionsOne")
+            : t("search.suggestionsMany", { count: ordered.length }),
+        );
+        if (shownForRef.current !== prefix) {
+          shownForRef.current = prefix;
+          trackSearchEvent({
+            type: "search.suggestions_shown",
+            query: prefix,
+            count: ordered.length,
+          });
+        }
+      } else {
+        setLiveMessage("");
+        shownForRef.current = null;
       }
-    } else {
-      setLiveMessage("");
-      shownForRef.current = null;
-    }
-  }, []);
+    },
+    // The filter is part of publishing a result set, so a viewer whose lists
+    // land AFTER a cached prefix was shown re-publishes it filtered: the fetch
+    // effect below already depends on this callback, and a cache hit costs no
+    // request. That is one re-run per session (the set settles once), never one
+    // per keystroke.
+    [hiddenChannelHandles],
+  );
 
   // Fetch suggestions for the debounced prefix. Guards: suggestions disabled,
   // mid-IME-composition, or an empty prefix. A cache hit resolves without a

@@ -6432,6 +6432,8 @@ export interface components {
             display_name: string;
             /** Format: date-time */
             muted_at: string;
+            /** @description Every channel handle this account publishes under, sorted. Present so a client can recognise a channel that belongs to a muted account without a lookup per handle: autocomplete suggestions (GET /search/suggestions) are viewer-agnostic by design and carry only channel_handle, so the client drops the ones naming a muted or blocked account itself. An account with no channel yields an empty array, never null. */
+            channel_handles: string[];
         };
         MutedAccountListResponse: components["schemas"]["PageMeta"] & {
             accounts: components["schemas"]["MutedAccount"][];
@@ -6581,6 +6583,8 @@ export interface components {
             display_name: string;
             /** Format: date-time */
             blocked_at: string;
+            /** @description Every channel handle this account publishes under, sorted — the same field MutedAccount carries, for the same client-side suggestion filter. An account with no channel yields an empty array, never null. */
+            channel_handles: string[];
         };
         BlockedUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["BlockedUser"][];

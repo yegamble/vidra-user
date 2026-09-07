@@ -38,7 +38,11 @@ export function MutedAccountsView() {
           icon={<EyeOffIcon size={24} />}
           tint="indigo"
           title="No muted accounts"
-          message="When you mute an account its comments are hidden from you. Muted accounts appear here."
+          // The page header two lines above already said "videos and comments";
+          // this said only comments, and after the A16 ruling it under-states
+          // by one more surface again — the account's own channel page. One
+          // sentence, one promise.
+          message="When you mute an account, its videos and comments are hidden from you — its channel page included. Muted accounts appear here."
         />
       }
       renderRow={(account, remove) => (

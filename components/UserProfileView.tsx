@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { AccountModerationMenu } from "@/components/AccountModerationMenu";
 import { ChannelResultCard } from "@/components/EntityResultCard";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -49,6 +50,9 @@ type ProfileSection = "channels" | "about";
 
 export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
   const name = profile.display_name || profile.username;
+  // The optional variant: this view is rendered straight from a server
+  // component, where no provider is guaranteed above it.
+  const session = useSettledOptionalSession();
   const [section, setSection] = useState<ProfileSection>("channels");
   return (
     <div className="flex flex-col gap-6">
@@ -74,6 +78,19 @@ export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
               <p className="mt-1 text-subhead tabular-nums text-fg-muted">
                 @{profile.username} · {profile.channels.length} {profile.channels.length === 1 ? "channel" : "channels"}
               </p>
+            </div>
+            {/* The same Mute / Block menu the channel page carries, so an
+                account can be muted from the page that is ABOUT it whether or
+                not it has ever commented (A16 ruling). Every handle the profile
+                lists is threaded through, so muting from here also drops each
+                of those channels from this viewer's autocomplete. */}
+            <div className="order-last flex w-full items-center justify-end pb-1 sm:order-none sm:w-auto sm:shrink-0">
+              <AccountModerationMenu
+                accountId={profile.id}
+                accountName={name}
+                channelHandles={profile.channels.map((c) => c.handle)}
+                session={session}
+              />
             </div>
           </div>
         </div>
