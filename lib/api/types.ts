@@ -167,6 +167,14 @@ export type SystemStatusRateLimits = SystemStatus["rate_limits"];
 // database block: the server omits it entirely when no CDN is wired — zero
 // runs on an edgeless install would read as a purge system that never works.
 export type SystemStatusCdnPurge = NonNullable<SystemStatus["cdn_purge"]>;
+// One vidra-core process this deployment can currently see (core migration
+// 0133). OPTIONAL on the wire and unwrapped like the two blocks above: the
+// server omits the list entirely when heartbeats are not wired, because an
+// EMPTY fleet would read as "nothing is running", which is never true of a page
+// that just answered. Every other block on the status page describes the
+// process that SERVED the request — on a split topology that is the api — so
+// this list is the only place the worker exists at all.
+export type SystemStatusProcess = NonNullable<SystemStatus["processes"]>[number];
 // The deploy-time shape (GET /admin/infrastructure) — what the operator chose
 // at install time, as opposed to SystemStatus's live health. Section types are
 // projected off the parent because the spec declares them inline (no named

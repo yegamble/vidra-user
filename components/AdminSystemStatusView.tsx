@@ -13,6 +13,7 @@ import type {
   SystemStatus,
   SystemStatusCdnPurge,
   SystemStatusDatabase,
+  SystemStatusProcess,
   SystemStatusRateLimits,
 } from "@/lib/api";
 import { formatDateTime, formatUptime, formatVersion } from "@/lib/format";
@@ -136,7 +137,8 @@ export function StatusPanel() {
               const c = data.components[name];
               const down = c.status !== "ok" && c.status !== "not_configured";
               return (
-                <li key={name} className="flex items-center justify-between gap-3 py-3">
+                <li key={name} className="flex flex-col gap-1.5 py-3">
+                  <span className="flex items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span
                       aria-hidden
@@ -160,16 +162,38 @@ export function StatusPanel() {
                           ? "bg-surface-strong text-fg-muted"
                           : "bg-success/15 text-success"
                     }`}
-                    title={c.error || undefined}
                   >
                     {componentStatusLabel(c.status)}
                   </span>
+                  </span>
+                  {/* The REASON, as text. It used to live only in a title
+                      attribute, so why a dependency was down was invisible
+                      without a mouse — and these sentences are written to name
+                      the consequence, not just the cause ("this replica may be
+                      serving stale instance settings", "the worker process X
+                      has not checked in for 47s"). A dashboard that hides its
+                      own diagnosis behind a hover is not a dashboard. */}
+                  {down && c.error ? (
+                    <span className="pl-[18px] text-[13px] leading-relaxed text-danger">
+                      {c.error}
+                    </span>
+                  ) : null}
                 </li>
               );
             })}
           </ul>
         )}
       </section>
+
+      {/* ABSENT — not empty — when heartbeats are not wired (an older core, a
+          process with no database). An empty fleet would read as "nothing is
+          running", which is never true of a page that just answered. */}
+      {data.processes && data.processes.length > 0 ? (
+        <Processes
+          processes={data.processes}
+          staleSeconds={data.process_stale_seconds ?? 0}
+        />
+      ) : null}
 
       {/* Absent, not zeroed, when this process has no pool attached — so the
           section is dropped whole rather than rendered as "0 of 0", which is
@@ -185,6 +209,127 @@ export function StatusPanel() {
           purge system that never works. */}
       {data.cdn_purge ? <CdnPurge purge={data.cdn_purge} /> : null}
     </div>
+  );
+}
+
+/** running | stale | stopped, said in words rather than wire enums. */
+const PROCESS_STATE_LABEL: Record<string, string> = {
+  running: "Running",
+  stale: "Stale",
+  stopped: "Stopped",
+};
+
+const PROCESS_ROLE_LABEL: Record<string, string> = {
+  all: "API + worker",
+  api: "API",
+  worker: "Worker",
+};
+
+/** How long ago, in the coarse words an operator reads at a glance. */
+function secondsAgo(seconds: number): string {
+  if (seconds < 5) return "just now";
+  if (seconds < 90) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 90) return `${minutes}m ago`;
+  return `${Math.round(minutes / 60)}h ago`;
+}
+
+/**
+ * The deployment's processes.
+ *
+ * Every other section on this page describes the process that SERVED the
+ * request. On a split topology (VIDRA_ROLE=api plus VIDRA_ROLE=worker) that is
+ * the api — so the half that transcodes, imports and sweeps had no
+ * representation here at all, and a killed worker left the page reading
+ * "Healthy" with every dependency green. This list is where that process
+ * exists.
+ *
+ * A heartbeat can only report a process alive enough to write one, so a crashed
+ * process shows as "Stale" — a clock that stopped — never as a self-reported
+ * failure. "Stopped" is a clean shutdown saying goodbye, which is what a
+ * scale-down looks like and never degrades the page.
+ */
+function Processes({
+  processes,
+  staleSeconds,
+}: {
+  processes: SystemStatusProcess[];
+  staleSeconds: number;
+}) {
+  return (
+    <section aria-label="Processes">
+      <h2 className="mb-2 text-[15px] font-bold tracking-tight">Processes</h2>
+      <p className="mb-2 text-[13px] leading-relaxed text-fg-muted">
+        Every vidra-core process in this deployment, and when each last checked
+        in.{" "}
+        {staleSeconds > 0
+          ? `One that goes quiet for more than ${staleSeconds}s is marked stale and degrades the instance — it may be stopped, wedged, or unable to reach the database.`
+          : null}
+      </p>
+      <ul className="flex flex-col divide-y divide-border-subtle rounded-2xl bg-surface-muted px-4">
+        {processes.map((p) => {
+          const stale = p.state === "stale";
+          const stopped = p.state === "stopped";
+          const pollFailing = p.settings_poll === "failing";
+          return (
+            <li key={p.process_id} className="flex flex-col gap-1 py-3">
+              <span className="flex items-center justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    aria-hidden
+                    className={`h-2 w-2 flex-none rounded-full ${
+                      stale
+                        ? "bg-danger-solid"
+                        : stopped
+                          ? "bg-border"
+                          : "bg-success"
+                    }`}
+                  />
+                  <span className="truncate text-sm font-medium text-fg">
+                    {PROCESS_ROLE_LABEL[p.role] ?? p.role}
+                    {p.self ? (
+                      <span className="ml-2 text-[11px] font-semibold text-fg-muted">
+                        this process
+                      </span>
+                    ) : null}
+                  </span>
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${
+                    stale
+                      ? "bg-danger-surface text-danger"
+                      : stopped
+                        ? "bg-surface-strong text-fg-muted"
+                        : "bg-success/15 text-success"
+                  }`}
+                >
+                  {PROCESS_STATE_LABEL[p.state] ?? p.state}
+                </span>
+              </span>
+              <span className="pl-[18px] font-mono text-[12px] break-all text-fg-muted">
+                {p.process_id}
+              </span>
+              <span className="pl-[18px] text-[13px] text-fg-muted">
+                {formatVersion(p.version)}
+                {p.commit ? ` · ${p.commit}` : ""} · last seen{" "}
+                {secondsAgo(p.last_seen_seconds_ago)} · started{" "}
+                {formatDateTime(p.started_at)}
+              </span>
+              {pollFailing ? (
+                <span className="flex items-start gap-2 pl-[18px] text-[13px] leading-relaxed text-danger">
+                  <WarningIcon size={15} className="mt-0.5 shrink-0" />
+                  <span>
+                    This process cannot read the settings version, so it may be
+                    serving stale instance settings, documents or branding
+                    {p.settings_poll_error ? `: ${p.settings_poll_error}` : "."}
+                  </span>
+                </span>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

@@ -8232,6 +8232,46 @@ export interface components {
                  */
                 last_incomplete_run_at?: string;
             };
+            /**
+             * Format: int64
+             * @description How long a process may stay silent before this page calls it stale (three settings-poll intervals). Present only alongside processes, so the page can explain its own verdict instead of asking the reader to guess the threshold.
+             */
+            process_stale_seconds?: number;
+            /** @description Every vidra-core process this deployment can currently see (migration 0133). It exists because every other block on this page describes the process that SERVED the request, and on a split topology (VIDRA_ROLE=api plus VIDRA_ROLE=worker) that is the api — so the half that transcodes, imports and sweeps had no representation at all and a killed worker left the page reading "ok". Each process upserts its own row on every settings-version poll, which is the one loop that runs in every role. ABSENT — never an empty array — when heartbeats are not wired (an older core, an embedder, a process with no database), on the same doctrine as database: an empty fleet would read as "nothing is running", which is never true of a page that just answered. A heartbeat can only report a process alive enough to write one: a process killed with SIGKILL appears as state=stale (its clock stopped), never as a self-reported failure. Operational metadata only — a role, a build, a hostname, a pid and two clocks. No DSN, address or credential. */
+            processes?: {
+                /**
+                 * @description hostname:pid. Stable for the life of the process, and the same string stamped as worker_id on the job runs it claims, so a run's WORKER column and this list name the same thing.
+                 * @example vidra-worker-1:1
+                 */
+                process_id: string;
+                /** @enum {string} */
+                role: "all" | "api" | "worker";
+                hostname: string;
+                /** Format: int32 */
+                pid: number;
+                version: string;
+                commit: string;
+                /**
+                 * @description running — checked in inside the window. stale — stopped checking in; the only report a crashed or partitioned process can produce. stopped — said goodbye on a clean shutdown, which is what a scale-down looks like and never degrades the page.
+                 * @enum {string}
+                 */
+                state: "running" | "stale" | "stopped";
+                /** Format: date-time */
+                started_at: string;
+                /** Format: date-time */
+                last_seen_at: string;
+                /** Format: int64 */
+                last_seen_seconds_ago: number;
+                /**
+                 * @description That process's own settings-version poll outcome. The settings_sync component aggregates these: it is ok only when every non-stopped process polled successfully inside the window, and names the stale or failing process when it is not.
+                 * @enum {string}
+                 */
+                settings_poll: "ok" | "failing" | "never";
+                /** @description Present only when settings_poll is failing. */
+                settings_poll_error?: string;
+                /** @description True for the process that served this request, so an operator reading a three-row list knows which one is answering. */
+                self: boolean;
+            }[];
         };
         /** @description The mail probe was handed to the relay. "sent" is the only value — a failure is an error response, not a status in here. */
         MailTestResult: {

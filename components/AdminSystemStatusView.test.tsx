@@ -241,3 +241,159 @@ describe("StatusPanel component vocabulary", () => {
     expect(screen.queryByText("not_configured")).toBeNull();
   });
 });
+
+// A17/ADM-04's first blocking gap: every block on this page described the
+// process that SERVED the request, so on a split topology (VIDRA_ROLE=api plus
+// VIDRA_ROLE=worker) a killed worker left the page reading "Healthy" with
+// every dependency green. Measured live on the shipped build: the worker was
+// killed and the page still answered ok 71 seconds later.
+describe("StatusPanel processes", () => {
+  const proc = (over: Record<string, unknown> = {}) => ({
+    process_id: "vidra-api-1:1",
+    role: "api",
+    hostname: "vidra-api-1",
+    pid: 1,
+    version: "0.6.3",
+    commit: "abc1234",
+    state: "running",
+    started_at: "2026-09-07T02:00:00Z",
+    last_seen_at: "2026-09-07T03:00:00Z",
+    last_seen_seconds_ago: 2,
+    settings_poll: "ok",
+    self: true,
+    ...over,
+  });
+
+  it("omits the section entirely when heartbeats are not wired", async () => {
+    render(<StatusPanel />);
+    expect(await screen.findByLabelText("Rate limits")).toBeTruthy();
+    // ABSENT, never an empty list: "no processes are running" is never true of
+    // a page that just answered.
+    expect(screen.queryByLabelText("Processes")).toBeNull();
+  });
+
+  it("lists the worker, not only the process that served the request", async () => {
+    mocks.getSystemStatus.mockResolvedValue(
+      systemStatus(undefined, {
+        process_stale_seconds: 30,
+        processes: [
+          proc(),
+          proc({
+            process_id: "vidra-worker-1:1",
+            role: "worker",
+            hostname: "vidra-worker-1",
+            self: false,
+            last_seen_seconds_ago: 3,
+          }),
+        ],
+      }),
+    );
+    render(<StatusPanel />);
+    const section = await screen.findByLabelText("Processes");
+    expect(within(section).getByText("Worker")).toBeTruthy();
+    expect(within(section).getByText("vidra-worker-1:1")).toBeTruthy();
+    // The reader must be able to tell which row is answering them.
+    expect(within(section).getByText("this process")).toBeTruthy();
+    // And the page explains its own staleness threshold rather than asking the
+    // reader to guess it.
+    expect(within(section).getByText(/more than 30s/)).toBeTruthy();
+  });
+
+  it("marks a process that stopped checking in as stale", async () => {
+    mocks.getSystemStatus.mockResolvedValue(
+      systemStatus(undefined, {
+        status: "degraded",
+        process_stale_seconds: 30,
+        components: {
+          settings_sync: {
+            status: "down",
+            error:
+              "the worker process vidra-worker-1:1 has not checked in for 47s, so it is stopped, wedged or unable to reach the database",
+          },
+        },
+        processes: [
+          proc(),
+          proc({
+            process_id: "vidra-worker-1:1",
+            role: "worker",
+            self: false,
+            state: "stale",
+            last_seen_seconds_ago: 47,
+          }),
+        ],
+      }),
+    );
+    render(<StatusPanel />);
+    const section = await screen.findByLabelText("Processes");
+    expect(within(section).getByText("Stale")).toBeTruthy();
+    expect(within(section).getByText(/47s ago/)).toBeTruthy();
+    // The dependency list must say WHY, in text. It used to live only in a
+    // title attribute, so the reason a dependency was down was invisible
+    // without a mouse.
+    expect(
+      screen.getByText(/has not checked in for 47s/),
+    ).toBeTruthy();
+  });
+
+  it("shows a cleanly stopped replica without alarm", async () => {
+    mocks.getSystemStatus.mockResolvedValue(
+      systemStatus(undefined, {
+        process_stale_seconds: 30,
+        processes: [
+          proc(),
+          proc({
+            process_id: "vidra-worker-1:1",
+            role: "worker",
+            self: false,
+            state: "stopped",
+            last_seen_seconds_ago: 600,
+          }),
+        ],
+      }),
+    );
+    render(<StatusPanel />);
+    const section = await screen.findByLabelText("Processes");
+    // A scale-down is not an outage, and the replica stays visible.
+    expect(within(section).getByText("Stopped")).toBeTruthy();
+    expect(await screen.findByText("Healthy")).toBeTruthy();
+  });
+
+  it("names the failing poll on the process that reported it", async () => {
+    mocks.getSystemStatus.mockResolvedValue(
+      systemStatus(undefined, {
+        status: "degraded",
+        process_stale_seconds: 30,
+        processes: [
+          proc(),
+          proc({
+            process_id: "vidra-worker-1:1",
+            role: "worker",
+            self: false,
+            settings_poll: "failing",
+            settings_poll_error: "permission denied for table settings_version",
+          }),
+        ],
+      }),
+    );
+    render(<StatusPanel />);
+    const section = await screen.findByLabelText("Processes");
+    expect(
+      within(section).getByText(/permission denied for table settings_version/),
+    ).toBeTruthy();
+  });
+
+  it("renders a role or state the client has not learned rather than dropping it", async () => {
+    mocks.getSystemStatus.mockResolvedValue(
+      systemStatus(undefined, {
+        processes: [proc({ role: "scheduler", state: "quiescing", self: false })],
+      }),
+    );
+    render(<StatusPanel />);
+    const section = await screen.findByLabelText("Processes");
+    // Same contract the dependency list and the feature list keep: the server
+    // may ship a role before this client learns its name, and hiding it would
+    // hide a process.
+    expect(within(section).getByText("scheduler")).toBeTruthy();
+    expect(within(section).getByText("quiescing")).toBeTruthy();
+  });
+});
