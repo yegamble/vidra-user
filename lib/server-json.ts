@@ -18,9 +18,18 @@
 //
 // Callers keep their own post-parse validation (an empty body is not the same
 // as a missing one) and their own React cache() wrapper.
+//
+// An UNCACHED read also carries an X-Correlation-ID (and a W3C traceparent when
+// tracing is on) so a server-rendered page joins the vidra-core request it
+// caused; see the comment at the call itself for why a revalidated read must
+// not. Correlation follows `freshness` rather than being a knob of its own,
+// because "is there a backend request per render" is exactly what freshness
+// already answers.
 
+import { requestId } from "@/lib/api/request-id";
 import { clientIpForwardHeaders } from "@/lib/client-ip.server";
 import { internalApiBaseUrl } from "@/lib/config";
+import { injectTraceContext } from "@/lib/observability/trace";
 
 /**
  * "no-store" bypasses the Next data cache entirely; a number revalidates the
@@ -52,11 +61,30 @@ export async function serverJson<T>(
   options: ServerJsonOptions<T>,
 ): Promise<T | null> {
   try {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (options.forwardClientIp) Object.assign(headers, await clientIpForwardHeaders());
+    // CORRELATION, AND WHY ONLY ON AN UNCACHED READ.
+    //
+    // lib/api/client.ts has minted an X-Correlation-ID per request since the
+    // observability spec landed; this second, older server-side fetch path
+    // never grew one, so every server-rendered read reached vidra-core with no
+    // id of any kind and a page view could not be joined to the backend
+    // requests it caused (measured through a header tap in the A35 lab:
+    // traceparent null, correlation null on both of the home page's reads).
+    //
+    // A REVALIDATED read is deliberately left bare. The Next data cache keys on
+    // the request headers, so a per-request header there mints one cache entry
+    // per render — the identical trap lib/client-ip.server.ts's skip list
+    // already documents for the viewer IP — and a read served FROM that cache
+    // makes no backend request to correlate with in the first place.
+    if (options.freshness === "no-store") {
+      headers["x-correlation-id"] = requestId();
+      // W3C traceparent for the active server span, so this hop joins
+      // vidra-core's own trace when OTEL_ENABLED=true. A no-op with tracing off.
+      injectTraceContext(headers);
+    }
     const res = await fetch(`${internalApiBaseUrl}${path}`, {
-      headers: {
-        Accept: "application/json",
-        ...(options.forwardClientIp ? await clientIpForwardHeaders() : {}),
-      },
+      headers,
       ...(options.freshness === "no-store"
         ? { cache: "no-store" as const }
         : { next: { revalidate: options.freshness.revalidateSeconds } }),
