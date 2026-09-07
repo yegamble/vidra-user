@@ -88,3 +88,40 @@ describe("ChannelSyncSection feature flag", () => {
     expect(screen.queryByText("Auto-import is disabled on this instance")).toBeNull();
   });
 });
+
+// A failing sync has to say WHY and WHEN. The backend backs a failing sync off
+// exponentially (vidra-core migration 0135), so "Failed" alone leaves the owner
+// unable to tell an hour's wait from a day's — and unable to judge whether to
+// press Sync now.
+describe("ChannelSyncSection failure backoff", () => {
+  const failing = {
+    id: "sync-1",
+    channel_id: "channel-1",
+    external_channel_url: "https://example.com/@chan",
+    state: "failed",
+    last_error: "could not list the external channel",
+    failure_count: 3,
+    next_run_at: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
+    created_at: "2026-09-01T00:00:00Z",
+    updated_at: "2026-09-07T12:00:00Z",
+  };
+
+  it("shows the safe error, the consecutive-failure count and the next attempt", async () => {
+    mocks.listChannelSyncs.mockResolvedValue({ channel_syncs: [failing] });
+    render(<ChannelSyncSection channels={channels} />);
+    await waitFor(() =>
+      expect(screen.getByText("could not list the external channel")).toBeDefined(),
+    );
+    expect(screen.getByText("3 failed runs in a row · next attempt in 4h")).toBeDefined();
+  });
+
+  it("says nothing about attempts for a healthy sync", async () => {
+    mocks.listChannelSyncs.mockResolvedValue({
+      channel_syncs: [{ ...failing, state: "idle", last_error: "", failure_count: 0 }],
+    });
+    render(<ChannelSyncSection channels={channels} />);
+    await waitFor(() => expect(screen.getByText("Idle")).toBeDefined());
+    expect(screen.queryByText(/next attempt/)).toBeNull();
+    expect(screen.queryByText(/failed run/)).toBeNull();
+  });
+});

@@ -1,5 +1,5 @@
 import { ApiError } from "@/lib/api";
-import type { ChannelSyncState } from "@/lib/api";
+import type { ChannelSync, ChannelSyncState } from "@/lib/api";
 
 // Channel auto-sync vocabulary (UPLOAD-13, backport W2.U5). Pure mappings of the
 // backend's `channel_sync.state` (see vidra-core/api/openapi.yaml
@@ -70,4 +70,47 @@ export function validateChannelSyncUrl(raw: string): string | null {
 // empty state.
 export function isChannelSyncDisabledError(err: unknown): boolean {
   return err instanceof ApiError && (err.status === 503 || err.code === "service_unavailable");
+}
+
+// channelSyncBackoffNote is the one-line explanation of a FAILING sync: how many
+// runs in a row have failed, and when the next attempt lands. The backend backs
+// a failing sync off exponentially (vidra-core migration 0135: the nth
+// consecutive failure retries after CHANNEL_SYNC_INTERVAL x 2^(n-1), capped at
+// CHANNEL_SYNC_BACKOFF_MAX), so "Failed" on its own is no longer enough — the
+// gap between attempts is now the thing the owner cannot guess, and it is what
+// tells them whether Sync now is worth pressing.
+//
+// Returns null when there is nothing to explain: a healthy sync, or one whose run
+// is in progress (while `syncing`, next_run_at is the worker's lease expiry, not
+// a scheduled attempt — rendering it would be a lie). A missing/unparseable
+// next_run_at degrades to the count alone rather than rendering "in NaN".
+export function channelSyncBackoffNote(
+  sync: Pick<ChannelSync, "state" | "failure_count" | "next_run_at">,
+  now: Date = new Date(),
+): string | null {
+  const failures = sync.failure_count ?? 0;
+  if (failures <= 0 || sync.state === "syncing") return null;
+  const count = failures === 1 ? "1 failed run" : `${failures} failed runs in a row`;
+  const at = sync.next_run_at ? new Date(sync.next_run_at).getTime() : Number.NaN;
+  if (Number.isNaN(at)) return count;
+  const secs = Math.floor((at - now.getTime()) / 1000);
+  if (secs <= 0) return `${count} · next attempt due now`;
+  return `${count} · next attempt in ${compactUntil(secs)}`;
+}
+
+// compactUntil renders a positive second count in the coarse units relativeTime
+// uses for the past ("40m", "16h", "2d"), so a row's two time phrases read in one
+// vocabulary.
+//
+// It ROUNDS where relativeTime floors, and the difference is load-bearing here: a
+// scheduled moment is always read some time AFTER it was scheduled, so a 4h
+// backoff has 3h59m left by the time the list is fetched — flooring would render
+// every backoff one unit short and a 4h gap would never once say "4h".
+function compactUntil(secs: number): string {
+  if (secs < 60) return "under a minute";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(secs / 3600);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(secs / 86400)}d`;
 }

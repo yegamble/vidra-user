@@ -12,6 +12,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage, fieldErrors, getInstanceCached } from "@/lib/api";
 import type { Channel, ChannelSync } from "@/lib/api";
 import {
+  channelSyncBackoffNote,
   channelSyncStateClass,
   channelSyncStateLabel,
   isChannelSyncDisabledError,
@@ -284,6 +285,11 @@ function ChannelSyncRow({
   const [phase, setPhase] = useState<RowPhase>("idle");
   const [scheduled, setScheduled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // How many runs in a row have failed and when the next attempt lands. The
+  // backend backs a failing sync off exponentially, so "Failed" alone no longer
+  // tells the owner whether the wait is an hour or a day — nor whether pressing
+  // Sync now (which bypasses the backoff) is worth it.
+  const backoffNote = channelSyncBackoffNote(sync);
 
   async function syncNow() {
     if (phase !== "idle") return;
@@ -347,8 +353,9 @@ function ChannelSyncRow({
         </span>
       </div>
 
-      {sync.last_error ? (
-        <p className="text-xs text-danger">{sync.last_error}</p>
+      {sync.last_error ? <p className="text-xs text-danger">{sync.last_error}</p> : null}
+      {backoffNote ? (
+        <p className="text-xs tabular-nums text-fg-muted">{backoffNote}</p>
       ) : null}
       {scheduled ? (
         <p role="status" className="text-xs text-fg-muted">

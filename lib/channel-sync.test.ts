@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "@/lib/api";
-import type { ChannelSyncState } from "@/lib/api";
+import type { ChannelSync, ChannelSyncState } from "@/lib/api";
 
 import {
+  channelSyncBackoffNote,
   channelSyncStateClass,
   channelSyncStateLabel,
   isChannelSyncDisabledError,
@@ -79,5 +80,72 @@ describe("isChannelSyncDisabledError", () => {
     ).toBe(false);
     expect(isChannelSyncDisabledError(new Error("boom"))).toBe(false);
     expect(isChannelSyncDisabledError(null)).toBe(false);
+  });
+});
+
+// channelSyncBackoffNote — the sentence that makes a failing sync legible to its
+// owner. Without it a row that says "Failed" gives no clue whether the next
+// attempt is in an hour or a day, which is exactly the question the backoff
+// (vidra-core migration 0135) makes worth asking.
+describe("channelSyncBackoffNote", () => {
+  const now = new Date("2026-09-07T12:00:00Z");
+  const sync = (over: Partial<ChannelSync>): ChannelSync =>
+    ({
+      id: "s1",
+      channel_id: "c1",
+      external_channel_url: "https://example.com/@chan",
+      state: "failed",
+      failure_count: 1,
+      next_run_at: "2026-09-07T13:00:00Z",
+      created_at: "2026-09-01T00:00:00Z",
+      updated_at: "2026-09-07T12:00:00Z",
+      ...over,
+    }) as ChannelSync;
+
+  it("is null for a healthy sync — no failures, nothing to explain", () => {
+    expect(channelSyncBackoffNote(sync({ state: "idle", failure_count: 0 }), now)).toBeNull();
+  });
+
+  it("is null while a run is in progress (next_run_at is the lease, not an attempt)", () => {
+    expect(channelSyncBackoffNote(sync({ state: "syncing", failure_count: 3 }), now)).toBeNull();
+  });
+
+  it("names one failed run and when the next attempt lands", () => {
+    expect(channelSyncBackoffNote(sync({ failure_count: 1 }), now)).toBe(
+      "1 failed run · next attempt in 1h",
+    );
+  });
+
+  it("shows the widening gap after repeated failures", () => {
+    expect(
+      channelSyncBackoffNote(
+        sync({ failure_count: 4, next_run_at: "2026-09-08T04:00:00Z" }),
+        now,
+      ),
+    ).toBe("4 failed runs in a row · next attempt in 16h");
+  });
+
+  it("says the attempt is due when the schedule has already passed (e.g. after Sync now)", () => {
+    expect(
+      channelSyncBackoffNote(sync({ failure_count: 2, next_run_at: "2026-09-07T11:59:00Z" }), now),
+    ).toBe("2 failed runs in a row · next attempt due now");
+  });
+
+  it("rounds the countdown so a 4h backoff read a moment later still says 4h", () => {
+    // A scheduled moment is always read AFTER it was scheduled: flooring would
+    // render every backoff one unit short, and a 4h gap would never say "4h".
+    expect(
+      channelSyncBackoffNote(
+        sync({ failure_count: 3, next_run_at: "2026-09-07T15:59:00Z" }),
+        now,
+      ),
+    ).toBe("3 failed runs in a row · next attempt in 4h");
+  });
+
+  it("degrades to the count alone when the backend sent no schedule", () => {
+    // An older core, or a field a proxy stripped: never render "in NaN".
+    expect(
+      channelSyncBackoffNote(sync({ failure_count: 2, next_run_at: undefined as unknown as string }), now),
+    ).toBe("2 failed runs in a row");
   });
 });
