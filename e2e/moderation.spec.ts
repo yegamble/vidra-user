@@ -193,9 +193,11 @@ test("an admin blocks the video from a report card", async ({ page }) => {
     route.fulfill({ json: { reports: [videoReport("r1", "open")], limit: 100, offset: 0 } }),
   );
   let blockedVideoId: string | null = null;
+  let blockBody: unknown = null;
   await page.route(BLOCK, (route) => {
     if (route.request().method() === "POST") {
       blockedVideoId = route.request().url().match(/\/videos\/([^/]+)\/block$/)?.[1] ?? null;
+      blockBody = route.request().postDataJSON();
       return route.fulfill({ status: 204, body: "" });
     }
     return route.continue();
@@ -204,16 +206,23 @@ test("an admin blocks the video from a report card", async ({ page }) => {
   await page.getByRole("link", { name: "Moderation" }).click();
   await expect(page.getByRole("link", { name: "Bad clip" })).toBeVisible();
 
+  // Blocking a LOCAL video is a two-step now (the A16 ruling): the reason is
+  // creator-facing, so the moderator writes one instead of the card silently
+  // forwarding the REPORTER's words to the person they reported.
   const blocked = page.waitForResponse(
     (r) => BLOCK.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   await page.getByRole("button", { name: "Block video" }).click();
+  await page.getByLabel("Block reason").fill("Third-party music");
+  await page.getByRole("button", { name: "Confirm block" }).click();
   await blocked;
 
   // The card reflects the block and offers a link to manage it.
   await expect(page.getByText("Video blocked")).toBeVisible();
   await expect(page.getByRole("link", { name: "Manage" })).toBeVisible();
   expect(blockedVideoId).toBe("v1");
+  // The moderator's words, not the reporter's — the creator reads this.
+  expect(blockBody).toEqual({ reason: "Third-party music" });
 });
 
 test("a remote-video report shows origin context and blocks the remote video", async ({
@@ -248,6 +257,10 @@ test("a remote-video report shows origin context and blocks the remote video", a
   );
 
   // Block the remote video from the card, carrying the report reason for audit.
+  // Remote blocks stay one click and still forward the report's reason: a
+  // remote_video_blocks row reaches no local creator and sends no notification,
+  // so the A16 ruling that made LOCAL block reasons creator-facing does not
+  // apply here. If that ever changes, this becomes the same leak.
   const blocked = page.waitForResponse(
     (r) =>
       /\/api\/v1\/admin\/remote-videos\/[^/]+\/block$/.test(r.url()) &&

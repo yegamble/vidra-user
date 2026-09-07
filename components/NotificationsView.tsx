@@ -29,6 +29,7 @@ export function NotificationTypeIcon({ type }: { type: string }) {
       return <MessageCircleIcon size={16} />;
     case "video_rejected":
     case "video_blocked":
+    case "video_unblocked":
     case "report_resolved":
       return <ShieldIcon size={16} />;
     case "new_report":
@@ -53,6 +54,11 @@ const NOTIF_CHIP: Record<string, string> = {
   message: "bg-tile-green/12 text-tile-green",
   video_rejected: "bg-tile-red/12 text-tile-red",
   video_blocked: "bg-tile-red/12 text-tile-red",
+  // The restoration is the one piece of GOOD moderation news, so it takes the
+  // shield in green rather than the take-down's red. Without an entry here it
+  // fell through to the follow glyph in the neutral chip — caught in Chromium,
+  // and the same failure class as a missing describeNotification case.
+  video_unblocked: "bg-tile-green/12 text-tile-green",
   report_resolved: "bg-tile-orange/12 text-tile-orange",
   new_report: "bg-tile-red/12 text-tile-red",
   new_video: "bg-accent/12 text-accent",
@@ -128,16 +134,32 @@ export function describeNotification(n: Notification): {
   if (n.type === "video_blocked") {
     // Distinct from video_rejected in every way that matters to the person
     // reading it: this video WAS published, it is now hidden from everyone
-    // including its owner, and a moderator can lift the block. No reason is
-    // carried — block reasons are staff-only until that ruling is settled — so
-    // the copy states the fact and links to the Studio list, which is the one
-    // place the creator can still see the video (badged "blocked"); the watch
-    // page 404s for them like it does for everyone else.
+    // including its owner, and a moderator can lift the block. The A16 ruling
+    // settled what slice 2 left open — the moderator's reason is now shown to
+    // the creator, because someone told only that their work was taken down can
+    // neither appeal it nor avoid repeating it. When the moderator wrote nothing
+    // (or the block has since been lifted, which deletes the reason) the copy is
+    // exactly the neutral notice it was. The link goes to the Studio list, the
+    // one place the creator can still see the video (badged "blocked"); the
+    // watch page 404s for them like it does for everyone else.
+    const what = n.video_title ? `“${n.video_title}”` : "one of your videos";
+    const why = n.moderation_note?.trim();
+    return {
+      lead: "A moderator",
+      rest: ` blocked ${what} — it is no longer available to viewers${why ? `: ${why}` : ""}`,
+      href: "/studio/content",
+    };
+  }
+  if (n.type === "video_unblocked") {
+    // The other half of video_blocked, and the reason it is its own type: a
+    // second video_blocked would read as a SECOND takedown in an inbox that
+    // renders by type. There is no prose — nothing needs explaining about a
+    // restoration — and the link goes to the video itself, which works again.
     const what = n.video_title ? `“${n.video_title}”` : "one of your videos";
     return {
       lead: "A moderator",
-      rest: ` blocked ${what} — it is no longer available to viewers`,
-      href: "/studio/content",
+      rest: ` restored ${what} — it is available to viewers again`,
+      href: n.video_id ? `/videos/${n.video_id}` : "/studio/content",
     };
   }
   if (n.type === "report_resolved") {

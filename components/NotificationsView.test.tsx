@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
+import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Notification } from "@/lib/api";
 
 import { TYPE_LABELS } from "./NotificationPrefsView";
-import { describeNotification } from "./NotificationsView";
+import { NotificationTypeIcon, describeNotification } from "./NotificationsView";
 
 function notif(overrides: Partial<Notification>): Notification {
   return {
@@ -114,16 +115,65 @@ describe("describeNotification", () => {
   // the rejection copy would tell a creator their upload never published, which
   // is false, and the type-union switch falling through to "started following"
   // is this repo's most-repeated frontend bug.
-  it("renders video_blocked as a take-down of a published video, without a reason", () => {
+  it("renders video_blocked as a take-down of a published video, carrying the moderator's reason", () => {
     const { lead, rest, href } = describeNotification(
-      notif({ type: "video_blocked", video_id: "v-1", video_title: "Clip" }),
+      notif({
+        type: "video_blocked",
+        video_id: "v-1",
+        video_title: "Clip",
+        moderation_note: "Third-party music you do not hold the rights to",
+      }),
     );
     expect(lead).toBe("A moderator");
     expect(rest).toContain("Clip");
     expect(rest).toContain("blocked");
+    // The A16 ruling: a creator told only that their work was taken down can
+    // neither appeal it nor avoid repeating it.
+    expect(rest).toContain("Third-party music you do not hold the rights to");
     expect(rest).not.toContain("started following");
     expect(rest).not.toContain("rejected");
     expect(href).toBe("/studio/content");
+  });
+
+  // A block lifted before the creator read the notice deletes the reason, and a
+  // moderator may have written none. Both land here, and the copy has to still
+  // be a whole sentence rather than one ending in a dangling colon.
+  it("renders video_blocked without a reason as the neutral notice it always was", () => {
+    const { rest } = describeNotification(
+      notif({ type: "video_blocked", video_id: "v-1", video_title: "Clip" }),
+    );
+    expect(rest).toBe(" blocked “Clip” — it is no longer available to viewers");
+    expect(rest).not.toContain(":");
+  });
+
+  // The loop video_blocked opened: before this type existed the creator was told
+  // their video had been taken down and then nothing at all when it came back,
+  // so the only way to find out was to keep checking. A missing case here would
+  // render it as "started following", this repo's most-repeated frontend bug.
+  it("renders video_unblocked as a restoration, linking to the video that works again", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({ type: "video_unblocked", video_id: "v-1", video_title: "Clip" }),
+    );
+    expect(lead).toBe("A moderator");
+    expect(rest).toContain("restored");
+    expect(rest).toContain("Clip");
+    expect(rest).not.toContain("started following");
+    expect(rest).not.toContain("blocked");
+    expect(href).toBe("/videos/v-1");
+  });
+});
+
+// The chip is decoration, but the WRONG decoration is a claim: the follow glyph
+// in a neutral circle is what an unrecognised type falls through to, which is
+// how a moderation event comes to look like a new follower. Caught in Chromium
+// on the first walkthrough of this type.
+describe("NotificationTypeIcon", () => {
+  it("gives video_unblocked the moderation shield, not the follow glyph", () => {
+    const { container } = render(<NotificationTypeIcon type="video_unblocked" />);
+    const blocked = render(<NotificationTypeIcon type="video_blocked" />).container.innerHTML;
+    const follow = render(<NotificationTypeIcon type="follow" />).container.innerHTML;
+    expect(container.innerHTML).toBe(blocked);
+    expect(container.innerHTML).not.toBe(follow);
   });
 });
 
@@ -140,6 +190,7 @@ describe("notification pref labels", () => {
       "report_resolved",
       "video_rejected",
       "video_blocked",
+      "video_unblocked",
     ]) {
       expect(TYPE_LABELS[type], `missing TYPE_LABELS entry for ${type}`).toBeDefined();
     }

@@ -297,7 +297,10 @@ function ReportDetail({
   const [note, setNote] = useState("");
   const [rowState, setRowState] = useState<RowState>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [blockState, setBlockState] = useState<"idle" | "blocking" | "blocked">("idle");
+  const [blockState, setBlockState] = useState<"idle" | "composing" | "blocking" | "blocked">(
+    "idle",
+  );
+  const [blockReason, setBlockReason] = useState("");
   const [blockError, setBlockError] = useState<string | null>(null);
   const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "deleting">("idle");
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -330,14 +333,16 @@ function ReportDetail({
     }
   }
 
-  // Block the reported video, recording the report's reason for the audit trail.
+  // Block the reported video with a reason the MODERATOR wrote. It used to send
+  // the reporter's own words, which was harmless while block reasons were
+  // staff-only and is not now that the creator reads them (the A16 ruling).
   // Independent of resolution — a moderator may block without resolving.
   async function blockVideo(videoId: string) {
     if (blockState === "blocking") return;
     setBlockState("blocking");
     setBlockError(null);
     try {
-      await api.blockVideo(videoId, { reason: report.reason });
+      await api.blockVideo(videoId, { reason: blockReason.trim() });
       setBlockState("blocked");
     } catch (err) {
       setBlockError(errorMessage(err, "Could not block this video."));
@@ -417,6 +422,33 @@ function ReportDetail({
           </label>
         ) : null}
 
+        {/* The block reason, written HERE rather than copied from the report.
+            Until the A16 ruling this field sent the REPORTER's words to the
+            server, which was harmless while block reasons were staff-only —
+            they are now shown to the creator, and a reporter's prose about the
+            person they reported is the last thing that should reach them.
+            Empty is allowed: the creator then reads the neutral take-down
+            notice, exactly as before this field existed. */}
+        {blockState === "composing" ? (
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-fg">
+              Why this video is being blocked
+            </span>
+            <span className="mb-1.5 block text-xs text-fg-muted">
+              The creator sees this on their video and in their notification, so write it for
+              them. Leave it empty and they are only told the video was blocked.
+            </span>
+            <textarea
+              aria-label="Block reason"
+              rows={2}
+              maxLength={MAX_NOTE_LEN}
+              value={blockReason}
+              onChange={(e) => setBlockReason(e.target.value)}
+              className="focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
+            />
+          </label>
+        ) : null}
+
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {blockError ? <p className="text-sm text-danger">{blockError}</p> : null}
         {deleteError ? <p className="text-sm text-danger">{deleteError}</p> : null}
@@ -443,15 +475,29 @@ function ReportDetail({
           {report.target_type === "video" && report.video_id ? (
             blockState === "blocked" ? (
               <BlockedNote manageHref="/moderation/blocked" />
-            ) : (
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={blockState === "blocking"}
-                onClick={() => void blockVideo(report.video_id as string)}
-              >
-                {blockState === "blocking" ? "Blocking…" : "Block video"}
+            ) : blockState === "idle" ? (
+              <Button variant="danger" size="sm" onClick={() => setBlockState("composing")}>
+                Block video
               </Button>
+            ) : (
+              <>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={blockState === "blocking"}
+                  onClick={() => void blockVideo(report.video_id as string)}
+                >
+                  {blockState === "blocking" ? "Blocking…" : "Confirm block"}
+                </Button>
+                <Button
+                  variant="tonal"
+                  size="sm"
+                  disabled={blockState === "blocking"}
+                  onClick={() => setBlockState("idle")}
+                >
+                  Cancel
+                </Button>
+              </>
             )
           ) : null}
           {report.target_type === "remote_video" && report.remote_video_id ? (

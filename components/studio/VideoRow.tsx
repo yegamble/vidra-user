@@ -425,6 +425,16 @@ export function VideoRow({
           <p className="mt-1 text-xs text-danger">
             Blocked by moderation — this video is not available to viewers, including you, until a
             moderator lifts the block. Nothing else about it has changed.
+            {/* The moderator's reason, creator-facing since the A16 ruling: being
+                told only that something was taken down leaves nothing to appeal
+                or to fix on the next upload. Absent when they wrote none, and
+                the sentence above still stands on its own. */}
+            {video.block_reason?.trim() ? (
+              <>
+                {" "}
+                <span className="font-medium">Reason:</span> {video.block_reason.trim()}
+              </>
+            ) : null}
           </p>
         ) : null}
       </div>
