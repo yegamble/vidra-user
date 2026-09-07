@@ -216,7 +216,9 @@ test("a failed sync shows its safe last_error, a Failed pill and when it will re
   await openStudio(page);
 
   const row = page.getByRole("listitem").filter({ hasText: "youtube.com/@example" });
-  await expect(row.getByText("Failed")).toBeVisible();
+  // exact: true — the retry line below also contains the word "failed", so a
+  // substring match resolves to two elements and trips Playwright strict mode.
+  await expect(row.getByText("Failed", { exact: true })).toBeVisible();
   await expect(row.getByText("the external channel could not be resolved")).toBeVisible();
   await expect(row.getByText("3 failed runs in a row · next attempt in 4h")).toBeVisible();
 });
