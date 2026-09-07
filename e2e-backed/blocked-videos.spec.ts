@@ -89,7 +89,7 @@ test("the remote block-list tab loads (empty) against the real backend", async (
 
 // Proves the block round trip from the moderation report queue: a viewer reports a
 // published video (seeded via the API), the deterministic admin logs in, opens the
-// queue, and clicks "Block video" on the report card — the video is then hidden
+// queue, writes a block reason and confirms on the report card — the video is hidden
 // from public surfaces and present in the block-list (DB-confirmed via the admin
 // block-list API + the now-404 public video detail).
 test("an admin blocks a reported video from the moderation queue", async ({ page, request }) => {
@@ -120,6 +120,10 @@ test("an admin blocks a reported video from the moderation queue", async ({ page
     (r) => /\/admin\/videos\/[^/]+\/block$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   await detail.getByRole("button", { name: "Block video" }).click();
+  // Two steps since the A16 ruling: the reason is creator-facing, so the
+  // moderator writes one rather than the card forwarding the reporter's words.
+  await detail.getByLabel("Block reason").fill("Blocked from the moderation queue");
+  await detail.getByRole("button", { name: "Confirm block" }).click();
   await blocked;
   await expect(detail.getByText("Video blocked")).toBeVisible();
 
