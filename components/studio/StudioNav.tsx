@@ -8,16 +8,20 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { channelAvatarUrl } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useLiveAvailable } from "@/lib/live/availability";
 
 import { ChannelProtocolBadges } from "./ChannelProtocolBadges";
 import { useStudio } from "./StudioContext";
 
 // The studio tab strip — the five surfaces the studio is split into. Active state
 // is derived from the pathname (exact match; the sub-routes are distinct paths).
-const TABS: ReadonlyArray<{ href: string; label: string }> = [
+// The Live tab is dropped when the instance reports `features.live: false` (the
+// operator's switch AND the RTMP ingest capability); the route itself stays
+// reachable and explains itself, so a deep link is never a dead end.
+const TABS: ReadonlyArray<{ href: string; label: string; live?: true }> = [
   { href: "/studio", label: "Dashboard" },
   { href: "/studio/content", label: "Content" },
-  { href: "/studio/live", label: "Live" },
+  { href: "/studio/live", label: "Live", live: true },
   { href: "/studio/analytics", label: "Analytics" },
   { href: "/studio/channel", label: "Channel" },
 ];
@@ -30,6 +34,12 @@ const TABS: ReadonlyArray<{ href: string; label: string }> = [
 // its own onboarding state).
 export function StudioNav() {
   const pathname = usePathname();
+  const liveAvailable = useLiveAvailable();
+  // Keep the tab while the user is standing on it, so the strip never loses the
+  // page the reader is looking at.
+  const tabs = TABS.filter(
+    (tab) => liveAvailable || tab.live !== true || pathname === tab.href,
+  );
 
   return (
     <nav
@@ -38,7 +48,7 @@ export function StudioNav() {
     >
       <ChannelSwitcher />
       <div className="flex gap-1 overflow-x-auto pb-1">
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const active = pathname === tab.href;
           return (
             <Link

@@ -6,9 +6,24 @@ const LIVE = /\/api\/v1\/live(\?|$)/;
 const REFRESH = /\/api\/v1\/auth\/refresh$/;
 const INSTANCE = /\/api\/v1\/instance$/;
 
+// The standalone auth routes, and what each one's <h1> reads.
+//
+// The brand on these screens is the INSTANCE's name, not the product's: the
+// wordmark home link, "Sign in to <name>" and "Create your <name> account" all
+// come from GET /instance `name`, the same source the tab title uses. The
+// product mark survives as the small, non-link "Powered by Vidra" line.
+//
+// This suite runs with NO BACKEND — page.route mocks the browser's requests,
+// but the instance snapshot these pages read is fetched server-side by the Next
+// server, which has nothing to ask — so every one of them renders the FALLBACK,
+// which is the product name. That is exactly the state a build-time prerender
+// ships in, so pinning it here is worth more than pinning a stub name would be;
+// the instance-name form itself is pinned by LoginForm.test.tsx.
+const INSTANCE_FALLBACK_NAME = "Vidra";
+
 const standaloneAuthRoutes = [
-  { path: "/login", heading: "Vidra" },
-  { path: "/signup", heading: "Create your account" },
+  { path: "/login", heading: INSTANCE_FALLBACK_NAME },
+  { path: "/signup", heading: `Create your ${INSTANCE_FALLBACK_NAME} account` },
   { path: "/reset-password", heading: "Reset your password" },
   { path: "/reset-password/confirm", heading: "Choose a new password" },
   { path: "/verify-email/confirm", heading: "Verify your email" },
@@ -380,11 +395,18 @@ for (const viewport of [
       await expect(page.getByRole("heading", { name: route.heading })).toBeVisible();
       await expect(page.getByRole("banner")).toHaveCount(0);
       await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
+      // The wordmark is the instance's name (the fallback here — see above) and
+      // stays the ONLY link in `main`: the "Powered by" attribution beneath the
+      // task is deliberately plain text, so a focused auth flow keeps exactly
+      // one exit.
       const homeLink = page
         .getByRole("main")
-        .getByRole("link", { name: "Vidra", exact: true });
+        .getByRole("link", { name: INSTANCE_FALLBACK_NAME, exact: true });
       await expect(homeLink).toHaveAttribute("href", "/");
       await expectMinimumTargetSize(homeLink, 1);
+      await expect(
+        page.getByRole("main").getByText(`Powered by ${INSTANCE_FALLBACK_NAME}`),
+      ).toBeVisible();
       await expectNoHorizontalScroll(page);
     }
   });

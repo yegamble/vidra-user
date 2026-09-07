@@ -1,4 +1,4 @@
-import { AuthPage, AuthPageHeading } from "@/components/auth/AuthPage";
+import { AuthPage, AuthPageHeading, authBrandName } from "@/components/auth/AuthPage";
 import { SignupForm } from "@/components/auth/SignupForm";
 import { OwnerClaimCard } from "@/components/OwnerClaimCard";
 import { getInstanceConfig } from "@/lib/instance-config.server";
@@ -17,7 +17,10 @@ export default async function SignupPage({
       {/* First-run: every signup path is refused until the server has an
           owner, so say so before the form wastes anyone's time. */}
       <OwnerClaimCard instance={instance} className="mb-6" />
-      <AuthPageHeading title="Create your account" />
+      <AuthPageHeading
+        title={`Create your ${authBrandName(instance?.name)} account`}
+        instanceName={instance?.name}
+      />
       <SignupForm
         oauthPending={sp.oauth === "1"}
         oauthError={sp.oauth_error ?? ""}

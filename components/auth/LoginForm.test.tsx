@@ -93,3 +93,34 @@ describe("LoginForm identifier field", () => {
     expect(routerPush).not.toHaveBeenCalled();
   });
 });
+
+// The sign-in screen names the INSTANCE, not the software running it. The tab
+// title and the app header have always shown the operator's name; the auth
+// screens were pinned to the product wordmark, so a renamed instance still read
+// "Sign in to Vidra". The product mark survives as the small "Powered by"
+// line rendered by AuthPage.
+describe("LoginForm branding", () => {
+  it("names the instance in the heading and the home wordmark", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: [], atproto_login: false });
+    render(<LoginForm instanceName="A17 Lab Tube" />);
+    await screen.findByLabelText("Email or username");
+    expect(screen.getByText("Sign in to A17 Lab Tube")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "A17 Lab Tube" }).getAttribute("href")).toBe("/");
+    expect(screen.queryByText("Sign in to Vidra")).toBeNull();
+  });
+
+  it("falls back to the product name when the instance has none", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: [], atproto_login: false });
+    // Undefined is what a build-time prerender sees: there is no backend to ask.
+    render(<LoginForm />);
+    await screen.findByLabelText("Email or username");
+    expect(screen.getByText("Sign in to Vidra")).toBeTruthy();
+  });
+
+  it("treats a whitespace-only instance name as no name", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: [], atproto_login: false });
+    render(<LoginForm instanceName="   " />);
+    await screen.findByLabelText("Email or username");
+    expect(screen.getByText("Sign in to Vidra")).toBeTruthy();
+  });
+});

@@ -25,7 +25,7 @@ export default async function ClaimOwnerPage({
   if (instance && !isOwnerClaimPending(instance)) redirect("/");
   return (
     <AuthPage>
-      <ClaimOwnerForm fromSignup={sp.from === "signup"} />
+      <ClaimOwnerForm fromSignup={sp.from === "signup"} instanceName={instance?.name} />
     </AuthPage>
   );
 }

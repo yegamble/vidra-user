@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { AuthWordmark } from "@/components/auth/AuthPage";
+import { AuthWordmark, authBrandName } from "@/components/auth/AuthPage";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
 import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
@@ -33,6 +33,7 @@ export function LoginForm({
   oauthError = "",
   initialProviders,
   initialAtprotoLogin,
+  instanceName,
 }: {
   /** True when the URL carried the ?oauth=1 return_to marker. */
   oauthPending?: boolean;
@@ -42,6 +43,12 @@ export function LoginForm({
   initialProviders?: string[];
   /** SSR snapshot of GET /instance atproto_login (Bluesky / any PDS handle login). */
   initialAtprotoLogin?: boolean;
+  /**
+   * SSR snapshot of GET /instance `name` — what this person is signing IN to.
+   * Undefined/empty falls back to the product name (a build-time prerender has
+   * no backend to ask).
+   */
+  instanceName?: string | null;
 }) {
   const router = useRouter();
   const { status, login, completeMfaChallenge } = useSession();
@@ -277,9 +284,11 @@ export function LoginForm({
     >
       <div className="mb-6 flex flex-col items-center gap-3 text-center">
         <h1>
-          <AuthWordmark brandClassName="text-[30px]" />
+          <AuthWordmark brandClassName="text-[30px]" instanceName={instanceName} />
         </h1>
-        <p className="text-title2 text-fg">Sign in to Vidra</p>
+        {/* The destination is the INSTANCE, not the software running it — the
+            same name the tab title and the app header already show. */}
+        <p className="text-title2 text-fg">Sign in to {authBrandName(instanceName)}</p>
       </div>
 
       {errorBanner}

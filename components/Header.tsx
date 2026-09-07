@@ -12,6 +12,7 @@ import { SearchAutocomplete, SearchAutocompleteFallback } from "@/components/Sea
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { isStandaloneRoute } from "@/lib/app-shell";
 import { brandingAssetUrl } from "@/lib/branding";
+import { useLiveAvailable } from "@/lib/live/availability";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 
 // App shell header (design templates "Vidra App" + "Vidra Desktop"): the brand
@@ -44,27 +45,38 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 // row is a real link (deep-linking into the studio surface that auto-opens the
 // flow). Protocol/status color stays inside the glyphs only: the upload arrow
 // wears the accent, Go live wears the `live` token.
-const CREATE_ITEMS: DropdownItem[] = [
-  {
-    label: "Upload video",
-    href: "/studio/content?upload=1",
-    icon: <UploadIcon size={18} className="text-accent-text" />,
-  },
-  {
-    label: "Go live",
-    href: "/studio/live?new=1",
-    icon: <TvIcon size={18} className="text-live" />,
-  },
-  { type: "separator" },
-  {
-    label: "New channel",
-    href: "/studio/channel?create=1",
-    icon: <PlusSquareIcon size={18} />,
-  },
-];
+//
+// The Go-live row is dropped when the instance reports `features.live: false`
+// (the setting AND the RTMP ingest capability). A menu row that can only ever
+// answer 403/503 is worse than no row.
+function createItems(liveAvailable: boolean): DropdownItem[] {
+  return [
+    {
+      label: "Upload video",
+      href: "/studio/content?upload=1",
+      icon: <UploadIcon size={18} className="text-accent-text" />,
+    },
+    ...(liveAvailable
+      ? [
+          {
+            label: "Go live",
+            href: "/studio/live?new=1",
+            icon: <TvIcon size={18} className="text-live" />,
+          } as DropdownItem,
+        ]
+      : []),
+    { type: "separator" },
+    {
+      label: "New channel",
+      href: "/studio/channel?create=1",
+      icon: <PlusSquareIcon size={18} />,
+    },
+  ];
+}
 
 export function Header({ instance = null }: { instance?: InstanceConfigSnapshot | null }) {
   const pathname = usePathname();
+  const liveAvailable = useLiveAvailable();
 
   if (isStandaloneRoute(pathname)) {
     return null;
@@ -138,7 +150,7 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
                 Create
               </>
             }
-            items={CREATE_ITEMS}
+            items={createItems(liveAvailable)}
           />
         </div>
         <NotificationsBell />
