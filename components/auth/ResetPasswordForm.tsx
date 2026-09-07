@@ -11,7 +11,16 @@ import { authApi, errorMessage } from "@/lib/api";
 // Requests a password-reset link. The backend always answers 202 (it never
 // reveals whether the email belongs to an account), so on success we show the
 // same neutral confirmation regardless — keeping the flow enumeration-safe.
-export function ResetPasswordForm() {
+//
+// mailEnabled is the instance's /instance features.mail boot signal. When the
+// deployment has no outbound mail path the endpoint still answers 202 and still
+// mints a token, so this form's success copy ("check your inbox") was a
+// promise nothing could keep: recovery is the one flow where a silent dead end
+// costs the user their account. We say so instead, and never ask for the
+// address. It defaults to true so an older backend that does not report the
+// flag — and the mocked e2e suite, which runs with no backend at all — behave
+// exactly as before.
+export function ResetPasswordForm({ mailEnabled = true }: { mailEnabled?: boolean }) {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -31,6 +40,26 @@ export function ResetPasswordForm() {
       );
       setSubmitting(false);
     }
+  }
+
+  if (!mailEnabled) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Alert>
+          This instance cannot send email yet, so it cannot send you a reset link.
+          Ask whoever runs it to set up outgoing mail (SMTP), or to reset your
+          password for you.
+        </Alert>
+        <p className="text-center text-subhead text-fg-muted">
+          <Link
+            href="/login"
+            className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80"
+          >
+            Back to sign in
+          </Link>
+        </p>
+      </div>
+    );
   }
 
   if (sent) {

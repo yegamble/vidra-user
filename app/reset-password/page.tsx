@@ -7,7 +7,10 @@ export default async function ResetPasswordPage() {
   return (
     <AuthPage>
       <AuthPageHeading title="Reset your password" instanceName={instance?.name} />
-      <ResetPasswordForm />
+      {/* features.mail is the boot signal for "this deployment has an outbound
+          mail path at all". Without one the request still answers 202 and the
+          user would be told to check an inbox nothing was sent to. */}
+      <ResetPasswordForm mailEnabled={instance?.features?.mail !== false} />
     </AuthPage>
   );
 }

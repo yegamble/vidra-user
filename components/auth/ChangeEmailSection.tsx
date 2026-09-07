@@ -22,8 +22,15 @@ import type { EmailChangeState } from "@/lib/api";
  *
  * The typed password lives in component state, is cleared on success, and is
  * never logged or put in a URL.
+ *
+ * mailEnabled is the /instance features.mail boot signal. With no outbound mail
+ * path the API still answers 202 and still parks a pending change whose
+ * confirmation nobody will ever receive — the card would say "waiting for
+ * confirmation at …" forever — so the form is withheld and the reason given
+ * instead. Defaults to true so an older backend, and the mocked e2e suite,
+ * behave exactly as before.
  */
-export function ChangeEmailSection() {
+export function ChangeEmailSection({ mailEnabled = true }: { mailEnabled?: boolean }) {
   const { user } = useSession();
   const titleId = useId();
   const emailId = useId();
@@ -143,7 +150,12 @@ export function ChangeEmailSection() {
         </Alert>
       ) : null}
 
-      {loading ? null : isPending ? (
+      {!mailEnabled ? (
+        <Alert as="div">
+          This instance cannot send email yet, so it cannot confirm a new address.
+          Ask whoever runs it to set up outgoing mail (SMTP).
+        </Alert>
+      ) : loading ? null : isPending ? (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-fg">
             Waiting for confirmation at{" "}

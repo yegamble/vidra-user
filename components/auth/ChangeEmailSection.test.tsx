@@ -160,3 +160,19 @@ describe("ChangeEmailSection", () => {
     expect(screen.getByText("ada@example.test")).toBeTruthy();
   });
 });
+
+// A05: with no outbound mail path the API still answers 202 and parks a pending
+// change whose confirmation nobody receives, so the card would read "waiting for
+// confirmation at …" forever. It withholds the form and says why instead.
+it("explains instead of offering the form when the instance cannot send mail", async () => {
+  getEmailChange.mockResolvedValue({ pending: false });
+  render(<ChangeEmailSection mailEnabled={false} />);
+
+  await waitFor(() => {
+    expect(screen.getByText(/cannot send email yet/i)).toBeTruthy();
+  });
+  expect(screen.queryByLabelText(NEW_EMAIL)).toBeNull();
+  expect(requestEmailChange).not.toHaveBeenCalled();
+  // The address itself is still shown: it is the fact the user came for.
+  expect(screen.getByText("ada@example.test")).toBeTruthy();
+});

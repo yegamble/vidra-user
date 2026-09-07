@@ -18,7 +18,7 @@ import { SignInGate } from "@/components/SignInGate";
 // download affordances and an explicit "I saved them" confirmation), and the
 // password-confirmed disable flow. The secret and recovery codes exist only in
 // component state — never in logs, URLs, or storage.
-export function SecuritySettingsView() {
+export function SecuritySettingsView({ mailEnabled = true }: { mailEnabled?: boolean }) {
   const { status, logoutEverywhere } = useSession();
 
   // `!== "authed"` rather than `=== "anon"`: this view used to rely on a
@@ -42,7 +42,7 @@ export function SecuritySettingsView() {
       {/* Email then password: the address is how the account is recovered, so
           it is the more consequential of the two, and both are gated on the
           same current-password proof. */}
-      <ChangeEmailSection />
+      <ChangeEmailSection mailEnabled={mailEnabled} />
       {/* Password sits next to the devices control because they are the same
           decision: changing the password signs the other devices out. */}
       <ChangePasswordSection />
