@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   updateAdminUser: vi.fn(),
   deleteAdminUser: vi.fn(),
   transferInstanceOwnership: vi.fn(),
+  reloadUser: vi.fn(),
   // The signed-in viewer, mutable so a test can be the OWNER rather than just
   // an admin — the ownership-transfer control turns on exactly that difference.
   session: { user: { id: "admin-1", role: "admin" } } as { user: Record<string, unknown> },
@@ -21,7 +22,7 @@ vi.mock("@/components/RoleGate", () => ({
   RoleGate: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/components/auth/AuthProvider", () => ({
-  useSession: () => mocks.session,
+  useSession: () => ({ ...mocks.session, reloadUser: mocks.reloadUser }),
 }));
 vi.mock("@/lib/api", () => ({
   api: {
@@ -73,6 +74,8 @@ beforeEach(() => {
   mocks.updateAdminUser.mockReset();
   mocks.deleteAdminUser.mockReset();
   mocks.transferInstanceOwnership.mockReset();
+  mocks.reloadUser.mockReset();
+  mocks.reloadUser.mockResolvedValue(undefined);
   mocks.transferInstanceOwnership.mockResolvedValue({
     new_owner_id: "admin-2",
     new_owner_username: "avery",
@@ -591,8 +594,11 @@ describe("AdminUsersView ownership transfer", () => {
         password: "supersecret",
       }),
     );
-    // The badge has to move without a manual refresh — a fetch-once list would
-    // keep showing the caller as owner after they stopped being one.
+    // Two things have to refresh, and both were caught missing in Chromium: the
+    // LIST, or the OWNER badge stays on the caller; and the SESSION, or the
+    // caller — who is no longer the owner — is still offered a transfer that
+    // core would answer 403 owner_only.
+    await waitFor(() => expect(mocks.reloadUser).toHaveBeenCalled());
     await waitFor(() => expect(mocks.getAdminUsers.mock.calls.length).toBeGreaterThan(1));
   });
 

@@ -69,7 +69,8 @@ type Gate = { allowed: true } | { allowed: false; reason: string };
 
 const GATE_OPEN: Gate = { allowed: true };
 
-const SELF_REASON = "You can't change your own role or status, or delete your own account.";
+const SELF_REASON =
+  "You can't change your own role or status, or delete your own account.";
 const OWNER_REASON =
   "This is the instance owner's account — the account that completed first-run setup. Another administrator can't change its role, deactivate it or delete it.";
 const LAST_ADMIN_REASON =
@@ -87,7 +88,12 @@ function rosterIsComplete(loaded: number, total: number, query: string) {
 
 function accountGuard(
   user: AdminUser,
-  { isSelf, users, total, query }: { isSelf: boolean; users: AdminUser[]; total: number; query: string },
+  {
+    isSelf,
+    users,
+    total,
+    query,
+  }: { isSelf: boolean; users: AdminUser[]; total: number; query: string },
 ): Gate {
   if (isSelf) return { allowed: false, reason: SELF_REASON };
   if (user.is_owner) return { allowed: false, reason: OWNER_REASON };
@@ -95,7 +101,8 @@ function accountGuard(
   const liveAdmins = users.filter(
     (u) => u.role === "admin" && u.is_active && u.deleted_at == null,
   );
-  const targetIsLive = user.role === "admin" && user.is_active && user.deleted_at == null;
+  const targetIsLive =
+    user.role === "admin" && user.is_active && user.deleted_at == null;
   if (targetIsLive && liveAdmins.length <= 1) {
     return { allowed: false, reason: LAST_ADMIN_REASON };
   }
@@ -154,7 +161,10 @@ export function AdminUsersView() {
     <RoleGate minRole="admin" action="manage users">
       {user ? (
         <ListBoundary label="users">
-          <UsersList currentUserId={user.id} viewerIsOwner={user.is_owner === true} />
+          <UsersList
+            currentUserId={user.id}
+            viewerIsOwner={user.is_owner === true}
+          />
         </ListBoundary>
       ) : null}
     </RoleGate>
@@ -195,7 +205,8 @@ function UsersList({
 
   // Reflect a saved edit back into the list (the PATCH returns the updated user).
   const onUpdated = useCallback(
-    (updated: AdminUser) => patch((all) => all.map((u) => (u.id === updated.id ? updated : u))),
+    (updated: AdminUser) =>
+      patch((all) => all.map((u) => (u.id === updated.id ? updated : u))),
     [patch],
   );
 
@@ -246,16 +257,20 @@ function UsersList({
 
   const visible = useMemo(() => {
     if (filter === "staff") return users.filter((u) => u.role !== "user");
-    if (filter === "deactivated") return users.filter((u) => u.is_active === false);
+    if (filter === "deactivated")
+      return users.filter((u) => u.is_active === false);
     return users;
   }, [users, filter]);
 
-  const selected = selectedId ? users.find((u) => u.id === selectedId) ?? null : null;
+  const selected = selectedId
+    ? (users.find((u) => u.id === selectedId) ?? null)
+    : null;
 
   // One guard per account, from the loaded rows. Recomputed with the page, so
   // promoting a second admin releases the last-admin gate on the next render.
   const guardFor = useCallback(
-    (u: AdminUser) => accountGuard(u, { isSelf: u.id === currentUserId, users, total, query }),
+    (u: AdminUser) =>
+      accountGuard(u, { isSelf: u.id === currentUserId, users, total, query }),
     [currentUserId, users, total, query],
   );
 
@@ -297,16 +312,22 @@ function UsersList({
             options={[
               { value: "all", label: "All", count: counts.all },
               { value: "staff", label: "Staff", count: counts.staff },
-              { value: "deactivated", label: "Deactivated", count: counts.deactivated },
+              {
+                value: "deactivated",
+                label: "Deactivated",
+                count: counts.deactivated,
+              },
             ]}
           />
           {/* Only worth spelling out once there is a second page. On an instance
               that fits on one, the page IS the instance and the counts are totals. */}
           {paged ? (
             <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
-              These counts cover the <span className="tabular-nums">{counts.all}</span> accounts on
-              this page, not all <span className="tabular-nums">{total}</span>. The accounts
-              endpoint filters by search text only, so role and status narrow one page at a time.
+              These counts cover the{" "}
+              <span className="tabular-nums">{counts.all}</span> accounts on
+              this page, not all <span className="tabular-nums">{total}</span>.
+              The accounts endpoint filters by search text only, so role and
+              status narrow one page at a time.
             </p>
           ) : null}
         </div>
@@ -324,7 +345,13 @@ function UsersList({
         // or the operator is stranded with no way back.
         <>
           <EmptyState
-            title={pageOffset > 0 ? "Nothing on this page" : query ? "No matching users" : "No users yet"}
+            title={
+              pageOffset > 0
+                ? "Nothing on this page"
+                : query
+                  ? "No matching users"
+                  : "No users yet"
+            }
             message={
               pageOffset > 0
                 ? "No accounts sit at this offset any more. Step back a page."
@@ -341,7 +368,10 @@ function UsersList({
           <ul className="flex flex-col gap-3 lg:hidden">
             {visible.length === 0 ? (
               <li>
-                <EmptyState title="No users in this view" message={facetEmptyMessage} />
+                <EmptyState
+                  title="No users in this view"
+                  message={facetEmptyMessage}
+                />
               </li>
             ) : (
               visible.map((u) => (
@@ -372,9 +402,16 @@ function UsersList({
                 onTransferred={list.reload}
               />
             ) : visible.length === 0 ? (
-              <EmptyState title="No users in this view" message={facetEmptyMessage} />
+              <EmptyState
+                title="No users in this view"
+                message={facetEmptyMessage}
+              />
             ) : (
-              <UsersTable users={visible} currentUserId={currentUserId} onOpen={setSelectedId} />
+              <UsersTable
+                users={visible}
+                currentUserId={currentUserId}
+                onOpen={setSelectedId}
+              />
             )}
           </div>
 
@@ -402,9 +439,9 @@ function isTombstone(user: AdminUser) {
 function TombstoneNotice() {
   return (
     <p className="text-[11.5px] leading-relaxed text-fg-muted">
-      This account was permanently deleted. Its username, address and profile are
-      gone and cannot be restored, so it can be neither reactivated nor deleted
-      again — the row is kept only as a record.
+      This account was permanently deleted. Its username, address and profile
+      are gone and cannot be restored, so it can be neither reactivated nor
+      deleted again — the row is kept only as a record.
     </p>
   );
 }
@@ -427,7 +464,9 @@ function FlagToggles({
     <div className="mt-3.5 flex flex-col gap-3 rounded-2xl bg-surface-muted p-4">
       <div className="flex items-start justify-between gap-3">
         <span className="min-w-0">
-          <span className="block text-[13px] font-semibold text-fg">Email verified</span>
+          <span className="block text-[13px] font-semibold text-fg">
+            Email verified
+          </span>
           <span className="block text-[11.5px] leading-relaxed text-fg-muted">
             Marks the address confirmed without the token round-trip. Turning it
             off revokes the confirmation.
@@ -442,7 +481,9 @@ function FlagToggles({
       </div>
       <div className="flex items-start justify-between gap-3">
         <span className="min-w-0">
-          <span className="block text-[13px] font-semibold text-fg">Skip upload review</span>
+          <span className="block text-[13px] font-semibold text-fg">
+            Skip upload review
+          </span>
           <span className="block text-[11.5px] leading-relaxed text-fg-muted">
             Exempts this account from new-upload quarantine, so its uploads
             publish directly. No effect while quarantine is off instance-wide.
@@ -541,7 +582,11 @@ function UsersTable({
                     with a muted name + the explicit "Deactivated" status instead
                     (spec §2/§4 — the AA gate wins over the mockup opacity). */}
                 <span className="flex min-w-0 items-center gap-2.5">
-                  <Avatar src={null} name={u.username} className="h-8 w-8 text-[12.5px]" />
+                  <Avatar
+                    src={null}
+                    name={u.username}
+                    className="h-8 w-8 text-[12.5px]"
+                  />
                   <span className="min-w-0">
                     <span className="flex items-center gap-1.5">
                       <span
@@ -555,24 +600,34 @@ function UsersTable({
                       {isSelf ? <SelfPill /> : null}
                       {u.is_owner ? <OwnerPill /> : null}
                     </span>
-                    <span className="block truncate text-[11.5px] text-fg-muted">@{u.username}</span>
+                    <span className="block truncate text-[11.5px] text-fg-muted">
+                      @{u.username}
+                    </span>
                   </span>
                 </span>
-                <span className="truncate text-[12.5px] text-fg-muted">{u.email}</span>
+                <span className="truncate text-[12.5px] text-fg-muted">
+                  {u.email}
+                </span>
                 <span>
                   <RolePill role={u.role} />
                 </span>
                 <span className="text-[12.5px] tabular-nums text-fg-muted">
                   {formatBytes(u.storage_used_bytes ?? 0)}
                 </span>
-                <span className="text-[12.5px] text-fg-muted">{formatMonthYear(u.created_at)}</span>
+                <span className="text-[12.5px] text-fg-muted">
+                  {formatMonthYear(u.created_at)}
+                </span>
                 <span
                   className={cn(
                     "text-[12px] font-semibold",
                     u.is_active ? "text-success" : "text-fg-muted",
                   )}
                 >
-                  {isTombstone(u) ? "Deleted" : u.is_active ? "Active" : "Deactivated"}
+                  {isTombstone(u)
+                    ? "Deleted"
+                    : u.is_active
+                      ? "Active"
+                      : "Deactivated"}
                 </span>
               </button>
             </li>
@@ -597,18 +652,24 @@ function UsersTable({
  */
 function transferGate(user: AdminUser): Gate {
   if (isTombstone(user)) {
-    return { allowed: false, reason: "This account is deleted, so it can never sign in to own anything." };
+    return {
+      allowed: false,
+      reason:
+        "This account is deleted, so it can never sign in to own anything.",
+    };
   }
   if (user.role !== "admin") {
     return {
       allowed: false,
-      reason: "Ownership can only go to another administrator. Change this account's role first.",
+      reason:
+        "Ownership can only go to another administrator. Change this account's role first.",
     };
   }
   if (!user.is_active) {
     return {
       allowed: false,
-      reason: "Ownership can only go to an active account — a deactivated one cannot reach the console it would own.",
+      reason:
+        "Ownership can only go to an active account — a deactivated one cannot reach the console it would own.",
     };
   }
   return GATE_OPEN;
@@ -621,11 +682,11 @@ function TransferOwnershipCard({
   user: AdminUser;
   onTransferred: () => void;
 }) {
+  const { reloadUser } = useSession();
   const gate = transferGate(user);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
 
   async function transfer() {
     if (busy || !password) return;
@@ -634,7 +695,13 @@ function TransferOwnershipCard({
     try {
       await api.transferInstanceOwnership({ user_id: user.id, password });
       setPassword("");
-      setDone(true);
+      // The CALLER stopped being the owner, so the session that decides whether
+      // this card renders at all is now stale. Refreshing it is what makes the
+      // control disappear; without it the former owner is still offered a
+      // transfer that core would answer 403 owner_only — the fetch-once badge
+      // bug, on a control rather than a count. Caught in Chromium: the row's
+      // OWNER badge moved and this card stayed.
+      await reloadUser();
       onTransferred();
     } catch (err) {
       setError(errorMessage(err, "Could not transfer ownership."));
@@ -645,52 +712,46 @@ function TransferOwnershipCard({
 
   return (
     <div className="rounded-2xl border border-border p-4">
-      <h3 className="text-[13.5px] font-semibold text-fg">Instance ownership</h3>
-      {done ? (
-        <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
-          <span className="font-medium text-fg">{user.username}</span> owns this instance now.
-          You are still an administrator, and both of you have been emailed.
-        </p>
+      <h3 className="text-[13.5px] font-semibold text-fg">
+        Instance ownership
+      </h3>
+      <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
+        You own this instance. Handing ownership to{" "}
+        <span className="font-medium text-fg">{user.username}</span> gives them
+        the protection you have — no other administrator can change their role,
+        deactivate them or delete them — and takes it from you. You stay an
+        administrator, but you will not be able to transfer ownership again, and
+        only they will. Both of you are emailed.
+      </p>
+      {gate.allowed ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            type="password"
+            autoComplete="current-password"
+            aria-label="Your password"
+            placeholder="Your password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
+          />
+          <Button
+            variant="danger-outline"
+            size="sm"
+            disabled={busy || password === ""}
+            onClick={() => void transfer()}
+          >
+            {busy ? "Transferring…" : "Transfer ownership"}
+          </Button>
+        </div>
       ) : (
-        <>
-          <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
-            You own this instance. Handing ownership to{" "}
-            <span className="font-medium text-fg">{user.username}</span> gives them the protection
-            you have — no other administrator can change their role, deactivate them or delete
-            them — and takes it from you. You stay an administrator, but you will not be able to
-            transfer ownership again, and only they will. Both of you are emailed.
-          </p>
-          {gate.allowed ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <input
-                type="password"
-                autoComplete="current-password"
-                aria-label="Your password"
-                placeholder="Your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
-              />
-              <Button
-                variant="danger-outline"
-                size="sm"
-                disabled={busy || password === ""}
-                onClick={() => void transfer()}
-              >
-                {busy ? "Transferring…" : "Transfer ownership"}
-              </Button>
-            </div>
-          ) : (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button variant="danger-outline" size="sm" disabled>
-                Transfer ownership
-              </Button>
-              <span className="text-[11.5px] text-fg-muted">{gate.reason}</span>
-            </div>
-          )}
-          {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
-        </>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button variant="danger-outline" size="sm" disabled>
+            Transfer ownership
+          </Button>
+          <span className="text-[11.5px] text-fg-muted">{gate.reason}</span>
+        </div>
       )}
+      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
     </div>
   );
 }
@@ -721,7 +782,11 @@ function UserDetail({
   onDeleted: (id: string) => void;
   onTransferred: () => void;
 }) {
-  const { saving, error, setError, save, doDelete } = useUserActions(user, onUpdated, onDeleted);
+  const { saving, error, setError, save, doDelete } = useUserActions(
+    user,
+    onUpdated,
+    onDeleted,
+  );
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [confirmName, setConfirmName] = useState("");
 
@@ -744,7 +809,9 @@ function UserDetail({
         <Avatar src={null} name={user.username} className="h-16 w-16 text-xl" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-bold tracking-tight text-fg">{user.display_name || user.username}</h2>
+            <h2 className="text-xl font-bold tracking-tight text-fg">
+              {user.display_name || user.username}
+            </h2>
             {isSelf ? <SelfPill /> : null}
             {user.is_owner ? <OwnerPill /> : null}
             <RolePill role={user.role} />
@@ -814,7 +881,14 @@ function UserDetail({
             </div>
           </div>
 
-          <QuotaCard user={user} used={used} quota={quota} saving={saving} onSave={save} boxed />
+          <QuotaCard
+            user={user}
+            used={used}
+            quota={quota}
+            saving={saving}
+            onSave={save}
+            boxed
+          />
 
           <FlagToggles user={user} saving={saving} onSave={save} />
 
@@ -832,9 +906,10 @@ function UserDetail({
             <div className="flex flex-col gap-2 rounded-2xl border border-danger-border p-3">
               <p className="text-sm text-fg-muted">
                 This permanently deletes{" "}
-                <span className="font-semibold text-fg">{user.username}</span>&apos;s account:
-                their channels and videos are removed for good, their comments become
-                &ldquo;[deleted]&rdquo; tombstones, and this cannot be undone.
+                <span className="font-semibold text-fg">{user.username}</span>
+                &apos;s account: their channels and videos are removed for good,
+                their comments become &ldquo;[deleted]&rdquo; tombstones, and
+                this cannot be undone.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <input
@@ -880,23 +955,39 @@ function UserDetail({
           <Fact
             k="Status"
             v={
-              <span className={user.is_active ? "text-success" : "text-fg-muted"}>
-                {deleted ? "Deleted" : user.is_active ? "Active" : "Deactivated"}
+              <span
+                className={user.is_active ? "text-success" : "text-fg-muted"}
+              >
+                {deleted
+                  ? "Deleted"
+                  : user.is_active
+                    ? "Active"
+                    : "Deactivated"}
               </span>
             }
           />
           <Fact k="Email" v={user.email_verified ? "Verified" : "Unverified"} />
           <Fact k="Joined" v={relativeTime(user.created_at)} />
-          <Fact k="Storage used" v={<span className="tabular-nums">{formatBytes(used)}</span>} />
+          <Fact
+            k="Storage used"
+            v={<span className="tabular-nums">{formatBytes(used)}</span>}
+          />
           <Fact
             k="Storage quota"
             v={
               <span className="tabular-nums">
-                {quota === null ? "Instance default" : quota === 0 ? "Unlimited" : formatBytes(quota)}
+                {quota === null
+                  ? "Instance default"
+                  : quota === 0
+                    ? "Unlimited"
+                    : formatBytes(quota)}
               </span>
             }
           />
-          <Fact k="New-upload quarantine" v={user.bypass_quarantine ? "Exempt" : "Standard"} />
+          <Fact
+            k="New-upload quarantine"
+            v={user.bypass_quarantine ? "Exempt" : "Standard"}
+          />
         </dl>
       </div>
     </div>
@@ -927,7 +1018,11 @@ function UserRow({
   onUpdated: (updated: AdminUser) => void;
   onDeleted: (id: string) => void;
 }) {
-  const { saving, error, setError, save, doDelete } = useUserActions(user, onUpdated, onDeleted);
+  const { saving, error, setError, save, doDelete } = useUserActions(
+    user,
+    onUpdated,
+    onDeleted,
+  );
   // Two-step permanent delete: an explicit arm click, then a type-the-username
   // confirmation (the same double-confirm as the self-serve delete).
   const [deleteArmed, setDeleteArmed] = useState(false);
@@ -945,7 +1040,9 @@ function UserRow({
         <Avatar src={null} name={user.username} className="h-11 w-11 text-sm" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-semibold tracking-tight text-fg">{user.username}</span>
+            <span className="font-semibold tracking-tight text-fg">
+              {user.username}
+            </span>
             {isSelf ? <SelfPill /> : null}
             {user.is_owner ? <OwnerPill /> : null}
             <RolePill role={user.role} />
@@ -985,7 +1082,13 @@ function UserRow({
         )}
       </div>
 
-      <QuotaCard user={user} used={used} quota={quota} saving={saving} onSave={save} />
+      <QuotaCard
+        user={user}
+        used={used}
+        quota={quota}
+        saving={saving}
+        onSave={save}
+      />
 
       <FlagToggles user={user} saving={saving} onSave={save} />
 
@@ -1024,10 +1127,11 @@ function UserRow({
       {deleteArmed ? (
         <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-danger-border p-3">
           <p className="text-sm text-fg-muted">
-            This permanently deletes <span className="font-semibold text-fg">{user.username}</span>&apos;s
-            account: their channels and videos are removed for good, their comments become
-            &ldquo;[deleted]&rdquo; tombstones, and this cannot be undone. Deactivate is the
-            reversible alternative.
+            This permanently deletes{" "}
+            <span className="font-semibold text-fg">{user.username}</span>
+            &apos;s account: their channels and videos are removed for good,
+            their comments become &ldquo;[deleted]&rdquo; tombstones, and this
+            cannot be undone. Deactivate is the reversible alternative.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -1124,12 +1228,17 @@ function QuotaCard({
         <span className="font-semibold text-fg">Storage quota</span>
         <span className="tabular-nums text-fg-muted">
           {rightLabel}
-          {overridden ? <span className="text-fg-muted"> · override</span> : null}
+          {overridden ? (
+            <span className="text-fg-muted"> · override</span>
+          ) : null}
         </span>
       </div>
       {finite ? (
         <div className="mt-2.5 h-[5px] overflow-hidden rounded-full bg-surface-strong">
-          <div className="h-full rounded-full bg-fg" style={{ width: `${pct}%` }} />
+          <div
+            className="h-full rounded-full bg-fg"
+            style={{ width: `${pct}%` }}
+          />
         </div>
       ) : null}
       {editing ? (

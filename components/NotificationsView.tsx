@@ -29,6 +29,7 @@ export function NotificationTypeIcon({ type }: { type: string }) {
       return <MessageCircleIcon size={16} />;
     case "video_rejected":
     case "video_blocked":
+    case "video_unblocked":
     case "report_resolved":
       return <ShieldIcon size={16} />;
     case "new_report":
@@ -53,6 +54,11 @@ const NOTIF_CHIP: Record<string, string> = {
   message: "bg-tile-green/12 text-tile-green",
   video_rejected: "bg-tile-red/12 text-tile-red",
   video_blocked: "bg-tile-red/12 text-tile-red",
+  // The restoration is the one piece of GOOD moderation news, so it takes the
+  // shield in green rather than the take-down's red. Without an entry here it
+  // fell through to the follow glyph in the neutral chip — caught in Chromium,
+  // and the same failure class as a missing describeNotification case.
+  video_unblocked: "bg-tile-green/12 text-tile-green",
   report_resolved: "bg-tile-orange/12 text-tile-orange",
   new_report: "bg-tile-red/12 text-tile-red",
   new_video: "bg-accent/12 text-accent",

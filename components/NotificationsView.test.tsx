@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
+import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Notification } from "@/lib/api";
 
 import { TYPE_LABELS } from "./NotificationPrefsView";
-import { describeNotification } from "./NotificationsView";
+import { NotificationTypeIcon, describeNotification } from "./NotificationsView";
 
 function notif(overrides: Partial<Notification>): Notification {
   return {
@@ -159,6 +160,20 @@ describe("describeNotification", () => {
     expect(rest).not.toContain("started following");
     expect(rest).not.toContain("blocked");
     expect(href).toBe("/videos/v-1");
+  });
+});
+
+// The chip is decoration, but the WRONG decoration is a claim: the follow glyph
+// in a neutral circle is what an unrecognised type falls through to, which is
+// how a moderation event comes to look like a new follower. Caught in Chromium
+// on the first walkthrough of this type.
+describe("NotificationTypeIcon", () => {
+  it("gives video_unblocked the moderation shield, not the follow glyph", () => {
+    const { container } = render(<NotificationTypeIcon type="video_unblocked" />);
+    const blocked = render(<NotificationTypeIcon type="video_blocked" />).container.innerHTML;
+    const follow = render(<NotificationTypeIcon type="follow" />).container.innerHTML;
+    expect(container.innerHTML).toBe(blocked);
+    expect(container.innerHTML).not.toBe(follow);
   });
 });
 
