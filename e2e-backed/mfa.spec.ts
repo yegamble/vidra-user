@@ -17,7 +17,7 @@ async function freshTotpCode(secret: string): Promise<string> {
     step = Math.floor(Date.now() / stepMs);
   }
   lastTotpStepUsed = step;
-  return await freshTotpCode(secret);
+  return totpCode(secret);
 }
 
 // Backend-backed e2e: the FULL TOTP lifecycle against a real vidra-core +
