@@ -225,7 +225,9 @@ test("a moderator resolves a flagged item with a note", async ({ page }) => {
   await openQueue(page);
   await expect(page.getByText("buy cheap SPAM now")).toBeVisible();
   await page.getByLabel("Internal moderator note").fill("hid the comment");
-  await page.getByRole("button", { name: "Resolve" }).click();
+  // exact: true — the filter chips put a "Resolved" button on the same page, and
+  // an accessible-name substring match would resolve to both.
+  await page.getByRole("button", { name: "Resolve", exact: true }).click();
 
   await expect(page.getByText("buy cheap SPAM now")).toHaveCount(0);
   expect(resolved).not.toBeNull();
