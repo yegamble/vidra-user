@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { WarningIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Alert } from "@/components/ui/Alert";
 import { Badge, type BadgeVariant } from "@/components/ui/Badge";
@@ -140,6 +141,26 @@ export function MediaGCPanel() {
           automatic sweep also deletes orphans on its own; the first sweep after each
           boot is always a dry run. Every sweep, manual or automatic, is audited.
         </p>
+        {/* MEDIA_GC_ENABLED gates the DAILY sweep only — the manual endpoint
+            stays mounted either way, by design (internal/httpapi/admin_media.go
+            says so). Without this line the page reads "Automatic daily sweep:
+            Off" beside a fully armed purge button and a paragraph that only
+            describes what happens when GC is ENABLED, so an admin who turned the
+            flag off to stop deletions could reasonably conclude nothing here
+            deletes. The button stays live: taking the operator's own sweep away
+            is a different decision from telling them the truth about it. */}
+        {config && !config.enabled ? (
+          <p
+            data-testid="gc-manual-still-deletes"
+            className="flex items-start gap-2 text-[13px] leading-relaxed text-warning"
+          >
+            <WarningIcon size={15} className="mt-0.5 shrink-0" />
+            <span>
+              The automatic sweep is off, but the manual purge below still deletes:
+              MEDIA_GC_ENABLED only controls the daily schedule.
+            </span>
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={() => void dryRun()} disabled={busy}>
             {phase === "scanning" ? "Scanning…" : "Run dry run"}

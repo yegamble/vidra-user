@@ -251,6 +251,36 @@ describe("MediaGCPanel", () => {
     expect(facts.textContent).not.toContain("not-applicable");
   });
 
+  // MEDIA_GC_ENABLED gates the DAILY sweep only — internal/httpapi/admin_media.go
+  // says so in as many words ("The manual POST stays mounted either way"), and a
+  // lab run confirmed it: with the flag off, GET /admin/media/gc reports
+  // enabled=false and POST {"dry_run": false} still deleted an orphan and
+  // answered 200. Until this, the panel rendered "Off" beside a fully armed
+  // purge button and the prose only said what happens when GC is ENABLED, so an
+  // admin who switched the flag off to stop deletions could read the page as
+  // "nothing here deletes" and be wrong.
+  it("says the manual purge still deletes when the automatic sweep is off", async () => {
+    mocks.getMediaGCConfig.mockResolvedValue(config({ enabled: false }));
+    render(<MediaGCPanel />);
+
+    await screen.findByTestId("gc-boot-facts");
+    const note = await screen.findByTestId("gc-manual-still-deletes");
+    expect(note.textContent).toContain("still deletes");
+    // The button is NOT disabled: turning the schedule off is not a reason to
+    // take the operator's own sweep away — the point is that they are told.
+    expect(screen.getByRole("button", { name: "Run dry run" }).hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  it("does not show the manual-purge note while the automatic sweep is on", async () => {
+    mocks.getMediaGCConfig.mockResolvedValue(config({ enabled: true }));
+    render(<MediaGCPanel />);
+
+    await screen.findByTestId("gc-boot-facts");
+    expect(screen.queryByTestId("gc-manual-still-deletes")).toBeNull();
+  });
+
   it("renders the page exactly as today when the boot-facts GET fails (older backend)", async () => {
     mocks.getMediaGCConfig.mockRejectedValue(apiError(404));
     render(<MediaGCPanel />);
