@@ -8,6 +8,11 @@ const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const REPORTS = /\/api\/v1\/admin\/reports(\?|$)/;
 const MATCHES = /\/api\/v1\/admin\/watched-word-matches(\?|$)/;
+// The triage verb hangs off the collection path, so MATCHES — which is anchored
+// at ? or end-of-string — deliberately does NOT match it. A route that missed
+// the POST would let it reach a backend that is not running, and the test would
+// fail as "the row is still there" rather than "the request never happened".
+const RESOLVE = /\/api\/v1\/admin\/watched-word-matches\/[^/]+\/resolve$/;
 
 type Role = "user" | "moderator" | "admin";
 
@@ -188,24 +193,26 @@ test("the queue quotes the flag-time snapshot, not a body edited since", async (
 test("a moderator resolves a flagged item with a note", async ({ page }) => {
   await signIn(page, "moderator");
   let resolved: { url: string; body: unknown } | null = null;
-  // The queue asks for OPEN by default, so the resolved row is gone on the
-  // refetch — the server applies the filter, not the client.
-  await page.route(MATCHES, (route) => {
-    if (route.request().method() === "POST") {
-      resolved = {
-        url: route.request().url(),
-        body: route.request().postDataJSON(),
-      };
-      return route.fulfill({ status: 204, body: "" });
-    }
-    return route.fulfill({
+  await page.route(RESOLVE, (route) => {
+    resolved = {
+      url: route.request().url(),
+      body: route.request().postDataJSON(),
+    };
+    return route.fulfill({ status: 204, body: "" });
+  });
+  // The list keeps returning the row: it leaves the page because the view drops
+  // it from the OPEN queue on the 204, not because the fixture stopped serving
+  // it. Under a single-state filter a triaged row is no longer one of the rows
+  // that filter selects, so it has to leave the page and the count together.
+  await page.route(MATCHES, (route) =>
+    route.fulfill({
       json: {
-        matches: resolved ? [] : [match("m4", "spam", "buy cheap SPAM now")],
+        matches: [match("m4", "spam", "buy cheap SPAM now")],
         limit: 100,
         offset: 0,
       },
-    });
-  });
+    }),
+  );
 
   await page.goto("/moderation/watched-word-matches");
   await expect(page.getByText("buy cheap SPAM now")).toBeVisible();
