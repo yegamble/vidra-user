@@ -217,8 +217,9 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
   }, []);
 
   // Fetched only for pages whose keys carry a wiring warn check (Advanced /
-  // delivery today) — the other pages could not consume the answer, so they
-  // never spend the request. A failure (older backend, transient error) means
+  // delivery, Live / streaming, VOD / transcription) — the other pages could
+  // not consume the answer, so they never spend the request. The set is derived
+  // from META by pageHasWiringChecks, so declaring a new `warn` is enough. A failure (older backend, transient error) means
   // the page renders exactly as it did before this fetch existed.
   useEffect(() => {
     if (!pageHasWiringChecks(page)) return;

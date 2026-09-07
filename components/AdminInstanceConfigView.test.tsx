@@ -983,9 +983,94 @@ describe("delivery wiring warnings (Advanced page)", () => {
   });
 
   it("does not spend the admin fetch on a page with no wiring checks", async () => {
+    // General carries no `warn` key. (VOD used to qualify; it now carries the
+    // transcription wiring check, so it is no longer the example of a page
+    // that skips the fetch — pageHasWiringChecks derives this from META.)
     mocks.getInstanceSettings.mockResolvedValue(doc);
-    render(<ConfigForm page="vod" />);
-    await screen.findByLabelText("Max concurrent uploads per user");
+    render(<ConfigForm page="general" />);
+    await screen.findByLabelText("Name");
     expect(mocks.getInfrastructure).not.toHaveBeenCalled();
+  });
+});
+
+// A17 / ADM-03: the two capabilities whose dependency is a boot-only deployment
+// fact. Same non-disabling contract as the delivery toggles — an operator who
+// turned live on before wiring the ingest plane has to be able to turn it back
+// off — so these assert the note AND that the switch stays operable.
+describe("missing-dependency warnings for live and transcription", () => {
+  const liveDoc = {
+    settings: [
+      {
+        key: "live_enabled",
+        type: "bool",
+        value: true,
+        default: false,
+        overridden: true,
+      },
+    ],
+  };
+  const transcriptionDoc = {
+    settings: [
+      {
+        key: "transcription_enabled",
+        type: "bool",
+        value: true,
+        default: false,
+        overridden: true,
+      },
+    ],
+  };
+
+  it("tells the admin the live ingest plane is missing, without locking the row", async () => {
+    mocks.getInstanceSettings.mockResolvedValue(liveDoc);
+    mocks.getInfrastructure.mockResolvedValue({
+      features: [{ key: "live", enabled: true, configured: false }],
+    });
+    render(<ConfigForm page="live" />);
+
+    expect(
+      await screen.findByText(/LIVE_RTMP_URL and LIVE_HLS_ROOT/),
+    ).toBeTruthy();
+    const live = screen.getByRole("switch", {
+      name: "Live streaming",
+    }) as HTMLButtonElement;
+    expect(live.disabled).toBe(false);
+  });
+
+  it("stays quiet once the ingest plane is wired", async () => {
+    mocks.getInstanceSettings.mockResolvedValue(liveDoc);
+    mocks.getInfrastructure.mockResolvedValue({
+      features: [{ key: "live", enabled: true, configured: true }],
+    });
+    render(<ConfigForm page="live" />);
+    await screen.findByRole("switch", { name: "Live streaming" });
+    await waitFor(() =>
+      expect(mocks.getInfrastructure).toHaveBeenCalledTimes(1),
+    );
+    expect(screen.queryByText(/LIVE_RTMP_URL/)).toBeNull();
+  });
+
+  it("tells the admin no transcription backend is wired", async () => {
+    mocks.getInstanceSettings.mockResolvedValue(transcriptionDoc);
+    mocks.getInfrastructure.mockResolvedValue({
+      features: [{ key: "captions", enabled: false, configured: false }],
+    });
+    render(<ConfigForm page="vod" />);
+
+    expect(
+      await screen.findByText(/no transcription backend wired/),
+    ).toBeTruthy();
+    const toggle = screen.getByRole("switch", {
+      name: "Automatic transcription",
+    }) as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+  });
+
+  it("degrades to no warn when the infrastructure fetch fails", async () => {
+    // beforeEach default: getInfrastructure rejects.
+    mocks.getInstanceSettings.mockResolvedValue(liveDoc);
+    render(<ConfigForm page="live" />);
+    await screen.findByRole("switch", { name: "Live streaming" });
+    expect(screen.queryByText(/LIVE_RTMP_URL/)).toBeNull();
   });
 });

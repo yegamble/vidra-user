@@ -557,8 +557,14 @@ export type SettingMeta = {
   /**
    * Boot-env dependency: when the /instance snapshot says the backing
    * subsystem is absent, the row renders disabled with this note instead of
-   * being silently ineffective. (No current key needs one; W3+ keys — e.g.
-   * transcription without WHISPER_ENDPOINT — declare theirs here.)
+   * being silently ineffective. Used by the three mail-dependent keys, whose
+   * signal (`features.mail`) rides the PUBLIC /instance document.
+   *
+   * Reach for `warn` instead whenever the row must stay flippable while inert,
+   * and whenever the signal is a deploy fact only the admin-only
+   * /admin/infrastructure snapshot carries (live ingest, WHISPER_ENDPOINT, the
+   * delivery toggles) — a disabled row would trap an operator with a switch
+   * they turned on and now cannot turn off.
    */
   bootDep?: {
     note: string;
@@ -1236,6 +1242,18 @@ export const META: Record<string, SettingMeta> = {
     control: "toggle",
     page: "vod",
     section: "transcription",
+    // A17 / ADM-03, and the case SettingMeta.bootDep's own doc comment named as
+    // the example that should declare one. The help above states the
+    // precondition in the abstract; only the /admin/infrastructure snapshot can
+    // say whether THIS server has it. `warn` rather than bootDep: the row must
+    // stay flippable while inert.
+    warn: {
+      note: "This server has no transcription backend wired (WHISPER_ENDPOINT), so this switch currently does nothing — no captions are generated. See Infrastructure → Optional features.",
+      isTriggered: (infra) =>
+        infra.features?.some(
+          (f) => f.key === "captions" && f.configured === false,
+        ) === true,
+    },
   },
   // VOD / Downloads
   downloads_enabled: {
@@ -1299,6 +1317,20 @@ export const META: Record<string, SettingMeta> = {
     control: "toggle",
     page: "live",
     section: "streaming",
+    // A17 / ADM-03. The live plane is two boot-only env values the admin cannot
+    // see from this page — LIVE_RTMP_URL (where a streamer publishes) and
+    // LIVE_HLS_ROOT (where the media server writes segments) — and the toggle
+    // alone silently produces streams nobody can publish to: creating one still
+    // answers 201 with a stream key and an EMPTY rtmp_url. `warn`, never
+    // bootDep, for the delivery-toggle reason — an on-but-inert switch has to
+    // stay flippable back off.
+    warn: {
+      note: "This server was not booted with a live ingest plane (LIVE_RTMP_URL and LIVE_HLS_ROOT), so creators get a stream key with nowhere to publish it. See Infrastructure → Optional features.",
+      isTriggered: (infra) =>
+        infra.features?.some(
+          (f) => f.key === "live" && f.configured === false,
+        ) === true,
+    },
   },
   // LIVE / Replay (config-parity W11).
   live_allow_replay: {
