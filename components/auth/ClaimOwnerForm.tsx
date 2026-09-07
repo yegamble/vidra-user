@@ -39,8 +39,11 @@ import {
 export function ClaimOwnerForm({
   /** True when a turned-away signup attempt sent the visitor here. */
   fromSignup = false,
+  instanceName,
 }: {
   fromSignup?: boolean;
+  /** SSR snapshot of GET /instance `name`; empty falls back to the product name. */
+  instanceName?: string | null;
 }) {
   const router = useRouter();
   const { claimOwner } = useSession();
@@ -131,7 +134,7 @@ export function ClaimOwnerForm({
     >
       <div className="mb-2 flex flex-col items-center gap-3 text-center">
         <h1>
-          <AuthWordmark brandClassName="text-[30px]" />
+          <AuthWordmark brandClassName="text-[30px]" instanceName={instanceName} />
         </h1>
         <p className="text-title2 text-fg">Finish setting up your server</p>
         <p className="text-subhead text-fg-muted">

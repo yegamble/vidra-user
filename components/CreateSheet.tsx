@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { PlusSquareIcon, UploadIcon, VideoIcon } from "@/components/icons";
 import { Modal } from "@/components/ui/Modal";
+import { useLiveAvailable } from "@/lib/live/availability";
 
 // CreateSheet — the phone "Create" bottom sheet (design "Vidra App": the Create
 // tab opens a sheet, it does not navigate). It mirrors the desktop "+ Create"
@@ -24,7 +25,10 @@ type CreateRow = {
   divider?: boolean;
 };
 
-const ROWS: readonly CreateRow[] = [
+// `live: true` marks the row that is dropped when the instance reports
+// `features.live: false` (the setting AND the RTMP ingest capability) — a row
+// that can only ever answer 403/503 is worse than no row.
+const ROWS: readonly (CreateRow & { live?: true })[] = [
   {
     href: "/studio/content?upload=1",
     title: "Upload video",
@@ -33,6 +37,7 @@ const ROWS: readonly CreateRow[] = [
   },
   {
     href: "/studio/live?new=1",
+    live: true,
     title: "Go live",
     subtitle: "Stream via RTMP with optional replay",
     // A `live`-token status dot (not a glyph), matching the design's Go-live cue.
@@ -54,11 +59,12 @@ const ROWS: readonly CreateRow[] = [
 ];
 
 export function CreateSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const liveAvailable = useLiveAvailable();
   if (!open) return null;
   return (
     <Modal title="Create" variant="sheet" hideClose onClose={onClose}>
       <ul className="flex flex-col">
-        {ROWS.map((row) => (
+        {ROWS.filter((row) => liveAvailable || row.live !== true).map((row) => (
           <li key={row.href} className={row.divider ? "mt-1 border-t border-border-subtle pt-1" : undefined}>
             <Link
               href={row.href}

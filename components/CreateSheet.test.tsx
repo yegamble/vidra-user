@@ -30,9 +30,23 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@/lib/api", () => ({
+  getInstanceCached: vi.fn(() => new Promise(() => {})),
+  invalidateInstanceCache: vi.fn(),
+}));
+
+import { setInstanceFeaturesForTests } from "@/lib/instance-features";
+
 import { CreateSheet } from "./CreateSheet";
 
-afterEach(cleanup);
+function features(overrides: Record<string, unknown> = {}) {
+  return { uploads: true, comments: true, ...overrides } as never;
+}
+
+afterEach(() => {
+  cleanup();
+  setInstanceFeaturesForTests(null);
+});
 
 describe("CreateSheet", () => {
   it("renders nothing when closed", () => {
@@ -69,5 +83,27 @@ describe("CreateSheet", () => {
     render(<CreateSheet open onClose={onClose} />);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // Live's capability flag is the operator's switch AND the deployment's RTMP
+  // ingest. With it false, POST /channels/{handle}/live can only answer 403 or
+  // 503, so the row must not be offered — a create menu that hands out a route
+  // to a refusal is worse than a shorter menu.
+  it("drops the Go live row when the instance reports live off", () => {
+    setInstanceFeaturesForTests(features({ live: false }));
+    render(<CreateSheet open onClose={() => {}} />);
+    expect(screen.queryByRole("link", { name: /Go live/ })).toBeNull();
+    // The rest of the sheet is untouched.
+    expect(screen.getByRole("link", { name: /Upload video/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /New channel/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open Studio/ })).toBeTruthy();
+  });
+
+  // Unknown is NOT off: an old core that does not disclose the flag, and the
+  // moment before the shared instance fetch lands, both keep the row.
+  it("keeps the Go live row while the capability is unknown", () => {
+    setInstanceFeaturesForTests(features());
+    render(<CreateSheet open onClose={() => {}} />);
+    expect(screen.getByRole("link", { name: /Go live/ })).toBeTruthy();
   });
 });

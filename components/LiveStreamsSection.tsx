@@ -14,6 +14,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
 import type { CreateLiveStreamRequest, LiveStream } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useLiveAvailable } from "@/lib/live/availability";
 
 // Live streams accept only public/unlisted/private (the create contract has no
 // "password" mode, unlike VOD videos) — narrow to exactly what the endpoint takes.
@@ -64,6 +65,12 @@ export function LiveStreamsSection({
       window.matchMedia("(max-width: 767px)").matches,
   );
   const autoOpenedRef = useRef(false);
+  // The instance's EFFECTIVE live capability (the operator's switch AND an RTMP
+  // ingest). With it off, create would answer 403 feature_disabled or 503
+  // live_not_configured, so the button is withheld and the section says why
+  // instead. Existing streams still list and stay manageable — an operator who
+  // unwires live must not strand the streams their creators already made.
+  const liveAvailable = useLiveAvailable();
 
   useEffect(() => {
     if (handle === "") return;
@@ -92,12 +99,14 @@ export function LiveStreamsSection({
       autoOpenedRef.current = false;
       return;
     }
+    // A `?new=1` deep link must not open a form whose submit cannot succeed.
+    if (!liveAvailable) return;
     if (autoOpenedRef.current) return;
     autoOpenedRef.current = true;
     setOpen(true);
     onAutoOpenConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpen]);
+  }, [autoOpen, liveAvailable]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -178,9 +187,11 @@ export function LiveStreamsSection({
           >
             Reload
           </Button>
-          <Button size="sm" onClick={() => setOpen(true)}>
-            Go live
-          </Button>
+          {liveAvailable ? (
+            <Button size="sm" onClick={() => setOpen(true)}>
+              Go live
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -197,6 +208,12 @@ export function LiveStreamsSection({
             setStatus("loading");
             setReloadKey((k) => k + 1);
           }}
+        />
+      ) : !liveAvailable && streams.length === 0 ? (
+        <EmptyState
+          icon={<TvIcon size={24} />}
+          title="Live streaming is off on this instance"
+          message="This server has live streaming switched off, or has no RTMP ingest for a stream to publish to. Ask the instance administrator to turn it on."
         />
       ) : streams.length === 0 ? (
         <EmptyState

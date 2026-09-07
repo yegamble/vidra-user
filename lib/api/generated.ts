@@ -3888,6 +3888,8 @@ export interface paths {
         /**
          * Create a live stream
          * @description Creates a live stream for a channel the caller owns and returns it plus the stream key (shown ONCE — only its hash is stored) and the RTMP ingest URL. Behind auth; a non-owner is 403, an unknown channel 404. RTMP ingestion / HLS output is a later integration boundary — the stream starts in state "offline".
+         *
+         *     Two feature gates, and they answer differently on purpose: the `live_enabled` admin setting being off is 403 `feature_disabled` (the operator's switch), while a deployment with no RTMP ingest at all (LIVE_RTMP_URL unset) is 503 `live_not_configured` — a runtime toggle cannot conjure a deployment prerequisite. Both refusals mint NO stream key. `features.live` on GET /instance reports the same effective answer, so a client that honours the flag never reaches either.
          */
         post: operations["createLiveStream"];
         delete?: never;
@@ -5343,7 +5345,7 @@ export interface components {
                 uploads: boolean;
                 /** @description Whether URL video import is accepted. */
                 imports: boolean;
-                /** @description Whether creating live streams is allowed. */
+                /** @description Whether creating live streams is allowed: the `live_enabled` admin setting AND the deployment's RTMP ingest capability (LIVE_RTMP_URL). False with either half missing, so a client that hides its "Go live" affordance on this flag never offers a stream key with nowhere to publish it. */
                 live: boolean;
                 /** @description Whether posting comments is allowed. */
                 comments: boolean;
@@ -20290,6 +20292,15 @@ export interface operations {
             };
             /** @description Validation failed. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description live_not_configured — live streaming is switched on but this deployment has no RTMP ingest for a streamer to publish to. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

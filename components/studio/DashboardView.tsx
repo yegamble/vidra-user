@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { api, videoThumbnailUrl } from "@/lib/api";
 import type { ChannelStatsResponse, Video, VideoStatsResponse } from "@/lib/api";
 import { formatCount } from "@/lib/format";
+import { useLiveAvailable } from "@/lib/live/availability";
 import { watchPath } from "@/lib/watch-path";
 
 import { StateBadge, type Status } from "./shared";
@@ -228,6 +229,10 @@ function LatestVideoCard({ handle }: { handle: string }) {
 // QuickActions — the two primary creator entry points, mirroring the header
 // "+ Create" dropdown and the mobile CreateSheet.
 function QuickActions() {
+  // Live is offered only when the instance reports the capability (the
+  // operator's switch AND an RTMP ingest); otherwise the button could only
+  // reach a create call that refuses.
+  const liveAvailable = useLiveAvailable();
   return (
     <section aria-labelledby="quick-actions-heading" className="flex flex-col gap-3">
       <h2 id="quick-actions-heading" className="text-[15px] font-bold tracking-tight">
@@ -238,10 +243,12 @@ function QuickActions() {
           <UploadIcon size={16} aria-hidden="true" />
           Upload video
         </LinkButton>
-        <LinkButton href="/studio/live?new=1" variant="tonal">
-          <TvIcon size={16} aria-hidden="true" />
-          Go live
-        </LinkButton>
+        {liveAvailable ? (
+          <LinkButton href="/studio/live?new=1" variant="tonal">
+            <TvIcon size={16} aria-hidden="true" />
+            Go live
+          </LinkButton>
+        ) : null}
       </div>
     </section>
   );

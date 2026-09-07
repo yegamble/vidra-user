@@ -80,6 +80,16 @@ jobs:
       # LIVE_INGEST_SECRET enables the media-server-facing live ingest hooks so the
       # studio live-status test can flip a stream live/ended by its key (test seam;
       # value must match LIVE_INGEST_SECRET in e2e-backed/fixtures.ts).
+      # LIVE_RTMP_URL is this lane's LIVE DEPENDENCY, stated rather than inherited.
+      # Live's effective availability is `the live_enabled setting AND an RTMP
+      # ingest`: with no ingest URL, GET /instance reports features.live=false and
+      # live-stream create answers 503 live_not_configured, so live-replay.spec.ts
+      # would find no "Go live" control. vidra-core's compose used to pin
+      # FEATURE_LIVE_ENABLED=true, which shadowed the derived Go default and
+      # switched live on for every stack whether or not it had an ingest plane;
+      # that pin is gone, so this lane says what it needs. No media server is
+      # started — the specs here exercise create/edit metadata, and the ingest
+      # hooks above are driven directly by key.
       # OWNER_CLAIM_TOKEN pins the first-run owner-claim token so admin.setup.ts can
       # claim the deterministic admin (test seam; value must match OWNER_CLAIM_TOKEN
       # in e2e-backed/fixtures.ts). Harmless on a core that predates the owner-claim
@@ -98,7 +108,7 @@ jobs:
       # byte-for-byte the historical one there.
       - name: Start vidra-core stack
         working-directory: .core
-        run: ${{ matrix.storage_env }} RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret TRANSCODING_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose ${{ matrix.profiles }} up -d --build
+        run: ${{ matrix.storage_env }} RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret LIVE_RTMP_URL=rtmp://127.0.0.1:1935/live TRANSCODING_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose ${{ matrix.profiles }} up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
