@@ -2,6 +2,24 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { totpCode, uniqueId } from "./fixtures";
 
+// Burn-after-first-use (core#188, the A05 hardening ruling): a TOTP code that
+// was accepted once is refused for the rest of its 30-second step, byte-identical
+// to a wrong code. This spec plays the authenticator twice in quick succession
+// (enrolment verify, then the login challenge), which used to reuse one step's
+// code and passed only because replays were accepted. Hand out at most one code
+// per step: if the current step already produced one, wait for the next.
+let lastTotpStepUsed = -1;
+async function freshTotpCode(secret: string): Promise<string> {
+  const stepMs = 30_000;
+  let step = Math.floor(Date.now() / stepMs);
+  if (step === lastTotpStepUsed) {
+    await new Promise((resolve) => setTimeout(resolve, stepMs - (Date.now() % stepMs) + 500));
+    step = Math.floor(Date.now() / stepMs);
+  }
+  lastTotpStepUsed = step;
+  return totpCode(secret);
+}
+
 // Backend-backed e2e: the FULL TOTP lifecycle against a real vidra-core +
 // PostgreSQL with NO route mocks. Enrollment happens through the UI on
 // /settings/security; the test then computes real RFC 6238 codes from the
@@ -85,7 +103,7 @@ test("TOTP enroll -> logout -> login gated by a computed code; a recovery code i
   expect(secret.length).toBeGreaterThanOrEqual(16);
 
   // Play the authenticator: verify the enrollment with a computed code.
-  await page.getByLabel("Verification code").fill(totpCode(secret));
+  await page.getByLabel("Verification code").fill(await freshTotpCode(secret));
   await page.getByRole("button", { name: "Verify code" }).click();
 
   // The 10 recovery codes are shown exactly once — capture them.
@@ -105,7 +123,7 @@ test("TOTP enroll -> logout -> login gated by a computed code; a recovery code i
   await signOut(page);
   await loginExpectingChallenge(page, email, password);
 
-  await fillAuthenticationCode(page, totpCode(secret));
+  await fillAuthenticationCode(page, await freshTotpCode(secret));
   await page.getByRole("button", { name: "Verify code" }).click();
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await page.getByRole("button", { name: "Open account menu" }).click();
