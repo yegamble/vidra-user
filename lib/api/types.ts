@@ -393,6 +393,14 @@ export type WatchedWordListResponse = Schemas["WatchedWordListResponse"];
 export type CreateWatchedWordRequest = Schemas["CreateWatchedWordRequest"];
 export type WatchedWordMatch = Schemas["WatchedWordMatch"];
 export type WatchedWordMatchListResponse = Schemas["WatchedWordMatchListResponse"];
+/**
+ * GET /admin/watched-word-matches `?status` — the triage filter. The queue
+ * defaults to `open`, so a caller that wants the whole history has to ask.
+ */
+export type WatchedWordMatchStatusFilter = NonNullable<
+  NonNullable<operations["listWatchedWordMatches"]["parameters"]["query"]>["status"]
+>;
+export type ResolveWatchedWordMatchRequest = Schemas["ResolveWatchedWordMatchRequest"];
 /** One query suppressed from instance-wide autosuggest, with its aggregate evidence. */
 export type SuggestionBanEntry = Schemas["SuggestionBanEntry"];
 /**

@@ -170,6 +170,8 @@ import type {
   WatchedWord,
   WatchedWordListResponse,
   WatchedWordMatchListResponse,
+  WatchedWordMatchStatusFilter,
+  ResolveWatchedWordMatchRequest,
   WatchHistoryResponse,
   WatchProgress,
 } from "./types";
@@ -2288,11 +2290,29 @@ export const api = {
       signal,
     }),
 
-  /** GET /api/v1/admin/watched-word-matches — comments flagged by a watched term (mod/admin). */
-  getWatchedWordMatches: (params: PageParams = {}, signal?: AbortSignal) =>
+  /**
+   * GET /api/v1/admin/watched-word-matches — content flagged by a watched term
+   * (mod/admin). `status` filters the triage state and the SERVER defaults it to
+   * `open`, so the queue is a work list rather than an ever-growing log.
+   */
+  getWatchedWordMatches: (
+    params: PageParams & { status?: WatchedWordMatchStatusFilter } = {},
+    signal?: AbortSignal,
+  ) =>
     apiRequest<WatchedWordMatchListResponse>("/api/v1/admin/watched-word-matches", {
-      query: pageQuery(params),
+      query: { status: params.status, ...pageQuery(params) },
       signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/watched-word-matches/{id}/resolve — triage one flagged
+   * item as resolved or dismissed with an optional note (mod/admin, 204).
+   * Idempotent: a repeat overwrites the outcome and still succeeds.
+   */
+  resolveWatchedWordMatch: (id: string, body: ResolveWatchedWordMatchRequest) =>
+    apiRequest<void>(`/api/v1/admin/watched-word-matches/${encodeURIComponent(id)}/resolve`, {
+      method: "POST",
+      body,
     }),
 
   /** POST /api/v1/admin/watched-words — add a watched term (moderator/admin; 409 on duplicate). */

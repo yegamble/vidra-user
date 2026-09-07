@@ -1430,6 +1430,24 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/watched-word-matches?limit=100");
   });
 
+  it("getWatchedWordMatches sends the triage filter to the SERVER", async () => {
+    await api.getWatchedWordMatches({ status: "dismissed", limit: 20 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/watched-word-matches?status=dismissed&limit=20",
+    );
+  });
+
+  it("resolveWatchedWordMatch POSTs the outcome + note to the resolve endpoint", async () => {
+    await api.resolveWatchedWordMatch("m1", { status: "dismissed", note: "false positive" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/watched-word-matches/m1/resolve");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      status: "dismissed",
+      note: "false positive",
+    });
+  });
+
   it("addWatchedWord POSTs the word", async () => {
     await api.addWatchedWord("spam");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
