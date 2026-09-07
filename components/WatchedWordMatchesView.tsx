@@ -72,6 +72,11 @@ export function splitSnapshot(
   length: number,
   term: string,
 ): [string, string, string] {
+  // Defensive, not decorative: `matched_text` is required by the contract, but a
+  // frontend running ahead of a core that predates 0132 would hand this
+  // `undefined`, and `Array.from(undefined)` throws — taking the whole queue
+  // down with the error boundary rather than one row's quote.
+  if (typeof text !== "string") return ["", "", ""];
   const chars = Array.from(text);
   let start = offset;
   let end = offset + length;

@@ -1,10 +1,19 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WatchedWordMatch } from "@/lib/api";
 
-import { WatchedWordMatchesView, splitSnapshot } from "./WatchedWordMatchesView";
+import {
+  WatchedWordMatchesView,
+  splitSnapshot,
+} from "./WatchedWordMatchesView";
 
 const mocks = vi.hoisted(() => ({
   getWatchedWordMatches: vi.fn(),
@@ -27,7 +36,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/auth/AuthProvider", () => ({
-  useSession: () => ({ user: { id: "mod-1", username: "dana", role: "moderator" } }),
+  useSession: () => ({
+    user: { id: "mod-1", username: "dana", role: "moderator" },
+  }),
 }));
 
 // A comment flagged for "pineapple" whose author has since edited the term away:
@@ -80,7 +91,11 @@ describe("splitSnapshot", () => {
     // plain ASCII and the icon lint has nothing to argue with.)
     const astral = String.fromCodePoint(0x2070e);
     const text = `${astral} pineapple`;
-    expect(splitSnapshot(text, 2, 9, "pineapple")).toEqual([`${astral} `, "pineapple", ""]);
+    expect(splitSnapshot(text, 2, 9, "pineapple")).toEqual([
+      `${astral} `,
+      "pineapple",
+      "",
+    ]);
   });
 
   it("falls back to a case-insensitive search when the offset is unknown (-1)", () => {
@@ -91,6 +106,15 @@ describe("splitSnapshot", () => {
       "MIXTAPE",
       " now",
     ]);
+  });
+
+  it("survives a missing snapshot instead of taking the queue down with it", () => {
+    // `matched_text` is contract-required, but a frontend deployed ahead of a
+    // core that predates 0132 would hand this undefined, and Array.from would
+    // throw through the error boundary.
+    expect(
+      splitSnapshot(undefined as unknown as string, -1, 0, "spam"),
+    ).toEqual(["", "", ""]);
   });
 
   it("highlights nothing rather than the wrong span when the term is absent", () => {
@@ -119,7 +143,9 @@ describe("WatchedWordMatchesView", () => {
   it("asks the server for OPEN matches by default", async () => {
     render(<WatchedWordMatchesView />);
     await waitFor(() => expect(mocks.getWatchedWordMatches).toHaveBeenCalled());
-    expect(mocks.getWatchedWordMatches.mock.calls[0][0]).toMatchObject({ status: "open" });
+    expect(mocks.getWatchedWordMatches.mock.calls[0][0]).toMatchObject({
+      status: "open",
+    });
   });
 
   it("filters on the SERVER when a chip is picked, not by narrowing the page it holds", async () => {
@@ -170,16 +196,27 @@ describe("WatchedWordMatchesView", () => {
     render(<WatchedWordMatchesView />);
     await screen.findByText(/I want/);
     fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
-    expect(await screen.findByText("Could not update this flagged item.")).toBeTruthy();
+    expect(
+      await screen.findByText("Could not update this flagged item."),
+    ).toBeTruthy();
     expect(screen.getByText(/I want/)).toBeTruthy();
   });
 
   it("marks a backfilled snapshot so it is not read as evidence of what was flagged", async () => {
     mocks.getWatchedWordMatches.mockResolvedValue(
-      page([{ ...EDITED_AWAY, id: "m-2", snapshot_backfilled: true, match_offset: -1 }]),
+      page([
+        {
+          ...EDITED_AWAY,
+          id: "m-2",
+          snapshot_backfilled: true,
+          match_offset: -1,
+        },
+      ]),
     );
     render(<WatchedWordMatchesView />);
-    expect(await screen.findByText(/Reconstructed from the live comment/)).toBeTruthy();
+    expect(
+      await screen.findByText(/Reconstructed from the live comment/),
+    ).toBeTruthy();
   });
 
   it("says a term is gone rather than dropping the match with it", async () => {
