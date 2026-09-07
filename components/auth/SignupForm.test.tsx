@@ -98,6 +98,10 @@ describe("SignupForm (W7 sign-up policies)", () => {
 
     await screen.findByText("Check your email");
     expect(screen.getByText(/verification link/)).toBeTruthy();
+    // The way out if the message never arrives. Without it this screen was a
+    // dead end: no session is issued behind the gate, so the signed-in resend
+    // is unreachable to exactly the person looking at it.
+    expect(screen.getByRole("button", { name: "Resend verification email" })).toBeTruthy();
     expect(routerPush).not.toHaveBeenCalled();
   });
 

@@ -191,6 +191,20 @@ export const authApi = {
     apiRequest<void>("/api/v1/auth/verify-email", { method: "POST" }),
 
   /**
+   * POST /api/v1/auth/verify-email/resend — re-send the verification message
+   * for an address WITHOUT a session. It is the half the signed-in variant
+   * above cannot cover: with the verification gate on, login answers 403
+   * `email_verification_required`, so the account that lost the message has no
+   * bearer token to ask with.
+   *
+   * Always 202 with an empty body — known, unknown, already-verified, and a
+   * repeat inside the server's send cooldown all look identical — so the caller
+   * must never render "we sent it" as a claim about the address existing.
+   */
+  resendEmailVerification: (body: { email: string }) =>
+    apiRequest<void>("/api/v1/auth/verify-email/resend", { method: "POST", body }),
+
+  /**
    * POST /api/v1/auth/verify-email/confirm — mark the email verified using the
    * single-use token from the verification message (public — the link may be
    * followed while logged out). 204 on success; 400 if invalid/used/expired.

@@ -8,6 +8,7 @@ import { AuthWordmark, authBrandName } from "@/components/auth/AuthPage";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
 import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
+import { ResendVerification } from "@/components/auth/ResendVerification";
 import { LockIcon } from "@/components/icons";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +16,7 @@ import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
-import { loginCredentials } from "@/lib/login-identifier";
+import { loginCredentials, looksLikeEmail } from "@/lib/login-identifier";
 
 // LoginForm drives the whole sign-in surface:
 //  - email-or-username + password credentials (cookie-mode session);
@@ -72,6 +73,13 @@ export function LoginForm({
   // still deciding, the landing shows a spinner; a settled "anon" means the
   // callback did NOT hand us a session cookie — surfaced honestly (dismissed
   // once the user falls back to the password form).
+  // Set to the address a refused sign-in was made with when login answers 403
+  // email_verification_required. It is what turns that refusal from a dead end
+  // into an action: the account is held BECAUSE it cannot sign in, so the
+  // signed-in resend is unreachable to exactly the person who needs it.
+  // Null when the attempt used a username — this instance knows the address,
+  // and the browser does not, so there is nothing honest to offer.
+  const [verificationBlocked, setVerificationBlocked] = useState<string | null>(null);
   const [oauthLanding] = useState(oauthPending && !oauthError);
   const [landingDismissed, setLandingDismissed] = useState(false);
   const completingOAuth = oauthLanding && !landingDismissed && status === "restoring";
@@ -109,6 +117,7 @@ export function LoginForm({
 
   async function submit() {
     setError(null);
+    setVerificationBlocked(null);
     setLandingDismissed(true); // a manual attempt supersedes the OAuth landing
     setSubmitting(true);
     try {
@@ -125,6 +134,13 @@ export function LoginForm({
       }
       router.push("/");
     } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.code === "email_verification_required" &&
+        looksLikeEmail(identifier)
+      ) {
+        setVerificationBlocked(identifier.trim());
+      }
       setError(
         errorMessage(err, "Something went wrong. Please try again.", {
           // Identifier-neutral: the attempt may have used a username.
@@ -292,6 +308,7 @@ export function LoginForm({
       </div>
 
       {errorBanner}
+      {verificationBlocked ? <ResendVerification email={verificationBlocked} /> : null}
 
       {/* type="text", not "email": a username is a valid value here, and the
           browser's built-in email validation would reject one. autoComplete

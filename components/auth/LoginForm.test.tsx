@@ -6,10 +6,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { routerReplace, routerPush, loginMock, getInstanceMock } = vi.hoisted(() => ({
+const { routerReplace, routerPush, loginMock, getInstanceMock, resendMock } = vi.hoisted(() => ({
   routerReplace: vi.fn(),
   routerPush: vi.fn(),
   loginMock: vi.fn(),
+  resendMock: vi.fn(),
   getInstanceMock: vi.fn(),
 }));
 
@@ -23,7 +24,11 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
-  return { ...actual, api: { getInstance: getInstanceMock } };
+  return {
+    ...actual,
+    api: { getInstance: getInstanceMock },
+    authApi: { resendEmailVerification: resendMock },
+  };
 });
 
 import { ApiError } from "@/lib/api";
@@ -36,6 +41,7 @@ afterEach(() => {
   getInstanceMock.mockReset();
   routerPush.mockReset();
   routerReplace.mockReset();
+  resendMock.mockReset();
 });
 
 async function signIn(identifier: string, password = "supersecret") {
@@ -84,6 +90,42 @@ describe("LoginForm identifier field", () => {
     );
     await signIn("ada");
     await screen.findByText("Invalid email/username or password.");
+  });
+
+  // A05 defect 2 at the sign-in screen: the refusal that holds an unverified
+  // account is the same refusal that denies it the session the signed-in resend
+  // needs, so the copy alone ("check your inbox") pointed at a message the
+  // person no longer has and offered nothing.
+  it("offers the resend when an email sign-in is held for verification", async () => {
+    resendMock.mockResolvedValue(undefined);
+    loginMock.mockRejectedValue(
+      new ApiError({
+        status: 403,
+        code: "email_verification_required",
+        message: "verify your email address to sign in",
+      }),
+    );
+    await signIn("ada@example.test");
+    await screen.findByText(/Verify your email address first/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Resend verification email" }));
+    await waitFor(() => expect(resendMock).toHaveBeenCalledWith({ email: "ada@example.test" }));
+  });
+
+  it("does NOT offer the resend when the attempt used a username", async () => {
+    loginMock.mockRejectedValue(
+      new ApiError({
+        status: 403,
+        code: "email_verification_required",
+        message: "verify your email address to sign in",
+      }),
+    );
+    await signIn("ada");
+    await screen.findByText(/Verify your email address first/);
+    // The route takes an ADDRESS. This browser has a username and no way to
+    // turn it into one, and inventing a lookup would be the enumeration
+    // oracle the resend route was written to avoid.
+    expect(screen.queryByRole("button", { name: "Resend verification email" })).toBeNull();
   });
 
   it("still swaps to the MFA challenge from a username sign-in", async () => {
