@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
 import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
+import { ResendVerification } from "@/components/auth/ResendVerification";
 import { ClockIcon, InfoIcon, MailIcon } from "@/components/icons";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -179,6 +180,13 @@ export function SignupForm({
                 sign in
               </Link>
               . You cannot sign in until your email is verified.
+              {/* The way out of the dead end this screen used to be: with the
+                  gate on there is no session, so the signed-in resend was
+                  unreachable and a lost message meant waiting for an admin to
+                  flip email_verified by hand. */}
+              <span className="mt-4 block">
+                <ResendVerification email={pendingEmail} />
+              </span>
             </>
           }
         />

@@ -133,6 +133,15 @@ describe("authApi + auth-store", () => {
     expect(init.method).toBe("POST");
   });
 
+  it("resendEmailVerification POSTs the address, with no bearer required", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 202 }));
+    await authApi.resendEmailVerification({ email: "ada@example.test" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/auth/verify-email/resend");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ email: "ada@example.test" }));
+  });
+
   it("confirmEmailVerification POSTs the token to the confirm endpoint", async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     await authApi.confirmEmailVerification({ token: "verify-tok" });

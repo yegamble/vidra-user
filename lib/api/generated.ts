@@ -600,6 +600,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/verify-email/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-send an email-verification message (no session)
+         * @description Re-sends the verification message for an address, WITHOUT a session. It is the unauthenticated counterpart of POST /api/v1/auth/verify-email, and it exists because the account that needs it is precisely the one that cannot sign in: with `registration_require_email_verification` effective, registration answers 202 with no session and login answers 403 `email_verification_required`.
+         *
+         *     Always 202 with an EMPTY body — for a known unverified address, an unknown one, an already-verified one, a deactivated one, and a repeat inside the send cooldown alike — so it cannot be used to enumerate accounts. A message is actually sent only for an active, unverified account whose last unused token is older than the cooldown; issuing a new token invalidates the account's previous unused ones, so only the newest link works. A relay failure is logged and audited and still answers 202, for the same reason: a 500 for a registered address beside a 202 for an unregistered one would be an account-existence oracle.
+         *
+         *     Behind the strict per-IP auth limiter (10/min) like every other unauthenticated credential endpoint.
+         */
+        post: operations["resendEmailVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/verify-email/confirm": {
         parameters: {
             query?: never;
@@ -5152,6 +5176,26 @@ export interface paths {
         patch: operations["updateUser"];
         trace?: never;
     };
+    "/api/v1/admin/users/{id}/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a user's second factor (admin)
+         * @description Removes a target account's TOTP configuration and every recovery code. Restricted to admins, and the CALLER re-confirms their OWN password — the target cannot supply theirs, which is the situation this exists for (an authenticator lost together with the recovery codes; self-service removal needs both the account's password and a session it can no longer obtain). The action removes protection and never grants access: nothing secret is read or returned, the response has no body, and no admin route anywhere discloses the shared secret or a recovery code. The target's sessions are revoked and the target is mailed a notice naming an administrator as the actor. Removing your OWN second factor here is allowed — an owner who loses their authenticator has nobody above them to ask — and in that case the acting session survives. Every outcome is audited (`admin.user.mfa_reset`) with the target named.
+         */
+        delete: operations["adminRemoveUserMFA"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7291,6 +7335,10 @@ export interface components {
         CreateWatchedWordRequest: {
             word: string;
         };
+        AdminRemoveUserMFARequest: {
+            /** @description The CALLING administrator's own current password. Not the target's: the target is, by construction, the party who cannot prove anything right now. */
+            password: string;
+        };
         /** @description Admin projection of an account (never includes the password hash). */
         AdminUser: {
             /** Format: uuid */
@@ -7323,6 +7371,8 @@ export interface components {
             deleted_at: string | null;
             /** @description Whether this account is THE instance owner — the account that redeemed the first-run setup token. There is no owner ROLE: the owner holds `admin` like any other administrator, so this flag is the only thing that identifies it. Another administrator cannot demote, deactivate or delete it (422 `owner_protected`), and nobody can remove the last active administrator (422 `last_admin`). False for every account on an instance claimed before the marker existed whose owner could not be determined. */
             is_owner: boolean;
+            /** @description Whether this account has a CONFIRMED second factor (TOTP). A pending enrollment reads false, exactly as the account's own GET /api/v1/auth/mfa reports it. It is a boolean and nothing more: no admin route ever returns the shared secret or a recovery code. An admin can remove the factor with DELETE /api/v1/admin/users/{id}/mfa, which is the only operator answer to a user who has lost both their authenticator and their recovery codes. */
+            mfa_enabled: boolean;
         };
         AdminUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["AdminUser"][];
@@ -10397,6 +10447,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description This deployment has no outbound mail path, so the confirmation this change depends on can never be delivered. Stable code `mail_not_configured` — the request is refused rather than left pending forever. Set MAIL_ENABLED=true with SMTP_HOST, SMTP_PORT and SMTP_FROM and restart the api. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     cancelEmailChange: {
@@ -10473,6 +10532,15 @@ export interface operations {
             };
             /** @description Too many requests (auth rate limit). */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This deployment has no outbound mail path, so the confirmation cannot be re-sent. Stable code `mail_not_configured`. Set MAIL_ENABLED=true with SMTP_HOST, SMTP_PORT and SMTP_FROM and restart the api. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10624,6 +10692,52 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resendEmailVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: email
+                     * @description The address to re-send the verification message to.
+                     */
+                    email: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted. Identical for every input; it does not disclose whether the address belongs to an account or whether anything was sent. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No address was supplied. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests from this IP. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15714,7 +15828,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The requested resolver is disabled on this instance (e.g. resolver=ytdlp while YTDLP_IMPORT_ENABLED is off). Stable code service_unavailable. */
+            /** @description The requested resolver is disabled on this instance (e.g. resolver=ytdlp while YTDLP_IMPORT_ENABLED is off). Stable code `ytdlp_import_not_configured`; the message names the variable to set. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -15826,7 +15940,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The deployment lacks the yt-dlp import resolver (YTDLP_IMPORT_ENABLED off), so channel auto-sync cannot run. Stable code service_unavailable. */
+            /** @description The deployment lacks the yt-dlp import resolver (YTDLP_IMPORT_ENABLED off), so channel auto-sync cannot run. Stable code `channel_sync_not_configured`; the message names the variable to set. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -15929,7 +16043,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The deployment lacks the yt-dlp import resolver, so channel auto-sync cannot run. Stable code service_unavailable. */
+            /** @description The deployment lacks the yt-dlp import resolver, so channel auto-sync cannot run. Stable code `channel_sync_not_configured`. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -16049,7 +16163,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The Whisper boot capability is not configured on this deployment (WHISPER_ENDPOINT), so auto-captioning cannot run. */
+            /** @description The Whisper boot capability is not configured on this deployment (WHISPER_ENDPOINT), so auto-captioning cannot run. Stable code `auto_captions_not_configured`; the message names the variable to set. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -24064,6 +24178,93 @@ export interface operations {
             };
             /** @description Validation failed, or an attempt to self-demote/deactivate. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminRemoveUserMFA: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminRemoveUserMFARequest"];
+            };
+        };
+        responses: {
+            /** @description The account's second factor was removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin, or the supplied password is wrong. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such user, or the account has no two-factor authentication to remove. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The calling admin has no password to confirm with (an OIDC/ATProto-only account); set one through the password reset flow first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (no password supplied). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts from this IP. The route sits behind the strict auth limiter because supplying a password makes it a guessing surface. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Two-factor authentication is not configured on this server. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
