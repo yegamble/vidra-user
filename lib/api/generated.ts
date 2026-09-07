@@ -3304,6 +3304,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/watched-word-matches/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Triage one watched-word match
+         * @description Marks a flagged item "resolved" (a moderator acted on it) or "dismissed" (a false positive), with an optional note stored on the match row. Restricted to moderators/admins. Idempotent, like resolving a report — a repeat overwrites the outcome and the note and still answers 204. The note never enters the audit ledger, which records the outcome and whether a note was supplied.
+         */
+        post: operations["resolveWatchedWordMatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/watched-word-matches": {
         parameters: {
             query?: never;
@@ -3313,7 +3333,11 @@ export interface paths {
         };
         /**
          * List content flagged by the watched-words list
-         * @description Returns comments AND videos that matched a watched term, newest match first, with the matched term and the target's context — a type badge ("comment" or "video"), the comment's body/author + its video, or the flagged video's title + owner. Comments are matched on post/edit; videos on create/edit (title+description). Restricted to moderators/admins. Detection only — nothing is auto-hidden (the upload quarantine pipeline is the hold mechanism for videos). Paginated via ?limit (1–100, default 20)/?offset.
+         * @description Returns comments AND videos that matched a watched term, newest match first, with the matched term and the target's context — a type badge ("comment" or "video"), the comment's body/author + its video, or the flagged video's title + owner. Comments are matched on post/edit; videos on create/edit (title+description). Restricted to moderators/admins. Detection only — nothing is auto-hidden (the upload quarantine pipeline is the hold mechanism for videos).
+         *
+         *     Each row carries `matched_text`, the SNAPSHOT of the text as it read when the flag was raised. The live target (`comment_body` / `video_title`) may since have changed, and `target_status` says which — "present" when the live text still contains the term, "edited_away" when it no longer does. `snapshot_backfilled` marks a row whose snapshot was reconstructed from the live text by migration 0132 rather than captured at flag time.
+         *
+         *     ?status filters the triage state and defaults to `open`; pass `all` for the whole history. Paginated via ?limit (1–100, default 20)/?offset.
          */
         get: operations["listWatchedWordMatches"];
         put?: never;
@@ -7196,7 +7220,7 @@ export interface components {
         WatchedWordMatch: {
             /** Format: uuid */
             id: string;
-            /** @description The watched term that matched. */
+            /** @description The watched term that matched, as it read when the flag was raised. It survives the term being deleted from the list (see term_active). */
             word: string;
             /**
              * @description What was flagged.
@@ -7208,7 +7232,7 @@ export interface components {
              * @description The flagged comment (comment matches only).
              */
             comment_id?: string;
-            /** @description The flagged comment's body (comment matches only). */
+            /** @description The flagged comment's LIVE body (comment matches only) — which may no longer contain the term. matched_text is what was flagged. */
             comment_body?: string;
             /**
              * Format: uuid
@@ -7220,9 +7244,47 @@ export interface components {
             author_username: string;
             /** Format: date-time */
             created_at: string;
+            /** @description The SNAPSHOT — the comment body, or the video's title and description joined by a newline, as it read at flag time. This is what a moderator reviews; the live target may since have changed. */
+            matched_text: string;
+            /** @description Where the term begins inside matched_text, counted in RUNES (code points) so a highlight cannot split a multi-byte character. -1 means the term could not be located and the client should fall back to searching matched_text for `word`. */
+            match_offset: number;
+            /** @description The term's length in runes, 0 when match_offset is -1. */
+            match_length: number;
+            /** @description True for a row whose snapshot was reconstructed from the LIVE text by migration 0132 rather than captured at flag time. Such a quote is the body as it reads today and must not be read as evidence of what was flagged. */
+            snapshot_backfilled: boolean;
+            /** @description False once the watched word itself was deleted. The match survives that and keeps its term in `word`. */
+            term_active: boolean;
+            /**
+             * @description Whether the LIVE target still contains the term. "edited_away" means the author has since removed it, so the snapshot and the live text differ. A DELETED target is not representable — the match row is removed with its comment or video.
+             * @enum {string}
+             */
+            target_status: "present" | "edited_away";
+            /**
+             * @description Triage state.
+             * @enum {string}
+             */
+            status: "open" | "resolved" | "dismissed";
+            /** @description The triaging moderator's note (empty when none was given). */
+            moderator_note: string;
+            /**
+             * Format: date-time
+             * @description When the match was triaged (absent while open).
+             */
+            resolved_at?: string;
+            /** @description Who triaged it (absent while open). */
+            resolved_by_username?: string;
         };
         WatchedWordMatchListResponse: components["schemas"]["PageMeta"] & {
             matches: components["schemas"]["WatchedWordMatch"][];
+        };
+        ResolveWatchedWordMatchRequest: {
+            /**
+             * @description The outcome — "resolved" when a moderator acted on the flagged content, "dismissed" when it was a false positive.
+             * @enum {string}
+             */
+            status: "resolved" | "dismissed";
+            /** @description The moderator's internal note. Stored on the match row and never in the audit ledger. */
+            note?: string;
         };
         CreateWatchedWordRequest: {
             word: string;
@@ -18531,9 +18593,71 @@ export interface operations {
             };
         };
     };
+    resolveWatchedWordMatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveWatchedWordMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description The match was triaged. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such flagged item. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listWatchedWordMatches: {
         parameters: {
             query?: {
+                /** @description Triage state to list. Defaults to open — the queue is a work list. */
+                status?: "open" | "resolved" | "dismissed" | "all";
                 limit?: number;
                 offset?: number;
             };
