@@ -2913,7 +2913,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected) mapped to whether it is delivered. Types never configured default to enabled. The new_report type is only ever delivered to admins/moderators, but the switch is visible to everyone.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report type is only ever delivered to admins/moderators, but the switch is visible to everyone.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -3481,12 +3481,12 @@ export interface paths {
         put?: never;
         /**
          * Block a video
-         * @description Blocks a video so it is removed from all public surfaces (feed, search, channel listings, subscriptions, the watch/detail endpoint, media streaming, and public interactions). Moderators/admins can still view a blocked video. Restricted to moderators/admins. Idempotent. An unknown id is 404.
+         * @description Blocks a video so it is removed from all public surfaces (feed, search, channel listings, subscriptions, the watch/detail endpoint, media streaming, and public interactions). Moderators/admins can still view a blocked video. Restricted to moderators/admins. Idempotent. An unknown id is 404. The video's owner is notified (a video_blocked notification) and the reason, when given, is shown to them — see BlockVideoRequest.
          */
         post: operations["blockVideo"];
         /**
          * Unblock a video
-         * @description Lifts a video's block, restoring it to public surfaces. Restricted to moderators/admins. Idempotent (unblocking a video that is not blocked still succeeds).
+         * @description Lifts a video's block, restoring it to public surfaces. Restricted to moderators/admins. Idempotent (unblocking a video that is not blocked still succeeds). The video's owner is notified (a video_unblocked notification linking to the restored video) — best-effort, and only when a block was actually lifted, so a repeated call delivers nothing further.
          */
         delete: operations["unblockVideo"];
         options?: never;
@@ -4380,6 +4380,30 @@ export interface paths {
         get: operations["listAuditLog"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/owner/transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transfer instance ownership (owner only)
+         * @description Moves the instance-owner marker (users.is_owner) from the caller to another administrator, and mails both parties. The former owner KEEPS their admin role — this transfers the marker, not the role.
+         *     Restricted to THE instance owner, not to admins generally: the marker exists precisely so other administrators cannot dispose of it, so an ordinary admin is 403 owner_only. Vidra has no owner role, so this is a service check rather than a router gate, and the route sits under /admin because that is where the console surface and the admin gate already are.
+         *     The caller re-enters their current password, the same confirmation DELETE /api/v1/auth/me and POST /api/v1/auth/me/deactivate ask for: this is the one action that permanently strips the caller of a capability, so a stolen access token alone must not perform it.
+         *     The target must be an active, non-tombstoned administrator other than the caller (422 owner_target_invalid otherwise) — the marker must sit on an account that can actually sign in and reach the console. The swap is one SQL statement under a partial unique index, so of two simultaneous transfers exactly one wins and the loser is 409 owner_transfer_conflict with nothing changed.
+         *     Until this route existed the marker had a single writer (the first-run owner claim) and no way to move, so an owner who closed their account left the instance permanently unowned. That is also why closing the owner's own account is now refused with 422 owner_must_transfer until ownership has moved.
+         */
+        post: operations["transferInstanceOwnership"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5546,6 +5570,8 @@ export interface components {
             /** @enum {string} */
             role: "user" | "moderator" | "admin";
             email_verified: boolean;
+            /** @description True on THE instance owner's own view — the account that completed first-run setup. It is here because ownership is something the caller can act on: only the owner may transfer it (POST /api/v1/admin/owner/transfer), and only the owner is refused their own deactivation and deletion until they have. Inferring it from the admin user list is not equivalent: that list's search filter can page the caller's own row out of view. */
+            is_owner?: boolean;
             /**
              * @description Human-facing name; may be empty.
              * @example Ada L.
@@ -5866,8 +5892,10 @@ export interface components {
              * @description The scheduled publish time. Present on the detail, create/update, and owner (studio) channel-list views once a schedule was set; omitted otherwise. The server publishes the video (running the same side effects as a direct publish) when this time arrives.
              */
             publish_at?: string;
-            /** @description True when a moderator has blocked this video. Present ONLY on the owner/editor channel-management listing (GET /channels/{handle}/videos read by someone who can manage the channel), and only when true. A block changes neither state nor privacy, so without this field that listing shows a taken-down video as "published" while it 404s for everyone including its owner. Public surfaces never contain a blocked video at all. The block REASON is deliberately not exposed here — it is staff-only. */
+            /** @description True when a moderator has blocked this video. Present ONLY on the owner/editor channel-management listing (GET /channels/{handle}/videos read by someone who can manage the channel), and only when true. A block changes neither state nor privacy, so without this field that listing shows a taken-down video as "published" while it 404s for everyone including its owner. Public surfaces never contain a blocked video at all. */
             blocked?: boolean;
+            /** @description The moderator's reason for that block, on the same owner-only listing and only when non-empty. The A16 ruling made it creator-facing: a creator told only that something was taken down can neither appeal it nor avoid repeating it, so the reason the moderator already writes for the moderation block-list is shown to them. It is moderator prose about a named account and never appears on any public surface, on another viewer's read of the same channel, or on the video detail endpoint (which stays 404 while the block stands). */
+            block_reason?: string;
             /**
              * Format: date-time
              * @description When the video was FIRST published elsewhere (a PeerTube import's originallyPublishedAt, or a date the creator set). Present on the detail and create/update views when known; omitted for anything first published on this instance, where created_at is the only date.
@@ -6694,10 +6722,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). It is deliberately neutral — neither the moderator nor the block reason is included, and it carries no moderation_note; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
-            type: "follow" | "comment" | "comment_reply" | "message" | "new_video" | "new_report" | "report_resolved" | "video_rejected" | "video_blocked" | "caption_ready";
+            type: "follow" | "comment" | "comment_reply" | "message" | "new_video" | "new_report" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -6738,7 +6766,7 @@ export interface components {
              * @enum {string}
              */
             report_target_type?: "video" | "comment" | "account" | "remote_video" | "message";
-            /** @description The moderator's written reason for rejecting a quarantined upload — video_rejected notifications ONLY, and absent when the moderator supplied none. It is the creator's only explanation of why their upload was refused. A video_blocked notification never carries one: block reasons are staff-only. */
+            /** @description The moderator's prose about this video, on the two types that exist to deliver it and absent when the moderator supplied none: the rejection note on video_rejected, and — since the A16 ruling made block reasons creator-facing — the block reason on video_blocked. It is the creator's only explanation of why their work was refused or taken down. A lifted block deletes the reason, so an older video_blocked notice stops carrying one and renders as the neutral notice; video_unblocked never carries prose. */
             moderation_note?: string;
         };
         NotificationListResponse: components["schemas"]["PageMeta"] & {
@@ -6766,7 +6794,8 @@ export interface components {
              *       "new_video": true,
              *       "report_resolved": true,
              *       "video_blocked": true,
-             *       "video_rejected": true
+             *       "video_rejected": true,
+             *       "video_unblocked": true
              *     }
              */
             prefs: {
@@ -6775,7 +6804,7 @@ export interface components {
         };
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }
@@ -6901,7 +6930,26 @@ export interface components {
             /** @description Internal moderator note (not shown to the reporter). */
             note?: string;
         };
-        /** @description Optional body for blocking a video; the reason is recorded for the audit trail. */
+        /** @description Which administrator becomes the instance owner, and the caller's current password confirming the action. */
+        TransferOwnershipRequest: {
+            /**
+             * Format: uuid
+             * @description The administrator who becomes the new instance owner.
+             */
+            user_id: string;
+            /** @description The CALLER's current password. Never logged, never audited, and never echoed back. */
+            password: string;
+        };
+        OwnerTransferResponse: {
+            /** Format: uuid */
+            new_owner_id: string;
+            new_owner_username: string;
+            /** Format: uuid */
+            former_owner_id: string;
+            /** @description The caller. They remain an administrator; only the owner marker moved. */
+            former_owner_username: string;
+        };
+        /** @description Optional body for blocking a video. The reason is recorded on the block and is CREATOR-FACING since the A16 ruling: the video's owner reads it on their own channel-management listing (block_reason) and on their video_blocked notification (moderation_note). It never reaches any other viewer. Write it for the creator, not just for the block-list. */
         BlockVideoRequest: {
             reason?: string;
         };
@@ -21524,6 +21572,75 @@ export interface operations {
             };
             /** @description The caller is not an admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    transferInstanceOwnership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferOwnershipRequest"];
+            };
+        };
+        responses: {
+            /** @description Ownership moved; the new and former owner are named. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerTransferResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin, is an admin but not the instance owner (owner_only), or the password was wrong. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Another ownership transfer completed first (owner_transfer_conflict). Nothing changed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The target is not an active, non-tombstoned administrator other than the caller (owner_target_invalid), or the body is missing a field. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

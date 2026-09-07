@@ -53,6 +53,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Blocked videos",
     help: "A moderator blocks one of your published videos, hiding it from viewers.",
   },
+  video_unblocked: {
+    label: "Restored videos",
+    help: "A moderator lifts a block, so one of your videos is available again.",
+  },
   caption_ready: {
     label: "Captions ready",
     help: "Auto-captions finish for one of your videos.",
@@ -71,6 +75,7 @@ const TYPE_ORDER = [
   "report_resolved",
   "video_rejected",
   "video_blocked",
+  "video_unblocked",
   "caption_ready",
 ];
 

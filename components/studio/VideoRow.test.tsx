@@ -59,11 +59,22 @@ describe("VideoRow — moderation state", () => {
     expect(screen.getByText("published")).toBeTruthy();
   });
 
-  it("does not show the creator the moderator's reason", () => {
-    // The contract never sends one to this surface; the row must not invent a
-    // placeholder that implies one exists, and reason-visibility stays an open
-    // product ruling rather than something the frontend settles by accident.
+  it("shows the creator the moderator's reason", () => {
+    // The A16 ruling settled what slice 2 left open. The reason was already
+    // written — the moderator types it for the block-list — and a creator told
+    // only that something was taken down can neither appeal it nor avoid
+    // repeating it, so it is shown here, on the one surface that is theirs.
+    renderRow(row({ blocked: true, block_reason: "Third-party music" }));
+    expect(screen.getByText(/reason/i)).toBeTruthy();
+    expect(screen.getByText(/Third-party music/)).toBeTruthy();
+  });
+
+  it("says nothing about a reason when the moderator wrote none", () => {
+    // The contract omits block_reason when it is empty — and a lifted block
+    // deletes it outright — so the row must not invent a placeholder that
+    // implies one exists. The take-down sentence still stands on its own.
     renderRow(row({ blocked: true }));
     expect(screen.queryByText(/reason/i)).toBeNull();
+    expect(screen.getByText(/not available to viewers/i)).toBeTruthy();
   });
 });

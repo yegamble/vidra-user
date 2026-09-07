@@ -185,6 +185,8 @@ export type InfrastructureFeature = Schemas["InfrastructureFeature"];
 export type MailTestResult = Schemas["MailTestResult"];
 export type AdminStats = Schemas["AdminStats"];
 export type UpdateUserRequest = Schemas["UpdateUserRequest"];
+export type TransferOwnershipRequest = Schemas["TransferOwnershipRequest"];
+export type OwnerTransferResponse = Schemas["OwnerTransferResponse"];
 
 // --- Admin: instance settings / jobs / media GB (slice user-admin-config) ----
 export type InstanceSetting = Schemas["InstanceSetting"];

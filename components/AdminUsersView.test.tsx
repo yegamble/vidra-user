@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   getAdminUsers: vi.fn(),
   updateAdminUser: vi.fn(),
   deleteAdminUser: vi.fn(),
+  transferInstanceOwnership: vi.fn(),
+  // The signed-in viewer, mutable so a test can be the OWNER rather than just
+  // an admin — the ownership-transfer control turns on exactly that difference.
+  session: { user: { id: "admin-1", role: "admin" } } as { user: Record<string, unknown> },
 }));
 
 // A stub that really re-renders on navigation: the list window lives in the URL
@@ -17,13 +21,14 @@ vi.mock("@/components/RoleGate", () => ({
   RoleGate: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/components/auth/AuthProvider", () => ({
-  useSession: () => ({ user: { id: "admin-1", role: "admin" } }),
+  useSession: () => mocks.session,
 }));
 vi.mock("@/lib/api", () => ({
   api: {
     getAdminUsers: mocks.getAdminUsers,
     updateAdminUser: mocks.updateAdminUser,
     deleteAdminUser: mocks.deleteAdminUser,
+    transferInstanceOwnership: mocks.transferInstanceOwnership,
   },
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
@@ -67,6 +72,15 @@ beforeEach(() => {
   mocks.getAdminUsers.mockReset();
   mocks.updateAdminUser.mockReset();
   mocks.deleteAdminUser.mockReset();
+  mocks.transferInstanceOwnership.mockReset();
+  mocks.transferInstanceOwnership.mockResolvedValue({
+    new_owner_id: "admin-2",
+    new_owner_username: "avery",
+    former_owner_id: "owner-1",
+    former_owner_username: "mona",
+  });
+  // Every test that does not opt in stays an ordinary admin.
+  mocks.session = { user: { id: "admin-1", role: "admin" } };
 });
 
 afterEach(() => cleanup());
@@ -534,5 +548,94 @@ describe("AdminUsersView last-admin guard", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open mona" }));
 
     expect((desktop().getByRole("button", { name: "Deactivate mona" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+// The A16 ruling's console half. `users.is_owner` has one slot and only its
+// holder can move it, so before this control an owner who closed their account
+// took the instance's ownership with them and the repair was a hand-written
+// database UPDATE. The control is the OWNER's alone — an ordinary admin calling
+// the route is 403 owner_only — and it must not be offered to a target the
+// server would refuse.
+describe("AdminUsersView ownership transfer", () => {
+  const owner = (overrides: Record<string, unknown> = {}) =>
+    account(0, { id: "owner-1", username: "mona", role: "admin", is_owner: true, ...overrides });
+  const otherAdmin = (overrides: Record<string, unknown> = {}) =>
+    account(1, { id: "admin-2", username: "avery", role: "admin", ...overrides });
+
+  function loadAs(viewer: Record<string, unknown>, users: Record<string, unknown>[]) {
+    mocks.session = { user: viewer };
+    mocks.getAdminUsers.mockResolvedValue({ users, total: users.length, limit: PAGE, offset: 0 });
+  }
+
+  it("offers the transfer to the owner, on another admin", async () => {
+    loadAs({ id: "owner-1", role: "admin", is_owner: true }, [owner(), otherAdmin()]);
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open avery" }));
+
+    const control = desktop().getByRole("button", { name: /transfer ownership/i });
+    expect(control).toBeTruthy();
+    // The consequences are stated before the password is asked for: the caller
+    // keeps admin, loses the owner protection, and cannot undo it themselves.
+    const pane = screen.getByTestId("admin-users-desktop").textContent ?? "";
+    expect(pane).toContain("You stay an administrator");
+    expect(pane).toContain("not be able to transfer ownership again");
+
+    fireEvent.change(desktop().getByLabelText(/your password/i), {
+      target: { value: "supersecret" },
+    });
+    fireEvent.click(control);
+    await waitFor(() =>
+      expect(mocks.transferInstanceOwnership).toHaveBeenCalledWith({
+        user_id: "admin-2",
+        password: "supersecret",
+      }),
+    );
+    // The badge has to move without a manual refresh — a fetch-once list would
+    // keep showing the caller as owner after they stopped being one.
+    await waitFor(() => expect(mocks.getAdminUsers.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("does not offer it to an ordinary admin at all", async () => {
+    loadAs({ id: "admin-2", role: "admin" }, [owner(), otherAdmin()]);
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open mona" }));
+
+    expect(desktop().queryByRole("button", { name: /transfer ownership/i })).toBeNull();
+    expect(mocks.transferInstanceOwnership).not.toHaveBeenCalled();
+  });
+
+  it("does not offer the owner their own account", async () => {
+    loadAs({ id: "owner-1", role: "admin", is_owner: true }, [owner(), otherAdmin()]);
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open mona" }));
+
+    expect(desktop().queryByRole("button", { name: /transfer ownership/i })).toBeNull();
+  });
+
+  it("disables it with a reason for an ineligible target, and asks for no password", async () => {
+    for (const [target, reason] of [
+      [
+        account(2, { id: "user-3", username: "bob", role: "user" }),
+        "Change this account's role first.",
+      ],
+      [
+        account(3, { id: "admin-4", username: "pat", role: "admin", is_active: false }),
+        "Ownership can only go to an active account",
+      ],
+    ] as const) {
+      loadAs({ id: "owner-1", role: "admin", is_owner: true }, [owner(), target]);
+      render(<AdminUsersView />);
+      fireEvent.click(await screen.findByRole("button", { name: `Open ${target.username}` }));
+
+      const control = desktop().getByRole("button", {
+        name: /transfer ownership/i,
+      }) as HTMLButtonElement;
+      expect(control.disabled).toBe(true);
+      expect(screen.getByTestId("admin-users-desktop").textContent ?? "").toContain(reason);
+      expect(desktop().queryByLabelText(/your password/i)).toBeNull();
+      cleanup();
+    }
+    expect(mocks.transferInstanceOwnership).not.toHaveBeenCalled();
   });
 });

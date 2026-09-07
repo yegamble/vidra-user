@@ -154,14 +154,20 @@ export function AdminUsersView() {
     <RoleGate minRole="admin" action="manage users">
       {user ? (
         <ListBoundary label="users">
-          <UsersList currentUserId={user.id} />
+          <UsersList currentUserId={user.id} viewerIsOwner={user.is_owner === true} />
         </ListBoundary>
       ) : null}
     </RoleGate>
   );
 }
 
-function UsersList({ currentUserId }: { currentUserId: string }) {
+function UsersList({
+  currentUserId,
+  viewerIsOwner,
+}: {
+  currentUserId: string;
+  viewerIsOwner: boolean;
+}) {
   // Desktop console (DR12): the users table is a master → detail. `selectedId`
   // is only ever set from the desktop table; mobile keeps its inline-control
   // cards, so it stays null there.
@@ -358,10 +364,12 @@ function UsersList({ currentUserId }: { currentUserId: string }) {
               <UserDetail
                 user={selected}
                 isSelf={selected.id === currentUserId}
+                viewerIsOwner={viewerIsOwner}
                 guard={guardFor(selected)}
                 onBack={() => setSelectedId(null)}
                 onUpdated={onUpdated}
                 onDeleted={onDeleted}
+                onTransferred={list.reload}
               />
             ) : visible.length === 0 ? (
               <EmptyState title="No users in this view" message={facetEmptyMessage} />
@@ -575,6 +583,118 @@ function UsersTable({
   );
 }
 
+/**
+ * Ownership transfer (core `POST /admin/owner/transfer`, A16 ruling). Rendered
+ * only for the OWNER, and only on someone else's detail — an ordinary admin is
+ * refused by core with 403 `owner_only`, and offering them a control that
+ * always 422s is exactly what the rest of this file exists to avoid.
+ *
+ * The marker has one slot and only its holder can move it, which is why this
+ * screen exists at all: before it, an owner who closed their account took the
+ * instance's ownership with them, and the only repair was a hand-written
+ * database UPDATE. That is also why the owner's own account-closing routes now
+ * refuse until this has been used.
+ */
+function transferGate(user: AdminUser): Gate {
+  if (isTombstone(user)) {
+    return { allowed: false, reason: "This account is deleted, so it can never sign in to own anything." };
+  }
+  if (user.role !== "admin") {
+    return {
+      allowed: false,
+      reason: "Ownership can only go to another administrator. Change this account's role first.",
+    };
+  }
+  if (!user.is_active) {
+    return {
+      allowed: false,
+      reason: "Ownership can only go to an active account — a deactivated one cannot reach the console it would own.",
+    };
+  }
+  return GATE_OPEN;
+}
+
+function TransferOwnershipCard({
+  user,
+  onTransferred,
+}: {
+  user: AdminUser;
+  onTransferred: () => void;
+}) {
+  const gate = transferGate(user);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  async function transfer() {
+    if (busy || !password) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.transferInstanceOwnership({ user_id: user.id, password });
+      setPassword("");
+      setDone(true);
+      onTransferred();
+    } catch (err) {
+      setError(errorMessage(err, "Could not transfer ownership."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-border p-4">
+      <h3 className="text-[13.5px] font-semibold text-fg">Instance ownership</h3>
+      {done ? (
+        <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
+          <span className="font-medium text-fg">{user.username}</span> owns this instance now.
+          You are still an administrator, and both of you have been emailed.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
+            You own this instance. Handing ownership to{" "}
+            <span className="font-medium text-fg">{user.username}</span> gives them the protection
+            you have — no other administrator can change their role, deactivate them or delete
+            them — and takes it from you. You stay an administrator, but you will not be able to
+            transfer ownership again, and only they will. Both of you are emailed.
+          </p>
+          {gate.allowed ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                type="password"
+                autoComplete="current-password"
+                aria-label="Your password"
+                placeholder="Your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
+              />
+              <Button
+                variant="danger-outline"
+                size="sm"
+                disabled={busy || password === ""}
+                onClick={() => void transfer()}
+              >
+                {busy ? "Transferring…" : "Transfer ownership"}
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button variant="danger-outline" size="sm" disabled>
+                Transfer ownership
+              </Button>
+              <span className="text-[11.5px] text-fg-muted">{gate.reason}</span>
+            </div>
+          )}
+          {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ── Desktop user detail ───────────────────────────────────────────────────── */
 
 // UserDetail — the design's two-column user detail: a 64px identity header with
@@ -585,17 +705,21 @@ function UsersTable({
 function UserDetail({
   user,
   isSelf,
+  viewerIsOwner,
   guard,
   onBack,
   onUpdated,
   onDeleted,
+  onTransferred,
 }: {
   user: AdminUser;
   isSelf: boolean;
+  viewerIsOwner: boolean;
   guard: Gate;
   onBack: () => void;
   onUpdated: (updated: AdminUser) => void;
   onDeleted: (id: string) => void;
+  onTransferred: () => void;
 }) {
   const { saving, error, setError, save, doDelete } = useUserActions(user, onUpdated, onDeleted);
   const [deleteArmed, setDeleteArmed] = useState(false);
@@ -699,6 +823,10 @@ function UserDetail({
               ? "Deletion is permanent and audited. Deactivating is the reversible alternative — it revokes the account's sessions and hides its content without destroying it."
               : guard.reason}
           </p>
+
+          {viewerIsOwner && !isSelf ? (
+            <TransferOwnershipCard user={user} onTransferred={onTransferred} />
+          ) : null}
 
           {deleteArmed ? (
             <div className="flex flex-col gap-2 rounded-2xl border border-danger-border p-3">

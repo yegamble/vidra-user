@@ -144,6 +144,8 @@ import type {
   ResolveReportRequest,
   UnreadCountResponse,
   UpdateUserRequest,
+  TransferOwnershipRequest,
+  OwnerTransferResponse,
   UpdatePlaylistRequest,
   UpdateVideoRequest,
   CreateUploadSessionRequest,
@@ -1938,6 +1940,23 @@ export const api = {
   updateAdminUser: (id: string, body: UpdateUserRequest) =>
     apiRequest<AdminUser>(`/api/v1/admin/users/${encodeURIComponent(id)}`, {
       method: "PATCH",
+      body,
+    }),
+
+  /**
+   * POST /api/v1/admin/owner/transfer — hand the instance-owner marker to
+   * another administrator (THE OWNER only, not admins generally: the marker
+   * exists so other admins cannot dispose of it, so an ordinary admin is 403
+   * `owner_only`). The caller re-enters their own password, the same
+   * confirmation the account-closing routes ask for. The target must be an
+   * active, non-tombstoned admin other than the caller (422
+   * `owner_target_invalid`); a transfer that lost a race is 409
+   * `owner_transfer_conflict` with nothing changed. Both parties are mailed.
+   * The former owner keeps their admin role — this moves the marker, not it.
+   */
+  transferInstanceOwnership: (body: TransferOwnershipRequest) =>
+    apiRequest<OwnerTransferResponse>("/api/v1/admin/owner/transfer", {
+      method: "POST",
       body,
     }),
 
