@@ -41,6 +41,10 @@ function sync(overrides: Record<string, unknown> = {}) {
     channel_id: "c1",
     external_channel_url: "https://www.youtube.com/@example",
     state: "waiting_first_run",
+    // The contract's failure-backoff fields (vidra-core migration 0135). A
+    // healthy sync carries 0 failures; next_run_at is always present.
+    failure_count: 0,
+    next_run_at: new Date(Date.now() + 3_600_000).toISOString(),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,
@@ -188,7 +192,9 @@ test("Remove deletes the sync and drops the row", async ({ page }) => {
   expect(deleted).toBe(true);
 });
 
-test("a failed sync shows its safe last_error and a Failed pill", async ({ page }) => {
+test("a failed sync shows its safe last_error, a Failed pill and when it will retry", async ({
+  page,
+}) => {
   await page.route(SYNCS, (route) =>
     route.fulfill({
       json: {
@@ -197,6 +203,11 @@ test("a failed sync shows its safe last_error and a Failed pill", async ({ page 
             state: "failed",
             last_error: "the external channel could not be resolved",
             last_sync_at: new Date(Date.now() - 3_600_000).toISOString(),
+            // Three consecutive failures: the backend has backed this sync off to
+            // 4x the interval, which is exactly what the owner cannot guess from
+            // the pill alone.
+            failure_count: 3,
+            next_run_at: new Date(Date.now() + 4 * 3_600_000).toISOString(),
           }),
         ],
       },
@@ -205,8 +216,11 @@ test("a failed sync shows its safe last_error and a Failed pill", async ({ page 
   await openStudio(page);
 
   const row = page.getByRole("listitem").filter({ hasText: "youtube.com/@example" });
-  await expect(row.getByText("Failed")).toBeVisible();
+  // exact: true — the retry line below also contains the word "failed", so a
+  // substring match resolves to two elements and trips Playwright strict mode.
+  await expect(row.getByText("Failed", { exact: true })).toBeVisible();
   await expect(row.getByText("the external channel could not be resolved")).toBeVisible();
+  await expect(row.getByText("3 failed runs in a row · next attempt in 4h")).toBeVisible();
 });
 
 test("the section renders an honest disabled empty state on the stable 503", async ({ page }) => {

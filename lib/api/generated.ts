@@ -8969,6 +8969,16 @@ export interface components {
             last_sync_at?: string;
             /** @description A safe, human-readable reason for the last failed run (omitted when empty). Never a raw internal error or credentials. */
             last_error?: string;
+            /**
+             * Format: int32
+             * @description Consecutive failed runs. 0 means the last run succeeded. The scheduler backs off exponentially on this count — the next attempt is CHANNEL_SYNC_INTERVAL x 2^(failure_count-1) after the failure, capped at CHANNEL_SYNC_BACKOFF_MAX — so a source that stays down is re-listed ever more slowly instead of at the plain cadence forever. A single success resets it. Requesting a sync now bypasses the backoff.
+             */
+            failure_count: number;
+            /**
+             * Format: date-time
+             * @description When the next run is currently scheduled. While a run is in progress this is the lease expiry rather than a future attempt.
+             */
+            next_run_at: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
