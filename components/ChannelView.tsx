@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { AccountModerationMenu } from "@/components/AccountModerationMenu";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
 import { ChannelVideoCard } from "@/components/ChannelVideoCard";
@@ -18,6 +19,8 @@ import { ApiError, api, channelAvatarUrl, channelBannerUrl } from "@/lib/api";
 import type { Channel, Video } from "@/lib/api";
 import { formatCount, formatMonthYear, pluralize } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
+import { useSettledSession } from "@/lib/use-settled-session";
+import { useViewerModeration } from "@/lib/use-viewer-moderation";
 
 type Section = "videos" | "about";
 
@@ -60,7 +63,19 @@ function ChannelForViewer({ handle }: { handle: string }) {
     }
   }, [handle, sessionStatus, user?.id]);
   const channel = data?.channel ?? null;
-  const videos = useMemo(() => data?.videos ?? [], [data]);
+  const serverVideos = useMemo(() => data?.videos ?? [], [data]);
+  // Has THIS viewer muted or blocked the channel's owner? `GET
+  // /channels/{handle}/videos` already answers with none of their videos for
+  // such a viewer (A16 ruling), so on a hard load `serverVideos` is empty and
+  // this only names WHY. It earns its keep on the mute the viewer just made
+  // from the menu below: the same predicate applied here hides the grid at
+  // once, with no refetch, and the next load agrees because the server does
+  // the same thing.
+  const settledSession = useSettledSession();
+  const { mutedIds, blockedIds } = useViewerModeration(settledSession);
+  const ownerHidden =
+    channel !== null && (mutedIds.has(channel.owner_id) || blockedIds.has(channel.owner_id));
+  const videos = useMemo(() => (ownerHidden ? [] : serverVideos), [ownerHidden, serverVideos]);
   // The channel-videos contract has no limit/offset (the backend returns the
   // full list), so "Load more" is a client-side reveal in PAGE_SIZE chunks.
   // Switch to server paging if/when the contract grows pagination params.
@@ -163,6 +178,16 @@ function ChannelForViewer({ handle }: { handle: string }) {
                   {sessionStatus === "authed" ? (
                     <MessageButton recipientId={channel.owner_id} variant="pill" compact />
                   ) : null}
+                  {/* Mute / Block, in the same overflow-menu idiom the comment
+                      row uses. Until the A16 ruling this was the ONLY thing a
+                      viewer could not do from here: an account that never
+                      commented could not be muted from the UI at all. */}
+                  <AccountModerationMenu
+                    accountId={channel.owner_id}
+                    accountName={name}
+                    channelHandles={[channel.handle]}
+                    session={settledSession}
+                  />
                 </>
               )}
             </div>
@@ -189,10 +214,25 @@ function ChannelForViewer({ handle }: { handle: string }) {
         />
         {section === "videos" ? (
           videos.length === 0 ? (
-            <EmptyState
-              title="No videos yet"
-              message="This channel has not published anything."
-            />
+            ownerHidden ? (
+              // The honest empty state. "No videos yet" would be a lie told to
+              // the one viewer who can see it: the channel publishes, and this
+              // viewer asked not to see it. The unmute is the menu in the
+              // header, two lines up, which is why the header stays.
+              <EmptyState
+                title="Videos hidden"
+                message={
+                  blockedIds.has(channel.owner_id)
+                    ? "You blocked this account, so its videos are hidden from you. Unblock it from the menu above to see them again."
+                    : "You muted this account, so its videos are hidden from you. Unmute it from the menu above to see them again."
+                }
+              />
+            ) : (
+              <EmptyState
+                title="No videos yet"
+                message="This channel has not published anything."
+              />
+            )
           ) : (
             <div className="flex flex-col gap-5">
               {/* Sort chips in the shared template pill language (filled =

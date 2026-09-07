@@ -38,7 +38,11 @@ export function BlockedUsersView() {
           icon={<SlashCircleIcon size={24} />}
           tint="red"
           title="No blocked accounts"
-          message="When you block an account, neither of you can send the other a direct message. Blocked accounts appear here."
+          // Same understatement the mutes empty state carried, and the mirror
+          // image of it: this named only the messaging half. A block hides
+          // everything a mute hides — videos, comments, the channel page — and
+          // adds the one thing a mute does not do.
+          message="When you block an account, its videos and comments are hidden from you — its channel page included — and neither of you can send the other a direct message. Blocked accounts appear here."
         />
       }
       renderRow={(account, remove) => (
