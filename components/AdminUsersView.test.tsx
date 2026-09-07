@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   updateAdminUser: vi.fn(),
   deleteAdminUser: vi.fn(),
   transferInstanceOwnership: vi.fn(),
+  removeAdminUserMFA: vi.fn(),
   reloadUser: vi.fn(),
   // The signed-in viewer, mutable so a test can be the OWNER rather than just
   // an admin — the ownership-transfer control turns on exactly that difference.
@@ -30,6 +31,7 @@ vi.mock("@/lib/api", () => ({
     updateAdminUser: mocks.updateAdminUser,
     deleteAdminUser: mocks.deleteAdminUser,
     transferInstanceOwnership: mocks.transferInstanceOwnership,
+    removeAdminUserMFA: mocks.removeAdminUserMFA,
   },
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
@@ -643,5 +645,77 @@ describe("AdminUsersView ownership transfer", () => {
       cleanup();
     }
     expect(mocks.transferInstanceOwnership).not.toHaveBeenCalled();
+  });
+});
+
+// A05 ruling 2. Before this the console showed nothing at all about two-factor:
+// an operator could neither see who had it on nor help a user who had lost both
+// their authenticator and their recovery codes, because self-service removal
+// needs the account's own password AND a session that account can no longer get.
+// The recovery of last resort was a database edit.
+describe("AdminUsersView second factor", () => {
+  beforeEach(() => {
+    mocks.session = { user: { id: "admin-1", role: "admin" } };
+    mocks.removeAdminUserMFA.mockReset();
+  });
+
+  function loadOne(overrides: Record<string, unknown>) {
+    const user = account(0, { id: "user-9", username: "ada", ...overrides });
+    mocks.getAdminUsers.mockResolvedValue({ users: [user], total: 1, limit: PAGE, offset: 0 });
+  }
+
+  it("shows whether an account has a second factor, and removes it", async () => {
+    mocks.removeAdminUserMFA.mockResolvedValue(undefined);
+    loadOne({ mfa_enabled: true });
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open ada" }));
+
+    const pane = () => screen.getByTestId("admin-users-desktop").textContent ?? "";
+    expect(pane()).toContain("Two-factor");
+    // The consequences are stated before the password is asked for, and the
+    // one thing an admin must NEVER be offered is stated too.
+    expect(pane()).toContain("signs out every device");
+    expect(pane()).toContain("never see their secret");
+
+    fireEvent.change(desktop().getByLabelText(/your password/i), {
+      target: { value: "supersecret" },
+    });
+    fireEvent.click(desktop().getByRole("button", { name: /remove second factor for ada/i }));
+
+    await waitFor(() =>
+      expect(mocks.removeAdminUserMFA).toHaveBeenCalledWith("user-9", {
+        password: "supersecret",
+      }),
+    );
+    // The row reflects the removal without a re-fetch: the endpoint answers 204
+    // with no body on purpose, so there is no server view to replace it with.
+    await waitFor(() => expect(pane()).toContain("Removed."));
+  });
+
+  it("disables the action with a reason when the account has no second factor", async () => {
+    loadOne({ mfa_enabled: false });
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open ada" }));
+
+    const control = desktop().getByRole("button", {
+      name: /remove second factor for ada/i,
+    }) as HTMLButtonElement;
+    expect(control.disabled).toBe(true);
+    expect(screen.getByTestId("admin-users-desktop").textContent ?? "").toContain(
+      "This account has no second factor.",
+    );
+    // No password field on a control that cannot fire.
+    expect(desktop().queryByLabelText(/your password/i)).toBeNull();
+    expect(mocks.removeAdminUserMFA).not.toHaveBeenCalled();
+  });
+
+  it("offers nothing on a tombstone", async () => {
+    loadOne({ mfa_enabled: true, deleted_at: "2026-02-02T00:00:00Z" });
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open ada" }));
+
+    expect(
+      desktop().queryByRole("button", { name: /remove second factor for ada/i }),
+    ).toBeNull();
   });
 });

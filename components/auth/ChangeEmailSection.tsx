@@ -256,6 +256,14 @@ function describe(err: unknown): React.ReactNode {
     }
     if (err.status === 422) return errorMessage(err);
     if (err.status === 404) return "There is no pending change any more. Reload to see the latest.";
+    // The server's own refusal for an instance with no relay. This page is ISR
+    // with a 60-second revalidate, so the mailEnabled prop above can be a
+    // minute stale — and a client that still shows the form must not report the
+    // resulting refusal as "something went wrong". The backend answers a TYPED
+    // 503 precisely so this sentence survives its 5xx message scrubbing.
+    if (err.code === "mail_not_configured") {
+      return "This instance cannot send email yet, so it cannot confirm a new address. Ask whoever runs it to set up outgoing mail (SMTP).";
+    }
   }
   return errorMessage(err);
 }

@@ -176,3 +176,28 @@ it("explains instead of offering the form when the instance cannot send mail", a
   // The address itself is still shown: it is the fact the user came for.
   expect(screen.getByText("ada@example.test")).toBeTruthy();
 });
+
+// The prop above is a snapshot from an ISR page with a 60-second revalidate, so
+// it can be a minute behind the deployment. When it is, the SERVER refuses —
+// with a typed 503 whose message survives the central 5xx scrubber — and the
+// card must repeat the operator's sentence rather than "something went wrong".
+it("repeats the operator's sentence when the server refuses for want of mail", async () => {
+  getEmailChange.mockResolvedValue({ pending: false });
+  requestEmailChange.mockRejectedValue(
+    new ApiError({
+      status: 503,
+      code: "mail_not_configured",
+      message: "this instance has no outbound mail path…",
+    }),
+  );
+  render(<ChangeEmailSection mailEnabled />);
+
+  fireEvent.change(await screen.findByLabelText(NEW_EMAIL), {
+    target: { value: "ada.new@example.test" },
+  });
+  fireEvent.change(screen.getByLabelText(PASSWORD), { target: { value: "supersecret" } });
+  fireEvent.click(screen.getByRole("button", { name: SUBMIT }));
+
+  await waitFor(() => expect(screen.getByText(/cannot send email yet/i)).toBeTruthy());
+  expect(screen.queryByText("Something went wrong.")).toBeNull();
+});

@@ -675,6 +675,121 @@ function transferGate(user: AdminUser): Gate {
   return GATE_OPEN;
 }
 
+/**
+ * RemoveSecondFactorCard — the operator answer to "I lost my phone and my
+ * recovery codes" (A05 ruling 2). Self-service removal needs the account's own
+ * password AND a session, so the account that needs help is precisely the one
+ * that cannot ask; before this the recovery of last resort was a database edit.
+ *
+ * It re-asks for the CALLER's password, like the ownership transfer beside it.
+ * Nothing secret is shown or returned — the shared secret and the recovery
+ * codes are deleted, never disclosed, so this cannot be used to impersonate a
+ * second factor; what it does is reduce the account to its password, which is
+ * why it is confirmed, audited and mailed.
+ *
+ * Removing your OWN is allowed on purpose: an owner who loses their
+ * authenticator has nobody above them to ask.
+ */
+function RemoveSecondFactorCard({
+  user,
+  onUpdated,
+}: {
+  user: AdminUser;
+  onUpdated: (updated: AdminUser) => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const enabled = user.mfa_enabled === true;
+
+  async function remove() {
+    if (busy || !password) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.removeAdminUserMFA(user.id, { password });
+      setPassword("");
+      setDone(true);
+      // Reflect it in the row the same way a PATCH does. The endpoint answers
+      // 204 with no body ON PURPOSE — nothing about a second factor may travel
+      // back to an admin — so the projection is updated here rather than
+      // replaced by a server view that does not exist.
+      onUpdated({ ...user, mfa_enabled: false });
+    } catch (err) {
+      setError(errorMessage(err, "Could not remove this account's second factor."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-border p-4">
+      <h3 className="text-[13.5px] font-semibold text-fg">Two-factor authentication</h3>
+      <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
+        {enabled ? (
+          <>
+            <span className="font-medium text-fg">{user.username}</span> signs in with an
+            authenticator app. Removing it leaves the account protected by its password alone,
+            signs out every device it is signed in on, and invalidates its recovery codes. Do this
+            when they have lost both their authenticator and their recovery codes — it is the only
+            way back in. They are emailed, and the action is recorded in the audit log. You will
+            never see their secret or their codes.
+          </>
+        ) : (
+          <>
+            <span className="font-medium text-fg">{user.username}</span> has not set up an
+            authenticator app, so there is nothing to remove. Only the account holder can turn
+            two-factor authentication on.
+          </>
+        )}
+      </p>
+      {done ? (
+        <p className="mt-2 text-sm text-success">
+          Removed. {user.username} can sign in with their password and set two-factor
+          authentication up again.
+        </p>
+      ) : enabled ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            type="password"
+            autoComplete="current-password"
+            aria-label="Your password"
+            placeholder="Your password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
+          />
+          <Button
+            variant="danger-outline"
+            size="sm"
+            aria-label={`Remove second factor for ${user.username}`}
+            disabled={busy || password === ""}
+            onClick={() => void remove()}
+          >
+            {busy ? "Removing…" : "Remove second factor"}
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            variant="danger-outline"
+            size="sm"
+            aria-label={`Remove second factor for ${user.username}`}
+            disabled
+          >
+            Remove second factor
+          </Button>
+          <span className="text-[11.5px] text-fg-muted">
+            This account has no second factor.
+          </span>
+        </div>
+      )}
+      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+    </div>
+  );
+}
+
 function TransferOwnershipCard({
   user,
   onTransferred,
@@ -898,6 +1013,10 @@ function UserDetail({
               : guard.reason}
           </p>
 
+          {!deleted ? (
+            <RemoveSecondFactorCard user={user} onUpdated={onUpdated} />
+          ) : null}
+
           {viewerIsOwner && !isSelf ? (
             <TransferOwnershipCard user={user} onTransferred={onTransferred} />
           ) : null}
@@ -967,6 +1086,16 @@ function UserDetail({
             }
           />
           <Fact k="Email" v={user.email_verified ? "Verified" : "Unverified"} />
+          <Fact
+            k="Two-factor"
+            v={
+              user.mfa_enabled ? (
+                <span className="text-success">On</span>
+              ) : (
+                <span className="text-fg-muted">Off</span>
+              )
+            }
+          />
           <Fact k="Joined" v={relativeTime(user.created_at)} />
           <Fact
             k="Storage used"

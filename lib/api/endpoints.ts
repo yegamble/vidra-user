@@ -1963,6 +1963,24 @@ export const api = {
     }),
 
   /**
+   * DELETE /api/v1/admin/users/{id}/mfa — remove a user's second factor
+   * (admin). The operator answer to a lost authenticator AND lost recovery
+   * codes, which self-service cannot reach: removing TOTP needs the account's
+   * own password and a session, and that account can no longer sign in.
+   *
+   * The password in the body is the CALLER's, not the target's. Nothing secret
+   * comes back — 204, and the shared secret and recovery codes are deleted
+   * rather than disclosed. The target's sessions are revoked and they are
+   * mailed a notice. 403 on a wrong password, 404 when the account has no
+   * second factor to remove.
+   */
+  removeAdminUserMFA: (id: string, body: { password: string }) =>
+    apiRequest<void>(`/api/v1/admin/users/${encodeURIComponent(id)}/mfa`, {
+      method: "DELETE",
+      body,
+    }),
+
+  /**
    * DELETE /api/v1/admin/users/{id} — IRREVERSIBLE admin hard delete of an
    * account (same semantics as the self-serve DELETE /auth/me: channels and
    * videos purged, comments tombstoned, per-user data erased, sessions
