@@ -42,7 +42,10 @@ export function AccountModerationMenu(props: AccountModerationMenuProps) {
 interface AccountModerationMenuProps {
   /** The account being moderated — a channel's `owner_id`, a profile's `id`. */
   accountId: string;
-  /** For the toast, so it names who was muted rather than "this account". */
+  /**
+   * For the trigger's accessible name, so a screen-reader user hears WHO the
+   * menu acts on rather than counting anonymous "More" buttons on a page.
+   */
   accountName: string;
   /**
    * The handles this account publishes under, as far as the calling page knows
