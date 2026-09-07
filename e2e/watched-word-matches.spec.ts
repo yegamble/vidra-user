@@ -87,6 +87,15 @@ function videoMatch(id: string, word: string, title: string, author = "bob") {
   };
 }
 
+// Reach the queue by CLICKING, never page.goto. A full load restarts session
+// restore, which needs POST /auth/refresh against a backend that is not running
+// here — the session comes back anonymous and RoleGate renders "Moderators only"
+// with nothing fetched, so every assertion fails on a page that is working.
+async function openQueue(page: Page) {
+  await page.getByRole("link", { name: "Moderation" }).click();
+  await page.getByRole("link", { name: "Word matches" }).click();
+}
+
 async function signIn(page: Page, role: Role) {
   await page.route(LOGIN, (route) => route.fulfill({ json: session(role) }));
   await page.route(FEED, (route) =>
@@ -139,8 +148,7 @@ test("a moderator reviews flagged comments and videos with type badges", async (
     }),
   );
 
-  await page.getByRole("link", { name: "Moderation" }).click();
-  await page.getByRole("link", { name: "Word matches" }).click();
+  await openQueue(page);
 
   // The comment match: term badge + type badge + quoted body.
   await expect(page.getByText("buy cheap SPAM now")).toBeVisible();
@@ -182,7 +190,7 @@ test("the queue quotes the flag-time snapshot, not a body edited since", async (
     }),
   );
 
-  await page.goto("/moderation/watched-word-matches");
+  await openQueue(page);
   await expect(page.getByText("buy cheap SPAM now")).toBeVisible();
   await expect(page.getByText("never mind, plain cheese")).toHaveCount(0);
   await expect(
@@ -214,7 +222,7 @@ test("a moderator resolves a flagged item with a note", async ({ page }) => {
     }),
   );
 
-  await page.goto("/moderation/watched-word-matches");
+  await openQueue(page);
   await expect(page.getByText("buy cheap SPAM now")).toBeVisible();
   await page.getByLabel("Internal moderator note").fill("hid the comment");
   await page.getByRole("button", { name: "Resolve" }).click();
