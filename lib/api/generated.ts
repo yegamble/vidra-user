@@ -5222,11 +5222,11 @@ export interface components {
         };
         ComponentStatus: {
             /**
-             * @description One of ok, down, not_configured.
+             * @description One of ok, degraded, down, not_configured. degraded is impaired but still serving and never takes the instance out of rotation — the mfa_kek component reports it when the configured MFA_KEY_KEK cannot decrypt the TOTP secrets this database holds.
              * @example ok
              */
             status: string;
-            /** @description Present only when the component is down. */
+            /** @description Present only when the component is degraded or down. */
             error?: string;
         };
         ReadinessResponse: {
