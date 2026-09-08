@@ -13,6 +13,15 @@ import type { OAuthIdentity } from "@/lib/api";
 // Unlink control. The backend refuses (422) to remove the account's LAST
 // sign-in method — that answer is surfaced honestly with the password-first
 // remedy instead of being swallowed.
+// Which account does this identity sign me in as? An OIDC identity answers with
+// its verified email; an ATProto one has no email BY DESIGN (the synthetic
+// address is deliberately non-routable) and answers with its handle. Falling
+// back to "no email recorded" for ATProto threw away the row's only content.
+function identityLabel(identity: OAuthIdentity): string {
+  if (identity.handle) return `@${identity.handle}`;
+  return identity.email || "no email recorded";
+}
+
 export function ConnectedLogins() {
   const [identities, setIdentities] = useState<OAuthIdentity[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -111,7 +120,7 @@ export function ConnectedLogins() {
                   {providerDisplayName(identity.provider)}
                 </p>
                 <p className="truncate text-[13px] text-fg-muted">
-                  {identity.email || "no email recorded"} · linked{" "}
+                  {identityLabel(identity)} · linked{" "}
                   {new Date(identity.created_at).toLocaleDateString()}
                 </p>
               </div>
