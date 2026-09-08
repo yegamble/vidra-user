@@ -4549,7 +4549,7 @@ export interface paths {
         };
         /**
          * Durable job-queue status (admin)
-         * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions, storage_migrations): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
+         * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions, storage_migrations, cdn_purge_jobs): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
          */
         get: operations["listJobs"];
         put?: never;
@@ -5280,6 +5280,12 @@ export interface components {
             error: {
                 /**
                  * @description Stable snake_case identifier for the error class.
+                 *
+                 *     Two codes govern every ingestion route (uploads, source replacement, URL imports, channel syncs, posters, caption tracks, playlist covers, avatars, banners, instance branding, DM attachments and account-import archives):
+                 *
+                 *     `scanner_not_configured` (503) — this instance has no malware scanner wired and has not declared the explicit opt-out (MALWARE_SCAN_MODE=disabled), so it accepts no user-supplied file at all. `GET /instance` reports features.uploads and features.imports false in the same state, so a client should hide the affordance rather than discover this per request.
+                 *
+                 *     `safety_scan_rejected` (422) — the scanner refused this file. The message is a fixed neutral sentence ("This file was rejected by the instance's safety scan and was not stored."); the signature and the scanner are deliberately NOT disclosed. The asynchronous paths report the same refusal out of band: the upload session settles state `failed` with that sentence in `failure_reason`, and the import job settles `failed` with it in `error`.
                  * @example not_found
                  */
                 code: string;
@@ -7262,7 +7268,7 @@ export interface components {
         WatchedWordListResponse: components["schemas"]["PageMeta"] & {
             words: components["schemas"]["WatchedWord"][];
         };
-        /** @description Content flagged by the watched-words list, for moderator review: a comment (type "comment"; comment_id/comment_body present, video_id is the video it is on) or a video (type "video"; comment fields absent, video_id/video_title are the flagged video). author_username is the comment's author or the video's owner respectively. */
+        /** @description Content flagged by the watched-words list, for moderator review: a comment (type "comment"; comment_id/comment_body present, video_id is the video it is on) or a video (type "video"; comment fields absent, video_id/video_title are the flagged video). author_username is the comment's author or the video's owner respectively; for a FEDERATED comment it is the remote actor's name as it was cached, and author_domain names its origin instance. */
         WatchedWordMatch: {
             /** Format: uuid */
             id: string;
@@ -7288,6 +7294,8 @@ export interface components {
             /** @description The video's title (a link target for the review queue). */
             video_title: string;
             author_username: string;
+            /** @description The origin instance of a FEDERATED comment's author. Absent (or empty) for anything local, which is what distinguishes a remote actor's name from a local username in the queue. */
+            author_domain?: string;
             /** Format: date-time */
             created_at: string;
             /** @description The SNAPSHOT — the comment body, or the video's title and description joined by a newline, as it read at flag time. This is what a moderator reviews; the live target may since have changed. */
@@ -8262,7 +8270,7 @@ export interface components {
                  */
                 pool_max_conns: number;
             };
-            /** @description This process's CDN purge record: how many invalidation fan-outs have run since boot, the per-key outcomes, and when a run last ended with the edge possibly still serving something. It exists because purge success is otherwise silent and failure one aggregate log line, while promoting media headers to shared-cacheable is gated on purge being demonstrably exercised. ABSENT — not zeroed — when no CDN is wired: zero runs on an edgeless install would read as a purge system that never works. In-process counters, reset by a restart. Never includes keys or URLs. */
+            /** @description The CDN purge record, in two halves with different lifetimes. runs/keys_purged/keys_failed/last_incomplete_run_at are THIS PROCESS's in-memory counters, reset by a restart: they answer "has purge been exercised, and is it failing now". pending_retries, oldest_pending_seconds and dead_letters are read from the durable purge queue and answer what a restart must not erase: "is the edge still serving something this instance has stopped serving". ABSENT — not zeroed — when no CDN is wired: zero runs on an edgeless install would read as a purge system that never works. Never includes keys or URLs. */
             cdn_purge?: {
                 /**
                  * Format: int64
@@ -8281,6 +8289,21 @@ export interface components {
                  * @description When a run last ended incomplete — per-key failures, or a key list known to be short (listing failed / fan-out cap hit). Omitted while every run since boot purged its full key set, so absence is the good news it reads as.
                  */
                 last_incomplete_run_at?: string;
+                /**
+                 * Format: int64
+                 * @description Queued invalidations still outstanding — waiting on their backoff or claimed by a worker. Zero is the healthy reading. Survives a restart, unlike the counters above.
+                 */
+                pending_retries: number;
+                /**
+                 * Format: int64
+                 * @description How long the oldest outstanding invalidation has been waiting. The staleness signal: a number that keeps growing means the edge is refusing purges. `vidra doctor` warns on it.
+                 */
+                oldest_pending_seconds: number;
+                /**
+                 * Format: int64
+                 * @description Invalidations that gave up after the attempt cap. Each one is an edge still serving an object this instance no longer serves; only a manual invalidation at the provider clears it.
+                 */
+                dead_letters: number;
             };
             /**
              * Format: int64

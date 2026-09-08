@@ -108,7 +108,13 @@ jobs:
       # byte-for-byte the historical one there.
       - name: Start vidra-core stack
         working-directory: .core
-        run: ${{ matrix.storage_env }} RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret LIVE_RTMP_URL=rtmp://127.0.0.1:1935/live TRANSCODING_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose ${{ matrix.profiles }} up -d --build
+        # MALWARE_SCAN_MODE=disabled: since vidra-core#201 scanning is on by
+        # default and an instance with no clamd REFUSES every upload, import and
+        # image (503 scanner_not_configured). This stack runs no clamd on purpose
+        # (the scan profile pulls a 1.5-2 GiB clamd + signature download the
+        # backed suites don't exercise), so it takes the documented, audited
+        # opt-out explicitly instead of failing every ingestion spec.
+        run: ${{ matrix.storage_env }} RATE_LIMIT_ENABLED=false MALWARE_SCAN_MODE=disabled DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret LIVE_RTMP_URL=rtmp://127.0.0.1:1935/live TRANSCODING_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose ${{ matrix.profiles }} up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
@@ -217,7 +223,7 @@ jobs:
       # job's backed-setup dependency runs ensureAdmin too.
       - name: Start vidra-core stack (yt-dlp + channel auto-sync enabled)
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false HTTP_IMPORT_ALLOW_PRIVATE_URLS=true YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
+        run: MALWARE_SCAN_MODE=disabled RATE_LIMIT_ENABLED=false HTTP_IMPORT_ALLOW_PRIVATE_URLS=true YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
@@ -329,7 +335,7 @@ jobs:
       # additionally needs that admin to read GET /api/v1/ipfs/status.
       - name: Start vidra-core stack (IPFS mirror + transcoding enabled)
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret TRANSCODING_ENABLED=true IPFS_ENABLED=true IPFS_API_URL=http://ipfs:5001 IPFS_GATEWAY_URL=http://127.0.0.1:9090 docker compose --profile core --profile ipfs up -d --build
+        run: MALWARE_SCAN_MODE=disabled RATE_LIMIT_ENABLED=false OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret TRANSCODING_ENABLED=true IPFS_ENABLED=true IPFS_API_URL=http://ipfs:5001 IPFS_GATEWAY_URL=http://127.0.0.1:9090 docker compose --profile core --profile ipfs up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
