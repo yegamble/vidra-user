@@ -223,7 +223,7 @@ jobs:
       # job's backed-setup dependency runs ensureAdmin too.
       - name: Start vidra-core stack (yt-dlp + channel auto-sync enabled)
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false HTTP_IMPORT_ALLOW_PRIVATE_URLS=true YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
+        run: MALWARE_SCAN_MODE=disabled RATE_LIMIT_ENABLED=false HTTP_IMPORT_ALLOW_PRIVATE_URLS=true YTDLP_IMPORT_ENABLED=true CHANNEL_SYNC_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
@@ -335,7 +335,7 @@ jobs:
       # additionally needs that admin to read GET /api/v1/ipfs/status.
       - name: Start vidra-core stack (IPFS mirror + transcoding enabled)
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret TRANSCODING_ENABLED=true IPFS_ENABLED=true IPFS_API_URL=http://ipfs:5001 IPFS_GATEWAY_URL=http://127.0.0.1:9090 docker compose --profile core --profile ipfs up -d --build
+        run: MALWARE_SCAN_MODE=disabled RATE_LIMIT_ENABLED=false OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret TRANSCODING_ENABLED=true IPFS_ENABLED=true IPFS_API_URL=http://ipfs:5001 IPFS_GATEWAY_URL=http://127.0.0.1:9090 docker compose --profile core --profile ipfs up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
