@@ -49,11 +49,14 @@ half of finding F04.
 `vitest.config.ts` states `passWithNoTests: false` so a glob edit that matches
 nothing cannot turn the unit gate into a no-op that still exits 0.
 
-**Toolchain and manifest.** CI pins Node **24** — this repo's stated runtime
-(`engines.node: ">=24"`, `.nvmrc`) — and installs with `npm ci`, never
-`npm install`; `ci-guard` fails a workflow that uses the latter. Note the open
-discrepancy: the published container image builds on `node:26-alpine`, which
-neither `engines` nor `.nvmrc` describes. Aligning them is an owner ruling.
+**Toolchain and manifest.** CI pins Node **26** — this repo's stated runtime
+(`engines.node: ">=26"`, `.nvmrc`/`.node-version`) and the runtime the published
+container image ships, since all three `Dockerfile` stages build on
+`node:26-alpine` — and installs with `npm ci`, never `npm install`; `ci-guard`
+fails a workflow that uses the latter. The manifest, every `setup-node` and the
+image are one number on purpose (A39 finding F09, owner ruling 2026-09-08:
+Node 26 everywhere); a bump moves all of them in the same commit or it
+reintroduces the drift.
 
 **Artifacts.** Every lane uploads its Playwright HTML report, JSON report,
 traces and (on failure) the backend compose log, 14-day retention:
