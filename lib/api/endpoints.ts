@@ -1074,10 +1074,15 @@ export const api = {
    * set; `reason` is free text shown to the creator, never publicly.
    */
   terminateLiveStream: (id: string, body: TerminateLiveStreamRequest) =>
-    apiRequest<LiveTerminationResult>(
-      `/api/v1/admin/live/${encodeURIComponent(id)}/terminate`,
-      { method: "POST", body: JSON.stringify(body) },
-    ),
+    // The body is passed as an OBJECT: apiRequest JSON-encodes every non-FormData
+    // body itself (lib/api/client.ts). Stringifying here too sent a JSON string
+    // as the payload, and core answered 400 "malformed or invalid request body"
+    // to every attempt — the moderator's End-stream dialog could not end a single
+    // broadcast (measured in the A26 rehearsal).
+    apiRequest<LiveTerminationResult>(`/api/v1/admin/live/${encodeURIComponent(id)}/terminate`, {
+      method: "POST",
+      body,
+    }),
 
   /** GET /api/v1/videos/{id}/captions — a video's caption tracks (public). */
   getCaptions: (videoId: string, signal?: AbortSignal) =>
