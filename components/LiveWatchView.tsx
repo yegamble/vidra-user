@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useOptionalSession } from "@/components/auth/AuthProvider";
+import { LiveTerminateDialog } from "@/components/LiveTerminateDialog";
 import { InfoIcon } from "@/components/icons";
 import { QualityMenu } from "@/components/QualityMenu";
 import { Button, EmptyState, ErrorState, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import type { LiveStream } from "@/lib/api";
+import { terminationHeadline } from "@/lib/live/termination";
 import { useLivePlayback } from "@/lib/use-playback-engine";
 import { useSettledOptionalSession } from "@/lib/use-settled-session";
 
@@ -32,6 +35,13 @@ export function LiveWatchView({ id }: { id: string }) {
   // landed on "not found" and the effect never re-ran to correct it.
   // `useSettledOptionalSession` because the view is also rendered bare.
   const { settled, viewerKey } = useSettledOptionalSession();
+  // Staff get the termination control. This is where a moderator watching an
+  // instance-damaging broadcast actually is — sending them to an admin page to
+  // find the stream by id would be a worse answer than no control at all, which
+  // was the previous state.
+  const session = useOptionalSession();
+  const staff = session?.user?.role === "admin" || session?.user?.role === "moderator";
+  const [terminating, setTerminating] = useState(false);
 
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -97,14 +107,20 @@ export function LiveWatchView({ id }: { id: string }) {
           message="This stream is live, but its video feed isn't available yet. Try refreshing in a moment."
           onRefresh={() => void load()}
         />
-      ) : stream.state === "ended" ? (
+      ) : stream.state === "ended" || stream.termination ? (
+        // A stream that was ENDED BY A PERSON says so, and says why. Before
+        // this, a moderator termination was indistinguishable from a publisher
+        // dropping off: the page read "This live stream has ended" and the only
+        // person the action was aimed at was told nothing at all. `termination`
+        // is present only for the creator, a channel content manager and staff
+        // (core gates it), so a public visitor still sees the plain sentence.
+        //
+        // The condition takes `termination` as well as the state because a
+        // PERMANENT stream returns to `offline` rather than `ended` when it is
+        // terminated — it is reusable — and the reason has to survive that.
         <StreamState
           title="Stream ended"
-          message={
-            stream.replay_enabled
-              ? "This live stream has ended. Its replay will appear as a normal video on the channel shortly."
-              : "This live stream has ended."
-          }
+          message={endedMessage(stream)}
           onRefresh={() => void load()}
         />
       ) : (
@@ -117,9 +133,22 @@ export function LiveWatchView({ id }: { id: string }) {
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {stream.state === "live" ? <LiveBadge /> : null}
+          {stream.state === "live" && typeof stream.viewer_count === "number" ? (
+            <ViewerCount count={stream.viewer_count} />
+          ) : null}
           <h1 className="text-[17px] font-bold leading-snug tracking-[-0.015em] sm:text-[19px]">
             {stream.title}
           </h1>
+          {staff && stream.state === "live" ? (
+            <Button
+              variant="danger-outline"
+              size="sm"
+              onClick={() => setTerminating(true)}
+              className="ml-auto"
+            >
+              End stream
+            </Button>
+          ) : null}
         </div>
         {channelName ? (
           <p className="text-[13px] text-fg-muted">
@@ -141,6 +170,15 @@ export function LiveWatchView({ id }: { id: string }) {
           </p>
         ) : null}
       </div>
+
+      {terminating ? (
+        <LiveTerminateDialog
+          streamId={stream.id}
+          streamTitle={stream.title}
+          onClose={() => setTerminating(false)}
+          onTerminated={() => void load()}
+        />
+      ) : null}
     </div>
   );
 }
@@ -211,6 +249,37 @@ function StreamState({
         </Button>
       ) : null}
     </div>
+  );
+}
+
+// endedMessage is what a stopped stream says. The termination sentence comes
+// first because it is the answer to the question the creator actually has, and
+// the moderator's own words follow it — the code says WHAT rule, the free text
+// says what happened.
+function endedMessage(stream: LiveStream): string {
+  const parts: string[] = [];
+  if (stream.termination) {
+    parts.push(terminationHeadline(stream.termination));
+    if (stream.termination.reason) parts.push(stream.termination.reason);
+  } else {
+    parts.push("This live stream has ended.");
+  }
+  if (stream.replay_enabled) {
+    parts.push("Its replay will appear as a normal video on the channel shortly.");
+  }
+  return parts.join(" ");
+}
+
+// ViewerCount renders the concurrent-viewer number. It is only ever rendered
+// when core actually sent one: the field is OMITTED rather than zeroed on an
+// instance that cannot measure it, so `typeof === "number"` at the call site is
+// what keeps a creator from being shown a confident "0 watching" by an instance
+// with no Redis.
+function ViewerCount({ count }: { count: number }) {
+  return (
+    <span className="text-[12.5px] font-medium text-fg-muted" aria-live="polite">
+      {count.toLocaleString()} {count === 1 ? "viewer" : "viewers"}
+    </span>
   );
 }
 

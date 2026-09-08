@@ -75,6 +75,15 @@ export function LiveNowRail() {
                     />
                     Live
                   </span>
+                  {/* Concurrent viewers, when the instance can measure them. The
+                      field is OMITTED rather than zeroed by core on an instance
+                      with no Redis, so the typeof guard is what keeps a rail of
+                      busy streams from all reading "0 watching". */}
+                  {typeof stream.viewer_count === "number" ? (
+                    <span className="absolute bottom-2.5 right-2.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-white backdrop-blur">
+                      {stream.viewer_count.toLocaleString()} watching
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-2 line-clamp-1 px-0.5 text-subhead font-semibold leading-snug tracking-[-0.01em] text-fg">
                   {stream.title}

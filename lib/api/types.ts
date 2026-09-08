@@ -445,6 +445,14 @@ export type UpdateLiveStreamRequest = Schemas["UpdateLiveStreamRequest"];
 export type CreateLiveStreamResponse = Schemas["CreateLiveStreamResponse"];
 export type LiveStreamListResponse = Schemas["LiveStreamListResponse"];
 export type LiveStreamKey = Schemas["LiveStreamKey"];
+// Termination (core migration 0141). LiveTermination is why a broadcast stopped
+// when a PERSON stopped it; it is present only for a viewer entitled to read it
+// (the creator, a channel content manager, staff), never on the public
+// projection. LiveTerminationReason is the closed set of moderator reason codes.
+export type LiveTermination = Schemas["LiveTermination"];
+export type LiveTerminationReason = NonNullable<LiveTermination["reason_code"]>;
+export type TerminateLiveStreamRequest = Schemas["TerminateLiveStreamRequest"];
+export type LiveTerminationResult = Schemas["LiveTerminationResult"];
 // The public "Live now" listing card — a minimal, truthful projection of a
 // currently-live PUBLIC stream (no viewer count, no thumbnail: neither exists
 // server-side yet). Distinct from LiveStream (the owner/watch metadata).
