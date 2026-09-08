@@ -11,6 +11,14 @@ name: contract-ci
 #
 # It cannot see backend-side spec edits on its own, so vidra-core's `openapi`
 # workflow is the backend half of the same contract.
+#
+# ORDERING RULE (A39). This lane checks out vidra-core's DEFAULT BRANCH, not the
+# core commit a change was developed against. So a frontend PR that consumes a
+# new endpoint is RED until the core PR adding it has MERGED to core `main` — the
+# red is correct and the fix is merge order, not a workflow change: land core
+# first, then re-run this check. It stays required precisely because it is the
+# only thing that notices a frontend calling an endpoint the backend does not
+# serve. Never make it optional to unblock a merge.
 on:
   push:
     branches: [main]

@@ -1,0 +1,3 @@
+# Intentionally empty: this lane starts every service its specs need, so ANY
+# skipped test is a wiring regression and must fail the job rather than let the
+# lane report success having executed nothing.

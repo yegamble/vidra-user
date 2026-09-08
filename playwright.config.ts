@@ -26,7 +26,15 @@ export default defineConfig({
   // flakiness without masking real defects (specs pass reliably locally).
   retries: process.env.CI ? 2 : 0,
   expect: { timeout: process.env.CI ? 10_000 : 5_000 },
-  reporter: [["html", { open: "never" }]],
+  // html for a human, json for the machine. scripts/ci/assert-no-skipped-tests.mjs
+  // reads the json to fail a lane that passed by SKIPPING — Playwright reports a
+  // skipped test as neither pass nor fail and exits 0, so without it a
+  // single-purpose lane (channel-sync-backed, ipfs-backed) can go green having
+  // executed nothing. Both are uploaded as CI artifacts. See AGENTS.md, "CI".
+  reporter: [
+    ["html", { open: "never" }],
+    ["json", { outputFile: process.env.PLAYWRIGHT_JSON_REPORT ?? "test-report/playwright.json" }],
+  ],
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",

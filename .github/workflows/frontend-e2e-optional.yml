@@ -1,0 +1,130 @@
+name: frontend-e2e-optional
+
+# EXPLICITLY OPTIONAL backed lanes (A39 / QLT-01). Never on push or pull_request,
+# never a merge gate, and never counted as coverage by a required check.
+#
+# Some backed specs need a stack posture that CONTRADICTS the main matrix — an
+# instance-wide flag that changes what every other spec's fixtures do. They used
+# to sit inside the required run and self-skip, which is the worst of both: the
+# flow had no automated proof, and the lane that appeared to cover it was green.
+# scripts/ci/allowed-skips-backed.txt now registers each of those skips and
+# points here; this workflow is where they actually execute, with the gating
+# variable SET and a ZERO-skip audit, so an optional lane can be absent but
+# cannot be falsely green.
+#
+# Wired here today:
+#   quarantine — QUARANTINE_NEW_UPLOADS parks fresh uploads for review, which
+#   would break every other spec's seeded, immediately-public upload.
+#
+# NOT wired yet, and honestly so — each needs more than a flag:
+#   search-discovery        needs a vidra-search service alongside vidra-core.
+#                           vidra-core's compose has no search service at all, so
+#                           no stack in this repo can satisfy E2E_SEARCH_SERVICE.
+#                           This is the remaining half of finding F04.
+#   registration-approval   REGISTRATION_REQUIRE_APPROVAL=true from boot also
+#                           gates the deterministic admin the backed-setup
+#                           project registers first, so the stack needs a seeded
+#                           admin BEFORE approval is switched on.
+#   whisper-captions        needs the whisper.cpp compose profile: a model
+#                           download and minutes of CPU per run.
+#   atproto                 needs real Bluesky app-password credentials.
+#   peertube-import         needs a read-only PeerTube instance to import from.
+on:
+  workflow_dispatch:
+  schedule:
+    # Sundays 05:00 UTC — out of the way of the weekday PR traffic.
+    - cron: "0 5 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quarantine-backed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out vidra-core (public — no token needed)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: yegamble/vidra-core
+          path: .core
+          persist-credentials: false
+
+      # QUARANTINE_NEW_UPLOADS=true is the whole point of this lane and the reason
+      # it cannot share the main matrix: with it on, every seeded upload parks in
+      # `quarantined` instead of publishing, and the other 70-odd specs assert a
+      # public video. The rest of the env matches the main backed job so the
+      # fixtures behave identically.
+      - name: Start vidra-core stack (uploads quarantined for review)
+        working-directory: .core
+        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true QUARANTINE_NEW_UPLOADS=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
+
+      - name: Wait for the API to be healthy
+        working-directory: .core
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then
+              echo "api healthy after ${i} tries"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::vidra-core API did not become healthy in time"
+          docker compose --profile core logs --no-color | tail -200
+          exit 1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build against the live backend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+        run: npm run build
+
+      - name: Run the quarantine backed spec only
+        env:
+          E2E_API_URL: http://localhost:8080
+        run: npm run e2e:backed -- e2e-backed/quarantine.spec.ts
+
+      # Empty allowlist: this stack sets QUARANTINE_NEW_UPLOADS, so the spec's
+      # "nothing to approve" self-skip means the flag stopped working — exactly
+      # the silence this lane exists to break.
+      - name: No skipped tests in the quarantine lane
+        if: always()
+        run: node scripts/ci/assert-no-skipped-tests.mjs test-report/playwright.json scripts/ci/allowed-skips-none.txt
+
+      - name: Capture backend logs on failure
+        if: failure()
+        working-directory: .core
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/test-report"
+          docker compose --profile core logs --no-color > "$GITHUB_WORKSPACE/test-report/compose.log" 2>&1 || true
+          tail -200 "$GITHUB_WORKSPACE/test-report/compose.log"
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-quarantine-report
+          path: |
+            playwright-report/
+            test-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: ignore

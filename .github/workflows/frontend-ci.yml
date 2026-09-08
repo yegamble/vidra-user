@@ -29,25 +29,46 @@ jobs:
         with:
           persist-credentials: false
 
+      # Node 24 is this repo's stated supported runtime: `engines.node: ">=24"`
+      # in package.json and `24` in .nvmrc. The published container image builds
+      # on node:26-alpine, which those two do not describe — see the A39 note in
+      # AGENTS.md; aligning them is an owner ruling, not a CI change.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: package-lock.json
 
+      # EXACT MANIFEST: `npm ci` installs strictly what package-lock.json pins and
+      # fails outright if the lockfile and package.json disagree — never
+      # `npm install`, which would silently resolve something else and rewrite the
+      # lockfile in the runner.
       - name: Install dependencies
         run: npm ci
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      # CI=true (set by Actions) also switches vitest to emit JUnit alongside the
+      # default reporter — see vitest.config.ts.
       - name: Run canonical gate (npm run ci)
         run: npm run ci
 
-      - name: Upload Playwright artifacts
+      # The mocked suite has no environment to be missing, so nothing in it has
+      # any business skipping: the allowlist is empty. Playwright exits 0 on a
+      # skipped test, so without this a `test.skip` added to buy time would
+      # remove a spec from the required gate invisibly.
+      - name: No skipped tests in the mocked suite
+        run: node scripts/ci/assert-no-skipped-tests.mjs test-report/playwright.json scripts/ci/allowed-skips-none.txt
+
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-report
-          path: playwright-report/
+          name: frontend-ci-reports
+          path: |
+            playwright-report/
+            test-report/
+            test-results/
+          retention-days: 14
           if-no-files-found: ignore

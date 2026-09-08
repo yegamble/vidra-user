@@ -42,6 +42,7 @@ yarn-error.log*
 
 # playwright
 /playwright-report/
+/test-report/
 /test-results/
 /playwright/.cache/
 
@@ -54,3 +55,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# A39: CI evidence bundles (uploaded as artifacts, never committed)
+/ci-report/
