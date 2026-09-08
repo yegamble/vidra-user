@@ -240,6 +240,35 @@ describe("StatusPanel component vocabulary", () => {
     expect(screen.getByText("Down")).toBeTruthy();
     expect(screen.queryByText("not_configured")).toBeNull();
   });
+
+  // The scanner probe (core: clamav) is the one dependency whose failure is
+  // invisible everywhere else — under the default fail-closed policy a dead
+  // clamd makes every upload and URL import land in "failed" while the api
+  // keeps answering 200. It must read as a named dependency with its reason,
+  // not as a bare wire key.
+  it("names the malware scanner, the storage-write probe and the MFA key", async () => {
+    mocks.getSystemStatus.mockResolvedValue(
+      systemStatus(undefined, {
+        status: "degraded",
+        components: {
+          clamav: {
+            status: "down",
+            error:
+              "the malware scanner is unreachable and MALWARE_SCAN_MODE=fail-closed, so every upload and every URL import is failing: clamav: dial: connection refused",
+          },
+          storage: { status: "ok" },
+          mfa_kek: { status: "not_configured" },
+        },
+      }),
+    );
+    render(<StatusPanel />);
+
+    expect(await screen.findByText("Malware scanning (ClamAV)")).toBeTruthy();
+    expect(screen.getByText("Storage writes")).toBeTruthy();
+    expect(screen.getByText("MFA secret key")).toBeTruthy();
+    expect(screen.queryByText("clamav")).toBeNull();
+    expect(screen.getByText(/every upload and every URL import is failing/)).toBeTruthy();
+  });
 });
 
 // A17/ADM-04's first blocking gap: every block on this page described the
