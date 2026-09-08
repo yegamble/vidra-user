@@ -11,6 +11,9 @@ const FEED = /\/api\/v1\/videos(\?|$)/;
 const SUBS = /\/api\/v1\/me\/subscriptions\/videos(\?|$)/;
 const REMOTE_FOLLOWS = /\/api\/v1\/me\/remote-follows(\?|$)/;
 const REMOTE_DETAIL = /\/api\/v1\/remote-videos\/rv1$/;
+// The MIRRORED comment thread (A29-F8): the comments the origin fans out to its
+// followers, which this instance stores and the watch page now shows.
+const REMOTE_COMMENTS = /\/api\/v1\/remote-videos\/rv1\/comments(\?|$)/;
 const INSTANCE_MUTE = /\/api\/v1\/me\/mutes\/instances\/[^/]+$/;
 
 const session = {
@@ -235,15 +238,64 @@ test("the remote watch page plays the origin stream and always links the origin 
   await expect(originLink).toHaveAttribute("target", "_blank");
   await expect(originLink).toHaveAttribute("rel", "noopener noreferrer");
 
-  // Honest copy: interactions live at the origin — no local comment/rating/save UI.
-  await expect(
-    page.getByText(
-      "This is a federated video from videos.example. Comments, ratings, and saving live on the origin instance.",
-    ),
-  ).toBeVisible();
+  // Honest copy: AUTHORING lives at the origin — no local rating/save UI, and no
+  // comment composer. Since A29-F8 the copy distinguishes the two halves it used
+  // to conflate: replying happens on the origin, but the thread the origin sends
+  // us is shown here, so "comments live on the origin instance" was true about
+  // writing and had become misleading about reading.
+  await expect(page.getByText(/Ratings and saving live on the origin instance/)).toBeVisible();
+  await expect(page.getByText(/so does replying/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Like" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
-  await expect(page.getByLabel(/comment/i)).toHaveCount(0);
+  // No composer: the thread is a mirror, and nothing here writes one.
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+});
+
+test("the remote watch page shows the comment thread the origin sent", async ({ page }) => {
+  await page.route(REMOTE_DETAIL, (route) => route.fulfill({ json: remoteDetail() }));
+  await page.route(REMOTE_COMMENTS, (route) =>
+    route.fulfill({
+      json: {
+        comments: [
+          {
+            id: "c1",
+            author_name: "ada",
+            author_domain: "videos.example",
+            actor_url: "https://videos.example/accounts/ada",
+            object_url: "https://videos.example/comments/c1",
+            body: "Beautiful grade — what camera?",
+            edited: false,
+            created_at: "2026-09-05T10:00:00Z",
+          },
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+      },
+    }),
+  );
+
+  await page.goto("/remote/rv1");
+  await expect(page.getByRole("heading", { name: "Comments from the origin" })).toBeVisible();
+  await expect(page.getByText("Beautiful grade — what camera?")).toBeVisible();
+  await expect(page.getByText("ada")).toBeVisible();
+  // Still no composer, with a thread present.
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+});
+
+test("an empty mirrored thread explains itself instead of claiming the video has none", async ({
+  page,
+}) => {
+  await page.route(REMOTE_DETAIL, (route) => route.fulfill({ json: remoteDetail() }));
+  await page.route(REMOTE_COMMENTS, (route) =>
+    route.fulfill({ json: { comments: [], total: 0, limit: 50, offset: 0 } }),
+  );
+
+  await page.goto("/remote/rv1");
+  // This instance only holds what it was SENT, and only from the moment someone
+  // here followed the channel — saying "no comments" would be a claim about the
+  // origin that this instance cannot make.
+  await expect(page.getByText(/mirrors the comments its origin sends it/)).toBeVisible();
 });
 
 test("a remote video without a stream shows the honest no-playback panel", async ({ page }) => {
