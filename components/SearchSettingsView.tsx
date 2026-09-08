@@ -178,8 +178,11 @@ function PreferencesSection({
           stop being recorded against your account altogether: from that moment
           they are stored the way a signed-out visitor&rsquo;s are, counted once
           toward the anonymous totals this site uses to decide what is popular,
-          and never linked back to you. A control this site has switched off
-          collects nothing either — it is greyed out below with the reason.
+          and never linked back to you. That covers how your video played, too:
+          the quality measurements this site takes while you watch — start time,
+          stalls, errors — stop carrying any pseudonym for you, while still
+          counting toward the anonymous playback totals the administrator reads.
+          A control this site has switched off collects nothing either — it is greyed out below with the reason.
         </p>
       </div>
 

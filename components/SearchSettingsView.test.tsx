@@ -286,6 +286,19 @@ describe("SearchSettingsView — the opt-out promise, in words", () => {
     expect(screen.getByText(/signed-out visitor/i)).toBeTruthy();
   });
 
+  // The owner's follow-on ruling: the opt-out covers PLAYBACK TELEMETRY too
+  // (core#192 — the QoE beacon now consults the same searchConsent predicate).
+  // A promise the server keeps and the page does not state is a promise nobody
+  // can act on, so the sentence is tested like the rest of them.
+  it("says the opt-out covers the playback quality measurements as well", async () => {
+    render(<SearchSettingsView />);
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
+    expect(screen.getByText(/quality measurements this site takes while you watch/i)).toBeTruthy();
+    // And is honest about what does NOT stop: the measurement still counts, it
+    // just stops carrying a pseudonym for this viewer.
+    expect(screen.getByText(/anonymous playback totals/i)).toBeTruthy();
+  });
+
   it("is honest that earlier activity is not retroactively unlinked", async () => {
     render(<SearchSettingsView />);
     await waitFor(() => expect(getSearchHistory).toHaveBeenCalled());
