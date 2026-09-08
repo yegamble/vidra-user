@@ -108,7 +108,13 @@ jobs:
       # byte-for-byte the historical one there.
       - name: Start vidra-core stack
         working-directory: .core
-        run: ${{ matrix.storage_env }} RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret LIVE_RTMP_URL=rtmp://127.0.0.1:1935/live TRANSCODING_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose ${{ matrix.profiles }} up -d --build
+        # MALWARE_SCAN_MODE=disabled: since vidra-core#201 scanning is on by
+        # default and an instance with no clamd REFUSES every upload, import and
+        # image (503 scanner_not_configured). This stack runs no clamd on purpose
+        # (the scan profile pulls a 1.5-2 GiB clamd + signature download the
+        # backed suites don't exercise), so it takes the documented, audited
+        # opt-out explicitly instead of failing every ingestion spec.
+        run: ${{ matrix.storage_env }} RATE_LIMIT_ENABLED=false MALWARE_SCAN_MODE=disabled DEV_MAIL_CAPTURE_ENABLED=true HTTP_IMPORT_ALLOW_PRIVATE_URLS=true LIVE_INGEST_SECRET=e2e-ingest-secret LIVE_RTMP_URL=rtmp://127.0.0.1:1935/live TRANSCODING_ENABLED=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose ${{ matrix.profiles }} up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
