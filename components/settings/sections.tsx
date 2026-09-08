@@ -150,6 +150,11 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         // (Mutes keeps indigo) — one hue per destination (design-system.md).
         color: "red",
         Icon: SlashCircleIcon,
+        // The remote-account block list is a SIBLING page rather than a second
+        // list here (A29-F7): the identity is a federated actor URL, added by
+        // pasting a handle. It rides this row so a viewer looking for "blocked"
+        // finds both, the way the mutes row already carries its instances page.
+        activePaths: ["/settings/blocks/remote"],
       },
     ],
   },

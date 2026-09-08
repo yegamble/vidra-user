@@ -98,6 +98,7 @@ import type {
   RemoteFollowListResponse,
   ATProtoLinkRequest,
   ATProtoStatus,
+  RemoteBlockListResponse,
   RemoteVideo,
   FeedScope,
   CreateChannelRequest,
@@ -1310,6 +1311,36 @@ export const api = {
     apiRequest<MutedInstanceListResponse>("/api/v1/me/mutes/instances", {
       query: pageQuery(params),
       signal,
+    }),
+
+  /**
+   * GET /api/v1/me/blocks/remote — the REMOTE (federated) accounts the caller
+   * has blocked, newest first. A sibling of getBlockedUsers rather than part of
+   * it: a remote actor is identified by a URL, not a local user uuid.
+   */
+  getRemoteBlocks: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<RemoteBlockListResponse>("/api/v1/me/blocks/remote", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/me/blocks/remote — block one remote account by fediverse
+   * handle (@user@domain) or ActivityPub actor URL (auth; idempotent; a local
+   * or unresolvable identity → 422).
+   */
+  blockRemoteActor: (actor: string) =>
+    apiRequest<void>("/api/v1/me/blocks/remote", { method: "POST", body: { actor } }),
+
+  /**
+   * DELETE /api/v1/me/blocks/remote?actor= — lift a remote-account block. The
+   * actor is matched VERBATIM against the stored URL, so pass back exactly what
+   * the list returned.
+   */
+  unblockRemoteActor: (actorURL: string) =>
+    apiRequest<void>("/api/v1/me/blocks/remote", {
+      method: "DELETE",
+      query: { actor: actorURL },
     }),
 
   /**

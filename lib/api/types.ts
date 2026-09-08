@@ -478,6 +478,8 @@ export type CreateRemoteFollowRequest = Schemas["CreateRemoteFollowRequest"];
 export type RemoteFollowState = NonNullable<Schemas["RemoteFollow"]["state"]>;
 export type RemoteFollow = Schemas["RemoteFollow"];
 export type RemoteFollowListResponse = Schemas["RemoteFollowListResponse"];
+export type RemoteBlock = Schemas["RemoteBlockView"];
+export type RemoteBlockListResponse = Schemas["RemoteBlockListResponse"];
 export type BlockedUser = Schemas["BlockedUser"];
 export type BlockedUserListResponse = Schemas["BlockedUserListResponse"];
 

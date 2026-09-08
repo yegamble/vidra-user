@@ -1,5 +1,6 @@
 import { BlockedUsersView } from "@/components/BlockedUsersView";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
+import { BlocksTabs } from "@/components/BlocksTabs";
 import { PageHeader } from "@/components/PageHeader";
 
 // The description used to promise only the messaging half, which under-sold
@@ -16,6 +17,7 @@ export default function BlockedUsersPage() {
         title="Blocked accounts"
         description="Accounts you have blocked. Their videos and comments are hidden from you, and neither of you can send the other a direct message."
       />
+      <BlocksTabs />
       <BlockedUsersView />
     </main>
   );
