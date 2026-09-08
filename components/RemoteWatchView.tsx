@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/components/auth/AuthProvider";
 import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import { ExternalLinkIcon, InfoIcon } from "@/components/icons";
+import { RemoteVideoThread } from "@/components/RemoteVideoThread";
 import { ReportButton } from "@/components/ReportButton";
 import { Button, EmptyState, ErrorState, Spinner, buttonClasses } from "@/components/ui";
 import { ApiError, api, errorMessage, remoteVideoThumbnailUrl } from "@/lib/api";
@@ -133,8 +134,9 @@ export function RemoteWatchView({ id }: { id: string }) {
         <div className="flex items-start gap-2.5 rounded-2xl bg-surface-muted p-4 text-[13px] leading-relaxed text-fg-muted">
           <InfoIcon size={14} strokeWidth={2} className="mt-0.5 flex-none" />
           <p>
-            This is a federated video from {video.domain}. Comments, ratings, and saving live on
-            the origin instance. Reports go to the moderators of this instance.
+            This is a federated video from {video.domain}. Ratings and saving live on the origin
+            instance, and so does replying — the comments below are a copy of the origin&rsquo;s
+            thread, sent here. Reports go to the moderators of this instance.
           </p>
         </div>
         {video.description ? (
@@ -143,6 +145,14 @@ export function RemoteWatchView({ id }: { id: string }) {
           </p>
         ) : null}
       </div>
+
+      {/*
+        The MIRRORED thread (A29-F8). Before it, this instance received every
+        federated comment for the videos it follows and dropped every one, so a
+        remote video carried no thread anywhere but its origin — while the
+        sender's ledger recorded a successful delivery.
+      */}
+      <RemoteVideoThread videoId={video.id} />
     </article>
   );
 }

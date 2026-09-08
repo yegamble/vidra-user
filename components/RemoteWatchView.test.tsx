@@ -3,7 +3,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RemoteVideo } from "@/lib/api";
+import type { RemoteVideo, RemoteVideoCommentListResponse } from "@/lib/api";
 
 // A29 remediation, the follower's half: the origin now advertises a playable
 // HLS master on its AS Video, so a federated video must render THIS instance's
@@ -18,6 +18,7 @@ import type { RemoteVideo } from "@/lib/api";
 
 const mocks = vi.hoisted(() => ({
   getRemoteVideo: vi.fn(),
+  getRemoteVideoComments: vi.fn(),
   useSession: vi.fn(),
   push: vi.fn(),
 }));
@@ -26,7 +27,11 @@ vi.mock("@/lib/api", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/api")>();
   return {
     ...actual,
-    api: { ...actual.api, getRemoteVideo: mocks.getRemoteVideo },
+    api: {
+      ...actual.api,
+      getRemoteVideo: mocks.getRemoteVideo,
+      getRemoteVideoComments: mocks.getRemoteVideoComments,
+    },
   };
 });
 
@@ -81,6 +86,9 @@ let restoreCanPlayType: (() => void) | null = null;
 
 beforeEach(() => {
   mocks.getRemoteVideo.mockReset();
+  mocks.getRemoteVideoComments
+    .mockReset()
+    .mockResolvedValue({ comments: [], total: 0, limit: 50, offset: 0 });
   mocks.useSession.mockReturnValue({ status: "anonymous" });
 });
 
@@ -164,5 +172,68 @@ describe("RemoteWatchView playback", () => {
     render(<RemoteWatchView id="r1" />);
     await screen.findByRole("heading", { name: "Dawn over the fjord" });
     expect(screen.getByRole("button", { name: /Mute instance peer\.example/ })).toBeTruthy();
+  });
+});
+
+describe("RemoteWatchView mirrored thread", () => {
+  it("renders the comments the origin sent, with each author's own domain", async () => {
+    restoreCanPlayType = pretendNativeHlsSupport();
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo({ stream_url: HLS_MASTER }));
+    mocks.getRemoteVideoComments.mockResolvedValue({
+      comments: [
+        {
+          id: "c1",
+          author_name: "ada",
+          author_domain: "peer.example",
+          actor_url: "https://peer.example/accounts/ada",
+          object_url: "https://peer.example/notes/1",
+          body: "Beautiful grade.",
+          edited: false,
+          created_at: "2026-09-05T10:00:00Z",
+        },
+        {
+          id: "c2",
+          author_name: "ada",
+          author_domain: "other.example",
+          actor_url: "https://other.example/accounts/ada",
+          object_url: "https://other.example/notes/2",
+          body: "Agreed.",
+          edited: true,
+          created_at: "2026-09-05T11:00:00Z",
+        },
+      ],
+      total: 2,
+      limit: 50,
+      offset: 0,
+    } satisfies RemoteVideoCommentListResponse);
+
+    render(<RemoteWatchView id="r1" />);
+    expect(await screen.findByText("Beautiful grade.")).toBeTruthy();
+    expect(screen.getByText("Agreed.")).toBeTruthy();
+    // Two authors called "ada" on different servers must be distinguishable.
+    expect(screen.getAllByText("ada")).toHaveLength(2);
+    // peer.example appears more than once (the card's own origin badge and the
+    // "Watch on …" link), so the assertion is that BOTH domains are present in
+    // the thread, not how many times each occurs on the page.
+    expect(screen.getAllByText(/peer\.example/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/other\.example/).length).toBeGreaterThan(0);
+    // An origin can rewrite a comment under a reader; the thread says so.
+    expect(screen.getByText(/edited/)).toBeTruthy();
+  });
+
+  it("explains an empty thread rather than implying the video has no comments", async () => {
+    restoreCanPlayType = pretendNativeHlsSupport();
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo({ stream_url: HLS_MASTER }));
+    render(<RemoteWatchView id="r1" />);
+    expect(await screen.findByText(/mirrors the comments its origin sends it/)).toBeTruthy();
+  });
+
+  it("offers no composer — replying lives on the origin", async () => {
+    restoreCanPlayType = pretendNativeHlsSupport();
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo({ stream_url: HLS_MASTER }));
+    render(<RemoteWatchView id="r1" />);
+    await screen.findByRole("heading", { name: "Comments from the origin" });
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByText(/so does replying/)).toBeTruthy();
   });
 });

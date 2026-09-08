@@ -100,6 +100,7 @@ import type {
   ATProtoStatus,
   RemoteBlockListResponse,
   RemoteVideo,
+  RemoteVideoCommentListResponse,
   FeedScope,
   CreateChannelRequest,
   UpdateChannelRequest,
@@ -1349,6 +1350,18 @@ export const api = {
    */
   getRemoteVideo: (id: string, signal?: AbortSignal) =>
     apiRequest<RemoteVideo>(`/api/v1/remote-videos/${encodeURIComponent(id)}`, { signal }),
+
+  /**
+   * GET /api/v1/remote-videos/{id}/comments — the comments this instance has
+   * MIRRORED for a federated video: the thread its origin fans out to its
+   * followers, oldest first. Read-only — there is no authoring endpoint,
+   * because comments on a remote video live on the origin.
+   */
+  getRemoteVideoComments: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<RemoteVideoCommentListResponse>(
+      `/api/v1/remote-videos/${encodeURIComponent(id)}/comments`,
+      { query: pageQuery(params), signal },
+    ),
 
   /**
    * POST /api/v1/remote-videos/{id}/report — file an abuse report against a

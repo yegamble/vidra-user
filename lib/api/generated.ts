@@ -3694,6 +3694,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/remote-videos/{id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The mirrored comment thread on a federated video
+         * @description Returns the comments this instance has MIRRORED for one remote video — the thread the origin fans out to its followers — oldest first. Public; paginated via limit (1–100, default 20) and offset.
+         *     READ-ONLY BY DESIGN. There is no POST: these rows are a mirror of somebody else's thread and nothing on this instance writes one. Comments, ratings and saving live on the origin instance; each comment carries its `object_url` on the origin so a reader can follow the thread back to where it is actually hosted.
+         *     Filtering matches the remote-video card exactly, so a thread can never show what the card would have hidden: comments from an admin-blocked instance are excluded for everyone, and a signed-in caller additionally loses comments from an instance they mute and from a remote account they block. An unknown remote video — or one hidden because its origin is admin-blocked — is 404, the same answer its detail route gives.
+         */
+        get: operations["listRemoteVideoComments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/remote-videos/{id}/thumbnail": {
         parameters: {
             query?: never;
@@ -4579,7 +4601,7 @@ export interface paths {
         };
         /**
          * Durable job-queue status (admin)
-         * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions, storage_migrations): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
+         * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions, storage_migrations, cdn_purge_jobs): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
          */
         get: operations["listJobs"];
         put?: never;
@@ -5310,6 +5332,12 @@ export interface components {
             error: {
                 /**
                  * @description Stable snake_case identifier for the error class.
+                 *
+                 *     Two codes govern every ingestion route (uploads, source replacement, URL imports, channel syncs, posters, caption tracks, playlist covers, avatars, banners, instance branding, DM attachments and account-import archives):
+                 *
+                 *     `scanner_not_configured` (503) — this instance has no malware scanner wired and has not declared the explicit opt-out (MALWARE_SCAN_MODE=disabled), so it accepts no user-supplied file at all. `GET /instance` reports features.uploads and features.imports false in the same state, so a client should hide the affordance rather than discover this per request.
+                 *
+                 *     `safety_scan_rejected` (422) — the scanner refused this file. The message is a fixed neutral sentence ("This file was rejected by the instance's safety scan and was not stored."); the signature and the scanner are deliberately NOT disclosed. The asynchronous paths report the same refusal out of band: the upload session settles state `failed` with that sentence in `failure_reason`, and the import job settles `failed` with it in `error`.
                  * @example not_found
                  */
                 code: string;
@@ -6685,6 +6713,40 @@ export interface components {
             blocked_at: string;
             /** @description Every channel handle this account publishes under, sorted — the same field MutedAccount carries, for the same client-side suggestion filter. An account with no channel yields an empty array, never null. */
             channel_handles: string[];
+        };
+        RemoteVideoComment: {
+            /**
+             * Format: uuid
+             * @description This instance's id for the mirrored row, not the origin's.
+             */
+            id: string;
+            /** @description The origin's preferredUsername, SNAPSHOT at the time the comment arrived, so the thread still renders when the actor is no longer cached. Falls back to the origin host. */
+            author_name: string;
+            author_domain: string;
+            actor_url: string;
+            /** @description The comment's ActivityPub id ON THE ORIGIN. */
+            object_url: string;
+            /** @description Plain text; the origin's HTML is stripped on ingest. */
+            body: string;
+            /** @description True once an Update{Note} changed the body. */
+            edited: boolean;
+            /**
+             * Format: date-time
+             * @description The origin's own publication time, when it sent one.
+             */
+            published_at?: string;
+            /**
+             * Format: date-time
+             * @description When this instance first stored the comment.
+             */
+            created_at: string;
+        };
+        RemoteVideoCommentListResponse: {
+            comments: components["schemas"]["RemoteVideoComment"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            offset: number;
         };
         RemoteBlockRequest: {
             /**
@@ -8317,7 +8379,7 @@ export interface components {
                  */
                 pool_max_conns: number;
             };
-            /** @description This process's CDN purge record: how many invalidation fan-outs have run since boot, the per-key outcomes, and when a run last ended with the edge possibly still serving something. It exists because purge success is otherwise silent and failure one aggregate log line, while promoting media headers to shared-cacheable is gated on purge being demonstrably exercised. ABSENT — not zeroed — when no CDN is wired: zero runs on an edgeless install would read as a purge system that never works. In-process counters, reset by a restart. Never includes keys or URLs. */
+            /** @description The CDN purge record, in two halves with different lifetimes. runs/keys_purged/keys_failed/last_incomplete_run_at are THIS PROCESS's in-memory counters, reset by a restart: they answer "has purge been exercised, and is it failing now". pending_retries, oldest_pending_seconds and dead_letters are read from the durable purge queue and answer what a restart must not erase: "is the edge still serving something this instance has stopped serving". ABSENT — not zeroed — when no CDN is wired: zero runs on an edgeless install would read as a purge system that never works. Never includes keys or URLs. */
             cdn_purge?: {
                 /**
                  * Format: int64
@@ -8336,6 +8398,21 @@ export interface components {
                  * @description When a run last ended incomplete — per-key failures, or a key list known to be short (listing failed / fan-out cap hit). Omitted while every run since boot purged its full key set, so absence is the good news it reads as.
                  */
                 last_incomplete_run_at?: string;
+                /**
+                 * Format: int64
+                 * @description Queued invalidations still outstanding — waiting on their backoff or claimed by a worker. Zero is the healthy reading. Survives a restart, unlike the counters above.
+                 */
+                pending_retries: number;
+                /**
+                 * Format: int64
+                 * @description How long the oldest outstanding invalidation has been waiting. The staleness signal: a number that keeps growing means the edge is refusing purges. `vidra doctor` warns on it.
+                 */
+                oldest_pending_seconds: number;
+                /**
+                 * Format: int64
+                 * @description Invalidations that gave up after the attempt cap. Each one is an edge still serving an object this instance no longer serves; only a manual invalidation at the provider clears it.
+                 */
+                dead_letters: number;
             };
             /**
              * Format: int64
@@ -19804,6 +19881,42 @@ export interface operations {
                 };
             };
             /** @description No such remote video (or its origin instance is blocked). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRemoteVideoComments: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of mirrored comments (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoCommentListResponse"];
+                };
+            };
+            /** @description No such remote video, or its origin instance is blocked here. */
             404: {
                 headers: {
                     [name: string]: unknown;
