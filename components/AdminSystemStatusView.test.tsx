@@ -426,3 +426,73 @@ describe("StatusPanel processes", () => {
     expect(within(section).getByText("quiescing")).toBeTruthy();
   });
 });
+
+// A29 parity, the rehearsal's finding (c): FederationHealth.LastDeliveredAt was
+// computed on every probe in core and rendered into nothing, so the one number
+// that separates a DRAINED federation queue from an ABANDONED one — both of
+// which read as zero pending — never reached the page that asks the question.
+describe("component detail", () => {
+  it("shows the federation queue's last successful delivery on a healthy card", async () => {
+    mocks.getSystemStatus.mockResolvedValue(
+      systemStatus(undefined, {
+        components: {
+          federation: {
+            status: "ok",
+            detail: { pending: "0", dead_lettered: "0", last_delivered_at: "2026-09-08T17:41:09Z" },
+          },
+        },
+      }),
+    );
+    render(<StatusPanel />);
+
+    const row = (await screen.findByText("Federation queue")).closest("li");
+    expect(row).not.toBeNull();
+    const scoped = within(row as HTMLElement);
+    expect(scoped.getByText("Last delivered")).toBeTruthy();
+    expect(scoped.getByText("Pending")).toBeTruthy();
+    expect(scoped.getByText("Dead-lettered")).toBeTruthy();
+  });
+
+  it("says 'never' rather than printing a zero timestamp on an instance that has delivered nothing", async () => {
+    mocks.getSystemStatus.mockResolvedValue(
+      systemStatus(undefined, {
+        components: { federation: { status: "ok", detail: { pending: "0", dead_lettered: "0" } } },
+      }),
+    );
+    render(<StatusPanel />);
+
+    const row = (await screen.findByText("Federation queue")).closest("li");
+    expect(within(row as HTMLElement).getByText("never")).toBeTruthy();
+  });
+
+  it("carries the detail on a FAILING card too", async () => {
+    mocks.getSystemStatus.mockResolvedValue(
+      systemStatus(undefined, {
+        status: "degraded",
+        components: {
+          federation: {
+            status: "degraded",
+            error: "2 outbound deliveries exhausted their retries and were dead-lettered.",
+            detail: { pending: "5", dead_lettered: "2", last_delivered_at: "2026-09-08T17:41:09Z" },
+          },
+        },
+      }),
+    );
+    render(<StatusPanel />);
+
+    const row = (await screen.findByText("Federation queue")).closest("li");
+    const scoped = within(row as HTMLElement);
+    expect(scoped.getByText(/dead-lettered\./)).toBeTruthy();
+    // An operator reading a failing queue wants "and the last thing that DID
+    // leave was at …" more than anyone reading a healthy one does.
+    expect(scoped.getByText("Last delivered")).toBeTruthy();
+  });
+
+  // A component with no detail must render exactly as it did before the field
+  // existed — every other row on this page is one.
+  it("adds nothing to a component that carries no detail", async () => {
+    render(<StatusPanel />);
+    const row = (await screen.findByText("PostgreSQL")).closest("li");
+    expect(within(row as HTMLElement).queryByText("Last delivered")).toBeNull();
+  });
+});

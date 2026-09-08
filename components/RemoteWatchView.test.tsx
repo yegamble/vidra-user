@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RemoteVideo, RemoteVideoCommentListResponse } from "@/lib/api";
@@ -19,6 +19,8 @@ import type { RemoteVideo, RemoteVideoCommentListResponse } from "@/lib/api";
 const mocks = vi.hoisted(() => ({
   getRemoteVideo: vi.fn(),
   getRemoteVideoComments: vi.fn(),
+  blockRemoteActor: vi.fn(),
+  unblockRemoteActor: vi.fn(),
   useSession: vi.fn(),
   push: vi.fn(),
 }));
@@ -31,6 +33,8 @@ vi.mock("@/lib/api", async (importActual) => {
       ...actual.api,
       getRemoteVideo: mocks.getRemoteVideo,
       getRemoteVideoComments: mocks.getRemoteVideoComments,
+      blockRemoteActor: mocks.blockRemoteActor,
+      unblockRemoteActor: mocks.unblockRemoteActor,
     },
   };
 });
@@ -89,6 +93,8 @@ beforeEach(() => {
   mocks.getRemoteVideoComments
     .mockReset()
     .mockResolvedValue({ comments: [], total: 0, limit: 50, offset: 0 });
+  mocks.blockRemoteActor.mockReset().mockResolvedValue(undefined);
+  mocks.unblockRemoteActor.mockReset().mockResolvedValue(undefined);
   mocks.useSession.mockReturnValue({ status: "anonymous" });
 });
 
@@ -235,5 +241,79 @@ describe("RemoteWatchView mirrored thread", () => {
     await screen.findByRole("heading", { name: "Comments from the origin" });
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.getByText(/so does replying/)).toBeTruthy();
+  });
+});
+
+// A29 parity: the block a viewer can reach from the page they are on, and the
+// one that addresses the right actor.
+//
+// The rehearsal measured the failure this closes: the settings form's only
+// affordance was a handle, and on an instance where an account and a channel
+// share a name WebFinger resolved that handle to the Person while the videos
+// are attributed to the Group — so the block a viewer could actually make hid
+// nothing, and the identity that WOULD have worked appeared on no page. The
+// fixture is the contract's own RemoteVideo, so if account_actor_url ever
+// leaves core's schema this file stops compiling rather than passing against an
+// invented shape.
+describe("RemoteWatchView account block", () => {
+  const identified = {
+    actor_url: "https://peer.example/video-channels/films",
+    account_actor_url: "https://peer.example/accounts/kaisa",
+    channel_handle: "films@peer.example",
+  };
+
+  it("blocks the OWNING ACCOUNT, not the channel the video is attributed to", async () => {
+    mocks.useSession.mockReturnValue({ status: "authed" });
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo(identified));
+    render(<RemoteWatchView id="r1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Block films@peer.example" }));
+
+    await waitFor(() => expect(mocks.blockRemoteActor).toHaveBeenCalledTimes(1));
+    // The ACCOUNT: one block covering every channel that person owns, including
+    // the ones they have not created yet.
+    expect(mocks.blockRemoteActor).toHaveBeenCalledWith("https://peer.example/accounts/kaisa");
+    await screen.findByRole("status");
+    expect(screen.getByRole("button", { name: "Unblock films@peer.example" })).toBeTruthy();
+  });
+
+  it("falls back to the channel actor when the origin named no owner", async () => {
+    mocks.useSession.mockReturnValue({ status: "authed" });
+    mocks.getRemoteVideo.mockResolvedValue(
+      remoteVideo({ actor_url: identified.actor_url, channel_handle: identified.channel_handle }),
+    );
+    render(<RemoteWatchView id="r1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Block films@peer.example" }));
+    await waitFor(() => expect(mocks.blockRemoteActor).toHaveBeenCalledTimes(1));
+    expect(mocks.blockRemoteActor).toHaveBeenCalledWith(identified.actor_url);
+  });
+
+  it("undoes with the SAME url it blocked", async () => {
+    mocks.useSession.mockReturnValue({ status: "authed" });
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo(identified));
+    render(<RemoteWatchView id="r1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Block films@peer.example" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Unblock films@peer.example" }));
+
+    await waitFor(() => expect(mocks.unblockRemoteActor).toHaveBeenCalledTimes(1));
+    // Verbatim: an unblock is matched against the stored URL, so a page that
+    // sent anything else would leave a block the viewer cannot lift.
+    expect(mocks.unblockRemoteActor).toHaveBeenCalledWith("https://peer.example/accounts/kaisa");
+  });
+
+  it("offers nothing to an anonymous viewer, and nothing when the row carries no actor", async () => {
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo(identified));
+    render(<RemoteWatchView id="r1" />);
+    await screen.findByRole("heading", { name: "Dawn over the fjord" });
+    expect(screen.queryByRole("button", { name: /^Block / })).toBeNull();
+
+    cleanup();
+    mocks.useSession.mockReturnValue({ status: "authed" });
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo());
+    render(<RemoteWatchView id="r1" />);
+    await screen.findByRole("heading", { name: "Dawn over the fjord" });
+    expect(screen.queryByRole("button", { name: /^Block / })).toBeNull();
   });
 });

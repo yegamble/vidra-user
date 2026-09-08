@@ -41,6 +41,9 @@ const COMPONENT_LABEL: Record<string, string> = {
   clamav: "Malware scanning (ClamAV)",
   mfa_kek: "MFA secret key",
   settings_sync: "Settings sync",
+  // Named for what it IS rather than for the protocol: an operator asking "is
+  // anything leaving this instance?" is asking about a queue.
+  federation: "Federation queue",
 };
 
 /** ok | down | not_configured, said in words rather than wire enums. */
@@ -56,6 +59,49 @@ function componentLabel(key: string): string {
 
 function componentStatusLabel(status: string): string {
   return COMPONENT_STATUS_LABEL[status] ?? status.replace(/_/g, " ");
+}
+
+/**
+ * Human labels for the `detail` keys a component may carry. An unknown key
+ * still renders, humanised — a newer core adding a fact must not make it
+ * invisible to an older console.
+ */
+const DETAIL_LABEL: Record<string, string> = {
+  dead_lettered: "Dead-lettered",
+  last_delivered_at: "Last delivered",
+  pending: "Pending",
+};
+
+/**
+ * ComponentDetail renders a component's extra facts under its row.
+ *
+ * ABSENT last_delivered_at means nothing has ever been delivered, and it says
+ * so in words rather than printing a zero timestamp — "never" is a state an
+ * operator can act on, and 1970 reads as a bug.
+ */
+function ComponentDetail({ detail }: { detail?: Record<string, string> }) {
+  if (!detail) return null;
+  const keys = Object.keys(detail).sort();
+  if (keys.length === 0) return null;
+  const hasQueueNumbers = "pending" in detail || "dead_lettered" in detail;
+  return (
+    <dl className="flex flex-wrap gap-x-5 gap-y-1 pl-[18px] text-[12.5px] text-fg-muted">
+      {keys.map((key) => (
+        <div key={key} className="flex items-baseline gap-1.5">
+          <dt className="font-medium">{DETAIL_LABEL[key] ?? key.replace(/_/g, " ")}</dt>
+          <dd className="tabular-nums">
+            {key === "last_delivered_at" ? formatDateTime(detail[key]) : detail[key]}
+          </dd>
+        </div>
+      ))}
+      {hasQueueNumbers && !("last_delivered_at" in detail) ? (
+        <div className="flex items-baseline gap-1.5">
+          <dt className="font-medium">Last delivered</dt>
+          <dd>never</dd>
+        </div>
+      ) : null}
+    </dl>
+  );
 }
 
 /**
@@ -185,6 +231,17 @@ export function StatusPanel() {
                       {c.error}
                     </span>
                   ) : null}
+                  {/* The FACTS behind the verdict. Only the federation queue
+                      sets these today, and last_delivered_at is the reason the
+                      block exists: a drained queue and an abandoned one both
+                      read as zero pending, and only the time of the last
+                      SUCCESSFUL delivery separates them. The number was
+                      computed on every probe and rendered into nothing.
+
+                      It shows on a healthy card too, not just a failing one:
+                      "ok, and nothing has left this instance since Tuesday" is
+                      the state an operator most needs to be able to notice. */}
+                  <ComponentDetail detail={c.detail} />
                 </li>
               );
             })}
