@@ -3694,6 +3694,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/remote-videos/{id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The mirrored comment thread on a federated video
+         * @description Returns the comments this instance has MIRRORED for one remote video — the thread the origin fans out to its followers — oldest first. Public; paginated via limit (1–100, default 20) and offset.
+         *     READ-ONLY BY DESIGN. There is no POST: these rows are a mirror of somebody else's thread and nothing on this instance writes one. Comments, ratings and saving live on the origin instance; each comment carries its `object_url` on the origin so a reader can follow the thread back to where it is actually hosted.
+         *     Filtering matches the remote-video card exactly, so a thread can never show what the card would have hidden: comments from an admin-blocked instance are excluded for everyone, and a signed-in caller additionally loses comments from an instance they mute and from a remote account they block. An unknown remote video — or one hidden because its origin is admin-blocked — is 404, the same answer its detail route gives.
+         */
+        get: operations["listRemoteVideoComments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/remote-videos/{id}/thumbnail": {
         parameters: {
             query?: never;
@@ -3865,6 +3887,36 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/blocks/remote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List blocked remote accounts
+         * @description Returns the REMOTE (federated) accounts the caller has blocked, newest block first. Requires authentication. Paginated via limit (1–100, default 20) and offset. An actor this instance has never cached still lists, with an empty handle: a block the viewer cannot see is a block they cannot lift.
+         */
+        get: operations["listRemoteBlocks"];
+        put?: never;
+        /**
+         * Block a remote account
+         * @description Blocks one REMOTE account for the caller, addressed by a fediverse handle (@user@domain) or an ActivityPub actor URL. Their federated videos leave the caller's feeds and reads, their replies are no longer stored under the caller's own videos, and their follows of the caller's channels are refused. It is a sibling of blocking a local account rather than an extension of it: a remote actor is identified by a URL, which cannot be a path segment.
+         *     It does NOT hide the caller from the blocked account and it does not stop delivery — a remote server decides what it shows its own users, and claiming otherwise would be a safety feature that only reads as one.
+         *     Requires authentication. Idempotent. A local identity is 422, as is a handle that cannot be resolved.
+         */
+        post: operations["blockRemoteActor"];
+        /**
+         * Unblock a remote account
+         * @description Lifts the caller's block of one remote account. The actor is supplied as a query parameter and matched VERBATIM against the stored actor URL — no handle resolution runs here, so a WebFinger that has since started failing can never strand a viewer with a block they cannot lift. Requires authentication. Idempotent.
+         */
+        delete: operations["unblockRemoteActor"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6661,6 +6713,63 @@ export interface components {
             blocked_at: string;
             /** @description Every channel handle this account publishes under, sorted — the same field MutedAccount carries, for the same client-side suggestion filter. An account with no channel yields an empty array, never null. */
             channel_handles: string[];
+        };
+        RemoteVideoComment: {
+            /**
+             * Format: uuid
+             * @description This instance's id for the mirrored row, not the origin's.
+             */
+            id: string;
+            /** @description The origin's preferredUsername, SNAPSHOT at the time the comment arrived, so the thread still renders when the actor is no longer cached. Falls back to the origin host. */
+            author_name: string;
+            author_domain: string;
+            actor_url: string;
+            /** @description The comment's ActivityPub id ON THE ORIGIN. */
+            object_url: string;
+            /** @description Plain text; the origin's HTML is stripped on ingest. */
+            body: string;
+            /** @description True once an Update{Note} changed the body. */
+            edited: boolean;
+            /**
+             * Format: date-time
+             * @description The origin's own publication time, when it sent one.
+             */
+            published_at?: string;
+            /**
+             * Format: date-time
+             * @description When this instance first stored the comment.
+             */
+            created_at: string;
+        };
+        RemoteVideoCommentListResponse: {
+            comments: components["schemas"]["RemoteVideoComment"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        RemoteBlockRequest: {
+            /**
+             * @description A fediverse handle (@user@domain or user@domain) or an ActivityPub actor URL. A handle is resolved through WebFinger rather than string-built, because the actor URL for a handle is whatever that server says it is. A URL is validated and SSRF-guarded but never dereferenced: a block must work against an actor that is offline or refusing us, which is the actor most likely to be blocked.
+             * @example @kaisa@peer.example
+             */
+            actor: string;
+        };
+        RemoteBlockView: {
+            /** @description The ActivityPub actor URL the block is keyed on. */
+            actor_url: string;
+            /** @description preferredUsername@domain when this instance has the actor cached, otherwise empty. */
+            handle: string;
+            domain: string;
+            /** Format: date-time */
+            blocked_at: string;
+        };
+        RemoteBlockListResponse: {
+            actors: components["schemas"]["RemoteBlockView"][];
+            /** Format: int64 */
+            total: number;
+            limit: number;
+            offset: number;
         };
         BlockedUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["BlockedUser"][];
@@ -19782,6 +19891,42 @@ export interface operations {
             };
         };
     };
+    listRemoteVideoComments: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of mirrored comments (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoCommentListResponse"];
+                };
+            };
+            /** @description No such remote video, or its origin instance is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getRemoteVideoThumbnail: {
         parameters: {
             query?: never;
@@ -20296,6 +20441,119 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRemoteBlocks: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of blocked remote accounts (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteBlockListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    blockRemoteActor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteBlockRequest"];
+            };
+        };
+        responses: {
+            /** @description The remote account is blocked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The identity was local, malformed, or unresolvable. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unblockRemoteActor: {
+        parameters: {
+            query: {
+                /** @description The actor URL exactly as the list returned it. */
+                actor: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The remote account is not blocked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No actor was supplied. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

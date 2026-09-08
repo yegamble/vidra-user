@@ -98,7 +98,9 @@ import type {
   RemoteFollowListResponse,
   ATProtoLinkRequest,
   ATProtoStatus,
+  RemoteBlockListResponse,
   RemoteVideo,
+  RemoteVideoCommentListResponse,
   FeedScope,
   CreateChannelRequest,
   UpdateChannelRequest,
@@ -1313,11 +1315,53 @@ export const api = {
     }),
 
   /**
+   * GET /api/v1/me/blocks/remote — the REMOTE (federated) accounts the caller
+   * has blocked, newest first. A sibling of getBlockedUsers rather than part of
+   * it: a remote actor is identified by a URL, not a local user uuid.
+   */
+  getRemoteBlocks: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<RemoteBlockListResponse>("/api/v1/me/blocks/remote", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/me/blocks/remote — block one remote account by fediverse
+   * handle (@user@domain) or ActivityPub actor URL (auth; idempotent; a local
+   * or unresolvable identity → 422).
+   */
+  blockRemoteActor: (actor: string) =>
+    apiRequest<void>("/api/v1/me/blocks/remote", { method: "POST", body: { actor } }),
+
+  /**
+   * DELETE /api/v1/me/blocks/remote?actor= — lift a remote-account block. The
+   * actor is matched VERBATIM against the stored URL, so pass back exactly what
+   * the list returned.
+   */
+  unblockRemoteActor: (actorURL: string) =>
+    apiRequest<void>("/api/v1/me/blocks/remote", {
+      method: "DELETE",
+      query: { actor: actorURL },
+    }),
+
+  /**
    * GET /api/v1/remote-videos/{id} — a federated remote video's stored metadata
    * (public; 404 when unknown or its origin instance is admin-blocked).
    */
   getRemoteVideo: (id: string, signal?: AbortSignal) =>
     apiRequest<RemoteVideo>(`/api/v1/remote-videos/${encodeURIComponent(id)}`, { signal }),
+
+  /**
+   * GET /api/v1/remote-videos/{id}/comments — the comments this instance has
+   * MIRRORED for a federated video: the thread its origin fans out to its
+   * followers, oldest first. Read-only — there is no authoring endpoint,
+   * because comments on a remote video live on the origin.
+   */
+  getRemoteVideoComments: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<RemoteVideoCommentListResponse>(
+      `/api/v1/remote-videos/${encodeURIComponent(id)}/comments`,
+      { query: pageQuery(params), signal },
+    ),
 
   /**
    * POST /api/v1/remote-videos/{id}/report — file an abuse report against a
