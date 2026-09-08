@@ -69,7 +69,12 @@ function deferredInstance() {
 }
 
 const instanceWithDefaults = {
-  features: { imports: true, upload_additional_extensions: true, video_replace: true },
+  features: {
+    uploads: true,
+    imports: true,
+    upload_additional_extensions: true,
+    video_replace: true,
+  },
   defaults: {
     publish: {
       privacy: "private",
@@ -602,5 +607,46 @@ describe("ReplaceVideoManager (W14)", () => {
         screen.getByText("Replacing video files has been turned off on this instance."),
       ).toBeTruthy();
     });
+  });
+});
+
+// features.uploads is not only the operator's uploads toggle: it now folds in
+// the safety-scan posture, so an instance with no scanner and no explicit
+// opt-out reports false and refuses every upload with 503
+// scanner_not_configured. A28 measured the opposite shape — an instance that
+// accepted and published unscanned media — and the Studio must follow whichever
+// answer /instance gives rather than discovering it after a 2 GB transfer.
+describe("UploadSection follows features.uploads", () => {
+  it("hides the dropzone and explains when uploads are unavailable", async () => {
+    mocks.getInstance.mockResolvedValue({
+      ...instanceWithDefaults,
+      features: { ...instanceWithDefaults.features, uploads: false },
+    });
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+    openSheet();
+
+    await waitFor(() => {
+      expect(screen.getByText("Uploads are unavailable on this instance")).toBeTruthy();
+    });
+    // The dropzone must be GONE, not merely disabled: an input the creator can
+    // still drop 2 GB into is a dead form.
+    expect(screen.queryByLabelText("Video file")).toBeNull();
+  });
+
+  it("keeps the dropzone when uploads are available", async () => {
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+    openSheet();
+    await waitFor(() => expect(screen.getByLabelText("Video file")).toBeTruthy());
+    expect(screen.queryByText("Uploads are unavailable on this instance")).toBeNull();
+  });
+
+  it("stays enabled while /instance is unknown (fail open, the 503 is the fallback)", async () => {
+    mocks.getInstance.mockRejectedValue(new Error("network"));
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+    openSheet();
+    await waitFor(() => expect(screen.getByLabelText("Video file")).toBeTruthy());
   });
 });
