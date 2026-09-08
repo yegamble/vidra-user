@@ -75,7 +75,7 @@ asserted in tests so a restyle cannot silently rename a control.
 
 | Need | Why |
 |------|-----|
-| Node.js 24+ + npm | Runtime and package manager (CI runs Node 24, image builds on `node:26-alpine`, `@types/node` ^26). Pinned in `package.json` `engines` and `.nvmrc` — run `nvm use` to match. |
+| Node.js 26+ + npm | Runtime and package manager (CI runs Node 26, image builds on `node:26-alpine`, `@types/node` ^26 — one number everywhere). Pinned in `package.json` `engines`, `.nvmrc` and `.node-version` — run `nvm use` to match. |
 | `npx playwright install chromium` | Required before running any Playwright suite |
 | Docker (optional) | For the production image or a local backend stack |
 | A running `vidra-core` stack | Only for the backend-backed e2e suite |

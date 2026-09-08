@@ -29,13 +29,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # Node 24 is this repo's stated supported runtime: `engines.node: ">=24"`
-      # in package.json and `24` in .nvmrc. The published container image builds
-      # on node:26-alpine, which those two do not describe — see the A39 note in
-      # AGENTS.md; aligning them is an owner ruling, not a CI change.
+      # Node 26 is this repo's stated supported runtime: `engines.node: ">=26"`
+      # in package.json and `26` in .nvmrc — and it is the runtime the published
+      # container image actually ships, since the Dockerfile's three stages all
+      # build on node:26-alpine. CI, the manifest and the image agree by
+      # construction; keep them moving together (A39 finding F09, owner ruling
+      # 2026-09-08: Node 26 everywhere).
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "24"
+          node-version: "26"
           cache: npm
           cache-dependency-path: package-lock.json
 
