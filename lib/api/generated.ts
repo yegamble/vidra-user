@@ -4489,7 +4489,7 @@ export interface paths {
         };
         /**
          * Operational system status (admin)
-         * @description Returns an operational snapshot for the admin dashboard: build info, the runtime environment, process uptime, an overall health flag, per-dependency component status (postgres, redis, s3, smtp, search, ffmpeg, settings_sync), and live PostgreSQL connection-pool counts. Restricted to admins. settings_sync is the settings-version poller that keeps this replica's in-memory instance settings/documents/branding in agreement with the fleet: down means the poll is failing and THIS replica may be serving stale admin-edited state; not_configured (no poller wired — a single-process or worker-role process) never degrades the instance. Always 200 (even when degraded) so the admin can see the degraded state, unlike /readyz which 503s. Reports only operational metadata. The `database` block is sampled at request time and is ABSENT — not zeroed — on a process with no pool wired: a pool reported as 0 of 0 is indistinguishable from one that is fully checked out.
+         * @description Returns an operational snapshot for the admin dashboard: build info, the runtime environment, process uptime, an overall health flag, per-dependency component status (postgres, redis, storage, s3, smtp, search, ffmpeg, settings_sync), and live PostgreSQL connection-pool counts. storage and s3 are different questions: s3 asks whether the bucket is there (a HeadBucket), storage asks whether this instance can WRITE to it. Restricted to admins. settings_sync is the settings-version poller that keeps this replica's in-memory instance settings/documents/branding in agreement with the fleet: down means the poll is failing and THIS replica may be serving stale admin-edited state; not_configured (no poller wired — a single-process or worker-role process) never degrades the instance. Always 200 (even when degraded) so the admin can see the degraded state, unlike /readyz which 503s. Reports only operational metadata. The `database` block is sampled at request time and is ABSENT — not zeroed — on a process with no pool wired: a pool reported as 0 of 0 is indistinguishable from one that is fully checked out.
          */
         get: operations["systemStatus"];
         put?: never;
@@ -5222,7 +5222,7 @@ export interface components {
         };
         ComponentStatus: {
             /**
-             * @description One of ok, degraded, down, not_configured. degraded is impaired but still serving and never takes the instance out of rotation — the mfa_kek component reports it when the configured MFA_KEY_KEK cannot decrypt the TOTP secrets this database holds.
+             * @description One of ok, degraded, down, not_configured. degraded is impaired but still serving and never takes the instance out of rotation — the mfa_kek component reports it when the configured MFA_KEY_KEK cannot decrypt the TOTP secrets this database holds, and the storage component reports it when the object store takes writes but refuses deletes. The storage component is the object store's WRITE verdict, re-probed every five minutes: every other storage check is a read, and a credential scoped to reads passes all of them while every upload fails. It reports down with the class of refusal (write_denied, quota_exceeded, unreachable) and never with the store's own text.
              * @example ok
              */
             status: string;
@@ -5231,7 +5231,7 @@ export interface components {
         };
         ReadinessResponse: {
             /**
-             * @description ok when all dependencies are reachable, otherwise degraded.
+             * @description ok when all dependencies are reachable, otherwise degraded. Only PostgreSQL being unreachable answers 503 (status unavailable); every other component — redis, mfa_kek, storage — degrades the body and keeps the 200, because the instance still serves reads and the admin console an operator needs in order to fix it.
              * @example ok
              */
             status: string;
@@ -15152,6 +15152,15 @@ export interface operations {
             };
             /** @description Storing the file would exceed the caller's storage quota (code quota_exceeded; or the rolling-24h daily upload quota, code daily_quota_exceeded). */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The instance's media store would not accept the file: its credential cannot write, its bucket or disk is full, or the store could not be reached. Stable code storage_unavailable, with one sentence per class naming the fix. Nothing was stored and nothing was lost — the video stays a draft with no file record — so a client may retry once the operator has acted. Every endpoint that STORES media answers this the same way; it is documented here because this is the one an uploader meets. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
