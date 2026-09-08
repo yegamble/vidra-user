@@ -15,6 +15,7 @@ import { api, errorMessage } from "@/lib/api";
 import type { CreateLiveStreamRequest, LiveStream } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useLiveAvailable } from "@/lib/live/availability";
+import { terminationHeadline } from "@/lib/live/termination";
 
 // Live streams accept only public/unlisted/private (the create contract has no
 // "password" mode, unlike VOD videos) — narrow to exactly what the endpoint takes.
@@ -55,6 +56,9 @@ export function LiveStreamsSection({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<RevealedKey | null>(null);
+  // The stream currently being ended, so the button can go busy and a
+  // double-click cannot fire two terminations.
+  const [ending, setEnding] = useState<string | null>(null);
   // Create-live Modal: launched by "Go live" or the `?new=1` deep link. The
   // sheet skin applies on phones (matchMedia guarded for non-browser test envs).
   const [open, setOpen] = useState(false);
@@ -139,6 +143,35 @@ export function LiveStreamsSection({
       setRevealed({ id, key: res.stream_key, rtmp: res.rtmp_url });
     } catch {
       // Leave the stream as-is on failure.
+    }
+  }
+
+  // End a broadcast in progress. Distinct from Delete, which destroys the stream
+  // AND its replay: this ends the SESSION — the stream leaves `live`, its key is
+  // rotated so an encoder reconnecting on its own cannot put it back on air, and
+  // the publisher is disconnected where the instance can reach its ingest.
+  //
+  // Before this there was no way to do it at all: the only exits were stopping
+  // the encoder (which leaves the row `live` until the ingest's stop hook or the
+  // duration watchdog catches up) and Delete.
+  //
+  // The list is reloaded rather than patched from the response, because ending a
+  // stream changes more of the row than the response carries — the state, the
+  // termination stamp, and (invisibly) the key.
+  async function endStream(id: string) {
+    if (ending !== null) return;
+    setEnding(id);
+    try {
+      await api.endLiveStream(id);
+      setReloadKey((k) => k + 1);
+      // The key that was on screen is the one the rotation just invalidated.
+      // Leaving it visible would have the creator paste a dead credential into
+      // OBS and wonder why the publish is refused.
+      setRevealed((r) => (r?.id === id ? null : r));
+    } catch (err) {
+      setError(errorMessage(err, "Could not end the stream."));
+    } finally {
+      setEnding(null);
     }
   }
 
@@ -244,8 +277,34 @@ export function LiveStreamsSection({
                   />
                   Save replay as a video
                 </label>
+                {/* A moderator termination is shown HERE as well as on the watch
+                    page, because this is the list a creator opens when they
+                    wonder what happened to a stream. Their own end is rendered
+                    too, in its own words, so the row does not read as a takedown
+                    they performed themselves. */}
+                {s.termination ? (
+                  <p
+                    className={cn(
+                      "mt-1.5 text-xs leading-relaxed",
+                      s.termination.by_moderator ? "text-danger" : "text-fg-muted",
+                    )}
+                  >
+                    {terminationHeadline(s.termination)}
+                    {s.termination.reason ? ` ${s.termination.reason}` : ""}
+                  </p>
+                ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-1 text-sm">
+                {s.state === "live" ? (
+                  <button
+                    type="button"
+                    onClick={() => void endStream(s.id)}
+                    disabled={ending === s.id}
+                    className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger-surface focus-ring disabled:opacity-60"
+                  >
+                    {ending === s.id ? "Ending…" : "End stream"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => void regenerate(s.id)}
@@ -319,6 +378,20 @@ export function LiveStreamsSection({
                 />
               </div>
             </div>
+            {/* The supported publisher profile. It is stated HERE, on the form
+                that hands out the stream key, because the ingest transcodes
+                nothing: whatever the encoder pushes is what every viewer gets,
+                on one bitrate, and a creator who pushes 4K has silently made the
+                stream unwatchable for everyone on a phone. Live ABR is a
+                separate piece of work (SCP-05). */}
+            <p className="rounded-xl bg-surface-muted px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-muted">
+              Encode at <strong className="font-semibold text-fg">720p, 30 fps, H.264</strong>{" "}
+              with <strong className="font-semibold text-fg">AAC-LC</strong> audio. The server
+              passes your video through untouched — it does not re-encode — so every viewer
+              receives exactly the bitrate you send. There is no automatic quality ladder yet, so
+              a higher setting does not reach more people; it only makes the stream unwatchable
+              on a slow connection.
+            </p>
             <div>
               <Button type="submit" disabled={busy || title.trim() === ""}>
                 {busy ? "Creating…" : "Create live stream"}

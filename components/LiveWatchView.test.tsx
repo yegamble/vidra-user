@@ -83,3 +83,155 @@ describe("LiveWatchView session settling", () => {
     expect(mocks.getLiveStream).toHaveBeenCalledTimes(1);
   });
 });
+
+// The termination surface: a stream that a PERSON ended says so, and says why —
+// to the people core actually sends the block to. Before this, a moderator
+// termination was indistinguishable from a publisher dropping off, and the only
+// person the action was aimed at was told nothing at all.
+describe("LiveWatchView termination", () => {
+  it("names the reason and the moderator's own words", async () => {
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    mocks.getLiveStream.mockResolvedValue({
+      id: "s1",
+      title: "A stream",
+      state: "ended",
+      privacy: "public",
+      channel_handle: "film-house",
+      termination: {
+        terminated_at: "2026-09-08T12:00:00Z",
+        by_moderator: true,
+        reason_code: "copyright",
+        reason: "studio claim 4471",
+      },
+    });
+    render(<LiveWatchView id="s1" />);
+    const msg = await screen.findByText(/ended by a moderator/i);
+    expect(msg.textContent).toContain("Copyright claim");
+    expect(msg.textContent).toContain("studio claim 4471");
+  });
+
+  it("does not accuse a creator who ended their own stream", async () => {
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    mocks.getLiveStream.mockResolvedValue({
+      id: "s1",
+      title: "A stream",
+      state: "ended",
+      privacy: "public",
+      channel_handle: "film-house",
+      termination: { terminated_at: "2026-09-08T12:00:00Z", by_moderator: false },
+    });
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText(/You ended this stream/i)).toBeTruthy();
+    expect(screen.queryByText(/moderator/i)).toBeNull();
+  });
+
+  // A PERMANENT stream returns to `offline` rather than `ended` when it is
+  // terminated, because it is reusable. If the ended-state branch keyed on the
+  // state alone, the reason would be invisible for exactly the streams a
+  // moderator is most likely to end twice.
+  it("shows the reason for a terminated PERMANENT stream, which is offline, not ended", async () => {
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    mocks.getLiveStream.mockResolvedValue({
+      id: "s1",
+      title: "A stream",
+      state: "offline",
+      privacy: "public",
+      permanent: true,
+      channel_handle: "film-house",
+      termination: {
+        terminated_at: "2026-09-08T12:00:00Z",
+        by_moderator: true,
+        reason_code: "spam",
+      },
+    });
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText(/ended by a moderator/i)).toBeTruthy();
+  });
+
+  it("says nothing when the publisher simply disconnected", async () => {
+    optionalSession = { status: "anon", user: null };
+    render(<LiveWatchView id="s1" />); // the default fixture: ended, no termination
+    expect(await screen.findByText(/This live stream has ended/i)).toBeTruthy();
+    expect(screen.queryByText(/moderator/i)).toBeNull();
+  });
+});
+
+// "Absent, not zero." Core OMITS viewer_count on an instance that cannot measure
+// it, so a rendered 0 would be this component inventing a fact — and the fact it
+// would invent is "nobody is watching", told to a creator mid-broadcast.
+describe("LiveWatchView viewer count", () => {
+  const liveStream = (extra: Record<string, unknown>) => ({
+    id: "s1",
+    title: "A stream",
+    state: "live",
+    privacy: "public",
+    channel_handle: "film-house",
+    hls_url: "/api/v1/live/s1/hls/master.m3u8",
+    ...extra,
+  });
+
+  it("renders the count when core sent one", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValue(liveStream({ viewer_count: 1234 }));
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText("1,234 viewers")).toBeTruthy();
+  });
+
+  it("says viewer, singular, for one", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValue(liveStream({ viewer_count: 1 }));
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText("1 viewer")).toBeTruthy();
+  });
+
+  it("renders a real zero — 'nobody is watching' is a fact core measured", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValue(liveStream({ viewer_count: 0 }));
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText("0 viewers")).toBeTruthy();
+  });
+
+  it("renders NOTHING when the field is absent", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValue(liveStream({}));
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText("A stream")).toBeTruthy();
+    expect(screen.queryByText(/viewers?$/)).toBeNull();
+  });
+});
+
+// The moderator control. A moderation power an actual moderator cannot invoke is
+// not a moderation power, and an End-stream button an ordinary viewer can see is
+// a button that only ever produces a 403.
+describe("LiveWatchView moderator termination control", () => {
+  const liveStream = {
+    id: "s1",
+    title: "A stream",
+    state: "live",
+    privacy: "public",
+    channel_handle: "film-house",
+    hls_url: "/api/v1/live/s1/hls/master.m3u8",
+  };
+
+  it("is offered to a moderator on a live stream", async () => {
+    optionalSession = { status: "authed", user: { id: "u-1", role: "moderator" } };
+    mocks.getLiveStream.mockResolvedValue(liveStream);
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByRole("button", { name: "End stream" })).toBeTruthy();
+  });
+
+  it("is not offered to an ordinary viewer", async () => {
+    optionalSession = { status: "authed", user: { id: "u-1", role: "user" } };
+    mocks.getLiveStream.mockResolvedValue(liveStream);
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText("A stream")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "End stream" })).toBeNull();
+  });
+
+  it("is not offered on a stream that is not live", async () => {
+    optionalSession = { status: "authed", user: { id: "u-1", role: "admin" } };
+    render(<LiveWatchView id="s1" />); // the default fixture is ended
+    expect(await screen.findByText("A stream")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "End stream" })).toBeNull();
+  });
+});

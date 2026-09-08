@@ -82,6 +82,8 @@ import type {
   LiveStream,
   LiveStreamListResponse,
   LiveStreamKey,
+  LiveTerminationResult,
+  TerminateLiveStreamRequest,
   LivePublicListResponse,
   UpdateLiveStreamRequest,
   MessageListResponse,
@@ -1052,6 +1054,30 @@ export const api = {
   /** DELETE /api/v1/live/{id} — delete a live stream (auth, owner; idempotent). */
   deleteLiveStream: (id: string) =>
     apiRequest<void>(`/api/v1/live/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/live/{id}/end — end your own broadcast (auth, owner).
+   *
+   * Distinct from deleteLiveStream, which destroys the stream AND its replay.
+   * This ends the session: the stream leaves `live`, its key is rotated so an
+   * encoder that reconnects on its own cannot put it back on air, and the
+   * publisher is disconnected where the instance can reach its ingest.
+   */
+  endLiveStream: (id: string) =>
+    apiRequest<LiveTerminationResult>(`/api/v1/live/${encodeURIComponent(id)}/end`, {
+      method: "POST",
+    }),
+
+  /**
+   * POST /api/v1/admin/live/{id}/terminate — end a broadcast as a moderator
+   * (auth, admin/moderator). `reason_code` is required and comes from a closed
+   * set; `reason` is free text shown to the creator, never publicly.
+   */
+  terminateLiveStream: (id: string, body: TerminateLiveStreamRequest) =>
+    apiRequest<LiveTerminationResult>(
+      `/api/v1/admin/live/${encodeURIComponent(id)}/terminate`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 
   /** GET /api/v1/videos/{id}/captions — a video's caption tracks (public). */
   getCaptions: (videoId: string, signal?: AbortSignal) =>

@@ -3518,6 +3518,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/live/{id}/terminate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End a live broadcast as a moderator
+         * @description Ends a live broadcast, records why, and disconnects the publisher. This is the control that did not exist: an instance had no way to stop a broadcast except the GLOBAL `live_max_duration_secs` watchdog, which has a 60-second floor, cuts up to one sweep interval late, applies to every stream at once, and never disconnects anybody.
+         *
+         *     The sequence, in order, because the order is load-bearing:
+         *
+         *     1. The session ends. Live HLS 404s immediately and the stream drops off every listing; every playback token outstanding against it dies with it.
+         *     2. The stream key is ROTATED — the RTMP boundary authenticates a key, not a session, so without this the publisher simply reconnects.
+         *     3. The publisher is DISCONNECTED at the ingest, via the media server's control surface. Requires LIVE_INGEST_CONTROL_URL; without it the broadcast is still off the air and the key is still dead, and the response says the socket was left open.
+         *     4. The recording is finalised into the replay by the ORDINARY disconnect path — the recording is still being written while the publisher holds the socket, so it is step 3 that makes step 4 possible.
+         *
+         *     The stream row is not deleted and the account is not touched: this ends a broadcast. `reason_code` is a closed set and is the only part written to the audit trail; the free-text `reason` is stored on the stream and shown to the CREATOR (on the stream page and in the Studio), never publicly.
+         *
+         *     Behind auth; admin or moderator (the A16 role model).
+         */
+        post: operations["terminateLiveStream"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/videos/{id}/block": {
         parameters: {
             query?: never;
@@ -4036,6 +4067,30 @@ export interface paths {
          * @description Rotates the stream key and returns the new one (shown ONCE). Behind auth; a non-owner or unknown id is 404. Use this if a key leaks.
          */
         post: operations["regenerateLiveStreamKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/live/{id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End your own live broadcast
+         * @description Ends a live broadcast the caller owns. Before this there was no way to end one at all: the only exits were stopping the encoder (which leaves the row `live` until the ingest's stop hook or the duration watchdog catches up) and DELETE, which takes the stream and its replay with it.
+         *
+         *     The same mechanism a moderator termination uses, minus the reason: the stream leaves `live`, its stream key is ROTATED (so an encoder that reconnects on its own cannot put it back on air), and the publisher is disconnected at the RTMP ingest when this instance has a control surface (LIVE_INGEST_CONTROL_URL). The recording is finalised into the replay by the ordinary disconnect path, exactly as an encoder stopping would.
+         *
+         *     A PERMANENT stream returns to `offline` (it is reusable); a one-shot goes to `ended`. Behind auth; the owner or a channel content manager only — anyone else gets 404, like every owner-scoped live route.
+         */
+        post: operations["endOwnLiveStream"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7755,6 +7810,46 @@ export interface components {
             channel_display_name?: string;
             /** @description Live HLS playlist path, present only while the stream is live and a media server (LIVE_HLS_ROOT) is configured to serve it. */
             hls_url?: string;
+            /**
+             * Format: int64
+             * @description Distinct viewers who fetched this stream's live playlist within the last rolling window (90 seconds). OMITTED — not zero — when the stream is not live or when this instance cannot measure it (no Redis): "nobody is watching" and "I cannot tell" are different statements, and a creator mid-broadcast must not be shown a confident 0 for the second. Viewers are deduped by a keyed, day-scoped digest; anonymous viewers are counted without their address being stored, and a signed-in viewer who has turned their discovery controls off is counted as an anonymous one.
+             */
+            viewer_count?: number;
+            termination?: components["schemas"]["LiveTermination"];
+        };
+        /** @description Why a broadcast stopped, when a PERSON stopped it. Absent when the publisher simply disconnected — and absent for callers who are not entitled to read it: only the creator, a channel content manager and staff see this block, never the public. */
+        LiveTermination: {
+            /** Format: date-time */
+            terminated_at: string;
+            /** @description True for a moderation action (it carries a reason code), false for the creator's own "End stream". */
+            by_moderator: boolean;
+            /**
+             * @description The moderator's reason, from a closed set. This is the only part written to the audit trail. Absent on an owner's own end.
+             * @enum {string}
+             */
+            reason_code?: "policy_violation" | "copyright" | "sensitive_content" | "spam" | "harassment" | "legal_request" | "technical" | "other";
+            /** @description The moderator's own words. Absent when they left none. */
+            reason?: string;
+        };
+        TerminateLiveStreamRequest: {
+            /** @enum {string} */
+            reason_code: "policy_violation" | "copyright" | "sensitive_content" | "spam" | "harassment" | "legal_request" | "technical" | "other";
+            /** @description Free text shown to the creator alongside the code's sentence. Stored on the stream, never in the audit trail. */
+            reason?: string;
+        };
+        /** @description The outcome of ending a broadcast. The three parts fail independently — the session always ends, but the key rotation can fail and the publisher's socket can survive — so this reports each rather than answering 204. */
+        LiveTerminationResult: {
+            /**
+             * @description What the stream is now. `offline` for a PERMANENT stream (reusable, therefore not ended); `ended` for a one-shot.
+             * @enum {string}
+             */
+            state: "offline" | "ended";
+            /** @description False when the RTMP socket may still be open — the instance has no LIVE_INGEST_CONTROL_URL, or the ingest did not confirm. The broadcast is off the air either way; the publisher may still be uploading to the server's disk. */
+            publisher_disconnected: boolean;
+            /** @description False only when the rotation itself failed, which is the one outcome in which the publisher can start broadcasting again. */
+            stream_key_rotated: boolean;
+            /** @description A sentence explaining a partial outcome. Absent when everything landed. */
+            detail?: string;
         };
         CreateLiveStreamRequest: {
             title: string;
@@ -7792,7 +7887,7 @@ export interface components {
         LiveStreamListResponse: components["schemas"]["PageMeta"] & {
             live_streams: components["schemas"]["LiveStream"][];
         };
-        /** @description One entry of the public "Live now" listing — the minimal, truthful projection of a currently-live PUBLIC stream. Omits fields a discovery rail cannot honestly use: no privacy/state (every entry is public+live), no stream key, no viewer/concurrent count (no server-side counter yet — W4 dependency), no thumbnail (live streams have no server-generated poster yet). */
+        /** @description One entry of the public "Live now" listing — the minimal, truthful projection of a currently-live PUBLIC stream. Omits fields a discovery rail cannot honestly use: no privacy/state (every entry is public+live), no stream key, no thumbnail (live streams have no server-generated poster yet). It DOES carry a concurrent-viewer count now that one exists. */
         LiveStreamCard: {
             /** Format: uuid */
             id: string;
@@ -7807,6 +7902,11 @@ export interface components {
             started_at?: string;
             /** @description Always true for a listing entry (discriminator for a shared card renderer). */
             is_live: boolean;
+            /**
+             * Format: int64
+             * @description Concurrent viewers, on the same terms as LiveStream.viewer_count — omitted rather than zeroed on an instance that cannot measure it.
+             */
+            viewer_count?: number;
             /** @description Live HLS playlist path, present only when a media server (LIVE_HLS_ROOT) is configured to serve it. */
             hls_url?: string;
         };
@@ -19403,6 +19503,77 @@ export interface operations {
             };
         };
     };
+    terminateLiveStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminateLiveStreamRequest"];
+            };
+        };
+        responses: {
+            /** @description What actually happened, including a partial outcome (the key rotation failed, or the publisher's socket survived). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveTerminationResult"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not an admin or moderator. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such live stream. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The stream exists but is not currently live. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or unknown reason_code. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     blockVideo: {
         parameters: {
             query?: never;
@@ -20941,6 +21112,55 @@ export interface operations {
             };
             /** @description No such live stream, or not owned by the caller. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    endOwnLiveStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What actually happened. Not a bare 204: the parts fail independently, and a caller told only "ok" while the publisher is still connected has been misinformed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveTerminationResult"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such live stream, or not managed by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The stream exists but is not currently live. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
