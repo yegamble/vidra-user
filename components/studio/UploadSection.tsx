@@ -117,6 +117,13 @@ export function UploadSection({
   // null = unknown/not-yet-loaded → the form stays enabled (fail open); false →
   // the URL tab renders the honest disabled state instead of a dead form.
   const [importsEnabled, setImportsEnabled] = useState<boolean | null>(null);
+  // Whether FILE upload is accepted on this instance. It is not only the
+  // operator's uploads toggle: features.uploads also folds in the safety-scan
+  // posture, so an instance with no scanner and no explicit opt-out reports
+  // false here and refuses every upload with 503 scanner_not_configured. Same
+  // contract as importsEnabled — null = unknown → the form stays enabled and the
+  // 503 at submit is the defensive fallback.
+  const [uploadsEnabled, setUploadsEnabled] = useState<boolean | null>(null);
   // Whether the extended upload container set is accepted
   // (features.upload_additional_extensions, config-parity W10) — narrows the
   // file picker's accept list in lock-step with the server's extension gate.
@@ -237,6 +244,7 @@ export function UploadSection({
       .getInstance(controller.signal)
       .then((res) => {
         setImportsEnabled(res.features.imports);
+        setUploadsEnabled(res.features.uploads);
         setAdditionalExts(res.features.upload_additional_extensions ?? null);
         // Prefill the publish form from the operator's defaults.publish block
         // (config-parity W9). Absent fields (older backend) leave the shipped
@@ -978,7 +986,9 @@ export function UploadSection({
   // Whether the pick step has enough to advance to details: a chosen file, or a
   // non-empty URL on an instance that accepts imports.
   const canContinue =
-    source === "file" ? fileName !== null : videoUrl.trim() !== "" && importsEnabled !== false;
+    source === "file"
+      ? fileName !== null && uploadsEnabled !== false
+      : videoUrl.trim() !== "" && importsEnabled !== false;
 
   // The metadata form stays editable while a FILE uploads (the creator fills in
   // details in parallel); it locks only for a URL import in flight or once the
@@ -1079,7 +1089,18 @@ export function UploadSection({
                       ]}
                     />
                   </div>
-                  {source === "file" ? (
+                  {source === "file" && uploadsEnabled === false ? (
+                    // Uploads are unavailable here — either the operator turned
+                    // them off, or this instance has no safety scanner and has
+                    // not opted out, in which case the server refuses every
+                    // upload with 503 scanner_not_configured. Either way an
+                    // honest empty state beats a dropzone that eats a 2 GB file
+                    // and then fails.
+                    <EmptyState
+                      title="Uploads are unavailable on this instance"
+                      message="This instance is not accepting new video files right now. Try again later, or ask the operator."
+                    />
+                  ) : source === "file" ? (
                     // Design's dashed dropzone: the file input is a full-bleed
                     // transparent overlay (still labelled "Video file" for
                     // pickers + tests + keyboard), with the visual chrome painted

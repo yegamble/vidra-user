@@ -178,10 +178,41 @@ export function scheduleToIso(local: string): string | undefined {
   return d.toISOString();
 }
 
+// SAFETY_SCAN_REJECTED_MESSAGE is the creator-facing sentence for a file the
+// instance's malware scanner refused. It is deliberately identical to the
+// backend's video.SafetyScanRejectedMessage: the synchronous route sends this
+// exact string with the code below, and the asynchronous paths write it onto the
+// upload session's failure_reason and the import job's error, so keying on the
+// CODE and rendering our own copy would have produced two subtly different
+// sentences for one outcome.
+//
+// It names neither malware nor the scanner. Telling a creator "malware" is
+// telling an attacker their probe worked, and the signature name is an oracle
+// for tuning a payload against the instance's engine. The verdict lives in the
+// audit trail and the moderation queue, which only staff can read.
+export const SAFETY_SCAN_REJECTED_MESSAGE =
+  "This file was rejected by the instance's safety scan and was not stored.";
+
+// SAFETY_SCAN_REJECTED_CODE is the stable machine-readable reason. The UI keys
+// on this, never on the sentence.
+export const SAFETY_SCAN_REJECTED_CODE = "safety_scan_rejected";
+
+// SCANNER_NOT_CONFIGURED_CODE is the OTHER half of the posture: this instance
+// has no malware scanner and has not declared an opt-out, so it accepts no
+// user-supplied file at all. /instance reports features.uploads and
+// features.imports false in the same state, so the creator should normally never
+// reach this — it is the defensive catch for the race between that read and the
+// submit.
+export const SCANNER_NOT_CONFIGURED_CODE = "scanner_not_configured";
+
 // importOrUploadError maps a publish failure to a friendly message, tailored to
 // whether the source was a file upload or a URL import.
 export function importOrUploadError(err: unknown, source: "file" | "url"): string {
   if (err instanceof ApiError) {
+    if (err.code === SAFETY_SCAN_REJECTED_CODE) return SAFETY_SCAN_REJECTED_MESSAGE;
+    if (err.code === SCANNER_NOT_CONFIGURED_CODE) {
+      return "This instance cannot accept files right now: its safety scanner is not available. Nothing was stored — try again later, or ask the operator.";
+    }
     if (err.status === 415) return "That is not a supported video type.";
     if (err.status === 413) return "That file is too large.";
     if (err.code === "quota_exceeded") {
@@ -190,6 +221,13 @@ export function importOrUploadError(err: unknown, source: "file" | "url"): strin
     if (err.code === "daily_quota_exceeded") {
       return "This upload would exceed your daily upload limit. Try again later — the limit is a rolling 24-hour window.";
     }
+    // The async paths report the refusal out of band rather than as a coded
+    // response: the upload session's failure_reason and the import job's error
+    // carry the sentence itself, which the upload layer re-throws as a generic
+    // upload_failed. Recognise the sentence there so the same outcome does not
+    // get the generic "check the URL" copy, which would send a creator to debug
+    // a link that was fetched perfectly well.
+    if (err.message === SAFETY_SCAN_REJECTED_MESSAGE) return SAFETY_SCAN_REJECTED_MESSAGE;
     if (source === "url" && err.status === 422) {
       return "Couldn't fetch that URL — it must be a public link to a video file.";
     }
