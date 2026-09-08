@@ -285,6 +285,24 @@ describe("api endpoints", () => {
     expect(liveHlsMasterUrl("ls1", null)).not.toContain("pt=");
   });
 
+  // The client already JSON-encodes every body it is handed (lib/api/client.ts),
+  // so an endpoint that stringifies its own sends a JSON STRING and core rejects
+  // the whole request with 400 "malformed or invalid request body" — measured in
+  // the A26 rehearsal, where the moderator's End-stream dialog could not end a
+  // single broadcast. The assertion is on the DECODED body being an object,
+  // because a double-encoded body still parses: JSON.parse of it returns the
+  // inner string, and only `toEqual` against the object catches that.
+  it("terminateLiveStream POSTs the reason as an object, not a re-encoded string", async () => {
+    await api.terminateLiveStream("ls 1", { reason_code: "policy_violation", reason: "note" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/live/ls%201/terminate");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      reason_code: "policy_violation",
+      reason: "note",
+    });
+  });
+
   it("createVideoPlaybackSession POSTs, carrying an unlock token as a bearer", async () => {
     await api.createVideoPlaybackSession("v1");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
