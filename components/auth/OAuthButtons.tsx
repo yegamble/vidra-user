@@ -60,8 +60,15 @@ export function AuthOrDivider() {
   );
 }
 
-/** "google" -> "Google" — provider names are configured lowercase identifiers. */
+/**
+ * "google" -> "Google" — provider names are configured lowercase identifiers.
+ * "atproto" is the one that is not operator-configured: it is the fixed provider
+ * key ATProto identity login writes, and every other surface calls it by the
+ * network's name ("Continue with Bluesky", "Connect a Bluesky account"), so the
+ * settings row must not be the single place that says "Atproto".
+ */
 export function providerDisplayName(provider: string): string {
+  if (provider === "atproto") return "Bluesky";
   return provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
