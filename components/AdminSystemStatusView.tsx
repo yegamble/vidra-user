@@ -21,18 +21,25 @@ import { useApiResource } from "@/lib/use-api-resource";
 
 /**
  * Operator-facing names for the server's probe vocabulary (postgres, redis,
- * s3, smtp, search, ffmpeg, settings_sync — internal/httpapi/system_probes.go).
+ * s3, storage, smtp, search, ffmpeg, clamav, mfa_kek, settings_sync —
+ * internal/httpapi/system_probes.go).
  * An unknown key is humanized rather than dropped, the same contract the
  * feature list on the Infrastructure page keeps: the server may ship a probe
  * before this client learns its name, and hiding it would hide a dependency.
+ * That fallback is why the three keys below were readable as "clamav",
+ * "storage" and "mfa kek" rather than missing — it degrades honestly, and it
+ * still reads like a wire enum on the page an operator opens mid-incident.
  */
 const COMPONENT_LABEL: Record<string, string> = {
   postgres: "PostgreSQL",
   redis: "Redis",
   s3: "Object storage",
+  storage: "Storage writes",
   smtp: "Outbound mail",
   search: "Search",
   ffmpeg: "Media tooling (ffmpeg)",
+  clamav: "Malware scanning (ClamAV)",
+  mfa_kek: "MFA secret key",
   settings_sync: "Settings sync",
 };
 
