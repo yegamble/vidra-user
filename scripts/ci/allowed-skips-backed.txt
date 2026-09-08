@@ -1,0 +1,45 @@
+# Skips permitted in the MAIN backed matrix (`e2e-backed (local)` / `(s3)`).
+# One JavaScript regex per line, matched by scripts/ci/assert-no-skipped-tests.mjs
+# against "<file> › <suite> › <title> :: <skip reason>".
+#
+# Everything here is a spec whose stack this lane deliberately does NOT start,
+# each with its own explicitly named home. Adding a line removes a flow from the
+# only automated proof it has — it is a reviewed decision with a written reason,
+# never a convenience.
+
+# Needs a real Bluesky PDS and app-password credentials. No credentialed lane
+# exists; run e2e-backed/atproto.spec.ts by hand against a real account.
+set E2E_ATPROTO=true
+E2E_ATPROTO_HANDLE and E2E_ATPROTO_APP_PASSWORD
+
+# Needs a read-only PeerTube instance to import from. Covered by the meta-repo
+# import rehearsals, not by a browser lane here.
+set E2E_PEERTUBE_SOURCE=true
+
+# Needs REGISTRATION_REQUIRE_APPROVAL=true, which changes what EVERY other spec's
+# signup does — so it cannot share this stack. Runs in frontend-e2e-optional.yml.
+set E2E_REGISTRATION_APPROVAL=true
+
+# Needs the whisper.cpp compose profile (a model download and minutes of CPU).
+# Runs in frontend-e2e-optional.yml.
+set E2E_WHISPER=true
+
+# Needs a vidra-search service alongside vidra-core. vidra-core's compose has no
+# search service at all, so this stack cannot satisfy it. Runs in
+# frontend-e2e-optional.yml against a real search-wired stack. THIS IS THE
+# REMAINING HALF OF FINDING F04 — it is registered here so it is visible, not
+# because it is finished.
+set E2E_SEARCH_SERVICE=true
+
+# QUARANTINE_NEW_UPLOADS is off on this stack, so there is no held upload to
+# approve or reject. Runs in frontend-e2e-optional.yml with it on.
+QUARANTINE_NEW_UPLOADS is not enabled
+
+# Channel auto-sync needs YTDLP_IMPORT_ENABLED, which regresses the URL-import
+# specs — it has its own isolated lane (channel-sync-backed), where the SAME spec
+# is audited against an EMPTY allowlist and may not skip.
+channel auto-sync is disabled on this backed stack
+
+# The backed-setup project claims the owner before this project runs, so the
+# first-run branch of owner-claim.spec.ts is unreachable by construction here.
+this stack already has an owner

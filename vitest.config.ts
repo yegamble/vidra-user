@@ -17,6 +17,15 @@ export default defineConfig({
     // via a `// @vitest-environment jsdom` docblock, so we don't pay for jsdom
     // on the node suites and keep one runner + one config.
     environment: "node",
+    // An empty run is a failed run. This is already vitest's default; stating it
+    // means a future `--passWithNoTests` (or a glob edit that matches nothing)
+    // cannot turn the required unit gate into a no-op that still exits 0.
+    passWithNoTests: false,
+    // Under CI also emit JUnit, which frontend-ci.yml uploads as an artifact so
+    // the per-test record of a green check outlives the run page's logs.
+    reporters: process.env.CI
+      ? ["default", ["junit", { outputFile: "test-report/vitest-junit.xml" }]]
+      : ["default"],
     include: [
       "lib/**/*.test.{ts,tsx}",
       "app/**/*.test.{ts,tsx}",

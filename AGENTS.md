@@ -7,6 +7,61 @@ memory: match YouTube's layout ergonomics (structure, proportions, icon sizes,
 responsive behavior) while keeping this repo's Apple design language for the
 visual skin.
 
+## CI: what "required for merge" means
+
+One check stands for the whole required set: **`ci-required`** — the only name
+that belongs in branch protection for this repo. It reads
+[`.github/required-checks.txt`](.github/required-checks.txt), the checked-in
+definition of required, and fails if any listed lane failed, was cancelled,
+timed out, or **never ran**.
+
+Required: `frontend`, `contract`, `e2e-backed (local)`, `e2e-backed (s3)`,
+`channel-sync-backed`, `ipfs-backed`, plus `guard` when its path filter fires.
+
+**`contract` is core-first, and its red is correct.** It checks this client
+against vidra-core's DEFAULT BRANCH, so a PR here that consumes a new endpoint
+stays red until the core PR adding it has MERGED. Land core first, then re-run.
+Never drop it to unblock a merge — it is the only check that notices the client
+calling an endpoint the backend does not serve.
+
+**No silent skips.** Playwright reports a skipped test as neither pass nor fail
+and exits 0, so a spec that bows out because the stack is not the stack it needs
+leaves its lane green having proved nothing. Every lane now runs
+`scripts/ci/assert-no-skipped-tests.mjs` over the JSON report:
+
+- the mocked suite and the single-purpose lanes (`channel-sync-backed`,
+  `ipfs-backed`, and the optional `quarantine-backed`) use
+  `scripts/ci/allowed-skips-none.txt` — **empty**. These lanes run one or two
+  specs and are the only automated proof those flows have; a skip there means
+  the job tested nothing;
+- the main backed matrix uses `scripts/ci/allowed-skips-backed.txt`, which names
+  every environment-gated spec and says where it DOES run. Adding a line removes
+  a flow from its only automated proof — a reviewed decision with a written
+  reason, never a convenience.
+
+Specs whose stack contradicts the main matrix live in
+`.github/workflows/frontend-e2e-optional.yml` (schedule + manual, never a merge
+gate), each with the gating variable SET and a zero-skip audit: an optional lane
+may be absent, it may not be falsely green. That file also lists, with reasons,
+the four specs still not wired anywhere — `search-discovery` is the remaining
+half of finding F04.
+
+`vitest.config.ts` states `passWithNoTests: false` so a glob edit that matches
+nothing cannot turn the unit gate into a no-op that still exits 0.
+
+**Toolchain and manifest.** CI pins Node **24** — this repo's stated runtime
+(`engines.node: ">=24"`, `.nvmrc`) — and installs with `npm ci`, never
+`npm install`; `ci-guard` fails a workflow that uses the latter. Note the open
+discrepancy: the published container image builds on `node:26-alpine`, which
+neither `engines` nor `.nvmrc` describes. Aligning them is an owner ruling.
+
+**Artifacts.** Every lane uploads its Playwright HTML report, JSON report,
+traces and (on failure) the backend compose log, 14-day retention:
+`frontend-ci-reports`, `playwright-backed-report-local`,
+`playwright-backed-report-s3`, `playwright-channel-sync-report`,
+`playwright-ipfs-report`, `playwright-quarantine-report`. vitest emits JUnit
+under CI into the same bundle.
+
 ## Verification gates (run before opening any PR; paste the output tail into the PR body)
 
 ```

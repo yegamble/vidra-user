@@ -159,10 +159,23 @@ jobs:
         # exists to exercise IPFS go green having executed nothing.
         run: npm run e2e:backed -- --grep-invert @ipfs
 
-      - name: Tail backend logs on failure
+      # Playwright exits 0 on a skipped test, so a spec that bows out because the
+      # stack is not the stack it needs leaves this lane green having proved
+      # nothing about that flow. The allowlist names every such spec and where it
+      # DOES run; anything else fails here. See scripts/ci/allowed-skips-backed.txt.
+      - name: No unregistered skips in the backed suite
+        if: always()
+        run: node scripts/ci/assert-no-skipped-tests.mjs test-report/playwright.json scripts/ci/allowed-skips-backed.txt
+
+      # Also KEPT, not just tailed: a 200-line tail is rarely the 200 lines that
+      # matter, and the run page's logs age out before a postmortem gets to them.
+      - name: Capture backend logs on failure
         if: failure()
         working-directory: .core
-        run: docker compose ${{ matrix.profiles }} logs --no-color | tail -200
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/test-report"
+          docker compose ${{ matrix.profiles }} logs --no-color > "$GITHUB_WORKSPACE/test-report/compose.log" 2>&1 || true
+          tail -200 "$GITHUB_WORKSPACE/test-report/compose.log"
 
       - name: Upload Playwright artifacts
         if: always()
@@ -172,7 +185,9 @@ jobs:
           name: playwright-backed-report-${{ matrix.storage }}
           path: |
             playwright-report/
+            test-report/
             test-results/
+          retention-days: 14
           if-no-files-found: ignore
 
   # Channel auto-sync (UPLOAD-13 / W2.U5) needs the yt-dlp import resolver on
@@ -240,10 +255,23 @@ jobs:
           E2E_API_URL: http://localhost:8080
         run: npm run e2e:backed -- e2e-backed/channel-sync.spec.ts
 
-      - name: Tail backend logs on failure
+      # THE reason this audit exists. channel-sync.spec.ts self-skips when
+      # GET /instance reports features.channel_sync=false — sensible in the main
+      # matrix, fatal here: this job runs that ONE spec, so if the flags ever stop
+      # producing the feature the job goes green having tested nothing at all,
+      # and the only automated proof of channel auto-sync disappears silently.
+      # Empty allowlist: this stack sets both flags, so a skip is a regression.
+      - name: No skipped tests in the channel-sync lane
+        if: always()
+        run: node scripts/ci/assert-no-skipped-tests.mjs test-report/playwright.json scripts/ci/allowed-skips-none.txt
+
+      - name: Capture backend logs on failure
         if: failure()
         working-directory: .core
-        run: docker compose --profile core logs --no-color | tail -200
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/test-report"
+          docker compose --profile core logs --no-color > "$GITHUB_WORKSPACE/test-report/compose.log" 2>&1 || true
+          tail -200 "$GITHUB_WORKSPACE/test-report/compose.log"
 
       - name: Upload Playwright artifacts
         if: always()
@@ -252,7 +280,9 @@ jobs:
           name: playwright-channel-sync-report
           path: |
             playwright-report/
+            test-report/
             test-results/
+          retention-days: 14
           if-no-files-found: ignore
 
   # IPFS media mirroring (P19). Its OWN isolated stack, for two reasons: the
@@ -354,10 +384,20 @@ jobs:
           E2E_API_URL: http://localhost:8080
         run: npm run e2e:backed -- e2e-backed/ipfs.spec.ts e2e-backed/ipfs-privacy-fence.spec.ts
 
-      - name: Tail backend logs on failure
+      # Same reasoning as the channel-sync lane: this job exists to run these two
+      # specs and nothing else, so a skip here means the IPFS mirror went
+      # unexercised. Empty allowlist.
+      - name: No skipped tests in the IPFS lane
+        if: always()
+        run: node scripts/ci/assert-no-skipped-tests.mjs test-report/playwright.json scripts/ci/allowed-skips-none.txt
+
+      - name: Capture backend logs on failure
         if: failure()
         working-directory: .core
-        run: docker compose --profile core --profile ipfs logs --no-color | tail -200
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/test-report"
+          docker compose --profile core --profile ipfs logs --no-color > "$GITHUB_WORKSPACE/test-report/compose.log" 2>&1 || true
+          tail -200 "$GITHUB_WORKSPACE/test-report/compose.log"
 
       - name: Upload Playwright artifacts
         if: always()
@@ -366,5 +406,7 @@ jobs:
           name: playwright-ipfs-report
           path: |
             playwright-report/
+            test-report/
             test-results/
+          retention-days: 14
           if-no-files-found: ignore
