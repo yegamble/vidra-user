@@ -124,6 +124,7 @@ export function RemoteWatchView({ id }: { id: string }) {
             <ExternalLinkIcon size={14} strokeWidth={2} />
           </a>
           <ReportButton kind="remote_video" targetId={video.id} />
+          <BlockRemoteAccountControl video={video} />
           <MuteInstanceControl domain={video.domain} />
           {queuedNext ? (
             <Button variant="tonal" size="sm" onClick={playQueuedNext}>
@@ -198,6 +199,83 @@ function RemotePlayer({ video, onEnded }: { video: RemoteVideo; onEnded?: () => 
     >
       Your browser does not support the video tag.
     </video>
+  );
+}
+
+// BlockRemoteAccountControl blocks the ACCOUNT behind this video, for this
+// viewer only.
+//
+// It is here because the alternative measured worse than useless. Before it, the
+// only per-actor control a viewer could reach was the settings form, whose
+// placeholder is a handle — and on an instance where an account and a channel
+// share a name, WebFinger resolved that handle to the Person while the videos
+// are attributed to the Group, so the block a viewer could actually make hid
+// nothing. The identity that WORKS was on no page at all.
+//
+// The contract now carries it: account_actor_url is the owning account, which is
+// what the block should name (one block, every channel that account owns,
+// including the ones it has not created yet), and actor_url is the channel
+// actor, the finest target available when the origin's document named no owner.
+// Neither is a URL the viewer types — the page passes back exactly what the API
+// gave it.
+//
+// It hides them from the viewer. It does not hide the viewer from them and it
+// does not stop delivery: a remote server decides what it shows its own users,
+// and the copy says so rather than implying protection that federation cannot
+// provide.
+function BlockRemoteAccountControl({ video }: { video: RemoteVideo }) {
+  const { status } = useSession();
+  const [blocked, setBlocked] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const actor = video.account_actor_url ?? video.actor_url ?? null;
+  if (status !== "authed" || !actor) return null;
+
+  const label = video.channel_handle ?? video.domain;
+
+  async function toggle() {
+    if (busy || !actor) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (blocked) {
+        await api.unblockRemoteActor(actor);
+        setBlocked(false);
+      } else {
+        await api.blockRemoteActor(actor);
+        setBlocked(true);
+      }
+    } catch (err) {
+      setError(errorMessage(err, "Could not update the block."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={busy}
+        aria-label={blocked ? `Unblock ${label}` : `Block ${label}`}
+        onClick={() => void toggle()}
+      >
+        {blocked ? "Unblock account" : "Block account"}
+      </Button>
+      {blocked ? (
+        <span role="status" className="text-xs text-fg-muted">
+          Blocked {label}. Their videos and replies no longer appear for you — on
+          this instance. They can still see yours.
+        </span>
+      ) : null}
+      {error ? (
+        <span role="alert" className="text-xs text-danger">
+          {error}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
