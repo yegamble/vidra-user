@@ -7923,7 +7923,7 @@ export interface components {
              * @enum {string}
              */
             state: "offline" | "ended";
-            /** @description False when the RTMP socket may still be open — the instance has no LIVE_INGEST_CONTROL_URL, or the ingest did not confirm. The broadcast is off the air either way; the publisher may still be uploading to the server's disk. */
+            /** @description True only when the media server reported closing at least one publisher connection. False when the instance has no LIVE_INGEST_CONTROL_URL, when the ingest did not answer, or when it answered that NO publisher was connected under this stream — a session that was never really publishing, or one that had already stopped. `detail` says which. The broadcast is off the air in every case; a publisher that is still connected keeps uploading to the server's disk until they stop. */
             publisher_disconnected: boolean;
             /** @description False only when the rotation itself failed, which is the one outcome in which the publisher can start broadcasting again. */
             stream_key_rotated: boolean;

@@ -238,3 +238,144 @@ describe("LiveWatchView moderator termination control", () => {
     expect(screen.queryByRole("button", { name: "End stream" })).toBeNull();
   });
 });
+
+// The page during a broadcast. A26 measured this view reading the stream ONCE
+// and never again: `0 viewers` at load that never moved while the API's own
+// count reached 3, and a moderator's termination that did not reach the page at
+// all — the live badge stayed up over a player that had stopped, until someone
+// reloaded.
+describe("LiveWatchView polling during a broadcast", () => {
+  const live = (extra: Record<string, unknown> = {}) => ({
+    id: "s1",
+    title: "A stream",
+    state: "live",
+    privacy: "public",
+    channel_handle: "film-house",
+    hls_url: "/api/v1/live/s1/hls/master.m3u8",
+    ...extra,
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Fake timers + a real microtask queue: advancing time fires the interval,
+  // and act() flushes the promise the fetch resolves with.
+  const advance = async (ms: number) => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  };
+
+  it("re-reads the stream every 10 seconds while it is live", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValue(live({ viewer_count: 1 }));
+    render(<LiveWatchView id="s1" />);
+    await act(async () => {});
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(1);
+
+    // Nothing at 9s; one read at 10s; another at 20s.
+    await advance(9_000);
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(1);
+    await advance(1_000);
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(2);
+    await advance(10_000);
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(3);
+  });
+
+  it("moves the viewer count without a reload", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValueOnce(live({ viewer_count: 1 }));
+    mocks.getLiveStream.mockResolvedValue(live({ viewer_count: 3 }));
+    render(<LiveWatchView id="s1" />);
+    await act(async () => {});
+    expect(screen.getByText("1 viewer")).toBeTruthy();
+    await advance(10_000);
+    expect(screen.getByText("3 viewers")).toBeTruthy();
+  });
+
+  it("flips to the ended state, with the moderator's reason, and then STOPS", async () => {
+    optionalSession = { status: "authed", user: { id: "u-1" } };
+    mocks.getLiveStream.mockResolvedValueOnce(live());
+    mocks.getLiveStream.mockResolvedValue({
+      id: "s1",
+      title: "A stream",
+      state: "ended",
+      privacy: "public",
+      channel_handle: "film-house",
+      termination: {
+        terminated_at: "2026-09-08T12:00:00Z",
+        by_moderator: true,
+        reason_code: "harassment",
+        reason: "targeting a viewer",
+      },
+    });
+    render(<LiveWatchView id="s1" />);
+    await act(async () => {});
+    expect(screen.queryByText(/ended by a moderator/i)).toBeNull();
+
+    await advance(10_000);
+    const msg = screen.getByText(/ended by a moderator/i);
+    expect(msg.textContent).toContain("targeting a viewer");
+    expect(screen.queryByRole("button", { name: "End stream" })).toBeNull();
+
+    // An ended stream cannot become anything else without a new session, so the
+    // polling stops: otherwise every abandoned tab pays a request every ten
+    // seconds forever.
+    const settled = mocks.getLiveStream.mock.calls.length;
+    await advance(60_000);
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(settled);
+  });
+
+  it("keeps one request in flight at a time", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValueOnce(live());
+    // A read that never answers: a slow instance must not accumulate polls.
+    mocks.getLiveStream.mockReturnValue(new Promise(() => {}));
+    render(<LiveWatchView id="s1" />);
+    await act(async () => {});
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(1);
+
+    await advance(40_000);
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not poll a backgrounded tab, and reads immediately on return", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValue(live());
+    render(<LiveWatchView id="s1" />);
+    await act(async () => {});
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(1);
+
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await advance(30_000);
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(1);
+
+    visibility.mockReturnValue("visible");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(2);
+    visibility.mockRestore();
+  });
+
+  it("keeps the slower cadence for a stream that has not started", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValue({
+      id: "s1",
+      title: "A stream",
+      state: "offline",
+      privacy: "public",
+      channel_handle: "film-house",
+    });
+    render(<LiveWatchView id="s1" />);
+    await act(async () => {});
+    await advance(10_000);
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(1);
+    await advance(5_000);
+    expect(mocks.getLiveStream).toHaveBeenCalledTimes(2);
+  });
+});
