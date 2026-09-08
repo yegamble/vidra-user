@@ -17,9 +17,23 @@ import { useSettledOptionalSession } from "@/lib/use-settled-session";
 type Status = "loading" | "error" | "notfound" | "ready";
 
 // How often to re-check an offline stream so a waiting viewer sees it go live
-// without a manual refresh. Only polls while offline (live/ended are stable
-// enough that an explicit Refresh covers them).
+// without a manual refresh.
 const OFFLINE_POLL_MS = 15_000;
+
+// How often to re-read a stream that IS live.
+//
+// A26 measured what its absence costs: the page rendered `0 viewers` at load and
+// never moved, while the API's count reached 3 and decayed back to 2 exactly as
+// designed — and a moderator's termination did not reach the viewer's page at
+// all until they reloaded, so a broadcast that had been taken off the air went on
+// showing a live badge over a player that had stopped.
+//
+// Ten seconds matches core's own read cache on the count (internal/live's
+// viewerCountRefresh), so a faster cadence would buy a viewer nothing but round
+// trips: the answer cannot change more often than that. It is slower than the
+// player's ~2 s playlist refresh on purpose — this read is the page's metadata,
+// not the video, and the video is what has to be timely.
+const LIVE_POLL_MS = 10_000;
 
 // LiveWatchView is the /live/[id] watch surface. It loads a single live stream
 // and, when it is live with an HLS playlist available, plays it via the shared
@@ -65,14 +79,49 @@ export function LiveWatchView({ id }: { id: string }) {
     return () => controller.abort();
   }, [load, settled, viewerKey]);
 
-  // While the stream is offline, quietly re-poll so it flips to the player the
-  // moment the publisher connects. Stops once live/ended (or unmounted).
-  const offline = status === "ready" && stream?.state === "offline";
+  // One poll, two cadences, and a stream that has ENDED gets none: an ended
+  // stream is the only state nothing can move it out of without a new session,
+  // and polling it forever would be one request every ten seconds, per viewer,
+  // for as long as anyone leaves the tab open.
+  const pollMs =
+    status !== "ready"
+      ? 0
+      : stream?.state === "offline"
+        ? OFFLINE_POLL_MS
+        : stream?.state === "live"
+          ? LIVE_POLL_MS
+          : 0;
   useEffect(() => {
-    if (!offline) return;
-    const timer = setInterval(() => void load(), OFFLINE_POLL_MS);
-    return () => clearInterval(timer);
-  }, [offline, load]);
+    if (!pollMs) return;
+    const controller = new AbortController();
+    // ONE request in flight at a time. Without this a slow instance turns a
+    // watch page into an ever-growing pile of overlapping reads: the interval
+    // does not wait for the answer, so a 30-second response on a 10-second
+    // cadence has three outstanding before the first returns.
+    let inFlight = false;
+    const tick = () => {
+      // A backgrounded tab is not watching. This is the same judgement the
+      // 90-second viewer window makes on the server: a locked phone should not
+      // vanish from the count, but it should not be paying for polls either.
+      if (inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
+      void load(controller.signal).finally(() => {
+        inFlight = false;
+      });
+    };
+    const timer = setInterval(tick, pollMs);
+    // Coming back to the tab is worth a read immediately rather than up to a
+    // cadence later — it is exactly when the page is most likely to be stale.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      controller.abort();
+    };
+  }, [pollMs, load]);
 
   if (status === "loading") {
     return (
