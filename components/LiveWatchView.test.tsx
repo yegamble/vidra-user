@@ -29,7 +29,10 @@ vi.mock("@/lib/use-playback-engine", () => ({
 
 // The session in context. null is the shipped default for this file: the view
 // is rendered bare here, with no AuthProvider above it.
-let optionalSession: { status: string; user: { id: string } | null } | null = null;
+// `role` is part of the shape this view reads: staff get the termination
+// control. Narrowing the fixture to { id } would make it impossible to write the
+// test that a moderator sees the button and an ordinary viewer does not.
+let optionalSession: { status: string; user: { id: string; role?: string } | null } | null = null;
 vi.mock("@/components/auth/AuthProvider", () => ({
   useOptionalSession: () => optionalSession,
 }));
