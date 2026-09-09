@@ -492,6 +492,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/me/password/set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a first password on an account that has none
+         * @description Gives a PASSWORD-LESS account (created by ATProto or OIDC sign-in) its first password, authorised by a step-up assertion instead of a current password.
+         *
+         *     It exists because such an account could previously never acquire a second sign-in method: it has no password to re-verify, and its synthetic `…@atproto.invalid` address is unroutable by design, so the reset mail can never arrive. The proof accepted here instead is a completed OAuth round trip through the provider that already IS the account's credential — started at `POST /api/v1/auth/step-up/start`, which redirects back with `?step_up=<token>`.
+         *
+         *     The consequences are the password change's, exactly: every OTHER session is revoked (access tokens included, because they are session-bound) and a "your password was changed" notice is ATTEMPTED. On an account still holding its placeholder address that notice cannot be delivered — say so rather than claiming it was sent. The new password must satisfy the same policy as registration. An account that already HAS a password is refused 422 `password_already_set` and belongs on `POST /api/v1/auth/me/password`. Rate limited alongside login. Requires a bearer access token.
+         */
+        post: operations["setPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/step-up/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a step-up re-authentication with a linked sign-in provider
+         * @description Begins a fresh provider re-authentication for the signed-in caller, so an account whose only credential is an external provider can authorise setting a first password or moving to a real email address.
+         *
+         *     It runs the SAME `Begin` the login does and seals the attempt into the SAME signed, httpOnly, ten-minute state cookie, with a step-up purpose plus the caller's user and session ids bound INSIDE the signed payload. Answer the returned `authorization_url` with a TOP-LEVEL browser navigation (never fetch it). The existing provider callback — `GET /api/v1/auth/atproto/callback` or `GET /api/v1/auth/oauth/{provider}/callback` — runs every invariant a login runs, checks the attested subject belongs to the bound account, and then, instead of minting a session, redirects to `return_to` with `?step_up=<token>` (or `?step_up_error=<code>`). That token is single-use, expires in ten minutes, and is bound to the session that started the challenge.
+         *
+         *     The provider must already be LINKED to the caller: a round trip through one this account never linked proves nothing about it, and is refused 422 `step_up_provider_not_linked` before the user is walked through a consent screen. Rate limited alongside login. Requires a bearer access token.
+         */
+        post: operations["startStepUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me/email-change": {
         parameters: {
             query?: never;
@@ -508,6 +556,8 @@ export interface paths {
         /**
          * Request a change of the current account's email address
          * @description Starts the two-step email change. Re-verifies the CURRENT password (a stolen access token alone must not be able to move the address an account is recovered through) and mails a single-use, expiring token to the NEW address, which is the possession proof a password cannot give. The account's live address is UNCHANGED until that token is confirmed, and the pending state is readable here with GET. A second request supersedes the first, killing its token. The address is refused when it already resolves to another account's sign-in identifier — its email OR its username, because sign-in accepts both with email taking precedence, so an address equal to somebody's username would shadow their sign-in. Rate limited alongside login, the reset and the password change. Requires a bearer access token.
+         *
+         *     A PASSWORD-LESS account (created by ATProto or OIDC sign-in) supplies a `step_up_token` instead of `current_password`. That account holds a synthetic `…@atproto.invalid` address, so moving to a real one is what makes it recoverable at all, and it can prove neither a password nor a mailbox — the step-up assertion (`POST /api/v1/auth/step-up/start`) is the proof it can give. What the step-up replaces is only the "are you the account holder" half: the confirmation still goes to the NEW address and nowhere else. On confirmation, the usual notice to the OLD address is SKIPPED when that address is the unroutable placeholder — there is no old mailbox to warn.
          */
         post: operations["requestEmailChange"];
         /**
@@ -5460,6 +5510,8 @@ export interface components {
                 video_id?: string;
                 /** @description The same video's short code, alongside video_id and under the same reasoning. Present ONLY on password_required. */
                 short_code?: string;
+                /** @description The sign-in providers that can satisfy a `step_up_required` 403. Present ONLY on that code. It is the caller's OWN linked identities — the same list GET /api/v1/me/oauth-identities already returns to them — so it discloses nothing new, and without it a client would have to guess which button to offer on a refusal whose whole purpose is to name the remedy. */
+                step_up_providers?: string[];
             };
         };
         InstanceResponse: {
@@ -5794,6 +5846,13 @@ export interface components {
             /** @enum {string} */
             role: "user" | "moderator" | "admin";
             email_verified: boolean;
+            /**
+             * @description Whether the account can sign in with a password at all. False for an account created by ATProto or OIDC sign-in, which is passwordless by construction — an empty stored hash bcrypt can never verify.
+             *     It is on the caller's OWN view because it is the first half of "this account has exactly one way in": with it false, losing the provider account loses the Vidra account. POST /api/v1/auth/me/password/set is the remedy, and it is the only route that works while this is false.
+             */
+            has_password?: boolean;
+            /** @description Whether the account's address is a synthetic, never-deliverable one (an RFC 2606 `.invalid` domain — `did-plc-…@atproto.invalid` for an ATProto account). The second half of the same fact: no reset, verification or security notice can ever reach it, so the account is unrecoverable by mail until a real address replaces it via the ordinary email-change flow. */
+            email_placeholder?: boolean;
             /** @description True on THE instance owner's own view — the account that completed first-run setup. It is here because ownership is something the caller can act on: only the owner may transfer it (POST /api/v1/admin/owner/transfer), and only the owner is refused their own deactivation and deletion until they have. Inferring it from the admin user list is not equivalent: that list's search filter can page the caller's own row out of view. */
             is_owner?: boolean;
             /**
@@ -7664,13 +7723,47 @@ export interface components {
              */
             new_password: string;
         };
-        /** @description Current-password re-verification plus the requested new address. The password is never echoed back or logged, and neither address appears in the audit trail. */
+        /** @description A first password plus the step-up assertion that authorises it. Neither value is ever echoed back or logged. */
+        SetPasswordRequest: {
+            /**
+             * Format: password
+             * @description The password to set. Same policy as registration and the password reset.
+             */
+            new_password: string;
+            /** @description The single-use token from a completed step-up round trip, delivered as `?step_up=` on the callback's redirect. Bound to the session that started the challenge and dead after ten minutes. */
+            step_up_token: string;
+        };
+        /** @description Which linked provider should re-authenticate the caller, and where to send the browser afterwards. */
+        StepUpStartRequest: {
+            /**
+             * @description `atproto`, or a configured OIDC provider name. It must be one the CALLER has linked.
+             * @example atproto
+             */
+            provider: string;
+            /**
+             * @description The ATProto handle to re-authenticate with (ATProto only; ignored for OIDC, where the provider knows who you are).
+             * @example alice.bsky.social
+             */
+            handle?: string;
+            /**
+             * @description A same-origin relative path to land on afterwards. The callback appends `?step_up=<token>` or `?step_up_error=<code>` itself.
+             * @example /settings/security
+             */
+            return_to?: string;
+        };
+        /** @description The provider authorization URL. Hand off with a TOP-LEVEL browser navigation; never fetch it. */
+        StepUpStartResponse: {
+            authorization_url: string;
+        };
+        /** @description The requested new address plus EXACTLY ONE proof that the caller is the account holder: the current password, or — for an account that has none — a step-up assertion. Supplying both is refused 422, so it is never ambiguous which one authorised the change. Neither proof is ever echoed back or logged, and neither address appears in the audit trail. */
         EmailChangeRequest: {
             /**
              * Format: password
-             * @description The account's current password, for confirmation.
+             * @description The account's current password, for confirmation. Required unless `step_up_token` is supplied.
              */
-            current_password: string;
+            current_password?: string;
+            /** @description The single-use token from a completed step-up round trip (`POST /api/v1/auth/step-up/start`), for a PASSWORD-LESS account. A provider-created account holds a synthetic `…@atproto.invalid` address, so putting a real one on it is what makes the account recoverable at all — and it can prove neither a password nor a mailbox. An account that HAS a password is refused 422 `password_already_set`. */
+            step_up_token?: string;
             /**
              * Format: email
              * @description The address to move to. It must differ from the current one and must not already resolve to another account's email or username.
@@ -10669,6 +10762,142 @@ export interface operations {
             };
         };
     };
+    setPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description The password was set and every other session was signed out. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `step_up_required` — no usable step-up assertion was supplied. One answer for every invalid case (absent, already spent, expired, or issued to another session or account) so a caller cannot probe which. `error.step_up_providers` names the sign-ins that can satisfy it. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (password too short or too long, missing token), or `password_already_set` — this account has a password; change it with the current one instead. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests (auth rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    startStepUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StepUpStartRequest"];
+            };
+        };
+        responses: {
+            /** @description The attempt was sealed into the state cookie; navigate to the URL. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepUpStartResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown OIDC provider. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (missing provider, malformed handle, off-origin `return_to`), or `step_up_provider_not_linked`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests (auth rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The provider / PDS could not be reached or resolved. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `atproto_disabled` — ATProto login is turned off on this instance, so no ATProto step-up can complete. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getEmailChange: {
         parameters: {
             query?: never;
@@ -10729,7 +10958,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The supplied current password is incorrect. */
+            /** @description The supplied current password is incorrect, or `step_up_required` — the supplied step-up assertion is absent, spent, expired, or issued to another session or account. `error.step_up_providers` names the sign-ins that can satisfy it. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10738,7 +10967,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Either the account has no password to re-verify (OAuth/ATProto-only — use the password-reset flow to set one), or the requested address is already in use on this instance as another account's email or username. */
+            /** @description Either the account has no password to re-verify and supplied no step-up assertion either, or the requested address is already in use on this instance as another account's email or username. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -10747,7 +10976,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation failed: the address is malformed, or it is the one the account already has. */
+            /** @description `password_already_set` (a step-up assertion was supplied for an account that HAS a password — change it with that password instead), or validation failed: the address is malformed, or it is the one the account already has. */
             422: {
                 headers: {
                     [name: string]: unknown;

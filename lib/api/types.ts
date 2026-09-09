@@ -312,6 +312,9 @@ export type PasswordResetConfirmRequest =
 export type EmailVerificationConfirmRequest =
   NonNullable<operations["confirmEmailVerification"]["requestBody"]>["content"]["application/json"];
 export type ChangePasswordRequest = Schemas["ChangePasswordRequest"];
+export type SetPasswordRequest = Schemas["SetPasswordRequest"];
+export type StepUpStartRequest = Schemas["StepUpStartRequest"];
+export type StepUpStartResponse = Schemas["StepUpStartResponse"];
 export type EmailChangeRequest = Schemas["EmailChangeRequest"];
 export type EmailChangeState = Schemas["EmailChangeState"];
 export type EmailChangeConfirmRequest = Schemas["EmailChangeConfirmRequest"];

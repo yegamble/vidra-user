@@ -22,6 +22,9 @@ import type {
   RecoveryCodesResponse,
   RegisterRequest,
   RegistrationPending,
+  SetPasswordRequest,
+  StepUpStartRequest,
+  StepUpStartResponse,
   TOTPEnrollmentResponse,
   UpdateProfileRequest,
   User,
@@ -257,6 +260,45 @@ export const authApi = {
    */
   changePassword: (body: ChangePasswordRequest) =>
     apiRequest<void>("/api/v1/auth/me/password", { method: "POST", body }),
+
+  /**
+   * POST /api/v1/auth/me/password/set — give an account with NO password its
+   * first one, authorised by a step-up assertion instead of a current password
+   * (bearer required). 204, and every other session is revoked exactly as the
+   * change does.
+   *
+   * It exists for the account shape that could not otherwise gain a second
+   * sign-in method at all: created by Bluesky/OIDC sign-in, so passwordless,
+   * and holding a synthetic `…@atproto.invalid` address the reset mail can
+   * never reach. 403 `step_up_required` when the assertion is missing, spent,
+   * expired, or from another session; 422 `password_already_set` when the
+   * account has a password (use changePassword); 422 on the password policy.
+   */
+  setPassword: (body: SetPasswordRequest) =>
+    apiRequest<void>("/api/v1/auth/me/password/set", { method: "POST", body }),
+
+  /**
+   * POST /api/v1/auth/step-up/start — begin a step-up re-authentication with a
+   * provider already linked to the account (bearer required). Runs with
+   * credentials included so the backend can seal the attempt into its signed
+   * httpOnly state cookie, and returns the authorization URL.
+   *
+   * The caller MUST hand off by a TOP-LEVEL browser navigation
+   * (window.location.assign) — never fetch `authorization_url`. The provider
+   * callback lands back on `return_to` with `?step_up=<token>` (or
+   * `?step_up_error=<code>`); spend that token on setPassword or
+   * requestEmailChange within ten minutes, from this same session.
+   *
+   * 422 `step_up_provider_not_linked` when the provider is not one of the
+   * caller's own; 503 `atproto_disabled` when the instance turned Bluesky
+   * sign-in off.
+   */
+  startStepUp: (body: StepUpStartRequest) =>
+    apiRequest<StepUpStartResponse>("/api/v1/auth/step-up/start", {
+      method: "POST",
+      body,
+      credentials: "include",
+    }),
 
   /**
    * POST /api/v1/auth/me/email-change — step one of the two-step address
