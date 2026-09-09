@@ -50,6 +50,10 @@ function PlaylistForViewer({ id }: { id: string }) {
   const isOwner = owned === true;
   const [editing, setEditing] = useState(false);
   const [reordering, setReordering] = useState(false);
+  // Deleting a playlist is irreversible and the control sits inches from Edit.
+  // Two-step, the same shape the Studio video row uses — one destructive idiom,
+  // not three (A11 close-out).
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   async function removeItem(videoId: string) {
     if (!playlist) return;
@@ -137,17 +141,39 @@ function PlaylistForViewer({ id }: { id: string }) {
           <div className="flex items-start justify-between gap-3">
             <h1 className="text-2xl font-bold tracking-tight">{playlist.title}</h1>
             {isOwner ? (
-              <div className="flex shrink-0 gap-2">
-                <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
-                  Edit
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => void deletePlaylist()}
-                  className="focus-ring rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger-surface"
-                >
-                  Delete playlist
-                </button>
+              <div className="flex shrink-0 items-center gap-2">
+                {confirmingDelete ? (
+                  <>
+                    <span className="text-[13px] text-fg-muted">Delete this playlist?</span>
+                    <button
+                      type="button"
+                      onClick={() => void deletePlaylist()}
+                      className="focus-ring rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger-surface"
+                    >
+                      Confirm delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDelete(false)}
+                      className="focus-ring rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
+                    >
+                      Cancel delete
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+                      Edit
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDelete(true)}
+                      className="focus-ring rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger-surface"
+                    >
+                      Delete playlist
+                    </button>
+                  </>
+                )}
               </div>
             ) : null}
           </div>
