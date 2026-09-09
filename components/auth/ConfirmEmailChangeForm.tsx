@@ -29,17 +29,14 @@ export function ConfirmEmailChangeForm({ token }: { token: string }) {
   const [state, setState] = useState<State>("confirming");
   const [email, setEmail] = useState("");
   const ran = useRef(false);
-  // Whether the address being REPLACED was the generated, never-deliverable
-  // one a provider account is created with. Core skips the "your address
-  // changed" notice to such an address on purpose — there is no old mailbox to
-  // warn and the bounce is guaranteed — so a page that claims the notice landed
-  // is the exact failure the suppression exists to prevent. Captured in a ref
-  // because reloadUser() below replaces `user` with the NEW address, and by the
-  // time this renders the fact would be gone.
-  const previousWasPlaceholder = useRef<boolean | null>(null);
-  if (previousWasPlaceholder.current === null && user) {
-    previousWasPlaceholder.current = user.email_placeholder === true;
-  }
+  // Whether the address being REPLACED was the generated, never-deliverable one
+  // a provider account is created with. Core skips the "your address changed"
+  // notice to such an address on purpose — there is no old mailbox to warn and
+  // the bounce is guaranteed — so a page that claims the notice landed is the
+  // exact failure the suppression exists to prevent. It is captured in the SAME
+  // settled promise that sets the new address, because the reloadUser() on the
+  // next line replaces `user` with the new one and the fact would be gone.
+  const [previousWasPlaceholder, setPreviousWasPlaceholder] = useState(false);
 
   useEffect(() => {
     if (!token || ran.current) return;
@@ -52,6 +49,7 @@ export function ConfirmEmailChangeForm({ token }: { token: string }) {
       .confirmEmailChange({ token })
       .then(async (res) => {
         setEmail(res.email);
+        setPreviousWasPlaceholder(user?.email_placeholder === true);
         setState("done");
         try {
           await reloadUser();
@@ -67,7 +65,7 @@ export function ConfirmEmailChangeForm({ token }: { token: string }) {
         }
         setState(err instanceof ApiError && (err.status === 400 || err.status === 409) ? "expired" : "error");
       });
-  }, [token, status, reloadUser]);
+  }, [token, status, user, reloadUser]);
 
   if (!token) {
     return <InvalidLink />;
@@ -92,7 +90,7 @@ export function ConfirmEmailChangeForm({ token }: { token: string }) {
       <div className="flex flex-col gap-4">
         <Alert variant="success">
           Your email address is now {email}.{" "}
-          {previousWasPlaceholder.current
+          {previousWasPlaceholder
             ? "Your previous address was generated for you and cannot receive mail, so no notice was sent to it."
             : "We told your previous address about the change."}
         </Alert>
