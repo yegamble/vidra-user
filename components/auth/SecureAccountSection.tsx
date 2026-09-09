@@ -72,6 +72,15 @@ export function SecureAccountSection({
   // nothing to prompt about, and must not spend a request finding that out.
   const needsPassword = user?.has_password === false;
   const needsEmail = user?.email_placeholder === true;
+  // A step-up is a SUBSTITUTE for a password, so core refuses one from an
+  // account that has a password: `POST /auth/me/email-change` with a
+  // step_up_token answers 422 password_already_set. Measured in the lab by
+  // taking the two rows in the order this card lists them — set a password,
+  // then add an address — which made the second row a button that could only
+  // ever fail. Once there is a password, the ordinary Change-email control on
+  // this same page is the door, and the card says so instead of offering a
+  // challenge whose result cannot be spent.
+  const emailNeedsThePasswordDoor = needsEmail && user?.has_password === true;
   const applies = needsPassword || needsEmail || completed.length > 0;
   const stepUpToken = spentToken || stepUp === "" ? null : stepUp;
   const landingError = stepUpError === "" ? null : stepUpErrorMessage(stepUpError);
@@ -199,7 +208,18 @@ export function SecureAccountSection({
         </SecureStep>
       ) : null}
 
-      {showEmail ? (
+      {showEmail && emailNeedsThePasswordDoor && !completed.includes("email") ? (
+        <div aria-labelledby="secure-email-by-password" className="flex flex-col gap-2 rounded-xl bg-surface p-3">
+          <h3 id="secure-email-by-password" className="text-sm font-semibold text-fg">
+            Add a real email address
+          </h3>
+          <p className="text-[13px] text-fg-muted">
+            Now that this account has a password, change the address in{" "}
+            <span className="font-medium text-fg">Email address</span> below and confirm it with
+            that password. A provider sign-in cannot authorise this once a password exists.
+          </p>
+        </div>
+      ) : showEmail ? (
         <SecureStep
           title="Add a real email address"
           lead="Where a password reset and any security notice can actually arrive."

@@ -258,3 +258,35 @@ describe("SecureAccountSection", () => {
     expect(alert.textContent).toMatch(/no linked sign-in/i);
   });
 });
+
+// The lab took the card's two rows in the order the card lists them — set a
+// password, then add a real address — and the second row became a button that
+// could only ever fail: a step-up is a SUBSTITUTE for a password, so core
+// answers 422 password_already_set once one exists. The card must route to the
+// door that opens instead of offering a challenge whose result cannot be spent.
+describe("SecureAccountSection once the account has a password", () => {
+  it("stops offering a step-up for the address and names the control that works", async () => {
+    useSessionMock.mockReturnValue({
+      user: user({ has_password: true, email_placeholder: true }),
+      reloadUser: vi.fn(),
+    });
+    listOAuthIdentities.mockResolvedValue({ identities: [atprotoIdentity] });
+    render(<SecureAccountSection />);
+    expect(await screen.findByText(/Add a real email address/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Add a real email address$/ })).toBeNull();
+    expect(screen.getByText(/change the address in/i).textContent).toMatch(/Email address/);
+    expect(startStepUp).not.toHaveBeenCalled();
+  });
+
+  it("still offers the step-up while the account is passwordless", async () => {
+    useSessionMock.mockReturnValue({
+      user: user({ has_password: false, email_placeholder: true }),
+      reloadUser: vi.fn(),
+    });
+    listOAuthIdentities.mockResolvedValue({ identities: [atprotoIdentity] });
+    render(<SecureAccountSection />);
+    expect(
+      await screen.findByRole("button", { name: /^Add a real email address$/ }),
+    ).toBeTruthy();
+  });
+});
