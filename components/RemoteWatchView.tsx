@@ -223,6 +223,31 @@ function RemotePlayer({ video, onEnded }: { video: RemoteVideo; onEnded?: () => 
 // does not stop delivery: a remote server decides what it shows its own users,
 // and the copy says so rather than implying protection that federation cannot
 // provide.
+// actorLabel names the actor the block will actually address, which is not
+// always the name on the page.
+//
+// The A29 rehearsal-3 walk found the gap: the control was labelled with the
+// CHANNEL handle while it blocked the owning PERSON, so a viewer read "Block
+// films@peer.example" and got a block covering every channel that account owns.
+// The reading was not wrong about the effect, only about the subject — and the
+// subject is the whole point of the account-vs-channel ruling.
+//
+// So the name comes from the actor URL the page is about to send: the origin's
+// own id for that actor, last path segment at its own domain. It falls back to
+// the channel handle only when the URL yields nothing nameable, which is also
+// the case where the block genuinely IS against the channel (the origin named
+// no owner) — so the label tells the truth in both directions.
+function actorLabel(actorURL: string, video: RemoteVideo): string {
+  try {
+    const url = new URL(actorURL);
+    const name = url.pathname.split("/").filter(Boolean).pop();
+    if (name) return `${name}@${url.host}`;
+  } catch {
+    // Not a URL we can parse — fall through to what the row already carries.
+  }
+  return video.channel_handle ?? video.domain;
+}
+
 function BlockRemoteAccountControl({ video }: { video: RemoteVideo }) {
   const { status } = useSession();
   const [blocked, setBlocked] = useState(false);
@@ -232,7 +257,7 @@ function BlockRemoteAccountControl({ video }: { video: RemoteVideo }) {
   const actor = video.account_actor_url ?? video.actor_url ?? null;
   if (status !== "authed" || !actor) return null;
 
-  const label = video.channel_handle ?? video.domain;
+  const label = actorLabel(actor, video);
 
   async function toggle() {
     if (busy || !actor) return;
@@ -259,7 +284,7 @@ function BlockRemoteAccountControl({ video }: { video: RemoteVideo }) {
         variant="secondary"
         size="sm"
         disabled={busy}
-        aria-label={blocked ? `Unblock ${label}` : `Block ${label}`}
+        aria-label={blocked ? `Unblock account ${label}` : `Block account ${label}`}
         onClick={() => void toggle()}
       >
         {blocked ? "Unblock account" : "Block account"}
