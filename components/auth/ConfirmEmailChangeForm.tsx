@@ -20,7 +20,7 @@ type State = "confirming" | "done" | "expired" | "signed-out" | "error";
  * the URL so returning here finishes the job.
  */
 export function ConfirmEmailChangeForm({ token }: { token: string }) {
-  const { status, reloadUser } = useSession();
+  const { status, user, reloadUser } = useSession();
   // "confirming" is the initial state rather than something the effect sets:
   // setting state synchronously inside an effect is exactly what the
   // react-hooks lint rule forbids, so every transition below happens from a
@@ -29,6 +29,17 @@ export function ConfirmEmailChangeForm({ token }: { token: string }) {
   const [state, setState] = useState<State>("confirming");
   const [email, setEmail] = useState("");
   const ran = useRef(false);
+  // Whether the address being REPLACED was the generated, never-deliverable
+  // one a provider account is created with. Core skips the "your address
+  // changed" notice to such an address on purpose — there is no old mailbox to
+  // warn and the bounce is guaranteed — so a page that claims the notice landed
+  // is the exact failure the suppression exists to prevent. Captured in a ref
+  // because reloadUser() below replaces `user` with the NEW address, and by the
+  // time this renders the fact would be gone.
+  const previousWasPlaceholder = useRef<boolean | null>(null);
+  if (previousWasPlaceholder.current === null && user) {
+    previousWasPlaceholder.current = user.email_placeholder === true;
+  }
 
   useEffect(() => {
     if (!token || ran.current) return;
@@ -80,7 +91,10 @@ export function ConfirmEmailChangeForm({ token }: { token: string }) {
     return (
       <div className="flex flex-col gap-4">
         <Alert variant="success">
-          Your email address is now {email}. We told your previous address about the change.
+          Your email address is now {email}.{" "}
+          {previousWasPlaceholder.current
+            ? "Your previous address was generated for you and cannot receive mail, so no notice was sent to it."
+            : "We told your previous address about the change."}
         </Alert>
         <p className="text-center text-sm text-fg-muted">
           <Link

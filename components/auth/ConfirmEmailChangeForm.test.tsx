@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const confirmEmailChange = vi.fn();
 const reloadUser = vi.fn();
 let sessionStatus = "authed";
+let sessionUser: { email_placeholder?: boolean } | null = null;
 
 vi.mock("@/lib/api", () => ({
   authApi: { confirmEmailChange: (...args: unknown[]) => confirmEmailChange(...args) },
@@ -20,7 +21,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/components/auth/AuthProvider", () => ({
-  useSession: () => ({ status: sessionStatus, reloadUser }),
+  useSession: () => ({ status: sessionStatus, user: sessionUser, reloadUser }),
 }));
 
 import { ApiError } from "@/lib/api";
@@ -29,6 +30,7 @@ import { ConfirmEmailChangeForm } from "./ConfirmEmailChangeForm";
 
 beforeEach(() => {
   sessionStatus = "authed";
+  sessionUser = { email_placeholder: false };
   confirmEmailChange.mockResolvedValue({ email: "ada.new@example.test" });
   reloadUser.mockResolvedValue(undefined);
 });
@@ -80,5 +82,33 @@ describe("ConfirmEmailChangeForm", () => {
     render(<ConfirmEmailChangeForm token="" />);
     expect((await screen.findByRole("alert")).textContent).toMatch(/invalid/i);
     expect(confirmEmailChange).not.toHaveBeenCalled();
+  });
+});
+
+// The old-address notice is SKIPPED by core when the address being replaced is
+// the generated …@atproto.invalid one — there is no mailbox to warn and the
+// bounce is guaranteed. Measured in the lab: the suppression works and the page
+// claimed the notice landed anyway, which is the one thing worse than sending
+// it. The page has to say which of the two happened.
+describe("ConfirmEmailChangeForm and the old-address notice", () => {
+  it("does not claim a notice was sent when the previous address was the generated one", async () => {
+    sessionUser = { email_placeholder: true };
+    render(<ConfirmEmailChangeForm token="token-fixture-1" />);
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toMatch(
+        /cannot receive mail, so no notice was sent/i,
+      ),
+    );
+    expect(screen.getByRole("status").textContent).not.toMatch(/We told your previous address/i);
+  });
+
+  it("still says the notice was sent when the previous address was a real one", async () => {
+    sessionUser = { email_placeholder: false };
+    render(<ConfirmEmailChangeForm token="token-fixture-1" />);
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toMatch(
+        /We told your previous address about the change/i,
+      ),
+    );
   });
 });
