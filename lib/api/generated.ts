@@ -11613,7 +11613,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Provider discovery failed (issuer unreachable). */
+            /** @description Provider discovery failed (issuer unreachable), stable code `oauth_provider_unavailable`. No attempt cookie is sealed. */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -11667,7 +11667,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Code exchange or id_token verification failed upstream. */
+            /** @description Code exchange or id_token verification failed upstream, stable code `oauth_exchange_failed`. No session is issued. */
             502: {
                 headers: {
                     [name: string]: unknown;
