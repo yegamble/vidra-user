@@ -97,6 +97,13 @@ export function oauthErrorMessage(code: string): string {
     // the fallback for anywhere else it surfaces.
     case "owner_claim_required":
       return "This server is still waiting for its owner, so new accounts cannot be created yet.";
+    // The instance's registration policy refused a FIRST sign-in. Neither of
+    // these is a failure to retry — retrying is exactly what will not help —
+    // so the copy states the decision and, where there is one, the next step.
+    case "registration_closed":
+      return "This server is not accepting new accounts right now, so signing in with a provider cannot create one.";
+    case "registration_pending":
+      return "Your request to join was sent to the moderators. You will be able to sign in once it is approved.";
     // The callback refused to switch accounts. A signed-in browser that starts
     // a sign-in flow and authenticates as SOMEBODY ELSE'S provider identity is
     // not making a login — it is asking for an account switch nobody asked for,
