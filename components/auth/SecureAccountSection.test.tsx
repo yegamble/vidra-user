@@ -152,8 +152,13 @@ describe("SecureAccountSection", () => {
     expect(assignMock).toHaveBeenCalledWith("https://pds.example/authorize?x=1");
   });
 
+  // The body carries NO token. The assertion rides the httpOnly vidra_step_up
+  // cookie the callback set, which the browser attaches to this very path, and
+  // this component cannot see it — which is the whole change. The auth
+  // rehearsal measured the old `?step_up=<token>` in a reverse proxy's access
+  // log and in the `Referer` of every subresource this page fetches.
   it("spends the landed assertion on the password, then reloads the account", async () => {
-    render(<SecureAccountSection stepUp="the-assertion" secure="password" />);
+    render(<SecureAccountSection secure="password" />);
     const next = await screen.findByLabelText("New password");
     fireEvent.change(next, { target: { value: "a-brand-new-password" } });
     fireEvent.change(screen.getByLabelText("Confirm password"), {
@@ -164,7 +169,6 @@ describe("SecureAccountSection", () => {
     await waitFor(() =>
       expect(setPassword).toHaveBeenCalledWith({
         new_password: "a-brand-new-password",
-        step_up_token: "the-assertion",
       }),
     );
     // has_password only flips on the server, so the card has to re-read the
@@ -175,7 +179,7 @@ describe("SecureAccountSection", () => {
   });
 
   it("refuses a mismatched confirmation without spending the assertion", async () => {
-    render(<SecureAccountSection stepUp="the-assertion" secure="password" />);
+    render(<SecureAccountSection secure="password" />);
     fireEvent.change(await screen.findByLabelText("New password"), {
       target: { value: "a-brand-new-password" },
     });
@@ -191,7 +195,7 @@ describe("SecureAccountSection", () => {
   });
 
   it("sends the email change with the assertion instead of a password", async () => {
-    render(<SecureAccountSection stepUp="the-assertion" secure="email" />);
+    render(<SecureAccountSection secure="email" />);
     fireEvent.change(await screen.findByLabelText("Email address"), {
       target: { value: "alice@example.test" },
     });
@@ -199,7 +203,6 @@ describe("SecureAccountSection", () => {
 
     await waitFor(() =>
       expect(requestEmailChange).toHaveBeenCalledWith({
-        step_up_token: "the-assertion",
         new_email: "alice@example.test",
       }),
     );
@@ -213,7 +216,7 @@ describe("SecureAccountSection", () => {
     setPassword.mockRejectedValue(
       new ApiError({ status: 403, code: "step_up_required", message: "confirm it is you" }),
     );
-    render(<SecureAccountSection stepUp="stale-assertion" secure="password" />);
+    render(<SecureAccountSection secure="password" />);
     fireEvent.change(await screen.findByLabelText("New password"), {
       target: { value: "a-brand-new-password" },
     });
@@ -243,10 +246,41 @@ describe("SecureAccountSection", () => {
         hash: "",
       },
     });
-    render(<SecureAccountSection stepUp="the-assertion" secure="password" />);
+    render(<SecureAccountSection secure="password" />);
     await waitFor(() => expect(replaceStateMock).toHaveBeenCalled());
     const [, , url] = replaceStateMock.mock.calls[0];
     expect(url).toBe("/settings/security?keep=1");
+  });
+
+  // THE TRANSPORT, asserted where it can be: a successful landing carries the
+  // action flag and nothing else, and the form it unlocks is offered without
+  // any token having been read. If a token were still required, this render
+  // would show the provider handoff instead of the password fields.
+  it("unlocks the form from the flag alone, with no token anywhere in the URL", async () => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: {
+        assign: assignMock,
+        pathname: "/settings/security",
+        search: "?secure=password",
+        hash: "",
+      },
+    });
+    render(<SecureAccountSection secure="password" />);
+    expect(await screen.findByLabelText("New password")).toBeTruthy();
+    expect(window.location.search).not.toContain("step_up=");
+  });
+
+  // A FAILED round trip lands with a machine code and must NOT unlock the form:
+  // there is no assertion behind it, and offering the fields would give the
+  // user a button that can only 403.
+  it("does not unlock the form when the round trip failed", async () => {
+    render(
+      <SecureAccountSection secure="password" stepUpError="step_up_identity_mismatch" />,
+    );
+    await screen.findByRole("alert");
+    expect(screen.queryByLabelText("New password")).toBeNull();
   });
 
   it("explains rather than offering a dead button when nothing is linked", async () => {

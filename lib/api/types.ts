@@ -237,6 +237,12 @@ export type MediaGCAdoptBucketResponse = Schemas["MediaGCAdoptBucketResponse"];
 export type StorageMigration = Schemas["StorageMigration"];
 export type StorageMigrationState = StorageMigration["state"];
 export type StorageMigrationList = Schemas["StorageMigrationList"];
+export type StorageMigrationFailure = Schemas["StorageMigrationFailure"];
+export type StorageMigrationPreview = Schemas["StorageMigrationPreview"];
+/** Why a paused campaign is paused. Absent on every other state. */
+export type StorageMigrationPausedReason = NonNullable<
+  StorageMigration["paused_reason"]
+>;
 export type IPFSStatus = Schemas["IPFSStatus"];
 export type IPFSNetworks = Schemas["IPFSNetworks"];
 export type IPFSNetworkStatus = Schemas["IPFSNetworkStatus"];
