@@ -140,16 +140,22 @@ describe("ChangeEmailSection", () => {
       expect(screen.getByRole("alert").textContent).toMatch(/already in use/i),
     );
 
-    // The other 409 is a different problem and must not read the same: it points
-    // at the flow that CAN set a password.
+    // The other 409 is a different problem and must not read the same. It has
+    // to point at a remedy the user can actually reach: the reset flow it used
+    // to name can never complete for this account shape, because its address is
+    // a generated one that cannot receive the mail (A30).
     requestEmailChange.mockRejectedValueOnce(
-      apiError(409, "this account has no password: use the password reset flow to set one"),
+      apiError(
+        409,
+        "this account has no password: set one with POST /api/v1/auth/me/password/set, which confirms you by re-signing in with the provider this account uses",
+      ),
     );
     fill();
     await waitFor(() => {
       const alert = screen.getByRole("alert");
       expect(alert.textContent).toMatch(/signs in without a password/i);
-      expect(alert.querySelector('a[href="/reset-password"]')).toBeTruthy();
+      expect(alert.textContent).toMatch(/Finish securing your account/i);
+      expect(alert.querySelector('a[href="/reset-password"]')).toBeNull();
     });
   });
 

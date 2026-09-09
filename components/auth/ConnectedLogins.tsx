@@ -56,8 +56,10 @@ export function ConnectedLogins() {
       setIdentities((prev) => prev?.filter((i) => i.provider !== provider) ?? prev);
     } catch (err) {
       if (err instanceof ApiError && err.status === 422) {
+        // The remedy has to be one the user can reach. The reset flow is not:
+        // this account's address is a generated one that cannot receive mail.
         setActionError(
-          "This is your only way to sign in, so it can't be unlinked. Set a password first (use the password-reset flow), then unlink it.",
+          "This is your only way to sign in, so it can't be unlinked. Set a password first under \u201cFinish securing your account\u201d in Settings \u203a Security, then unlink it.",
         );
       } else if (err instanceof ApiError && err.status === 404) {
         // Already gone (another tab/session) — reflect reality.

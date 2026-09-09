@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
@@ -241,14 +240,19 @@ function describe(err: unknown): React.ReactNode {
     if (err.status === 409) {
       // The password-less (OAuth/ATProto-only) shape says "reset"; the taken
       // address does not. The server's own sentence is the discriminator.
-      if (/reset/i.test(err.message)) {
+      // The server's own sentence is the discriminator, and "no password" is
+      // the phrase only this refusal carries.
+      if (/no password/i.test(err.message)) {
+        // The password-less (Bluesky/OIDC) shape. It used to be pointed at the
+        // reset flow, which for this account can never complete: its address is
+        // a generated one that cannot receive mail. "Finish securing your
+        // account" at the top of this page is the door that works — it confirms
+        // you with the provider instead.
         return (
           <>
             This account signs in without a password, so there is none to confirm with. Use{" "}
-            <Link href="/reset-password" className="focus-ring rounded-sm font-semibold underline">
-              password reset
-            </Link>{" "}
-            to set one first.
+            <span className="font-semibold">Finish securing your account</span> at the top of this
+            page — it confirms you with the account you sign in with instead.
           </>
         );
       }

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChangeEmailSection } from "@/components/auth/ChangeEmailSection";
 import { ChangePasswordSection } from "@/components/auth/ChangePasswordSection";
+import { SecureAccountSection } from "@/components/auth/SecureAccountSection";
 import { QrCode } from "@/components/QrCode";
 import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
@@ -18,7 +19,18 @@ import { SignInGate } from "@/components/SignInGate";
 // download affordances and an explicit "I saved them" confirmation), and the
 // password-confirmed disable flow. The secret and recovery codes exist only in
 // component state — never in logs, URLs, or storage.
-export function SecuritySettingsView({ mailEnabled = true }: { mailEnabled?: boolean }) {
+export function SecuritySettingsView({
+  mailEnabled = true,
+  stepUp = "",
+  stepUpError = "",
+  secure = "",
+}: {
+  mailEnabled?: boolean;
+  /** The step-up callback's landing values, read server-side from the query. */
+  stepUp?: string;
+  stepUpError?: string;
+  secure?: string;
+}) {
   const { status, logoutEverywhere } = useSession();
 
   // `!== "authed"` rather than `=== "anon"`: this view used to rely on a
@@ -38,6 +50,11 @@ export function SecuritySettingsView({ mailEnabled = true }: { mailEnabled?: boo
 
   return (
     <div className="flex max-w-xl flex-col gap-6">
+      {/* First, and only when it applies: an account created by signing in with
+          Bluesky/OIDC has ONE credential and no recovery address, and nothing
+          else on this page tells it so. It renders nothing for an account that
+          already has both. */}
+      <SecureAccountSection stepUp={stepUp} stepUpError={stepUpError} secure={secure} />
       <TwoFactorSection />
       {/* Email then password: the address is how the account is recovered, so
           it is the more consequential of the two, and both are gated on the
