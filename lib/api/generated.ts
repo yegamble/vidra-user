@@ -11719,6 +11719,15 @@ export interface operations {
                     "application/json": components["schemas"]["Channel"];
                 };
             };
+            /** @description The handle was renamed away from (migration 0142 renames a channel whose handle collided with an account username) and the rename is less than a year old. Location carries this endpoint at the channel's current handle. After a year the alias expires and the same request answers 404 — the ActivityPub actor id, which is a promise to other servers rather than a courtesy to people, is frozen at the old handle forever and is unaffected either way. */
+            301: {
+                headers: {
+                    /** @description This endpoint at the channel's current handle. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No channel with that handle. */
             404: {
                 headers: {

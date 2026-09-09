@@ -227,6 +227,80 @@ describe("RemoteWatchView mirrored thread", () => {
     expect(screen.getByText(/edited/)).toBeTruthy();
   });
 
+  // A29 rehearsal 3. Migration 0140's parent_object_url made the mirror
+  // THREADED in storage and in the contract; the page rendered every row flat,
+  // so a reply and the comment it answers looked like two unrelated remarks —
+  // and on a thread where the reply arrived first, in the wrong order. The
+  // contract's own rule for a parent that is not among the rows we hold is "a
+  // thread with a hole is better than a dropped reply": render it at the top.
+  it("threads a reply under the comment it answers", async () => {
+    restoreCanPlayType = pretendNativeHlsSupport();
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo({ stream_url: HLS_MASTER }));
+    mocks.getRemoteVideoComments.mockResolvedValue({
+      comments: [
+        {
+          id: "c1",
+          author_name: "ada",
+          author_domain: "peer.example",
+          actor_url: "https://peer.example/accounts/ada",
+          object_url: "https://peer.example/notes/1",
+          body: "Beautiful grade.",
+          edited: false,
+          created_at: "2026-09-05T10:00:00Z",
+        },
+        {
+          id: "c3",
+          author_name: "kai",
+          author_domain: "peer.example",
+          actor_url: "https://peer.example/accounts/kai",
+          object_url: "https://peer.example/notes/3",
+          parent_object_url: "https://peer.example/notes/2",
+          body: "Orphan reply.",
+          edited: false,
+          created_at: "2026-09-05T12:00:00Z",
+        },
+        {
+          id: "c2",
+          author_name: "bo",
+          author_domain: "peer.example",
+          actor_url: "https://peer.example/accounts/bo",
+          object_url: "https://peer.example/notes/9",
+          parent_object_url: "https://peer.example/notes/1",
+          body: "Thank you.",
+          edited: false,
+          created_at: "2026-09-05T11:00:00Z",
+        },
+      ],
+      total: 3,
+      limit: 50,
+      offset: 0,
+    } satisfies RemoteVideoCommentListResponse);
+
+    render(<RemoteWatchView id="r1" />);
+    const reply = await screen.findByText("Thank you.");
+    const parent = screen.getByText("Beautiful grade.");
+    const orphan = screen.getByText("Orphan reply.");
+
+    const row = (el: HTMLElement) => el.closest("[data-thread-depth]");
+    expect(row(parent)?.getAttribute("data-thread-depth")).toBe("0");
+    expect(row(reply)?.getAttribute("data-thread-depth")).toBe("1");
+    // A reply whose parent this instance was never sent is not dropped and not
+    // hidden: it renders at the top level.
+    expect(row(orphan)?.getAttribute("data-thread-depth")).toBe("0");
+
+    // A reply must FOLLOW its parent, whatever order the origin's rows arrived
+    // in — here the orphan was listed between them.
+    const bodies = screen.getAllByText(/Beautiful grade\.|Thank you\.|Orphan reply\./);
+    expect(bodies.map((el) => el.textContent)).toEqual([
+      "Beautiful grade.",
+      "Thank you.",
+      "Orphan reply.",
+    ]);
+    // And it says whom it answers, because indentation alone is not an
+    // accessible name.
+    expect(screen.getByText(/Replying to ada/)).toBeTruthy();
+  });
+
   it("explains an empty thread rather than implying the video has no comments", async () => {
     restoreCanPlayType = pretendNativeHlsSupport();
     mocks.getRemoteVideo.mockResolvedValue(remoteVideo({ stream_url: HLS_MASTER }));
