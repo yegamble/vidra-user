@@ -737,7 +737,7 @@ function ReportView({
       {entities.length === 0 ? (
         <EmptyState title="Nothing to import" message="The source has no mappable entities." />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border-subtle">
+        <div className="relative overflow-x-auto rounded-2xl border border-border-subtle">
           <table className="w-full min-w-[36rem] text-left text-sm">
             <caption className="sr-only">Per-entity import counts</caption>
             <thead className="border-b border-border-subtle text-[10.5px] font-bold uppercase tracking-[0.05em] text-fg-muted">

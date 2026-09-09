@@ -63,6 +63,7 @@ import {
   shortcutForKey,
 } from "@/lib/player-shortcuts";
 import { useChapters } from "@/lib/use-chapters";
+import { readStoredVolume, storeVolume } from "@/lib/player-volume";
 import { useHlsPlayback } from "@/lib/use-playback-engine";
 import { useStoryboard } from "@/lib/use-storyboard";
 
@@ -413,7 +414,15 @@ export function VideoPlayer({
     const onVolumeEv = () => {
       setVolume(el.volume);
       setMuted(el.muted);
+      // Volume belongs to the device, not the session: a viewer who turned it
+      // down should not meet full blast on the next video (A40).
+      storeVolume(el.volume, el.muted);
     };
+    // Apply the remembered level BEFORE seeding state below, so the first frame
+    // of the control bar already shows the level this device chose.
+    const remembered = readStoredVolume();
+    if (el.volume !== remembered.volume) el.volume = remembered.volume;
+    if (el.muted !== remembered.muted) el.muted = remembered.muted;
     el.addEventListener("play", onPlayEv);
     el.addEventListener("pause", onPauseEv);
     el.addEventListener("ended", onEndedEv);

@@ -473,7 +473,11 @@ function VideoCell({ video }: { video: AdminVideo }) {
   const thumbnail = video.is_local ? videoThumbnailUrl(video.id) : remoteVideoThumbnailUrl(video.id);
   return (
     <div className="flex w-[30rem] items-center gap-3">
-      <Link href={href} className="relative h-[4.3rem] w-[7.5rem] shrink-0 overflow-hidden rounded-lg bg-surface-muted">
+      <Link
+        href={href}
+        aria-label={video.title}
+        className="relative h-[4.3rem] w-[7.5rem] shrink-0 overflow-hidden rounded-lg bg-surface-muted"
+      >
         {video.has_thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element -- authenticated backend media URL
           <img src={thumbnail} alt="" className="h-full w-full object-cover" />

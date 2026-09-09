@@ -199,7 +199,7 @@ function AllChannelsScope({
         ]}
       />
       <StatsChart series={stats.daily_views} label="Daily views across all channels" />
-      <div className="overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
+      <div className="relative overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
         <table className="w-full min-w-[32rem] text-sm">
           <caption className="sr-only">
             Per-channel breakdown — select a channel to view its analytics.

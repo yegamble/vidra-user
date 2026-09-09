@@ -133,7 +133,7 @@ export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
                     href={`https://bsky.app/profile/${encodeURIComponent(profile.bluesky_handle)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="focus-ring rounded-sm text-accent underline underline-offset-2 hover:opacity-80"
+                    className="focus-ring rounded-sm text-accent-text underline underline-offset-2 hover:opacity-80"
                   >
                     @{profile.bluesky_handle}
                   </a>

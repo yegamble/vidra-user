@@ -113,7 +113,7 @@ export function AdminTable<Row>({
       {rows.length === 0 ? (
         empty ?? <EmptyState title={`No ${label.toLowerCase()}`} />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
+        <div className="relative overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
           <table
             aria-label={label}
             style={minWidth ? { minWidth } : undefined}
