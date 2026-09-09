@@ -329,6 +329,12 @@ describe("RemoteWatchView mirrored thread", () => {
 // fixture is the contract's own RemoteVideo, so if account_actor_url ever
 // leaves core's schema this file stops compiling rather than passing against an
 // invented shape.
+//
+// The A29 follow-ups added the other half: the control must NAME the actor it
+// addresses. Rehearsal 3 walked this page in Chromium and read
+// "Block films@peer.example" on a control that blocks the PERSON who owns
+// films — right about the effect, wrong about the subject, on the one screen
+// where the account-vs-channel distinction is the whole ruling.
 describe("RemoteWatchView account block", () => {
   const identified = {
     actor_url: "https://peer.example/video-channels/films",
@@ -341,24 +347,27 @@ describe("RemoteWatchView account block", () => {
     mocks.getRemoteVideo.mockResolvedValue(remoteVideo(identified));
     render(<RemoteWatchView id="r1" />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Block films@peer.example" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Block account kaisa@peer.example" }));
 
     await waitFor(() => expect(mocks.blockRemoteActor).toHaveBeenCalledTimes(1));
     // The ACCOUNT: one block covering every channel that person owns, including
     // the ones they have not created yet.
     expect(mocks.blockRemoteActor).toHaveBeenCalledWith("https://peer.example/accounts/kaisa");
     await screen.findByRole("status");
-    expect(screen.getByRole("button", { name: "Unblock films@peer.example" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unblock account kaisa@peer.example" })).toBeTruthy();
   });
 
-  it("falls back to the channel actor when the origin named no owner", async () => {
+  // When the origin named no owner the block genuinely IS against the channel
+  // actor, and the label says so — the name follows the URL being sent, so it
+  // cannot claim an account the request does not name.
+  it("falls back to the channel actor when the origin named no owner, and says so", async () => {
     mocks.useSession.mockReturnValue({ status: "authed" });
     mocks.getRemoteVideo.mockResolvedValue(
       remoteVideo({ actor_url: identified.actor_url, channel_handle: identified.channel_handle }),
     );
     render(<RemoteWatchView id="r1" />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Block films@peer.example" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Block account films@peer.example" }));
     await waitFor(() => expect(mocks.blockRemoteActor).toHaveBeenCalledTimes(1));
     expect(mocks.blockRemoteActor).toHaveBeenCalledWith(identified.actor_url);
   });
@@ -368,8 +377,8 @@ describe("RemoteWatchView account block", () => {
     mocks.getRemoteVideo.mockResolvedValue(remoteVideo(identified));
     render(<RemoteWatchView id="r1" />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Block films@peer.example" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Unblock films@peer.example" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Block account kaisa@peer.example" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Unblock account kaisa@peer.example" }));
 
     await waitFor(() => expect(mocks.unblockRemoteActor).toHaveBeenCalledTimes(1));
     // Verbatim: an unblock is matched against the stored URL, so a page that
