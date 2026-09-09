@@ -183,6 +183,46 @@ export function beaconSourceUrl(raw: string | null | undefined): string | undefi
 }
 
 /**
+ * beaconSourceOrigin reduces a beaconSourceUrl further, to the thing the server's
+ * classifier actually keys on: the ORIGIN. An absolute URL yields
+ * `scheme://host`; a leading-slash path — a same-origin relative fetch, which
+ * the server classifies as api-proxy by definition — yields the sentinel
+ * SAME_ORIGIN so it compares equal to itself and unequal to every gateway.
+ *
+ * It exists to answer one question: did this playback change WHERE its bytes
+ * come from? That is a different question from "did the URL change", which a
+ * generation tag, a rung change or a segment answers yes to on every request.
+ */
+export const SAME_ORIGIN = "same-origin" as const;
+
+export function beaconSourceOrigin(reduced: string | undefined): string | undefined {
+  if (!reduced) return undefined;
+  if (reduced.startsWith("/")) return SAME_ORIGIN;
+  const match = /^(https?:\/\/[^/]+)/i.exec(reduced);
+  return match ? match[1].toLowerCase() : undefined;
+}
+
+/**
+ * deliveryOriginChanged reports a playback moving between delivery origins
+ * mid-session — the watch page flipping hls.js to the IPFS gateway master, and
+ * the fallback back to the api.
+ *
+ * FALSE for the first source a playback ever has (there is nothing to have moved
+ * from), and false whenever either side is unclassifiable, because "we cannot
+ * tell" must not be reported as a change: a spurious true restarts the start
+ * measurement and mints a duplicate playback.start.
+ */
+export function deliveryOriginChanged(
+  previous: string | undefined,
+  next: string | undefined,
+): boolean {
+  const before = beaconSourceOrigin(previous);
+  const after = beaconSourceOrigin(next);
+  if (!before || !after) return false;
+  return before !== after;
+}
+
+/**
  * finalFetchUrl digs the URL a request ACTUALLY resolved to out of hls.js's
  * `networkDetails` — the XHR (`responseURL`, which follows redirects) or the
  * fetch Response (`url`). The redirect is the whole point: a 307 to a CDN or a
