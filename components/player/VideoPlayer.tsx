@@ -945,7 +945,7 @@ export function VideoPlayer({
           // instead of being locked out of the player by the news that it broke.
           className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center p-3 text-center"
         >
-          <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-2 rounded-2xl bg-black/85 px-4 py-3 text-white">
+          <div className="flex max-w-sm flex-col items-center gap-2 rounded-2xl bg-black/85 px-4 py-3 text-white">
             <p className="text-[13px] font-medium">
               This video could not be played. The media may be temporarily unavailable on this
               instance.
@@ -953,7 +953,7 @@ export function VideoPlayer({
             <button
               type="button"
               onClick={playback.retry}
-              className="cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="pointer-events-auto cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               Try again
             </button>

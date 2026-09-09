@@ -59,7 +59,15 @@ async function panOffset(page: Page): Promise<number> {
   });
 }
 
-type Control = { name: string; w: number; h: number; path: string; clipped: string | null };
+type Control = {
+  name: string;
+  w: number;
+  h: number;
+  path: string;
+  clipped: string | null;
+  /** WCAG 2.5.8's spacing exception: no other target's centre within 24px. */
+  spaced: boolean;
+};
 
 /**
  * Every visible interactive control on the page, with the two measurements this
@@ -117,7 +125,24 @@ async function controls(page: Page): Promise<Control[]> {
         h: Math.round(Math.max(r.height, t.height)),
         path: path(el),
         clipped,
-      });
+        spaced: true,
+        cx: (Math.max(r.left, t.left) + Math.min(r.right, t.right)) / 2,
+        cy: (Math.max(r.top, t.top) + Math.min(r.bottom, t.bottom)) / 2,
+      } as Control & { cx: number; cy: number });
+    }
+    // The spacing exception, applied properly: an undersized target passes when
+    // a 24px circle around it reaches no other target. It is what makes a
+    // 22x20 search field inside a 44px-tall wrapper, or a card title link with
+    // 30px of pitch above and below, not a finding — and it is the difference
+    // between a walk that reports four real failures and one that reports 160
+    // and gets ignored.
+    const pts = out as Array<Control & { cx: number; cy: number }>;
+    for (const a of pts) {
+      a.spaced = !pts.some(
+        (b) => b !== a && Math.hypot(a.cx - b.cx, a.cy - b.cy) < 24,
+      );
+      delete (a as Partial<typeof a>).cx;
+      delete (a as Partial<typeof a>).cy;
     }
     return out;
   });
@@ -188,10 +213,11 @@ for (const width of [PHONE, STAGE]) {
       if (pan > 1) failures.push(`${route.name} [${route.rows}] pans ${pan}px sideways`);
 
       for (const c of await controls(page)) {
-        // WCAG 2.5.8 AA's floor. A control smaller than this in BOTH dimensions
-        // is a target nothing can reliably hit; a wide-but-short text link is
-        // covered by the spacing exception and is not counted here.
-        if (c.w < 24 && c.h < 24) failures.push(`${route.name} [${route.rows}] target ${c.w}x${c.h} "${c.name}" ${c.path}`);
+        // WCAG 2.5.8 AA's floor, with its own spacing exception applied: an
+        // undersized target that nothing else crowds is reachable.
+        if (c.w < 24 && c.h < 24 && !c.spaced) {
+          failures.push(`${route.name} [${route.rows}] target ${c.w}x${c.h} "${c.name}" ${c.path}`);
+        }
         if (c.clipped) failures.push(`${route.name} [${route.rows}] "${c.name}" clipped by ${c.clipped}`);
       }
     }
