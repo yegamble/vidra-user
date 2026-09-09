@@ -281,7 +281,7 @@ export function StorageMigrationControls({
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={busy !== null || campaign.state === "aborting"}
+                disabled={busy !== null || !CAN_PAUSE.has(campaign.state)}
                 onClick={() => void run("pause", () => api.pauseStorageMigration(id))}
               >
                 {busy === "pause" ? "Pausing…" : "Pause"}
@@ -367,7 +367,21 @@ export function StorageMigrationControls({
   );
 }
 
-/** States a cutover can be RECORDED from (core's own guard, mirrored). */
+/**
+ * States each control is legal from — core's own SQL guards, mirrored.
+ *
+ * Mirrored rather than inferred, because the alternative is a button that is
+ * offered and then 409s: core answers a typed refusal NAMING the state either
+ * way, so nothing is unsafe, but an operator driving a move should not have to
+ * learn the transition table by pressing things.
+ */
+const CAN_PAUSE = new Set<StorageMigrationState>([
+  "enumerating",
+  "copying",
+  "synced",
+]);
+
+/** A cutover can only be RECORDED from the two phases that precede it. */
 const CAN_SWITCH = new Set<StorageMigrationState>(["copying", "synced"]);
 
 /**
