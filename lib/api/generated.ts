@@ -10733,7 +10733,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The account has no password to change (OAuth/ATProto-only). Use the password-reset flow to set one. */
+            /** @description The account has no password to change (OAuth/ATProto-only). Set one at `POST /api/v1/auth/me/password/set`, which a step-up authorises — the password-reset flow cannot help, because such an account's address is a generated one that can never receive mail. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -10967,7 +10967,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Either the account has no password to re-verify and supplied no step-up assertion either, or the requested address is already in use on this instance as another account's email or username. */
+            /** @description Either the account has no password to re-verify and supplied no step-up assertion either (set one at `POST /api/v1/auth/me/password/set`, or supply `step_up_token` here), or the requested address is already in use on this instance as another account's email or username. */
             409: {
                 headers: {
                     [name: string]: unknown;
