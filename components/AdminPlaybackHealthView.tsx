@@ -341,7 +341,7 @@ function CollectionSwitchPanel({ state }: { state: CollectionSwitch }) {
               schedule.{" "}
               <Link
                 href={COLLECTION_SETTING_PAGE}
-                className="font-medium text-accent hover:underline"
+                className="font-medium text-accent-text hover:underline"
               >
                 Turn it back on under Delivery
               </Link>
@@ -390,7 +390,7 @@ function NothingMeasured({ collection }: { collection: CollectionSwitch }) {
             back on under Delivery on the{" "}
             <Link
               href={COLLECTION_SETTING_PAGE}
-              className="font-medium text-accent hover:underline"
+              className="font-medium text-accent-text hover:underline"
             >
               Advanced config page
             </Link>

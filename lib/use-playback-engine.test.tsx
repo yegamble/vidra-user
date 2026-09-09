@@ -478,6 +478,95 @@ describe("engine selection", () => {
     expect(result.current.src).toBe("http://localhost:8080/api/v1/videos/video-1/original");
     canPlayType.mockRestore();
   });
+
+  // A32/A33 carry-in: with the object store down, hls.js gives up, the
+  // progressive original 503s too, and the media element ends on
+  // MEDIA_ELEMENT_ERROR code 4 — and NOTHING declined that last engine, so the
+  // surface believed it was still playing and rendered a dead 0:00/0:00 with no
+  // message anywhere in the DOM. An engine whose media element errored is an
+  // engine that dropped out, exactly like a fatal hls.js error.
+  it("declines the last engine when its media element errors, and says so", async () => {
+    hlsMock.supported = false; // hls.js declines; jsdom claims no native HLS
+    const el = document.createElement("video");
+    const videoRef = { current: el };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(result.current.mode).toBe("progressive"));
+    expect(result.current.failed).toBe(false);
+
+    act(() => {
+      el.dispatchEvent(new Event("error"));
+    });
+
+    await waitFor(() => expect(result.current.mode).toBeNull());
+    expect(result.current.failed).toBe(true);
+    // The element keeps pointing at the source it could not play: a <video> with
+    // no attribute at all says the player was never pointed anywhere.
+    expect(result.current.src).toBe("http://localhost:8080/api/v1/videos/video-1/original");
+  });
+
+  // Under load the media element's own `error` can beat React's effect: the src
+  // is committed as a prop, so an instantly-refused request fails before anything
+  // is listening. A failure that arrived first is still a failure.
+  it("catches up on an error that fired before the listener attached", async () => {
+    hlsMock.supported = false;
+    const el = document.createElement("video");
+    Object.defineProperty(el, "error", { configurable: true, value: { code: 4 } });
+    Object.defineProperty(el, "currentSrc", {
+      configurable: true,
+      value: "http://localhost:8080/api/v1/videos/video-1/original",
+    });
+    const videoRef = { current: el };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    expect(result.current.mode).toBeNull();
+  });
+
+  // ...but a leftover error from the engine that just gave up must not condemn
+  // the fallback before it has been tried.
+  it("ignores a stale error belonging to another engine's source", async () => {
+    hlsMock.supported = false;
+    const el = document.createElement("video");
+    Object.defineProperty(el, "error", { configurable: true, value: { code: 4 } });
+    Object.defineProperty(el, "currentSrc", {
+      configurable: true,
+      value: "http://localhost:8080/master.m3u8",
+    });
+    const videoRef = { current: el };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(result.current.mode).toBe("progressive"));
+    expect(result.current.failed).toBe(false);
+  });
+
+  it("re-arms every engine on retry so a recovered store plays without a reload", async () => {
+    hlsMock.supported = false;
+    const el = document.createElement("video");
+    const videoRef = { current: el };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(result.current.mode).toBe("progressive"));
+    act(() => {
+      el.dispatchEvent(new Event("error"));
+    });
+    await waitFor(() => expect(result.current.failed).toBe(true));
+
+    act(() => result.current.retry());
+
+    await waitFor(() => expect(result.current.mode).toBe("progressive"));
+    expect(result.current.failed).toBe(false);
+  });
+
+  // Suspended is not failure: a playback session still in flight picks no
+  // engine on purpose, and a surface that read that as "unplayable" would flash
+  // an error panel over every single open.
+  it("does not call a suspended session a failure", async () => {
+    sessionMock.video = null; // the session never settles into something playable
+    const videoRef = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+    expect(result.current.failed).toBe(false);
+  });
 });
 
 // Live and federated playback had no tests at all before they shared VOD's

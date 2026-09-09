@@ -238,7 +238,11 @@ test("the owner can delete a playlist", async ({ page }) => {
   // Reach the detail page via client-side nav so the in-memory session survives.
   await goToPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
+  // Two-step since A40: a playlist is destroyed for good, and the control sits
+  // next to Edit.
   await page.getByRole("button", { name: "Delete playlist" }).click();
+  await expect(page.getByRole("button", { name: "Cancel delete" })).toBeVisible();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
   await expect(page).toHaveURL(/\/playlists$/);
 });
 

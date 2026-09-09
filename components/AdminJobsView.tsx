@@ -139,7 +139,7 @@ function JobsPanel() {
         {data.recent_failures.length === 0 ? (
           <EmptyState title="No recent failures" message="No jobs have dead-lettered recently." />
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-border-subtle">
+          <div className="relative overflow-x-auto rounded-2xl border border-border-subtle">
             <table className="w-full min-w-[36rem] text-left text-sm">
               <thead className="border-b border-border-subtle text-[10.5px] font-bold uppercase tracking-[0.05em] text-fg-muted">
                 <tr>

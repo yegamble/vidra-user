@@ -432,7 +432,7 @@ export function ConfigForm({ page }: { page: ConfigPageId }) {
       >
         <div className="flex items-end justify-between gap-3 px-0.5">
           <div className="min-w-0">
-            <h2 className="text-[12px] font-bold uppercase tracking-[0.06em] text-fg-subtle">
+            <h2 className="text-[12px] font-bold uppercase tracking-[0.06em] text-fg-muted">
               {section.title}
             </h2>
             {section.description ? (

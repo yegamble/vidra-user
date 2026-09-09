@@ -577,7 +577,7 @@ function MigrationCard({ campaign }: { campaign: StorageMigration }) {
         host — see &ldquo;Moving the media store&rdquo; in the operations guide.{" "}
         <Link
           href="/admin/jobs"
-          className="font-medium text-accent hover:underline"
+          className="font-medium text-accent-text hover:underline"
         >
           Follow the per-object queue in Jobs
         </Link>
@@ -748,7 +748,7 @@ function FeatureRow({ feature }: { feature: InfrastructureFeature }) {
   // toggle — previously had no path to its control, because the link only
   // existed inside the note conditional and a healthy row carries no note.
   const link = href ? (
-    <Link href={href} className="font-medium text-accent hover:underline">
+    <Link href={href} className="font-medium text-accent-text hover:underline">
       {FEATURE_CONFIG_LINK_LABEL[feature.key] ?? "Open settings"}
     </Link>
   ) : null;
@@ -817,7 +817,7 @@ function OffNote({
         <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
           Optional: {lead}{" "}
           {/* The affordance disappears once the rest is showing. */}
-          <span className="font-medium text-accent group-open:hidden">
+          <span className="font-medium text-accent-text group-open:hidden">
             More
           </span>
         </summary>

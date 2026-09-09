@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -77,6 +77,51 @@ afterEach(() => {
 });
 
 describe("VideoPlayer shell", () => {
+  it("opens at the volume this device last chose, and remembers a change", async () => {
+    localStorage.setItem("vidra.player.volume", "0.3");
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(video.volume).toBeCloseTo(0.3, 3));
+
+    await act(async () => {
+      video.volume = 0.6;
+      video.dispatchEvent(new Event("volumechange"));
+    });
+    expect(localStorage.getItem("vidra.player.volume")).toBe("0.6");
+  });
+
+  // A32/A33 carry-in: with the object store down every source 503s, the last
+  // engine's media element errors, and the stage used to render a dead
+  // 0:00/0:00 with no message anywhere in the DOM. The viewer is told now.
+  it("states the failure and offers a retry when no engine can play the video", async () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    await act(async () => {
+      video.dispatchEvent(new Event("error"));
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/could not be played/i);
+    expect(within(alert).getByRole("button", { name: /try again/i })).toBeTruthy();
+  });
+
+  it("clears the failure surface when the retry succeeds", async () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await act(async () => {
+      video.dispatchEvent(new Event("error"));
+    });
+    const retry = screen.getByRole("button", { name: /try again/i });
+
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("renders a chrome-less video (no native controls) under a custom overlay", () => {
     const { container } = render(<Harness />);
     const video = container.querySelector("video");

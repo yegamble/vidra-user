@@ -113,7 +113,19 @@ export function AdminTable<Row>({
       {rows.length === 0 ? (
         empty ?? <EmptyState title={`No ${label.toLowerCase()}`} />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
+        // `relative` makes this the containing block for anything positioned
+        // inside the table: without it a positioned descendant escapes the
+        // scroller and its layout overflow lands on the ROOT, which is how two
+        // admin pages could be swiped ~800px sideways into blank space on a
+        // phone (A40). `tabIndex`/`role`/`aria-label` make the sideways scroll
+        // reachable without a pointer — a table whose rows carry no focusable
+        // cell is otherwise keyboard-inaccessible past its first column.
+        <div
+          className="relative overflow-x-auto rounded-2xl border border-border-subtle bg-surface"
+          tabIndex={0}
+          role="region"
+          aria-label={label}
+        >
           <table
             aria-label={label}
             style={minWidth ? { minWidth } : undefined}

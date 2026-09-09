@@ -63,6 +63,7 @@ import {
   shortcutForKey,
 } from "@/lib/player-shortcuts";
 import { useChapters } from "@/lib/use-chapters";
+import { readStoredVolume, storeVolume } from "@/lib/player-volume";
 import { useHlsPlayback } from "@/lib/use-playback-engine";
 import { useStoryboard } from "@/lib/use-storyboard";
 
@@ -413,7 +414,15 @@ export function VideoPlayer({
     const onVolumeEv = () => {
       setVolume(el.volume);
       setMuted(el.muted);
+      // Volume belongs to the device, not the session: a viewer who turned it
+      // down should not meet full blast on the next video (A40).
+      storeVolume(el.volume, el.muted);
     };
+    // Apply the remembered level BEFORE seeding state below, so the first frame
+    // of the control bar already shows the level this device chose.
+    const remembered = readStoredVolume();
+    if (el.volume !== remembered.volume) el.volume = remembered.volume;
+    if (el.muted !== remembered.muted) el.muted = remembered.muted;
     el.addEventListener("play", onPlayEv);
     el.addEventListener("pause", onPauseEv);
     el.addEventListener("ended", onEndedEv);
@@ -919,6 +928,37 @@ export function VideoPlayer({
           onReplay={replayVideo}
           onDismiss={dismissEndCard}
         />
+      ) : null}
+
+      {/* Nothing left can play this (A32/A33): every engine dropped out — hls.js
+          fatally, then the media element itself on the progressive original.
+          Before this the stage kept its controls and read a dead 0:00/0:00 with
+          no message anywhere in the DOM, which is indistinguishable from a video
+          that simply has not started. Sits UNDER the IPFS overlay so a mirror
+          failure keeps its own, more specific copy. */}
+      {playback.failed ? (
+        <div
+          role="alert"
+          // A centred card, not a full-bleed scrim, and pointer-transparent
+          // except for its own button: the control bar underneath stays visible
+          // AND operable, so a viewer can still hit Play — which is a retry —
+          // instead of being locked out of the player by the news that it broke.
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center p-3 text-center"
+        >
+          <div className="flex max-w-sm flex-col items-center gap-2 rounded-2xl bg-black/85 px-4 py-3 text-white">
+            <p className="text-[13px] font-medium">
+              This video could not be played. The media may be temporarily unavailable on this
+              instance.
+            </p>
+            <button
+              type="button"
+              onClick={playback.retry}
+              className="pointer-events-auto cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {/* IPFS fetching/error surface (DR5) — the topmost layer, over the video

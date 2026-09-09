@@ -445,7 +445,7 @@ export function AdminJobRunsView({ refreshKey }: { refreshKey: number }) {
               one <tr> out with declared columns — expressing an expansion row
               would mean adding a second rendering mode for this single caller,
               which costs more than the shared chrome saves. */}
-          <div className="overflow-x-auto rounded-2xl border border-border-subtle">
+          <div className="relative overflow-x-auto rounded-2xl border border-border-subtle">
             <table className="w-full min-w-[68rem] text-left text-sm" aria-label="Job executions">
               <thead className="border-b border-border-subtle text-[10.5px] font-bold uppercase tracking-[0.05em] text-fg-muted">
                 <tr>
