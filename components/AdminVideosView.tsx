@@ -473,9 +473,16 @@ function VideoCell({ video }: { video: AdminVideo }) {
   const thumbnail = video.is_local ? videoThumbnailUrl(video.id) : remoteVideoThumbnailUrl(video.id);
   return (
     <div className="flex w-[30rem] items-center gap-3">
+      {/* The thumbnail duplicates the title link beside it, and as a bare
+          image-only <a> it had no accessible name at all (a serious axe
+          `link-name`). Taking it out of the a11y tree and out of the tab order
+          is the sanctioned answer for a redundant adjacent link: the
+          destination stays reachable by the named link, and a keyboard does not
+          stop twice on the same row. */}
       <Link
         href={href}
-        aria-label={video.title}
+        aria-hidden="true"
+        tabIndex={-1}
         className="relative h-[4.3rem] w-[7.5rem] shrink-0 overflow-hidden rounded-lg bg-surface-muted"
       >
         {video.has_thumbnail ? (

@@ -498,8 +498,20 @@ function usePlaybackEngine(
     telemetry,
   ]);
 
-  const src =
+  const activeSrc =
     mode === "native-hls" ? nativeHls : mode === "progressive" ? progressive : undefined;
+  // Candidates existed and every one of them dropped out. Suspended is not
+  // failure: there the list is empty on purpose.
+  const failed = !suspended && candidates.length > 0 && mode === null;
+  // When every engine has been declined the element keeps pointing at the
+  // progressive original — the last resort selection would have reached, and the
+  // only source worth leaving on a media element that has stopped. Yanking the
+  // src as well would leave a <video> with no attribute at all: nothing to
+  // inspect, nothing to reload, and a DOM that says the player was never pointed
+  // anywhere. A source with NO progressive original (a federated m3u8) keeps the
+  // old contract and reports nothing, because there is no file to point at.
+  // Derived, not remembered, so it cannot outlive its own video.
+  const src = activeSrc ?? (failed ? progressive : undefined);
 
   // The engines that play through the media element itself (native HLS and the
   // progressive original) have no error channel of their own — hls.js reports
@@ -535,9 +547,7 @@ function usePlaybackEngine(
   return {
     mode,
     src,
-    // Candidates existed and every one of them dropped out. Suspended is not
-    // failure: there the list is empty on purpose.
-    failed: !suspended && candidates.length > 0 && mode === null,
+    failed,
     retry,
     // Only hls.js exposes controllable quality. Native HLS deliberately exposes
     // NO entries: there the browser owns variant selection outright, steered by

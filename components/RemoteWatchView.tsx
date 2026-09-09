@@ -165,7 +165,12 @@ function RemotePlayer({ video, onEnded }: { video: RemoteVideo; onEnded?: () => 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playback = useRemotePlayback(videoRef, video);
 
-  if (playback.mode === null) {
+  // "Nothing playable was advertised" and "the origin's stream would not load"
+  // are different facts. The panel below is for the first: with no source there
+  // is nothing to render a player around. A source that WAS advertised and then
+  // failed keeps its player — the element points at what the origin offered, and
+  // the "Watch on <origin>" link underneath is this surface's real fallback.
+  if (!playback.src) {
     return (
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-2xl bg-surface-muted p-6 text-center">
         {video.has_thumbnail ? (

@@ -500,7 +500,9 @@ describe("engine selection", () => {
 
     await waitFor(() => expect(result.current.mode).toBeNull());
     expect(result.current.failed).toBe(true);
-    expect(result.current.src).toBeUndefined();
+    // The element keeps pointing at the source it could not play: a <video> with
+    // no attribute at all says the player was never pointed anywhere.
+    expect(result.current.src).toBe("http://localhost:8080/api/v1/videos/video-1/original");
   });
 
   // Under load the media element's own `error` can beat React's effect: the src

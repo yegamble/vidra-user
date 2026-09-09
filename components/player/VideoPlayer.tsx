@@ -939,19 +939,25 @@ export function VideoPlayer({
       {playback.failed ? (
         <div
           role="alert"
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center text-white"
+          // A centred card, not a full-bleed scrim, and pointer-transparent
+          // except for its own button: the control bar underneath stays visible
+          // AND operable, so a viewer can still hit Play — which is a retry —
+          // instead of being locked out of the player by the news that it broke.
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center p-3 text-center"
         >
-          <p className="max-w-sm text-sm font-medium">
-            This video could not be played. The media may be temporarily unavailable on this
-            instance.
-          </p>
-          <button
-            type="button"
-            onClick={playback.retry}
-            className="cursor-pointer rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          >
-            Try again
-          </button>
+          <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-2 rounded-2xl bg-black/85 px-4 py-3 text-white">
+            <p className="text-[13px] font-medium">
+              This video could not be played. The media may be temporarily unavailable on this
+              instance.
+            </p>
+            <button
+              type="button"
+              onClick={playback.retry}
+              className="cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              Try again
+            </button>
+          </div>
         </div>
       ) : null}
 
