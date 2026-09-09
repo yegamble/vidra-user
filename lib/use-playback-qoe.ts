@@ -39,6 +39,7 @@ import {
   RENDITION_UNSUPPORTED,
   beaconSourceUrl,
   buildQoEEvent,
+  deliveryOriginChanged,
   flushPlaybackEvents,
   mediaErrorClass,
   qoeSubject,
@@ -216,7 +217,50 @@ export function usePlaybackQoE(args: {
       next.fetchedUrl = undefined;
     }
     next.subject = qoeSubject(session, engine);
-    next.sourceUrl = beaconSourceUrl(sourceUrl);
+
+    // THE SOURCE SWITCH (A31). The watch page can re-point the engine at the
+    // IPFS gateway's master playlist mid-watch, and back to the api when the
+    // gateway fails its probe. Before this, neither move produced an event: the
+    // client emits playback.start once per session, so a viewer who flipped to
+    // IPFS and watched to the end contributed ONE row labelled `api-proxy`, and
+    // IPFS delivery was near-invisible in QoE for the clean case. Only a later
+    // rebuffer, rung change or error happened to carry the new source.
+    //
+    // A move between delivery ORIGINS restarts the start measurement, so the
+    // next first frame emits a playback.start carrying the new source URL — and
+    // the server, which owns the classification, files it under `ipfs-gateway`
+    // (or `api-proxy` on the way back). Three things make that honest rather
+    // than double-counting:
+    //
+    //   - The viewer really did wait again. hls.js is torn down and rebuilt
+    //     against a different host; TTFF from the gateway is a real number that
+    //     nothing else in this hook can measure.
+    //   - Rollups group by (delivery_source, engine, packaging_format), so the
+    //     second start lands in a DIFFERENT group. Nothing is counted twice
+    //     within a group; the per-source playback counts are each right.
+    //   - It is ORIGIN-scoped, not URL-scoped. A generation tag, a rung change
+    //     or a segment changes the URL constantly and none of them changes where
+    //     the bytes come from. An hls.js decline that hands the SAME url to
+    //     native HLS is likewise not a restart — that is an engine handover, and
+    //     TTFF is what the viewer waited, not what the winning engine took.
+    const nextSource = beaconSourceUrl(sourceUrl);
+    if (deliveryOriginChanged(next.sourceUrl, nextSource)) {
+      next.firstFrame = false;
+      next.anchorMs = now();
+      // Everything below was observed on the PREVIOUS origin. Carrying any of it
+      // over would attribute the old source's facts to the new one — and the
+      // rendition in particular must go, so the new ladder's opening pick rides
+      // on the new playback.start instead of counting as a switch.
+      next.fetchedUrl = undefined;
+      next.height = null;
+      next.rebufferStartMs = null;
+      // A start held for want of a session was measured against the source we
+      // just left. There is no group to file it under that would be true, and
+      // the fresh anchor above measures the new one honestly, so it is dropped
+      // rather than misattributed.
+      next.pendingStartTtffMs = null;
+    }
+    next.sourceUrl = nextSource;
     if (engine && sourceUrl && next.anchorMs === null) next.anchorMs = now();
     // Release a start held back for want of a subject (see pendingStartTtffMs).
     // The number is the one measured at the first frame, not a fresh one: TTFF
