@@ -505,7 +505,7 @@ export interface paths {
          * Set a first password on an account that has none
          * @description Gives a PASSWORD-LESS account (created by ATProto or OIDC sign-in) its first password, authorised by a step-up assertion instead of a current password.
          *
-         *     It exists because such an account could previously never acquire a second sign-in method: it has no password to re-verify, and its synthetic `…@atproto.invalid` address is unroutable by design, so the reset mail can never arrive. The proof accepted here instead is a completed OAuth round trip through the provider that already IS the account's credential — started at `POST /api/v1/auth/step-up/start`, which redirects back with `?step_up=<token>`.
+         *     It exists because such an account could previously never acquire a second sign-in method: it has no password to re-verify, and its synthetic `…@atproto.invalid` address is unroutable by design, so the reset mail can never arrive. The proof accepted here instead is a completed OAuth round trip through the provider that already IS the account's credential — started at `POST /api/v1/auth/step-up/start`, whose callback parks the assertion in the httpOnly `vidra_step_up` cookie.
          *
          *     The consequences are the password change's, exactly: every OTHER session is revoked (access tokens included, because they are session-bound) and a "your password was changed" notice is ATTEMPTED. On an account still holding its placeholder address that notice cannot be delivered — say so rather than claiming it was sent. The new password must satisfy the same policy as registration. An account that already HAS a password is refused 422 `password_already_set` and belongs on `POST /api/v1/auth/me/password`. Rate limited alongside login. Requires a bearer access token.
          */
@@ -529,7 +529,9 @@ export interface paths {
          * Start a step-up re-authentication with a linked sign-in provider
          * @description Begins a fresh provider re-authentication for the signed-in caller, so an account whose only credential is an external provider can authorise setting a first password or moving to a real email address.
          *
-         *     It runs the SAME `Begin` the login does and seals the attempt into the SAME signed, httpOnly, ten-minute state cookie, with a step-up purpose plus the caller's user and session ids bound INSIDE the signed payload. Answer the returned `authorization_url` with a TOP-LEVEL browser navigation (never fetch it). The existing provider callback — `GET /api/v1/auth/atproto/callback` or `GET /api/v1/auth/oauth/{provider}/callback` — runs every invariant a login runs, checks the attested subject belongs to the bound account, and then, instead of minting a session, redirects to `return_to` with `?step_up=<token>` (or `?step_up_error=<code>`). That token is single-use, expires in ten minutes, and is bound to the session that started the challenge.
+         *     It runs the SAME `Begin` the login does and seals the attempt into the SAME signed, httpOnly, ten-minute state cookie, with a step-up purpose plus the caller's user and session ids bound INSIDE the signed payload. Answer the returned `authorization_url` with a TOP-LEVEL browser navigation (never fetch it). The existing provider callback — `GET /api/v1/auth/atproto/callback` or `GET /api/v1/auth/oauth/{provider}/callback` — runs every invariant a login runs, checks the attested subject belongs to the bound account, and then, instead of minting a session, parks a single-use assertion in the httpOnly `vidra_step_up` cookie (`Path=/api/v1/auth/me`, SameSite=Lax) and redirects to `return_to` UNCHANGED — no token and no flag, so the landing URL carries only what the caller put in its own `return_to` (typically `?secure=password`). A FAILURE still redirects with `?step_up_error=<code>`, which is a machine code and not a secret. The assertion is single-use, expires in ten minutes, and is bound to the session that started the challenge.
+         *
+         *     It moved off the query string because the auth rehearsal measured what the query cost: `step_up=<32 bytes>` in a reverse proxy's access log and in the `Referer` of every subresource the landing page then fetched, while the identically-shaped `vidra_mfa_pending` cookie appeared in neither.
          *
          *     The provider must already be LINKED to the caller: a round trip through one this account never linked proves nothing about it, and is refused 422 `step_up_provider_not_linked` before the user is walked through a consent screen. Rate limited alongside login. Requires a bearer access token.
          */
@@ -5197,6 +5199,8 @@ export interface paths {
          *     This does NOT change what the instance serves from. Cutover is an explicit operator step: swap BOTH environment sets (STORAGE_* to the new store, STORAGE_MIGRATION_TARGET_* to the old one) and restart. The api detects that swap, starts the grace clock, and only then — after STORAGE_MIGRATION_GRACE_HOURS — deletes the old store's copies. See vidra-core docs/operations.md, "Moving the media store".
          *
          *     While any campaign is not done or cancelled, DESTRUCTIVE media garbage collection is forced to dry-run (MediaGCResponse.forced_dry_run_reason = storage_migration_active). At most one campaign runs at a time. Restricted to admins; audited (admin.storage.migration.start).
+         *
+         *     With `dry_run: true` this creates NOTHING and answers 200 with a preview: the two store identities, the object count and the byte total a campaign would copy. It is the answer a confirmation dialog needs before an operator agrees to move a whole media library, and it is audited too (admin.storage.migration.preview), because enumerating the store is an expensive read somebody should be able to attribute.
          */
         post: operations["startStorageMigration"];
         delete?: never;
@@ -5241,6 +5245,126 @@ export interface paths {
          *     Before cutover this is a complete rollback: nothing about what the instance serves has changed. After cutover it is not — the instance is already serving from the target — so cancelling then simply stops the old store's copies from ever being deleted. Restricted to admins; audited (admin.storage.migration.cancel).
          */
         post: operations["cancelStorageMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/storage/migrations/{id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause a storage migration (admin)
+         * @description Parks a live campaign: the copy workers stop claiming objects and the ledger stands exactly where it is. Nothing is undone and nothing is deleted, and the media-GC interlock stays engaged — a half-finished move is precisely the state in which "no database row references this object" stops being evidence about either store.
+         *
+         *     The phase the campaign came out of is remembered, so a resume never has to guess: a campaign paused out of `synced` is ready to cut over and one paused out of `copying` is not. Legal from `enumerating`, `copying` and `synced` only; anything else is a 409 naming the state it is actually in. Restricted to admins; audited (admin.storage.migration.pause).
+         *
+         *     A campaign is ALSO paused automatically, with paused_reason `target_write_denied`, when the migration target stops accepting write probes — and resumed automatically when it starts again.
+         */
+        post: operations["pauseStorageMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/storage/migrations/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume a paused storage migration (admin)
+         * @description Puts a paused campaign back in the phase it came out of. It is refused (409) while the migration target is still not accepting writes, rather than resuming a campaign the next sweep would pause again within the minute. Restricted to admins; audited (admin.storage.migration.resume).
+         */
+        post: operations["resumeStorageMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/storage/migrations/{id}/abort": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Abort a storage migration, optionally cleaning the destination (admin)
+         * @description Cancels a campaign and, when asked for it explicitly, REMOVES the partial copies that campaign wrote to the destination.
+         *
+         *     Without `clean_destination` this is exactly the cancel: the copies stay, byte-identical objects under identical keys, inert until some future campaign re-verifies them. That is the default and the safe answer.
+         *
+         *     With `clean_destination: true` the campaign enters `aborting` and the leader-gated sweep removes those copies batch by batch before it reaches `cancelled`. Only objects the campaign PROVED it wrote to the destination are removed; the source is untouched throughout. Because this is the only thing in the product that deletes from the destination, and it is being asked for on the way out of a destructive operation, the body must also carry `confirm: "PURGE"` — the same typed confirmation the media-GC page's destructive sweep uses.
+         *
+         *     Legal from `enumerating`, `copying`, `synced` and `paused`. After cutover the destination is the store the instance SERVES FROM, so cleaning it would empty the live library, and the request is a 409. Restricted to admins; audited (admin.storage.migration.abort).
+         */
+        post: operations["abortStorageMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/storage/migrations/{id}/switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a storage-migration cutover (admin)
+         * @description Records that this instance is now serving from the migration TARGET, without waiting up to a minute for the leader sweep to notice.
+         *
+         *     It cannot PERFORM a cutover. Which store a process serves from is decided by the environment it was started with, and the campaign reads that off the two backends it holds rather than being told. So this endpoint is the second half of a two-step action whose first half is an operator's: swap BOTH environment sets (STORAGE_* to the new store, STORAGE_MIGRATION_TARGET_* to the old one) and restart, then record it here. When the swap has not taken effect in this process, the answer is a 409 saying exactly that — which is the point: waiting and hoping is replaced by being told.
+         *
+         *     Recording the cutover starts the grace clock. Legal from `copying` and `synced`. Restricted to admins; audited (admin.storage.migration.switch).
+         */
+        post: operations["switchStorageMigrationAuthority"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/storage/migrations/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release the old store and start deleting it (admin)
+         * @description Ends the grace window early and opens the delete-source phase.
+         *
+         *     The grace window is an UNDO window: while it runs, reverting the environment swap is a restart rather than a restore. Ending it is therefore an operator decision, and this is the act that makes a move irreversible — the second, explicit step after the authority switch, never a consequence of it.
+         *
+         *     The precondition that cannot be waived is re-checked here rather than trusted from the counters: every object must be accounted for. A campaign whose environment was swapped before the copy finished still has objects the new store does not hold, and releasing then would delete their only remaining copy — that is a 409, and nothing is deleted.
+         *
+         *     Legal from `cutover` only. Restricted to admins; audited (admin.storage.migration.release).
+         */
+        post: operations["releaseStorageMigrationSource"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7771,15 +7895,21 @@ export interface components {
              */
             new_password: string;
         };
-        /** @description A first password plus the step-up assertion that authorises it. Neither value is ever echoed back or logged. */
+        /** @description A first password. The step-up assertion that authorises it normally arrives on the httpOnly `vidra_step_up` COOKIE the callback set, so a browser sends this body with `new_password` alone. Neither value is ever echoed back or logged. */
         SetPasswordRequest: {
             /**
              * Format: password
              * @description The password to set. Same policy as registration and the password reset.
              */
             new_password: string;
-            /** @description The single-use token from a completed step-up round trip, delivered as `?step_up=` on the callback's redirect. Bound to the session that started the challenge and dead after ten minutes. */
-            step_up_token: string;
+            /**
+             * @description The single-use token from a completed step-up round trip. OPTIONAL, and normally absent: the callback parks it in the httpOnly `vidra_step_up` cookie (`Path=/api/v1/auth/me`, SameSite=Lax, ten minutes) and a browser simply sends the cookie. The field survives for an API client with no cookie jar, which can read the token off the Set-Cookie header; when both are present the COOKIE wins, so a stale token in a body cannot outrank a fresh grant.
+             *
+             *     It moved off the query string because the auth rehearsal measured what the query cost: `step_up=<32 bytes>` in a reverse proxy's access log and in the `Referer` of every subresource the landing page fetched, while the identically-shaped `vidra_mfa_pending` cookie appeared in neither.
+             *
+             *     With neither cookie nor field the answer is 403 `step_up_required`, the same answer a spent or expired assertion gets.
+             */
+            step_up_token?: string;
         };
         /** @description Which linked provider should re-authenticate the caller, and where to send the browser afterwards. */
         StepUpStartRequest: {
@@ -7794,7 +7924,7 @@ export interface components {
              */
             handle?: string;
             /**
-             * @description A same-origin relative path to land on afterwards. The callback appends `?step_up=<token>` or `?step_up_error=<code>` itself.
+             * @description A same-origin relative path to land on afterwards. On success the callback lands here UNCHANGED and the assertion rides the httpOnly `vidra_step_up` cookie; on failure it appends `?step_up_error=<code>`.
              * @example /settings/security
              */
             return_to?: string;
@@ -7811,10 +7941,14 @@ export interface components {
         EmailChangeRequest: {
             /**
              * Format: password
-             * @description The account's current password, for confirmation. Required unless `step_up_token` is supplied.
+             * @description The account's current password, for confirmation. Required unless a step-up assertion is supplied — either on the httpOnly `vidra_step_up` cookie (what a browser sends) or as `step_up_token`.
              */
             current_password?: string;
-            /** @description The single-use token from a completed step-up round trip (`POST /api/v1/auth/step-up/start`), for a PASSWORD-LESS account. A provider-created account holds a synthetic `…@atproto.invalid` address, so putting a real one on it is what makes the account recoverable at all — and it can prove neither a password nor a mailbox. An account that HAS a password is refused 422 `password_already_set`. */
+            /**
+             * @description The single-use token from a completed step-up round trip (`POST /api/v1/auth/step-up/start`), for a PASSWORD-LESS account. A provider-created account holds a synthetic `…@atproto.invalid` address, so putting a real one on it is what makes the account recoverable at all — and it can prove neither a password nor a mailbox. An account that HAS a password is refused 422 `password_already_set`.
+             *
+             *     OPTIONAL, and normally absent: the assertion arrives on the httpOnly `vidra_step_up` cookie the callback set, so a browser sends `new_email` alone. The EXACTLY-ONE-PROOF rule counts the cookie: supplying `current_password` while that cookie is present is the 422, and supplying neither is the 422 that names the password.
+             */
             step_up_token?: string;
             /**
              * Format: email
@@ -8543,10 +8677,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description `enumerating` — listing the source store. `copying` — objects are being copied and verified. `synced` — every object is verified in the target and a delta pass found nothing new; this is the state to cut over from. `cutover` — the api is serving from the target and the grace clock is running. `deleting_source` — removing the old store's copies. `done`/`cancelled`/`failed` — terminal.
+             * @description `enumerating` — listing the source store. `copying` — objects are being copied and verified. `synced` — every object is verified in the target and a delta pass found nothing new; this is the state to cut over from. `paused` — live but not claiming objects; `paused_reason` says why and `resume_state` says where a resume lands. `aborting` — cancelled, and removing the partial copies the campaign wrote to the destination before it reaches `cancelled`. `cutover` — the api is serving from the target and the grace clock is running. `deleting_source` — removing the old store's copies. `done`/`cancelled`/`failed` — terminal.
              * @enum {string}
              */
-            state: "enumerating" | "copying" | "synced" | "cutover" | "deleting_source" | "done" | "cancelled" | "failed";
+            state: "enumerating" | "copying" | "synced" | "paused" | "aborting" | "cutover" | "deleting_source" | "done" | "cancelled" | "failed";
             /** @example local:/var/lib/vidra/media */
             source_desc: string;
             /** @example s3://nyc3.digitaloceanspaces.com/example-video-media */
@@ -8569,6 +8703,16 @@ export interface components {
             /** @description A safe, operator-facing diagnostic — a category or an instruction, never a raw backend error, endpoint or object key. Typically set when a campaign is STUCK waiting for an operator (for example, the environment was swapped before every object had been copied). */
             last_error: string;
             /**
+             * @description Why a `paused` campaign is paused; absent otherwise. `target_write_denied` — the migration target refused a write probe. The instance itself is unaffected and keeps serving from whichever store holds authority, and copying resumes on its own once the target accepts writes again. `operator` — an admin pressed pause, and only an admin resumes it.
+             * @enum {string}
+             */
+            paused_reason?: "target_write_denied" | "operator";
+            /**
+             * @description The phase a resume returns this paused campaign to. It is shown because it is the difference between resuming into more copying and resuming onto a campaign that is ready to cut over.
+             * @enum {string}
+             */
+            resume_state?: "enumerating" | "copying" | "synced";
+            /**
              * Format: date-time
              * @description When the api first saw itself serving from target_desc. The grace period before the source is deleted is measured from here, and it is written once so a restart cannot restart the clock.
              */
@@ -8590,6 +8734,65 @@ export interface components {
             objects?: {
                 [key: string]: number;
             };
+            /** @description Per-CATEGORY failure counts, single-campaign view only. It exists because `objects_failed` counts only objects whose whole attempt budget is spent, so a campaign every object of which is being refused reports `objects_failed: 0` and an empty `last_error` for as long as the retry ladder takes — the operator watches progress stall and is told nothing. `retrying` is that invisible half. */
+            failures?: components["schemas"]["StorageMigrationFailure"][];
+        };
+        /** @description One failure category and how many objects are in it. The category is one of a short fixed set this instance writes — never a storage key, an endpoint, or a raw backend error. */
+        StorageMigrationFailure: {
+            /** @example copy failed; retrying */
+            category: string;
+            /**
+             * Format: int64
+             * @description Objects that have spent their whole attempt budget and dead-lettered.
+             */
+            terminal: number;
+            /**
+             * Format: int64
+             * @description Objects that have failed at least once and are still being retried.
+             */
+            retrying: number;
+        };
+        /** @description Optional body for the start. Omit it entirely for a real campaign, which is what every client before the preview existed sends. */
+        StartStorageMigrationRequest: {
+            /**
+             * @description Answer 200 with a preview of what a campaign WOULD copy instead of creating one. Nothing is written and there is nothing to cancel.
+             * @default false
+             */
+            dry_run: boolean;
+        };
+        /** @description What a campaign would copy, computed without creating a campaign row, writing a ledger entry, or touching the target. */
+        StorageMigrationPreview: {
+            /** @description Always true. It is here so a client cannot mistake a preview for a campaign. */
+            dry_run: boolean;
+            /** @example local:/var/lib/vidra/media */
+            source_desc: string;
+            /** @example s3://nyc3.digitaloceanspaces.com/example-video-media */
+            target_desc: string;
+            /**
+             * Format: int64
+             * @description Objects in the source store. Exact.
+             */
+            objects: number;
+            /**
+             * Format: int64
+             * @description Total size of those objects. Zero and meaningless unless `bytes_known` is true.
+             */
+            bytes: number;
+            /** @description False when the source cannot report sizes without a per-object round trip. The COUNT is still exact; the byte total is simply absent rather than a number an operator would take for a fact. */
+            bytes_known: boolean;
+        };
+        /** @description Optional body for the abort. Omit it entirely for a plain cancel, which leaves the destination's copies in place. */
+        AbortStorageMigrationRequest: {
+            /**
+             * @description Also remove the partial copies this campaign wrote to the destination. Only objects the campaign PROVED it wrote are removed; the source is untouched.
+             * @default false
+             */
+            clean_destination: boolean;
+            /**
+             * @description Must be the literal `PURGE` when `clean_destination` is true, and is ignored otherwise. The same typed confirmation the media-GC page's destructive sweep uses.
+             * @example PURGE
+             */
+            confirm?: string;
         };
         StorageMigrationList: {
             /** @description Campaign history, newest first. */
@@ -24750,8 +24953,21 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StartStorageMigrationRequest"];
+            };
+        };
         responses: {
+            /** @description The dry-run preview (`dry_run: true` only). Nothing was created. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigrationPreview"];
+                };
+            };
             /** @description The campaign was opened. */
             201: {
                 headers: {
@@ -24779,7 +24995,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description A storage migration is already in progress. */
+            /** @description A storage migration is already in progress, or the migration target is not currently accepting writes — a campaign started into a store that refuses writes would pause on its first tick, so it is refused here instead. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -24906,6 +25122,354 @@ export interface operations {
             };
             /** @description No such storage migration. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    pauseStorageMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The campaign after the pause. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigration"];
+                };
+            };
+            /** @description The id is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such storage migration. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The campaign is in a state this action is not legal from. The message names that state, because the commonest cause is a stale page and an operator driving a move has to know what changed under them. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resumeStorageMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The campaign after the resume. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigration"];
+                };
+            };
+            /** @description The id is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such storage migration. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The campaign is in a state this action is not legal from. The message names that state, because the commonest cause is a stale page and an operator driving a move has to know what changed under them. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    abortStorageMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AbortStorageMigrationRequest"];
+            };
+        };
+        responses: {
+            /** @description The campaign after the abort. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigration"];
+                };
+            };
+            /** @description The id is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such storage migration. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The campaign is in a state this action is not legal from. The message names that state, because the commonest cause is a stale page and an operator driving a move has to know what changed under them. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `clean_destination` was set without `confirm: "PURGE"`. Nothing was deleted and the campaign is unchanged. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    switchStorageMigrationAuthority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The campaign after the cutover was recorded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigration"];
+                };
+            };
+            /** @description The id is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such storage migration. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The campaign is not in `copying` or `synced`, or this process is still serving from the migration SOURCE so there is no cutover to record. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    releaseStorageMigrationSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The campaign after the delete-source phase opened. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageMigration"];
+                };
+            };
+            /** @description The id is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such storage migration. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The campaign is not in `cutover`, or objects have not all been copied out of the source yet. Nothing was deleted. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

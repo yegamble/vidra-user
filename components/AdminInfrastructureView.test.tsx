@@ -7,6 +7,28 @@ const mocks = vi.hoisted(() => ({
   getInfrastructure: vi.fn(),
   getSystemStatus: vi.fn(),
   getStorageMigrations: vi.fn(),
+  getStorageMigration: vi.fn(),
+  previewStorageMigration: vi.fn(),
+  startStorageMigration: vi.fn(),
+  pauseStorageMigration: vi.fn(),
+  resumeStorageMigration: vi.fn(),
+  abortStorageMigration: vi.fn(),
+  switchStorageMigrationAuthority: vi.fn(),
+  releaseStorageMigrationSource: vi.fn(),
+}));
+
+// The panel now hosts StorageMigrationControls, whose campaign-detail read is
+// VIEWER-SCOPED and therefore goes through useSettledSession — which throws
+// outside an AuthProvider on purpose (a viewer-scoped read that can never see
+// the viewer is the bug the hook exists to prevent, not a configuration). The
+// panel is rendered bare here, as it has been since it was written, so the
+// session hook is mocked to a settled admin rather than the provider being
+// stood up around every case.
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useSession: () => ({
+    status: "authed",
+    user: { id: "admin-1", role: "admin" },
+  }),
 }));
 
 vi.mock("@/lib/api", async (importActual) => {
@@ -18,6 +40,14 @@ vi.mock("@/lib/api", async (importActual) => {
       getInfrastructure: mocks.getInfrastructure,
       getSystemStatus: mocks.getSystemStatus,
       getStorageMigrations: mocks.getStorageMigrations,
+      getStorageMigration: mocks.getStorageMigration,
+      previewStorageMigration: mocks.previewStorageMigration,
+      startStorageMigration: mocks.startStorageMigration,
+      pauseStorageMigration: mocks.pauseStorageMigration,
+      resumeStorageMigration: mocks.resumeStorageMigration,
+      abortStorageMigration: mocks.abortStorageMigration,
+      switchStorageMigrationAuthority: mocks.switchStorageMigrationAuthority,
+      releaseStorageMigrationSource: mocks.releaseStorageMigrationSource,
     },
   };
 });
@@ -141,6 +171,7 @@ beforeEach(() => {
   mocks.getInfrastructure.mockResolvedValue(infrastructure(s3Storage));
   mocks.getSystemStatus.mockResolvedValue(systemStatus({ status: "ok" }));
   mocks.getStorageMigrations.mockResolvedValue({ migrations: [] });
+  mocks.getStorageMigration.mockRejectedValue(new Error("not stubbed"));
 });
 
 afterEach(() => {

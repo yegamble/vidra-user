@@ -1067,6 +1067,63 @@ describe("api endpoints", () => {
     );
   });
 
+  // The rest of the migration verbs (A34: the surface was start, cancel and a
+  // read-only list, so both writes were API-only on the most destructive thing
+  // an instance does to itself).
+  const CAMPAIGN = "11111111-1111-1111-1111-111111111111";
+  const BASE = `http://localhost:8080/api/v1/admin/storage/migrations/${CAMPAIGN}`;
+
+  it("previewStorageMigration POSTs dry_run and creates nothing", async () => {
+    await api.previewStorageMigration();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/storage/migrations");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ dry_run: true });
+  });
+
+  it("startStorageMigration POSTs with no dry_run", async () => {
+    await api.startStorageMigration();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/storage/migrations");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
+  });
+
+  it.each([
+    ["pause", (id: string) => api.pauseStorageMigration(id)],
+    ["resume", (id: string) => api.resumeStorageMigration(id)],
+    ["switch", (id: string) => api.switchStorageMigrationAuthority(id)],
+    ["release", (id: string) => api.releaseStorageMigrationSource(id)],
+  ])("%s POSTs to its own control", async (path, call) => {
+    await call(CAMPAIGN);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE}/${path}`);
+    expect(init.method).toBe("POST");
+  });
+
+  it("abortStorageMigration sends the clean-up flag and the typed confirmation", async () => {
+    await api.abortStorageMigration(CAMPAIGN, {
+      cleanDestination: true,
+      confirm: "PURGE",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE}/abort`);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      clean_destination: true,
+      confirm: "PURGE",
+    });
+  });
+
+  it("a plain abort never asks for the destination to be cleared", async () => {
+    await api.abortStorageMigration(CAMPAIGN);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      clean_destination: false,
+      confirm: "",
+    });
+  });
+
   it("updateAdminUser PATCHes the role / active flag", async () => {
     await api.updateAdminUser("u1", { role: "moderator", is_active: false });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

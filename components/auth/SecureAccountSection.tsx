@@ -29,22 +29,29 @@ import { useSettledSession } from "@/lib/use-settled-session";
  *  1. Each action starts a step-up — a fresh round trip through the provider
  *     that is already this account's credential — with `return_to` carrying
  *     which action asked, so the browser lands back here knowing what to show.
- *  2. The callback returns `?step_up=<token>`. It is read once on mount and
- *     STRIPPED from the URL with history.replaceState, so it does not survive a
- *     copied link or a shared screen. It is worthless elsewhere anyway (bound to
- *     this session, single-use, ten minutes) — stripping it is hygiene, not the
- *     defence.
- *  3. That token authorises exactly one write: setting the first password, or
- *     starting the email change. Neither is spent until the user submits.
+ *  2. The callback parks the assertion in the httpOnly `vidra_step_up` cookie
+ *     and lands here with only the `?secure=` flag this page put in its own
+ *     `return_to`. THIS COMPONENT READS NO TOKEN, from the URL or anywhere
+ *     else: it cannot, and that is the point. The auth rehearsal measured the
+ *     old `?step_up=<token>` in a reverse proxy's access log and in the
+ *     `Referer` of every subresource this page fetches, while the
+ *     identically-shaped `vidra_mfa_pending` cookie appeared in neither.
+ *  3. `?secure=` is a FLAG and not a secret: it says which action asked, and it
+ *     can only be on the URL because a callback redirected to a `return_to`
+ *     this page built. So its presence at mount is what distinguishes "back
+ *     from a completed round trip" from "someone opened the settings page".
+ *  4. The write is authorised by the cookie, at the route. An absent, spent or
+ *     expired assertion is a 403 `step_up_required` on submit, rendered where
+ *     every other write error is — there is nothing to check in advance and
+ *     nothing that could be checked without the token this page deliberately
+ *     cannot see.
  */
 export function SecureAccountSection({
-  stepUp = "",
   stepUpError = "",
   secure = "",
 }: {
-  /** The `?step_up=<token>` the provider callback landed with. */
-  stepUp?: string;
-  /** The `?step_up_error=<code>` it landed with instead, on failure. */
+  /** The `?step_up_error=<code>` a FAILED round trip landed with. A machine
+   * code, never a secret — the successful landing carries nothing at all. */
   stepUpError?: string;
   /** Which action asked for the assertion — it rode in `return_to`. */
   secure?: string;
@@ -57,9 +64,17 @@ export function SecureAccountSection({
   // login page reads ?oauth_error — not scraped out of window.location in an
   // effect, which would be a synchronous setState in an effect and a hydration
   // mismatch besides. State only tracks what the user does from here.
-  const [spentToken, setSpentToken] = useState(false);
-  const [action, setAction] = useState<SecureAction | null>(
-    secure === "password" || secure === "email" ? secure : null,
+  const landedAction: SecureAction | null =
+    secure === "password" || secure === "email" ? secure : null;
+  const [action, setAction] = useState<SecureAction | null>(landedAction);
+  // Whether a completed round trip is standing behind this page. It is
+  // INFERRED, not read: `?secure=` can only be on the URL because a callback
+  // redirected to a return_to this page built, and a failed round trip says so
+  // with `?step_up_error=` instead. The assertion itself is in an httpOnly
+  // cookie this component cannot see, and does not need to — the route checks
+  // it.
+  const [authorised, setAuthorised] = useState(
+    landedAction !== null && stepUpError === "",
   );
   // Which steps finished in THIS visit. It exists so the confirmation survives:
   // reloadUser flips has_password server-side, which would otherwise make the
@@ -82,7 +97,6 @@ export function SecureAccountSection({
   // challenge whose result cannot be spent.
   const emailNeedsThePasswordDoor = needsEmail && user?.has_password === true;
   const applies = needsPassword || needsEmail || completed.length > 0;
-  const stepUpToken = spentToken || stepUp === "" ? null : stepUp;
   const landingError = stepUpError === "" ? null : stepUpErrorMessage(stepUpError);
 
   // The linked identities are a VIEWER-SCOPED read, so it waits for the session
@@ -115,7 +129,11 @@ export function SecureAccountSection({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (!params.has("step_up") && !params.has("step_up_error") && !params.has("secure")) return;
+    if (!params.has("step_up_error") && !params.has("secure")) return;
+    // "step_up" is deleted defensively: no callback writes it any more, but an
+    // in-flight browser mid-deploy, or a bookmarked landing URL from before the
+    // transport changed, still can. Costing one line to strip a token that
+    // should not be there is the right trade for a line that can only help.
     params.delete("step_up");
     params.delete("step_up_error");
     params.delete("secure");
@@ -131,7 +149,7 @@ export function SecureAccountSection({
   // single-use server-side, so leaving the form up would only offer the user a
   // guaranteed 403.
   const clearToken = useCallback(() => {
-    setSpentToken(true);
+    setAuthorised(false);
     setAction(null);
   }, []);
 
@@ -191,14 +209,13 @@ export function SecureAccountSection({
           title="Set a password"
           lead="A second way in, so this account survives losing the first."
           active={action === "password"}
-          token={stepUpToken}
+          authorised={authorised}
           provider={provider}
           onStart={() => setAction("password")}
           onCancel={clearToken}
         >
-          {(token) => (
+          {() => (
             <SetPasswordForm
-              token={token}
               onDone={() => {
                 markDone("password");
                 void reloadUser();
@@ -224,12 +241,12 @@ export function SecureAccountSection({
           title="Add a real email address"
           lead="Where a password reset and any security notice can actually arrive."
           active={action === "email"}
-          token={stepUpToken}
+          authorised={authorised}
           provider={provider}
           onStart={() => setAction("email")}
           onCancel={clearToken}
         >
-          {(token) => <AddEmailForm token={token} onDone={() => markDone("email")} />}
+          {() => <AddEmailForm onDone={() => markDone("email")} />}
         </SecureStep>
       ) : null}
     </section>
@@ -248,7 +265,7 @@ function SecureStep({
   title,
   lead,
   active,
-  token,
+  authorised,
   provider,
   onStart,
   onCancel,
@@ -257,11 +274,14 @@ function SecureStep({
   title: string;
   lead: string;
   active: boolean;
-  token: string | null;
+  /** A completed round trip is standing behind this page — see the module
+   * comment for why this is inferred from the landing flag rather than read
+   * from a token. */
+  authorised: boolean;
   provider: string | null;
   onStart: () => void;
   onCancel: () => void;
-  children: (token: string) => React.ReactNode;
+  children: () => React.ReactNode;
 }) {
   const titleId = useId();
   return (
@@ -272,9 +292,9 @@ function SecureStep({
         </h3>
         <p className="text-[13px] text-fg-muted">{lead}</p>
       </div>
-      {active && token ? (
+      {active && authorised ? (
         <>
-          {children(token)}
+          {children()}
           <button
             type="button"
             onClick={onCancel}
@@ -395,7 +415,7 @@ function StepUpChallenge({
 
 const MIN_PASSWORD_LENGTH = 8;
 
-function SetPasswordForm({ token, onDone }: { token: string; onDone: () => void }) {
+function SetPasswordForm({ onDone }: { onDone: () => void }) {
   const nextId = useId();
   const confirmId = useId();
   const [next, setNext] = useState("");
@@ -418,7 +438,9 @@ function SetPasswordForm({ token, onDone }: { token: string; onDone: () => void 
     }
     setBusy(true);
     try {
-      await authApi.setPassword({ new_password: next, step_up_token: token });
+      // No step_up_token: the assertion rides the httpOnly vidra_step_up
+      // cookie the callback set, which the browser attaches to this very path.
+      await authApi.setPassword({ new_password: next });
       setNext("");
       setConfirm("");
       setDone(true);
@@ -461,7 +483,7 @@ function SetPasswordForm({ token, onDone }: { token: string; onDone: () => void 
   );
 }
 
-function AddEmailForm({ token, onDone }: { token: string; onDone: () => void }) {
+function AddEmailForm({ onDone }: { onDone: () => void }) {
   const emailId = useId();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -472,8 +494,9 @@ function AddEmailForm({ token, onDone }: { token: string; onDone: () => void }) 
     setError(null);
     setBusy(true);
     try {
+      // Same transport: the cookie is the proof, and sending `new_email`
+      // alone is what a browser can do.
       const state = await authApi.requestEmailChange({
-        step_up_token: token,
         new_email: email.trim(),
       });
       setSentTo(state.new_email ?? email.trim());

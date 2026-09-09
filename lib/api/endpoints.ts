@@ -36,6 +36,7 @@ import type {
   PeerTubeImportRunList,
   StorageMigration,
   StorageMigrationList,
+  StorageMigrationPreview,
   SystemStatus,
   AdminVideoListResponse,
   AdminVideoScope,
@@ -2171,10 +2172,11 @@ export const api = {
 
   /**
    * GET /api/v1/admin/storage/migrations — media-store migration campaign
-   * history, newest first (admin only). Read-only on purpose: starting and
-   * cancelling a campaign are CLI/ops actions (core docs/operations.md,
-   * "Moving the media store"), because a move is bracketed by an environment
-   * swap and a restart that no browser button can perform.
+   * history, newest first (admin only).
+   *
+   * No longer the whole surface. A34 found this page rendering the list and
+   * nothing else, so both writes were API-only on the most destructive thing an
+   * instance does to itself; the controls below are the rest of the verbs.
    */
   getStorageMigrations: (signal?: AbortSignal) =>
     apiRequest<StorageMigrationList>("/api/v1/admin/storage/migrations", { signal }),
@@ -2182,18 +2184,106 @@ export const api = {
   /**
    * GET /api/v1/admin/storage/migrations/{id} — one campaign (admin only).
    * The single-campaign view is the only one that carries the per-state
-   * `objects` breakdown; the list omits it.
-   *
-   * UNREACHABLE FROM THE UI as of 2026-09: AdminInfrastructureView renders the
-   * LIST (getStorageMigrations) but never a per-campaign detail, so the
-   * `objects` breakdown this endpoint exists to deliver has no surface. Kept
-   * deliberately — this is a missing admin view, not dead code, and deleting
-   * the wrapper would erase the only evidence of the gap.
+   * `objects` breakdown AND the per-category `failures` list, which is the
+   * number that makes a stalling campaign legible before its objects
+   * dead-letter.
    */
   getStorageMigration: (id: string, signal?: AbortSignal) =>
     apiRequest<StorageMigration>(
       `/api/v1/admin/storage/migrations/${encodeURIComponent(id)}`,
       { signal },
+    ),
+
+  /**
+   * POST /api/v1/admin/storage/migrations with `dry_run: true` — what a move
+   * WOULD copy, computed without creating a campaign row. It is the answer the
+   * confirmation dialog asks for before an operator agrees to move a whole
+   * media library, and there is nothing to cancel if they say no.
+   */
+  previewStorageMigration: (signal?: AbortSignal) =>
+    apiRequest<StorageMigrationPreview>("/api/v1/admin/storage/migrations", {
+      method: "POST",
+      body: { dry_run: true },
+      signal,
+    }),
+
+  /** POST /api/v1/admin/storage/migrations — open a campaign (admin only). */
+  startStorageMigration: (signal?: AbortSignal) =>
+    apiRequest<StorageMigration>("/api/v1/admin/storage/migrations", {
+      method: "POST",
+      signal,
+    }),
+
+  /**
+   * POST …/{id}/pause — park a live campaign. The workers stop claiming
+   * objects; nothing is undone and nothing is deleted.
+   */
+  pauseStorageMigration: (id: string, signal?: AbortSignal) =>
+    apiRequest<StorageMigration>(
+      `/api/v1/admin/storage/migrations/${encodeURIComponent(id)}/pause`,
+      { method: "POST", signal },
+    ),
+
+  /**
+   * POST …/{id}/resume — put a paused campaign back in the phase it came out
+   * of. A 409 while the target is still refusing writes, rather than a resume
+   * that silently undoes itself on the next sweep.
+   */
+  resumeStorageMigration: (id: string, signal?: AbortSignal) =>
+    apiRequest<StorageMigration>(
+      `/api/v1/admin/storage/migrations/${encodeURIComponent(id)}/resume`,
+      { method: "POST", signal },
+    ),
+
+  /**
+   * POST …/{id}/abort — cancel, and optionally REMOVE the partial copies the
+   * campaign wrote to the destination.
+   *
+   * Without `cleanDestination` this is the plain cancel and the copies stay.
+   * With it, core requires `confirm: "PURGE"` in the body — this is the only
+   * thing in the product that deletes from the destination, and it is being
+   * asked for on the way out of a destructive operation.
+   */
+  abortStorageMigration: (
+    id: string,
+    opts: { cleanDestination?: boolean; confirm?: string } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<StorageMigration>(
+      `/api/v1/admin/storage/migrations/${encodeURIComponent(id)}/abort`,
+      {
+        method: "POST",
+        body: {
+          clean_destination: Boolean(opts.cleanDestination),
+          confirm: opts.confirm ?? "",
+        },
+        signal,
+      },
+    ),
+
+  /**
+   * POST …/{id}/switch — record a cutover the operator has ALREADY performed in
+   * the environment. It cannot perform one: which store a process serves from
+   * is decided by the environment it started with. A 409 says exactly that when
+   * the swap has not taken effect, which is the half of a two-step action a
+   * page can usefully report.
+   */
+  switchStorageMigrationAuthority: (id: string, signal?: AbortSignal) =>
+    apiRequest<StorageMigration>(
+      `/api/v1/admin/storage/migrations/${encodeURIComponent(id)}/switch`,
+      { method: "POST", signal },
+    ),
+
+  /**
+   * POST …/{id}/release — end the grace window early and start deleting the old
+   * store's copies. This is the act that makes a move irreversible, and it is
+   * deliberately a SECOND, separate step after the authority switch rather than
+   * a consequence of it.
+   */
+  releaseStorageMigrationSource: (id: string, signal?: AbortSignal) =>
+    apiRequest<StorageMigration>(
+      `/api/v1/admin/storage/migrations/${encodeURIComponent(id)}/release`,
+      { method: "POST", signal },
     ),
 
   /**

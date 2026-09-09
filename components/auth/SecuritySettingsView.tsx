@@ -21,13 +21,11 @@ import { SignInGate } from "@/components/SignInGate";
 // component state — never in logs, URLs, or storage.
 export function SecuritySettingsView({
   mailEnabled = true,
-  stepUp = "",
   stepUpError = "",
   secure = "",
 }: {
   mailEnabled?: boolean;
   /** The step-up callback's landing values, read server-side from the query. */
-  stepUp?: string;
   stepUpError?: string;
   secure?: string;
 }) {
@@ -54,7 +52,7 @@ export function SecuritySettingsView({
           Bluesky/OIDC has ONE credential and no recovery address, and nothing
           else on this page tells it so. It renders nothing for an account that
           already has both. */}
-      <SecureAccountSection stepUp={stepUp} stepUpError={stepUpError} secure={secure} />
+      <SecureAccountSection stepUpError={stepUpError} secure={secure} />
       <TwoFactorSection />
       {/* Email then password: the address is how the account is recovered, so
           it is the more consequential of the two, and both are gated on the

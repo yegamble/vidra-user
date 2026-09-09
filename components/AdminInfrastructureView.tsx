@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
+import {
+  MIGRATION_STATE_LABEL,
+  StorageMigrationControls,
+  TERMINAL_MIGRATION_STATES,
+} from "@/components/StorageMigrationControls";
 import { Badge } from "@/components/ui/Badge";
 import type { BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import type {
@@ -17,7 +21,6 @@ import type {
   InfrastructureStatus,
   InfrastructureStorage,
   StorageMigration,
-  StorageMigrationState,
   SystemStatusComponent,
 } from "@/lib/api";
 import { formatBytes, formatDateTime } from "@/lib/format";
@@ -324,42 +327,6 @@ export function InfrastructurePanel() {
  */
 const OBJECT_STORE_COMPONENT = "s3";
 
-/** Campaign states nothing further happens from. */
-const TERMINAL_MIGRATION_STATES = new Set<StorageMigrationState>([
-  "done",
-  "cancelled",
-  "failed",
-]);
-
-/**
- * Operator-facing phase names. Exhaustive over the contract's union on purpose:
- * a phase added core-side becomes a type error here rather than a raw
- * snake_case string leaking into the page.
- */
-const MIGRATION_STATE_LABEL: Record<StorageMigrationState, string> = {
-  enumerating: "Listing the source",
-  copying: "Copying",
-  synced: "Synced — ready to cut over",
-  cutover: "Cut over — grace period running",
-  deleting_source: "Deleting the old copies",
-  done: "Done",
-  cancelled: "Cancelled",
-  failed: "Failed",
-};
-
-const MIGRATION_STATE_VARIANT: Record<StorageMigrationState, BadgeVariant> = {
-  enumerating: "accent",
-  copying: "accent",
-  // The one phase that is waiting on a human: everything is verified in the
-  // destination and the operator has to swap the environment and restart.
-  synced: "warning",
-  cutover: "accent",
-  deleting_source: "accent",
-  done: "success",
-  cancelled: "neutral",
-  failed: "danger",
-};
-
 type Fetched<T> = { status: Status; data: T };
 
 /**
@@ -369,10 +336,13 @@ type Fetched<T> = { status: Status; data: T };
  * (they cost a round trip to the bucket / a query), so they fetch separately
  * and fail separately — neither can blank the page around them.
  *
- * READ-ONLY BY DESIGN: there is no Start/Cancel button here and this wave does
- * not add one. A migration is bracketed by an environment swap and a restart
- * that a browser cannot perform, so the campaign is driven from the runbook
- * ("Moving the media store" in the operations guide) and this page reports it.
+ * NO LONGER READ-ONLY. A34 found this panel rendering a campaign list and
+ * nothing else, so start and cancel were API-only on the most destructive thing
+ * an instance does to itself, and pause/resume/abort-with-clean-up/switch/
+ * release did not exist at all. The controls live in
+ * StorageMigrationControls; what stays true is the one thing a browser really
+ * cannot do — cutover is an environment swap plus a restart — and that is now
+ * SAID on the card rather than being the reason there are no buttons.
  */
 function StorageLive({ backend }: { backend: InfrastructureStorage["backend"] }) {
   const [probe, setProbe] = useState<Fetched<SystemStatusComponent | null>>({
@@ -442,7 +412,17 @@ function StorageLive({ backend }: { backend: InfrastructureStorage["backend"] })
       </div>
       <ProbeNote backend={backend} probe={probe} />
 
-      {active ? <MigrationCard campaign={active} /> : null}
+      {campaigns.status === "ready" ? (
+        <StorageMigrationControls
+          campaign={active ?? null}
+          onChanged={(next) =>
+            setCampaigns((prev) => ({
+              status: "ready",
+              data: [next, ...prev.data.filter((m) => m.id !== next.id)],
+            }))
+          }
+        />
+      ) : null}
       {!active && campaigns.status === "ready" && last ? (
         <p className="text-[13px] text-fg-muted">
           Last migration: {MIGRATION_STATE_LABEL[last.state].toLowerCase()} on{" "}
@@ -528,62 +508,6 @@ function ProbeNote({
     );
   }
   return null;
-}
-
-function MigrationCard({ campaign }: { campaign: StorageMigration }) {
-  const { objects_total: total, objects_done: done } = campaign;
-  const percent = total > 0 ? (done / total) * 100 : 0;
-
-  return (
-    <Card className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold tracking-tight">Storage migration</h3>
-        <Badge variant={MIGRATION_STATE_VARIANT[campaign.state]} status>
-          {MIGRATION_STATE_LABEL[campaign.state]}
-        </Badge>
-      </div>
-      {/* Store IDENTITY strings, never credentials — "s3://<endpoint>/<bucket>"
-          or "local:<path>". They are what the api compares its own backends
-          against, so showing them verbatim is what makes a half-done cutover
-          legible. */}
-      <p className="font-mono text-[13px] break-all text-fg-muted">
-        {campaign.source_desc} → {campaign.target_desc}
-      </p>
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-2 text-xs text-fg-muted">
-          <span>
-            {total > 0
-              ? `${done.toLocaleString()} of ${total.toLocaleString()} objects verified`
-              : "Counting objects in the source"}
-          </span>
-          {total > 0 ? (
-            <span className="tabular-nums">{Math.round(percent)}%</span>
-          ) : null}
-        </div>
-        <ProgressBar value={percent} label="Storage migration progress" />
-      </div>
-      {campaign.objects_failed > 0 ? (
-        <p className="text-[13px] text-danger">
-          {campaign.objects_failed.toLocaleString()} object
-          {campaign.objects_failed === 1 ? "" : "s"} dead-lettered. They do not
-          block the campaign, but their bytes are not in the destination.
-        </p>
-      ) : null}
-      {campaign.last_error ? (
-        <p className="text-[13px] text-warning">{campaign.last_error}</p>
-      ) : null}
-      <p className="text-[13px] text-fg-muted">
-        Starting, cancelling and cutting over are operator actions from the
-        host — see &ldquo;Moving the media store&rdquo; in the operations guide.{" "}
-        <Link
-          href="/admin/jobs"
-          className="font-medium text-accent-text hover:underline"
-        >
-          Follow the per-object queue in Jobs
-        </Link>
-      </p>
-    </Card>
-  );
 }
 
 /**
