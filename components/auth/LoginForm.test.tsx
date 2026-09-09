@@ -6,20 +6,22 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { routerReplace, routerPush, loginMock, getInstanceMock, resendMock } = vi.hoisted(() => ({
-  routerReplace: vi.fn(),
-  routerPush: vi.fn(),
-  loginMock: vi.fn(),
-  resendMock: vi.fn(),
-  getInstanceMock: vi.fn(),
-}));
+const { routerReplace, routerPush, loginMock, getInstanceMock, resendMock, challengeMock } =
+  vi.hoisted(() => ({
+    routerReplace: vi.fn(),
+    routerPush: vi.fn(),
+    loginMock: vi.fn(),
+    resendMock: vi.fn(),
+    getInstanceMock: vi.fn(),
+    challengeMock: vi.fn(),
+  }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: routerReplace, push: routerPush }),
 }));
 
 vi.mock("@/components/auth/AuthProvider", () => ({
-  useSession: () => ({ status: "anon", login: loginMock, completeMfaChallenge: vi.fn() }),
+  useSession: () => ({ status: "anon", login: loginMock, completeMfaChallenge: challengeMock }),
 }));
 
 vi.mock("@/lib/api", async () => {
@@ -42,6 +44,42 @@ afterEach(() => {
   routerPush.mockReset();
   routerReplace.mockReset();
   resendMock.mockReset();
+  challengeMock.mockReset();
+});
+
+// The SSO second factor lands here. The callback issued NO session, parked the
+// mfa_token in an httpOnly cookie, and redirected with the FLAG ?mfa=required —
+// the page's whole input is that flag, which is exactly the point: a token in
+// the URL would sit in history, in same-origin Referer headers and in proxy
+// logs, and unlike the step-up assertion an mfa_token is bound to no session.
+describe("LoginForm provider two-factor landing", () => {
+  it("shows the existing challenge for ?mfa=required and submits with no token", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: ["google"], atproto_login: false });
+    challengeMock.mockResolvedValue(undefined);
+    render(<LoginForm mfaPending />);
+
+    expect(await screen.findByText("Two-factor authentication")).toBeTruthy();
+    // The credentials form is gone — this is a sign-in already half-completed,
+    // not a fresh one.
+    expect(screen.queryByLabelText("Email or username")).toBeNull();
+    // The one-shot marker is cleaned out of the URL so a reload cannot replay it.
+    await waitFor(() => expect(routerReplace).toHaveBeenCalledWith("/login"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Use a recovery code instead" }));
+    fireEvent.change(screen.getByLabelText("Recovery code"), { target: { value: "a1b2c-3d4e5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify code" }));
+
+    // NULL token: the server reads the pending cookie the request carries.
+    await waitFor(() => expect(challengeMock).toHaveBeenCalledWith(null, "a1b2c-3d4e5"));
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/"));
+  });
+
+  it("offers a way back to the credentials form", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: [], atproto_login: false });
+    render(<LoginForm mfaPending />);
+    fireEvent.click(await screen.findByRole("button", { name: "Back to sign in" }));
+    expect(await screen.findByLabelText("Email or username")).toBeTruthy();
+  });
 });
 
 async function signIn(identifier: string, password = "supersecret") {

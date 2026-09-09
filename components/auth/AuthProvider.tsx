@@ -56,8 +56,13 @@ interface SessionContextValue {
   status: SessionStatus;
   /** Credentials name the account by `identifier` (email or username) or the legacy `email`. */
   login: (credentials: LoginCredentials) => Promise<LoginOutcome>;
-  /** Second half of a two-factor login (TOTP or recovery code). */
-  completeMfaChallenge: (mfaToken: string, code: string) => Promise<void>;
+  /**
+   * Second half of a two-factor login (TOTP or recovery code). `mfaToken` is
+   * NULL for a challenge that came from a provider sign-in: a browser redirect
+   * cannot carry a JSON token, so the backend parked it in an httpOnly cookie
+   * and the request is made with credentials instead.
+   */
+  completeMfaChallenge: (mfaToken: string | null, code: string) => Promise<void>;
   register: (input: Omit<RegisterRequest, "cookie_mode">) => Promise<RegisterOutcome>;
   /**
    * First-run owner claim: redeem the server's boot-logged setup token for the
@@ -226,7 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const completeMfaChallenge = useCallback(
-    async (mfaToken: string, code: string) => {
+    async (mfaToken: string | null, code: string) => {
       apply(await authApi.completeMFAChallenge(mfaToken, code));
     },
     [apply],

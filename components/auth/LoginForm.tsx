@@ -21,7 +21,9 @@ import { loginCredentials, looksLikeEmail } from "@/lib/login-identifier";
 // LoginForm drives the whole sign-in surface:
 //  - email-or-username + password credentials (cookie-mode session);
 //  - the two-factor challenge swap-in when login answers {mfa_required,
-//    mfa_token} — a TOTP or recovery code finishes the login;
+//    mfa_token} — a TOTP or recovery code finishes the login — AND when a
+//    PROVIDER sign-in lands here with ?mfa=required, which is the same
+//    challenge with the token in an httpOnly cookie instead of in state;
 //  - one "Continue with <Provider>" button per configured OIDC provider
 //    (GET /instance oauth_providers), navigating top-level to the backend's
 //    OAuth begin endpoint with return_to=/login?oauth=1;
@@ -32,6 +34,7 @@ import { loginCredentials, looksLikeEmail } from "@/lib/login-identifier";
 export function LoginForm({
   oauthPending = false,
   oauthError = "",
+  mfaPending = false,
   initialProviders,
   initialAtprotoLogin,
   instanceName,
@@ -40,6 +43,14 @@ export function LoginForm({
   oauthPending?: boolean;
   /** The ?oauth_error=<code> from a failed OAuth callback ("" when none). */
   oauthError?: string;
+  /**
+   * True when the URL carried ?mfa=required: a provider sign-in verified the
+   * account and stopped short of a session because two-factor is on. The token
+   * is NOT here — it is in the httpOnly `vidra_mfa_pending` cookie, deliberately,
+   * so it stays out of the browser history, Referer headers and proxy logs. The
+   * challenge below submits with credentials and no token.
+   */
+  mfaPending?: boolean;
   /** SSR snapshot; undefined means the server could not reach the instance API. */
   initialProviders?: string[];
   /** SSR snapshot of GET /instance atproto_login (Bluesky / any PDS handle login). */
@@ -62,6 +73,11 @@ export function LoginForm({
   const [submitting, setSubmitting] = useState(false);
   // Set once login answers mfa_required: the form swaps to the code entry.
   const [mfaToken, setMfaToken] = useState<string | null>(null);
+  // The same challenge, arrived at from a provider redirect. Sticky, because
+  // the ?mfa=required marker is cleaned out of the URL immediately below.
+  const [providerChallenge, setProviderChallenge] = useState(mfaPending);
+  // Either route shows the challenge; only one of them has a token to send.
+  const challenging = mfaToken !== null || providerChallenge;
   const [code, setCode] = useState("");
   // The TOTP path shows the 6-digit box grid; the recovery path swaps to a
   // single free-text field (recovery codes are hyphenated, not 6 digits). The
@@ -90,8 +106,8 @@ export function LoginForm({
   // Clean the one-shot OAuth markers out of the URL (they must not survive a
   // reload/bookmark); the outcome already lives in state.
   useEffect(() => {
-    if (oauthPending || oauthError) router.replace("/login");
-  }, [oauthPending, oauthError, router]);
+    if (oauthPending || oauthError || mfaPending) router.replace("/login");
+  }, [oauthPending, oauthError, mfaPending, router]);
 
   // A successful OAuth landing: the silent refresh picked up the session
   // cookie the callback set — leave the login page.
@@ -159,10 +175,12 @@ export function LoginForm({
   }
 
   async function submitChallenge() {
-    if (!mfaToken) return;
+    if (!challenging) return;
     setError(null);
     setSubmitting(true);
     try {
+      // A null token is the provider path: the backend reads the pending
+      // cookie the callback set, which the request carries with credentials.
       await completeMfaChallenge(mfaToken, code.trim());
       router.push("/");
     } catch (err) {
@@ -179,7 +197,7 @@ export function LoginForm({
     }
   }
 
-  if (completingOAuth) {
+  if (completingOAuth && !challenging) {
     return (
       <div className="flex justify-center py-12">
         <Spinner label="Completing sign-in" />
@@ -198,7 +216,7 @@ export function LoginForm({
     </Alert>
   ) : null;
 
-  if (mfaToken) {
+  if (challenging) {
     return (
       <form
         noValidate
@@ -275,8 +293,11 @@ export function LoginForm({
           type="button"
           onClick={() => {
             // The mfa_token is single-purpose and short-lived; dropping it
-            // returns to a clean credentials form.
+            // returns to a clean credentials form. The provider variant drops
+            // the marker instead — the cookie is the server's to expire, and it
+            // dies on its own in five minutes.
             setMfaToken(null);
+            setProviderChallenge(false);
             setCode("");
             setRecoveryMode(false);
             setError(null);

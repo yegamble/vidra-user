@@ -4,13 +4,15 @@ import { OwnerClaimCard } from "@/components/OwnerClaimCard";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 
 // The OAuth callback redirects back here carrying one-shot markers: ?oauth=1
-// (success landing — the session cookie was just set) or ?oauth_error=<code>
-// (user-actionable failure). They are read server-side and handed to the form,
-// which immediately cleans them out of the URL.
+// (success landing — the session cookie was just set), ?oauth_error=<code>
+// (user-actionable failure), or ?mfa=required (the account was verified but has
+// two-factor on, so the callback issued NO session and parked the challenge
+// token in an httpOnly cookie). They are read server-side and handed to the
+// form, which immediately cleans them out of the URL.
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ oauth?: string; oauth_error?: string }>;
+  searchParams: Promise<{ oauth?: string; oauth_error?: string; mfa?: string }>;
 }) {
   const [sp, instance] = await Promise.all([searchParams, getInstanceConfig()]);
   // The page is a thin standalone wrapper; the title lives inside LoginForm so each
@@ -25,6 +27,7 @@ export default async function LoginPage({
       <LoginForm
         oauthPending={sp.oauth === "1"}
         oauthError={sp.oauth_error ?? ""}
+        mfaPending={sp.mfa === "required"}
         initialProviders={instance?.oauth_providers}
         initialAtprotoLogin={instance?.atproto_login}
         instanceName={instance?.name}

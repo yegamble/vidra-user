@@ -80,8 +80,12 @@ export function oauthErrorMessage(code: string): string {
   switch (code) {
     case "access_denied":
       return "The sign-in was cancelled at the provider.";
+    // The refusal that protects an existing account from a provider's word
+    // about its email address. The copy has to carry the REMEDY, because the
+    // person reading it is very often the legitimate owner of both: sign in the
+    // way this account already signs in, then connect the provider on purpose.
     case "email_conflict":
-      return "That provider login could not be linked: another account already uses its email address.";
+      return "An account here already uses that email address. Sign in with your password and connect this provider from Settings › Connected logins.";
     case "email_required":
       return "The provider did not share a verified email address, which this instance requires.";
     case "account_disabled":
@@ -93,6 +97,14 @@ export function oauthErrorMessage(code: string): string {
     // the fallback for anywhere else it surfaces.
     case "owner_claim_required":
       return "This server is still waiting for its owner, so new accounts cannot be created yet.";
+    // The callback refused to switch accounts. A signed-in browser that starts
+    // a sign-in flow and authenticates as SOMEBODY ELSE'S provider identity is
+    // not making a login — it is asking for an account switch nobody asked for,
+    // which A05 measured happening silently. Say which door is the right one.
+    case "identity_belongs_to_another_account":
+      return "That provider account belongs to a different account here. Sign out first, then sign in with it.";
+    case "provider_already_linked":
+      return "This account is already connected to that provider. Sign out first, then sign in with it.";
     // ATProto identity-login callback failures (Bluesky / any PDS).
     case "atproto_identity_mismatch":
       return "Bluesky sign-in could not be verified. Try again.";

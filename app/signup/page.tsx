@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { AuthPage, AuthPageHeading, authBrandName } from "@/components/auth/AuthPage";
 import { SignupForm } from "@/components/auth/SignupForm";
 import { OwnerClaimCard } from "@/components/OwnerClaimCard";
@@ -9,9 +11,16 @@ import { getInstanceConfig } from "@/lib/instance-config.server";
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ oauth?: string; oauth_error?: string }>;
+  searchParams: Promise<{ oauth?: string; oauth_error?: string; mfa?: string }>;
 }) {
-  const [sp, instance] = await Promise.all([searchParams, getInstanceConfig()]);
+  const sp0 = await searchParams;
+  // ?mfa=required means the provider round trip resolved to an account that
+  // ALREADY EXISTS and has two-factor on — so this is a sign-in that needs a
+  // code, not a signup. The challenge UI lives on the login page, and the
+  // pending-challenge cookie is scoped to the API, not to this route, so the
+  // marker travels and nothing is lost by moving.
+  if (sp0.mfa === "required") redirect("/login?mfa=required");
+  const [sp, instance] = await Promise.all([Promise.resolve(sp0), getInstanceConfig()]);
   return (
     <AuthPage>
       {/* First-run: every signup path is refused until the server has an
