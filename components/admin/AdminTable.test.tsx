@@ -39,6 +39,18 @@ function table(props: Partial<AdminTableProps<Run>> = {}) {
 }
 
 describe("AdminTable", () => {
+  // A wide admin table scrolls sideways inside its own box. A pointer can drag
+  // it; a keyboard can only reach it if the scroll container is itself
+  // focusable — axe calls this `scrollable-region-focusable`, and it fired on
+  // /admin/playback-health, whose rows carry no links at all (A40).
+  it("makes the horizontal scroller reachable by keyboard, and names it", () => {
+    const { container } = render(table());
+    const scroller = container.querySelector("div.overflow-x-auto") as HTMLElement;
+    expect(scroller.getAttribute("tabindex")).toBe("0");
+    expect(scroller.getAttribute("role")).toBe("region");
+    expect(scroller.getAttribute("aria-label")).toBe("Job executions");
+  });
+
   it("renders declared columns as a named table", () => {
     render(table());
     const grid = screen.getByRole("table", { name: "Job executions" });
