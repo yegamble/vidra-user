@@ -77,6 +77,38 @@ afterEach(() => {
 });
 
 describe("VideoPlayer shell", () => {
+  // A32/A33 carry-in: with the object store down every source 503s, the last
+  // engine's media element errors, and the stage used to render a dead
+  // 0:00/0:00 with no message anywhere in the DOM. The viewer is told now.
+  it("states the failure and offers a retry when no engine can play the video", async () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    await act(async () => {
+      video.dispatchEvent(new Event("error"));
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/could not be played/i);
+    expect(within(alert).getByRole("button", { name: /try again/i })).toBeTruthy();
+  });
+
+  it("clears the failure surface when the retry succeeds", async () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await act(async () => {
+      video.dispatchEvent(new Event("error"));
+    });
+    const retry = screen.getByRole("button", { name: /try again/i });
+
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("renders a chrome-less video (no native controls) under a custom overlay", () => {
     const { container } = render(<Harness />);
     const video = container.querySelector("video");

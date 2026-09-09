@@ -921,6 +921,31 @@ export function VideoPlayer({
         />
       ) : null}
 
+      {/* Nothing left can play this (A32/A33): every engine dropped out — hls.js
+          fatally, then the media element itself on the progressive original.
+          Before this the stage kept its controls and read a dead 0:00/0:00 with
+          no message anywhere in the DOM, which is indistinguishable from a video
+          that simply has not started. Sits UNDER the IPFS overlay so a mirror
+          failure keeps its own, more specific copy. */}
+      {playback.failed ? (
+        <div
+          role="alert"
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center text-white"
+        >
+          <p className="max-w-sm text-sm font-medium">
+            This video could not be played. The media may be temporarily unavailable on this
+            instance.
+          </p>
+          <button
+            type="button"
+            onClick={playback.retry}
+            className="cursor-pointer rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
+
       {/* IPFS fetching/error surface (DR5) — the topmost layer, over the video
           and controls. Content is owned by WatchView (peer-free copy). */}
       {overlay}

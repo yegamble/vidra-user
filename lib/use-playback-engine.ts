@@ -127,6 +127,22 @@ export interface HlsPlayback {
   pending: boolean;
   setQuality: (quality: QualitySelection) => void;
   /**
+   * True once NOTHING left here can play this video: every candidate engine
+   * dropped out (hls.js fatal after bounded recovery, then the media element
+   * itself erroring on the progressive/native source). A32/A33 measured the
+   * alternative — a total object-store outage rendered a dead `0:00/0:00` with
+   * no message anywhere in the DOM, because the last engine's failure was never
+   * recorded. `false` while a session is still suspended: that is a wait, not a
+   * failure.
+   */
+  failed: boolean;
+  /**
+   * Re-arm every engine for this key and start the selection over. The store
+   * coming back is the case this exists for — the viewer should not have to
+   * reload the page to find out.
+   */
+  retry: () => void;
+  /**
    * The CMAF tree's DASH manifest, when the session advertised one.
    * INFORMATIONAL: nothing plays it and it must not influence engine selection —
    * there is no DASH engine yet (item 3c). It is surfaced so the second engine,
@@ -135,15 +151,12 @@ export interface HlsPlayback {
   dashUrl: string | null;
 }
 
-/** Live playback, plus the one thing only a live surface needs. */
-export interface LivePlayback extends HlsPlayback {
-  /**
-   * True once the live playlist could not be played (no engine can play it, or
-   * hls.js failed fatally after bounded recovery). A live stream has no original
-   * file to fall back to, so the surface shows an honest error instead.
-   */
-  failed: boolean;
-}
+/**
+ * Live playback. `failed` is narrowed here: a live surface must additionally
+ * wait out the session it opens, so the shared flag is recomputed against the
+ * session state rather than inherited.
+ */
+export type LivePlayback = HlsPlayback;
 
 /**
  * Federated playback. Narrower on purpose: the remote watch surface renders a
@@ -239,6 +252,15 @@ function usePlaybackEngine(
     });
   }, []);
 
+  const retry = useCallback(() => {
+    const el = videoRef.current;
+    // Drop the dead source so re-selecting the SAME engine re-runs the media
+    // element's resource selection; without this the attribute is unchanged and
+    // the element sits on its cached failure.
+    if (el) el.removeAttribute("src");
+    setDeclined({ key, engines: [] });
+  }, [key, videoRef]);
+
   const candidates = useMemo(
     // Suspended: no candidates, so no engine is picked and nothing loads. The
     // list is rebuilt (and playback begins) the moment the session settles.
@@ -253,6 +275,21 @@ function usePlaybackEngine(
     () => pickEngine(candidates, declinedHere),
     [candidates, declinedHere],
   );
+
+  // The engines that play through the media element itself (native HLS and the
+  // progressive original) have no error channel of their own — hls.js reports
+  // its fatal errors, but a plain <video src> only fires `error`. Without this
+  // the last engine could fail and nothing would record it, which is exactly how
+  // an object-store outage rendered a player that looked like it was working.
+  useEffect(() => {
+    if (mode !== "progressive" && mode !== "native-hls") return;
+    const el = videoRef.current;
+    if (!el) return;
+    const failedHere = mode;
+    const onError = () => declineEngines(key, failedHere);
+    el.addEventListener("error", onError);
+    return () => el.removeEventListener("error", onError);
+  }, [mode, key, videoRef, declineEngines]);
 
   // The URL the winning engine was pointed at — the pre-redirect fallback for
   // "where did these bytes come from?". hls.js improves on it per fragment with
@@ -491,6 +528,10 @@ function usePlaybackEngine(
   return {
     mode,
     src,
+    // Candidates existed and every one of them dropped out. Suspended is not
+    // failure: there the list is empty on purpose.
+    failed: !suspended && candidates.length > 0 && mode === null,
+    retry,
     // Only hls.js exposes controllable quality. Native HLS deliberately exposes
     // NO entries: there the browser owns variant selection outright, steered by
     // the SCORE attribute the backend emits on each variant, and nothing can
