@@ -503,6 +503,41 @@ describe("engine selection", () => {
     expect(result.current.src).toBeUndefined();
   });
 
+  // Under load the media element's own `error` can beat React's effect: the src
+  // is committed as a prop, so an instantly-refused request fails before anything
+  // is listening. A failure that arrived first is still a failure.
+  it("catches up on an error that fired before the listener attached", async () => {
+    hlsMock.supported = false;
+    const el = document.createElement("video");
+    Object.defineProperty(el, "error", { configurable: true, value: { code: 4 } });
+    Object.defineProperty(el, "currentSrc", {
+      configurable: true,
+      value: "http://localhost:8080/api/v1/videos/video-1/original",
+    });
+    const videoRef = { current: el };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    expect(result.current.mode).toBeNull();
+  });
+
+  // ...but a leftover error from the engine that just gave up must not condemn
+  // the fallback before it has been tried.
+  it("ignores a stale error belonging to another engine's source", async () => {
+    hlsMock.supported = false;
+    const el = document.createElement("video");
+    Object.defineProperty(el, "error", { configurable: true, value: { code: 4 } });
+    Object.defineProperty(el, "currentSrc", {
+      configurable: true,
+      value: "http://localhost:8080/master.m3u8",
+    });
+    const videoRef = { current: el };
+    const { result } = renderHook(() => useHlsPlayback(videoRef, VIDEO, null));
+
+    await waitFor(() => expect(result.current.mode).toBe("progressive"));
+    expect(result.current.failed).toBe(false);
+  });
+
   it("re-arms every engine on retry so a recovered store plays without a reload", async () => {
     hlsMock.supported = false;
     const el = document.createElement("video");

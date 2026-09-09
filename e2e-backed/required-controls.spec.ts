@@ -7,6 +7,7 @@ import {
   API_URL,
   registerUser,
   seedPublishedChannel,
+  waitForPublished,
 } from "./fixtures";
 
 /*
@@ -136,6 +137,9 @@ let walker: { username: string };
 
 test.beforeAll(async ({ request }) => {
   seeded = await seedPublishedChannel(request);
+  // The media-failure walk needs a video that CAN play, or the dead 0:00/0:00 it
+  // is about would be indistinguishable from one that is still transcoding.
+  await waitForPublished(request, seeded.videoId);
   // A plain signed-in account for the viewer/creator surfaces. seedPublishedChannel
   // does not surrender its owner's username, and every one of these routes is
   // about the shape of the screen, not about whose data is on it.
@@ -241,16 +245,45 @@ test("the account menu opens by keyboard, closes on Escape and hands focus back"
 test("a watch page whose media cannot be fetched says so and offers a retry", async ({ page }) => {
   // The A32/A33 finding: with the object store down every source failed and the
   // stage rendered a dead 0:00/0:00 with no message anywhere in the DOM.
-  await page.route(/\/api\/v1\/videos\/[^/]+\/(original|hls\/)/, (route) =>
-    route.fulfill({ status: 503, body: '{"error":{"code":"storage_unavailable"}}' }),
-  );
+  // Slow on purpose: hls.js has to exhaust its own bounded recovery before the
+  // progressive fallback is even tried, and under a loaded runner the navigation
+  // alone can eat the default budget.
+  test.slow();
+  // A dead object store is a request that does not come back with bytes. Abort
+  // rather than answer 503: hls.js treats a refused fetch as a network error it
+  // cannot retry its way out of, so the give-up is prompt and the walk does not
+  // sit through its backoff ladder on a loaded runner.
+  const refused = new Set<string>();
+  await page.route(/\/api\/v1\/videos\/[^/]+\/(original|hls\/)/, (route) => {
+    refused.add(route.request().url().includes("/original") ? "original" : "hls");
+    return route.abort("failed");
+  });
   await page.goto(`/videos/${seeded.videoId}`);
+  // A viewer would press play; do the same, so the media element is asked for
+  // bytes even on a browser that would otherwise preload nothing.
+  await page.waitForTimeout(1500);
+  await page.evaluate(async () => {
+    const v = document.querySelector("video");
+    if (v) {
+      v.muted = true;
+      try { await v.play(); } catch { /* the point is that it cannot */ }
+    }
+  });
+  // The mechanism first, so a failure says WHICH half broke: every engine has to
+  // have been tried and refused before anything can honestly report a failure.
+  await expect.poll(() => refused.has("original"), { timeout: 45_000 }).toBe(true);
+  await expect
+    .poll(() => page.evaluate(() => document.querySelector("video")?.error?.code ?? null), {
+      timeout: 45_000,
+    })
+    .not.toBeNull();
   const alert = page.getByRole("alert").filter({ hasText: /could not be played/i });
   await expect(alert).toBeVisible({ timeout: 30_000 });
   await expect(alert.getByRole("button", { name: "Try again" })).toBeVisible();
 });
 
 test("player speed and volume survive a reload and a second tab", async ({ page, context }) => {
+  test.slow();
   await page.goto(`/videos/${seeded.videoId}`);
   await page.getByRole("button", { name: /^Speed/ }).first().click();
   await page.getByRole("menuitemradio", { name: "1.5×" }).click();

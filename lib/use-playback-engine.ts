@@ -276,21 +276,6 @@ function usePlaybackEngine(
     [candidates, declinedHere],
   );
 
-  // The engines that play through the media element itself (native HLS and the
-  // progressive original) have no error channel of their own — hls.js reports
-  // its fatal errors, but a plain <video src> only fires `error`. Without this
-  // the last engine could fail and nothing would record it, which is exactly how
-  // an object-store outage rendered a player that looked like it was working.
-  useEffect(() => {
-    if (mode !== "progressive" && mode !== "native-hls") return;
-    const el = videoRef.current;
-    if (!el) return;
-    const failedHere = mode;
-    const onError = () => declineEngines(key, failedHere);
-    el.addEventListener("error", onError);
-    return () => el.removeEventListener("error", onError);
-  }, [mode, key, videoRef, declineEngines]);
-
   // The URL the winning engine was pointed at — the pre-redirect fallback for
   // "where did these bytes come from?". hls.js improves on it per fragment with
   // the post-redirect URL; a media element cannot, so for native/progressive this
@@ -515,6 +500,28 @@ function usePlaybackEngine(
 
   const src =
     mode === "native-hls" ? nativeHls : mode === "progressive" ? progressive : undefined;
+
+  // The engines that play through the media element itself (native HLS and the
+  // progressive original) have no error channel of their own — hls.js reports
+  // its fatal errors, but a plain <video src> only fires `error`. Without this
+  // the last engine could fail and nothing would record it, which is exactly how
+  // an object-store outage rendered a player that looked like it was working.
+  useEffect(() => {
+    if ((mode !== "progressive" && mode !== "native-hls") || !src) return;
+    const el = videoRef.current;
+    if (!el) return;
+    const failedHere = mode;
+    const onError = () => declineEngines(key, failedHere);
+    el.addEventListener("error", onError);
+    // React commits `src` as a prop, so the browser starts loading BEFORE this
+    // effect runs: a source that fails instantly (a refused connection, an
+    // offline device) has already fired `error` by the time we are listening.
+    // Catch that up — but only when the failure is THIS engine's source, or the
+    // hls.js attempt's leftover error would decline the fallback untried.
+    const resolved = typeof window === "undefined" ? src : new URL(src, window.location.href).href;
+    if (el.error && el.currentSrc === resolved) onError();
+    return () => el.removeEventListener("error", onError);
+  }, [mode, src, key, videoRef, declineEngines]);
 
   useEffect(() => {
     const el = videoRef.current;
