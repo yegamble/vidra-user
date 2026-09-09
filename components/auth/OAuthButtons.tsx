@@ -97,6 +97,14 @@ export function oauthErrorMessage(code: string): string {
     // the fallback for anywhere else it surfaces.
     case "owner_claim_required":
       return "This server is still waiting for its owner, so new accounts cannot be created yet.";
+    // The callback refused to switch accounts. A signed-in browser that starts
+    // a sign-in flow and authenticates as SOMEBODY ELSE'S provider identity is
+    // not making a login — it is asking for an account switch nobody asked for,
+    // which A05 measured happening silently. Say which door is the right one.
+    case "identity_belongs_to_another_account":
+      return "That provider account belongs to a different account here. Sign out first, then sign in with it.";
+    case "provider_already_linked":
+      return "This account is already connected to that provider. Sign out first, then sign in with it.";
     // ATProto identity-login callback failures (Bluesky / any PDS).
     case "atproto_identity_mismatch":
       return "Bluesky sign-in could not be verified. Try again.";

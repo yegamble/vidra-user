@@ -142,6 +142,20 @@ test("a failed OAuth landing (no session cookie) falls back to the form with an 
   await expect(page).toHaveURL(/\/login$/);
 });
 
+// The refusal that replaces the silent account switch A05 measured. It lands on
+// the LOGIN page, so it has to be rendered there — a refusal the landing page
+// cannot show is the one thing worse than the switch it prevents.
+test("a refused account switch says which door is the right one", async ({ page }) => {
+  await page.route(INSTANCE, (route) => route.fulfill({ json: instanceJson(["google"]) }));
+  await page.goto("/login?oauth=1&oauth_error=identity_belongs_to_another_account");
+
+  await expect(
+    page.getByText(/belongs to a different account here\. Sign out first/),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByLabel("Email")).toBeVisible();
+});
+
 // A provider sign-in that resolved to an account with two-factor on issues NO
 // session: the callback parks the mfa_token in an httpOnly cookie and lands
 // here with the FLAG ?mfa=required. The page shows the same challenge the
