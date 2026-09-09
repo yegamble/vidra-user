@@ -80,8 +80,12 @@ export function oauthErrorMessage(code: string): string {
   switch (code) {
     case "access_denied":
       return "The sign-in was cancelled at the provider.";
+    // The refusal that protects an existing account from a provider's word
+    // about its email address. The copy has to carry the REMEDY, because the
+    // person reading it is very often the legitimate owner of both: sign in the
+    // way this account already signs in, then connect the provider on purpose.
     case "email_conflict":
-      return "That provider login could not be linked: another account already uses its email address.";
+      return "An account here already uses that email address. Sign in with your password and connect this provider from Settings › Connected logins.";
     case "email_required":
       return "The provider did not share a verified email address, which this instance requires.";
     case "account_disabled":

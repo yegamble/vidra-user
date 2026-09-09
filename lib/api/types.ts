@@ -315,6 +315,9 @@ export type ChangePasswordRequest = Schemas["ChangePasswordRequest"];
 export type SetPasswordRequest = Schemas["SetPasswordRequest"];
 export type StepUpStartRequest = Schemas["StepUpStartRequest"];
 export type StepUpStartResponse = Schemas["StepUpStartResponse"];
+// The response both provider-link starts share (OIDC and ATProto). Same shape
+// as a step-up start, deliberately a distinct name: they are different acts.
+export type LinkStartResponse = Schemas["LinkStartResponse"];
 export type EmailChangeRequest = Schemas["EmailChangeRequest"];
 export type EmailChangeState = Schemas["EmailChangeState"];
 export type EmailChangeConfirmRequest = Schemas["EmailChangeConfirmRequest"];

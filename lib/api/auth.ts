@@ -13,6 +13,7 @@ import type {
   EmailChangeRequest,
   EmailChangeState,
   EmailVerificationConfirmRequest,
+  LinkStartResponse,
   LoginRequest,
   MFARequiredResponse,
   MFAStatusResponse,
@@ -110,10 +111,18 @@ export const authApi = {
    * code, consumed on use) for the full session. Cookie mode like login; a
    * wrong/expired token and a wrong code are both 401.
    */
-  completeMFAChallenge: (mfaToken: string, code: string) =>
+  completeMFAChallenge: (mfaToken: string | null, code: string) =>
     apiRequest<AuthResponse>("/api/v1/auth/mfa/challenge", {
       method: "POST",
-      body: { mfa_token: mfaToken, code, cookie_mode: true },
+      // A null token means the challenge came from a PROVIDER sign-in: the
+      // callback could not hand a browser redirect a JSON token, so it parked
+      // it in the httpOnly `vidra_mfa_pending` cookie the credentials below
+      // carry back. Sending `mfa_token: null` would be a supplied-and-empty
+      // token, which is a 422; omitting the field is what tells the server to
+      // read the cookie.
+      body: mfaToken === null
+        ? { code, cookie_mode: true }
+        : { mfa_token: mfaToken, code, cookie_mode: true },
       credentials: "include",
       retryOn401: false,
     }),
@@ -167,6 +176,43 @@ export const authApi = {
   unlinkOAuthIdentity: (provider: string) =>
     apiRequest<void>(`/api/v1/me/oauth-identities/${encodeURIComponent(provider)}`, {
       method: "DELETE",
+    }),
+
+  /**
+   * POST /api/v1/auth/oauth/{provider}/link/start — connect an OIDC provider to
+   * the SIGNED-IN account (bearer required). It exists because a provider's
+   * word about an email address no longer links anything: an id_token whose
+   * address matches an existing account is refused, so connecting a provider is
+   * something the account holder does here, in a session.
+   *
+   * Runs with credentials included so the backend can seal the attempt into its
+   * signed httpOnly state cookie, and returns the authorization URL. The caller
+   * MUST hand off by a TOP-LEVEL browser navigation (window.location.assign) —
+   * never fetch `authorization_url`. The callback lands back on `return_to`
+   * with `?link=<provider>` or `?link_error=<code>`.
+   *
+   * 422 `provider_already_linked` when this account already has an identity for
+   * the provider; 503 `oauth_not_configured` when the instance has none.
+   */
+  startOAuthLink: (provider: string, returnTo: string) =>
+    apiRequest<LinkStartResponse>(
+      `/api/v1/auth/oauth/${encodeURIComponent(provider)}/link/start`,
+      { method: "POST", body: { return_to: returnTo }, credentials: "include", retryOn401: false },
+    ),
+
+  /**
+   * POST /api/v1/auth/atproto/link/start — the Bluesky twin of the above. It
+   * takes a handle, and because ATProto resolves its subject BEFORE the browser
+   * leaves, a handle already connected to another account is refused right here
+   * with 409 `identity_belongs_to_another_account` rather than after a consent
+   * screen.
+   */
+  startATProtoLink: (handle: string, returnTo: string) =>
+    apiRequest<LinkStartResponse>("/api/v1/auth/atproto/link/start", {
+      method: "POST",
+      body: { handle, return_to: returnTo },
+      credentials: "include",
+      retryOn401: false,
     }),
 
   /**

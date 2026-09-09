@@ -769,7 +769,9 @@ export interface paths {
         put?: never;
         /**
          * Complete an MFA login
-         * @description Second half of a two-factor login: exchanges the short-lived (5 min) single-purpose `mfa_token` from the login response plus a 6-digit TOTP code — or a single-use recovery code, which is consumed — for the full auth response. Rate limited like login. Supports `cookie_mode` exactly like login: the session's refresh token is then delivered as the httpOnly `vidra_refresh` cookie and omitted from the body. A tampered, expired, or repurposed token and a wrong code are both 401.
+         * @description Second half of a two-factor login: exchanges the short-lived (5 min) single-purpose `mfa_token` plus a 6-digit TOTP code — or a single-use recovery code, which is consumed — for the full auth response. Rate limited like login. Supports `cookie_mode` exactly like login: the session's refresh token is then delivered as the httpOnly `vidra_refresh` cookie and omitted from the body. A tampered, expired, or repurposed token and a wrong code are both 401.
+         *
+         *     The token comes from the login response OR, for a sign-in that went through an identity provider, from the httpOnly `vidra_mfa_pending` cookie the callback set (send credentials and omit `mfa_token`). That cookie is cleared the moment it authorises a session, and when the token it carries cannot be resolved at all; a WRONG CODE leaves it in place so the code can be retyped.
          */
         post: operations["completeMFAChallenge"];
         delete?: never;
@@ -798,6 +800,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/oauth/{provider}/link/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect an OIDC provider to the signed-in account
+         * @description Begins "connect this provider to MY account" for the authenticated caller. It exists because a provider-asserted email no longer links anything (see the callback): linking is an act the account holder performs, in a session, from settings.
+         *
+         *     It answers JSON rather than a 302 for the reason the step-up start does: the request has to carry the caller's bearer token, which a top-level navigation cannot send. Send it with credentials so the server can seal the attempt into the signed httpOnly `vidra_oauth_state` cookie (with `purpose: link` plus the caller's user and session ids INSIDE the signed payload), then top-level-navigate to `authorization_url` — never fetch it. The existing `GET /auth/oauth/{provider}/callback` finishes the round trip and redirects to `return_to` with `?link=<provider>` or `?link_error=<code>`; `identity_belongs_to_another_account` is the code for a subject already linked elsewhere, which is refused, never moved.
+         */
+        post: operations["startOAuthLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/oauth/{provider}/callback": {
         parameters: {
             query?: never;
@@ -807,7 +831,11 @@ export interface paths {
         };
         /**
          * OIDC provider callback
-         * @description The redirect target the provider sends the browser back to. Verifies the signed state cookie against the returned `state`, exchanges the code (with PKCE), verifies the id_token against the provider JWKS and the attempt nonce, then logs in: a known identity signs its account in; a new identity whose provider-verified email matches an existing account is linked to it; otherwise a new account is created (username derived from the profile and deduplicated, email_verified inherited from the claim). The session is always issued in cookie mode — the rotating refresh token is set as the httpOnly `vidra_refresh` cookie and the SPA obtains an access token via POST /api/v1/auth/refresh with credentials — and the browser is redirected (302) to the validated `return_to` path. User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`); protocol violations (missing/forged/expired state, nonce mismatch) are 400.
+         * @description The redirect target the provider sends the browser back to. Verifies the signed state cookie against the returned `state`, exchanges the code (with PKCE), verifies the id_token against the provider JWKS and the attempt nonce, then resolves the identity: a known (provider, subject) signs its account in; an identity whose email matches an existing account is REFUSED with `oauth_error=email_conflict`, verified or not, because a provider-asserted address is not consent to take an account over (connect the provider from settings instead — see `/auth/oauth/{provider}/link/start`); otherwise a new account is created (username derived from the profile and deduplicated, email_verified inherited from the claim). The session is issued in cookie mode — the rotating refresh token is set as the httpOnly `vidra_refresh` cookie and the SPA obtains an access token via POST /api/v1/auth/refresh with credentials — and the browser is redirected (302) to the validated `return_to` path.
+         *
+         *     Two callbacks do NOT end in a session. When the resolved account has two-factor enabled, no session is issued: the challenge token is set as the httpOnly `vidra_mfa_pending` cookie and the redirect carries `?mfa=required`, to be finished at POST /api/v1/auth/mfa/challenge. And when a session is ALREADY signed in in this browser, the callback is treated as a request to connect that identity to THAT account (`?link=<provider>`), or refused with `?link_error=identity_belongs_to_another_account` — never an account switch.
+         *
+         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
          */
         get: operations["completeOAuth"];
         put?: never;
@@ -832,6 +860,26 @@ export interface paths {
          * @description Begins the ATProto (Bluesky / any PDS) identity-login flow for a handle: resolves and bidirectionally verifies the handle, discovers the account's authorization server, performs a Pushed Authorization Request (PAR) with PKCE + DPoP, seals the attempt (including the ephemeral DPoP key) into a short-lived, signed, httpOnly `vidra_atproto_state` cookie, and returns the authorization URL. Call this with fetch (credentials included), then top-level-navigate the browser to `authorization_url`. The redirect_uri and client_id are always derived server-side from PUBLIC_BASE_URL — never from request parameters.
          */
         post: operations["startATProtoLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/atproto/link/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect a Bluesky (ATProto) account to the signed-in account
+         * @description The ATProto twin of `POST /auth/oauth/{provider}/link/start`, with one difference that is visible in the responses: ATProto resolves its subject (the DID) BEFORE the browser leaves, so a handle already linked to another account is refused here with 409 `identity_belongs_to_another_account` rather than as a redirect code at the callback. Send with credentials, then top-level-navigate to `authorization_url`; `GET /auth/atproto/callback` finishes it and redirects with `?link=atproto` or `?link_error=<code>`.
+         */
+        post: operations["startATProtoLink"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7751,6 +7799,10 @@ export interface components {
              */
             return_to?: string;
         };
+        LinkStartResponse: {
+            /** @description Where to send the browser by TOP-LEVEL navigation. Never fetch it: the provider needs a real user agent, and the attempt is sealed into an httpOnly cookie the navigation must carry back. */
+            authorization_url: string;
+        };
         /** @description The provider authorization URL. Hand off with a TOP-LEVEL browser navigation; never fetch it. */
         StepUpStartResponse: {
             authorization_url: string;
@@ -9679,8 +9731,8 @@ export interface components {
             recovery_codes: string[];
         };
         MFAChallengeRequest: {
-            /** @description The mfa_token from the login response (valid 5 minutes). */
-            mfa_token: string;
+            /** @description The mfa_token from the login response (valid 5 minutes). OPTIONAL since provider sign-ins gained a second factor: a sign-in that ends in a browser redirect cannot hand the client a JSON token, so the callback parks it in the short-lived httpOnly `vidra_mfa_pending` cookie and the landing URL carries only `?mfa=required`. Send the request with credentials and omit this field in that case. Supplying neither the field nor the cookie is 422. */
+            mfa_token?: string;
             /** @description The current 6-digit authenticator code (±1 period of clock skew is tolerated) or one unused recovery code. */
             code: string;
             /**
@@ -11595,14 +11647,12 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Unknown or unconfigured provider. */
+            /** @description Unknown provider name on an instance that HAS providers configured. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
+                content?: never;
             };
             /** @description Invalid return_to (not a same-origin relative path). */
             422: {
@@ -11615,6 +11665,87 @@ export interface operations {
             };
             /** @description Provider discovery failed (issuer unreachable), stable code `oauth_provider_unavailable`. No attempt cookie is sealed. */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This instance has no OIDC providers configured at all, stable code `oauth_not_configured` — the same shape ATProto's disabled path answers with, and distinct from the 404 a mistyped provider name gets on an instance that does have providers. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    startOAuthLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Same-origin relative path to return to (`/...`); absolute URLs and `//...` are rejected. Defaults to `/`. */
+                    return_to?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The authorization URL to navigate the browser to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkStartResponse"];
+                };
+            };
+            /** @description Not authenticated, or the request is not bound to a session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown provider name on an instance that HAS providers configured. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid return_to, or stable code `provider_already_linked` — this account already holds an identity for this provider. Refused HERE rather than after a consent screen. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Provider discovery failed, stable code `oauth_provider_unavailable`. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This instance has no OIDC providers configured, stable code `oauth_not_configured`. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11642,7 +11773,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Redirect to return_to. On success the `vidra_refresh` session cookie is set; on user-actionable failure the location carries `?oauth_error=<code>` instead. */
+            /** @description Redirect to return_to. On a completed sign-in the `vidra_refresh` session cookie is set; on a pending second factor the location carries `?mfa=required` and the `vidra_mfa_pending` cookie instead; on a link the location carries `?link=<provider>` or `?link_error=<code>`; on a user-actionable sign-in failure it carries `?oauth_error=<code>`. */
             302: {
                 headers: {
                     [name: string]: unknown;
@@ -11658,8 +11789,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unknown or unconfigured provider. */
+            /** @description Unknown provider name on an instance that HAS providers configured. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Code exchange or id_token verification failed upstream, stable code `oauth_exchange_failed`. No session is issued. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11667,8 +11805,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Code exchange or id_token verification failed upstream, stable code `oauth_exchange_failed`. No session is issued. */
-            502: {
+            /** @description This instance has no OIDC providers configured, stable code `oauth_not_configured`. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11726,6 +11864,80 @@ export interface operations {
                 };
             };
             /** @description ATProto login is not enabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    startATProtoLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The ATProto handle to connect (e.g. alice.bsky.social). */
+                    handle: string;
+                    /** @description Same-origin relative path to return to (`/...`). Defaults to `/`. */
+                    return_to?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The authorization URL to navigate the browser to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkStartResponse"];
+                };
+            };
+            /** @description Not authenticated, or the request is not bound to a session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Stable code `identity_belongs_to_another_account`: that Bluesky account is already connected to a different account here. Refused, never moved. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid handle or return_to, or stable code `provider_already_linked` — this account already has a Bluesky identity connected. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Identity resolution or authorization-server discovery / PAR failed upstream. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description ATProto login is not enabled on this instance, stable code `atproto_disabled`. */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -6,6 +6,7 @@ const LOGIN = /\/api\/v1\/auth\/login$/;
 const REFRESH = /\/api\/v1\/auth\/refresh$/;
 const ME = /\/api\/v1\/auth\/me$/;
 const IDENTITIES = /\/api\/v1\/me\/oauth-identities$/;
+const CHALLENGE = /\/api\/v1\/auth\/mfa\/challenge$/;
 
 const user = {
   id: "u1",
@@ -91,7 +92,14 @@ test("an email_conflict landing on the signup page explains the conflict", async
   await page.route(INSTANCE, (route) => route.fulfill({ json: instanceJson(["google"]) }));
   await page.goto("/signup?oauth=1&oauth_error=email_conflict");
 
-  await expect(page.getByText(/another account already uses its email/)).toBeVisible();
+  // The copy now carries the REMEDY, because the person reading it is usually
+  // the legitimate owner of both: a provider's word about an address no longer
+  // links anything, so the way in is the account's own credential plus a
+  // deliberate connection from settings.
+  await expect(
+    page.getByText(/An account here already uses that email address/),
+  ).toBeVisible();
+  await expect(page.getByText(/connect this provider from Settings/)).toBeVisible();
   await expect(page).toHaveURL(/\/signup$/);
 });
 
@@ -134,9 +142,51 @@ test("a failed OAuth landing (no session cookie) falls back to the form with an 
   await expect(page).toHaveURL(/\/login$/);
 });
 
+// A provider sign-in that resolved to an account with two-factor on issues NO
+// session: the callback parks the mfa_token in an httpOnly cookie and lands
+// here with the FLAG ?mfa=required. The page shows the same challenge the
+// password path uses, and the request that finishes it carries NO token —
+// deliberately, so the whole first factor never appears in a URL, a history
+// entry, a Referer header or a proxy log.
+test("a provider sign-in with two-factor lands on the challenge and finishes without a token", async ({
+  page,
+}) => {
+  await page.route(INSTANCE, (route) => route.fulfill({ json: instanceJson(["google"]) }));
+  await page.route(FEED, (route) =>
+    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+  );
+  let body: Record<string, unknown> = {};
+  await page.route(CHALLENGE, async (route) => {
+    body = route.request().postDataJSON();
+    await route.fulfill({ json: session });
+  });
+
+  await page.goto("/login?mfa=required");
+
+  await expect(page.getByRole("heading", { name: "Two-factor authentication" })).toBeVisible();
+  // No credentials form: this sign-in is already half-completed.
+  await expect(page.getByLabel("Email")).toHaveCount(0);
+  // The one-shot marker never survives into history or a bookmark.
+  await expect(page).toHaveURL(/\/login$/);
+
+  await page.getByRole("button", { name: "Use a recovery code instead" }).click();
+  await page.getByLabel("Recovery code").fill("a1b2c-3d4e5");
+  await page.getByRole("button", { name: "Verify code" }).click();
+
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
+  expect(body.mfa_token).toBeUndefined();
+  expect(body.code).toBe("a1b2c-3d4e5");
+  expect(body.cookie_mode).toBe(true);
+});
+
 // --- Connected logins on /settings -----------------------------------------
 
-async function signIn(page: Page) {
+// providers is what the INSTANCE offers, which the settings section now needs
+// as well as the identity list: a provider with no identity is a Connect row,
+// and there is no other way to acquire one since an email match stopped
+// linking.
+async function signIn(page: Page, providers: string[] = ["google"]) {
+  await page.route(INSTANCE, (route) => route.fulfill({ json: instanceJson(providers) }));
   await page.route(LOGIN, (route) => route.fulfill({ json: session }));
   await page.route(FEED, (route) =>
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
@@ -174,8 +224,15 @@ test("settings lists the linked identities and unlink removes a row", async ({ p
   await expect(page.getByText("ada@gmail.test", { exact: false })).toBeVisible();
 
   await page.getByRole("button", { name: "Unlink Google" }).click();
-  await expect(page.getByText("Google")).toHaveCount(0);
-  await expect(page.getByText("Github")).toBeVisible();
+  // The ROW stays and flips to a Connect control: Google is a provider this
+  // instance offers, and a disconnection the person can no longer undo would be
+  // a one-way door — connecting from here is the only linking path there is.
+  await expect(page.getByRole("button", { name: "Connect Google" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Unlink Google" })).toHaveCount(0);
+  await expect(page.getByText("ada@gmail.test", { exact: false })).toHaveCount(0);
+  // Github is NOT offered by this instance, but the account has an identity for
+  // it, so it stays listed and stays unlinkable.
+  await expect(page.getByRole("button", { name: "Unlink Github" })).toBeVisible();
   expect(deleted).toBe(true);
 });
 
@@ -210,11 +267,28 @@ test("unlinking the last sign-in method surfaces the 422 with the remedy", async
   await expect(page.getByText("Google")).toBeVisible(); // the row stays
 });
 
-test("an account with no linked identities shows the empty copy", async ({ page }) => {
+test("an unlinked provider the instance offers gets a Connect control", async ({ page }) => {
   await signIn(page);
   await page.route(IDENTITIES, (route) => route.fulfill({ json: { identities: [] } }));
 
   await page.getByRole("button", { name: "Open account menu" }).click();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
-  await expect(page.getByText("No external logins are linked to this account.")).toBeVisible();
+
+  // Connecting a provider is now a deliberate act performed HERE, because an
+  // id_token whose email matches an existing account is refused rather than
+  // linked. A configured provider with no identity is exactly that row.
+  await expect(page.getByRole("button", { name: "Connect Google" })).toBeVisible();
+  await expect(page.getByText("Not connected")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Unlink Google" })).toHaveCount(0);
+});
+
+test("an instance offering no providers says so", async ({ page }) => {
+  await signIn(page, []);
+  await page.route(IDENTITIES, (route) => route.fulfill({ json: { identities: [] } }));
+
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(
+    page.getByText("This instance does not offer any external sign-in providers."),
+  ).toBeVisible();
 });
