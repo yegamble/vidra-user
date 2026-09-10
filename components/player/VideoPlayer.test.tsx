@@ -150,6 +150,77 @@ describe("VideoPlayer shell", () => {
     expect(cc.getAttribute("aria-pressed")).toBe("false");
   });
 
+  // A text-track list a media element can FORGET, which is what Safari does on
+  // the native-HLS path: <video src> points straight at the master playlist, so
+  // the element runs its own load after the effect that turned captions on and
+  // comes back with every mode reset to "disabled". jsdom implements no media
+  // stack at all, so the list is faked with exactly that semantic.
+  function fakeTextTracks(labels: string[]) {
+    const listeners: Record<string, Array<() => void>> = {};
+    const tracks = labels.map((label) => ({ label, kind: "captions", language: "en", mode: "disabled" }));
+    return {
+      tracks,
+      list: {
+        get length() {
+          return tracks.length;
+        },
+        item: (i: number) => tracks[i],
+        addEventListener: (type: string, fn: () => void) => {
+          (listeners[type] ??= []).push(fn);
+        },
+        removeEventListener: (type: string, fn: () => void) => {
+          listeners[type] = (listeners[type] ?? []).filter((f) => f !== fn);
+        },
+        [Symbol.iterator]: function* () {
+          yield* tracks;
+        },
+      } as unknown as TextTrackList,
+      forget: () => tracks.forEach((t) => (t.mode = "disabled")),
+      emit: (type: string) => (listeners[type] ?? []).forEach((fn) => fn()),
+    };
+  }
+
+  it("turns captions on by default when the user asked for it", async () => {
+    const fake = fakeTextTracks(["English"]);
+    vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, captions_default: true });
+    render(<Harness tracks={[{ language: "en", label: "English", url: "blob:cc" }]} />);
+    await waitFor(() => expect(fake.tracks[0].mode).toBe("showing"));
+    expect(screen.getByRole("button", { name: "Captions" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("re-applies captions-on-by-default after the element's own load forgets the mode", async () => {
+    const fake = fakeTextTracks(["English"]);
+    vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, captions_default: true });
+    const { container } = render(<Harness tracks={[{ language: "en", label: "English", url: "blob:cc" }]} />);
+    await waitFor(() => expect(fake.tracks[0].mode).toBe("showing"));
+    const video = container.querySelector("video") as HTMLVideoElement;
+    // The element loads its own resource and comes back with the modes reset —
+    // measured in real Safari 26.5 on the native-HLS engine, where captions
+    // never came on while hls.js (whose element has no src of its own) always
+    // did. One application is not enough.
+    act(() => {
+      fake.forget();
+      fireEvent.loadedData(video);
+    });
+    expect(fake.tracks[0].mode).toBe("showing");
+  });
+
+  it("does not fight a viewer who turns captions back off", async () => {
+    const fake = fakeTextTracks(["English"]);
+    vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);
+    hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, captions_default: true });
+    const { container } = render(<Harness tracks={[{ language: "en", label: "English", url: "blob:cc" }]} />);
+    await waitFor(() => expect(fake.tracks[0].mode).toBe("showing"));
+    fireEvent.click(screen.getByRole("button", { name: "Captions" }));
+    expect(fake.tracks[0].mode).toBe("disabled");
+    act(() => {
+      fireEvent.loadedData(container.querySelector("video") as HTMLVideoElement);
+    });
+    expect(fake.tracks[0].mode).toBe("disabled");
+  });
+
   it("drives play/pause and reflects the media state", () => {
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;

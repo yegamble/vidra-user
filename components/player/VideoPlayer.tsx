@@ -217,6 +217,10 @@ export function VideoPlayer({
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
+  // Whether the viewer has operated the captions control on this player. The
+  // per-user "captions on by default" re-asserts itself while the media element
+  // is still settling (see below); once the viewer has chosen, it stops.
+  const captionsChosenRef = useRef(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Picture-in-Picture (PLAY-05). pipSupported is resolved in an effect (reads
   // document.pictureInPictureEnabled — a client-only global), so it starts false
@@ -297,6 +301,9 @@ export function VideoPlayer({
     for (const t of list) t.mode = "disabled";
     if (!anyShowing) list[0].mode = "showing";
     setCaptionsOn(!anyShowing);
+    // The viewer has now said what they want, so the per-user default stops
+    // re-asserting itself (see the captions_default effect below).
+    captionsChosenRef.current = true;
   }, [videoRef]);
 
   const toggleFullscreen = useCallback(() => {
@@ -505,12 +512,37 @@ export function VideoPlayer({
     if (appliedCaptionsRef.current === video.id) return;
     const el = videoRef.current;
     if (!el) return;
-    const list = Array.from(el.textTracks);
-    if (list.length === 0) return; // <track>s not attached yet — retry on change
-    appliedCaptionsRef.current = video.id;
-    for (const t of list) t.mode = "disabled";
-    list[0].mode = "showing";
-    setCaptionsOn(true);
+    const apply = () => {
+      if (captionsChosenRef.current) return;
+      const list = Array.from(el.textTracks);
+      if (list.length === 0) return; // <track>s not attached yet — retry on change
+      if (list.some((t) => t.mode === "showing")) {
+        setCaptionsOn(true);
+        return;
+      }
+      appliedCaptionsRef.current = video.id;
+      for (const t of list) t.mode = "disabled";
+      list[0].mode = "showing";
+      setCaptionsOn(true);
+    };
+    apply();
+    // ONE APPLICATION IS NOT ENOUGH on an engine that hands the master playlist
+    // to the media element itself. Native HLS sets <video src> to the master, so
+    // the element runs its own load AFTER this effect, attaches the stream's own
+    // in-band text tracks, and comes back with every mode reset to "disabled" —
+    // measured in real Safari 26.5, where "captions on by default" never came on
+    // natively while it always did through hls.js, whose element has no src of
+    // its own to load. Re-assert on the element's load milestones (and when the
+    // list itself changes), until the viewer says otherwise.
+    const list = el.textTracks;
+    el.addEventListener("loadeddata", apply);
+    el.addEventListener("loadedmetadata", apply);
+    if (typeof list.addEventListener === "function") list.addEventListener("addtrack", apply);
+    return () => {
+      el.removeEventListener("loadeddata", apply);
+      el.removeEventListener("loadedmetadata", apply);
+      if (typeof list.removeEventListener === "function") list.removeEventListener("addtrack", apply);
+    };
   }, [settings.captions_default, tracks.length, video.id, videoRef]);
 
   // Reflect fullscreen changes (including exits via Esc / browser UI) on the
