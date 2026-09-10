@@ -185,7 +185,10 @@ describe("VideoPlayer shell", () => {
     vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);
     hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, captions_default: true });
     render(<Harness tracks={[{ language: "en", label: "English", url: "blob:cc" }]} />);
-    await waitFor(() => expect(fake.tracks[0].mode).toBe("showing"));
+    // "hidden", not "showing": ON means the track is parsed and firing cuechange
+    // while CaptionLayer draws the cues clear of the control bar. Only PiP hands
+    // rendering back to the browser.
+    await waitFor(() => expect(fake.tracks[0].mode).toBe("hidden"));
     expect(screen.getByRole("button", { name: "Captions" }).getAttribute("aria-pressed")).toBe("true");
   });
 
@@ -194,7 +197,7 @@ describe("VideoPlayer shell", () => {
     vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);
     hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, captions_default: true });
     const { container } = render(<Harness tracks={[{ language: "en", label: "English", url: "blob:cc" }]} />);
-    await waitFor(() => expect(fake.tracks[0].mode).toBe("showing"));
+    await waitFor(() => expect(fake.tracks[0].mode).toBe("hidden"));
     const video = container.querySelector("video") as HTMLVideoElement;
     // The element loads its own resource and comes back with the modes reset —
     // measured in real Safari 26.5 on the native-HLS engine, where captions
@@ -204,7 +207,7 @@ describe("VideoPlayer shell", () => {
       fake.forget();
       fireEvent.loadedData(video);
     });
-    expect(fake.tracks[0].mode).toBe("showing");
+    expect(fake.tracks[0].mode).toBe("hidden");
   });
 
   it("does not fight a viewer who turns captions back off", async () => {
@@ -212,7 +215,7 @@ describe("VideoPlayer shell", () => {
     vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);
     hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, captions_default: true });
     const { container } = render(<Harness tracks={[{ language: "en", label: "English", url: "blob:cc" }]} />);
-    await waitFor(() => expect(fake.tracks[0].mode).toBe("showing"));
+    await waitFor(() => expect(fake.tracks[0].mode).toBe("hidden"));
     fireEvent.click(screen.getByRole("button", { name: "Captions" }));
     expect(fake.tracks[0].mode).toBe("disabled");
     act(() => {
@@ -463,5 +466,190 @@ describe("VideoPlayer shell", () => {
     // A new source (navigation / fallback) clears any stale end card.
     act(() => void fireEvent(video, new Event("loadstart")));
     expect(screen.queryByTestId("player-end-card")).toBeNull();
+  });
+
+  // ---- app-rendered captions (the cue must clear the control bar) ----
+  //
+  // jsdom implements no media stack, so textTracks is faked — with the two
+  // behaviours a real browser gives us and this layer depends on: setting a
+  // track's `mode` fires `change` on the LIST, and a track in `hidden` mode
+  // still fires `cuechange` carrying its active cues.
+  function fakeCaptionTracks(count = 1) {
+    const listListeners: Record<string, Array<() => void>> = {};
+    const emit = (type: string) => (listListeners[type] ?? []).forEach((fn) => fn());
+    const tracks = Array.from({ length: count }, (_, i) => {
+      const cueListeners: Array<() => void> = [];
+      let mode = "disabled";
+      const track = {
+        kind: "captions",
+        language: `l${i}`,
+        label: `Track ${i}`,
+        activeCues: null as unknown as TextTrackCueList | null,
+        get mode() {
+          return mode;
+        },
+        set mode(next: string) {
+          if (next === mode) return;
+          mode = next;
+          emit("change");
+        },
+        addEventListener: (type: string, fn: () => void) => {
+          if (type === "cuechange") cueListeners.push(fn);
+        },
+        removeEventListener: (type: string, fn: () => void) => {
+          const at = cueListeners.indexOf(fn);
+          if (at >= 0) cueListeners.splice(at, 1);
+        },
+        /** Test-only: play (or clear, with null) a cue on this track. */
+        cue(text: string | null) {
+          track.activeCues = (
+            text === null ? [] : [{ startTime: 0, endTime: 1, text, id: "" }]
+          ) as unknown as TextTrackCueList;
+          cueListeners.forEach((fn) => fn());
+        },
+      };
+      return track;
+    });
+    const list = {
+      get length() {
+        return tracks.length;
+      },
+      item: (i: number) => tracks[i],
+      addEventListener: (type: string, fn: () => void) => {
+        (listListeners[type] ??= []).push(fn);
+      },
+      removeEventListener: (type: string, fn: () => void) => {
+        listListeners[type] = (listListeners[type] ?? []).filter((f) => f !== fn);
+      },
+      [Symbol.iterator]: function* () {
+        yield* tracks;
+      },
+    };
+    return { tracks, list: list as unknown as TextTrackList };
+  }
+
+  const CC_TRACKS: CaptionTrack[] = [{ language: "l0", label: "Track 0", url: "blob:cc" }];
+
+  function installTracks(count = 1) {
+    const fake = fakeCaptionTracks(count);
+    vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);
+    return fake;
+  }
+
+  it("draws the active cues itself, with the track kept out of the browser's own renderer", () => {
+    const fake = installTracks();
+    render(<Harness tracks={CC_TRACKS} />);
+
+    act(() => void fireEvent.click(screen.getByRole("button", { name: "Captions" })));
+    // NOT "showing": a natively drawn cue is positioned at the bottom of the
+    // video element with no knowledge of our overlaid bar, which is how caption
+    // text ended up behind the transport row. hidden = parsed, ours to draw.
+    expect(fake.tracks[0].mode).toBe("hidden");
+    expect(screen.getByRole("button", { name: "Captions" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.queryByTestId("player-caption-cue")).toBeNull();
+
+    act(() => void fake.tracks[0].cue("Cue from the fixture"));
+    expect(screen.getByTestId("player-caption-cue").textContent).toBe("Cue from the fixture");
+    // Decoration over the real, accessible control — assistive tech is not
+    // exposed to native cues either.
+    expect(screen.getByTestId("player-captions").getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("clears the drawn cues when captions are switched off", () => {
+    const fake = installTracks();
+    render(<Harness tracks={CC_TRACKS} />);
+    act(() => void fireEvent.click(screen.getByRole("button", { name: "Captions" })));
+    act(() => void fake.tracks[0].cue("Still on screen"));
+    expect(screen.getByTestId("player-caption-cue")).toBeTruthy();
+
+    act(() => void fireEvent.click(screen.getByRole("button", { name: "Captions" })));
+
+    expect(fake.tracks[0].mode).toBe("disabled");
+    expect(screen.queryByTestId("player-caption-cue")).toBeNull();
+  });
+
+  it("follows a switch to another track instead of stranding the old track's cue", () => {
+    const fake = installTracks(2);
+    render(<Harness tracks={CC_TRACKS} />);
+    act(() => void fireEvent.click(screen.getByRole("button", { name: "Captions" })));
+    act(() => void fake.tracks[0].cue("English"));
+    expect(screen.getByTestId("player-caption-cue").textContent).toBe("English");
+
+    // The selection moves to the second track (a language pick, or an engine
+    // swapping the list): the first track's cue must not survive it.
+    act(() => {
+      fake.tracks[0].mode = "disabled";
+      fake.tracks[1].mode = "hidden";
+    });
+    expect(screen.queryByTestId("player-caption-cue")).toBeNull();
+
+    act(() => void fake.tracks[1].cue("Français"));
+    expect(screen.getByTestId("player-caption-cue").textContent).toBe("Français");
+  });
+
+  it("hands captions back to the browser in picture-in-picture, and takes them back on exit", () => {
+    const fake = installTracks();
+    const { container } = render(<Harness tracks={CC_TRACKS} />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    act(() => void fireEvent.click(screen.getByRole("button", { name: "Captions" })));
+    act(() => void fake.tracks[0].cue("In the stage"));
+    expect(screen.getByTestId("player-caption-cue")).toBeTruthy();
+
+    // The PiP window is the browser's surface; our overlay cannot follow the
+    // video into it, so the browser has to draw the cues there.
+    act(() => void fireEvent(video, new Event("enterpictureinpicture")));
+    expect(fake.tracks[0].mode).toBe("showing");
+    expect(screen.queryByTestId("player-caption-cue")).toBeNull();
+    // Captions are still ON — only the renderer changed hands.
+    expect(screen.getByRole("button", { name: "Captions" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+
+    act(() => void fireEvent(video, new Event("leavepictureinpicture")));
+    expect(fake.tracks[0].mode).toBe("hidden");
+    act(() => void fake.tracks[0].cue("Back in the stage"));
+    expect(screen.getByTestId("player-caption-cue").textContent).toBe("Back in the stage");
+  });
+
+  it("lifts the cue above the MEASURED control bar, and settles it into the title-safe band when the chrome hides", () => {
+    // jsdom has no layout: give the stage and the bar a size so the inset math
+    // is exercised rather than collapsing to the floor.
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const id = this.dataset.testid;
+      const height = id === "video-player" ? 360 : id === "player-controls" ? 96 : 0;
+      return { height, width: 640, top: 0, left: 0, right: 640, bottom: height } as DOMRect;
+    });
+    vi.useFakeTimers();
+    try {
+      const fake = installTracks();
+      const { container } = render(<Harness tracks={CC_TRACKS} />);
+      const video = container.querySelector("video") as HTMLVideoElement;
+      act(() => void fireEvent.click(screen.getByRole("button", { name: "Captions" })));
+      act(() => void fake.tracks[0].cue("Above the bar"));
+
+      // Paused on mount → the chrome is pinned up → the cue clears the 96px bar.
+      const layer = screen.getByTestId("player-captions");
+      expect(layer.getAttribute("data-controls")).toBe("visible");
+      expect(layer.style.bottom).toBe("110px"); // 96 bar + 14 gap
+
+      // Playback starts, the chrome auto-hides → the cue drops to the title-safe
+      // band (6% of a 360px stage = 21.6px, floored at 24px), never to the edge.
+      act(() => void fireEvent(video, new Event("play")));
+      act(() => void vi.advanceTimersByTime(3000));
+      expect(layer.getAttribute("data-controls")).toBe("hidden");
+      expect(layer.style.bottom).toBe("24px");
+
+      // ...and back up the moment the chrome returns, on the bar's own motion
+      // token (transition-[bottom] inherits the same duration/easing).
+      act(() => void fireEvent(video, new Event("pause")));
+      expect(layer.style.bottom).toBe("110px");
+      expect(layer.className).toContain("transition-[bottom]");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

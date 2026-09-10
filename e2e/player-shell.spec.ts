@@ -101,7 +101,10 @@ test("the captions button toggles the track mode and reflects aria-pressed", asy
   const mode = () =>
     page.locator("video").evaluate((el: HTMLVideoElement) => el.textTracks[0]?.mode ?? "none");
   await cc.click();
-  await expect.poll(mode).toBe("showing");
+  // "hidden" is the ON mode: the track is parsed and firing cuechange, and the
+  // player's CaptionLayer draws the cues clear of the control bar. Only PiP
+  // hands rendering back to the browser ("showing").
+  await expect.poll(mode).toBe("hidden");
   await expect(cc).toHaveAttribute("aria-pressed", "true");
   await cc.click();
   await expect.poll(mode).toBe("disabled");

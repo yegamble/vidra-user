@@ -139,7 +139,11 @@ test("C toggles captions on and off", async ({ page }) => {
   const mode = () =>
     page.locator("video").evaluate((el: HTMLVideoElement) => el.textTracks[0]?.mode ?? "none");
   await page.keyboard.press("c");
-  await expect.poll(mode).toBe("showing");
+  // "hidden", not "showing": captions ON means the track is parsed and firing
+  // cuechange while the player's own CaptionLayer draws the cues where they
+  // clear the control bar. Only picture-in-picture hands rendering back to the
+  // browser ("showing"), because our overlay cannot follow the video there.
+  await expect.poll(mode).toBe("hidden");
   await page.keyboard.press("c");
   await expect.poll(mode).toBe("disabled");
 });
