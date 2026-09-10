@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 
+import { CaptionLayer } from "@/components/player/CaptionLayer";
 import { EndCard } from "@/components/player/EndCard";
 import { OverlayButton } from "@/components/player/OverlayButton";
 import {
@@ -71,6 +72,25 @@ import { useStoryboard } from "@/lib/use-storyboard";
 // playing before auto-hiding (they never hide while paused, focused, or a menu
 // holds focus inside the bar).
 const IDLE_HIDE_MS = 3000;
+
+// Which text-track mode "captions on" means for THIS element right now.
+//
+// Normally `hidden`: the track is parsed and fires cuechange, but the browser
+// does not paint it — CaptionLayer does, inside the stage, where it can be held
+// clear of the overlaid control bar. A natively drawn (`showing`) cue is
+// positioned at the bottom of the video element with no knowledge of our chrome,
+// which is exactly how caption text ended up behind the transport row.
+//
+// The one exception is picture-in-picture: that window is the browser's, our
+// overlay cannot follow the video into it, so there the browser has to draw the
+// captions and the mode goes back to `showing`.
+function captionsOnMode(el: HTMLVideoElement): "hidden" | "showing" {
+  const webkitMode = (el as { webkitPresentationMode?: string }).webkitPresentationMode;
+  const inPip =
+    (typeof document !== "undefined" && document.pictureInPictureElement === el) ||
+    webkitMode === "picture-in-picture";
+  return inPip ? "showing" : "hidden";
+}
 
 export interface CaptionTrack {
   language: string;
@@ -145,6 +165,10 @@ export function VideoPlayer({
 }) {
   const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride, playbackToken);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // The overlay control bar, handed to CaptionLayer so the captions can be held
+  // above its MEASURED height — it retiers by container query, so no pixel
+  // constant would be right at every stage width.
+  const controlsRef = useRef<HTMLDivElement | null>(null);
 
   // Seek-preview storyboard (CORE-16): null when the detail has none, so the
   // seek bar's scrub bubble degrades to the timestamp alone. The VTT/sprite only
@@ -297,14 +321,30 @@ export function VideoPlayer({
     if (!el) return;
     const list = Array.from(el.textTracks);
     if (list.length === 0) return;
-    const anyShowing = list.some((t) => t.mode === "showing");
+    // ON is now "not disabled" rather than "showing": the selected track runs
+    // hidden while our own layer draws it (see captionsOnMode).
+    const anyOn = list.some((t) => t.mode !== "disabled");
     for (const t of list) t.mode = "disabled";
-    if (!anyShowing) list[0].mode = "showing";
-    setCaptionsOn(!anyShowing);
+    if (!anyOn) list[0].mode = captionsOnMode(el);
+    setCaptionsOn(!anyOn);
     // The viewer has now said what they want, so the per-user default stops
     // re-asserting itself (see the captions_default effect below).
     captionsChosenRef.current = true;
   }, [videoRef]);
+
+  // Move whichever track is currently ON between the two ON modes, without
+  // turning captions on or off. Used when the video crosses into or out of
+  // picture-in-picture, where the renderer changes hands.
+  const applyCaptionsMode = useCallback(
+    (mode: "hidden" | "showing") => {
+      const el = videoRef.current;
+      if (!el) return;
+      for (const t of Array.from(el.textTracks)) {
+        if (t.mode !== "disabled" && t.mode !== mode) t.mode = mode;
+      }
+    },
+    [videoRef],
+  );
 
   const toggleFullscreen = useCallback(() => {
     const c = containerRef.current;
@@ -465,7 +505,7 @@ export function VideoPlayer({
     const el = videoRef.current;
     if (!el) return;
     const list = el.textTracks;
-    const sync = () => setCaptionsOn(Array.from(list).some((t) => t.mode === "showing"));
+    const sync = () => setCaptionsOn(Array.from(list).some((t) => t.mode !== "disabled"));
     sync();
     // TextTrackList is an EventTarget in browsers; some test DOMs (jsdom) omit
     // the listener methods, so guard before wiring the live sync.
@@ -516,13 +556,15 @@ export function VideoPlayer({
       if (captionsChosenRef.current) return;
       const list = Array.from(el.textTracks);
       if (list.length === 0) return; // <track>s not attached yet — retry on change
-      if (list.some((t) => t.mode === "showing")) {
+      // "Already on" is any mode but disabled: the ON mode is `hidden` (our own
+      // layer draws the cues) except inside PiP, where it is `showing`.
+      if (list.some((t) => t.mode !== "disabled")) {
         setCaptionsOn(true);
         return;
       }
       appliedCaptionsRef.current = video.id;
       for (const t of list) t.mode = "disabled";
-      list[0].mode = "showing";
+      list[0].mode = captionsOnMode(el);
       setCaptionsOn(true);
     };
     apply();
@@ -565,15 +607,36 @@ export function VideoPlayer({
         !el.disablePictureInPicture,
     );
     setPipActive(document.pictureInPictureElement === el);
-    const onEnter = () => setPipActive(true);
-    const onLeave = () => setPipActive(false);
+    // Captions change renderer at the PiP boundary: our overlay lives in the
+    // stage and cannot follow the video into the PiP window, so on the way in
+    // the track goes back to `showing` and the browser draws it there; on the
+    // way out it returns to `hidden` and the overlay takes over again. Missing
+    // this would leave a PiP viewer with no captions at all.
+    const onEnter = () => {
+      setPipActive(true);
+      applyCaptionsMode("showing");
+    };
+    const onLeave = () => {
+      setPipActive(false);
+      applyCaptionsMode("hidden");
+    };
+    // Safari drives PiP through its own presentation-mode event (the same one
+    // that reports its native fullscreen), so the standard enter/leave pair is
+    // not enough there. "fullscreen" and "inline" both mean our layer is back.
+    const onPresentationChange = () => {
+      const mode = (el as { webkitPresentationMode?: string }).webkitPresentationMode;
+      if (mode === "picture-in-picture") onEnter();
+      else onLeave();
+    };
     el.addEventListener("enterpictureinpicture", onEnter);
     el.addEventListener("leavepictureinpicture", onLeave);
+    el.addEventListener("webkitpresentationmodechanged", onPresentationChange);
     return () => {
       el.removeEventListener("enterpictureinpicture", onEnter);
       el.removeEventListener("leavepictureinpicture", onLeave);
+      el.removeEventListener("webkitpresentationmodechanged", onPresentationChange);
     };
-  }, [videoRef, playback.src]);
+  }, [videoRef, playback.src, applyCaptionsMode]);
 
   // Player keyboard shortcuts (the full PLAY-09 set — see lib/player-shortcuts).
   // Ignored while typing / operating another control (SHORTCUT_IGNORE_SELECTOR)
@@ -758,6 +821,18 @@ export function VideoPlayer({
         Your browser does not support the video tag.
       </video>
 
+      {/* The cues, drawn by us rather than the browser, so they can sit clear of
+          the control bar instead of behind it. A child of the stage, so it
+          follows theater and fullscreen; under the bar's z-index by
+          construction. */}
+      <CaptionLayer
+        videoRef={videoRef}
+        stageRef={containerRef}
+        controlsRef={controlsRef}
+        trackCount={tracks.length}
+        controlsVisible={controlsVisible}
+      />
+
       {children}
 
       {/* Center play affordance while paused — decorative; the surface click and
@@ -780,6 +855,7 @@ export function VideoPlayer({
           (never display), so focus is never lost; global reduced-motion neutralizes
           the fade. */}
       <div
+        ref={controlsRef}
         data-testid="player-controls"
         className={cn(
           "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0.5 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-1.5 pb-1.5 pt-10 transition-opacity sm:px-3 sm:pb-2",
