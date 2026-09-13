@@ -16,7 +16,17 @@ definition of required, and fails if any listed lane failed, was cancelled,
 timed out, or **never ran**.
 
 Required: `frontend`, `contract`, `e2e-backed (local)`, `e2e-backed (s3)`,
-`channel-sync-backed`, `ipfs-backed`, plus `guard` when its path filter fires.
+`channel-sync-backed`, `ipfs-backed`, `dependency-audit`, plus `guard` when its
+path filter fires.
+
+**`dependency-audit` can go red with no change in this repo.** It audits
+`package-lock.json` on every PR, on main and daily, because advisories are
+published against lockfiles nobody touched (v0.6.4 shipped `next@16.3.0` past
+two critical advisories that way). Any advisory in runtime dependencies, or
+high/critical anywhere, fails; so does an audit that could not reach the
+advisory endpoint. The fix is upgrading the named package — a security bump is
+the one exception to "Dependabot owns bumps" below, because Dependabot security
+updates are not enabled here. Never raise the audit level to get green.
 
 **`contract` is core-first, and its red is correct.** It checks this client
 against vidra-core's DEFAULT BRANCH, so a PR here that consumes a new endpoint
@@ -105,7 +115,8 @@ npm run test          # vitest, ~1.4k tests
    themes both matter), match existing idioms:
    `EmptyState`/`ErrorState`/`Spinner`, `Dropdown` `triggerVariant="icon"`,
    portal patterns for menus/modals.
-6. **Do not bump dependencies** (Dependabot owns bumps), do not touch
+6. **Do not bump dependencies** (Dependabot owns bumps — except the smallest
+   upgrade that clears a `dependency-audit` finding), do not touch
    `.github/workflows`, never commit secrets or `.env` files.
 
 ## Git hygiene — finished means merged (all agents / AI tools)

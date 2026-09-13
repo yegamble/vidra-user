@@ -1,0 +1,46 @@
+name: dependency-audit
+
+# Advisory gate over package-lock.json (QLT-01 / REL-01 security facet). The
+# policy and the reason it exists live in scripts/ci/dependency-audit.sh; this
+# file only decides WHEN it runs:
+#   pull_request / push — a change must not introduce or keep a known advisory;
+#   schedule            — advisories are published against lockfiles nobody is
+#                         touching (v0.6.4 shipped next@16.3.0 that way), so
+#                         main is re-audited daily with no commit required.
+#
+# Lockfile-only: no `npm ci`, so the audit sees exactly what package-lock.json
+# pins and needs no install scripts or build. Deliberately NOT part of
+# `npm run ci`: that gate is offline-reproducible, and "a new advisory exists"
+# must read differently from "this change broke the build".
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Node 26 like every other lane (owner ruling 2026-09-08): the npm that
+      # ships with it is the one whose audit semantics this gate was verified on.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "26"
+
+      - name: Audit the lockfile against the advisory database
+        run: npm run audit:deps

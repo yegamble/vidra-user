@@ -37,6 +37,12 @@ e2e-backed (s3)
 channel-sync-backed
 ipfs-backed
 
+# dependency-audit.yml — package-lock.json against the advisory database: any
+# advisory in runtime dependencies, or high/critical anywhere, fails. It also
+# fails when the audit cannot run — an unreachable advisory endpoint is not a
+# clean scan. Policy lives in scripts/ci/dependency-audit.sh.
+dependency-audit
+
 # ci-guard.yml — action pins, no hidden continue-on-error, npm ci not npm
 # install, frontend-ci really runs the canonical gate, and required-checks.txt
 # names only jobs that exist. Path-filtered to .github/workflows/**.
