@@ -18,6 +18,10 @@ timed out, or **never ran**.
 Required: `frontend`, `contract`, `e2e-backed (local)`, `e2e-backed (s3)`,
 `channel-sync-backed`, `ipfs-backed`, `dependency-audit`, plus `guard` when its
 path filter fires.
+Removing an entry from the manifest fails `ci-guard`
+(`scripts/ci/check-required-manifest-removals.sh`, compared against the base
+branch) unless the same file carries `# retired: <name> — <reason>` for it:
+retiring a lane is a deliberate, diff-visible act, never a quiet deletion.
 
 **`dependency-audit` can go red with no change in this repo.** It audits
 `package-lock.json` on every PR, on main and daily, because advisories are
