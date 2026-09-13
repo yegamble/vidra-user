@@ -37,7 +37,22 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-RUN addgroup --system --gid 1001 nodejs \
+# `apk upgrade` FIRST, in the runner only (the one stage that ships): the base
+# image lags the package repository. node:26-alpine inherits alpine:3.24's
+# package set, which is rebuilt for Alpine point releases, not for each
+# package fix — so a plain rebuild re-ships the base's copy. v0.6.4 shipped
+# libssl3/libcrypto3 3.5.7-r0 (ten OpenSSL CVEs, CVSS up to 9.8) while
+# 3.5.8-r0 was already in v3.24 main. Exposure here is low — the node binary
+# embeds its own OpenSSL and does not link libssl; apk and busybox wget's
+# https helper do — but a scanner cannot tell, and an advisory against the
+# image is a real finding for every operator who scans.
+# Trade-off, stated honestly: the image now takes whatever v3.24 main serves
+# at build time, so two builds of one commit can differ in patch-level
+# packages; the scan of the pushed digest is the record of what shipped. A
+# builder that reuses a cached layer for this RUN (e.g. publish-container's
+# GHA cache, same base digest) also reuses its package set.
+RUN apk upgrade --no-cache \
+  && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 # Standalone output bundles a minimal server + pruned node_modules; static assets
 # and public/ must be copied alongside it.
