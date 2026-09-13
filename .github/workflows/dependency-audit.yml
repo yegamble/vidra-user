@@ -7,6 +7,8 @@ name: dependency-audit
 #   schedule            — advisories are published against lockfiles nobody is
 #                         touching (v0.6.4 shipped next@16.3.0 that way), so
 #                         main is re-audited daily with no commit required.
+#                         A red scheduled run opens or updates ONE tracking
+#                         issue (last step): nothing else surfaces it.
 #
 # Lockfile-only: no `npm ci`, so the audit sees exactly what package-lock.json
 # pins and needs no install scripts or build. Deliberately NOT part of
@@ -34,6 +36,12 @@ jobs:
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # issues: write exists for the last step alone — the tracking issue a red
+    # SCHEDULED run opens. A job-level block replaces the workflow-level one
+    # wholesale, so contents: read is restated for the checkout.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,3 +55,32 @@ jobs:
 
       - name: Audit the lockfile against the advisory database
         run: npm run audit:deps
+
+      # A red scheduled run has no PR to be red on: GitHub emails whoever last
+      # edited the cron line, and nothing else changes. So it opens ONE tracking
+      # issue, found again by its fixed title on later red runs and commented
+      # on rather than duplicated. PR and push runs skip this: their red is
+      # already on the PR or the commit.
+      - name: Open or update the tracking issue for a red scheduled run
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "dependency-audit: the scheduled audit of main is red"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          body="The daily dependency audit of \`main\` failed.
+
+          - run: ${RUN_URL}
+          - commit: ${SHA}
+
+          The run log names the advisory. The fix is the smallest upgrade of the named package (AGENTS.md); never raise the audit level or narrow the scope. Close this issue once a scheduled run on main is green again."
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"$TITLE\" in:title" --json number,title \
+            --jq 'map(select(.title == env.TITLE)) | .[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
+            echo "commented on tracking issue #$number"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$body"
+          fi
