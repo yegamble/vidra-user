@@ -26,7 +26,9 @@ two critical advisories that way). Any advisory in runtime dependencies, or
 high/critical anywhere, fails; so does an audit that could not reach the
 advisory endpoint. The fix is upgrading the named package — a security bump is
 the one exception to "Dependabot owns bumps" below, because Dependabot security
-updates are not enabled here. Never raise the audit level to get green.
+updates are not enabled here. Never raise the audit level to get green. A red
+DAILY run on main blocks nothing by itself and emails only whoever last edited
+the cron line — whoever sees it opens the fix PR.
 
 **`contract` is core-first, and its red is correct.** It checks this client
 against vidra-core's DEFAULT BRANCH, so a PR here that consumes a new endpoint
