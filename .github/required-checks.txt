@@ -49,6 +49,11 @@ dependency-audit
 # names only jobs that exist. Path-filtered to .github/workflows/**.
 ?guard
 
+# docker-build.yml — the production Dockerfile builds (linux/amd64, no push)
+# the way the release builds it. Path-filtered to Dockerfile and
+# publish-container.yml: the two files that can break it.
+?docker-build
+
 # NOT required, deliberately:
 #   quarantine-backed   frontend-e2e-optional.yml — scheduled/dispatch only,
 #                       because its instance flag contradicts the main matrix
