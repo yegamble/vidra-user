@@ -23,8 +23,11 @@ on:
 permissions:
   contents: read
 
+# The event is part of the group: the daily scheduled run lands on main's head
+# commit, and must never cancel that same commit's push run — a `cancelled`
+# check-run fails ci-required.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
