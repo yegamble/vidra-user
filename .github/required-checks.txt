@@ -38,9 +38,10 @@ channel-sync-backed
 ipfs-backed
 
 # dependency-audit.yml — package-lock.json against the advisory database: any
-# advisory in runtime dependencies, or high/critical anywhere, fails. It also
-# fails when the audit cannot run — an unreachable advisory endpoint is not a
-# clean scan. Policy lives in scripts/ci/dependency-audit.sh.
+# advisory in the non-dev dependency tree, or high/critical anywhere, fails. It
+# also fails when the audit cannot run — an unreachable advisory endpoint, or a
+# lockfile too hollow to have been examined, is not a clean scan. Policy lives
+# in scripts/ci/dependency-audit.sh.
 dependency-audit
 
 # ci-guard.yml — action pins, no hidden continue-on-error, npm ci not npm

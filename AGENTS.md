@@ -22,13 +22,18 @@ path filter fires.
 **`dependency-audit` can go red with no change in this repo.** It audits
 `package-lock.json` on every PR, on main and daily, because advisories are
 published against lockfiles nobody touched (v0.6.4 shipped `next@16.3.0` past
-two critical advisories that way). Any advisory in runtime dependencies, or
-high/critical anywhere, fails; so does an audit that could not reach the
-advisory endpoint. The fix is upgrading the named package — a security bump is
-the one exception to "Dependabot owns bumps" below, because Dependabot security
+two critical advisories that way). Any advisory in the non-dev dependency tree
+(`--omit=dev`: the lockfile minus devDependencies — not exactly what the image
+ships, since `next build` inlines devDependencies that `app/` imports and those
+are caught only at the second, high/critical threshold), or high/critical
+anywhere, fails; so does an audit that could not reach the advisory endpoint,
+or one that examined fewer packages than the script's floor (an empty lockfile
+audits clean). The fix is upgrading the named package — a security bump is the
+one exception to "Dependabot owns bumps" below, because Dependabot security
 updates are not enabled here. Never raise the audit level to get green. A red
-DAILY run on main blocks nothing by itself and emails only whoever last edited
-the cron line — whoever sees it opens the fix PR.
+DAILY run on main blocks nothing by itself; it opens (or comments on) one
+tracking issue titled "dependency-audit: the scheduled audit of main is red" —
+whoever picks it up opens the fix PR and closes the issue when main is green.
 
 **`contract` is core-first, and its red is correct.** It checks this client
 against vidra-core's DEFAULT BRANCH, so a PR here that consumes a new endpoint
