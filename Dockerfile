@@ -48,9 +48,10 @@ ENV HOSTNAME=0.0.0.0
 # image is a real finding for every operator who scans.
 # Trade-off, stated honestly: the image now takes whatever v3.24 main serves
 # at build time, so two builds of one commit can differ in patch-level
-# packages; the scan of the pushed digest is the record of what shipped. A
-# builder that reuses a cached layer for this RUN (e.g. publish-container's
-# GHA cache, same base digest) also reuses its package set.
+# packages. A cached layer for this RUN would silently re-ship an OLDER package
+# set — neither the base digest nor this line changes when a fix lands — so
+# publish-container.yml rebuilds this stage with no-cache-filters. Nothing scans
+# the pushed digest yet; release qualification has to.
 RUN apk upgrade --no-cache \
   && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
