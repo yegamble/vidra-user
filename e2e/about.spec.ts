@@ -342,110 +342,13 @@ for (const viewport of [
   });
 }
 
-// The white-label cases share NO state: each routes its own instance fixture
-// and navigates from scratch. They live in their own describe so the file-wide
-// `mode: "serial"` at the top — which exists for the redirect/metadata
-// scenarios that share one cold SSR cache warm-up — does not apply: under
-// serial mode an unrelated earlier failure in this file would SKIP all three,
-// and the mocked lane's zero-skip audit (allowed-skips-none.txt) correctly
-// treats an unregistered skip as its own failure.
-test.describe("white-label (branding.hide_software_name)", () => {
-  test.describe.configure({ mode: "parallel" });
-
-  // --- White-label (branding.hide_software_name) ------------------------------
-  //
-  // The instance name here is deliberately NOT "Vidra Test" (the shared fixture's
-  // name) so a whole-page sweep for the software name means something, and the
-  // social links are cleared because their hrefs point at a vidra.example.test
-  // domain that is the operator's, not the software's.
-  //
-  // MECHANISM NOTE. The About page's snapshot reaches the client through the
-  // page.route mock above: playwright.config pins the SERVER's
-  // INTERNAL_API_BASE_URL at an unreachable address, so the RSC read resolves to
-  // null and InstanceAboutView re-reads /instance from the browser (see its
-  // bootstrap effect). That is why this state is drivable here at all — and why the
-  // 404 on /about/vidra, which is decided SERVER-side from the same snapshot, is
-  // not: it is proved in app/about/vidra/page.test.tsx instead. What this spec can
-  // prove about that URL is that reaching it renders no software attribution.
-  function whiteLabelledInstance() {
-    return instanceJson(true, {
-      name: "A17 Lab Tube",
-      social_links: { website: "", mastodon: "", x: "", bluesky: "" },
-      branding: {
-        avatar: { url: "/api/v1/instance/avatar", is_fallback: false },
-        banner: { url: "/api/v1/instance/banner", is_fallback: false },
-        logos: {},
-        hide_instance_name: false,
-        hide_software_name: true,
-      },
-    });
-  }
-
-  test("white-label: the About pages name the instance and never the software", async ({ page }) => {
-    await routeAbout(page, whiteLabelledInstance(), emptyAbout);
-    await page.goto("/about/instance/home");
-    await expect(page.getByRole("heading", { name: "A17 Lab Tube", exact: true })).toBeVisible();
-
-    // The software's own tab is gone; the other two stay.
-    const nav = page.getByRole("navigation", { name: "About categories" });
-    await expect(nav.getByRole("link", { name: "Vidra", exact: true })).toHaveCount(0);
-    await expect(nav.getByRole("link", { name: "Platform", exact: true })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Network", exact: true })).toBeVisible();
-
-    // Technical: the whole Software row goes (the version identifies the product
-    // as surely as the name), and the rest of the table is untouched.
-    await page.getByRole("link", { name: "Technical information" }).click();
-    await expect(page).toHaveURL(/\/about\/instance\/tech$/);
-    await expect(page.getByRole("heading", { name: "Technical information" })).toBeVisible();
-    await expect(page.getByText("vidra 0.1.0")).toHaveCount(0);
-    await expect(page.getByText("Software", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Video uploads")).toBeVisible();
-
-    // Network: neutral prose, protocol names intact — a NETWORK is not this product.
-    await page.getByRole("link", { name: "Network", exact: true }).click();
-    await expect(page).toHaveURL(/\/about\/network$/);
-    await expect(page.getByText(/This platform speaks three open protocols/).first()).toBeVisible();
-    await expect(page.getByText(/This platform federates individual channels/).first()).toBeVisible();
-    await expect(page.getByText("ActivityPub", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("main")).not.toContainText(/vidra/i);
-  });
-
-  test("white-label: /about/vidra renders no software attribution", async ({ page }) => {
-    await routeAbout(page, whiteLabelledInstance(), emptyAbout);
-    await page.goto("/about/vidra");
-
-    // The identity header still renders (the route exists whenever the SERVER
-    // snapshot is unreadable — see the mechanism note above), but the section that
-    // names the software does not.
-    await expect(page.getByRole("heading", { name: "A17 Lab Tube", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /powered by/i })).toHaveCount(0);
-    await expect(page.getByRole("main")).not.toContainText(/vidra/i);
-  });
-
-  test("the software tab and its hero stay put when the name is not hidden", async ({ page }) => {
-    // The regression guard for every instance that never touches the setting: an
-    // explicit false must behave exactly like today.
-    await routeAbout(
-      page,
-      instanceJson(true, {
-        branding: {
-          avatar: { url: "/api/v1/instance/avatar", is_fallback: false },
-          banner: { url: "/api/v1/instance/banner", is_fallback: false },
-          logos: {},
-          hide_instance_name: false,
-          hide_software_name: false,
-        },
-      }),
-    );
-    await page.goto("/about/vidra");
-    await expect(
-      page.getByRole("heading", { name: "This platform is powered by Vidra" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("navigation", { name: "About categories" }).getByRole("link", {
-        name: "Vidra",
-        exact: true,
-      }),
-    ).toBeVisible();
-  });
-});
+// The white-label (branding.hide_software_name) About cases live in their OWN
+// file, e2e/about-white-label.spec.ts, NOT here. This file is configured
+// `mode: "serial"` at the top because its redirect/metadata scenarios share one
+// cold SSR instance-config warm-up — and under serial mode a failure in any
+// earlier test SKIPS the rest, which the mocked lane's zero-skip audit
+// (allowed-skips-none.txt) correctly treats as its own failure. The white-label
+// cases share no state with anything here, so they should not inherit that
+// coupling. (Playwright also refuses a `mode: "parallel"` describe nested inside
+// a serial one, so a nested describe cannot opt out — a separate file is the
+// only way.)
