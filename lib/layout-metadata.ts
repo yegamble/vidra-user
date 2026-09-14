@@ -38,8 +38,11 @@ import {
   hideSoftwareName,
 } from "@/lib/software-brand";
 
-/** The pre-W4 hardcoded values — the fallback floor for every field. */
-export const FALLBACK_TITLE = "Vidra";
+// The pre-W4 hardcoded values — still the fallback floor for these two fields.
+// There is deliberately NO FALLBACK_TITLE here any more: the title's floor is the
+// software's name, and that name has exactly ONE spelling in this codebase,
+// SOFTWARE_NAME in lib/software-brand.ts. A second literal beside it is how the
+// two drift.
 export const FALLBACK_DESCRIPTION = "A federated, PeerTube-inspired video platform.";
 export const FALLBACK_ICON = "/icon.svg";
 // The committed PWA apple-touch icon (Wave F, scripts/generate-icons.mjs). It is

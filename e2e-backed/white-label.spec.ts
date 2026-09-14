@@ -138,6 +138,11 @@ const ANONYMOUS_PATHS = [
 
 /** Pages that need a session. */
 const SIGNED_IN_PATHS = [
+  // Swept first so its snapshot cache entry is known post-PATCH before the
+  // export-download step below navigates here: that flow REQUESTS an export, so
+  // it cannot itself be wrapped in a retry (a repeat hits the one-active-export
+  // 409), and riding the TTL out on a sibling path proves nothing about this one.
+  "/settings",
   "/settings/donations",
   "/settings/connections",
   "/settings/security",
@@ -202,7 +207,7 @@ test("white-label hides the software name everywhere, and turning it off brings 
     // one leak a reader keeps on disk. account-export.spec.ts asserts the same
     // filename from the other direction (and tolerates both spellings, because
     // this flag is instance-wide while this test holds it on).
-    await page.goto("/settings");
+    await page.goto("/settings"); // already ridden out by the sweep loop above
     await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
     await page.getByRole("button", { name: "Request export" }).click();
     const exportDownload = page.getByRole("button", { name: "Download archive" });
@@ -224,9 +229,17 @@ test("white-label hides the software name everywhere, and turning it off brings 
       await expect(page.getByText(/Powered by/i)).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: CACHE_TTL_BUDGET });
 
-    const aboutSoftwareBack = await page.goto("/about/vidra");
-    expect(aboutSoftwareBack?.status(), "/about/vidra serves normally when not hidden").toBe(200);
-    await expect(page.getByRole("heading", { name: /powered by/i })).toBeVisible();
+    // Same per-path ride-out as every other assertion here, and for the same
+    // reason: /about/vidra's 404-or-200 is decided SERVER-side from the instance
+    // snapshot, whose data-cache entry for this path is independent of /login's.
+    // Riding the TTL out on /login proves nothing about this one.
+    await expect(async () => {
+      const res = await page.goto("/about/vidra");
+      expect(res?.status(), "/about/vidra serves normally when not hidden").toBe(200);
+      await expect(page.getByRole("heading", { name: /powered by/i })).toBeVisible({
+        timeout: 3_000,
+      });
+    }).toPass({ timeout: CACHE_TTL_BUDGET });
 
     // And the Technical page's Software row is back — the positive mirror of the
     // /about/vidra 200 above. Asserted POSITIVELY on purpose: "the row is gone
