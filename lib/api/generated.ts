@@ -5814,6 +5814,8 @@ export interface components {
                 };
                 /** @description Hide the textual instance name in the header (meaningful once a header logo is set). */
                 hide_instance_name: boolean;
+                /** @description White-label: hide the software name ("Vidra") and every "Powered by" attribution from public and signed-in surfaces (branding_hide_software_name). Machine-readable identifiers (NodeInfo, /version, cookie and header names) are unchanged. */
+                hide_software_name: boolean;
             };
             /** @description Operator-tuned client behaviour defaults (W5/W9 consume): what anonymous visitors see first and how publish forms are seeded. */
             defaults: {

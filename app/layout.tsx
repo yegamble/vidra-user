@@ -9,10 +9,12 @@ import { Header } from "@/components/Header";
 import { InstanceBanner } from "@/components/InstanceBanner";
 import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { Sidebar } from "@/components/Sidebar";
+import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 import { ToastProvider } from "@/components/ui";
 import { t } from "@/lib/i18n";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { buildRootMetadata } from "@/lib/layout-metadata";
+import { hideSoftwareName } from "@/lib/software-brand";
 import { buildThemeBootstrapScript } from "@/lib/theme-bootstrap";
 
 // Config-parity W2: this layout is a fixed set of extension SEAMS wired to the
@@ -26,6 +28,8 @@ import { buildThemeBootstrapScript } from "@/lib/theme-bootstrap";
 //   - header branding → components/Header.tsx (W4 logos + hide_instance_name)
 //   - theme bootstrap → lib/theme-bootstrap.ts (W5 default_theme)
 //   - CSS/JS inject   → components/InstanceCustomization.tsx (W6 documents)
+//   - software brand  → components/SoftwareBrandProvider.tsx (white-label:
+//                       branding.hide_software_name, lib/software-brand.ts)
 
 export async function generateMetadata(): Promise<Metadata> {
   return buildRootMetadata(await getInstanceConfig());
@@ -74,24 +78,26 @@ export default async function RootLayout({
         <a href="#main-content" className="skip-link">
           {t("a11y.skipToContent")}
         </a>
-        <AuthProvider>
-          <PlayerSettingsBootstrap />
-          <ToastProvider>
-            <InstanceBanner instance={instance} />
-            <Header instance={instance} />
-            <div className="flex w-full flex-1">
-              <Sidebar />
-              <div
-                id="main-content"
-                tabIndex={-1}
-                className="flex min-h-0 min-w-0 flex-1 flex-col focus:outline-none"
-              >
-                {children}
+        <SoftwareBrandProvider hidden={hideSoftwareName(instance)}>
+          <AuthProvider>
+            <PlayerSettingsBootstrap />
+            <ToastProvider>
+              <InstanceBanner instance={instance} />
+              <Header instance={instance} />
+              <div className="flex w-full flex-1">
+                <Sidebar />
+                <div
+                  id="main-content"
+                  tabIndex={-1}
+                  className="flex min-h-0 min-w-0 flex-1 flex-col focus:outline-none"
+                >
+                  {children}
+                </div>
               </div>
-            </div>
-            <BottomTabBar />
-          </ToastProvider>
-        </AuthProvider>
+              <BottomTabBar />
+            </ToastProvider>
+          </AuthProvider>
+        </SoftwareBrandProvider>
       </body>
     </html>
   );

@@ -32,6 +32,13 @@ export type InstanceBrandingBlock = {
     opengraph?: BrandingAsset;
   };
   hide_instance_name?: boolean;
+  /**
+   * White-label (branding_hide_software_name): the operator asked for the
+   * software's name and every "Powered by" attribution to be absent from
+   * public and signed-in surfaces. Read it through lib/software-brand.ts —
+   * never compare this field by hand, so "absent means show" stays one rule.
+   */
+  hide_software_name?: boolean;
 };
 
 /** W1 shape; W5/W9 populate. */
