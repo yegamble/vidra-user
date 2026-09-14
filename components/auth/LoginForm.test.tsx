@@ -35,6 +35,9 @@ vi.mock("@/lib/api", async () => {
 
 import { ApiError } from "@/lib/api";
 
+import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
+
+import { AuthPage } from "./AuthPage";
 import { LoginForm } from "./LoginForm";
 
 afterEach(() => {
@@ -202,5 +205,44 @@ describe("LoginForm branding", () => {
     render(<LoginForm instanceName="   " />);
     await screen.findByLabelText("Email or username");
     expect(screen.getByText("Sign in to Vidra")).toBeTruthy();
+  });
+});
+
+// White-label (branding.hide_software_name): nothing on the sign-in screen may
+// name the software — not the heading, not the wordmark fallback, and not the
+// "Powered by" line AuthPage renders beneath the form.
+describe("LoginForm while white-labelled", () => {
+  const hidden = (node: React.ReactNode) =>
+    render(<SoftwareBrandProvider hidden>{node}</SoftwareBrandProvider>);
+
+  it("still names the instance in the heading and the wordmark", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: [], atproto_login: false });
+    hidden(<LoginForm instanceName="A17 Lab Tube" />);
+    await screen.findByLabelText("Email or username");
+    expect(screen.getByText("Sign in to A17 Lab Tube")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "A17 Lab Tube" })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/vidra/i);
+  });
+
+  it("drops the destination clause entirely when the instance has no name", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: [], atproto_login: false });
+    hidden(<LoginForm />);
+    await screen.findByLabelText("Email or username");
+    // The heading paragraph, not the submit button of the same name.
+    expect(screen.getByText("Sign in", { selector: "p" })).toBeTruthy();
+    expect(screen.queryByText(/sign in to/i)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/vidra/i);
+  });
+
+  it("renders no Powered by attribution inside the auth page chrome", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: [], atproto_login: false });
+    hidden(
+      <AuthPage>
+        <LoginForm instanceName="A17 Lab Tube" />
+      </AuthPage>,
+    );
+    await screen.findByLabelText("Email or username");
+    expect(screen.queryByText(/powered by/i)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/vidra/i);
   });
 });

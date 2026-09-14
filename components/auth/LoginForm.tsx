@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { AuthWordmark, authBrandName } from "@/components/auth/AuthPage";
+import { AuthWordmark } from "@/components/auth/AuthPage";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
 import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
 import { ResendVerification } from "@/components/auth/ResendVerification";
 import { LockIcon } from "@/components/icons";
+import { useSoftwareBrandHidden } from "@/components/SoftwareBrandProvider";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -17,6 +18,7 @@ import { OtpInput } from "@/components/ui/OtpInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import { loginCredentials, looksLikeEmail } from "@/lib/login-identifier";
+import { brandName } from "@/lib/software-brand";
 
 // LoginForm drives the whole sign-in surface:
 //  - email-or-username + password credentials (cookie-mode session);
@@ -64,6 +66,9 @@ export function LoginForm({
 }) {
   const router = useRouter();
   const { status, login, completeMfaChallenge } = useSession();
+  // The sign-in heading names the destination: the instance, else the software,
+  // else nothing at all once the software name is white-labelled away.
+  const signInBrand = brandName(instanceName, useSoftwareBrandHidden());
   // One field for both sign-in identifiers: an email address or a username.
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -325,7 +330,11 @@ export function LoginForm({
         </h1>
         {/* The destination is the INSTANCE, not the software running it — the
             same name the tab title and the app header already show. */}
-        <p className="text-title2 text-fg">Sign in to {authBrandName(instanceName)}</p>
+        {/* White-labelled with no instance name: "Sign in" is the whole
+            heading — there is nothing this screen may honestly name. */}
+        <p className="text-title2 text-fg">
+          {signInBrand !== null ? `Sign in to ${signInBrand}` : "Sign in"}
+        </p>
       </div>
 
       {errorBanner}
