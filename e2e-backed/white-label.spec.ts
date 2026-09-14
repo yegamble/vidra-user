@@ -25,13 +25,17 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, API_URL, adminToken, instanceAbout } from 
 // WRITE-ONLY in this loop (npm run e2e:backed), never part of the mocked
 // `npm run ci` gate.
 //
-// SERIAL, and hermetic in a `finally`: both tests flip one INSTANCE-WIDE setting,
-// so running them concurrently would have each read the other's state. Nothing
-// else in the backed suite asserts the software's name on a non-admin surface
-// (peertube-import.spec asserts it on admin copy, which this feature
+// ONE test in TWO PHASES, not two tests, and hermetic in a `finally`. The setting
+// is INSTANCE-WIDE, so two tests would either race each other (fullyParallel) or
+// need serial mode — and serial mode is a trap here: Playwright SKIPS the rest of
+// a serial group when an earlier test fails, so phase 1 going red would ALSO trip
+// the lane's zero-skip audit with an unregistered skip. That was measured, not
+// guessed (run 34852976974). A single test makes both directions one outcome.
+//
+// Nothing else in the backed suite asserts the software's name on a non-admin
+// surface (peertube-import.spec asserts it on admin copy, which this feature
 // deliberately leaves alone), so the ~90s window cannot cross-talk with another
 // spec either.
-test.describe.configure({ mode: "serial" });
 
 /** Anything that would name the software or attribute the platform to it. */
 const LEAK = /vidra|powered by/i;
@@ -125,7 +129,7 @@ const SIGNED_IN_PATHS = [
   "/settings/security",
 ] as const;
 
-test("white-label: no public or signed-in surface names the software once it is hidden", async ({
+test("white-label hides the software name everywhere, and turning it off brings it back", async ({
   page,
   request,
 }) => {
@@ -134,6 +138,8 @@ test("white-label: no public or signed-in surface names the software once it is 
   const instanceName = (await instanceAbout(request)).name;
   const sweep = async () => maskInstanceName(await visibleSurface(page), instanceName);
   try {
+    // PHASE 1 — hidden: nothing a reader or a crawler can see may name the
+    // software.
     await setHideSoftwareName(request, token, true);
 
     // Ride out the instance-config cache ONCE on the cheapest surface, so the
@@ -170,33 +176,23 @@ test("white-label: no public or signed-in surface names the software once it is 
       await page.goto(path);
       expect(await sweep(), `signed-in surface ${path} names the software`).not.toMatch(LEAK);
     }
-  } finally {
-    // Hermetic: clear the overlay whatever happened above, so a failure here
-    // cannot white-label every other spec sharing this stack.
-    await setHideSoftwareName(request, token, null);
-  }
-});
 
-test("white-label off: the attribution and the software's About page come back", async ({
-  page,
-  request,
-}) => {
-  // The regression half. Every instance that never touches this setting must keep
-  // today's behavior, and "hidden" must be reversible rather than one-way.
-  test.setTimeout(300_000);
-  const token = await adminToken(request);
-  try {
+    // PHASE 2 — the regression half, and the proof that hiding is REVERSIBLE
+    // rather than one-way: turn it off and the attribution and the software's own
+    // About page come back. Every instance that never touches this setting lives
+    // in this state, so it is the half that must never break.
     await setHideSoftwareName(request, token, false);
-
     await expect(async () => {
       await page.goto("/login");
       await expect(page.getByText(/Powered by/i)).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: CACHE_TTL_BUDGET });
 
-    const aboutSoftware = await page.goto("/about/vidra");
-    expect(aboutSoftware?.status(), "/about/vidra serves normally when not hidden").toBe(200);
+    const aboutSoftwareBack = await page.goto("/about/vidra");
+    expect(aboutSoftwareBack?.status(), "/about/vidra serves normally when not hidden").toBe(200);
     await expect(page.getByRole("heading", { name: /powered by/i })).toBeVisible();
   } finally {
+    // Hermetic: clear the overlay whatever happened above, so a failure here
+    // cannot leave every other spec sharing this stack white-labelled.
     await setHideSoftwareName(request, token, null);
   }
 });
