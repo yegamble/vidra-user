@@ -28,8 +28,17 @@ export const SOFTWARE_NAME = "Vidra";
 /**
  * Prose subject for sentences that would otherwise name the software
  * ("Vidra never holds funds" → "This platform never holds funds").
+ *
+ * Sentence-initial form. Unlike "Vidra" this is a common noun phrase, not a
+ * proper noun, so its case depends on where it lands in the sentence — see
+ * platformLabel()'s `sentenceStart` option, which exists because substituting
+ * this form mid-sentence produced "…networks that This platform can post to on
+ * your behalf".
  */
 export const NEUTRAL_PLATFORM_LABEL = "This platform";
+
+/** The same label anywhere but the first word of a sentence. */
+export const NEUTRAL_PLATFORM_LABEL_MIDSENTENCE = "this platform";
 
 /**
  * A BRAND SLOT that must never render empty — the header wordmark and the auth
@@ -68,9 +77,24 @@ export function hideSoftwareName(instance: SoftwareBrandSource): boolean {
   return instance?.branding?.hide_software_name === true;
 }
 
-/** The prose subject for a sentence about the platform. */
-export function platformLabel(hidden: boolean): string {
-  return hidden ? NEUTRAL_PLATFORM_LABEL : SOFTWARE_NAME;
+/**
+ * The prose subject for a sentence about the platform.
+ *
+ * `sentenceStart` defaults to true — the label is the first word of its sentence.
+ * Pass `{ sentenceStart: false }` anywhere it is not (after a comma, a
+ * conjunction, an em dash, or mid-clause), or the neutral form reads as a
+ * mid-sentence capital. The SOFTWARE name is a proper noun and is returned
+ * unchanged in both positions, which is why callers can pass the option
+ * unconditionally without special-casing the not-hidden state.
+ */
+export function platformLabel(
+  hidden: boolean,
+  options?: { sentenceStart?: boolean },
+): string {
+  if (!hidden) return SOFTWARE_NAME;
+  return options?.sentenceStart === false
+    ? NEUTRAL_PLATFORM_LABEL_MIDSENTENCE
+    : NEUTRAL_PLATFORM_LABEL;
 }
 
 /**

@@ -46,7 +46,13 @@ export function useSoftwareName(): string | null {
   return useSoftwareBrandHidden() ? null : SOFTWARE_NAME;
 }
 
-/** The subject for a sentence about the platform: "Vidra" or a neutral label. */
-export function usePlatformLabel(): string {
-  return platformLabel(useSoftwareBrandHidden());
+/**
+ * The subject for a sentence about the platform: "Vidra" or a neutral label.
+ *
+ * Pass `{ sentenceStart: false }` when the label is NOT the first word of its
+ * sentence — the neutral form is a common noun phrase and would otherwise render
+ * as a mid-sentence capital. See platformLabel() in lib/software-brand.ts.
+ */
+export function usePlatformLabel(options?: { sentenceStart?: boolean }): string {
+  return platformLabel(useSoftwareBrandHidden(), options);
 }

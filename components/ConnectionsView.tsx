@@ -57,7 +57,9 @@ export function ConnectionsView() {
 function BlueskySection() {
   // Two sentences name the software as the actor doing the cross-posting; a
   // white-labelled instance may not name it (branding.hide_software_name).
-  const platformLabel = usePlatformLabel();
+  // BOTH land mid-sentence — after "so" and after an em dash — so the neutral
+  // form must not be capitalised ("…so this platform can announce…").
+  const platformLabel = usePlatformLabel({ sentenceStart: false });
   const [phase, setPhase] = useState<Phase>("loading");
   const [account, setAccount] = useState<ATProtoStatus | null>(null);
   const [reloadKey, setReloadKey] = useState(0);

@@ -4,6 +4,9 @@
 // name the software as the ACTOR doing the cross-posting ("so Vidra can
 // announce…", "Vidra never reads your Bluesky feed"). Both keep every factual
 // claim — outbound-only, no inbound reads — and only change their subject.
+//
+// Both sit MID-SENTENCE, which is why they take the lowercase neutral form. The
+// software name is a proper noun and is unchanged by position.
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,10 +63,13 @@ describe("ConnectionsView cross-posting copy", () => {
 
   it("neutralizes the subject when hidden, keeping both claims", async () => {
     await show(true);
+    // LOWERCASE: both land mid-sentence (after "so", and after an em dash), so a
+    // capitalised neutral label would read "…so This platform can announce…".
     expect(
-      screen.getByText(/so This platform can announce your newly published/),
+      screen.getByText(/so this platform can announce your newly published/),
     ).toBeTruthy();
-    expect(screen.getByText(/This platform never reads your Bluesky feed/)).toBeTruthy();
+    expect(screen.getByText(/this platform never reads your Bluesky feed/)).toBeTruthy();
+    expect(screen.queryByText(/This platform/)).toBeNull();
     // Bluesky is a NETWORK, not this product — it stays named.
     expect(screen.getByRole("heading", { name: "Bluesky" })).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/vidra/i);

@@ -4,6 +4,7 @@ import {
   NEUTRAL_BRAND_FALLBACK,
   NEUTRAL_DESCRIPTION,
   NEUTRAL_PLATFORM_LABEL,
+  NEUTRAL_PLATFORM_LABEL_MIDSENTENCE,
   NEUTRAL_SITE_TITLE,
   SOFTWARE_NAME,
   brandName,
@@ -36,6 +37,27 @@ describe("platformLabel", () => {
     expect(platformLabel(true)).toBe(NEUTRAL_PLATFORM_LABEL);
     expect(NEUTRAL_PLATFORM_LABEL).not.toContain(SOFTWARE_NAME);
   });
+
+  // The neutral label is a common noun phrase, so unlike a proper noun its case
+  // depends on where it lands. Substituted mid-sentence without this, it rendered
+  // "…networks that This platform can post to on your behalf".
+  it("lowercases the neutral label mid-sentence", () => {
+    expect(platformLabel(true, { sentenceStart: false })).toBe("this platform");
+    expect(platformLabel(true, { sentenceStart: true })).toBe(NEUTRAL_PLATFORM_LABEL);
+    expect(platformLabel(true)).toBe(NEUTRAL_PLATFORM_LABEL);
+  });
+
+  it("leaves the software name alone in BOTH positions — a proper noun never lowercases", () => {
+    expect(platformLabel(false, { sentenceStart: false })).toBe(SOFTWARE_NAME);
+    expect(platformLabel(false, { sentenceStart: true })).toBe(SOFTWARE_NAME);
+  });
+
+  it("differs from the sentence-start form only in the first character", () => {
+    const start = platformLabel(true);
+    const mid = platformLabel(true, { sentenceStart: false });
+    expect(mid).toBe(start[0].toLowerCase() + start.slice(1));
+    expect(mid).not.toBe(start);
+  });
 });
 
 describe("brandName", () => {
@@ -64,6 +86,7 @@ describe("the neutral slot fillers never leak the software name", () => {
       NEUTRAL_SITE_TITLE,
       NEUTRAL_DESCRIPTION,
       NEUTRAL_PLATFORM_LABEL,
+      NEUTRAL_PLATFORM_LABEL_MIDSENTENCE,
     ]) {
       expect(filler).not.toMatch(/vidra/i);
       expect(filler.trim()).not.toBe("");

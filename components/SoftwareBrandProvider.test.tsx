@@ -15,6 +15,7 @@ function Probe() {
       <li data-testid="hidden">{String(useSoftwareBrandHidden())}</li>
       <li data-testid="name">{useSoftwareName() ?? "(none)"}</li>
       <li data-testid="label">{usePlatformLabel()}</li>
+      <li data-testid="label-mid">{usePlatformLabel({ sentenceStart: false })}</li>
     </ul>
   );
 }
@@ -31,6 +32,8 @@ describe("SoftwareBrandProvider", () => {
     expect(read("hidden")).toBe("false");
     expect(read("name")).toBe("Vidra");
     expect(read("label")).toBe("Vidra");
+    // A proper noun is unchanged by position.
+    expect(read("label-mid")).toBe("Vidra");
   });
 
   it("shows the software name when the provider reports hidden=false", () => {
@@ -52,6 +55,9 @@ describe("SoftwareBrandProvider", () => {
     expect(read("hidden")).toBe("true");
     expect(read("name")).toBe("(none)");
     expect(read("label")).toBe("This platform");
+    // The hook forwards the position through to the seam, so a consumer whose
+    // label lands mid-sentence gets the lowercase form.
+    expect(read("label-mid")).toBe("this platform");
     expect(document.body.textContent).not.toMatch(/vidra/i);
   });
 });

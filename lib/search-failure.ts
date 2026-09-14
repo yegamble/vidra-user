@@ -22,6 +22,11 @@
  * (branding.hide_software_name — see lib/software-brand.ts). Callers pass
  * usePlatformLabel(), so both surfaces still share one sentence and cannot
  * drift into different stories about the same HTTP response.
+ *
+ * The label OPENS the returned sentence, so callers pass the sentence-start form
+ * (plain usePlatformLabel(), no options) and must splice the result after a full
+ * stop — which both call sites do. Splicing it mid-sentence would render the
+ * neutral label as a mid-sentence capital.
  */
 export function searchServiceDown(platformLabel: string): string {
   return `${platformLabel} could not reach the search service. It may be offline, or not configured on this instance.`;
