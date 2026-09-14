@@ -12,6 +12,8 @@ vi.mock("@/lib/api", () => ({
 import { api } from "@/lib/api";
 import type { DonationAddress } from "@/lib/api";
 
+import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
+
 import { SupportButton } from "./SupportButton";
 
 const mockChannel = vi.mocked(api.listChannelDonationAddresses);
@@ -99,5 +101,32 @@ describe("SupportButton", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Support" }));
     expect(screen.getByText("Unverified")).toBeTruthy();
     expect(screen.queryByText("Verified")).toBeNull();
+  });
+});
+
+// White-label (branding.hide_software_name): the non-custodial disclaimer names
+// the platform in prose, so the sentence's subject comes from the seam. The
+// claim itself must survive — it is a legal statement, not branding.
+describe("SupportButton non-custodial disclaimer", () => {
+  async function openDialog(hidden: boolean) {
+    mockChannel.mockResolvedValue({ addresses: [addr()] });
+    render(
+      <SoftwareBrandProvider hidden={hidden}>
+        <SupportButton sources={[{ kind: "channel", handle: "grade-house" }]} name="Grade House" />
+      </SoftwareBrandProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /support/i }));
+    return screen.findByRole("dialog");
+  }
+
+  it("names the software while it is not hidden", async () => {
+    const dialog = await openDialog(false);
+    expect(dialog.textContent).toContain("Vidra never holds or processes funds.");
+  });
+
+  it("keeps the disclaimer but not the software name when hidden", async () => {
+    const dialog = await openDialog(true);
+    expect(dialog.textContent).toContain("This platform never holds or processes funds.");
+    expect(dialog.textContent).not.toMatch(/vidra/i);
   });
 });
