@@ -124,6 +124,26 @@ describe("Header branding", () => {
     expect(screen.getByRole("link", { name: "ExampleTube" })).toBeTruthy();
   });
 
+  // White-label (branding.hide_software_name): the wordmark's LAST fallback is
+  // the software's own name, so the header is the one place a named-nothing
+  // instance leaks it. The header must still never be empty.
+  it("keeps the software wordmark when the software name is not hidden", () => {
+    render(<Header instance={snapshot({ hide_software_name: false }, "")} />);
+    expect(screen.getByRole("link", { name: "Vidra" })).toBeTruthy();
+  });
+
+  it("falls back to a neutral home label when hidden and the instance has no name", () => {
+    render(<Header instance={snapshot({ hide_software_name: true }, "")} />);
+    expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
+    expect(screen.queryByText("Vidra")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/vidra/i);
+  });
+
+  it("still prefers the instance's own name when hidden", () => {
+    render(<Header instance={snapshot({ hide_software_name: true })} />);
+    expect(screen.getByRole("link", { name: "ExampleTube" })).toBeTruthy();
+  });
+
   it("stays hidden on standalone routes", () => {
     pathname.value = "/embed/v1";
     const { container } = render(<Header instance={snapshot({})} />);

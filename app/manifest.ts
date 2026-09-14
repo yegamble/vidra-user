@@ -1,37 +1,28 @@
 import type { MetadataRoute } from "next";
 
-import { FALLBACK_DESCRIPTION, FALLBACK_TITLE } from "@/lib/layout-metadata";
+import { getInstanceConfig } from "@/lib/instance-config.server";
+import { buildWebManifest } from "@/lib/layout-metadata";
 
 // Web app manifest (Wave F PWA floor). Next serves this at /manifest.webmanifest
 // and injects the <link rel="manifest"> automatically. NO service worker this
 // session — installability here is manifest + icons + theme-color only (the SW /
 // web-push story lands with the notification work).
 //
-// Naming reuses the built-in fallback identity (lib/layout-metadata) — the same
-// "Vidra" the root <title> falls back to. The manifest is a static route, so it
-// cannot read the per-request instance snapshot the way generateMetadata does;
-// an operator rename shows in the tab title/branding, while the install name
-// stays the product default. theme_color mirrors the light theme-color emitted
-// by the root viewport (app/layout.tsx); background_color is the light canvas
-// token (--canvas in app/globals.css) for a flash-free splash.
-export default function manifest(): MetadataRoute.Manifest {
-  return {
-    name: FALLBACK_TITLE,
-    short_name: FALLBACK_TITLE,
-    description: FALLBACK_DESCRIPTION,
-    start_url: "/",
-    display: "standalone",
-    background_color: "#f5f5f7",
-    theme_color: "#ffffff",
-    icons: [
-      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      {
-        src: "/icon-maskable-512.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "maskable",
-      },
-    ],
-  };
+// The naming logic lives in lib/layout-metadata (buildWebManifest), beside the
+// root <title> it must agree with. It used to be a STATIC export naming the
+// product unconditionally: an operator rename showed in the tab title while the
+// INSTALL name stayed "Vidra". That was a cosmetic mismatch until the
+// white-label switch, at which point the manifest became a leak the operator
+// cannot close — both the installed app's name and the manifest JSON itself are
+// public.
+//
+// force-dynamic, not prerendered: a build-time render has no backend to ask, so
+// a prerendered manifest would serve the fallback name to every visitor. The
+// instance read is still cheap — getInstanceConfig() carries its own explicit
+// `next: { revalidate: 60 }`, so the document is fetched about once a minute
+// rather than once per request.
+export const dynamic = "force-dynamic";
+
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  return buildWebManifest(await getInstanceConfig());
 }

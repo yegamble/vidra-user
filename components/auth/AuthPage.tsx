@@ -1,27 +1,24 @@
+"use client";
+
 import Link from "next/link";
 
 import { ProtocolRibbon } from "@/components/ProtocolRibbon";
+import { useSoftwareBrandHidden, useSoftwareName } from "@/components/SoftwareBrandProvider";
 import { cn } from "@/lib/cn";
+import { NEUTRAL_BRAND_FALLBACK, brandName } from "@/lib/software-brand";
 
 // The account-entry flows (login / signup / password reset / email verify) are
 // standalone routes: the app header, sidebar, and phone tab bar step aside
 // (lib/app-shell.isStandaloneRoute), so these components own the whole page.
 // Apple-ID styling: one focused task on a narrow, centered column over the soft
 // canvas, led by the instance wordmark + tri-protocol ribbon lockup.
-
-/**
- * The product name, and the ONLY thing these screens fall back to when the
- * instance has no name of its own — a build-time prerender has no backend to
- * ask, and a screen with an empty brand slot is worse than one wearing the
- * software's name.
- */
-export const PRODUCT_NAME = "Vidra";
-
-/** The instance's own name, or the product name when it has none. */
-export function authBrandName(instanceName?: string | null): string {
-  const trimmed = typeof instanceName === "string" ? instanceName.trim() : "";
-  return trimmed !== "" ? trimmed : PRODUCT_NAME;
-}
+//
+// "use client" so the whole family can read the white-label decision from the
+// SoftwareBrandProvider context (wired once in app/layout.tsx) instead of having
+// every one of the seven standalone auth routes thread a `hidden` prop through
+// AuthPage, AuthPageHeading, AuthWordmark and AuthBrandLink. The name-resolution
+// rule itself stays pure and server-safe in lib/software-brand.ts (brandName),
+// which is what the server pages import when they need it for a heading string.
 
 /** A safely centered, scrollable canvas for focused account-entry flows. */
 export function AuthPage({ children }: { children: React.ReactNode }) {
@@ -43,11 +40,15 @@ export function AuthPage({ children }: { children: React.ReactNode }) {
  * `main` link on every standalone auth route — the wordmark home link — and a
  * second one would both break that count and offer a second, lower-value exit
  * from a focused task.
+ *
+ * White-label: this line is the "Powered by" attribution itself, so a hidden
+ * software name removes it ENTIRELY rather than neutralizing its wording —
+ * "Powered by this platform" would be worse than silence.
  */
 export function AuthPoweredBy() {
-  return (
-    <p className="mt-10 text-center text-footnote text-fg-muted">Powered by {PRODUCT_NAME}</p>
-  );
+  const name = useSoftwareName();
+  if (name === null) return null;
+  return <p className="mt-10 text-center text-footnote text-fg-muted">Powered by {name}</p>;
 }
 
 /**
@@ -55,7 +56,9 @@ export function AuthPoweredBy() {
  * wordmark rendered as a home link. `apple-ux.spec` asserts a `main > link`
  * → "/" with a ≥44px target on every standalone auth route; its accessible name
  * is the instance's name (the product name when the instance has none, which is
- * what a build-time prerender and the mocked e2e suite both see).
+ * what a build-time prerender and the mocked e2e suite both see, and the
+ * neutral "Home" when the software name is hidden and the instance is unnamed —
+ * the link must never lose its accessible name).
  */
 export function AuthBrandLink({
   className,
@@ -64,6 +67,7 @@ export function AuthBrandLink({
   className?: string;
   instanceName?: string | null;
 }) {
+  const hidden = useSoftwareBrandHidden();
   return (
     <Link
       href="/"
@@ -72,7 +76,7 @@ export function AuthBrandLink({
         className,
       )}
     >
-      {authBrandName(instanceName)}
+      {brandName(instanceName, hidden) ?? NEUTRAL_BRAND_FALLBACK}
     </Link>
   );
 }

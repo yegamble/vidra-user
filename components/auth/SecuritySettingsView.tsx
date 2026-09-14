@@ -7,6 +7,7 @@ import { ChangeEmailSection } from "@/components/auth/ChangeEmailSection";
 import { ChangePasswordSection } from "@/components/auth/ChangePasswordSection";
 import { SecureAccountSection } from "@/components/auth/SecureAccountSection";
 import { QrCode } from "@/components/QrCode";
+import { useSoftwareBrandHidden } from "@/components/SoftwareBrandProvider";
 import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, authApi, errorMessage } from "@/lib/api";
@@ -417,6 +418,10 @@ function EnrollStep({
 }
 
 function RecoveryCodesStep({ codes, onConfirm }: { codes: string[]; onConfirm: () => void }) {
+  // The saved file's name shows in the downloads shelf and in the reader's home
+  // directory for as long as they keep it, so a white-labelled instance must not
+  // stamp the software's name onto it. The FILE's contents are just the codes.
+  const softwareHidden = useSoftwareBrandHidden();
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-warning/30 bg-warning/10 p-4">
       <div className="flex flex-col gap-1">
@@ -445,7 +450,12 @@ function RecoveryCodesStep({ codes, onConfirm }: { codes: string[]; onConfirm: (
         <CopyButton text={codes.join("\n")} label="Copy recovery codes" />
         <button
           type="button"
-          onClick={() => downloadTextFile("vidra-recovery-codes.txt", codes.join("\n") + "\n")}
+          onClick={() =>
+            downloadTextFile(
+              softwareHidden ? "recovery-codes.txt" : "vidra-recovery-codes.txt",
+              codes.join("\n") + "\n",
+            )
+          }
           className="focus-ring rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
         >
           Download codes

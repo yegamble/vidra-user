@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useSoftwareBrandHidden } from "@/components/SoftwareBrandProvider";
 import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, authApi, errorMessage, getInstanceCached } from "@/lib/api";
@@ -74,6 +75,11 @@ export function AccountDataSection() {
 }
 
 function ExportCard() {
+  // The saved file's NAME is user-visible in the downloads shelf, so a
+  // white-labelled instance hands over "account-export.json". The archive's
+  // CONTENT is untouched: the `vidra_export` envelope key is the interchange
+  // format's own identifier, and renaming it would break every importer.
+  const softwareHidden = useSoftwareBrandHidden();
   const [view, setView] = useState<ExportView>({ kind: "loading" });
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -133,7 +139,10 @@ function ExportCard() {
     setBusy(true);
     try {
       const archive = await authApi.downloadAccountExport();
-      downloadJsonFile("vidra-account-export.json", archive);
+      downloadJsonFile(
+        softwareHidden ? "account-export.json" : "vidra-account-export.json",
+        archive,
+      );
     } catch (err) {
       if (err instanceof ApiError && err.status === 410) {
         setActionError("This export has expired — request a new one.");
@@ -254,6 +263,7 @@ function ExportCard() {
 }
 
 function ImportCard() {
+  const softwareHidden = useSoftwareBrandHidden();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -282,7 +292,11 @@ function ImportCard() {
       !("vidra_export" in parsed) ||
       !("profile" in parsed)
     ) {
-      setError("That file is not a vidra account archive.");
+      setError(
+        softwareHidden
+          ? "That file is not a valid account archive."
+          : "That file is not a vidra account archive.",
+      );
       return;
     }
 
@@ -295,7 +309,11 @@ function ImportCard() {
       if (err instanceof ApiError && err.status === 413) {
         setError("The archive is larger than this instance accepts.");
       } else if (err instanceof ApiError && err.status === 422) {
-        setError("That file is not a valid vidra account archive.");
+        setError(
+          softwareHidden
+            ? "That file is not a valid account archive."
+            : "That file is not a valid vidra account archive.",
+        );
       } else {
         setError(errorMessage(err, "The import failed. Please try again."));
       }
@@ -311,7 +329,8 @@ function ImportCard() {
           Import an archive
         </h3>
         <p className="text-sm text-fg-muted">
-          Re-creates the safe parts of a vidra export archive on this account: profile name and
+          Re-creates the safe parts of {softwareHidden ? "an account" : "a vidra"} export archive
+          on this account: profile name and
           bio, playlists (items whose videos exist on this instance), follows of local channels,
           and notification preferences. Channels, videos, comments, saved videos, and watch
           history are in the archive but cannot be re-imported. Importing never deletes anything;

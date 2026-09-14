@@ -9,10 +9,12 @@ import { Header } from "@/components/Header";
 import { InstanceBanner } from "@/components/InstanceBanner";
 import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { Sidebar } from "@/components/Sidebar";
+import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 import { ToastProvider } from "@/components/ui";
 import { t } from "@/lib/i18n";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { buildRootMetadata } from "@/lib/layout-metadata";
+import { hideSoftwareName } from "@/lib/software-brand";
 import { buildThemeBootstrapScript } from "@/lib/theme-bootstrap";
 
 // Config-parity W2: this layout is a fixed set of extension SEAMS wired to the
@@ -26,6 +28,28 @@ import { buildThemeBootstrapScript } from "@/lib/theme-bootstrap";
 //   - header branding → components/Header.tsx (W4 logos + hide_instance_name)
 //   - theme bootstrap → lib/theme-bootstrap.ts (W5 default_theme)
 //   - CSS/JS inject   → components/InstanceCustomization.tsx (W6 documents)
+//   - software brand  → components/SoftwareBrandProvider.tsx (white-label:
+//                       branding.hide_software_name, lib/software-brand.ts)
+
+// EVERY PAGE UNDER THIS LAYOUT RENDERS PER REQUEST.
+//
+// `next build` has no backend to ask, so a build-time prerender resolves the
+// instance snapshot to null and bakes the FALLBACK identity into HTML: measured
+// on this tree before this line, 56 prerendered page documents, 55 of them
+// carrying `<title>Vidra</title>` and the software wordmark in the header. Each
+// was an ISR entry with a 60s revalidate, i.e. stale-while-revalidate: the FIRST
+// response to each path after every deploy or container start served the baked
+// copy, and only then re-rendered. For a white-label switch that is one leaked
+// response per path per deploy — and the identical bug for an operator who
+// simply RENAMES their instance, which is why this is not a white-label special
+// case but the seam's own correctness.
+//
+// The snapshot read stays cheap: getInstanceConfig() passes an explicit
+// `next: { revalidate: 60 }` (INSTANCE_CONFIG_REVALIDATE_SECONDS), and an
+// explicit per-fetch cache option is not overridden by this flag — so this is
+// about one backend read a minute, not one per request. Verified by counting
+// requests against a stub API (see the PR description).
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   return buildRootMetadata(await getInstanceConfig());
@@ -74,24 +98,26 @@ export default async function RootLayout({
         <a href="#main-content" className="skip-link">
           {t("a11y.skipToContent")}
         </a>
-        <AuthProvider>
-          <PlayerSettingsBootstrap />
-          <ToastProvider>
-            <InstanceBanner instance={instance} />
-            <Header instance={instance} />
-            <div className="flex w-full flex-1">
-              <Sidebar />
-              <div
-                id="main-content"
-                tabIndex={-1}
-                className="flex min-h-0 min-w-0 flex-1 flex-col focus:outline-none"
-              >
-                {children}
+        <SoftwareBrandProvider hidden={hideSoftwareName(instance)}>
+          <AuthProvider>
+            <PlayerSettingsBootstrap />
+            <ToastProvider>
+              <InstanceBanner instance={instance} />
+              <Header instance={instance} />
+              <div className="flex w-full flex-1">
+                <Sidebar />
+                <div
+                  id="main-content"
+                  tabIndex={-1}
+                  className="flex min-h-0 min-w-0 flex-1 flex-col focus:outline-none"
+                >
+                  {children}
+                </div>
               </div>
-            </div>
-            <BottomTabBar />
-          </ToastProvider>
-        </AuthProvider>
+              <BottomTabBar />
+            </ToastProvider>
+          </AuthProvider>
+        </SoftwareBrandProvider>
       </body>
     </html>
   );

@@ -5802,7 +5802,7 @@ export interface components {
                 /** @description Whether this deployment has an outbound mail path (an SMTP relay via MAIL_ENABLED, or the dev capture seam) — a boot capability, not a runtime setting. The admin UI renders the mail-dependent settings (email_subject_prefix, email_body_signature, contact_form_enabled) disabled-with-explanation when false, since they are inert without a mailer (config-parity W6 email seam). */
                 mail: boolean;
             };
-            /** @description Instance imagery (config-parity W1 shape; W4 populates the frontend consumers). Each slot carries its public serving URL ("" when unset) and an is_fallback flag telling the client to use its built-in default imagery. The response also gains an ETag and Cache-Control s-maxage=60. */
+            /** @description Instance imagery (config-parity W1 shape; W4 populates the frontend consumers). Each slot carries its public serving URL ("" when unset) and an is_fallback flag telling the client to use its built-in default imagery. The response also gains an ETag and Cache-Control s-maxage=60. Alongside the imagery slots, this object carries the two display gates the client applies to the chrome: hide_instance_name (the instance's own name in the header) and hide_software_name (the software's name and every "Powered by" attribution, anywhere). */
             branding: {
                 avatar: components["schemas"]["InstanceAssetRef"];
                 banner: components["schemas"]["InstanceAssetRef"];
@@ -5814,6 +5814,8 @@ export interface components {
                 };
                 /** @description Hide the textual instance name in the header (meaningful once a header logo is set). */
                 hide_instance_name: boolean;
+                /** @description White-label: hide the software name ("Vidra") and every "Powered by" attribution from public and signed-in surfaces (branding_hide_software_name). Machine-readable identifiers (NodeInfo, /version, cookie and header names) are unchanged. */
+                hide_software_name: boolean;
             };
             /** @description Operator-tuned client behaviour defaults (W5/W9 consume): what anonymous visitors see first and how publish forms are seeded. */
             defaults: {

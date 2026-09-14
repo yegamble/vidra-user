@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { CheckIcon, HeartIcon } from "@/components/icons";
+import { usePlatformLabel } from "@/components/SoftwareBrandProvider";
 import { Badge, Modal } from "@/components/ui";
 import { QrCode } from "@/components/QrCode";
 import { api } from "@/lib/api";
@@ -26,7 +27,9 @@ function fetchSource(source: DonateSource, signal: AbortSignal): Promise<Donatio
 // SupportButton is the design's watch/channel "Support" affordance (DR5): a heart
 // pill that opens a crypto-donation dialog (QR tile + mono address + copy +
 // verified/unverified pill) bound to the public donation-address reads. Display +
-// copy only — Vidra is non-custodial and processes no payments (P13). Renders
+// copy only — the software is non-custodial and processes no payments (P13).
+// The dialog says so in prose, so the sentence's subject comes from the
+// white-label seam (usePlatformLabel) rather than naming the product. Renders
 // NOTHING unless the entity exposes at least one public address, so the action
 // never opens an empty dialog. `name` is the entity being supported (dialog
 // heading). `label` lets a caller show "Support {name}".
@@ -111,6 +114,7 @@ function SupportDialog({
 }) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
+  const platformLabel = usePlatformLabel();
   // Mobile bottom-sheet vs desktop centered dialog (design). The dialog only
   // mounts on a user click; guard matchMedia for non-browser test envs.
   const [sheet] = useState(
@@ -146,7 +150,7 @@ function SupportDialog({
       className="max-h-[85vh] overflow-y-auto"
     >
       <p className="mb-4 text-[12.5px] leading-relaxed text-fg-muted">
-        Send crypto directly to the creator. Vidra never holds or processes funds.
+        Send crypto directly to the creator. {platformLabel} never holds or processes funds.
       </p>
       <div className="flex flex-col gap-2.5">
         {ordered.map((addr) => {

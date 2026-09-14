@@ -44,6 +44,7 @@ import type {
 } from "@/lib/api";
 import { brandingAssetUrl } from "@/lib/branding";
 import type { InstanceBrandingBlock } from "@/lib/instance-config.server";
+import { hideSoftwareName, platformLabel } from "@/lib/software-brand";
 
 export type InstanceAboutSection =
   | "home"
@@ -161,6 +162,13 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
 
   const name = instance.name;
   const branding = (instance as { branding?: InstanceBrandingBlock }).branding;
+  // White-label, read from the instance document THIS view renders rather than
+  // from the SoftwareBrandProvider context: the About page's snapshot is the
+  // client-side cached /instance read (see the bootstrap effect above — the
+  // server-rendered one is null whenever Next cannot reach the API directly),
+  // and answering from two sources could disagree inside one render.
+  const softwareHidden = hideSoftwareName({ branding });
+  const label = platformLabel(softwareHidden);
   const bannerUrl = brandingAssetUrl(branding?.banner);
   // PeerTube treats the instance avatar as its compact identity. If an older
   // backend/operator only populated a typed square logo or favicon, use that
@@ -217,7 +225,12 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
             label="Platform"
             active={platformSection}
           />
-          <AboutPrimaryLink href="/about/vidra" label="Vidra" active={section === "vidra"} />
+          {/* The software's own page. White-labelled: no tab, and the route
+              itself 404s (app/about/vidra/page.tsx) — an unlinked but crawlable
+              URL naming the software is still a leak. */}
+          {softwareHidden ? null : (
+            <AboutPrimaryLink href="/about/vidra" label="Vidra" active={section === "vidra"} />
+          )}
           <AboutPrimaryLink
             href="/about/network"
             label="Network"
@@ -261,10 +274,16 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
         {section === "team" ? <TeamSection name={name} about={about} /> : null}
         {section === "moderation" ? <ModerationSection about={about} /> : null}
         {section === "technical" ? (
-          <TechnicalSection instance={instance} about={about} />
+          <TechnicalSection
+            instance={instance}
+            about={about}
+            softwareHidden={softwareHidden}
+          />
         ) : null}
-        {section === "vidra" ? <VidraSection instance={instance} /> : null}
-        {section === "network" ? <NetworkSection instance={instance} /> : null}
+        {section === "vidra" && !softwareHidden ? <VidraSection instance={instance} /> : null}
+        {section === "network" ? (
+          <NetworkSection instance={instance} platformLabel={label} />
+        ) : null}
       </div>
 
       {contactOpen ? (
@@ -587,9 +606,12 @@ function ModerationSection({ about }: { about: InstanceAboutResponse }) {
 function TechnicalSection({
   instance,
   about,
+  softwareHidden,
 }: {
   instance: ExtendedInstanceResponse;
   about: InstanceAboutResponse;
+  /** White-label: omit the Software row — name AND version identify the product. */
+  softwareHidden: boolean;
 }) {
   return (
     <section aria-labelledby="about-technical-heading" className="flex max-w-5xl flex-col gap-7">
@@ -599,10 +621,12 @@ function TechnicalSection({
       <AboutBlock title="Server and hardware" text={about.hardware_info} />
       <div className="overflow-hidden rounded-2xl border border-border-subtle">
         <dl className="divide-y divide-border-subtle text-sm">
-          <TechnicalRow
-            label="Software"
-            value={`${instance.software.name} ${formatVersion(instance.software.version)}`}
-          />
+          {softwareHidden ? null : (
+            <TechnicalRow
+              label="Software"
+              value={`${instance.software.name} ${formatVersion(instance.software.version)}`}
+            />
+          )}
           <TechnicalRow
             label="Federation"
             value={instance.federation_enabled ? "ActivityPub enabled" : "Local only"}
@@ -667,7 +691,18 @@ function VidraSection({ instance }: { instance: ExtendedInstanceResponse }) {
 // under the intro copy. Three tinted protocol cards name the networks Vidra
 // speaks; the federation-behaviour cards and the channel-level peers note keep
 // the honest architecture (Vidra has no instance-wide peer graph).
-function NetworkSection({ instance }: { instance: ExtendedInstanceResponse }) {
+function NetworkSection({
+  instance,
+  platformLabel: label,
+}: {
+  instance: ExtendedInstanceResponse;
+  /**
+   * The subject for every sentence here that used to name the software: "Vidra",
+   * or a neutral label once the operator hid it. The protocol NAMES
+   * (ActivityPub, Bluesky, IPFS) are networks, not this product, and stay.
+   */
+  platformLabel: string;
+}) {
   const federated = instance.federation_enabled;
   return (
     <section aria-labelledby="about-network-heading" className="flex flex-col gap-9">
@@ -677,8 +712,8 @@ function NetworkSection({ instance }: { instance: ExtendedInstanceResponse }) {
         </h2>
         <p className="mt-3 text-body leading-relaxed text-fg-muted">
           {federated
-            ? `${instance.name} is part of the open social web. Vidra speaks three open protocols, so channels and videos are not locked to one company's servers.`
-            : `${instance.name} runs as a local-only video platform today. Vidra is built to speak three open protocols, so the operator can join the wider network whenever they choose.`}
+            ? `${instance.name} is part of the open social web. ${label} speaks three open protocols, so channels and videos are not locked to one company's servers.`
+            : `${instance.name} runs as a local-only video platform today. ${label} is built to speak three open protocols, so the operator can join the wider network whenever they choose.`}
         </p>
         {/* Sanctioned ProtocolRibbon placement (b): the Network hero divider. */}
         <ProtocolRibbon className="mt-6" />
@@ -718,7 +753,7 @@ function NetworkSection({ instance }: { instance: ExtendedInstanceResponse }) {
         <AboutFeatureCard
           Icon={UsersIcon}
           title="Channel-level relationships"
-          copy="Vidra federates individual channels rather than exposing one instance-wide follower graph. Followers and remote relationships therefore belong to channel pages."
+          copy={`${label} federates individual channels rather than exposing one instance-wide follower graph. Followers and remote relationships therefore belong to channel pages.`}
         />
         <AboutFeatureCard
           Icon={ShieldIcon}
@@ -740,7 +775,7 @@ function NetworkSection({ instance }: { instance: ExtendedInstanceResponse }) {
               icon={<ServerIcon size={24} />}
               tint="green"
               title="No instance-wide peer list"
-              message="Vidra federates at the channel level, so remote connections live on individual channel pages rather than in a single peers directory."
+              message={`${label} federates at the channel level, so remote connections live on individual channel pages rather than in a single peers directory.`}
             />
           </div>
         </div>

@@ -42,7 +42,13 @@ test("the account export round-trips: request → poll → download parses as JS
   const downloadEvent = page.waitForEvent("download");
   await downloadButton.click();
   const download = await downloadEvent;
-  expect(download.suggestedFilename()).toBe("vidra-account-export.json");
+  // Either spelling is correct here. The filename is white-labelled by the
+  // instance-wide branding_hide_software_name flag, and white-label.spec.ts holds
+  // that flag ON for minutes while this suite runs fullyParallel — so pinning one
+  // spelling would make this spec fail for a reason that has nothing to do with
+  // account export. white-label.spec.ts asserts the hidden spelling exactly, and
+  // the AccountDataSection unit tests pin both, so neither branch is unproven.
+  expect(download.suggestedFilename()).toMatch(/^(vidra-)?account-export\.json$/);
 
   // The downloaded file is the real archive: parse it and assert the format
   // marker, the profile, and the seeded channel made it in.

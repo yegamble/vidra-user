@@ -153,6 +153,9 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["delivery_presign_enabled", "advanced", "delivery"],
   ["delivery_cdn_enabled", "advanced", "delivery"],
   ["qoe_collection_enabled", "advanced", "delivery"],
+  // White-label: the FIRST registry key the server homes in general/branding,
+  // the section whose content had until now been the assets panel alone.
+  ["branding_hide_software_name", "general", "branding"],
 ];
 
 describe("config pages", () => {
@@ -381,10 +384,12 @@ describe("W4 branding & social identity placement", () => {
     expect(PAGE_SECTIONS.customization.map((s) => s.id)).toContain("header");
   });
 
-  it("the general page model carries the key-less Branding panel section regardless of registry placement", () => {
+  it("the general page model carries the Branding panel section regardless of registry placement", () => {
     // The regression the review caught: with the real backend's rows (the
-    // hide-name toggle server-placed at customization/header), no registry
-    // key lands in general/branding — the panel section must render anyway.
+    // hide-name toggle server-placed at customization/header), that key must not
+    // land in general/branding — and the panel section must render whatever
+    // does, which is what its alwaysRender flag buys (it was literally key-less
+    // until the white-label toggle joined it).
     const serverRows = [
       setting("header_hide_instance_name", {
         type: "bool",
@@ -397,7 +402,13 @@ describe("W4 branding & social identity placement", () => {
     const general = buildPageModel("general", serverRows);
     const branding = general.find((s) => s.section.id === "branding");
     expect(branding).toBeDefined();
-    expect(branding?.keys).toEqual([]);
+    expect(
+      PAGE_SECTIONS.general.find((s) => s.id === "branding")?.alwaysRender,
+    ).toBe(true);
+    expect(branding?.keys).not.toContain("header_hide_instance_name");
+    // The one key this section owns: the white-label toggle (rendered from the
+    // META fallback here, since these server rows do not carry it yet).
+    expect(branding?.keys).toEqual(["branding_hide_software_name"]);
     // …and the toggle itself renders on the customization page's Header section.
     const customization = buildPageModel("customization", serverRows);
     const header = customization.find((s) => s.section.id === "header");

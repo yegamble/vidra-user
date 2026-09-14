@@ -1459,3 +1459,75 @@ test("a form loaded from an older backend renders new fields disabled, not broke
     page.getByRole("button", { name: "Save changes" }),
   ).toBeDisabled();
 });
+
+// The white-label switch is the ONLY control for branding_hide_software_name, so
+// its reachability is the feature's front door. The server places it at
+// general/branding — the section whose content is the assets PANEL — so this
+// proves renderSection draws the panel and the server-placed registry row
+// together rather than one instead of the other.
+test("white-label: the hide-software-name toggle lives in General → Branding and PATCHes alone", async ({
+  page,
+}) => {
+  const unset = { url: "", is_fallback: true };
+  const brandedInstance = {
+    ...instanceDoc,
+    branding: {
+      avatar: unset,
+      banner: unset,
+      logos: {
+        favicon: unset,
+        header_wide: unset,
+        header_square: unset,
+        opengraph: unset,
+      },
+      hide_instance_name: false,
+      hide_software_name: false,
+    },
+  };
+  await signIn(page, "admin", brandedInstance);
+  let patchBody: unknown = null;
+  await page.route(SETTINGS, (route) => {
+    if (route.request().method() === "PATCH") {
+      patchBody = route.request().postDataJSON();
+      return route.fulfill({ json: settings });
+    }
+    return route.fulfill({
+      json: {
+        settings: [
+          ...settings.settings,
+          // The real backend's placement for this key.
+          {
+            ...bool("branding_hide_software_name"),
+            page: "general",
+            section: "branding",
+          },
+        ],
+      },
+    });
+  });
+  await openConfig(page);
+
+  // One section holds both the assets panel and the toggle.
+  // Each config section is a <section aria-label={title}> — role="region".
+  const branding = page.getByRole("region", { name: "Branding", exact: true });
+  await expect(branding.getByRole("group", { name: "Branding assets" })).toBeVisible();
+  const toggle = branding.getByRole("switch", { name: "Hide software name" });
+  await expect(toggle).toBeVisible();
+
+  // The help text states the asymmetric scope: visitors stop seeing the software
+  // name, the admin console and the federation documents keep identifying it.
+  // .first(): these regexes all match the SAME help span, and the repo's existing
+  // help-text assertions use .first() for the same strict-mode reason. The three
+  // operator-facing limits are pinned here as well as in the unit suite, because
+  // this is the rendering an admin actually reads.
+  await expect(branding.getByText(/White-label this instance/).first()).toBeVisible();
+  await expect(branding.getByText(/Presentation only/).first()).toBeVisible();
+  await expect(branding.getByText(/NodeInfo/).first()).toBeVisible();
+  await expect(branding.getByText(/within about a minute/).first()).toBeVisible();
+  await expect(branding.getByText(/falls back to showing the software name/).first()).toBeVisible();
+
+  await toggle.click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  expect(patchBody).toEqual({ branding_hide_software_name: true });
+});

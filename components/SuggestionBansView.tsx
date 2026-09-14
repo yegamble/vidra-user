@@ -9,10 +9,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ListTail } from "@/components/ui/ListTail";
 import { Spinner } from "@/components/ui/Spinner";
+import { usePlatformLabel } from "@/components/SoftwareBrandProvider";
 import { ApiError, api } from "@/lib/api";
 import type { SuggestionBanEntry } from "@/lib/api";
 import { formatCount, pluralize, relativeTime } from "@/lib/format";
-import { SEARCH_RETRY_QUALIFIER, SEARCH_SERVICE_DOWN } from "@/lib/search-failure";
+import { SEARCH_RETRY_QUALIFIER, searchServiceDown } from "@/lib/search-failure";
 import { useAppendingList } from "@/lib/use-appending-list";
 import { useAsyncAction } from "@/lib/use-async-action";
 
@@ -62,12 +63,12 @@ type LoadFailure = {
  *    no retry.
  *  - 403 otherwise — the caller is not a moderator. Retrying cannot help.
  */
-function describeSuggestionBanFailure(err: unknown): LoadFailure {
+function describeSuggestionBanFailure(err: unknown, platformLabel: string): LoadFailure {
   if (err instanceof ApiError) {
     if (err.status === 503 || err.code === "search_unavailable") {
       return {
         title: "The search service did not answer",
-        message: `Autosuggest bans are stored by the search service. ${SEARCH_SERVICE_DOWN} ${SEARCH_RETRY_QUALIFIER}`,
+        message: `Autosuggest bans are stored by the search service. ${searchServiceDown(platformLabel)} ${SEARCH_RETRY_QUALIFIER}`,
         retryable: true,
       };
     }
@@ -97,11 +98,11 @@ function describeSuggestionBanFailure(err: unknown): LoadFailure {
  * moderator who believes a slur is suppressed when it is not is worse off than
  * one who knows it failed.
  */
-function mapMutationError(notDone: string) {
+function mapMutationError(notDone: string, platformLabel: string) {
   return (err: unknown): string | null => {
     if (err instanceof ApiError) {
       if (err.status === 503 || err.code === "search_unavailable") {
-        return `${notDone}. ${SEARCH_SERVICE_DOWN}`;
+        return `${notDone}. ${searchServiceDown(platformLabel)}`;
       }
       if (err.status === 403 && err.code === "feature_disabled") {
         return `${notDone}. Smart search is switched off on this instance.`;
@@ -118,6 +119,7 @@ function mapMutationError(notDone: string) {
 }
 
 function BansList() {
+  const platformLabel = usePlatformLabel();
   // useAppendingList reports only THAT the load failed; the three states above
   // need the error itself, so the load callback keeps it.
   const [failure, setFailure] = useState<unknown>(null);
@@ -141,7 +143,8 @@ function BansList() {
     },
   });
 
-  const problem = list.status === "error" ? describeSuggestionBanFailure(failure) : null;
+  const problem =
+    list.status === "error" ? describeSuggestionBanFailure(failure, platformLabel) : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -200,6 +203,7 @@ function BansList() {
 // confirmation quotes the response's `normalized_query` — the value a later
 // unban must target — never the string that was typed.
 function BanForm({ onBanned }: { onBanned: () => void }) {
+  const platformLabel = usePlatformLabel();
   const [value, setValue] = useState("");
   const [banned, setBanned] = useState<string | null>(null);
 
@@ -213,7 +217,7 @@ function BanForm({ onBanned }: { onBanned: () => void }) {
       onBanned();
     },
     "Could not ban that query.",
-    mapMutationError("The ban was not applied"),
+    mapMutationError("The ban was not applied", platformLabel),
   );
 
   return (
@@ -268,6 +272,7 @@ function BanRow({
   entry: SuggestionBanEntry;
   onLifted: (normalizedQuery: string) => void;
 }) {
+  const platformLabel = usePlatformLabel();
   const [confirming, setConfirming] = useState(false);
   const { run, busy, error } = useAsyncAction(
     async () => {
@@ -275,7 +280,7 @@ function BanRow({
       onLifted(entry.normalized_query);
     },
     "Could not lift this ban.",
-    mapMutationError("The ban was not lifted"),
+    mapMutationError("The ban was not lifted", platformLabel),
   );
 
   return (

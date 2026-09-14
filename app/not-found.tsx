@@ -2,10 +2,17 @@ import type { Metadata } from "next";
 
 import { LinkButton } from "@/components/ui";
 import { t } from "@/lib/i18n";
+import { getInstanceConfig } from "@/lib/instance-config.server";
+import { buildNotFoundMetadata } from "@/lib/layout-metadata";
 
-export const metadata: Metadata = {
-  title: "Page not found — Vidra",
-};
+// The title was a hardcoded "Page not found — Vidra": the one page a crawler is
+// most likely to reach by guessing, naming the software on an instance that asked
+// not to be named. It now follows the same rules as the root <title> (instance
+// name → software name → no suffix at all when white-labelled and unnamed),
+// which is why this is generateMetadata rather than a static export.
+export async function generateMetadata(): Promise<Metadata> {
+  return buildNotFoundMetadata(await getInstanceConfig());
+}
 
 // Catch-all 404. Renders inside the root layout, so the site chrome (header,
 // search, navigation) stays available; known-entity misses (bad video/channel

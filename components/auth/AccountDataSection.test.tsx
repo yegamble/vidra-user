@@ -33,6 +33,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { AccountDataSection } from "@/components/auth/AccountDataSection";
+import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 
 function instanceWith(features: Record<string, boolean>) {
   return { name: "Vidra", features };
@@ -153,5 +154,75 @@ describe("AccountDataSection import summary", () => {
   it("still reports created follows", async () => {
     const text = await importWith({ ...base, follows_created: 2, follows_skipped: 0 });
     expect(text).toContain("2 created");
+  });
+});
+
+// White-label (branding.hide_software_name): the downloaded FILENAME and the
+// import error copy are user-visible; the `vidra_export` envelope key inside the
+// archive is the interchange format's own identifier and must NOT move.
+describe("AccountDataSection while white-labelled", () => {
+  async function clickDownload(hidden: boolean) {
+    mocks.getAccountExport.mockResolvedValue({
+      state: "done",
+      download_ready: true,
+      requested_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+    });
+    mocks.downloadAccountExport.mockResolvedValue({ vidra_export: 1, profile: {} });
+    // Capture the anchor the download helper clicks WITHOUT stubbing
+    // document.createElement — testing-library's own render() calls it too.
+    const names: string[] = [];
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        names.push(this.download);
+      });
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+
+    render(
+      <SoftwareBrandProvider hidden={hidden}>
+        <AccountDataSection />
+      </SoftwareBrandProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Download archive" }));
+    await waitFor(() => expect(names.length).toBe(1));
+    click.mockRestore();
+    return names[0];
+  }
+
+  it("names the download after the software by default", async () => {
+    expect(await clickDownload(false)).toBe("vidra-account-export.json");
+  });
+
+  it("names the download neutrally when hidden", async () => {
+    expect(await clickDownload(true)).toBe("account-export.json");
+  });
+
+  async function rejectFile(hidden: boolean) {
+    render(
+      <SoftwareBrandProvider hidden={hidden}>
+        <AccountDataSection />
+      </SoftwareBrandProvider>,
+    );
+    const input = (await screen.findByLabelText("Archive file (JSON)")) as HTMLInputElement;
+    // Structurally valid JSON that is NOT an archive: rejected without a round trip.
+    const file = new File([JSON.stringify({ nope: true })], "x.json", {
+      type: "application/json",
+    });
+    Object.defineProperty(input, "files", { value: [file] });
+    fireEvent.change(input);
+    fireEvent.click(screen.getByRole("button", { name: "Import archive" }));
+    return screen.findByText(/not a/i);
+  }
+
+  it("names the software in the rejection by default", async () => {
+    expect((await rejectFile(false)).textContent).toBe("That file is not a vidra account archive.");
+  });
+
+  it("stays neutral in the rejection when hidden", async () => {
+    const alert = await rejectFile(true);
+    expect(alert.textContent).toBe("That file is not a valid account archive.");
+    expect(document.body.textContent).not.toMatch(/vidra/i);
   });
 });

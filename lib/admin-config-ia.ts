@@ -216,10 +216,13 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       id: "branding",
       title: "Branding",
       description:
-        "The imagery this instance presents: avatar, banner, header logos, favicon, and the social-card image.",
-      // The section's content is the InstanceBrandingManager panel (dedicated
+        "The imagery and naming this instance presents: avatar, banner, header logos, favicon, the social-card image, and whether the software names itself.",
+      // The section hosts the InstanceBrandingManager panel (dedicated
       // upload/delete endpoints, not registry keys), so it renders regardless
-      // of which registry keys the server places here. Client-only panel.
+      // of which registry keys the server places here — that is what
+      // alwaysRender buys. It ALSO takes registry rows: the server places
+      // branding_hide_software_name here, and renderSection draws the panel and
+      // the rows together (proved by AdminInstanceConfigView.test.tsx).
       alwaysRender: true,
     },
     {
@@ -634,6 +637,25 @@ export const META: Record<string, SettingMeta> = {
     control: "markdown",
     page: "general",
     section: "identity",
+  },
+  // GENERAL / Branding — the white-label switch, placed beside the logo panel
+  // because hiding the software's name and uploading your own mark are one
+  // decision. The help text spells out three things an operator would otherwise
+  // discover by being surprised:
+  //   - the scope is deliberately asymmetric (admin pages and machine-readable
+  //     documents keep identifying the software, so an operator can still tell
+  //     what they are running and a peer can still negotiate with it);
+  //   - the change is not instant — the public instance document is cached for
+  //     about a minute, and THIS browser holds its own copy until reloaded;
+  //   - it fails toward SHOWING the name. A frontend that cannot read /instance
+  //     has no evidence of the operator's choice, and blanking every brand slot
+  //     on an unreachable backend would be the worse failure.
+  branding_hide_software_name: {
+    label: "Hide software name",
+    help: "White-label this instance: removes “Vidra” and “Powered by Vidra” from public and signed-in pages, downloads, the PWA name and the About page. Presentation only — admin pages and machine-readable documents (NodeInfo, /version) still identify the software. Visitors see the change within about a minute; reload this browser to see it here. If the frontend cannot reach the API it falls back to showing the software name.",
+    control: "toggle",
+    page: "general",
+    section: "branding",
   },
   default_language: {
     label: "Default language",

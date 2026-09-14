@@ -12,6 +12,7 @@ import { SearchAutocomplete, SearchAutocompleteFallback } from "@/components/Sea
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { isStandaloneRoute } from "@/lib/app-shell";
 import { brandingAssetUrl } from "@/lib/branding";
+import { NEUTRAL_BRAND_FALLBACK, brandName, hideSoftwareName } from "@/lib/software-brand";
 import { useLiveAvailable } from "@/lib/live/availability";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 
@@ -40,6 +41,12 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 // PeerTube-style compact identity fallback when no typed header logo exists.
 // branding.hide_instance_name drops the text ONLY when an image is actually
 // set, so the header is never empty.
+//
+// branding.hide_software_name (white-label) changes only the LAST fallback: an
+// instance that set no name of its own wears the software's name today, which is
+// exactly what a white-labelled operator asked not to show. The slot then reads
+// "Home" — the honest accessible name for a link to "/" — because an empty
+// wordmark would break the "never renders an empty header" guarantee instead.
 // The desktop "+ Create" menu — mirrors the mobile CreateSheet rows: the two
 // primary creator flows (upload / go live), a divider, then New channel. Each
 // row is a real link (deep-linking into the studio surface that auto-opens the
@@ -82,8 +89,8 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
     return null;
   }
 
-  const rawName = typeof instance?.name === "string" ? instance.name.trim() : "";
-  const name = rawName !== "" ? rawName : "Vidra";
+  const name =
+    brandName(instance?.name, hideSoftwareName(instance)) ?? NEUTRAL_BRAND_FALLBACK;
   const wideLogo = brandingAssetUrl(instance?.branding?.logos?.header_wide);
   const squareLogo = brandingAssetUrl(instance?.branding?.logos?.header_square);
   const avatar = brandingAssetUrl(instance?.branding?.avatar);

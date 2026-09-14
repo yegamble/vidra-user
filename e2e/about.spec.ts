@@ -341,3 +341,14 @@ for (const viewport of [
     await expectNoHorizontalPageScroll(page);
   });
 }
+
+// The white-label (branding.hide_software_name) About cases live in their OWN
+// file, e2e/about-white-label.spec.ts, NOT here. This file is configured
+// `mode: "serial"` at the top because its redirect/metadata scenarios share one
+// cold SSR instance-config warm-up — and under serial mode a failure in any
+// earlier test SKIPS the rest, which the mocked lane's zero-skip audit
+// (allowed-skips-none.txt) correctly treats as its own failure. The white-label
+// cases share no state with anything here, so they should not inherit that
+// coupling. (Playwright also refuses a `mode: "parallel"` describe nested inside
+// a serial one, so a nested describe cannot opt out — a separate file is the
+// only way.)
