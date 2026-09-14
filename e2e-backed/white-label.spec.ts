@@ -32,10 +32,14 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, API_URL, adminToken, instanceAbout } from 
 // the lane's zero-skip audit with an unregistered skip. That was measured, not
 // guessed (run 34852976974). A single test makes both directions one outcome.
 //
-// Nothing else in the backed suite asserts the software's name on a non-admin
-// surface (peertube-import.spec asserts it on admin copy, which this feature
-// deliberately leaves alone), so the ~90s window cannot cross-talk with another
-// spec either.
+// CROSS-TALK. This test holds an INSTANCE-WIDE flag on for minutes while other
+// specs run in parallel against the same stack, so anything asserting the
+// software's name meanwhile can see either state. Two do:
+//   - peertube-import.spec asserts it on ADMIN copy, which this feature
+//     deliberately leaves alone — unaffected either way;
+//   - account-export.spec asserts the DOWNLOAD FILENAME, which this feature does
+//     change. That assertion now accepts both spellings for exactly this reason
+//     (see the comment at its call site).
 
 /** Anything that would name the software or attribute the platform to it. */
 const LEAK = /vidra|powered by/i;
@@ -43,11 +47,16 @@ const LEAK = /vidra|powered by/i;
 /**
  * The instance's OWN name is not a leak even when it happens to contain the
  * software's name — an operator who calls their site "Vidra Test" has chosen
- * that, and hiding the software name cannot un-choose it. Masking it here keeps
- * the sweep hermetic: it does not have to rename the instance (which would race
- * instance-settings.spec.ts, running in parallel against the same stack) to stay
- * meaningful. The "powered by" half of LEAK still fires on a masked
- * "Powered by [instance]", so masking cannot hide a real attribution.
+ * that, and hiding the software name cannot un-choose it. Masking it keeps the
+ * sweep hermetic: it does not have to rename the instance (which would race
+ * instance-settings.spec.ts) to stay meaningful. The "powered by" half of LEAK
+ * still fires on a masked "Powered by [instance]", so masking cannot hide a real
+ * attribution.
+ *
+ * The name is re-read LIVE before every sweep rather than captured once:
+ * instance-settings.spec.ts renames the instance to `Vidra <id>` and never
+ * restores it, in parallel, so a stale mask would leave a legitimate instance
+ * name unmasked and report a false LEAK.
  */
 function maskInstanceName(text: string, instanceName: string): string {
   const trimmed = instanceName.trim();
@@ -117,6 +126,11 @@ const ANONYMOUS_PATHS = [
   "/reset-password",
   "/about",
   "/about/network",
+  // The Technical page prints `instance.software.name` verbatim, so it is both
+  // the most direct leak and the likeliest place for a future change to un-gate
+  // one; /about/instance/home is its sibling and shares the identity header.
+  "/about/instance/home",
+  "/about/instance/tech",
   "/robots.txt",
   // A guessed URL: the 404 page's own title used to name the software.
   "/this-page-does-not-exist",
@@ -135,47 +149,70 @@ test("white-label hides the software name everywhere, and turning it off brings 
 }) => {
   test.setTimeout(300_000);
   const token = await adminToken(request);
-  const instanceName = (await instanceAbout(request)).name;
-  const sweep = async () => maskInstanceName(await visibleSurface(page), instanceName);
+  const sweep = async () =>
+    maskInstanceName(await visibleSurface(page), (await instanceAbout(request)).name);
   try {
     // PHASE 1 — hidden: nothing a reader or a crawler can see may name the
     // software.
     await setHideSoftwareName(request, token, true);
 
-    // Ride out the instance-config cache ONCE on the cheapest surface, so the
-    // per-path assertions below fail for their own reasons rather than for a
-    // stale snapshot.
-    await expect(async () => {
-      await page.goto("/");
-      expect(maskInstanceName(await page.title(), instanceName)).not.toMatch(LEAK);
-    }).toPass({ timeout: CACHE_TTL_BUDGET });
+    // EVERY path gets its own cache ride-out, not just the first. The setting
+    // reaches each server-rendered surface through the ~60s instance-config data
+    // cache, and those entries are per-render-path: riding the TTL out on "/"
+    // proves nothing about /login's entry, so a bare assertion on the next path
+    // could read a snapshot from before the PATCH and report a leak that is
+    // really staleness.
+    const sweepPath = async (path: string, label: string) => {
+      await expect(async () => {
+        await page.goto(path);
+        expect(await sweep(), `${label} ${path} names the software`).not.toMatch(LEAK);
+      }).toPass({ timeout: CACHE_TTL_BUDGET });
+    };
 
     for (const path of ANONYMOUS_PATHS) {
-      await page.goto(path);
-      expect(await sweep(), `anonymous surface ${path} names the software`).not.toMatch(LEAK);
+      await sweepPath(path, "anonymous surface");
     }
 
     // /about/vidra is the software's own page: the URL itself is the leak, so it
     // must 404 rather than merely render empty.
-    const aboutSoftware = await page.goto("/about/vidra");
-    expect(aboutSoftware?.status(), "/about/vidra must 404 while white-labelled").toBe(404);
-    expect(await sweep(), "/about/vidra names the software").not.toMatch(LEAK);
+    await expect(async () => {
+      const res = await page.goto("/about/vidra");
+      expect(res?.status(), "/about/vidra must 404 while white-labelled").toBe(404);
+      expect(await sweep(), "/about/vidra names the software").not.toMatch(LEAK);
+    }).toPass({ timeout: CACHE_TTL_BUDGET });
 
     // The PWA manifest is public JSON and names the installed app. page.request
     // shares the page's baseURL and cookies, so this is the same document a
     // browser would install from.
-    const manifest = await page.request.get("/manifest.webmanifest");
-    expect(manifest.ok(), `GET /manifest.webmanifest ${manifest.status()}`).toBeTruthy();
-    expect(
-      maskInstanceName(await manifest.text(), instanceName),
-      "the PWA manifest names the software",
-    ).not.toMatch(LEAK);
+    await expect(async () => {
+      const manifest = await page.request.get("/manifest.webmanifest");
+      expect(manifest.ok(), `GET /manifest.webmanifest ${manifest.status()}`).toBeTruthy();
+      expect(
+        maskInstanceName(await manifest.text(), (await instanceAbout(request)).name),
+        "the PWA manifest names the software",
+      ).not.toMatch(LEAK);
+    }).toPass({ timeout: CACHE_TTL_BUDGET });
 
     await signInAsAdmin(page);
     for (const path of SIGNED_IN_PATHS) {
-      await page.goto(path);
-      expect(await sweep(), `signed-in surface ${path} names the software`).not.toMatch(LEAK);
+      await sweepPath(path, "signed-in surface");
     }
+
+    // The account export's DOWNLOAD FILENAME is white-labelled too, and it is the
+    // one leak a reader keeps on disk. account-export.spec.ts asserts the same
+    // filename from the other direction (and tolerates both spellings, because
+    // this flag is instance-wide while this test holds it on).
+    await page.goto("/settings");
+    await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
+    await page.getByRole("button", { name: "Request export" }).click();
+    const exportDownload = page.getByRole("button", { name: "Download archive" });
+    await expect(exportDownload).toBeVisible({ timeout: 60_000 });
+    const downloadEvent = page.waitForEvent("download");
+    await exportDownload.click();
+    expect(
+      (await downloadEvent).suggestedFilename(),
+      "the export filename must not carry the software name",
+    ).toBe("account-export.json");
 
     // PHASE 2 — the regression half, and the proof that hiding is REVERSIBLE
     // rather than one-way: turn it off and the attribution and the software's own
@@ -190,6 +227,16 @@ test("white-label hides the software name everywhere, and turning it off brings 
     const aboutSoftwareBack = await page.goto("/about/vidra");
     expect(aboutSoftwareBack?.status(), "/about/vidra serves normally when not hidden").toBe(200);
     await expect(page.getByRole("heading", { name: /powered by/i })).toBeVisible();
+
+    // And the Technical page's Software row is back — the positive mirror of the
+    // /about/vidra 200 above. Asserted POSITIVELY on purpose: "the row is gone
+    // when hidden" is only meaningful if something proves it comes back, or a
+    // permanently-omitted row would pass phase 1 forever.
+    await expect(async () => {
+      await page.goto("/about/instance/tech");
+      await expect(page.getByText(/^vidra \S+/)).toBeVisible({ timeout: 3_000 });
+      await expect(page.getByText("Software", { exact: true })).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: CACHE_TTL_BUDGET });
   } finally {
     // Hermetic: clear the overlay whatever happened above, so a failure here
     // cannot leave every other spec sharing this stack white-labelled.

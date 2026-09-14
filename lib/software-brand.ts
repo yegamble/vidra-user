@@ -68,11 +68,6 @@ export function hideSoftwareName(instance: SoftwareBrandSource): boolean {
   return instance?.branding?.hide_software_name === true;
 }
 
-/** The software name to render, or null when this instance is white-labelled. */
-export function softwareName(instance: SoftwareBrandSource): string | null {
-  return hideSoftwareName(instance) ? null : SOFTWARE_NAME;
-}
-
 /** The prose subject for a sentence about the platform. */
 export function platformLabel(hidden: boolean): string {
   return hidden ? NEUTRAL_PLATFORM_LABEL : SOFTWARE_NAME;

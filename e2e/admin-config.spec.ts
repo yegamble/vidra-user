@@ -1516,10 +1516,15 @@ test("white-label: the hide-software-name toggle lives in General → Branding a
 
   // The help text states the asymmetric scope: visitors stop seeing the software
   // name, the admin console and the federation documents keep identifying it.
-  // .first(): both regexes match the SAME help span, and the repo's existing
-  // help-text assertions use .first() for the same strict-mode reason.
+  // .first(): these regexes all match the SAME help span, and the repo's existing
+  // help-text assertions use .first() for the same strict-mode reason. The three
+  // operator-facing limits are pinned here as well as in the unit suite, because
+  // this is the rendering an admin actually reads.
   await expect(branding.getByText(/White-label this instance/).first()).toBeVisible();
+  await expect(branding.getByText(/Presentation only/).first()).toBeVisible();
   await expect(branding.getByText(/NodeInfo/).first()).toBeVisible();
+  await expect(branding.getByText(/within about a minute/).first()).toBeVisible();
+  await expect(branding.getByText(/falls back to showing the software name/).first()).toBeVisible();
 
   await toggle.click();
   await page.getByRole("button", { name: "Save changes" }).click();

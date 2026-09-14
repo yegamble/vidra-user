@@ -640,14 +640,19 @@ export const META: Record<string, SettingMeta> = {
   },
   // GENERAL / Branding — the white-label switch, placed beside the logo panel
   // because hiding the software's name and uploading your own mark are one
-  // decision. Scope is deliberately asymmetric and the help text says so: the
-  // name goes from what VISITORS and signed-in users see, while the ADMIN
-  // console and the machine-readable federation documents keep identifying the
-  // software, so an operator can still tell what they are running and a peer can
-  // still negotiate with it.
+  // decision. The help text spells out three things an operator would otherwise
+  // discover by being surprised:
+  //   - the scope is deliberately asymmetric (admin pages and machine-readable
+  //     documents keep identifying the software, so an operator can still tell
+  //     what they are running and a peer can still negotiate with it);
+  //   - the change is not instant — the public instance document is cached for
+  //     about a minute, and THIS browser holds its own copy until reloaded;
+  //   - it fails toward SHOWING the name. A frontend that cannot read /instance
+  //     has no evidence of the operator's choice, and blanking every brand slot
+  //     on an unreachable backend would be the worse failure.
   branding_hide_software_name: {
     label: "Hide software name",
-    help: "White-label this instance: removes “Vidra” and “Powered by Vidra” from public and signed-in pages, downloads, the PWA name and the About page. Admin pages and machine-readable federation documents (NodeInfo, /version) still identify the software.",
+    help: "White-label this instance: removes “Vidra” and “Powered by Vidra” from public and signed-in pages, downloads, the PWA name and the About page. Presentation only — admin pages and machine-readable documents (NodeInfo, /version) still identify the software. Visitors see the change within about a minute; reload this browser to see it here. If the frontend cannot reach the API it falls back to showing the software name.",
     control: "toggle",
     page: "general",
     section: "branding",

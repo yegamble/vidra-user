@@ -9,7 +9,6 @@ import {
   brandName,
   hideSoftwareName,
   platformLabel,
-  softwareName,
 } from "@/lib/software-brand";
 
 describe("hideSoftwareName", () => {
@@ -28,13 +27,6 @@ describe("hideSoftwareName", () => {
   it("hides only on an explicit true", () => {
     expect(hideSoftwareName({ branding: { hide_software_name: true } })).toBe(true);
     expect(hideSoftwareName({ branding: { hide_software_name: false } })).toBe(false);
-  });
-});
-
-describe("softwareName", () => {
-  it("is the product name while not hidden and null once hidden", () => {
-    expect(softwareName(null)).toBe(SOFTWARE_NAME);
-    expect(softwareName({ branding: { hide_software_name: true } })).toBeNull();
   });
 });
 
