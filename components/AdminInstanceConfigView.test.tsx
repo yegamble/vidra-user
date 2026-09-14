@@ -635,6 +635,94 @@ describe("branding panel reachability (General page, config-parity W4)", () => {
   });
 });
 
+// White-label (branding_hide_software_name). Modelled on the W4 block above,
+// with the OPPOSITE placement: the server homes this key at general/branding, so
+// it must land in the SAME section that hosts the InstanceBrandingManager panel.
+// That section is `alwaysRender` because its content is the panel — the
+// regression this guards is a renderSection that draws the panel INSTEAD of the
+// section's registry rows rather than alongside them, which would leave the only
+// control for this feature unreachable from the console.
+describe("white-label toggle placement (General → Branding)", () => {
+  const whiteLabelSettings = {
+    settings: [
+      ...doc.settings,
+      {
+        key: "branding_hide_software_name",
+        type: "bool",
+        value: false,
+        default: false,
+        overridden: false,
+        page: "general",
+        section: "branding",
+      },
+    ],
+  };
+
+  const unset = { url: "", is_fallback: true };
+
+  beforeEach(() => {
+    mocks.getInstanceSettings.mockResolvedValue(whiteLabelSettings);
+    mocks.getInstance.mockResolvedValue({
+      name: "Test",
+      federation_enabled: true,
+      branding: {
+        avatar: unset,
+        banner: unset,
+        logos: {
+          favicon: unset,
+          header_wide: unset,
+          header_square: unset,
+          opengraph: unset,
+        },
+        hide_instance_name: false,
+        hide_software_name: false,
+      },
+    });
+  });
+
+  it("renders the server-placed toggle inside Branding, beside the assets panel", async () => {
+    render(<ConfigForm page="general" />);
+
+    // Await the section heading first (the settings-load milestone) so each
+    // findBy budget covers a single round trip — see the note in the W4 block.
+    const heading = await screen.findByRole("heading", { name: "Branding" });
+    const section = heading.closest("section");
+    expect(section).not.toBeNull();
+
+    // The panel and the registry row render TOGETHER in this one section.
+    expect(await screen.findByRole("group", { name: "Branding assets" })).toBeTruthy();
+    const toggle = within(section as HTMLElement).getByRole("switch", {
+      name: "Hide software name",
+    });
+    expect((toggle as HTMLButtonElement).disabled).toBe(false);
+    expect(within(section as HTMLElement).getByRole("group", { name: "Branding assets" }))
+      .toBeTruthy();
+  });
+
+  it("names the asymmetric scope in the help text so the admin is not surprised", async () => {
+    render(<ConfigForm page="general" />);
+    await screen.findByRole("heading", { name: "Branding" });
+    const help = await screen.findByText(/White-label this instance/);
+    expect(help.textContent).toMatch(/Powered by Vidra/);
+    expect(help.textContent).toMatch(/PWA name/);
+    // The admin console and the federation documents are explicitly excluded.
+    expect(help.textContent).toMatch(/Admin pages/);
+    expect(help.textContent).toMatch(/NodeInfo/);
+  });
+
+  it("PATCHes only branding_hide_software_name when the toggle is flipped", async () => {
+    render(<ConfigForm page="general" />);
+    await screen.findByRole("heading", { name: "Branding" });
+    fireEvent.click(await screen.findByRole("switch", { name: "Hide software name" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mocks.updateInstanceSettings).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceSettings).toHaveBeenCalledWith({
+      branding_hide_software_name: true,
+    });
+  });
+});
+
 describe("inline video-card preview gate", () => {
   const previewDoc = {
     settings: [
