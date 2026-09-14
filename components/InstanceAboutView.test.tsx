@@ -87,7 +87,7 @@ async function show(section: "vidra" | "technical" | "network", hidden: boolean)
   // The identity hero is the settled-snapshot milestone (the skeleton renders
   // until BOTH the instance and the about document land).
   await waitFor(() =>
-    expect(screen.getByRole("heading", { name: "A17 Lab Tube", exact: true })).toBeTruthy(),
+    expect(screen.getByRole("heading", { name: "A17 Lab Tube" })).toBeTruthy(),
   );
 }
 

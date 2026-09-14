@@ -15,8 +15,9 @@ import type { SearchHistoryEntry, UpdateProfileRequest } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
 import type { InstanceSearchBlock } from "@/lib/instance-config.server";
-import { SEARCH_RETRY_QUALIFIER, SEARCH_SERVICE_DOWN } from "@/lib/search-failure";
+import { SEARCH_RETRY_QUALIFIER, searchServiceDown } from "@/lib/search-failure";
 import { SignInGate } from "@/components/SignInGate";
+import { usePlatformLabel } from "@/components/SoftwareBrandProvider";
 
 // A single per-key preference key on the profile update path. All three ride the
 // existing PATCH /auth/me contract (regenerated UpdateProfileRequest).
@@ -142,6 +143,9 @@ function PreferencesSection({
   gates: Record<PrefKey, Gate>;
 }) {
   const { updateProfile } = useSession();
+  // The privacy explainer's subject is the software; a white-labelled instance
+  // may not name it (branding.hide_software_name).
+  const platformLabel = usePlatformLabel();
   const [prefs, setPrefs] = useState<Record<PrefKey, boolean>>(initial);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -171,7 +175,7 @@ function PreferencesSection({
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold tracking-tight text-fg">Personalization</h2>
         <p className="text-[13px] text-fg-muted">
-          Vidra can use your searches and what you watch to tailor suggestions,
+          {platformLabel} can use your searches and what you watch to tailor suggestions,
           search results, and your home recommendations. These controls are yours —
           turn any of them off at any time, and each one feeds only its own
           feature. Once none of them is active for you, your searches and plays
@@ -316,12 +320,12 @@ type LoadFailure = {
  *  - 403/401 otherwise — the caller may not read this history. Retrying cannot
  *    help either.
  */
-function describeHistoryFailure(err: unknown): LoadFailure {
+function describeHistoryFailure(err: unknown, platformLabel: string): LoadFailure {
   if (err instanceof ApiError) {
     if (err.status === 503 || err.code === "search_unavailable") {
       return {
         title: "The search service did not answer",
-        message: `Your search history is stored by the search service. ${SEARCH_SERVICE_DOWN} ${SEARCH_RETRY_QUALIFIER}`,
+        message: `Your search history is stored by the search service. ${searchServiceDown(platformLabel)} ${SEARCH_RETRY_QUALIFIER}`,
         retryable: true,
       };
     }
@@ -346,10 +350,10 @@ function describeHistoryFailure(err: unknown): LoadFailure {
 }
 
 /** The same three states for a delete/clear that did NOT take effect. */
-function historyMutationError(notDone: string, err: unknown): string {
+function historyMutationError(notDone: string, err: unknown, platformLabel: string): string {
   if (err instanceof ApiError) {
     if (err.status === 503 || err.code === "search_unavailable") {
-      return `${notDone}. ${SEARCH_SERVICE_DOWN}`;
+      return `${notDone}. ${searchServiceDown(platformLabel)}`;
     }
     if (err.status === 403 && err.code === "feature_disabled") {
       return `${notDone}. Smart search is switched off on this instance.`;
@@ -381,6 +385,7 @@ function historyMutationError(notDone: string, err: unknown): string {
 // the strongest claim on the control. It stays hidden while the list is loading
 // or has failed, where a click would race an unknown state.
 function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean }) {
+  const platformLabel = usePlatformLabel();
   const [entries, setEntries] = useState<SearchHistoryEntry[]>([]);
   const [fetchStatus, setFetchStatus] = useState<HistoryStatus>("loading");
   const [failure, setFailure] = useState<unknown>(null);
@@ -413,7 +418,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
   // "off" is derived, not stored: the operator's verdict outranks any fetch
   // state, and deriving it keeps the spinner from flashing before the effect.
   const status: HistoryStatus = instanceEnabled ? fetchStatus : "off";
-  const problem = status === "error" ? describeHistoryFailure(failure) : null;
+  const problem = status === "error" ? describeHistoryFailure(failure, platformLabel) : null;
 
   function retry() {
     setFetchStatus("loading");
@@ -431,7 +436,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
     } catch (err) {
       // Restore on failure and report.
       setEntries((prev) => [...prev, entry]);
-      setActionError(historyMutationError("That search was not removed", err));
+      setActionError(historyMutationError("That search was not removed", err, platformLabel));
     }
   }
 
@@ -443,7 +448,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
       setEntries([]);
       setConfirmClear(false);
     } catch (err) {
-      setActionError(historyMutationError("Your history was not cleared", err));
+      setActionError(historyMutationError("Your history was not cleared", err, platformLabel));
     } finally {
       setClearing(false);
     }

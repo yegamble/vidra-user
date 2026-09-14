@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { ProtocolBadge } from "@/components/ProtocolBadge";
+import { usePlatformLabel } from "@/components/SoftwareBrandProvider";
 import { Alert } from "@/components/ui/Alert";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -54,6 +55,9 @@ export function ConnectionsView() {
 // 200 (linked), 404 (not linked → show the connect form), or 503 (the extension
 // is disabled on this instance → an honest not-available state, no form).
 function BlueskySection() {
+  // Two sentences name the software as the actor doing the cross-posting; a
+  // white-labelled instance may not name it (branding.hide_software_name).
+  const platformLabel = usePlatformLabel();
   const [phase, setPhase] = useState<Phase>("loading");
   const [account, setAccount] = useState<ATProtoStatus | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -92,10 +96,11 @@ function BlueskySection() {
         <ProtocolBadge protocol="atproto" />
       </div>
       <p className="text-sm text-fg-muted">
-        Connect a Bluesky account so Vidra can announce your newly published{" "}
+        Connect a Bluesky account so {platformLabel} can announce your newly published{" "}
         <span className="font-medium">public</span> videos there. Cross-posting is outbound only —
-        Vidra never reads your Bluesky feed, and posting happens automatically on publish (there is
-        nothing else to post here).
+        {" "}
+        {platformLabel} never reads your Bluesky feed, and posting happens automatically on publish
+        (there is nothing else to post here).
       </p>
 
       {phase === "loading" ? (

@@ -16,9 +16,16 @@
 /**
  * Names BOTH causes the 503 admits (offline OR never configured) and promises
  * nothing about time.
+ *
+ * A FUNCTION of the platform label rather than a constant: the sentence's
+ * subject is the software, which a white-labelled instance may not name
+ * (branding.hide_software_name — see lib/software-brand.ts). Callers pass
+ * usePlatformLabel(), so both surfaces still share one sentence and cannot
+ * drift into different stories about the same HTTP response.
  */
-export const SEARCH_SERVICE_DOWN =
-  "Vidra could not reach the search service. It may be offline, or not configured on this instance.";
+export function searchServiceDown(platformLabel: string): string {
+  return `${platformLabel} could not reach the search service. It may be offline, or not configured on this instance.`;
+}
 
 /**
  * Qualifies a retry that may never succeed, and names who can actually fix the

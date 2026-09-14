@@ -37,6 +37,7 @@ vi.mock("@/lib/api", () => {
 });
 
 import { ApiError, api } from "@/lib/api";
+import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 import { SearchSettingsView } from "./SearchSettingsView";
 
 const getSearchHistory = vi.mocked(api.getSearchHistory);
@@ -354,5 +355,52 @@ describe("SearchSettingsView — signed out", () => {
     render(<SearchSettingsView />);
     expect(screen.getByText("Sign in to manage your search settings")).toBeTruthy();
     expect(getSearchHistory).not.toHaveBeenCalled();
+  });
+});
+
+// White-label (branding.hide_software_name): the privacy explainer and the
+// shared "could not reach the search service" sentence both name the software as
+// their subject. Both keep every factual claim and only change that subject.
+describe("SearchSettingsView while white-labelled", () => {
+  const show = (hidden: boolean) =>
+    render(
+      <SoftwareBrandProvider hidden={hidden}>
+        <SearchSettingsView />
+      </SoftwareBrandProvider>,
+    );
+
+  it("names the software in the personalization explainer by default", async () => {
+    show(false);
+    expect(
+      await screen.findByText(/Vidra can use your searches and what you watch/),
+    ).toBeTruthy();
+  });
+
+  it("neutralizes the personalization explainer when hidden", async () => {
+    show(true);
+    expect(
+      await screen.findByText(/This platform can use your searches and what you watch/),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/vidra/i);
+  });
+
+  it("neutralizes the shared search-service failure sentence when hidden", async () => {
+    getSearchHistory.mockRejectedValue(apiError(503, "search_unavailable"));
+    show(true);
+    const alert = await screen.findByRole("alert");
+    // Every claim survives: both causes named, no promise about time, and the
+    // qualified retry.
+    expect(alert.textContent).toContain(
+      "This platform could not reach the search service. It may be offline, or not configured on this instance.",
+    );
+    expect(alert.textContent).toMatch(/Retrying helps only if/i);
+    expect(document.body.textContent).not.toMatch(/vidra/i);
+  });
+
+  it("still names the software in that sentence by default", async () => {
+    getSearchHistory.mockRejectedValue(apiError(503, "search_unavailable"));
+    show(false);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Vidra could not reach the search service.");
   });
 });
