@@ -2,11 +2,7 @@
 
 import { createContext, useContext, useMemo } from "react";
 
-import {
-  SOFTWARE_NAME,
-  platformLabel,
-  type SoftwareBrandSource,
-} from "@/lib/software-brand";
+import { SOFTWARE_NAME, platformLabel } from "@/lib/software-brand";
 
 // The client half of the white-label seam (lib/software-brand.ts). One decision
 // — "may this deployment say the software's name?" — travels from the RSC
@@ -54,10 +50,3 @@ export function useSoftwareName(): string | null {
 export function usePlatformLabel(): string {
   return platformLabel(useSoftwareBrandHidden());
 }
-
-/**
- * Re-exported for the handful of client components that already hold their own
- * copy of the /instance document (the About page reads a client-side cached
- * one) and should answer from THAT rather than from a second source of truth.
- */
-export type { SoftwareBrandSource };

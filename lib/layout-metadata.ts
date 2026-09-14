@@ -3,6 +3,11 @@
 // from generateMetadata and never grows metadata logic of its own — metadata
 // waves extend THIS module only.
 //
+// Two sibling builders live here for the same reason, and share its naming
+// rules so the three can never disagree about what this site is called:
+// buildWebManifest (app/manifest.ts — the PWA name) and buildNotFoundMetadata
+// (app/not-found.tsx — the 404 title).
+//
 // W4 behavior: the SSR instance snapshot drives title/description (instance
 // name + short description), the favicon (branding.logos.favicon), the
 // og:image / twitter:image social-card default (branding.logos.opengraph),

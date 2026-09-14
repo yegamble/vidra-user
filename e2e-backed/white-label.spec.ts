@@ -69,7 +69,17 @@ async function setHideSoftwareName(
     // reset, since "false" would leave the key marked overridden.
     data: { branding_hide_software_name: value },
   });
-  expect(res.ok(), `PATCH instance-settings ${res.status()}`).toBeTruthy();
+  // CORE-FIRST. The backed lanes build against vidra-core's DEFAULT BRANCH, so
+  // until the matching core change merges this PATCH is rejected for an unknown
+  // key and this whole file is red — the same correct red the `contract` lane
+  // shows, for the same reason. Name it in the failure so nobody debugs the
+  // frontend for it.
+  expect(
+    res.ok(),
+    `PATCH instance-settings ${res.status()} for branding_hide_software_name — ` +
+      "if this is a 4xx about an unknown key, the vidra-core white-label change " +
+      "has not merged to its default branch yet. Land core first, then re-run.",
+  ).toBeTruthy();
 }
 
 async function signInAsAdmin(page: Page): Promise<void> {

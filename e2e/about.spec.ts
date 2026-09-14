@@ -394,8 +394,8 @@ test("white-label: the About pages name the instance and never the software", as
   // Network: neutral prose, protocol names intact — a NETWORK is not this product.
   await page.getByRole("link", { name: "Network", exact: true }).click();
   await expect(page).toHaveURL(/\/about\/network$/);
-  await expect(page.getByText(/This platform speaks three open protocols/)).toBeVisible();
-  await expect(page.getByText(/This platform federates individual channels/)).toBeVisible();
+  await expect(page.getByText(/This platform speaks three open protocols/).first()).toBeVisible();
+  await expect(page.getByText(/This platform federates individual channels/).first()).toBeVisible();
   await expect(page.getByText("ActivityPub", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("main")).not.toContainText(/vidra/i);
 });
