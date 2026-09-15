@@ -104,6 +104,7 @@ import type {
   RemoteBlockListResponse,
   RemoteVideo,
   RemoteVideoCommentListResponse,
+  AuthoredRemoteComment,
   FeedScope,
   CreateChannelRequest,
   UpdateChannelRequest,
@@ -1384,16 +1385,56 @@ export const api = {
     apiRequest<RemoteVideo>(`/api/v1/remote-videos/${encodeURIComponent(id)}`, { signal }),
 
   /**
-   * GET /api/v1/remote-videos/{id}/comments — the comments this instance has
-   * MIRRORED for a federated video: the thread its origin fans out to its
-   * followers, oldest first. Read-only — there is no authoring endpoint,
-   * because comments on a remote video live on the origin.
+   * GET /api/v1/remote-videos/{id}/comments — the comments for a federated
+   * video. Two disjoint arrays: `comments` is the paginated MIRRORED origin
+   * thread (each `local:false`), `authored` is the complete set of comments
+   * LOCAL users have written here and federated to the origin (each `local:true`,
+   * not paginated). Both are filtered for the CALLER's mutes/blocks, so pass the
+   * viewer's token (wait for the session to settle — see useSettledSession).
+   * A 404 means no such remote video, or its origin is blocked here.
    */
   getRemoteVideoComments: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<RemoteVideoCommentListResponse>(
       `/api/v1/remote-videos/${encodeURIComponent(id)}/comments`,
       { query: pageQuery(params), signal },
     ),
+
+  /**
+   * POST /api/v1/remote-videos/{id}/comments — author a comment on a federated
+   * video (auth). The comment is HOSTED and shown on THIS instance (the home
+   * instance hosts and moderates it — migration 0147) and federated to the
+   * origin as a Create{Note}; the returned `delivery_state` reports that leg
+   * (`pending` at first). 403 when new comments are disabled on this instance,
+   * 404 for an unknown/origin-blocked video, 422 on an empty/over-long body.
+   */
+  createRemoteVideoComment: (id: string, body: string) =>
+    apiRequest<AuthoredRemoteComment>(
+      `/api/v1/remote-videos/${encodeURIComponent(id)}/comments`,
+      { method: "POST", body: { body } },
+    ),
+
+  /**
+   * PATCH /api/v1/remote-video-comments/{id} — edit your OWN locally-authored
+   * comment on a remote video (auth, author-only). The edit re-federates as an
+   * Update{Note} and resets delivery_state to pending. 403 for another user's
+   * comment, 404 for an unknown id, 422 on an empty/over-long body.
+   */
+  updateRemoteVideoComment: (id: string, body: string) =>
+    apiRequest<AuthoredRemoteComment>(
+      `/api/v1/remote-video-comments/${encodeURIComponent(id)}`,
+      { method: "PATCH", body: { body } },
+    ),
+
+  /**
+   * DELETE /api/v1/remote-video-comments/{id} — delete a locally-authored
+   * comment on a remote video (auth; author always, or a moderator/admin). The
+   * deletion re-federates as a Delete{Note} to the origin. 403 when not allowed,
+   * 404 for an unknown id.
+   */
+  deleteRemoteVideoComment: (id: string) =>
+    apiRequest<void>(`/api/v1/remote-video-comments/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 
   /**
    * POST /api/v1/remote-videos/{id}/report — file an abuse report against a

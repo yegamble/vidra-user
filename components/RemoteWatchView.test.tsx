@@ -43,6 +43,20 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push }),
 }));
 
+// The authoring composer's sign-in prompt is a next/link; shim it to a plain
+// anchor so it mounts without the App Router's link runtime.
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...props
+  }: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock("@/components/auth/AuthProvider", () => ({
   useSession: () => mocks.useSession(),
 }));
@@ -92,7 +106,7 @@ beforeEach(() => {
   mocks.getRemoteVideo.mockReset();
   mocks.getRemoteVideoComments
     .mockReset()
-    .mockResolvedValue({ comments: [], total: 0, limit: 50, offset: 0 });
+    .mockResolvedValue({ comments: [], authored: [], total: 0, limit: 50, offset: 0 });
   mocks.blockRemoteActor.mockReset().mockResolvedValue(undefined);
   mocks.unblockRemoteActor.mockReset().mockResolvedValue(undefined);
   mocks.useSession.mockReturnValue({ status: "anonymous" });
@@ -189,6 +203,7 @@ describe("RemoteWatchView mirrored thread", () => {
       comments: [
         {
           id: "c1",
+          local: false,
           author_name: "ada",
           author_domain: "peer.example",
           actor_url: "https://peer.example/accounts/ada",
@@ -199,6 +214,7 @@ describe("RemoteWatchView mirrored thread", () => {
         },
         {
           id: "c2",
+          local: false,
           author_name: "ada",
           author_domain: "other.example",
           actor_url: "https://other.example/accounts/ada",
@@ -208,6 +224,7 @@ describe("RemoteWatchView mirrored thread", () => {
           created_at: "2026-09-05T11:00:00Z",
         },
       ],
+      authored: [],
       total: 2,
       limit: 50,
       offset: 0,
@@ -240,6 +257,7 @@ describe("RemoteWatchView mirrored thread", () => {
       comments: [
         {
           id: "c1",
+          local: false,
           author_name: "ada",
           author_domain: "peer.example",
           actor_url: "https://peer.example/accounts/ada",
@@ -250,6 +268,7 @@ describe("RemoteWatchView mirrored thread", () => {
         },
         {
           id: "c3",
+          local: false,
           author_name: "kai",
           author_domain: "peer.example",
           actor_url: "https://peer.example/accounts/kai",
@@ -261,6 +280,7 @@ describe("RemoteWatchView mirrored thread", () => {
         },
         {
           id: "c2",
+          local: false,
           author_name: "bo",
           author_domain: "peer.example",
           actor_url: "https://peer.example/accounts/bo",
@@ -271,6 +291,7 @@ describe("RemoteWatchView mirrored thread", () => {
           created_at: "2026-09-05T11:00:00Z",
         },
       ],
+      authored: [],
       total: 3,
       limit: 50,
       offset: 0,
@@ -308,13 +329,25 @@ describe("RemoteWatchView mirrored thread", () => {
     expect(await screen.findByText(/mirrors the comments its origin sends it/)).toBeTruthy();
   });
 
-  it("offers no composer — replying lives on the origin", async () => {
+  it("offers an anonymous viewer a sign-in prompt, not a composer", async () => {
     restoreCanPlayType = pretendNativeHlsSupport();
     mocks.getRemoteVideo.mockResolvedValue(remoteVideo({ stream_url: HLS_MASTER }));
     render(<RemoteWatchView id="r1" />);
     await screen.findByRole("heading", { name: "Comments from the origin" });
+    // No composer for a logged-out viewer, but a way in.
     expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.getByText(/so does replying/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
+    // The page copy now says authoring is possible AND hosted here.
+    expect(screen.getByText(/hosted on this instance and sent on to/)).toBeTruthy();
+  });
+
+  it("offers a signed-in viewer a composer that authors against this instance", async () => {
+    restoreCanPlayType = pretendNativeHlsSupport();
+    mocks.useSession.mockReturnValue({ status: "authed", user: { id: "u1", username: "me" } });
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo({ stream_url: HLS_MASTER }));
+    render(<RemoteWatchView id="r1" />);
+    const box = await screen.findByRole("textbox", { name: "Add a comment" });
+    expect(box).toBeTruthy();
   });
 });
 

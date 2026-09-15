@@ -500,6 +500,14 @@ export type RemoteFollow = Schemas["RemoteFollow"];
 export type RemoteFollowListResponse = Schemas["RemoteFollowListResponse"];
 export type RemoteVideoComment = Schemas["RemoteVideoComment"];
 export type RemoteVideoCommentListResponse = Schemas["RemoteVideoCommentListResponse"];
+// A comment a LOCAL user authored on a remote video: hosted + displayed here,
+// federated to the origin. `local:true` is the discriminator against the
+// mirrored RemoteVideoComment (`local:false`).
+export type AuthoredRemoteComment = Schemas["AuthoredRemoteComment"];
+export type AuthoredRemoteCommentRequest = Schemas["AuthoredRemoteCommentRequest"];
+// The federation status of the reply sent to the origin. The comment is hosted
+// and shown locally regardless of this value.
+export type RemoteCommentDeliveryState = AuthoredRemoteComment["delivery_state"];
 export type RemoteBlock = Schemas["RemoteBlockView"];
 export type RemoteBlockListResponse = Schemas["RemoteBlockListResponse"];
 export type BlockedUser = Schemas["BlockedUser"];

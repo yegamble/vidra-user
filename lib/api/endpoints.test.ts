@@ -1617,6 +1617,36 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/remote-videos/r%201");
   });
 
+  it("getRemoteVideoComments targets the remote-video comments with pagination", async () => {
+    await api.getRemoteVideoComments("r1", { limit: 100 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/remote-videos/r1/comments?limit=100",
+    );
+  });
+
+  it("createRemoteVideoComment POSTs the body to the remote-video comments endpoint", async () => {
+    await api.createRemoteVideoComment("r 1", "nice video");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/remote-videos/r%201/comments");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ body: "nice video" });
+  });
+
+  it("updateRemoteVideoComment PATCHes the body to the authored-comment endpoint", async () => {
+    await api.updateRemoteVideoComment("c 1", "edited");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/remote-video-comments/c%201");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ body: "edited" });
+  });
+
+  it("deleteRemoteVideoComment DELETEs the authored-comment endpoint", async () => {
+    await api.deleteRemoteVideoComment("c 1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/remote-video-comments/c%201");
+    expect(init.method).toBe("DELETE");
+  });
+
   it("remoteVideoThumbnailUrl builds the cached-poster URL", () => {
     expect(remoteVideoThumbnailUrl("r1")).toBe(
       "http://localhost:8080/api/v1/remote-videos/r1/thumbnail",
