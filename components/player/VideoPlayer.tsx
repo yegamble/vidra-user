@@ -460,15 +460,56 @@ export function VideoPlayer({
   useEffect(() => {
     startAttempted.current = false;
   }, [video.id]);
+
+  // The live preference, held in a ref so the attempt below keeps ONE identity
+  // for the whole mount — the media-element subscription registers it as a
+  // listener and must never re-subscribe just because the store notified.
+  const startOnOpenRef = useRef(startOnOpen);
   useEffect(() => {
-    primeInstanceDefaults();
-    if (variant !== "watch" || !startOnOpen || startAttempted.current) return;
+    startOnOpenRef.current = startOnOpen;
+  }, [startOnOpen]);
+
+  const attemptStartOnOpen = useCallback(() => {
+    if (variant !== "watch" || !startOnOpenRef.current || startAttempted.current) return;
     const el = videoRef.current;
     if (!el || !el.paused) return;
+    // HOLD UNTIL A SOURCE EXISTS. On an SPA feed→watch navigation the defaults
+    // store and the per-user layer are already settled, so this effect ran on
+    // the FIRST render — before the engine attached anything (in hls.js mode the
+    // shell renders <video> with no src at all and the MSE blob only arrives
+    // after `import("hls.js")` resolves). play() on an empty element does not
+    // error: the element reports paused=false at NETWORK_EMPTY and waits. Then
+    // the attach runs the load algorithm, which rejects that promise with
+    // AbortError and pauses again silently — so nothing played and the latch was
+    // already spent. currentSrc covers hls.js's blob:, the attribute covers the
+    // progressive/native URL. readyState is deliberately NOT part of this: hls.js
+    // sits at readyState 0 with a perfectly valid blob until the first fragment.
+    if (!el.currentSrc && !el.getAttribute("src")) return;
     startAttempted.current = true;
     // el.play() may return undefined in non-browser test DOMs.
-    void el.play()?.catch(() => {});
-  }, [startOnOpen, variant, video.id, videoRef]);
+    void el.play()?.catch((err: unknown) => {
+      // Re-arm on AbortError ONLY. That name means the load algorithm
+      // interrupted us — a re-attach, not an answer about this video — so the
+      // next attach should start it. A NotAllowedError is the browser's autoplay
+      // policy refusing, and re-arming there would re-kick a refused play on
+      // every re-attach and flicker the transport label. The latch is also not
+      // re-armed once anything has actually played: a viewer's explicit pause is
+      // never fought.
+      if ((err as { name?: string } | null)?.name !== "AbortError") return;
+      const current = videoRef.current;
+      if (!current || current.played.length !== 0 || current.currentTime !== 0) return;
+      startAttempted.current = false;
+    });
+  }, [variant, videoRef]);
+
+  // Re-run on attach, not just on the preference landing: playback.src/mode is
+  // how the shell learns the engine re-pointed the element (the HLS→original
+  // fallback, an IPFS switch, a retry). The loadstart listener below covers the
+  // hls.js blob attach, which changes no React state at all.
+  useEffect(() => {
+    primeInstanceDefaults();
+    attemptStartOnOpen();
+  }, [attemptStartOnOpen, startOnOpen, video.id, playback.src, playback.mode]);
 
   // ---- media-element state subscription (mounted once) ----
 
@@ -507,6 +548,10 @@ export function VideoPlayer({
     const onLoadStartEv = () => {
       setEnded(false);
       setPaused(el.paused);
+      // A source has just been attached. For hls.js that is the only signal the
+      // shell gets (attaching an MSE blob changes no React state), so this is
+      // where a held start-on-open kick lands on the SPA path.
+      attemptStartOnOpen();
     };
     const onTimeEv = () => {
       setCurrentTime(el.currentTime);
@@ -559,7 +604,7 @@ export function VideoPlayer({
       el.removeEventListener("durationchange", onDurationEv);
       el.removeEventListener("volumechange", onVolumeEv);
     };
-  }, [videoRef, bump]);
+  }, [videoRef, bump, attemptStartOnOpen]);
 
   // Track caption visibility from the element itself, so the toggle's
   // aria-pressed reflects changes made either here or via the C shortcut.
