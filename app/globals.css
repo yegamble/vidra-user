@@ -596,37 +596,49 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
  *   and bottom edges — the exact hard rectangle this change removes, silently
  *   restored.
  *
- *   The stops are derived from the bleed, not chosen: the layer is 118% of the
- *   stage wide and 144% tall (AmbientGlow.geometry), so the player's own edges
- *   sit at 7.6%/92.4% across and 15.3%/84.7% down. Ramping to opaque at 13% and
- *   25% therefore leaves the wash at ~0.6 alpha where it hugs the player and
- *   spends the whole bleed band fading to nothing — matched on both axes, so
- *   the halo reads as round rather than as a cross.
+ *   The layer's own edge is not the only edge that matters. `#main-content`
+ *   clips this bleed horizontally, so ANY wash still left at that clip line is
+ *   a hard vertical seam the full height of the glow — the original bug
+ *   relocated 24px left. Two things keep it from existing: the sideways bleed
+ *   is `min(6%, 1.5rem)`, so the layer edge can never extend past the gutter
+ *   that separates the stage from the clip line, and the horizontal ramp is
+ *   long (20%) so what little sits near that edge is already near zero.
+ *   Measured across the clip line at 1280/1440/1600/1920, both themes, rail
+ *   and rail-less: <= 1 level per channel.
+ *
+ *   The VERTICAL ramp is deliberately asymmetric — opaque by 22% on the way in,
+ *   gone by 96% on the way out, starting to fade at 70%. Text lives BELOW the
+ *   player (title, view count, the shortcuts row) and nothing lives above it,
+ *   so the wash may be generous overhead and must not be underneath: at the
+ *   player's own bottom edge it is already down to ~0.43 alpha.
  *
  * Opacity is a tuned PAIR, not one value dimmed: the wash is a dark image, and
  * over the near-white light canvas the same strength that reads as spilled
- * light on #0a0a0a reads as a grey slab on #f5f5f7. Saturation carries the
- * light theme instead (the hue survives, the darkness does not).
+ * light on #0a0a0a reads as a grey veil on #f5f5f7. Both values are ceilings
+ * set by CONTRAST, not by taste — `text-fg-muted` sits on this wash at the
+ * shortcuts row, and a white video frame composites far brighter than any
+ * poster. Re-measure that pair (>= 4.5:1) against a white frame on any change;
+ * axe cannot see it, because the wash is a sibling layer, not a background.
  */
 .ambient-glow {
-  opacity: 0.42;
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 13%, #000 87%, transparent 100%);
-  mask-image: linear-gradient(to right, transparent 0%, #000 13%, #000 87%, transparent 100%);
+  opacity: 0.3;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 20%, #000 80%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 20%, #000 80%, transparent 100%);
 }
 .ambient-glow-wash {
   filter: blur(40px) saturate(1.7);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 25%, #000 75%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 25%, #000 75%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 70%, transparent 96%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 70%, transparent 96%);
 }
 [data-theme="dark"] .ambient-glow {
-  opacity: 0.7;
+  opacity: 0.55;
 }
 [data-theme="dark"] .ambient-glow-wash {
   filter: blur(40px) saturate(1.4);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .ambient-glow {
-    opacity: 0.7;
+    opacity: 0.55;
   }
   :root:not([data-theme="light"]) .ambient-glow-wash {
     filter: blur(40px) saturate(1.4);
@@ -651,7 +663,10 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
  * Toast, Skeleton/Spinner pulse, tab/hover), the skip-link slide, and any
  * future motion — and forces instant (non-smooth) scrolling. This is the single
  * source of the app's prefers-reduced-motion behavior; components do not need to
- * branch on it themselves.
+ * branch on it themselves. ONE sanctioned exception: AmbientGlow's frame
+ * sampler is JS work, not a transition, so zeroing a duration cannot stop it —
+ * it reads the query itself via lib/use-prefers-reduced-motion.ts and never
+ * starts. Anything else that branches on this in JS needs the same excuse.
  */
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -669,6 +684,11 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
 
 /* Respect the system's Reduce Transparency preference where supported. */
 @media (prefers-reduced-transparency: reduce) {
+  /* Pure decoration: the ambient glow is the first thing to go. */
+  .ambient-glow {
+    display: none;
+  }
+
   .glass-chrome {
     background: var(--surface-raised);
     -webkit-backdrop-filter: none;
@@ -682,6 +702,11 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
 }
 
 @media (prefers-contrast: more) {
+  /* Pure decoration: the ambient glow is the first thing to go. */
+  .ambient-glow {
+    display: none;
+  }
+
   .glass-chrome {
     border-color: var(--border);
     background: var(--surface-raised);
@@ -696,6 +721,11 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
 }
 
 @media (forced-colors: active) {
+  /* Pure decoration: the ambient glow is the first thing to go. */
+  .ambient-glow {
+    display: none;
+  }
+
   .glass-chrome {
     border-color: CanvasText;
     background: Canvas;

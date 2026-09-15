@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { cn } from "@/lib/cn";
+import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 
 // AmbientGlow renders the Watch page's signature ambient halo: a blurred,
 // saturated wash of the video's own colour that surrounds the player, modelled
@@ -26,18 +27,26 @@ import { cn } from "@/lib/cn";
 // `overflow-x-clip`: the page must still never scroll horizontally
 // (e2e/responsive.spec.ts). `clip` and not `hidden` — `hidden` would make that
 // column a scroll container and break sticky descendants and focus scrolling.
+// That clip is itself an edge, so the bleed is capped at the width of the
+// gutter between the stage and the clip line (see AmbientGlow.geometry): a wash
+// still visible where the clip lands is the same hard seam, moved 24px left.
 
 /** Sample bitmap size — colour only; it is blurred to 40px, detail is waste. */
 const SAMPLE_W = 48;
 const SAMPLE_H = 27;
 
 /**
- * Sampling cadence. YouTube recomputes its ambient colour every ~5s and
- * cross-fades; 1s with a 1.5s cross-fade keeps the wash reactive without ever
- * reading as flicker. Deliberately NOT requestAnimationFrame: this is ambience,
- * not animation, and a per-frame canvas draw behind a 40px blur is pure heat.
+ * Sampling cadence, and it is BOUNDED BELOW BY THE CROSS-FADE (1500ms). A
+ * cadence shorter than the fade means the outgoing canvas is overwritten while
+ * still ~a third visible — a pop once per cycle, and a blurred layer that
+ * re-rasterizes every frame for the whole session instead of settling between
+ * samples. 2500ms leaves a full second of stillness and sits nearer YouTube's
+ * own calm ~5s recompute. Deliberately NOT requestAnimationFrame: this is
+ * ambience, not animation, and a per-frame canvas draw behind a 40px blur is
+ * pure heat. Exported so the test can assert fade <= cadence rather than
+ * restate two numbers that must agree.
  */
-const SAMPLE_INTERVAL_MS = 1000;
+export const SAMPLE_INTERVAL_MS = 2500;
 
 type GlowProps = {
   posterUrl: string | null;
@@ -61,14 +70,12 @@ export function AmbientGlow({ posterUrl, videoRef }: GlowProps) {
   // whether the visitor asked for less motion. Both start false so the server
   // render and the first client render agree (no hydration mismatch).
   const [hasVideo, setHasVideo] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  // A LIVE query, not a value read once: switching Reduce Motion on mid-session
+  // must stop the sampler, the way the CSS reset stops every transition.
+  const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     setHasVideo(!!videoRef?.current);
-    setReducedMotion(
-      typeof window.matchMedia === "function" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    );
   }, [videoRef, posterUrl]);
 
   useEffect(() => {
@@ -84,6 +91,10 @@ export function AmbientGlow({ posterUrl, videoRef }: GlowProps) {
     const sample = () => {
       // Nothing to light while the player owns the whole screen, and nothing to
       // look at in a background tab — in both cases skip the draw entirely.
+      // The fullscreen check is best-effort: iOS Safari's NATIVE video
+      // fullscreen sets neither `fullscreenElement` nor `webkitFullscreenElement`,
+      // so there the sampler keeps drawing into a layer nobody can see. Wasteful
+      // for the length of one fullscreen session, never wrong on screen.
       if (document.hidden || document.fullscreenElement) return;
       if (video.paused || video.ended) return;
       // HAVE_CURRENT_DATA: below this some browsers throw on drawImage.
@@ -133,6 +144,11 @@ export function AmbientGlow({ posterUrl, videoRef }: GlowProps) {
       video.removeEventListener("ended", stop);
       document.removeEventListener("visibilitychange", onVisibility);
     };
+    // `hasVideo` is not read in here, and is a dependency on purpose: it flips
+    // false -> true on the mount pass that discovers videoRef.current, and that
+    // flip is the only signal this effect gets that there is now an element to
+    // attach to. Dropping it leaves the sampler permanently unattached whenever
+    // the glow's first render happened before the player's ref was set.
   }, [videoRef, reducedMotion, hasVideo]);
 
   // No poster and no video: there is no imagery to bloom from, so paint nothing
@@ -147,10 +163,22 @@ export function AmbientGlow({ posterUrl, videoRef }: GlowProps) {
         // AmbientGlow.geometry — the bleed. Percentages resolve against the
         // stage (the `relative isolate` wrapper in WatchView), so the halo
         // scales with the player at every breakpoint and in theater mode.
-        // ~9% sideways and ~22% above/below echoes YouTube's scale(1.5, 2):
-        // more bleed vertically than horizontally, because that is where the
-        // page has room and where the eye reads "light spilling off the screen".
-        "pointer-events-none absolute -bottom-[22%] -left-[9%] -right-[9%] -top-[22%] -z-10",
+        // Vertically ~22%, echoing YouTube's scale(1.5, 2): more bleed above
+        // and below than sideways, because that is where the page has room and
+        // where the eye reads "light spilling off the screen".
+        //
+        // Sideways is `min(6%, 1.5rem)` and the cap is the load-bearing half.
+        // 1.5rem is the `sm:px-6` gutter between the stage and `#main-content`'s
+        // clip edge, so the layer can never extend past the clip — and since the
+        // mask is 0 at the layer's own edge, the clip lands on nothing. A bare
+        // 6% overshoots that gutter by ~13px at a 1280 viewport and re-creates
+        // the hard vertical seam this whole change exists to remove.
+        "pointer-events-none absolute -z-10",
+        "-bottom-[22%] -top-[22%] -left-[min(6%,1.5rem)] -right-[min(6%,1.5rem)]",
+        // Below md the stage is full-bleed: there is no gutter to glow into and
+        // no room beside the player, so the layer would be all cost (a canvas,
+        // an interval, a blurred composite) for something nobody can see.
+        "hidden md:block",
         // Horizontal edge falloff + the per-theme opacity (app/globals.css).
         "ambient-glow",
       )}
@@ -172,7 +200,9 @@ export function AmbientGlow({ posterUrl, videoRef }: GlowProps) {
         {/*
           Two stacked sample canvases. The incoming one sits on top at opacity 1
           and the outgoing one stays below at 0, so a colour change takes 1.5s to
-          complete — slow enough to read as ambience rather than a cut.
+          complete — slow enough to read as ambience rather than a cut, and
+          SHORTER than SAMPLE_INTERVAL_MS so it always finishes before the
+          outgoing canvas is redrawn under it.
         */}
         <canvas
           ref={canvasA}

@@ -72,10 +72,13 @@ async function mockWatch(page: Page) {
   );
 }
 
-/** The document must never scroll sideways (a 1px rounding tolerance). */
+// The document must never scroll sideways (a 1px rounding tolerance).
+// Against `clientWidth`, NOT `window.innerWidth`: innerWidth includes the
+// classic scrollbar gutter, so on a scrollbar-rendering Chromium it silently
+// tolerates ~15px of real overflow. Same comparison as e2e/responsive.spec.ts.
 async function assertNoHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth,
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(1);
 }
@@ -115,13 +118,20 @@ test("the ambient glow bleeds past the stage on every side without scrolling the
   await expect(glow.locator("canvas")).toHaveCount(2);
 });
 
-test("the bleeding glow does not scroll the page sideways on a phone viewport", async ({
+test("the glow is not painted at all below md, where the stage is full-bleed", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockWatch(page);
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Ambient Clip" })).toBeVisible();
-  await expect(page.getByTestId("ambient-glow")).toHaveCount(1);
+
+  // There is no gutter to glow into on a phone and no room beside the player,
+  // so the layer would be all cost: a canvas, an interval and a blurred
+  // composite for something nobody can see. It is `hidden md:block`, so the
+  // node stays (one class, no branch) but nothing paints.
+  const glow = page.getByTestId("ambient-glow");
+  await expect(glow).toBeHidden();
+  await expect(glow).toHaveCSS("display", "none");
   await assertNoHorizontalScroll(page);
 });
