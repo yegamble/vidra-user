@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { SearchIcon, TrashIcon } from "@/components/icons";
@@ -16,6 +16,7 @@ import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
 import type { InstanceSearchBlock } from "@/lib/instance-config.server";
 import { SEARCH_RETRY_QUALIFIER, searchServiceDown } from "@/lib/search-failure";
+import { subscribeSearchHistoryFlushed } from "@/lib/search-events";
 import { SignInGate } from "@/components/SignInGate";
 import { usePlatformLabel } from "@/components/SoftwareBrandProvider";
 
@@ -365,6 +366,28 @@ function historyMutationError(notDone: string, err: unknown, platformLabel: stri
   return errorMessage(err, `${notDone}.`);
 }
 
+// When a search the viewer just made reaches the server (the batched
+// `search.submitted` event flushes ~5s after the search), its history row is
+// written asynchronously — core answers POST /search/events with 202 and never
+// blocks on the search service — so the very first read after the flush can still
+// miss it. On the flush signal we refresh the list a bounded number of times,
+// spaced out, and stop the moment it changes. This is edge-triggered by a real
+// search and self-limiting: at most HISTORY_RECONCILE_ATTEMPTS reads per search,
+// never a standing poll.
+const HISTORY_RECONCILE_ATTEMPTS = 3;
+const HISTORY_RECONCILE_DELAY_MS = 2_500;
+
+// A stable fingerprint of the list, so a refresh can tell "the flushed search
+// has landed" (the list changed) from "not yet" without matching the raw typed
+// query against the normalized one the server stores. `last_used_at` is part of
+// it so a repeat of an existing search — same text, newer timestamp — also reads
+// as a change.
+function historyFingerprint(entries: SearchHistoryEntry[]): string {
+  return JSON.stringify(
+    entries.map((e) => [e.normalized_query ?? e.query ?? "", e.last_used_at ?? ""]),
+  );
+}
+
 // The stored search-history list: view, per-item delete, and clear-all behind a
 // confirm modal. Never a fake empty history — a service that did not answer
 // says so, and says whether waiting could possibly help.
@@ -394,6 +417,14 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
   const [clearing, setClearing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Latest entries, readable from the flush subscription without making it a
+  // dependency (which would tear the subscription down and rebuild it on every
+  // list change).
+  const entriesRef = useRef<SearchHistoryEntry[]>(entries);
+  useEffect(() => {
+    entriesRef.current = entries;
+  }, [entries]);
+
   useEffect(() => {
     // The one state that issues no request at all. Core does NOT gate the read
     // route on the instance setting, so this endpoint would answer 200 with
@@ -414,6 +445,65 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
       });
     return () => controller.abort();
   }, [reloadKey, instanceEnabled]);
+
+  // A quiet, in-place refresh: updates the list without the loading spinner (so a
+  // background refresh never flashes an already-rendered list) and never turns a
+  // working page into an error state. Returns the new entries, or null if the
+  // read failed or was aborted.
+  const refreshQuietly = useCallback(
+    async (signal?: AbortSignal): Promise<SearchHistoryEntry[] | null> => {
+      try {
+        const res = await api.getSearchHistory({ limit: FULL_LIST_LIMIT }, signal);
+        if (signal?.aborted) return null;
+        const next = res.entries ?? [];
+        setEntries(next);
+        setFetchStatus("ready");
+        setFailure(null);
+        return next;
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
+
+  // Reflect a just-made search without a manual reload. `search-events` fires
+  // this edge once the viewer's batched `search.submitted` has been accepted by
+  // the server; because the row is then written asynchronously, refresh a bounded
+  // number of times until the list changes, then stop. Only fires in response to
+  // a real search — there is no timer here when nothing is happening.
+  useEffect(() => {
+    if (!instanceEnabled) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const controller = new AbortController();
+
+    const reconcile = () => {
+      // Collapse a burst of searches into a single bounded refresh loop.
+      if (timer) clearTimeout(timer);
+      const before = historyFingerprint(entriesRef.current);
+      let attempts = 0;
+      const tick = async () => {
+        if (cancelled) return;
+        attempts += 1;
+        const next = await refreshQuietly(controller.signal);
+        if (cancelled) return;
+        const landed = next !== null && historyFingerprint(next) !== before;
+        if (!landed && attempts < HISTORY_RECONCILE_ATTEMPTS) {
+          timer = setTimeout(() => void tick(), HISTORY_RECONCILE_DELAY_MS);
+        }
+      };
+      void tick();
+    };
+
+    const unsubscribe = subscribeSearchHistoryFlushed(reconcile);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      controller.abort();
+      unsubscribe();
+    };
+  }, [instanceEnabled, refreshQuietly]);
 
   // "off" is derived, not stored: the operator's verdict outranks any fetch
   // state, and deriving it keeps the spinner from flashing before the effect.

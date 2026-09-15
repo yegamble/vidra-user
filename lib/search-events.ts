@@ -32,6 +32,50 @@ let queue: SearchEventInput[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let listenersBound = false;
 
+// --- "the batched write landed" signal --------------------------------------
+//
+// A `search.submitted` event is the only thing this queue carries that WRITES to
+// the caller's stored search history (that ingest path is the one that sets
+// `allow_history` — see lib/search-session.ts). A search is submitted on the
+// results page, but its event does not leave the browser until this queue
+// flushes — up to FLUSH_INTERVAL_MS later, and asynchronously after that, since
+// core answers POST /search/events with 202 and never blocks on the search
+// service. Anything that reads the history immediately (the "Search &
+// recommendations" page, reached by a client-side nav straight after a search)
+// therefore reads it BEFORE the write it is meant to show, and with no other
+// signal to go on would stay stale until a manual reload.
+//
+// So: notify anyone who cares once a batch that CONTAINED a submitted search has
+// been accepted by the server. It is a bare edge — it carries no data and issues
+// no request itself; a listener decides what to re-read. Fired on SUCCESS only:
+// a dropped batch changed nothing on the server, so there is nothing to reflect.
+type HistoryFlushListener = () => void;
+const historyFlushListeners = new Set<HistoryFlushListener>();
+
+/**
+ * subscribeSearchHistoryFlushed registers `listener`, invoked after a flushed
+ * batch that contained a `search.submitted` event has been accepted by the
+ * server. Returns an unsubscribe function. This is the seam the search-history
+ * surface uses to refresh once the batched write lands instead of reading only
+ * on mount; it is edge-triggered by a real search, never a timer or a poll.
+ */
+export function subscribeSearchHistoryFlushed(listener: HistoryFlushListener): () => void {
+  historyFlushListeners.add(listener);
+  return () => {
+    historyFlushListeners.delete(listener);
+  };
+}
+
+function notifyHistoryFlushed(): void {
+  for (const listener of historyFlushListeners) {
+    try {
+      listener();
+    } catch {
+      // A listener must never break the best-effort telemetry pipeline.
+    }
+  }
+}
+
 function bindLifecycleListeners(): void {
   if (listenersBound || typeof window === "undefined") return;
   listenersBound = true;
@@ -84,8 +128,14 @@ export function flush(opts: { keepalive?: boolean } = {}): void {
   if (queue.length === 0) return;
   const batch = queue.slice(0, MAX_BATCH);
   queue = queue.slice(MAX_BATCH);
+  // Only a submitted search writes to the caller's search history; if this batch
+  // carries one, wake the history surface once the write has been accepted.
+  const affectsHistory = batch.some((event) => event.type === "search.submitted");
   void api
     .postSearchEvents(batch, { keepalive: opts.keepalive })
+    .then(() => {
+      if (affectsHistory) notifyHistoryFlushed();
+    })
     .catch((err: unknown) => {
       // Telemetry is best-effort: swallow. Log at debug for local diagnosis only.
       logger.debug("search events flush failed", {
