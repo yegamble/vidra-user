@@ -35,7 +35,7 @@ import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
 import { TranscodingNote } from "@/components/watch/TranscodingNote";
 import { UpNextQueue } from "@/components/UpNextQueue";
-import { WATCH_CONTENT, WATCH_CONTENT_X } from "@/components/watch/layout";
+import { WATCH_CONTENT, WATCH_THEATER_INSET } from "@/components/watch/layout";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -60,6 +60,7 @@ import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { setImmersive } from "@/lib/sidebar-state";
+import { WATCH_TWO_COLUMN_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import { logger } from "@/lib/logger";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { trackSearchEvent } from "@/lib/search-events";
@@ -149,15 +150,10 @@ export function WatchView({
   // hydration the client restores the session's mode. Widens the stage to the
   // full content width and reflows the related rail below.
   const theater = useSyncExternalStore(subscribeTheater, readStoredTheater, serverTheater);
-  // Theater asks the app shell to step aside — YouTube closes the guide on a
-  // theater watch page, and the full-bleed band has nowhere to go while a 224px
-  // rail holds the left edge. The header's Menu button brings it back as an
-  // overlay drawer. Cleared on unmount so leaving the watch page (or leaving
-  // theater) always restores the rail; nothing else in the app sets this flag.
-  useEffect(() => {
-    setImmersive(theater);
-    return () => setImmersive(false);
-  }, [theater]);
+  // Is the page actually two-column? The same breakpoint `.watch-layout` uses,
+  // read in JS because hiding the app rail is a JS decision and the two must
+  // agree: below it there is no band to make room for.
+  const twoColumn = useMediaQuery(WATCH_TWO_COLUMN_QUERY);
   // The "next" video for the player's autoplay end card (PLAY-08): the first
   // related entry, reported up by RelatedVideos so the end card reuses that fetch
   // (no second request). null until the rail resolves, or when nothing relates.
@@ -408,6 +404,27 @@ export function WatchView({
     else tryIpfs();
   }, [ipfsState, switchToServer, tryIpfs]);
 
+  // Theater asks the app SHELL to step aside — YouTube closes the guide on a
+  // theater watch page, and the full-bleed band has nowhere to go while a 224px
+  // rail holds the left edge. The header's Menu button brings it back as an
+  // overlay drawer.
+  //
+  // Three conditions, all load-bearing:
+  //   - `theater`   — the mode itself;
+  //   - `twoColumn` — below the breakpoint theater is inert (no band, no width
+  //     to gain), so hiding the rail there would take navigation away and give
+  //     nothing back;
+  //   - status ready — this effect runs BEFORE the not-found / error / locked /
+  //     restricted early returns, so without it a viewer who followed a dead
+  //     link in theater got an error page with no navigation on it.
+  //
+  // Cleared on unmount so leaving the watch page always restores the rail;
+  // nothing else in the app sets this flag.
+  useEffect(() => {
+    setImmersive(theater && twoColumn && status === "ready");
+    return () => setImmersive(false);
+  }, [theater, twoColumn, status]);
+
   function retry() {
     setStatus("loading");
     setReloadKey((k) => k + 1);
@@ -420,7 +437,7 @@ export function WatchView({
     // Same silhouette as the route loading boundary and the loaded page, so
     // navigation → hydration → data reads as one surface filling in.
     return (
-      <div role="status" aria-live="polite" className={WATCH_CONTENT}>
+      <div role="status" aria-live="polite">
         <span className="sr-only">Loading video…</span>
         <WatchSkeleton />
       </div>
@@ -532,12 +549,14 @@ export function WatchView({
   }
 
   // The stage block — the player (or the sensitive-content gate standing in for
-  // it) plus the rows that belong directly beneath it. ONE definition, two
-  // placements: in theater it is the full-bleed band at the top of the page;
-  // otherwise it is the first child of the primary column, exactly where it has
-  // always been.
+  // it) plus the rows that belong directly beneath it. ONE definition and ONE
+  // DOM POSITION: it is the grid's `stage` area in both modes, and theater only
+  // moves that AREA (see .watch-layout in app/globals.css). Rendering it at two
+  // tree positions is a remount — React reconciles by position — which destroyed
+  // the <video>, restarted playback from 0 and counted a second view every time
+  // someone pressed `T`.
   const stageBlock = (
-      <div className="flex flex-col">
+      <div className="watch-stage-area flex flex-col">
         {isSensitiveVideo(video) &&
         !sensitiveAccepted &&
         (sensitivePolicy === "blur" ||
@@ -550,8 +569,11 @@ export function WatchView({
             className={cn(
               "flex w-full flex-col items-center justify-center gap-3 overflow-hidden bg-black px-6 text-center",
               // The gate stands in for the player, so it takes the player's
-              // box: the full-bleed band in theater, the 16:9 card otherwise.
-              theater ? "watch-theater-band" : "aspect-video rounded-2xl",
+              // box. `.watch-theater-band` is inert below the two-column
+              // breakpoint, which is why the 16:9 card classes stay on in both
+              // modes and only the radius is dropped at xl.
+              "aspect-video rounded-2xl",
+              theater ? "watch-theater-band xl:rounded-none" : null,
             )}
           >
             <WarningIcon size={28} className="text-white/80" />
@@ -587,10 +609,10 @@ export function WatchView({
               playbackToken={playbackToken}
               overlay={playerOverlay}
             />
-            {/* The rows that live directly under the stage. In theater the
-                band above them spans the whole content area, so they take the
-                page container themselves and stay on the page's measure. */}
-            <div className={cn("flex flex-col", theater ? WATCH_CONTENT_X : null)}>
+            {/* The rows that live directly under the stage. In theater the band
+                above them spans the whole content area, so they take the page's
+                content measure themselves and stay lined up with the title. */}
+            <div className={cn("flex flex-col", theater ? WATCH_THEATER_INSET : null)}>
             {/* IPFS source bar — only when the video is gateway-mirrored. */}
             {ipfsAvailable ? (
               <IpfsSourceBar
@@ -616,31 +638,20 @@ export function WatchView({
   );
 
   return (
-    <div data-theater={theater ? "on" : "off"} className="flex w-full min-w-0 flex-1 flex-col">
-      {/* Theater (lg+; below lg the page is single-column and theater changes
-          nothing): the stage becomes a full-bleed band spanning the whole width
-          of #main-content, and the page under it keeps the ORDINARY two-column
-          layout — YouTube moves the secondary column below the player, it does
-          not delete it. */}
-      {theater ? stageBlock : null}
-      <div className={WATCH_CONTENT}>
-        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-center lg:gap-7">
-          <div
-            className={cn(
-              "flex min-w-0 flex-1 flex-col gap-8",
-              // Cap the in-column stage so a 16:9 player can never be taller
-              // than the viewport: width = the shared height ceiling × 16/9.
-              // Without it, a watch page with no related rail rendered a
-              // full-measure stage that pushed the title off the bottom of a
-              // 720px screen. `lg:justify-center` on the row is the other half:
-              // once the column is capped (or the rail is empty) the leftover
-              // space is split evenly instead of all landing on the right.
-              theater ? null : "lg:max-w-[calc(var(--watch-stage-max-h)*16/9)]",
-            )}
-          >
+    // ONE grid, three areas (app/globals.css .watch-layout). Theater swaps the
+    // AREAS — the stage spans every track, full-bleed and flush under the
+    // header, and the page below it keeps the ordinary two columns — but the
+    // stage never changes its position in the tree, so toggling theater is a
+    // style change and nothing in the player unmounts. Below the two-column
+    // breakpoint theater is inert in CSS and the immersive flag is not set, so
+    // a phone sees exactly today's page.
+    <div
+      data-theater={theater ? "on" : "off"}
+      className={cn("watch-layout", theater ? "watch-layout-theater" : null)}
+    >
+      {stageBlock}
+      <div className="watch-body-area flex flex-col gap-8">
       <article className="flex flex-col gap-4">
-        {theater ? null : stageBlock}
-
         {playlist.active && playlist.status === "error" ? (
           <ErrorState message="Could not load this playlist. Playback continuation is unavailable." onRetry={playlist.retry} />
         ) : null}
@@ -743,19 +754,18 @@ export function WatchView({
         onSeekToTimestamp={seekToTimestamp}
         canManageComments={Boolean(user && channel && user.id === channel.owner_id)}
       />
-          </div>
+      </div>
 
-          {/* Secondary column: the viewer's up-next queue (renders nothing when
-              empty) stacked above the related list. The wrapper takes no fixed
-              width — each child carries the rail's lg width — and `empty:hidden`
-              removes the wrapper itself when BOTH children render nothing, so a
-              watch page with no queue and nothing related does not pay the
-              column gap and the primary column centres exactly. */}
-          <div className="flex shrink-0 flex-col gap-4 empty:hidden">
-            <UpNextQueue currentVideo={video} />
-            <RelatedVideos video={video} onFirstRelated={setRelatedNextVideo} />
-          </div>
-        </div>
+      {/* Secondary column: the viewer's up-next queue (renders nothing when
+          empty) stacked above the related list. At the two-column breakpoint
+          its 344px track is reserved by the GRID whether or not anything
+          renders into it — sizing it to its content meant a rail-less page
+          painted a narrow stage during the related fetch and then jumped when
+          the list resolved empty. Stacked, an empty column collapses
+          (`.watch-rail-area:empty`). */}
+      <div className="watch-rail-area flex flex-col gap-4">
+        <UpNextQueue currentVideo={video} />
+        <RelatedVideos video={video} onFirstRelated={setRelatedNextVideo} />
       </div>
     </div>
   );
@@ -907,8 +917,8 @@ function Player({
   const posterUrl = video.has_thumbnail ? videoThumbnailUrl(video.id, playbackToken) : null;
 
   return (
-    <div className={cn("flex flex-col", theater ? null : "gap-2")}>
-      <div className={cn("relative isolate", theater ? "watch-theater-band w-full bg-black" : null)}>
+    <div className={cn("flex flex-col gap-2", theater ? "xl:gap-0" : null)}>
+      <div className={cn("relative isolate", theater ? "watch-theater-band" : null)}>
         <AmbientGlow posterUrl={posterUrl} videoRef={videoRef} />
         <VideoPlayer
           video={video}
@@ -935,7 +945,7 @@ function Player({
           // Under a full-bleed band this row would otherwise start at the
           // viewport edge; give it the page container and the gap the band
           // no longer provides.
-          theater ? `${WATCH_CONTENT_X} pt-2` : null,
+          theater ? `${WATCH_THEATER_INSET} xl:pt-2` : null,
         )}
       >
         {resumeAt !== null ? (

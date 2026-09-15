@@ -31,7 +31,7 @@ export function UpNextQueue({ currentVideo }: { currentVideo: Video | null }) {
     <aside
       aria-label="Up next queue"
       data-testid="upnext-queue"
-      className="flex w-full shrink-0 flex-col gap-3 lg:w-[344px]"
+      className="flex w-full shrink-0 flex-col gap-3 xl:w-[344px]"
     >
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-[13px] font-bold tracking-[0.02em] text-fg-muted">

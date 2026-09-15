@@ -127,13 +127,13 @@ export function RelatedVideos({
   // of returning null — otherwise the player column renders full-width and
   // then visibly shrinks when the rail pops in. Only the lg+ two-column
   // layout needs the reservation (stacked layouts just append below), so the
-  // placeholder stays hidden under lg. A resolved-but-empty list collapses.
+  // placeholder stays hidden under xl. A resolved-but-empty list collapses.
   if (related === null) {
     return (
       <aside
         aria-label="Related videos"
         aria-busy="true"
-        className="hidden w-full shrink-0 flex-col gap-3.5 lg:flex lg:w-[344px]"
+        className="hidden w-full shrink-0 flex-col gap-3.5 xl:flex xl:w-[344px]"
       >
         <h2 className="text-[13px] font-bold tracking-[0.02em] text-fg-muted">Related videos</h2>
         <div aria-hidden className="flex flex-col gap-3.5">
@@ -161,11 +161,11 @@ export function RelatedVideos({
   return (
     <aside
       aria-label="Related videos"
-      className="flex w-full shrink-0 flex-col gap-3.5 lg:w-[344px]"
+      className="flex w-full shrink-0 flex-col gap-3.5 xl:w-[344px]"
     >
       <h2 className="text-[13px] font-bold tracking-[0.02em] text-fg-muted">Related videos</h2>
       <ul
-        className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-1 lg:gap-y-3.5"
+        className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 xl:grid-cols-1 xl:gap-y-3.5"
       >
         {related.map((v) => (
           <li key={v.id}>

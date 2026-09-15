@@ -20,7 +20,14 @@
 export const WATCH_CONTENT =
   "mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-6 sm:py-6";
 
-/** The same measure and side gutters with no vertical padding — for rows that
- * sit directly under the full-bleed theater band and must line up with the
- * content below it without adding a second gap. */
-export const WATCH_CONTENT_X = "mx-auto w-full max-w-[1280px] px-4 sm:px-6";
+/**
+ * The inset that puts a row sitting inside the FULL-BLEED theater band back on
+ * the page's content column (the resume/shortcuts row, the IPFS source bar, the
+ * transcoding note). `max-w + px` reproduces `.watch-layout`'s grid measure
+ * exactly at every width, so these rows line up with the title below them.
+ *
+ * `xl:`-only because theater itself is: below the two-column breakpoint the
+ * band is inert and `.watch-layout`'s own padding is already the gutter —
+ * applying this there would pad twice.
+ */
+export const WATCH_THEATER_INSET = "xl:mx-auto xl:w-full xl:max-w-[1280px] xl:px-6";
