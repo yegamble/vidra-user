@@ -545,6 +545,26 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
 }
 
 /*
+ * The media-overlay focus ring: the same job as `.focus-ring`, for controls
+ * painted ON video (the bespoke player's chrome). It is theme-INVARIANT by
+ * design — the documented media-overlay exception — because `--surface` and
+ * `--focus` are surface colours, and both vanish against the wrong frame: the
+ * accent ring over a purple night sky is a ring you cannot see.
+ *
+ * tvOS focus is scale + shadow + illumination rather than a coloured ring, so
+ * this is a WHITE glow over a dark separator: a 2px black gap lifts it off a
+ * bright frame, the white ring carries the focus, and the soft outer glow is
+ * the illumination. `.focus-ring` stays the rule everywhere else.
+ */
+.focus-ring-media:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.55),
+    0 0 0 4px rgba(255, 255, 255, 0.85),
+    0 0 12px 2px rgba(255, 255, 255, 0.35);
+}
+
+/*
  * Skip-to-content link. The first focusable element in the document; visually
  * hidden (pulled off-screen) until it receives keyboard focus, at which point it
  * animates into the top-left corner. Activating it moves focus past the header /
