@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AutoplaySwitch } from "@/components/player/AutoplaySwitch";
+import { PlayGlyph, ReplayGlyph } from "@/components/player/icons";
 import { remoteVideoThumbnailUrl, videoThumbnailUrl, type Video } from "@/lib/api";
-import { cn } from "@/lib/cn";
 import {
   END_CARD_COUNTDOWN_SECONDS,
   countdownAnnouncement,
@@ -164,18 +165,16 @@ export function EndCard({
               ref={playNowRef}
               type="button"
               onClick={goNext}
-              className="focus-ring inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-black transition-colors hover:bg-white/90"
+              className="focus-ring-media inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white/15 px-5 text-sm font-semibold text-white backdrop-blur-md transition-colors duration-150 ease-out hover:bg-white/25 motion-reduce:transition-none"
             >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <PlayGlyph size={16} />
               Play now
             </button>
             {counting ? (
               <button
                 type="button"
                 onClick={() => setCancelled(true)}
-                className="focus-ring inline-flex h-11 items-center rounded-full px-4 text-sm font-semibold text-white/90 ring-1 ring-inset ring-white/30 transition-colors hover:bg-white/10 hover:text-white"
+                className="focus-ring-media inline-flex h-11 cursor-pointer items-center rounded-full bg-white/10 px-5 text-sm font-semibold text-white/90 backdrop-blur-md transition-colors duration-150 ease-out hover:bg-white/20 hover:text-white motion-reduce:transition-none"
               >
                 Cancel
               </button>
@@ -184,53 +183,34 @@ export function EndCard({
                 ref={replayRef}
                 type="button"
                 onClick={onReplay}
-                className="focus-ring inline-flex h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white/90 ring-1 ring-inset ring-white/30 transition-colors hover:bg-white/10 hover:text-white"
+                className="focus-ring-media inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white/10 px-5 text-sm font-semibold text-white/90 backdrop-blur-md transition-colors duration-150 ease-out hover:bg-white/20 hover:text-white motion-reduce:transition-none"
               >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                  <path d="M3 3v5h5" />
-                </svg>
+                <ReplayGlyph size={16} />
                 Replay
               </button>
             )}
           </div>
 
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoplayEnabled}
-            aria-label="Autoplay next"
-            onClick={onToggleAutoplay}
-            className="focus-ring inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs font-medium text-white/80 transition-colors hover:text-white"
-          >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "relative inline-flex h-4 w-7 items-center rounded-full transition-colors",
-                autoplayEnabled ? "bg-white" : "bg-white/25",
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-block h-3 w-3 rounded-full transition-transform",
-                  autoplayEnabled ? "translate-x-3.5 bg-black" : "translate-x-0.5 bg-white",
-                )}
-              />
-            </span>
-            <span>Autoplay is {autoplayEnabled ? "on" : "off"}</span>
-          </button>
+          {/* The same switch the control bar shows — one implementation, so the
+              two can never disagree about what "on" looks like. The accessible
+              name stays the stable "Autoplay next" here (the state is carried by
+              aria-checked), because a name that rewrites itself under a viewer
+              who just moved focus onto it is its own small confusion. */}
+          <AutoplaySwitch
+            enabled={autoplayEnabled}
+            onToggle={onToggleAutoplay}
+            label="Autoplay next"
+            showText
+          />
         </>
       ) : (
         <button
           ref={replayRef}
           type="button"
           onClick={onReplay}
-          className="focus-ring inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-black transition-colors hover:bg-white/90"
+          className="focus-ring-media inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white/15 px-5 text-sm font-semibold text-white backdrop-blur-md transition-colors duration-150 ease-out hover:bg-white/25 motion-reduce:transition-none"
         >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
+          <ReplayGlyph size={16} />
           Replay
         </button>
       )}

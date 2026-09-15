@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
-import { CheckIcon, MoreVerticalIcon } from "@/components/icons";
+import { CheckIcon } from "@/components/icons";
+import { OverflowGlyph } from "@/components/player/icons";
 import { OverlayButton } from "@/components/player/OverlayButton";
 import { usePlayerPopup } from "@/components/player/use-player-popup";
 
@@ -115,6 +116,7 @@ export function PlayerOverflowMenu({
       <OverlayButton
         ref={buttonRef}
         label="More player options"
+        tip="More options"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => (open ? closePopup() : openPopup())}
@@ -125,7 +127,7 @@ export function PlayerOverflowMenu({
           }
         }}
       >
-        <MoreVerticalIcon size={20} aria-hidden="true" />
+        <OverflowGlyph />
       </OverlayButton>
       {open && container
         ? createPortal(

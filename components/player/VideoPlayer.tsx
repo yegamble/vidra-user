@@ -10,9 +10,25 @@ import {
   type RefObject,
 } from "react";
 
+import { AutoplaySwitch } from "@/components/player/AutoplaySwitch";
 import { CaptionLayer } from "@/components/player/CaptionLayer";
 import { EndCard } from "@/components/player/EndCard";
+import {
+  CaptionsGlyph,
+  FullscreenEnterGlyph,
+  FullscreenExitGlyph,
+  PauseGlyph,
+  PipGlyph,
+  PlayGlyph,
+  TheaterEnterGlyph,
+  TheaterExitGlyph,
+} from "@/components/player/icons";
 import { OverlayButton } from "@/components/player/OverlayButton";
+import {
+  PlayerTipProvider,
+  PlayerTooltipLayer,
+  usePlayerTooltip,
+} from "@/components/player/PlayerTooltip";
 import {
   PlayerOverflowMenu,
   type OverflowChoiceGroup,
@@ -58,6 +74,7 @@ import {
 import { isAutoQuality } from "@/lib/quality-id";
 import { readBuffered, stepVolume } from "@/lib/player-ui";
 import {
+  CONTROL_SHORTCUT_KEYS,
   SHORTCUT_IGNORE_SELECTOR,
   clampSeekTarget,
   seekTargetForFraction,
@@ -272,6 +289,25 @@ export function VideoPlayer({
     idleRef.current = window.setTimeout(() => setPointerActive(false), IDLE_HIDE_MS);
   }, []);
   useEffect(() => () => window.clearTimeout(idleRef.current), []);
+
+  // The pointer LEAVING the stage hides the chrome at once rather than starting
+  // a 3s countdown for a viewer who has already looked away — YouTube's rule,
+  // and the one the owner asked for ("when the pointer leaves the player, the
+  // buttons AND the timeline must disappear"). The other two guards still
+  // apply, because they are expressed in controlsVisible, not here: paused pins
+  // the chrome, and focus inside the bar (which an open menu holds) pins it too.
+  const onStageLeave = useCallback(() => {
+    if (idleRef.current) window.clearTimeout(idleRef.current);
+    setPointerActive(false);
+  }, []);
+
+  // One tooltip for the whole bar, anchored above the transport. The bar
+  // element is the positioning frame, so the bubble is clamped to the stage's
+  // width by construction.
+  // A bubble never outlives the chrome it belongs to: it is a CHILD of the bar,
+  // so the bar's own fade takes it with it — no second piece of state to keep
+  // in sync, and nothing left hanging over bare video.
+  const { handle: tipHandle, tip } = usePlayerTooltip(controlsRef);
 
   // Keep the latest progress-reporting callbacks in a ref so the media-event
   // subscription below stays mounted once (never re-subscribing on a new
@@ -801,9 +837,14 @@ export function VideoPlayer({
         // more bar). Container queries make the tiers track the real budget.
         "@container/stage relative w-full select-none overflow-hidden bg-black",
         variant === "embed" ? "h-full" : "aspect-video rounded-2xl",
+        // Hide the cursor with the chrome: a lone arrow floating over a
+        // full-bleed frame is the one piece of UI left when everything else has
+        // faded. Any pointer move calls bump() and brings both back.
+        !controlsVisible && "cursor-none",
       )}
       onPointerMove={bump}
       onPointerDown={bump}
+      onPointerLeave={onStageLeave}
       onFocus={() => setFocusWithin(true)}
       onBlur={onContainerBlur}
     >
@@ -843,10 +884,8 @@ export function VideoPlayer({
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 flex items-center justify-center"
         >
-          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm">
-            <svg viewBox="0 0 24 24" className="ml-0.5 h-7 w-7" fill="currentColor" aria-hidden="true">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+          <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/10 backdrop-blur-md">
+            <PlayGlyph size={28} />
           </span>
         </div>
       ) : null}
@@ -854,14 +893,22 @@ export function VideoPlayer({
       {/* The overlay control bar over a bottom scrim. Hidden = opacity only
           (never display), so focus is never lost; global reduced-motion neutralizes
           the fade. */}
+      <PlayerTipProvider value={tipHandle}>
       <div
         ref={controlsRef}
         data-testid="player-controls"
         className={cn(
-          "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0.5 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-1.5 pb-1.5 pt-10 transition-opacity sm:px-3 sm:pb-2",
+          // The scrim is a TALL soft ramp (~140px on a desktop stage), not a
+          // 40px band: the HIG's clear-material-over-bright-video guidance is a
+          // 35% dimming layer, and a short ramp leaves white glyphs sitting on
+          // whatever frame happens to be under them. Held shorter on a phone
+          // stage, which is only ~185px tall in total.
+          "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0.5 bg-gradient-to-t from-black/65 via-black/30 to-transparent px-1.5 pb-1.5 pt-12 sm:px-3 sm:pb-2 @min-[480px]/stage:pt-20",
+          "transition-opacity duration-[250ms] ease-out motion-reduce:transition-none",
           controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       >
+        <PlayerTooltipLayer tip={tip} barRef={controlsRef} />
         <SeekBar
           currentTime={currentTime}
           duration={duration}
@@ -871,16 +918,12 @@ export function VideoPlayer({
           chapters={chapters}
         />
         <div className="flex items-center gap-0.5 sm:gap-1">
-          <OverlayButton label={paused ? "Play" : "Pause"} onClick={togglePlay}>
-            {paused ? (
-              <svg viewBox="0 0 24 24" className="ml-0.5 h-5 w-5" fill="currentColor" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
-                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-              </svg>
-            )}
+          <OverlayButton
+            label={paused ? "Play" : "Pause"}
+            tipKeys={CONTROL_SHORTCUT_KEYS.play}
+            onClick={togglePlay}
+          >
+            {paused ? <PlayGlyph /> : <PauseGlyph />}
           </OverlayButton>
 
           {/* Mute joins the bar at a 480px stage; below that it lives in the
@@ -897,10 +940,10 @@ export function VideoPlayer({
           {/* Elapsed always; the "/ total" tail costs ~46px on a long video and is
               held back until the stage can afford it. The total is never lost to
               assistive tech — SeekBar's aria-valuetext reads "X of Y". */}
-          <span className="whitespace-nowrap px-0.5 text-[11px] font-medium tabular-nums text-white sm:text-xs">
+          <span className="whitespace-nowrap px-1 text-[12px] font-medium tabular-nums text-white/85 @min-[480px]/stage:text-[13px]">
             {formatDuration(currentTime)}
             <span className="hidden @min-[420px]/stage:inline">
-              <span className="text-white/70">/</span>
+              <span className="px-0.5 text-white/45">/</span>
               {formatDuration(duration)}
             </span>
           </span>
@@ -908,7 +951,7 @@ export function VideoPlayer({
           {/* Current chapter title (CORE-15): muted + truncated, held off the
               narrowest phone bar (< sm) so it never crowds the core controls. */}
           {currentChapterTitle ? (
-            <span className="hidden min-w-0 max-w-[8rem] truncate px-0.5 text-[11px] text-white/70 @min-[900px]/stage:inline-block @min-[1100px]/stage:max-w-[14rem]">
+            <span className="hidden min-w-0 max-w-[8rem] truncate px-1 text-[12px] text-white/60 @min-[900px]/stage:inline-block @min-[1100px]/stage:max-w-[14rem]">
               {currentChapterTitle}
             </span>
           ) : null}
@@ -923,25 +966,19 @@ export function VideoPlayer({
               the end card, so SSR/first-client render is stable. */}
           {variant === "watch" ? (
             <div className="hidden @min-[700px]/stage:contents">
-            <OverlayButton
-              label={autoplayEnabled ? "Autoplay next is on" : "Autoplay next is off"}
-              pressed={autoplayEnabled}
-              onClick={onToggleAutoplay}
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="M10 9.5v5l4-2.5z" fill="currentColor" stroke="none" />
-              </svg>
-            </OverlayButton>
+              <AutoplaySwitch enabled={autoplayEnabled} onToggle={onToggleAutoplay} />
             </div>
           ) : null}
 
           {tracks.length > 0 ? (
-            <OverlayButton label="Captions" pressed={captionsOn} onClick={toggleCaptions}>
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="M8 11.5a1.5 1.5 0 0 0-3 0v1a1.5 1.5 0 0 0 3 0M15 11.5a1.5 1.5 0 0 0-3 0v1a1.5 1.5 0 0 0 3 0" />
-              </svg>
+            <OverlayButton
+              label="Captions"
+              tip="Subtitles/closed captions"
+              tipKeys={CONTROL_SHORTCUT_KEYS.captions}
+              pressed={captionsOn}
+              onClick={toggleCaptions}
+            >
+              <CaptionsGlyph />
             </OverlayButton>
           ) : null}
 
@@ -971,18 +1008,11 @@ export function VideoPlayer({
             <div className="hidden @min-[860px]/stage:contents">
               <OverlayButton
                 label="Theater mode"
+                tipKeys={CONTROL_SHORTCUT_KEYS.theater}
                 pressed={theater}
                 onClick={() => toggleTheater()}
               >
-                {theater ? (
-                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="6" y="7" width="12" height="10" rx="1.5" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="3" y="6" width="18" height="12" rx="1.5" />
-                  </svg>
-                )}
+                {theater ? <TheaterExitGlyph /> : <TheaterEnterGlyph />}
               </OverlayButton>
             </div>
           ) : null}
@@ -994,13 +1024,12 @@ export function VideoPlayer({
             <div className="hidden @min-[700px]/stage:contents">
               <OverlayButton
                 label={pipActive ? "Exit picture-in-picture" : "Picture-in-picture"}
+                tip="Picture-in-picture"
+                tipKeys={CONTROL_SHORTCUT_KEYS.pip}
                 pressed={pipActive}
                 onClick={togglePip}
               >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <rect x="11" y="11" width="8" height="5" rx="1" fill="currentColor" stroke="none" />
-                </svg>
+                <PipGlyph />
               </OverlayButton>
             </div>
           ) : null}
@@ -1009,21 +1038,16 @@ export function VideoPlayer({
 
           <OverlayButton
             label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            tip={isFullscreen ? "Exit full screen" : "Full screen"}
+            tipKeys={CONTROL_SHORTCUT_KEYS.fullscreen}
             pressed={isFullscreen}
             onClick={toggleFullscreen}
           >
-            {isFullscreen ? (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M16 21v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" />
-              </svg>
-            )}
+            {isFullscreen ? <FullscreenExitGlyph /> : <FullscreenEnterGlyph />}
           </OverlayButton>
         </div>
       </div>
+      </PlayerTipProvider>
 
       {/* End-of-playback card (PLAY-08): autoplay-next countdown when a next
           video is available, else a plain replay affordance. Media-overlay zone. */}

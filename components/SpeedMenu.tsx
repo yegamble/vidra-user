@@ -23,6 +23,7 @@ export function SpeedMenu({
       buttonLabel={`Speed: ${rateLabel(speed)}`}
       buttonText={rateLabel(speed)}
       menuLabel="Playback speed"
+      tip="Playback speed"
       variant={variant}
       icon={
         // Minified inline gauge icon
