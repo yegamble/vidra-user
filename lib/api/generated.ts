@@ -3863,18 +3863,46 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The mirrored comment thread on a federated video
-         * @description Returns the comments this instance has MIRRORED for one remote video — the thread the origin fans out to its followers — oldest first. Public; paginated via limit (1–100, default 20) and offset.
-         *     READ-ONLY BY DESIGN. There is no POST: these rows are a mirror of somebody else's thread and nothing on this instance writes one. Comments, ratings and saving live on the origin instance; each comment carries its `object_url` on the origin so a reader can follow the thread back to where it is actually hosted.
-         *     Filtering matches the remote-video card exactly, so a thread can never show what the card would have hidden: comments from an admin-blocked instance are excluded for everyone, and a signed-in caller additionally loses comments from an instance they mute and from a remote account they block. An unknown remote video — or one hidden because its origin is admin-blocked — is 404, the same answer its detail route gives.
+         * The comment thread on a federated video (mirrored + locally authored)
+         * @description Returns BOTH halves of the thread on one remote video. `comments` is the MIRRORED origin thread — the comments the origin fans out to its followers — oldest first and paginated (limit 1–100, default 20; offset; total/limit/offset describe THIS array). `authored` is the complete set of comments a LOCAL user has authored on this remote video (the home-instance-hosts-and-federates model, migration 0147), not paginated. Public.
+         *     The two arrays are disjoint by construction (this instance never mirrors a comment it authored), so a client can concatenate them. Each item carries a `local` boolean: mirrored comments (local=false) carry a remote actor + the origin `object_url`; locally-authored comments (local=true) carry a local author id and a `delivery_state` (the federation status of the reply sent to the origin).
+         *     Filtering matches the remote-video card: mirrored comments from an admin-blocked instance are excluded for everyone, and a signed-in caller additionally loses mirrored comments from an instance they mute / a remote account they block, and locally-authored comments by a local account they mute or block. An unknown remote video — or one hidden because its origin is admin-blocked — is 404, the same answer its detail route gives.
          */
         get: operations["listRemoteVideoComments"];
         put?: never;
-        post?: never;
+        /**
+         * Author a comment on a federated video
+         * @description Authors a comment on a remote (federated) video. The comment is stored and displayed on THIS instance (the home instance hosts and moderates it, the owner's ruling — migration 0147) and federated to the origin as a Create{Note} inReplyTo the remote video. The response's `delivery_state` reports the federation leg (`pending` at first); the comment is shown locally regardless. Requires authentication. Gated by the instance comment toggle. An unknown or origin-blocked remote video is 404.
+         */
+        post: operations["createRemoteVideoComment"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remote-video-comments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a comment on a federated video
+         * @description Deletes a locally-authored comment on a remote video. The author may always delete their own; a moderator/admin may delete anyone's (the home instance owns moderation — the ruling). The deletion re-federates as a Delete of the local Note to the origin. Requires authentication. A non-author non-moderator is 403, an unknown id is 404.
+         */
+        delete: operations["deleteRemoteVideoComment"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit your own comment on a federated video
+         * @description Edits the caller's OWN locally-authored comment on a remote video. Only the author may edit (a moderator removes, not edits). The edit re-federates as an Update{Note} to the origin and resets delivery_state to pending. Requires authentication. Another user's comment is 403, an unknown id is 404.
+         */
+        patch: operations["updateRemoteVideoComment"];
         trace?: never;
     };
     "/api/v1/remote-videos/{id}/thumbnail": {
@@ -7058,6 +7086,8 @@ export interface components {
              * @description This instance's id for the mirrored row, not the origin's.
              */
             id: string;
+            /** @description Always false — the discriminator a client uses to tell a MIRRORED comment (this schema) from a LOCALLY-AUTHORED one (AuthoredRemoteComment, in the response's `authored` array). Mirrored comments carry a remote actor; locally-authored ones carry a local author id and a delivery_state. */
+            local: boolean;
             /** @description The origin's preferredUsername, SNAPSHOT at the time the comment arrived, so the thread still renders when the actor is no longer cached. Falls back to the origin host. */
             author_name: string;
             author_domain: string;
@@ -7081,8 +7111,50 @@ export interface components {
              */
             created_at: string;
         };
+        AuthoredRemoteComment: {
+            /**
+             * Format: uuid
+             * @description This instance's id for the locally-authored comment.
+             */
+            id: string;
+            /** Format: uuid */
+            remote_video_id: string;
+            /** @description Always true — the discriminator against a mirrored comment. */
+            local: boolean;
+            /**
+             * Format: uuid
+             * @description The LOCAL author's account id (so a viewer can mute them).
+             */
+            author_id: string;
+            author_username: string;
+            author_display_name: string;
+            body: string;
+            /** @description The LOCAL ActivityPub object id this instance minted for the comment. */
+            object_url: string;
+            /** @description The origin video's object id the federated reply threads onto. */
+            in_reply_to: string;
+            /**
+             * @description The federation status of the reply delivered to the origin. The comment is HOSTED + DISPLAYED locally regardless of this value (the home instance hosts it); this only reports whether the Create/Update/ Delete{Note} to the origin landed. 'pending' until the delivery queue sends it, 'delivered' once the origin inbox answered 2xx, 'failed' when it dead-lettered or was cancelled (destination blocked).
+             * @enum {string}
+             */
+            delivery_state: "pending" | "delivered" | "failed";
+            /** @description The last delivery error; present only when delivery_state=failed. */
+            last_error?: string;
+            edited: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AuthoredRemoteCommentRequest: {
+            /** @description The comment text (1–2000 characters after trimming). */
+            body: string;
+        };
         RemoteVideoCommentListResponse: {
+            /** @description The paginated MIRRORED origin thread (total/limit/offset describe it). */
             comments: components["schemas"]["RemoteVideoComment"][];
+            /** @description The complete set of comments a LOCAL user has authored on this remote video (migration 0147, the home-instance-hosts-and-federates ruling), subject to the viewer's own mutes/blocks. NOT paginated — it is this instance's own content and is small — and disjoint from `comments` (this instance never mirrors a comment it authored), so a client can concatenate the two without deduping. */
+            authored: components["schemas"]["AuthoredRemoteComment"][];
             /** Format: int64 */
             total: number;
             limit: number;
@@ -20949,7 +21021,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A page of mirrored comments (possibly empty). */
+            /** @description The mirrored page plus the locally-authored comments (either may be empty). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -20960,6 +21032,177 @@ export interface operations {
             };
             /** @description No such remote video, or its origin instance is blocked here. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createRemoteVideoComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthoredRemoteCommentRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored, locally-authored comment. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthoredRemoteComment"];
+                };
+            };
+            /** @description Authentication required, or the account is no longer available. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description New comments are disabled on this instance. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or its origin instance is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (empty or over-long body). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRemoteVideoComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not allowed to delete this comment. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such authored comment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRemoteVideoComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthoredRemoteCommentRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated comment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthoredRemoteComment"];
+                };
+            };
+            /** @description Authentication required, or the account is no longer available. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not the author of this comment. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such authored comment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (empty or over-long body). */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
