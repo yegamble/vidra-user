@@ -184,7 +184,7 @@
   --tile-indigo: light-dark(#5856d6, #5e5ce6);
 
   /*
-   * Watch-stage height ceiling — ONE number both watch layouts agree on.
+   * Watch-stage height ceiling — ONE number every watch layout agrees on.
    *
    * A 16:9 stage measured only from the page WIDTH runs off the bottom of the
    * screen on any laptop: at 1280x720 a full-measure stage is 720px tall on a
@@ -193,11 +193,30 @@
    * too whenever no related rail narrowed the column). YouTube solves this by
    * capping the player to the viewport minus the masthead and the space the
    * page owes the title below it; this is the same subtraction — 3.5rem of
-   * flush header plus ~10rem of title/meta — expressed once so the theater
-   * band (height) and the default player column (width, via 16:9) can never
-   * drift apart.
+   * flush header plus ~10rem of title/meta.
+   *
+   * The 480px FLOOR is inside the token, not bolted onto one consumer: on a
+   * short window the subtraction alone would hand back a stage narrower than
+   * the related rail beside it (327px at 600px tall), and a page that scrolls
+   * is better than a player smaller than its own sidebar. Because the floor
+   * lives here, the theater band (which reads it as a height) and the default
+   * player column (which reads it as a width, via 16:9) cannot disagree about
+   * where it applies.
    */
-  --watch-stage-max-h: calc(100dvh - 3.5rem - 10rem);
+  --watch-stage-max-h: max(480px, calc(100dvh - 3.5rem - 10rem));
+
+  /*
+   * The watch page's primary (player) column ceiling. Two limits, whichever
+   * binds first: the page measure minus the secondary column, and the height
+   * ceiling above turned back into a width at 16:9.
+   */
+  --watch-measure: 1280px;
+  --watch-rail-w: 344px;
+  --watch-col-gap: 1.75rem;
+  --watch-primary-max: min(
+    calc(var(--watch-measure) - 3rem - var(--watch-rail-w) - var(--watch-col-gap)),
+    calc(var(--watch-stage-max-h) * 16 / 9)
+  );
 
   /* legacy aliases (base body styles + older call sites) */
   --background: var(--canvas);
@@ -752,6 +771,23 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
   }
 }
 
+/*
+ * `.glass-chrome-solid` — the material's existing opaque fallback, promoted to
+ * a modifier for the one placement that needs it unconditionally.
+ *
+ * The chrome is translucent by design and reads its contrast from the page
+ * BEHIND it. Over the theater band that page is #000: measured, the drawer
+ * panel composited to rgb(199,199,199) and its `fg-muted` labels to 3.74:1 —
+ * under AA, where the same panel over the canvas measures 6.21:1. This is not a
+ * third material; it is the recipe `prefers-contrast: more` and `forced-colors`
+ * already apply below, taken on purpose rather than by the viewer's OS setting.
+ */
+.glass-chrome-solid {
+  background: var(--surface-raised);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 @media (prefers-contrast: more) {
   /* Pure decoration: the ambient glow is the first thing to go. */
   .ambient-glow {
@@ -802,19 +838,123 @@ body:has([data-messaging-shell]) > div:has(> #main-content) {
   min-height: 0;
 }
 
-/*
- * Theater stage band (watch page, lg+): a full-bleed strip spanning #main-content
- * edge to edge, with the player letterboxed on black inside it.
+/* ── Watch page layout ─────────────────────────────────────────────────────
  *
- * Height = 16:9 of the BAND'S OWN width — not 100vw, which would over-measure by
- * the scrollbar and letterbox every capped stage by a few pixels — clamped by
- * --watch-stage-max-h so the masthead and the title row stay on screen, and
- * floored so a short window still gets a usable stage rather than a slot. The
- * <video> inside is object-contain in a h-full box, so the clamp letterboxes on
- * black exactly the way the real thing does.
+ * ONE grid, three areas — stage / body / rail. Theater changes the AREAS, not
+ * the tree: the stage keeps a single DOM position in both modes.
+ *
+ * That is not a tidiness preference. Rendering the stage at two positions and
+ * switching between them is a REMOUNT — React reconciles by position, so
+ * pressing `T` destroyed the <video> and its hls instance, restarted playback
+ * from 0, re-fired the start-on-open kick, re-showed the "Resume from…" offer
+ * mid-watch, and reset the once-per-video guard so a second view was counted.
+ * A grid-area swap is a style change; nothing unmounts.
+ *
+ * Below the two-column breakpoint the page is a single column — stage, body,
+ * then rail — and theater is INERT: there is no second column to collapse, no
+ * width to gain, and a full-bleed square-cornered phone player is not an
+ * improvement. The breakpoint is stated once in CSS here and once in JS
+ * (WATCH_TWO_COLUMN_QUERY, lib/use-media-query.ts), which is what keeps the
+ * immersive flag that hides the app rail from firing where there is no band.
  */
-.watch-theater-band {
-  aspect-ratio: 16 / 9;
-  max-height: var(--watch-stage-max-h);
-  min-height: min(480px, 56.25vw);
+.watch-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "stage"
+    "body"
+    "rail";
+  align-content: start;
+  row-gap: 1rem;
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .watch-layout {
+    padding: 1.5rem;
+  }
+}
+
+.watch-stage-area {
+  grid-area: stage;
+  min-width: 0;
+}
+
+.watch-body-area {
+  grid-area: body;
+  min-width: 0;
+}
+
+.watch-rail-area {
+  grid-area: rail;
+  min-width: 0;
+}
+
+/* Stacked: the rail reads as a third block, and an empty one (no queue, nothing
+ * related — both children render nothing) takes no space at all. */
+@media (max-width: 1279.98px) {
+  .watch-rail-area {
+    margin-top: 1rem;
+  }
+
+  .watch-rail-area:empty {
+    display: none;
+  }
+}
+
+@media (min-width: 1280px) {
+  /*
+   * Two columns. The gutter tracks are `minmax(1.5rem, 1fr)`, so the content
+   * columns centre and the measure is the tracks' own sum — reproducing the old
+   * `max-w-[1280px] mx-auto px-6` container exactly, while leaving the grid
+   * itself full-width so the theater band can span it.
+   *
+   * The rail track is a FIXED 344px whether or not anything renders into it.
+   * Sizing it to its content meant a rail-less page painted a 624px stage while
+   * the related fetch was in flight and then jumped to a full-measure one when
+   * the list resolved empty — a layout shift on the largest element on the
+   * page. YouTube keeps the secondary column too.
+   */
+  .watch-layout {
+    padding: 1.5rem 0;
+    grid-template-columns:
+      [full-start] minmax(1.5rem, 1fr)
+      [content-start] minmax(0, var(--watch-primary-max))
+      var(--watch-col-gap)
+      var(--watch-rail-w) [content-end]
+      minmax(1.5rem, 1fr) [full-end];
+    grid-template-areas:
+      ". stage . rail ."
+      ". body  . rail .";
+  }
+
+  /* Theater: the stage spans every track (full bleed, flush under the header)
+   * and the page below it keeps the ordinary two columns — YouTube moves the
+   * secondary column under the player, it does not delete it. */
+  .watch-layout-theater {
+    padding-top: 0;
+    row-gap: 1.5rem;
+    grid-template-areas:
+      "stage stage stage stage stage"
+      ".     body  .     rail  .";
+  }
+}
+
+/*
+ * The theater stage band. Height = 16:9 of the band's OWN width — not 100vw,
+ * which over-measures by the scrollbar and letterboxes every capped stage by a
+ * few pixels — clamped by the shared ceiling so the masthead and the title row
+ * stay on screen. The <video> inside is object-contain in an h-full box, so the
+ * clamp letterboxes on black exactly the way the real thing does.
+ *
+ * Gated to the two-column breakpoint: below it the class is inert and the stage
+ * stays its own 16:9 card (see the layout note above).
+ */
+@media (min-width: 1280px) {
+  .watch-theater-band {
+    width: 100%;
+    background: #000;
+    aspect-ratio: 16 / 9;
+    max-height: var(--watch-stage-max-h);
+  }
 }

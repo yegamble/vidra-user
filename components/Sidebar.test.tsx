@@ -89,8 +89,63 @@ describe("Sidebar — immersive (theater) placement", () => {
     // The same link list — not a forked one.
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Studio" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
     expect(document.querySelector("[data-testid='sidebar-scrim']")).not.toBeNull();
+  });
+
+  it("is a real dialog, not just a modal-shaped panel", () => {
+    render(<Sidebar />);
+    act(() => {
+      setImmersive(true);
+      setDrawerOpen(true);
+    });
+    const dialog = screen.getByRole("dialog", { name: "Primary navigation" });
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    expect(dialog.contains(screen.getByRole("navigation", { name: "Primary" }))).toBe(true);
+  });
+
+  it("makes the page underneath inert while open, and reachable again after", () => {
+    const main = document.createElement("div");
+    main.id = "main-content";
+    document.body.appendChild(main);
+    render(<Sidebar />);
+    act(() => {
+      setImmersive(true);
+      setDrawerOpen(true);
+    });
+    expect(main.hasAttribute("inert")).toBe(true);
+    act(() => setDrawerOpen(false));
+    expect(main.hasAttribute("inert")).toBe(false);
+    main.remove();
+  });
+
+  it("drops the collapse toggle in the drawer — it would be a dead control there", () => {
+    render(<Sidebar />);
+    // Present in the in-flow rail…
+    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
+    act(() => {
+      setImmersive(true);
+      setDrawerOpen(true);
+    });
+    // …and gone in the overlay, where the panel is a fixed 224px and flipping
+    // `collapsed` changed nothing but the button's own label.
+    expect(screen.queryByRole("button", { name: "Collapse sidebar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Expand sidebar" })).toBeNull();
+  });
+
+  it("uses the opaque material in the drawer (the band behind it is black)", () => {
+    render(<Sidebar />);
+    act(() => {
+      setImmersive(true);
+      setDrawerOpen(true);
+    });
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(nav.className).toContain("glass-chrome-solid");
+    // The in-flow rail keeps the translucent material.
+    act(() => setDrawerOpen(false));
+    act(() => setImmersive(false));
+    expect(screen.getByRole("navigation", { name: "Primary" }).className).not.toContain(
+      "glass-chrome-solid",
+    );
   });
 
   it("moves focus to the first link on open", () => {

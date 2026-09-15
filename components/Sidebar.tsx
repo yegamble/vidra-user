@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { InfoIcon } from "@/components/icons";
@@ -17,6 +17,7 @@ import { SidebarFollowing } from "@/components/SidebarFollowing";
 import { isAdminConsoleRoute, isStandaloneRoute } from "@/lib/app-shell";
 import { cn } from "@/lib/cn";
 import { useMessagingAvailable } from "@/lib/messaging/availability";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 import {
   MENU_BUTTON_ATTR,
   SIDEBAR_ID,
@@ -65,8 +66,6 @@ export function Sidebar() {
   const drawerOpen = useSyncExternalStore(subscribeDrawerOpen, readDrawerOpen, serverDrawerOpen);
   // Called before the standalone/admin early returns so the hook order is stable.
   const messagingAvailable = useMessagingAvailable();
-  const panelRef = useRef<HTMLElement | null>(null);
-  const wasOpen = useRef(false);
   const lastPath = useRef(pathname);
 
   // A navigation closes the drawer — an overlay that outlived the page it was
@@ -76,31 +75,6 @@ export function Sidebar() {
     lastPath.current = pathname;
     setDrawerOpen(false);
   }, [pathname]);
-
-  // Focus management for the overlay placement: in on open, back to the Menu
-  // button on close. The button is found by its marker attribute rather than a
-  // shared ref, because it lives in a sibling subtree (the header) that this
-  // component has no handle on.
-  useEffect(() => {
-    const open = immersive && drawerOpen;
-    if (open && !wasOpen.current) {
-      panelRef.current?.querySelector<HTMLElement>("a, button")?.focus();
-    } else if (!open && wasOpen.current) {
-      document.querySelector<HTMLElement>(`[${MENU_BUTTON_ATTR}]`)?.focus();
-    }
-    wasOpen.current = open;
-  }, [immersive, drawerOpen]);
-
-  // Escape closes the overlay (the dialog-dismissal idiom the rest of the app
-  // uses). Bound only while it is open.
-  useEffect(() => {
-    if (!immersive || !drawerOpen) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setDrawerOpen(false);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [immersive, drawerOpen]);
 
   if (isStandaloneRoute(pathname)) {
     return null;
@@ -136,15 +110,18 @@ export function Sidebar() {
     // rgb(31,31,32) at scrollTop 60. Scrolling an inner wrapper keeps the glass
     // box a fixed height, and keeps the scrollbar out of the rounded corner.
     <nav
-      ref={panelRef}
       id={SIDEBAR_ID}
       aria-label="Primary"
       className={cn(
         "glass-chrome flex-col justify-between gap-2 rounded-sheet p-2 transition-[width] duration-200 motion-reduce:transition-none",
         immersive
-          ? // Overlay placement: same panel, pinned beside the viewport edge at
-            // the same offsets the in-flow rail keeps, above the scrim (z-40).
-            "fixed bottom-3 left-3 top-[4.25rem] z-40 flex w-56"
+          ? // Overlay placement: the same panel, pinned at the same offsets the
+            // in-flow rail keeps, below the header (which stays lit and usable
+            // — the Menu button has to be able to close what it opened) and
+            // therefore under the header's z-index too. `.glass-chrome-solid`
+            // because the page behind it here is the theater band's #000, where
+            // the translucent material drops `fg-muted` to 3.74:1.
+            "glass-chrome-solid fixed bottom-3 left-3 z-20 flex w-56 top-[calc(4.25rem+env(safe-area-inset-top))]"
           : "sticky top-[4.25rem] mb-3 ml-3 mt-3 hidden max-h-[calc(100vh-5rem)] shrink-0 self-start sm:flex",
         immersive ? null : collapsed ? "w-16" : "w-56",
       )}
@@ -169,53 +146,112 @@ export function Sidebar() {
           collapsed={railCollapsed(collapsed, immersive)}
           active={pathname === "/about" || pathname?.startsWith("/about/") === true}
         />
-        <button
-          type="button"
-          onClick={() => setCollapsed(!collapsed)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-          className="focus-ring flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
-        >
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-[18px] w-[18px] shrink-0"
+        {/* The collapse toggle belongs to the IN-FLOW rail only. In the drawer
+            it was a dead control: the overlay is a fixed 224px panel, so
+            flipping `collapsed` there changed nothing but the button's own
+            label. Closing the drawer is the Menu button, Escape or the scrim. */}
+        {immersive ? null : (
+          <button
+            type="button"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            className="focus-ring flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
           >
-            {collapsed ? <path d="M13 17l5-5-5-5M6 17l5-5-5-5" /> : <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />}
-          </svg>
-          <span className={railCollapsed(collapsed, immersive) ? "sr-only" : "truncate"}>
-            Collapse
-          </span>
-        </button>
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-[18px] w-[18px] shrink-0"
+            >
+              {collapsed ? <path d="M13 17l5-5-5-5M6 17l5-5-5-5" /> : <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />}
+            </svg>
+            <span className="truncate">Collapse</span>
+          </button>
+        )}
       </div>
     </nav>
   );
 
   if (!immersive) return panel;
 
+  return <SidebarDrawer onClose={() => setDrawerOpen(false)}>{panel}</SidebarDrawer>;
+}
+
+/**
+ * SidebarDrawer — the overlay placement's modal shell. It is shaped like a
+ * modal (it covers the page, it traps the eye, clicking outside dismisses it),
+ * so it IS one: `role="dialog" aria-modal="true"`, the shared focus contract
+ * (lib/use-dialog-focus: focus in on open, Tab trapped, Escape closes, focus
+ * restored to the Menu button that opened it) and `inert` on `#main-content`
+ * while it is up, so the page underneath is unreachable by pointer, caret and
+ * assistive technology rather than merely covered.
+ *
+ * A separate component so the hook's mount-only lifecycle matches the drawer's:
+ * it mounts when the drawer opens and unmounts when it closes. The panel itself
+ * is passed in — one panel, two placements; the link list is never forked.
+ */
+function SidebarDrawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocus(wrapperRef, onClose);
+
+  // Declared AFTER the hook so its cleanup runs after the hook's restore.
+  // Safari does not focus a <button> on click, so "restore whatever was
+  // focused" can legitimately land on <body>; the Menu button marks itself for
+  // exactly this case, so the control that opened the drawer still gets focus
+  // back on every browser.
+  useEffect(() => {
+    return () => {
+      const active = document.activeElement;
+      if (active === null || active === document.body) {
+        document.querySelector<HTMLElement>(`[${MENU_BUTTON_ATTR}]`)?.focus();
+      }
+    };
+  }, []);
+
+  // `inert` (React 19 / baseline 2024) takes the page underneath out of reach
+  // of pointer, caret and assistive technology — a scrim only covers it. The
+  // header is a SIBLING of #main-content and deliberately stays reachable: the
+  // Menu button must be able to close what it opened.
+  useEffect(() => {
+    const main = document.getElementById("main-content");
+    main?.setAttribute("inert", "");
+    return () => main?.removeAttribute("inert");
+  }, []);
+
   return (
-    <>
+    // The dialog IS the overlay box — a zero-size wrapper around `fixed`
+    // children has no bounding box, which reads as hidden to both assistive
+    // technology heuristics and Playwright's visibility check.
+    //
+    // It starts BELOW the header (3.5rem plus the notch inset, so an installed
+    // PWA's masthead is not covered either) and stays under the header's
+    // z-index, so the bar the drawer was opened from is still lit and
+    // clickable: the same Menu button has to be able to close what it opened,
+    // and dimming search and the account menu behind a navigation overlay is
+    // not what the overlay is for.
+    <div
+      ref={wrapperRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Primary navigation"
+      className="fixed inset-x-0 bottom-0 z-20 top-[calc(3.5rem+env(safe-area-inset-top))]"
+    >
       {/* Scrim: dismiss-on-click, and the visual separation an overlay owes the
           page under it. Decorative — Escape and the Menu button are the
-          keyboard/AT paths, so it is not a control in the a11y tree.
-          It starts BELOW the header (3.5rem, the flush bar's sm+ height — the
-          drawer only exists at sm+) so the bar it was opened from stays lit and
-          clickable: the same Menu button has to be able to close it again, and
-          dimming search and the account menu behind an unrelated overlay is not
-          what a navigation drawer is for. */}
+          keyboard/AT paths, so it is not a control in the a11y tree. */}
       <div
         aria-hidden
         data-testid="sidebar-scrim"
-        onClick={() => setDrawerOpen(false)}
-        className="fixed inset-x-0 bottom-0 top-14 z-30 bg-black/45"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/45"
       />
-      {panel}
-    </>
+      {children}
+    </div>
   );
 }
 
