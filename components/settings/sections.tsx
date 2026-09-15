@@ -14,13 +14,14 @@ import {
   SmartphoneIcon,
   UserIcon,
 } from "@/components/icons";
-import type { TileColor } from "@/components/ui";
 
-// The System-Settings section catalog, shared by the two Group-C surfaces that
+// The settings section catalog, shared by the two Group-C surfaces that
 // must stay in lock-step: the desktop SettingsRail (lg split-view) and the
 // mobile grouped-rows drill-in inside SettingsView. Keeping one source means the
-// icon-tile hue, the route, and the sr-only "Manage …" name (pinned by e2e) can
-// never drift between the two.
+// icon, the route, and the sr-only "Manage …" name (pinned by e2e) can never
+// drift between the two. Rows lead with a PLAIN muted stroke glyph — the app's
+// nav idiom everywhere else (Sidebar, StudioNav, admin rail) — not the colored
+// System-Settings tile this catalog used to carry a hue for.
 export type SettingsSection = {
   /** Route this row navigates to. */
   href: string;
@@ -32,8 +33,6 @@ export type SettingsSection = {
   short: string;
   /** Muted sub-line under the title (mobile rows). */
   desc: string;
-  /** Apple system-color tile hue — one per destination (Mutes = indigo, Blocked = red). */
-  color: TileColor;
   Icon: (props: IconProps) => ReactElement;
   /** Extra route prefixes that also light this rail item (e.g. sub-tabs). */
   activePaths?: readonly string[];
@@ -45,7 +44,6 @@ export type SettingsSectionGroup = { label: string; items: readonly SettingsSect
 export const SETTINGS_PROFILE = {
   href: "/settings",
   short: "Profile",
-  color: "blue" as TileColor,
   Icon: UserIcon,
 };
 
@@ -59,7 +57,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Playback",
         short: "Playback",
         desc: "Autoplay, default speed and quality, captions and theater defaults.",
-        color: "purple",
         Icon: PlayIcon,
       },
       {
@@ -68,7 +65,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Security",
         short: "Security",
         desc: "Two-factor authentication, recovery codes, and signing out of all devices.",
-        color: "gray",
         Icon: LockIcon,
       },
       {
@@ -77,7 +73,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Connected accounts",
         short: "Connections",
         desc: "Connect Bluesky to cross-post your new public videos (ATProto).",
-        color: "green",
         Icon: LinkIcon,
       },
       {
@@ -86,7 +81,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Encrypted-messaging devices",
         short: "Devices",
         desc: "Devices that can read your encrypted messages, and their safety numbers.",
-        color: "teal",
         Icon: SmartphoneIcon,
       },
       {
@@ -95,7 +89,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Notifications",
         short: "Notifications",
         desc: "Choose which notifications you receive.",
-        color: "red",
         Icon: BellIcon,
       },
       {
@@ -104,7 +97,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Donation addresses",
         short: "Donations",
         desc: "Public crypto addresses shown on your profile and channels (display only).",
-        color: "pink",
         Icon: HeartIcon,
       },
     ],
@@ -118,7 +110,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Search & recommendations",
         short: "Search",
         desc: "Personalization, and your search history.",
-        color: "orange",
         Icon: SearchIcon,
       },
       {
@@ -127,7 +118,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Sensitive content",
         short: "Content",
         desc: "Choose whether flagged videos are shown, warned, blurred, or hidden for you.",
-        color: "purple",
         Icon: EyeIcon,
       },
       {
@@ -136,7 +126,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Mutes",
         short: "Mutes",
         desc: "Accounts and federated instances whose content is hidden from you.",
-        color: "indigo",
         Icon: EyeOffIcon,
         activePaths: ["/settings/mutes/instances"],
       },
@@ -146,9 +135,6 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         title: "Blocked accounts",
         short: "Blocked",
         desc: "Accounts you have blocked. Neither of you can direct-message the other.",
-        // Blocked reads as a harder boundary than Mute, so it wears the red tile
-        // (Mutes keeps indigo) — one hue per destination (design-system.md).
-        color: "red",
         Icon: SlashCircleIcon,
         // The remote-account block list is a SIBLING page rather than a second
         // list here (A29-F7): the identity is a federated actor URL, added by

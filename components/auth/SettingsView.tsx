@@ -15,7 +15,6 @@ import { SETTINGS_GROUPS, type SettingsSection } from "@/components/settings/sec
 import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { IconTile } from "@/components/ui/IconTile";
 import { ApiError, api, authApi, errorMessage, userAvatarUrl, userBannerUrl } from "@/lib/api";
 import type { UpdateProfileRequest, User } from "@/lib/api";
 import { SignInGate } from "@/components/SignInGate";
@@ -38,24 +37,23 @@ function SettingsGroup({ label, children }: { label: string; children: ReactNode
   );
 }
 
-// SettingsNavRow is one navigation row: a leading colored IconTile (System
-// Settings pattern), a Subhead title + Footnote sub-line, and a trailing
-// chevron. The exact "Manage …" name each sub-page's e2e navigates by is carried
-// as sr-only text INSIDE the link, so the link's name-from-content includes it
+// SettingsNavRow is one navigation row: a plain muted leading icon (the app's
+// own list/nav idiom — the Sidebar and every section nav draw an 18px stroke
+// glyph, never a colored square), a Subhead title + Footnote sub-line, and a
+// trailing chevron. The exact "Manage …" name each sub-page's e2e navigates
+// by is carried as sr-only text INSIDE the link, so its name-from-content has it
 // (keeps every getByRole("link", { name: "Manage …" }) green) without an
 // aria-label — an aria-label would trip axe's label-content-name-mismatch
 // against the visible sub-line. Both this row and the desktop SettingsRail are
-// fed by the shared section catalog, so their hue/route/name never diverge.
-function SettingsNavRow({ href, action, title, desc, color, Icon }: SettingsSection) {
+// fed by the shared section catalog, so their route/name never diverge.
+function SettingsNavRow({ href, action, title, desc, Icon }: SettingsSection) {
   return (
     <li>
       <Link
         href={href}
         className="focus-ring flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-strong"
       >
-        <IconTile color={color}>
-          <Icon size={16} />
-        </IconTile>
+        <Icon size={18} strokeWidth={1.9} className="shrink-0 text-fg-muted" />
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-semibold text-fg">{title}</span>
           <span className="mt-0.5 block text-[13px] text-fg-muted">{desc}</span>
@@ -151,7 +149,7 @@ export function SettingsView() {
       />
       {/* Section navigation — the iOS grouped-rows drill-in (System Settings
           pattern): surface-muted cards of hairline-divided full-row links, each
-          led by a colored IconTile. On ≥ lg the SettingsRail (left) is the
+          led by a plain muted icon. On ≥ lg the SettingsRail (left) is the
           section nav, so these collapse to avoid a duplicate nav. */}
       <div className="flex flex-col gap-6 lg:hidden">
         {SETTINGS_GROUPS.map((group) => (

@@ -33,9 +33,10 @@ executed deference as absence and made the app read gray-on-gray; it is
   echo the indigo the CTAs already leaned toward while staying clearly distinct
   from Bluesky's brand blue. Never introduce a second interactive hue.
 - **Color beyond the accent must be semantic**, never decorative: status
-  tokens for status, protocol colors inside badges, colored icon tiles in
-  settings-style lists (see "Semantic color & protocol identity"). A color that
-  doesn't *mean* something is still wrong.
+  tokens for status, protocol colors inside badges, tinted icon chips and
+  status dots (`EmptyState`, notification kinds, admin stats) — never behind
+  navigation (see "Semantic color & protocol identity"). A color that doesn't
+  *mean* something is still wrong.
 
 Hard rules:
 - **Mobile-first.** Phone layout (390px) is designed first; wider viewports
@@ -100,7 +101,7 @@ below is axe-verified against the redesign (see the contrast contract).
 | `warning-solid` | Apple systemOrange **fill** (dots/tiles) | `#ff9500` | `#ff9f0a` |
 | `live` | the LIVE pulse dot (sits on media) | `#ff453a` | `#ff453a` |
 | `protocol-activitypub` / `-bluesky` / `-ipfs` | tri-protocol identity (badges + ribbon only) | `#6364ff` / `#0085ff` / `#65c2cb` | same |
-| `tile-{blue,gray,red,purple,orange,teal,green,pink,indigo}` | Settings/Admin icon-tile squares | Apple system colors | theme-tuned |
+| `tile-{blue,gray,red,purple,orange,teal,green,pink,indigo}` | tinted icon chips + status dots (EmptyState, notification kinds, admin stats) | Apple system colors | theme-tuned |
 
 Contrast contract (axe-verified, redesign):
 - `fg`/`fg-muted` pass AA (≥4.5:1) on `canvas`, `surface`, `surface-muted`, and
@@ -163,21 +164,35 @@ follow-up.)
 Color beyond the accent is allowed ONLY in these forms — each carries meaning,
 none touches chrome:
 
-- **Settings icon tiles** (System Settings pattern): grouped settings /
-  admin / moderation rows lead with a `rounded-lg` colored tile (28×28,
-  `IconTile` primitive) holding a white 16px glyph. The tile is *supporting*,
-  never the sole carrier of meaning (the adjacent label is); one hue per
-  destination, drawn from the fixed `--tile-*` palette in `globals.css` (blue
-  `#007aff`/`#0a84ff`, gray `#8e8e93`/`#98989d`, red `#ff3b30`/`#ff453a`,
-  purple `#af52de`/`#bf5af2`, orange `#ff9500`/`#ff9f0a`, teal
-  `#30b0c7`/`#40c8e0`, green `#34c759`/`#30d158`, pink `#ff2d55`/`#ff375f`,
-  indigo `#5856d6`/`#5e5ce6`) — never ad-hoc per-component hexes. Suggested
-  mapping (brief): Profile blue · Security gray · Notifications red · Playback
-  purple · Search orange · Devices teal · Connections green · Donations pink ·
-  Privacy indigo. Within Privacy & safety the two list destinations split by
-  severity: **Mutes = indigo, Blocked = red** (blocking is a harder boundary than
-  muting) — one hue per destination. Use `<IconTile color="blue">`; the white
-  glyph is decorative. (Catalog: `components/settings/sections.tsx`.)
+- **Navigation icons are monochrome — never colored tiles.** *(Rule changed
+  2026-09-15; the `IconTile` primitive and the per-destination hue mapping it
+  carried are **withdrawn and deleted**.)* Settings rows used to lead with a
+  28×28 Apple-system-color square holding a white glyph — the iOS System
+  Settings look. Nothing else in the app navigates that way: the Sidebar
+  (`components/Sidebar.tsx`), StudioNav, the admin rail
+  (`components/AdminConsole.tsx`) and `ModerationSectionNav` all draw a plain
+  stroke glyph, `text-fg-muted` at rest, the row's `text-accent-text` when
+  active. Eleven saturated squares in a column the app otherwise renders in one
+  hue read as a foreign surface, so **every nav row — the desktop
+  `SettingsRail` and the mobile grouped rows included — leads with a plain
+  monochrome icon**. The standard density is an **18px glyph on a 44px
+  (`min-h-11`) row** — Sidebar, `SettingsRail` and `ModerationSectionNav`; the
+  **admin console rail deliberately runs denser**, 16px on `h-9` rows, with its
+  "More" group carrying no icons at all. Stroke weight follows the caller
+  (`1.9` in the Sidebar and `SettingsRail`, the set's `1.8` default in
+  `ModerationSectionNav`). What is universal is the *treatment* — one plain
+  glyph, muted at rest, accent when active, never a tile.
+  (Catalog: `components/settings/sections.tsx`; it carries no hue.)
+- **Tinted icon chips and status dots** keep the fixed `--tile-*` Apple-system
+  palette in `globals.css` (blue `#007aff`/`#0a84ff`, gray `#8e8e93`/`#98989d`,
+  red `#ff3b30`/`#ff453a`, purple `#af52de`/`#bf5af2`, orange
+  `#ff9500`/`#ff9f0a`, teal `#30b0c7`/`#40c8e0`, green `#34c759`/`#30d158`,
+  pink `#ff2d55`/`#ff375f`, indigo `#5856d6`/`#5e5ce6`) — never ad-hoc
+  per-component hexes. It survives the tile's withdrawal because it is what
+  `EmptyState`'s icon-in-tinted-circle, the notification-kind chips
+  (`bg-tile-*/12 text-tile-*`) and the admin stat dots are drawn from: a ~12%
+  tint behind a same-hue glyph, or a solid dot — never a saturated fill under
+  navigation.
 - **Protocol colors inside badges**: federation/protocol identity is colored
   *inside* `Badge`-shaped elements only — the `Badge` `protocol` variant paints
   a ~12% brand tint + a full-strength brand **dot**, keeping an `fg` label (the
@@ -358,7 +373,6 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
 | Modals (dialog) | `rounded-[20px]` |
 | Feature thumbnails / hero media (feed) | `rounded-2xl` |
 | Bottom sheets | `rounded-t-[22px]` |
-| Icon tiles (`IconTile`) | `rounded-lg` |
 | Menu items inside popovers | `rounded-lg` |
 
 ## Component patterns (from the templates)
@@ -407,10 +421,14 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   variant="federated"` marks a remote origin with the tri-protocol ribbon on
   its top edge (the third pinned ribbon placement). The standalone ribbon is
   `<ProtocolRibbon>` (placements a + b).
-- **Icon tiles**: `<IconTile color="blue">…</IconTile>` — a 28×28 `rounded-lg`
-  Apple-system-color square with a white 16px glyph, leading grouped
-  Settings/Admin/Moderation rows (one hue per destination; see the tile palette
-  above).
+- **Nav row icons**: a plain `components/icons` glyph — muted at rest, accent
+  when active, never a colored tile (the `IconTile` primitive was withdrawn
+  2026-09-15). Standard density is 18px on a `min-h-11` row (`<Icon size={18}
+  className="shrink-0" />`, `strokeWidth={1.9}` where the caller wants the
+  Sidebar's weight): Sidebar, `SettingsRail`, the mobile grouped settings rows,
+  `ModerationSectionNav`. `AdminConsole`'s rail is the one sanctioned
+  exception — 16px on `h-9`, icons on the primary group only — because it lists
+  fourteen destinations and progressive disclosure is the point of that rail.
 - **Grouped settings rows** (mobile settings): a `rounded-2xl overflow-hidden`
   group, rows `divide-y divide-border-subtle`, each row label + optional
   `text-fg-muted` sub-line + chevron; group headers `text-xs font-bold uppercase
@@ -535,8 +553,8 @@ safe-area), `Dropdown` (menu-button pattern), `Tabs` (WAI-ARIA tabs), `Toast`
 pills **`inverse`** `bg-fg text-canvas` (ADMIN) / **`strong`**
 `bg-surface-strong text-fg-muted` (MOD), + **`protocol`** (brand tint + dot +
 `fg` label, `protocol` prop) / **`federated`** (remote origin, tri-protocol
-ribbon top edge)), `IconTile` (28×28 Apple-color tile + white glyph, `color`
-prop), `Avatar`, `Skeleton`, `Spinner`, `EmptyState` (icon-in-tinted-circle),
+ribbon top edge)), `Avatar`, `Skeleton`, `Spinner`, `EmptyState`
+(icon-in-tinted-circle),
 `ErrorState`, `LoadMoreButton`. `ProtocolRibbon` (components/) is the standalone
 tri-protocol gradient rule.
 Custom components, not UI-kit wrappers. Do not fork these patterns locally.
