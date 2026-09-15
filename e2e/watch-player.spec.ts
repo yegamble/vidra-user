@@ -389,12 +389,14 @@ test("the seek bar shows chapter ticks, the current-chapter readout, and chapter
     });
   });
 
-  // The current-chapter readout is a STAGE-width tier (@min-[900px]/stage). On
-  // a watch page with nothing related the stage is now capped to the viewport
-  // height (896px at 1280x720 — see components/WatchView.tsx), which lands just
-  // under that tier, so measure the tier at a width where it applies rather
-  // than dropping the assertion.
-  await page.setViewportSize({ width: 1440, height: 900 });
+  // The current-chapter readout is a STAGE-width tier (@min-[900px]/stage) and
+  // the tier is correct: at 860px the bar already carries quality "Auto
+  // (1080p)" with no room to spare. But the watch page now reserves the
+  // secondary column's 344px track at the two-column breakpoint, which caps a
+  // two-column stage at 860 — so the widest ORDINARY stage is the single-column
+  // one just below that breakpoint (916px here). Measure the tier where it
+  // applies rather than lowering it or dropping the assertion.
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
 

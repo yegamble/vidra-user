@@ -57,8 +57,17 @@ Hard rules:
   - **in an immersive shell** — today only the watch page's theater mode, which
     hides the rail so the stage can span the content area edge to edge, as
     YouTube closes the guide there — it opens the same panel as an overlay
-    DRAWER over a scrim (Escape, scrim click and any route change close it;
-    focus enters the panel and returns to the button).
+    DRAWER. The drawer is modal-shaped, so it IS a modal: `role="dialog"
+    aria-modal="true"`, the shared focus contract (`lib/use-dialog-focus`, the
+    same hook `Modal` uses — focus in, Tab trapped, Escape closes, focus
+    restored to the Menu button) and `inert` on `#main-content` while it is up.
+    It wears `.glass-chrome-solid` — the material's own opaque fallback — because
+    the page behind it there is the theater band's #000, where the translucent
+    chrome drops `fg-muted` to 3.74:1. The scrim starts below the header and
+    stays under its z-index, so the bar the drawer was opened from is still lit
+    and the Menu button can close what it opened. The rail's Collapse row is not
+    rendered in the drawer: the overlay is a fixed 224px panel, so it would flip
+    its own label and change nothing.
   It is absent where there is no app sidebar to toggle: below `sm` (phones keep
   the bottom tab bar and get no hamburger — `e2e/mobile-nav.spec.ts`), on
   standalone routes, and on the admin console routes, where the console's own
@@ -760,6 +769,31 @@ never substitute a library's variant when the design's path differs. Typed
 - Both navs return `null` on `/embed/*` (bare iframe player).
 - Every page renders exactly ONE `<main>` (landmarks are gated by
   `e2e/a11y-landmarks.spec.ts`).
+
+**The watch page's layout (`.watch-layout`, added 2026-09-15).** The watch
+surface is ONE CSS grid with three areas — `stage` / `body` / `rail` — rather
+than nested flex columns, and theater mode swaps the AREAS. That is a
+correctness rule, not a styling preference: the stage must keep a single DOM
+position, because React reconciles by position and rendering it somewhere else
+in theater REMOUNTED the player (playback restarted at 0, the mid-watch "Resume
+from…" offer reappeared, and a second view was counted on every `T`). Three
+things follow, and each was a defect first:
+
+- **The two-column switch is `xl` (1280px), not `lg`.** At 1024 the sidebar
+  (224) plus the reserved rail (344) left a 368×207 stage with a three-line
+  title. YouTube drops to one column at about the same available width.
+- **The secondary column's 344px track is reserved whether or not anything
+  renders into it.** Sizing it to its content shifted the largest element on the
+  page when the related fetch resolved empty.
+- **Theater is inert below that breakpoint**, in CSS (`.watch-theater-band`,
+  `.watch-layout-theater`) and in JS (`WATCH_TWO_COLUMN_QUERY`, which also gates
+  the immersive flag): there is no second column to collapse, no width to gain,
+  and a full-bleed square-cornered phone player is not an improvement.
+
+The stage's size ceiling is one token, `--watch-stage-max-h` — the viewport
+minus the masthead and the space the page owes the title, floored at 480px —
+read by the theater band as a height and by the default player column as a width
+at 16:9, so the two modes cannot disagree.
 
 ## Accessibility baseline (unchanged contract, do not regress)
 

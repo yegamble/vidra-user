@@ -19,6 +19,17 @@ import { TINY_MP4_BASE64 } from "../e2e-backed/fixtures";
 // The player opens a PLAYBACK SESSION before it plays (phase-4 item 1) and drives
 // the master URL from it, so every test here mocks that call: it is what decides
 // what plays, and an unmocked one would only ever be exercising the fallback.
+//
+// VIEWPORT: the quality menu is a STAGE-width tier (@min-[820px]/stage — "Auto
+// (1080p)" is the widest control in the bar). The watch page reserves the
+// secondary column's 344px track at the two-column breakpoint whether or not
+// anything renders into it (components/WatchView.tsx), so a 1280x720 window
+// leaves a 624px stage and the menu correctly tiers out into the overflow.
+// These tests are about HLS, not about control placement, so they run at a
+// width where the bar carries the menu; e2e/player-shell.spec.ts owns the
+// tiering itself.
+test.use({ viewport: { width: 1600, height: 900 } });
+
 const DETAIL = /\/api\/v1\/videos\/v1$/;
 const SESSION = /\/api\/v1\/videos\/v1\/playback-session$/;
 const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;

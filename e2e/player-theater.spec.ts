@@ -130,8 +130,11 @@ test("theater mode widens the stage and moves the related rail below it, persist
   await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
 
   // VIEWPORT-CAPPED: the stage never eats the masthead plus the space the page
-  // owes the title below it, so the title stays on screen.
+  // owes the title below it, so the title stays on screen. The lower bound is
+  // not decoration — every width/position assertion above is also satisfied by
+  // a stage of zero height.
   const viewport = page.viewportSize()!;
+  expect(after.player!.height).toBeGreaterThan(300);
   expect(after.player!.height).toBeLessThanOrEqual(viewport.height - 56 - 160);
   const title = (await page.getByRole("heading", { name: "Theater Clip" }).boundingBox())!;
   expect(title.y + title.height).toBeLessThanOrEqual(viewport.height);
@@ -166,35 +169,132 @@ test("theater mode widens the stage and moves the related rail below it, persist
   await expect(afterReload.locator).toHaveAttribute(afterReload.stateAttr, "true");
 });
 
-test("with nothing related, the default layout keeps the stage on screen and centred", async ({
-  page,
-}) => {
-  // A watch page whose related rail resolves EMPTY used to hand the player
-  // column the whole 1280px measure, which is a 720px stage on a 720px screen:
-  // the title, the channel row and every action sat below the fold. The column
-  // is capped to the shared height ceiling expressed as a width, and the row
-  // centres what is left.
+test("a page with nothing related lays out exactly like one with a rail", async ({ page }) => {
+  // Two regressions in one test.
+  //
+  // 1. SIZE: a watch page whose related rail resolved EMPTY used to hand the
+  //    player column the whole measure — a 720px stage on a 720px screen, with
+  //    the title and every action below the fold.
+  // 2. SHIFT: sizing the secondary column to its CONTENT meant the same page
+  //    painted a narrow stage while the related fetch was in flight and then
+  //    jumped to a full-measure one when the list resolved empty — a layout
+  //    shift on the largest element on the page. The column's track is now
+  //    reserved whether or not anything renders into it (YouTube keeps the
+  //    secondary column too), so the stage is the same size throughout.
   await mockWatch(page, []);
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Theater Clip" })).toBeVisible();
-  // Wait for the rail to RESOLVE to empty — while the fetch is in flight it
-  // holds a 344px skeleton, which is the layout this test is not about.
+
+  const stage = page.getByTestId("video-player");
+  // Measured BEFORE the related fetch resolves (the rail is still a skeleton)…
+  const whileLoading = (await stage.boundingBox())!;
   await expect(page.getByRole("complementary", { name: "Related videos" })).toHaveCount(0);
+  // …and after it resolves to nothing.
+  const resolved = (await stage.boundingBox())!;
+  expect(Math.abs(resolved.width - whileLoading.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(resolved.x - whileLoading.x)).toBeLessThanOrEqual(1);
 
+  // On screen, with the title under it.
   const viewport = page.viewportSize()!;
-  const stage = (await page.getByTestId("video-player").boundingBox())!;
-  expect(stage.y + stage.height).toBeLessThan(viewport.height - 100);
+  expect(resolved.height).toBeGreaterThan(200);
+  expect(resolved.y + resolved.height).toBeLessThan(viewport.height - 100);
 
-  // Centred in the content area rather than hugging the left edge.
-  const main = (await page.locator("#main-content").boundingBox())!;
-  const stageCentre = stage.x + stage.width / 2;
-  const mainCentre = main.x + main.width / 2;
-  expect(Math.abs(stageCentre - mainCentre)).toBeLessThanOrEqual(2);
+  // And the same geometry a page WITH a rail gets — the reserved column is the
+  // point, so an empty one changes nothing.
+  await page.unroute(CHANNEL_VIDEOS);
+  await mockWatch(page);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("complementary", { name: "Related videos" })).toBeVisible();
+  const withRail = (await stage.boundingBox())!;
+  expect(Math.abs(withRail.width - resolved.width)).toBeLessThanOrEqual(1);
 
   // Still the default layout: the sidebar is present and the stage is not
   // full-bleed (it keeps the page's measure and gutters).
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
-  expect(stage.width).toBeLessThan(main.width - 40);
+  const main = (await page.locator("#main-content").boundingBox())!;
+  expect(withRail.width).toBeLessThan(main.width - 40);
+});
+
+test("toggling theater keeps playing the same video — no remount, no second view", async ({
+  page,
+}) => {
+  // The stage used to be rendered at two different tree positions, and React
+  // reconciles by position: pressing `T` destroyed the <video>, restarted from
+  // 0, re-showed the mid-watch "Resume from…" offer and counted a SECOND view.
+  let views = 0;
+  await page.route(/\/api\/v1\/videos\/v1\/view$/, (route) => {
+    views += 1;
+    return route.fulfill({ status: 204, body: "" });
+  });
+  await mockWatch(page);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Theater Clip" })).toBeVisible();
+
+  const media = page.locator("video");
+  // Play — which is what counts the view — and stamp the element so a
+  // replacement is detectable.
+  await media.evaluate(async (el: HTMLVideoElement) => {
+    el.muted = true;
+    (el as HTMLVideoElement & { __same?: string }).__same = "original-element";
+    try {
+      await el.play();
+    } catch {
+      /* autoplay policy — headless allows muted, and the play event is the point */
+    }
+  });
+  await expect.poll(() => views).toBe(1);
+  // Let the playhead move off zero. (The route-mocked fixture answers no Range
+  // requests, so it cannot be SEEKED — letting it play is how this suite gets a
+  // non-zero position to compare against.)
+  await expect
+    .poll(() => media.evaluate((el: HTMLVideoElement) => el.currentTime))
+    .toBeGreaterThan(0.3);
+  const playedTo = await media.evaluate((el: HTMLVideoElement) => el.currentTime);
+
+  const toggle = await playerControl(page, "Theater mode");
+  await toggle.locator.click();
+  await expect(page.locator("[data-theater]").first()).toHaveAttribute("data-theater", "on");
+
+  // Same element, same position, and no second view POST.
+  expect(
+    await media.evaluate(
+      (el: HTMLVideoElement) => (el as HTMLVideoElement & { __same?: string }).__same,
+    ),
+  ).toBe("original-element");
+  // Playback carried on from where it was rather than restarting at zero.
+  expect(await media.evaluate((el: HTMLVideoElement) => el.currentTime)).toBeGreaterThanOrEqual(
+    playedTo,
+  );
+  expect(await media.evaluate((el: HTMLVideoElement) => el.paused)).toBe(false);
+  expect(views).toBe(1);
+});
+
+test("theater is inert on a phone, where there is no second column to collapse", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockWatch(page);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Theater Clip" })).toBeVisible();
+
+  const stage = page.getByTestId("video-player");
+  const before = (await stage.boundingBox())!;
+  const toggle = await playerControl(page, "Theater mode");
+  await toggle.locator.click();
+  await expect(page.locator("[data-theater]").first()).toHaveAttribute("data-theater", "on");
+
+  // The mode is remembered — it just does not change this layout.
+  const after = (await stage.boundingBox())!;
+  expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(1);
+  // Not full-bleed: the page's gutter is still there, and the card keeps its
+  // radius (a square-cornered edge-to-edge phone player is not an improvement).
+  const main = (await page.locator("#main-content").boundingBox())!;
+  expect(after.x).toBeGreaterThan(main.x + 8);
+  expect(await stage.evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).not.toBe("0px");
+  // And the phone keeps its navigation (the bottom tab bar), because immersive
+  // is gated to the two-column breakpoint too.
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
 });
 
 test("the PiP button is hidden when the browser reports no Picture-in-Picture support", async ({
