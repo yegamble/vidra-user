@@ -106,10 +106,16 @@ export default async function RootLayout({
               <Header instance={instance} />
               <div className="flex w-full flex-1">
                 <Sidebar />
+                {/* overflow-x-clip: the watch page's ambient glow deliberately
+                    bleeds past the player (components/watch/AmbientGlow.tsx), and
+                    this column is where that bleed is absorbed so the document
+                    never scrolls sideways (e2e/responsive.spec.ts). CLIP, not
+                    hidden: `hidden` would make this a scroll container, which
+                    breaks sticky descendants and scroll-into-view on focus. */}
                 <div
                   id="main-content"
                   tabIndex={-1}
-                  className="flex min-h-0 min-w-0 flex-1 flex-col focus:outline-none"
+                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip focus:outline-none"
                 >
                   {children}
                 </div>

@@ -158,6 +158,18 @@ follow-up.)
   backdrop-blur` pills (LIVE, IPFS), `bg-black/45` dialog scrim, white progress
   bars on media. They sit on imagery, not on themed surfaces.
 - **QR codes** — always dark modules on a white padded tile (scanability).
+- **Ambient glow** (watch page, `components/watch/AmbientGlow.tsx` +
+  `.ambient-glow` in `globals.css`) — the halo behind the player is the video's
+  OWN colour, so it is image, not palette. Invariants (numbers live in the CSS,
+  where they are tuned): **it may never have an edge** — it bleeds past the
+  stage, carries no `overflow` of its own, and its sideways bleed is capped at
+  the gutter so `#main-content`'s clip lands on nothing; the falloff is two
+  nested single-axis gradient masks, **never `mask-composite`** (whose
+  unsupported fallback is the union — a hard rectangle); opacity is a per-theme
+  pair whose ceiling is `text-fg-muted` contrast against a WHITE video frame,
+  not taste; the cross-fade is never longer than the sampling cadence; and it is
+  off entirely under `prefers-reduced-motion`, hidden under reduced
+  transparency / increased contrast / forced colors, and not painted below `md`.
 
 ## Semantic color & protocol identity (2026-07-19)
 

@@ -842,7 +842,7 @@ function Player({
   return (
     <div className="flex flex-col gap-2">
       <div className="relative isolate">
-        <AmbientGlow posterUrl={posterUrl} />
+        <AmbientGlow posterUrl={posterUrl} videoRef={videoRef} />
         <VideoPlayer
           video={video}
           videoRef={videoRef}
