@@ -202,12 +202,17 @@ export function Sidebar() {
     <>
       {/* Scrim: dismiss-on-click, and the visual separation an overlay owes the
           page under it. Decorative — Escape and the Menu button are the
-          keyboard/AT paths, so it is not a control in the a11y tree. */}
+          keyboard/AT paths, so it is not a control in the a11y tree.
+          It starts BELOW the header (3.5rem, the flush bar's sm+ height — the
+          drawer only exists at sm+) so the bar it was opened from stays lit and
+          clickable: the same Menu button has to be able to close it again, and
+          dimming search and the account menu behind an unrelated overlay is not
+          what a navigation drawer is for. */}
       <div
         aria-hidden
         data-testid="sidebar-scrim"
         onClick={() => setDrawerOpen(false)}
-        className="fixed inset-0 z-30 bg-black/45"
+        className="fixed inset-x-0 bottom-0 top-14 z-30 bg-black/45"
       />
       {panel}
     </>
