@@ -903,7 +903,7 @@ export function VideoPlayer({
           // 35% dimming layer, and a short ramp leaves white glyphs sitting on
           // whatever frame happens to be under them. Held shorter on a phone
           // stage, which is only ~185px tall in total.
-          "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0.5 bg-gradient-to-t from-black/65 via-black/30 to-transparent px-1.5 pb-1.5 pt-12 sm:px-3 sm:pb-2 @min-[480px]/stage:pt-20",
+          "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0.5 bg-gradient-to-t from-black/80 via-black/45 via-55% to-transparent px-1.5 pb-1.5 pt-12 sm:px-3 sm:pb-2 @min-[480px]/stage:pt-20",
           "transition-opacity duration-[250ms] ease-out motion-reduce:transition-none",
           controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
         )}

@@ -171,6 +171,47 @@ follow-up.)
   off entirely under `prefers-reduced-motion`, hidden under reduced
   transparency / increased contrast / forced colors, and not painted below `md`.
 
+**Amended 2026-09-15 (the bespoke player's chrome).** The exception above says
+what colour these controls may be; the player pass settled what they must look
+like. The rules below govern `components/player/*` and nothing else — the app's
+own surfaces keep every rule in this document.
+
+- **Focus is `.focus-ring-media`, not `.focus-ring`.** The accent ring is built
+  from `--surface` and `--focus`; both are surface colours, and over a bright or
+  saturated frame the ring disappears. The media ring is a fixed black
+  separator + white ring + soft outer glow (tvOS focus is scale, shadow and
+  illumination — never a coloured ring). It lives beside `.focus-ring` in
+  `globals.css` and is used by every interactive element in `player/*`.
+- **Scrim.** `bg-gradient-to-t from-black/80 via-black/45 via-55% to-transparent`
+  over ~140px of ramp on a desktop stage (shorter on a phone, where the whole
+  stage is ~185px). The HIG's answer to clear material over bright video is a
+  real dimming layer; a 40px band leaves white glyphs standing on whatever frame
+  happens to be underneath. Measured against a near-white frame, the glyph row
+  sits at ~L93 — white/90 on it clears AA comfortably.
+- **Buttons.** 44pt round target, 22px glyph, `text-white/90` at rest, a
+  `bg-white/12` hover disc with a 150ms scale (reduced-motion neutralises both).
+  A toggle that is ON adds a 2px white underline under the glyph — `aria-pressed`
+  was always there, but nothing a SIGHTED viewer could read was.
+- **Tooltips: one per BAR, never one per button.** Controls report hover/focus to
+  the control bar, which draws a single `bg-black/85` bubble ABOVE the whole
+  transport (the seek bar included), horizontally centred on the control and
+  clamped inside the stage, with the keyboard shortcut in a `<kbd>` keycap
+  (thin `white/40` border, `white/80` text, 11px). 350ms hover dwell, immediate
+  on keyboard focus, never on touch (`hover: none`). Player controls therefore
+  carry NO native `title`. Not wired to `aria-describedby`: an icon-only control
+  already carries those words as its accessible name.
+- **Auto-hide.** The chrome fades over 250ms after 3s idle while playing, AND
+  immediately when the pointer leaves the stage; the cursor goes with it
+  (`cursor-none`). It never hides while paused, while focus is inside the bar
+  (an open menu holds it), and it hides by OPACITY only — never `display` — so
+  focus is never lost.
+- **On/off controls that are settings, not actions, are switches.** Autoplay is
+  `components/player/AutoplaySwitch.tsx`: `role="switch"` + `aria-checked` (not
+  `aria-pressed`), a 36×14 track with an overlapping 20px knob carrying a dark
+  play/pause glyph. One component, used by the control bar and the end card. The
+  overflow MENU keeps `menuitemcheckbox` rows — a switch inside `role="menu"` is
+  the wrong ARIA, and that menu is a themed surface, not a media overlay.
+
 ## Semantic color & protocol identity (2026-07-19)
 
 Color beyond the accent is allowed ONLY in these forms — each carries meaning,
@@ -593,6 +634,21 @@ never substitute a library's variant when the design's path differs. Typed
   and a few app-specific marks with no design-vocabulary equivalent (federated
   globe, protocol/privacy glyphs, quality sliders, messaging attachment-kind
   glyphs, the new-message compose mark, and the sidebar collapse double-chevron).
+- **The player-chrome exception is ONE module (2026-09-15):
+  `components/player/icons.tsx`.** `player/*` may inline SVG, but not at call
+  sites: the bar's coherence is a property of the SET, and the old bar proved
+  it — feather-style 2px outlines for speaker and captions next to a solid play
+  triangle, which is what made a bespoke player read as a stock `<video>`. The
+  module's house style: 24-unit viewBox; SOLID SF-Symbols-like forms
+  (`play.fill`, `speaker.wave.2.fill`, `captions.bubble.fill`, `pip.fill`);
+  frames (theater, PiP) drawn as filled evenodd paths rather than hairlines so
+  their optical weight matches the solids; `fill="currentColor"`, `aria-hidden`;
+  and sizing through a `size` prop that sets the width/height ATTRIBUTES —
+  never `h-*`/`w-*` classes, because `cn()` is a plain concat with no
+  tailwind-merge and that is exactly how the kebab glyph got squeezed. Default
+  22px, on 44pt round targets. A glyph the chrome does not use does not belong
+  in it: speed and quality are text pills ("1×", "Auto (1080p)"), and menu rows
+  use the app set's `CheckIcon`, because those rows are a themed surface.
 - **SVG only, never emoji or unicode-glyph icons.** `npm run lint:icons`
   (`scripts/check-no-emoji.mjs`) is a **hard CI gate** that fails on emoji
   codepoints in `components/` and `app/` JSX. Non-icon glyphs it deliberately

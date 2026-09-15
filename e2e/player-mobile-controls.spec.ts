@@ -168,8 +168,8 @@ for (const [label, width, height] of [
     await expect(page.getByTestId("player-controls")).toBeVisible();
 
     const bar = page.getByTestId("player-controls");
-    const inBar = async (name: string) =>
-      (await bar.getByRole("button", { name, exact: true }).count()) > 0;
+    const inBar = async (role: "button" | "switch", name: string) =>
+      (await bar.getByRole(role, { name, exact: true }).count()) > 0;
 
     await page.getByRole("button", { name: "More player options" }).click();
     const menu = page.getByRole("menu", { name: "More player options" });
@@ -177,8 +177,13 @@ for (const [label, width, height] of [
 
     for (const name of ["Mute", "Captions", "Autoplay next", "Theater mode"]) {
       const reachable =
-        (await inBar(name)) ||
-        (await inBar("Autoplay next is on")) ||
+        (await inBar("button", name)) ||
+        // Autoplay in the BAR is a switch whose accessible name states the
+        // state it is in ("Autoplay is on"), so neither the role nor the name
+        // matches the menu row's stable "Autoplay next" checkbox. Scoped to
+        // that one control: the old spelling OR-ed this clause into every
+        // iteration, which quietly satisfied the whole loop from one control.
+        (name === "Autoplay next" && (await inBar("switch", "Autoplay is on"))) ||
         (await menu.getByRole("menuitemcheckbox", { name, exact: true }).count()) > 0;
       expect(reachable, `${name} is unreachable at ${width}px`).toBe(true);
     }

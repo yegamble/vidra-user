@@ -191,3 +191,60 @@ test("the overlay controls are reachable by keyboard in order with visible focus
   await page.keyboard.press("Tab");
   await expect(page.getByRole("slider", { name: "Volume" })).toBeFocused();
 });
+
+// The bar's one tooltip (the Apple TV chrome pass). Two properties are worth a
+// browser: WHERE it lands (jsdom has no layout, so the clamp and the "above the
+// transport" placement can only be asserted here) and that hovering a control
+// produces exactly one of them.
+test("hovering a control names it above the transport, with its shortcut, inside the stage", async ({
+  page,
+}) => {
+  await mockWatch(page, { captions: true });
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Shell Clip" })).toBeVisible();
+
+  const tip = page.getByTestId("player-tooltip");
+  await expect(tip).toHaveCount(0);
+
+  await page.getByTestId("player-controls").getByRole("button", { name: "Captions" }).hover();
+  await expect(tip).toBeVisible();
+  // The label AND the key that does the same thing, in a keycap.
+  await expect(tip).toContainText("Subtitles/closed captions");
+  await expect(tip.locator("kbd")).toHaveText("C");
+
+  const tipBox = (await tip.boundingBox())!;
+  const seekBox = (await page.getByRole("slider", { name: "Seek" }).boundingBox())!;
+  const stageBox = (await page.getByTestId("video-player").boundingBox())!;
+  // ABOVE the whole transport — it must never cover the timeline the viewer is
+  // aiming at, which is what a per-button tooltip anchored to the control does.
+  expect(tipBox.y + tipBox.height).toBeLessThanOrEqual(seekBox.y + 1);
+  // ...and clamped inside the stage, which is overflow-hidden: a bubble that
+  // escapes it is a bubble that gets cut in half.
+  expect(tipBox.x).toBeGreaterThanOrEqual(stageBox.x - 0.5);
+  expect(tipBox.x + tipBox.width).toBeLessThanOrEqual(stageBox.x + stageBox.width + 0.5);
+
+  // Leaving the control takes the label with it.
+  await page.getByRole("slider", { name: "Seek" }).hover();
+  await expect(tip).toHaveCount(0);
+});
+
+test("the pointer leaving the stage while playing takes the controls with it", async ({ page }) => {
+  await mockWatch(page);
+  await page.goto("/videos/v1");
+  const bar = page.getByTestId("player-controls");
+  const stage = page.getByTestId("video-player");
+  await expect(bar).toBeVisible();
+
+  // Pointer over the bar, then playing: the chrome is up.
+  await bar.hover();
+  await page.locator("video").evaluate((el) => el.dispatchEvent(new Event("play")));
+  await expect(bar).toHaveCSS("opacity", "1");
+
+  // Out of the stage entirely → the buttons and the timeline go at once,
+  // without waiting out the 3s idle timer.
+  const box = (await stage.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height + 120);
+  await expect(bar).toHaveCSS("opacity", "0");
+  // Hidden by opacity only — never display — so focus is never lost.
+  await expect(bar).toHaveCount(1);
+});
