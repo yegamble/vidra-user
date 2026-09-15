@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -30,6 +30,9 @@ vi.mock("@/lib/api", () => {
       getSearchHistory: vi.fn(),
       deleteSearchHistoryEntry: vi.fn(() => Promise.resolve()),
       clearSearchHistory: vi.fn(() => Promise.resolve()),
+      // The real lib/search-events (NOT mocked here) posts through this when a
+      // batch flushes; the refresh-race tests below drive that path for real.
+      postSearchEvents: vi.fn(() => Promise.resolve()),
     },
     ApiError: MockApiError,
     errorMessage: (_err: unknown, fallback: string) => fallback,
@@ -37,6 +40,7 @@ vi.mock("@/lib/api", () => {
 });
 
 import { ApiError, api } from "@/lib/api";
+import { flush, resetSearchEventsForTest, trackSearchEvent } from "@/lib/search-events";
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 import { SearchSettingsView } from "./SearchSettingsView";
 
@@ -57,6 +61,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetSearchEventsForTest();
   vi.clearAllMocks();
 });
 
@@ -345,6 +350,99 @@ describe("SearchSettingsView — clear-all reachability", () => {
     expect(screen.queryByRole("button", { name: "Clear all" })).toBeNull();
     resolve({ entries: [], limit: 100, offset: 0 });
     expect(await screen.findByRole("button", { name: "Clear all" })).toBeTruthy();
+  });
+});
+
+// The refresh race (Wave A): the history list is read ONCE on mount, but the
+// search that should appear in it rides a ~5s behavioural-event batch and is
+// written to the server AFTER that batch flushes. Reading only on mount left a
+// just-made search invisible until a manual reload. The fix subscribes to the
+// flush-landed signal and refreshes the list — bounded, never polling.
+describe("SearchSettingsView — a just-made search refreshes without a manual reload", () => {
+  const entry = (query: string) => ({
+    query,
+    normalized_query: query,
+    last_used_at: "2026-09-15T00:00:00Z",
+    use_count: 1,
+  });
+
+  it("shows a search made just before landing here, once its batched event flushes", async () => {
+    // Mount reads an empty history: the search's `search.submitted` event has not
+    // been flushed yet (it rides a batch), so the row does not exist server-side.
+    render(<SearchSettingsView />);
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/You have no saved searches/)).toBeTruthy();
+    expect(screen.queryByText("just-searched")).toBeNull();
+
+    // The next read (once the flush lands) carries the new row.
+    getSearchHistory.mockResolvedValue({
+      entries: [entry("just-searched")],
+      limit: 100,
+      offset: 0,
+    });
+
+    // Drive a REAL search event through lib/search-events and flush it. No
+    // remount, no manual reload — the already-mounted section reflects it itself.
+    await act(async () => {
+      trackSearchEvent({ type: "search.submitted", query: "just-searched" });
+      flush();
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("just-searched")).toBeTruthy();
+    // Bounded: the mount read plus the reconcile read that saw the change (it
+    // stops the instant the list changes) — nowhere near a poll.
+    expect(getSearchHistory.mock.calls.length).toBeLessThanOrEqual(4);
+  });
+
+  it("does not re-read history when a non-search event flushes", async () => {
+    render(<SearchSettingsView />);
+    await waitFor(() => expect(getSearchHistory).toHaveBeenCalledTimes(1));
+
+    // An impression/play event writes nothing to search history.
+    await act(async () => {
+      trackSearchEvent({ type: "video.impression", video_id: "v1", context: "home" });
+      flush();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getSearchHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes a bounded number of times and then stops when the write lags", async () => {
+    vi.useFakeTimers();
+    try {
+      // The row never becomes visible to the read — server ingest lags past the
+      // whole reconcile window — so the loop cannot early-exit on a change.
+      render(<SearchSettingsView />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(getSearchHistory).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        trackSearchEvent({ type: "search.submitted", query: "ghost" });
+        flush();
+        await vi.advanceTimersByTimeAsync(2_500 * 12);
+      });
+
+      const total = getSearchHistory.mock.calls.length;
+      // Mount read + a small, FIXED number of reconcile reads. Bounded on purpose:
+      // a regression to standing polling would blow far past this.
+      expect(total).toBeGreaterThan(1);
+      expect(total).toBeLessThanOrEqual(4);
+
+      // Genuinely stopped: no further reads however long we wait.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_500 * 12);
+      });
+      expect(getSearchHistory.mock.calls.length).toBe(total);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

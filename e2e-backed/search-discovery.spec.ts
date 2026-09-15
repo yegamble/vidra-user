@@ -76,3 +76,41 @@ test("a signed-in user can delete a search-history entry", async ({ page, reques
   await page.getByRole("button", { name: new RegExp(`Remove .*${query}.* from your search history`) }).click();
   await expect(entry).toBeHidden();
 });
+
+// The refresh race (Wave A): a search rides a batched behavioural event that the
+// browser flushes ~5s after the search, and core ingests it asynchronously after
+// that. The history surface used to read once on mount and never again, so a
+// search made JUST before landing here stayed invisible until a manual reload.
+// This proves the search now appears on its own — and that the fix does not
+// hammer the API to get there.
+test("a just-made search appears in history without a manual reload", async ({ page, request }) => {
+  const user = await registerUser(request, "searcher");
+  await loginUI(page, user.email, "supersecret-e2e");
+
+  const query = `noreload-${Date.now()}`;
+  await page.getByLabel("Search videos").fill(query);
+  await page.getByLabel("Search videos").press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/search\\?q=${query}`));
+
+  // Count reads of the history endpoint from here on — through the flush window
+  // and the bounded post-flush refreshes. A regression to tight polling would
+  // blow past the cap below within the ~20s we wait for the row.
+  let historyReads = 0;
+  page.on("request", (req) => {
+    if (req.method() === "GET" && /\/me\/search-history(\?|$)/.test(req.url())) historyReads += 1;
+  });
+
+  // Reach the history surface by CLIENT-SIDE navigation — no page reload, so the
+  // pending behavioural batch and its flush timer survive.
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("link", { name: "Manage search and recommendations" }).click();
+  await expect(page.getByRole("heading", { name: "Search & recommendations" })).toBeVisible();
+
+  // The just-made search shows up on its own — no reload, no extra interaction.
+  await expect(page.getByText(query, { exact: true })).toBeVisible({ timeout: 20_000 });
+
+  // Bounded: the mount read plus a handful of reconcile reads. Far below what a
+  // per-second poll over the same window would produce.
+  expect(historyReads).toBeLessThanOrEqual(6);
+});
