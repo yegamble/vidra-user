@@ -158,6 +158,19 @@ follow-up.)
   backdrop-blur` pills (LIVE, IPFS), `bg-black/45` dialog scrim, white progress
   bars on media. They sit on imagery, not on themed surfaces.
 - **QR codes** — always dark modules on a white padded tile (scanability).
+- **Ambient glow** (watch page, `components/watch/AmbientGlow.tsx` +
+  `.ambient-glow` in `globals.css`) — the halo behind the player is the video's
+  OWN colour, so it is image, not palette. **It may never have an edge**: it
+  bleeds ~9% past the stage sideways and ~22% above/below, carries no
+  `overflow` of its own, and ramps to fully transparent before its own box via
+  two nested single-axis gradient masks (never `mask-composite`, whose
+  unsupported fallback is the union — a hard rectangle). `blur(40px)` with
+  `saturate(1.4)` dark / `1.7` light; opacity is a tuned pair, 0.7 dark and
+  0.42 light, because the same wash that reads as spilled light on `#0a0a0a`
+  reads as a grey slab on `#f5f5f7`. It samples the playing `<video>` into a
+  48x27 canvas once a second and cross-fades over 1.5s (never rAF); it stops on
+  pause/end, in fullscreen, on a hidden tab, and entirely under
+  `prefers-reduced-motion` (static poster wash only).
 
 ## Semantic color & protocol identity (2026-07-19)
 

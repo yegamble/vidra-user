@@ -579,6 +579,60 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
   outline: none;
 }
 
+/*
+ * Ambient glow (watch page, components/watch/AmbientGlow.tsx) — the soft halo
+ * of the video's own colour around the player, after YouTube's #cinematics.
+ *
+ * THE EDGE IS THE WHOLE PROBLEM. The first version clipped the blur to a box
+ * (`overflow-hidden`), which is why it shipped as a hard-edged grey rectangle
+ * banding the player. A glow may not have a boundary, so every edge of this
+ * layer ramps to fully transparent before it reaches its own box:
+ *
+ *   The falloff is TWO masks, one per axis, on two nested elements — NOT one
+ *   mask-image with `mask-composite: intersect`. Nesting intersects by
+ *   construction, everywhere `mask-image` works. Composite would have been a
+ *   single-point failure: where `mask-composite` is unsupported the two layers
+ *   fall back to ADD, i.e. their UNION, which is opaque all the way to the top
+ *   and bottom edges — the exact hard rectangle this change removes, silently
+ *   restored.
+ *
+ *   The stops are derived from the bleed, not chosen: the layer is 118% of the
+ *   stage wide and 144% tall (AmbientGlow.geometry), so the player's own edges
+ *   sit at 7.6%/92.4% across and 15.3%/84.7% down. Ramping to opaque at 13% and
+ *   25% therefore leaves the wash at ~0.6 alpha where it hugs the player and
+ *   spends the whole bleed band fading to nothing — matched on both axes, so
+ *   the halo reads as round rather than as a cross.
+ *
+ * Opacity is a tuned PAIR, not one value dimmed: the wash is a dark image, and
+ * over the near-white light canvas the same strength that reads as spilled
+ * light on #0a0a0a reads as a grey slab on #f5f5f7. Saturation carries the
+ * light theme instead (the hue survives, the darkness does not).
+ */
+.ambient-glow {
+  opacity: 0.42;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 13%, #000 87%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 13%, #000 87%, transparent 100%);
+}
+.ambient-glow-wash {
+  filter: blur(40px) saturate(1.7);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 25%, #000 75%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 25%, #000 75%, transparent 100%);
+}
+[data-theme="dark"] .ambient-glow {
+  opacity: 0.7;
+}
+[data-theme="dark"] .ambient-glow-wash {
+  filter: blur(40px) saturate(1.4);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ambient-glow {
+    opacity: 0.7;
+  }
+  :root:not([data-theme="light"]) .ambient-glow-wash {
+    filter: blur(40px) saturate(1.4);
+  }
+}
+
 /* The LIVE indicator pulse (template `vpulse`). Neutralized by the global
  * reduced-motion reset below like every other animation. */
 @keyframes live-pulse {
