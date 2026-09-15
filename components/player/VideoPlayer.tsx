@@ -490,9 +490,24 @@ export function VideoPlayer({
       setEnded(true);
       window.clearTimeout(idleRef.current); // the end card takes over the surface
     };
+    // THE ELEMENT CAN LEAVE PLAYBACK WITHOUT FIRING `pause`. Whenever the media
+    // element load algorithm runs on a source that already existed — hls.js
+    // `destroy()`/`detachMedia` does removeAttribute("src") + load(), and so does
+    // the HLS→original fallback after a 404 master, a session naming a different
+    // master, an IPFS source switch, or playback.retry() — the spec sets `paused`
+    // back to true and rejects any pending play promise with AbortError, firing
+    // `abort` + `emptied` + `loadstart` and NEVER `pause`. Those three events are
+    // therefore the only notice React gets, so resync from the element itself,
+    // read LIVE at event time. On a normal first attach this is a no-op (the
+    // element was already paused); Chrome's autoplay-policy refusal fires no
+    // `play` at all, so there is nothing there to correct either.
+    const onLoadResetEv = () => setPaused(el.paused);
     // A new source (navigation to another video within the page, or an
     // HLS→original fallback) resets the element, so drop any stale end card.
-    const onLoadStartEv = () => setEnded(false);
+    const onLoadStartEv = () => {
+      setEnded(false);
+      setPaused(el.paused);
+    };
     const onTimeEv = () => {
       setCurrentTime(el.currentTime);
       setBuffered(readBuffered(el.buffered));
@@ -517,6 +532,8 @@ export function VideoPlayer({
     el.addEventListener("pause", onPauseEv);
     el.addEventListener("ended", onEndedEv);
     el.addEventListener("loadstart", onLoadStartEv);
+    el.addEventListener("abort", onLoadResetEv);
+    el.addEventListener("emptied", onLoadResetEv);
     el.addEventListener("timeupdate", onTimeEv);
     el.addEventListener("progress", onProgressEv);
     el.addEventListener("loadedmetadata", onDurationEv);
@@ -534,6 +551,8 @@ export function VideoPlayer({
       el.removeEventListener("pause", onPauseEv);
       el.removeEventListener("ended", onEndedEv);
       el.removeEventListener("loadstart", onLoadStartEv);
+      el.removeEventListener("abort", onLoadResetEv);
+      el.removeEventListener("emptied", onLoadResetEv);
       el.removeEventListener("timeupdate", onTimeEv);
       el.removeEventListener("progress", onProgressEv);
       el.removeEventListener("loadedmetadata", onDurationEv);
