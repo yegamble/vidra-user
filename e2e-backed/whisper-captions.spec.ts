@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { TINY_MP4_BASE64, captions, channelVideos, uniqueId } from "./fixtures";
+import { SAMPLE_AV_MP4_4S_BASE64, captions, channelVideos, uniqueId } from "./fixtures";
 
 // Backend-backed proof of the Whisper auto-caption round trip against a real
 // vidra-core + PostgreSQL: a creator publishes a video, requests automatic
@@ -8,12 +8,18 @@ import { TINY_MP4_BASE64, captions, channelVideos, uniqueId } from "./fixtures";
 // WebVTT track persists (visible via the public captions API).
 //
 // SKIPPED by default: auto-captioning requires the instance to be started with
-// WHISPER_ENABLED=true pointing at a reachable Whisper transcription service, and
-// a clip that actually carries an audio track to transcribe (the tiny synthetic
-// fixture may not). Opt in explicitly with E2E_WHISPER=true when running the
-// backed stack with that profile:
+// WHISPER_ENABLED=true pointing at a reachable Whisper transcription service.
+// Opt in explicitly with E2E_WHISPER=true when running the backed stack with the
+// captions (whisper.cpp) profile:
 //
 //   E2E_WHISPER=true npm run e2e:backed
+//
+// The upload uses SAMPLE_AV_MP4_4S_BASE64, a clip with a REAL audio track: the
+// old video-only fixture (SAMPLE_MP4_4S_BASE64 / TINY_MP4_BASE64) has nothing to
+// transcribe, so the job's first attempt failed at audio extraction and only the
+// ~90s backoff retry recovered — which blew the test budget (Playwright's default
+// 30s test timeout is far below this spec's 180s caption wait). With audio the
+// FIRST attempt succeeds, so the track lands well within the raised timeout below.
 //
 // Without the flag this is a no-op skip, so `npm run e2e:backed` stays green on a
 // stack that doesn't run Whisper. It is never part of `npm run ci`.
@@ -23,6 +29,12 @@ test.describe("Whisper auto-captions (backed)", () => {
   test.skip(!WHISPER_ENABLED, "set E2E_WHISPER=true with a Whisper-enabled backed stack");
 
   test("a creator generates automatic captions from the studio", async ({ page, request }) => {
+    // Whisper transcription (model load + inference) plus the full signup →
+    // channel → upload → publish → caption round trip runs well past Playwright's
+    // 30s default. The caption wait alone is 180s; give the whole test comfortable
+    // headroom above it so a healthy run never races the budget.
+    test.setTimeout(240_000);
+
     const id = uniqueId();
     const handle = `ch${id}`;
     const channelName = `Channel ${id}`;
@@ -49,7 +61,7 @@ test.describe("Whisper auto-captions (backed)", () => {
     await page.getByLabel("Video file").setInputFiles({
       name: "clip.mp4",
       mimeType: "video/mp4",
-      buffer: Buffer.from(TINY_MP4_BASE64, "base64"),
+      buffer: Buffer.from(SAMPLE_AV_MP4_4S_BASE64, "base64"),
     });
     const uploaded = page.waitForResponse(
       (r) => /\/videos\/[^/]+\/file$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
