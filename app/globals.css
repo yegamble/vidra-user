@@ -565,6 +565,21 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
 }
 
 /*
+ * Forced colors (Windows High Contrast). BOTH rings are drawn with box-shadow
+ * over `outline: none`, and forced-colors mode DROPS box-shadow entirely — so
+ * in the mode that exists specifically for people who need a visible focus
+ * indicator, both of ours were invisible. Restore a real outline in the system
+ * highlight colour; `outline` is the one focus affordance forced colors keeps.
+ */
+@media (forced-colors: active) {
+  .focus-ring:focus-visible,
+  .focus-ring-media:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
+/*
  * Skip-to-content link. The first focusable element in the document; visually
  * hidden (pulled off-screen) until it receives keyboard focus, at which point it
  * animates into the top-left corner. Activating it moves focus past the header /

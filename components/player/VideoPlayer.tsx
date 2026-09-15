@@ -290,22 +290,31 @@ export function VideoPlayer({
   }, []);
   useEffect(() => () => window.clearTimeout(idleRef.current), []);
 
-  // The pointer LEAVING the stage hides the chrome at once rather than starting
-  // a 3s countdown for a viewer who has already looked away — YouTube's rule,
-  // and the one the owner asked for ("when the pointer leaves the player, the
+  // The MOUSE leaving the stage hides the chrome at once rather than starting a
+  // 3s countdown for a viewer who has already looked away — YouTube's rule, and
+  // the one the owner asked for ("when the pointer leaves the player, the
   // buttons AND the timeline must disappear"). The other two guards still
   // apply, because they are expressed in controlsVisible, not here: paused pins
   // the chrome, and focus inside the bar (which an open menu holds) pins it too.
-  const onStageLeave = useCallback(() => {
+  //
+  // `pointerType` is load-bearing, not defensive. A touch pointer fires
+  // pointerout/pointerleave immediately after pointerup — the finger really has
+  // left the screen — so without this guard every TAP on a control during
+  // playback ran this path and faded the bar to opacity 0 with
+  // pointer-events-none, i.e. captions, fullscreen and the seek bar became
+  // unreachable by the only input a phone has. A touch device hides the chrome
+  // through the idle timer, which is what it has always done.
+  const onStageLeave = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "mouse") return;
     if (idleRef.current) window.clearTimeout(idleRef.current);
     setPointerActive(false);
   }, []);
 
-  // One tooltip for the whole bar, anchored above the transport. The bar
-  // element is the positioning frame, so the bubble is clamped to the stage's
-  // width by construction — and, being a CHILD of the bar, it fades with the
-  // chrome instead of needing a second piece of state kept in sync with it.
-  const { handle: tipHandle, tip } = usePlayerTooltip(controlsRef);
+  // One tooltip for the whole bar, anchored above the transport. Its own
+  // zero-height row is the positioning frame (the bar's padding would otherwise
+  // shift every centre), and being a CHILD of the bar it fades with the chrome
+  // instead of needing a second piece of state kept in sync with it.
+  const { handle: tipHandle, tip, anchorRef: tipAnchorRef } = usePlayerTooltip();
 
   // Keep the latest progress-reporting callbacks in a ref so the media-event
   // subscription below stays mounted once (never re-subscribing on a new
@@ -906,7 +915,7 @@ export function VideoPlayer({
             controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
           )}
         >
-          <PlayerTooltipLayer tip={tip} barRef={controlsRef} />
+          <PlayerTooltipLayer tip={tip} anchorRef={tipAnchorRef} />
           <SeekBar
             currentTime={currentTime}
             duration={duration}
@@ -941,7 +950,7 @@ export function VideoPlayer({
             <span className="whitespace-nowrap px-1 text-[12px] font-medium tabular-nums text-white/85 @min-[480px]/stage:text-[13px]">
               {formatDuration(currentTime)}
               <span className="hidden @min-[420px]/stage:inline">
-                <span className="px-0.5 text-white/45">/</span>
+                <span className="px-0.5 text-white/70">/</span>
                 {formatDuration(duration)}
               </span>
             </span>
@@ -949,7 +958,7 @@ export function VideoPlayer({
             {/* Current chapter title (CORE-15): muted + truncated, held off the
                 narrowest phone bar (< sm) so it never crowds the core controls. */}
             {currentChapterTitle ? (
-              <span className="hidden min-w-0 max-w-[8rem] truncate px-1 text-[12px] text-white/60 @min-[900px]/stage:inline-block @min-[1100px]/stage:max-w-[14rem]">
+              <span className="hidden min-w-0 max-w-[8rem] truncate px-1 text-[12px] text-white/70 @min-[900px]/stage:inline-block @min-[1100px]/stage:max-w-[14rem]">
                 {currentChapterTitle}
               </span>
             ) : null}
@@ -1083,7 +1092,7 @@ export function VideoPlayer({
             <button
               type="button"
               onClick={playback.retry}
-              className="pointer-events-auto cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="focus-ring-media pointer-events-auto cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25"
             >
               Try again
             </button>

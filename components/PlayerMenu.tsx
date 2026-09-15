@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { CheckIcon } from "@/components/icons";
+import { MEDIA_PRESS } from "@/components/player/chrome";
 import { usePlayerTipProps } from "@/components/player/PlayerTooltip";
 import { usePlayerPopup } from "@/components/player/use-player-popup";
 import { cn } from "@/lib/cn";
@@ -131,8 +132,14 @@ export function PlayerMenu<T extends string | number>({
         }}
         className={cn(
           "flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap font-semibold",
+          // min-w-11: a text pill is still a 44pt target. Without the icon the
+          // "1×" pill collapsed to 37px wide, which is under the floor every
+          // round button in the same row meets.
           overlay
-            ? "focus-ring-media h-11 rounded-full px-3 text-[12px] text-white/90 transition-[color,background-color,transform] duration-150 ease-out hover:scale-105 hover:bg-white/12 hover:text-white active:scale-95 motion-reduce:transform-none motion-reduce:transition-none"
+            ? cn(
+                "focus-ring-media h-11 min-w-11 justify-center rounded-full px-3 text-[12px] text-white/90 hover:bg-white/12 hover:text-white",
+                MEDIA_PRESS,
+              )
             : "focus-ring rounded-full bg-surface-muted px-4 py-2 text-[13px] text-fg transition-colors hover:bg-surface-strong",
         )}
         {...(overlay ? tipProps : { onClick: () => (open ? closePopup() : openPopup()) })}

@@ -30,15 +30,19 @@ export function AutoplaySwitch({
   enabled: boolean;
   onToggle: () => void;
   /**
-   * Accessible name. Defaults to the state sentence ("Autoplay is on/off") the
-   * bar uses, where the control is icon-only; the end card passes a stable
-   * "Autoplay next" instead, so its name does not change under the viewer.
+   * Accessible name. Defaults to the stable "Autoplay next" that the overflow
+   * menu row and the end card also use: WCAG 3.2.4 wants one function to carry
+   * one name across the UI, and a name that rewrites itself under a viewer who
+   * has just focused it is its own small confusion. The STATE is `aria-checked`
+   * (and the knob, and the tooltip) — never the name.
    */
   label?: string;
   /** Show the word "Autoplay" beside the track (the end card does; the bar does not). */
   showText?: boolean;
   className?: string;
 }) {
+  // The tooltip is the one place the state is spelled out in words: it is
+  // transient, pointer-driven prose, not the control's identity.
   const state = enabled ? "Autoplay is on" : "Autoplay is off";
   const tipProps = usePlayerTipProps<HTMLButtonElement>(state, undefined, { onClick: onToggle });
 
@@ -47,7 +51,7 @@ export function AutoplaySwitch({
       type="button"
       role="switch"
       aria-checked={enabled}
-      aria-label={label ?? state}
+      aria-label={label ?? "Autoplay next"}
       className={cn(
         "focus-ring-media inline-flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-full px-2 text-[12px] font-medium text-white/90",
         "transition-colors duration-150 ease-out hover:text-white motion-reduce:transition-none",
@@ -59,7 +63,12 @@ export function AutoplaySwitch({
         aria-hidden="true"
         className={cn(
           "relative inline-flex h-3.5 w-9 items-center rounded-full transition-colors duration-150 ease-out motion-reduce:transition-none",
-          enabled ? "bg-white/80" : "bg-white/30",
+          // OFF is a DARK track with a white hairline, not a dim white one.
+          // `bg-white/30` over the scrim measured 2.21:1 against the video —
+          // under the 3:1 floor for a non-text control, so the one state the
+          // owner complained he could not read was the unreadable one. Dark +
+          // ring reads as an empty socket at any brightness; ON stays white/80.
+          enabled ? "bg-white/80" : "bg-black/45 ring-1 ring-inset ring-white/70",
         )}
       >
         {/* The knob overlaps the track vertically (20px on a 14px rail), which

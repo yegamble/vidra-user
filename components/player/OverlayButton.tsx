@@ -2,6 +2,7 @@
 
 import type { ButtonHTMLAttributes, Ref } from "react";
 
+import { MEDIA_PRESS } from "@/components/player/chrome";
 import { usePlayerTipProps } from "@/components/player/PlayerTooltip";
 import { cn } from "@/lib/cn";
 
@@ -46,8 +47,10 @@ export function OverlayButton({
   children,
   ref,
   onPointerEnter,
+  onPointerMove,
   onPointerLeave,
   onPointerDown,
+  onPointerUp,
   onFocus,
   onBlur,
   onClick,
@@ -55,8 +58,10 @@ export function OverlayButton({
 }: OverlayButtonProps) {
   const tipProps = usePlayerTipProps<HTMLButtonElement>(tip ?? label, tipKeys, {
     onPointerEnter,
+    onPointerMove,
     onPointerLeave,
     onPointerDown,
+    onPointerUp,
     onFocus,
     onBlur,
     onClick,
@@ -69,12 +74,14 @@ export function OverlayButton({
       aria-label={label}
       aria-pressed={pressed}
       className={cn(
-        "focus-ring-media relative inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-white/90",
-        "transition-[color,background-color,transform] duration-150 ease-out",
-        "hover:bg-white/12 hover:text-white active:scale-95 hover:scale-105",
-        "motion-reduce:transform-none motion-reduce:transition-none",
-        "disabled:pointer-events-none disabled:opacity-50",
-        pressed && "text-white",
+        "focus-ring-media relative inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full",
+        MEDIA_PRESS,
+        "hover:bg-white/12 hover:text-white disabled:pointer-events-none disabled:opacity-50",
+        // Ternary, not `pressed && "text-white"`: cn() is a plain concat with no
+        // tailwind-merge, so an appended override loses to whichever of the two
+        // same-group utilities the STYLESHEET emits later — the pressed state
+        // was silently a no-op.
+        pressed ? "text-white" : "text-white/90",
         className,
       )}
       {...tipProps}

@@ -11,14 +11,19 @@ describe("AutoplaySwitch", () => {
     // The owner's complaint: the old autoplay control gave no indication of
     // whether it was on or off. aria-pressed on an icon is the same ambiguity
     // for assistive tech; role=switch + aria-checked is the on/off semantic.
+    //
+    // The NAME does not move with the state. One function carries one name
+    // across the bar, the overflow menu and the end card (WCAG 3.2.4), and a
+    // control that renames itself under the viewer who just focused it is its
+    // own small confusion — aria-checked is what changes.
     render(<AutoplaySwitch enabled onToggle={() => {}} />);
-    const on = screen.getByRole("switch", { name: "Autoplay is on" });
+    const on = screen.getByRole("switch", { name: "Autoplay next" });
     expect(on.getAttribute("aria-checked")).toBe("true");
     expect(on.getAttribute("aria-pressed")).toBeNull();
 
     cleanup();
     render(<AutoplaySwitch enabled={false} onToggle={() => {}} />);
-    const off = screen.getByRole("switch", { name: "Autoplay is off" });
+    const off = screen.getByRole("switch", { name: "Autoplay next" });
     expect(off.getAttribute("aria-checked")).toBe("false");
   });
 

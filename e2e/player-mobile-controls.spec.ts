@@ -178,12 +178,12 @@ for (const [label, width, height] of [
     for (const name of ["Mute", "Captions", "Autoplay next", "Theater mode"]) {
       const reachable =
         (await inBar("button", name)) ||
-        // Autoplay in the BAR is a switch whose accessible name states the
-        // state it is in ("Autoplay is on"), so neither the role nor the name
-        // matches the menu row's stable "Autoplay next" checkbox. Scoped to
-        // that one control: the old spelling OR-ed this clause into every
-        // iteration, which quietly satisfied the whole loop from one control.
-        (name === "Autoplay next" && (await inBar("switch", "Autoplay is on"))) ||
+        // Autoplay in the bar is a SWITCH (aria-checked), in the menu a
+        // checkbox row — but one function, one name, everywhere. The old
+        // spelling matched the bar switch by a state-carrying name and OR-ed
+        // that clause into every iteration, so one matching control quietly
+        // satisfied the whole loop.
+        (await inBar("switch", name)) ||
         (await menu.getByRole("menuitemcheckbox", { name, exact: true }).count()) > 0;
       expect(reachable, `${name} is unreachable at ${width}px`).toBe(true);
     }

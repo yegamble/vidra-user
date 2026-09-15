@@ -165,7 +165,12 @@ export function EndCard({
               ref={playNowRef}
               type="button"
               onClick={goNext}
-              className="focus-ring-media inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white/15 px-5 text-sm font-semibold text-white backdrop-blur-md transition-colors duration-150 ease-out hover:bg-white/25 motion-reduce:transition-none"
+              // The ONE opaque surface on the card. Translucent-white primary
+              // against translucent-white secondary (15% vs 10%) was two glass
+              // pills of near-identical weight, so the card had no primary
+              // action to aim at. Still media-overlay legal — white on video,
+              // no theme token.
+              className="focus-ring-media inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-black transition-colors duration-150 ease-out hover:bg-white/90 motion-reduce:transition-none"
             >
               <PlayGlyph size={16} />
               Play now
@@ -183,7 +188,7 @@ export function EndCard({
                 ref={replayRef}
                 type="button"
                 onClick={onReplay}
-                className="focus-ring-media inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white/10 px-5 text-sm font-semibold text-white/90 backdrop-blur-md transition-colors duration-150 ease-out hover:bg-white/20 hover:text-white motion-reduce:transition-none"
+                className="focus-ring-media inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-black transition-colors duration-150 ease-out hover:bg-white/90 motion-reduce:transition-none"
               >
                 <ReplayGlyph size={16} />
                 Replay
@@ -208,7 +213,7 @@ export function EndCard({
           ref={replayRef}
           type="button"
           onClick={onReplay}
-          className="focus-ring-media inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white/15 px-5 text-sm font-semibold text-white backdrop-blur-md transition-colors duration-150 ease-out hover:bg-white/25 motion-reduce:transition-none"
+          className="focus-ring-media inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-black transition-colors duration-150 ease-out hover:bg-white/90 motion-reduce:transition-none"
         >
           <ReplayGlyph size={16} />
           Replay

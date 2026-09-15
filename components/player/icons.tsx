@@ -53,16 +53,20 @@ function Glyph({ size = 22, className, children, ...rest }: GlyphProps) {
   );
 }
 
-/** play.fill — a solid triangle, round-joined, optically centred (centroid ≈ x12). */
+/**
+ * play.fill — ONE filled path, corners rounded by quadratic curves rather than
+ * by a stroke. The first cut filled AND stroked the same path in
+ * `currentColor`: at `text-white/90` the two alphas composite (1-0.1²≈0.99) and
+ * the rim rendered a full step brighter than the body (sampled 253 vs 232) — a
+ * bright outline around a dimmer triangle, which is precisely the "looks like
+ * the generic player" outline look this pass exists to remove. No glyph in this
+ * module paints fill and stroke over the same geometry; where a stroke appears
+ * (the replay ring, the speaker waves) it is `fill="none"`.
+ */
 export function PlayGlyph(props: GlyphProps) {
   return (
     <Glyph {...props}>
-      <path
-        d="M8.6 5.4 19.2 12 8.6 18.6Z"
-        stroke="currentColor"
-        strokeWidth="2.6"
-        strokeLinejoin="round"
-      />
+      <path d="M8.2 6.6Q8.2 4.6 9.9 5.66L18.14 10.83Q20 12 18.14 13.17L9.9 18.34Q8.2 19.4 8.2 17.4Z" />
     </Glyph>
   );
 }
@@ -146,9 +150,14 @@ export function VolumeHighGlyph(props: GlyphProps) {
 }
 
 /**
- * captions.bubble.fill — a solid rounded plate with two knocked-out caption
- * lines (evenodd), which is what makes it read as "text on a card" at 22px
- * rather than as an empty outlined box.
+ * captions.bubble.fill — a rounded plate with two knocked-out caption lines
+ * (evenodd), which is what makes it read as "text on a card" rather than as an
+ * empty outlined box.
+ *
+ * Sized down from 20×14 to 18×12 and the knockouts fattened from 2.1 units to
+ * 2.6 with a 2-unit gap: at 22px on a DPR-1 display the old slots were under a
+ * device pixel apart and antialiased into a single dash, so the glyph read as a
+ * solid slab carrying ~2.4× the ink of the play triangle beside it.
  */
 export function CaptionsGlyph(props: GlyphProps) {
   return (
@@ -156,20 +165,27 @@ export function CaptionsGlyph(props: GlyphProps) {
       <path
         fillRule="evenodd"
         clipRule="evenodd"
-        d="M4.6 5h14.8A2.6 2.6 0 0 1 22 7.6v8.8a2.6 2.6 0 0 1-2.6 2.6H4.6A2.6 2.6 0 0 1 2 16.4V7.6A2.6 2.6 0 0 1 4.6 5zm1.95 4.35a1.05 1.05 0 1 0 0 2.1h6.6a1.05 1.05 0 1 0 0-2.1h-6.6zm0 3.5a1.05 1.05 0 1 0 0 2.1h10.9a1.05 1.05 0 1 0 0-2.1H6.55z"
+        d="M5.6 6h12.8A2.6 2.6 0 0 1 21 8.6v6.8a2.6 2.6 0 0 1-2.6 2.6H5.6A2.6 2.6 0 0 1 3 15.4V8.6A2.6 2.6 0 0 1 5.6 6zm1.5 2.4a1.3 1.3 0 1 0 0 2.6h5.2a1.3 1.3 0 1 0 0-2.6H7.1zm0 4.6a1.3 1.3 0 1 0 0 2.6h9.8a1.3 1.3 0 1 0 0-2.6H7.1z"
       />
     </Glyph>
   );
 }
 
-/** rectangle.inset.filled → theater OFF: the wide stage the button switches TO. */
+/**
+ * rectangle.inset.filled → theater OFF: the wide stage the button switches TO.
+ *
+ * 22×9.5 — deliberately wider AND shorter than the PiP frame (20×14) beside it.
+ * Both are rings of the same 2.2-unit weight, so aspect ratio is the only thing
+ * telling them apart at 22px; at the first cut's 20×12.8 they were the same
+ * silhouette with a dot in one of them.
+ */
 export function TheaterEnterGlyph(props: GlyphProps) {
   return (
     <Glyph {...props}>
       <path
         fillRule="evenodd"
         clipRule="evenodd"
-        d="M4.4 5.6h15.2A2.4 2.4 0 0 1 22 8v8a2.4 2.4 0 0 1-2.4 2.4H4.4A2.4 2.4 0 0 1 2 16V8a2.4 2.4 0 0 1 2.4-2.4zm.2 2.6a.4.4 0 0 0-.4.4v6.8c0 .22.18.4.4.4h14.8a.4.4 0 0 0 .4-.4V8.6a.4.4 0 0 0-.4-.4H4.6z"
+        d="M3.2 7.25h17.6A2.2 2.2 0 0 1 23 9.45v5.1a2.2 2.2 0 0 1-2.2 2.2H3.2A2.2 2.2 0 0 1 1 14.55v-5.1a2.2 2.2 0 0 1 2.2-2.2zm.2 2.2a.4.4 0 0 0-.4.4v4.3c0 .22.18.4.4.4h17.2a.4.4 0 0 0 .4-.4v-4.3a.4.4 0 0 0-.4-.4H3.4z"
       />
     </Glyph>
   );

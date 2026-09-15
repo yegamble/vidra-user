@@ -32,6 +32,19 @@ export const TIP_HOVER_DELAY_MS = 350;
 export interface PlayerTipHandle {
   /** Report hover/focus on a control. `immediate` skips the hover dwell (keyboard focus). */
   show(el: HTMLElement | null, label: string, keys?: string, immediate?: boolean): void;
+  /**
+   * Same, but only when nothing is already armed or showing — what a bare
+   * pointermove uses, so a pointer that was ALREADY parked on a control when
+   * the player hydrated still gets its label without re-triggering on every
+   * one of the hundreds of moves that follow.
+   */
+  showIfIdle(el: HTMLElement | null, label: string, keys?: string): void;
+  /**
+   * Re-state a control's CURRENT label. A control whose name changes while it
+   * is hovered (Play → Pause on K) calls this; it is a no-op for any control
+   * that is not the one being shown.
+   */
+  refresh(el: HTMLElement | null, label: string, keys?: string): void;
   hide(): void;
 }
 
@@ -41,7 +54,14 @@ export const PlayerTipProvider = PlayerTipContext.Provider;
 
 type TipHandlers<T extends HTMLElement> = Pick<
   DOMAttributes<T>,
-  "onPointerEnter" | "onPointerLeave" | "onPointerDown" | "onFocus" | "onBlur" | "onClick"
+  | "onPointerEnter"
+  | "onPointerMove"
+  | "onPointerLeave"
+  | "onPointerDown"
+  | "onPointerUp"
+  | "onFocus"
+  | "onBlur"
+  | "onClick"
 >;
 
 /**
@@ -54,7 +74,10 @@ type TipHandlers<T extends HTMLElement> = Pick<
  * jsdom always answers `false` to `:focus-visible` (it has no input-modality
  * heuristic), so gating on that selector would make the keyboard path both
  * untestable and wrong under test; tracking our own pointerdown is the same
- * rule, decided locally.
+ * rule, decided locally. That flag is cleared on pointerUP and on leave, not
+ * only on blur: Safari does not focus a button on click, so a pointerdown flag
+ * that waited for a blur that never came suppressed every later keyboard
+ * tooltip on the page.
  */
 export function usePlayerTipProps<T extends HTMLElement>(
   tip: string | undefined,
@@ -63,13 +86,39 @@ export function usePlayerTipProps<T extends HTMLElement>(
 ): TipHandlers<T> {
   const handle = useContext(PlayerTipContext);
   const pointerRef = useRef(false);
+  // The element this control last reported, so a label change can be pushed to
+  // an OPEN bubble without the bar having to know which control it belongs to.
+  const elRef = useRef<HTMLElement | null>(null);
+
+  // Keep an open bubble's text in step with the control under it. `refresh`
+  // ignores everything that is not the shown control, and returns the SAME
+  // state object when nothing changes, so React bails out of the re-render —
+  // this costs a render only on the rare frame where a hovered control renames
+  // itself (Play → Pause, Mute → Unmute, Fullscreen → Exit full screen).
+  useEffect(() => {
+    if (elRef.current) handle?.refresh(elRef.current, tip ?? "", keys);
+  }, [handle, tip, keys]);
+
   if (!handle || !tip) return own;
   return {
     onPointerEnter: (e) => {
+      elRef.current = e.currentTarget;
       handle.show(e.currentTarget, tip, keys, false);
       own.onPointerEnter?.(e);
     },
+    onPointerMove: (e) => {
+      // A pointer already resting on the control when the player hydrates never
+      // fires another `pointerenter` — React attaches its listener after the
+      // native event has been and gone. Without this the label simply never
+      // appears (and the e2e that hovered before hydration was flaky for the
+      // same reason).
+      elRef.current = e.currentTarget;
+      handle.showIfIdle(e.currentTarget, tip, keys);
+      own.onPointerMove?.(e);
+    },
     onPointerLeave: (e) => {
+      pointerRef.current = false;
+      elRef.current = null;
       handle.hide();
       own.onPointerLeave?.(e);
     },
@@ -77,8 +126,15 @@ export function usePlayerTipProps<T extends HTMLElement>(
       pointerRef.current = true;
       own.onPointerDown?.(e);
     },
+    onPointerUp: (e) => {
+      pointerRef.current = false;
+      own.onPointerUp?.(e);
+    },
     onFocus: (e) => {
-      if (!pointerRef.current) handle.show(e.currentTarget, tip, keys, true);
+      if (!pointerRef.current) {
+        elRef.current = e.currentTarget;
+        handle.show(e.currentTarget, tip, keys, true);
+      }
       own.onFocus?.(e);
     },
     onBlur: (e) => {
@@ -96,83 +152,131 @@ export function usePlayerTipProps<T extends HTMLElement>(
 interface ActiveTip {
   label: string;
   keys?: string;
-  /** Centre of the reporting control, in the bar's own coordinates. */
+  /** Centre of the reporting control, in the ANCHOR ROW's coordinates. */
   center: number;
 }
 
-/** The bar-side half: the handle controls hand to `usePlayerTipProps`, plus state. */
-export function usePlayerTooltip(barRef: RefObject<HTMLElement | null>) {
+/**
+ * The bar-side half: the handle controls hand to `usePlayerTipProps`, the
+ * state, and the ref for the zero-height anchor row the bubble is positioned
+ * against.
+ *
+ * The anchor row — not the bar — is the frame for BOTH the centre and the
+ * clamp, and that is the whole point of it existing. The bar carries
+ * `px-1.5 sm:px-3`, so a centre measured from the bar's border box and applied
+ * inside its padding box lands one padding-width to the right (+12px at a
+ * desktop stage), and a clamp computed against the bar's full width lets the
+ * rightmost control's bubble hang past the stage's `overflow-hidden` edge.
+ */
+export function usePlayerTooltip() {
+  const anchorRef = useRef<HTMLDivElement | null>(null);
   const [tip, setTip] = useState<ActiveTip | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
+  // True from the moment a dwell is armed until the bubble is dismissed — what
+  // `showIfIdle` tests, so a stream of pointermoves cannot re-arm the timer.
+  const activeRef = useRef(false);
+  const activeElRef = useRef<HTMLElement | null>(null);
 
   const hide = useCallback(() => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
+    activeRef.current = false;
+    activeElRef.current = null;
     setTip(null);
   }, []);
 
-  const show = useCallback<PlayerTipHandle["show"]>(
-    (el, label, keys, immediate) => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-      const bar = barRef.current;
-      if (!el || !bar) return;
-      // Touch has no hover: a tap would flash the label and leave it stranded
-      // under the finger. Keyboard focus still shows it.
-      if (!immediate && window.matchMedia?.("(hover: none)").matches) return;
-      const place = () => {
-        const barBox = bar.getBoundingClientRect();
-        const box = el.getBoundingClientRect();
-        setTip({ label, keys, center: box.left + box.width / 2 - barBox.left });
-      };
-      if (immediate) place();
-      else timerRef.current = window.setTimeout(place, TIP_HOVER_DELAY_MS);
+  const show = useCallback<PlayerTipHandle["show"]>((el, label, keys, immediate) => {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    const anchor = anchorRef.current;
+    if (!el || !anchor) return;
+    // Touch has no hover: a tap would flash the label and leave it stranded
+    // under the finger. Keyboard focus still shows it.
+    if (!immediate && window.matchMedia?.("(hover: none)").matches) return;
+    activeRef.current = true;
+    activeElRef.current = el;
+    const place = () => {
+      const anchorBox = anchor.getBoundingClientRect();
+      const box = el.getBoundingClientRect();
+      setTip({ label, keys, center: box.left + box.width / 2 - anchorBox.left });
+    };
+    if (immediate) place();
+    else timerRef.current = window.setTimeout(place, TIP_HOVER_DELAY_MS);
+  }, []);
+
+  const showIfIdle = useCallback<PlayerTipHandle["showIfIdle"]>(
+    (el, label, keys) => {
+      if (activeRef.current) return;
+      show(el, label, keys, false);
     },
-    [barRef],
+    [show],
   );
+
+  const refresh = useCallback<PlayerTipHandle["refresh"]>((el, label, keys) => {
+    if (!el || activeElRef.current !== el) return;
+    setTip((current) =>
+      current === null || (current.label === label && current.keys === keys)
+        ? current
+        : { ...current, label, keys },
+    );
+  }, []);
 
   useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
-  const handle = useMemo<PlayerTipHandle>(() => ({ show, hide }), [show, hide]);
-  return { handle, tip, hideTip: hide };
+  // A bubble must not outlive the surface it was drawn over. Entering or
+  // leaving fullscreen re-lays-out the stage under a pointer that never moves
+  // (so no pointerleave ever arrives), and a tab switch leaves it parked on
+  // return; both stranded it.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const dismiss = () => hide();
+    document.addEventListener("fullscreenchange", dismiss);
+    document.addEventListener("visibilitychange", dismiss);
+    return () => {
+      document.removeEventListener("fullscreenchange", dismiss);
+      document.removeEventListener("visibilitychange", dismiss);
+    };
+  }, [hide]);
+
+  const handle = useMemo<PlayerTipHandle>(
+    () => ({ show, showIfIdle, refresh, hide }),
+    [show, showIfIdle, refresh, hide],
+  );
+  return { handle, tip, anchorRef, hideTip: hide };
 }
 
 /**
  * The bubble itself — a zero-height anchor row that sits directly above the
  * seek bar inside the control bar's flex column, so the label clears the whole
- * transport (timeline included) and is clamped to the bar's own width, which is
- * the stage's width.
+ * transport (timeline included) and is clamped to the bar's CONTENT width.
  */
 export function PlayerTooltipLayer({
   tip,
-  barRef,
+  anchorRef,
 }: {
   tip: ActiveTip | null;
-  barRef: RefObject<HTMLElement | null>;
+  anchorRef: RefObject<HTMLDivElement | null>;
 }) {
   const bubbleRef = useRef<HTMLDivElement | null>(null);
 
-  // Clamp inside the bar once the bubble has a measured width. The render below
-  // positions it on the control's centre; this correction writes the clamped
-  // left straight to the node (an external system — no setState, no cascading
-  // render) in a LAYOUT effect, so it lands before paint and never slides.
-  // jsdom has no layout, so every rect is 0 there and the bubble stays put: the
-  // clamp is exercised in the browser specs.
+  // Clamp inside the anchor row once the bubble has a measured width. The
+  // render below positions it on the control's centre; this correction writes
+  // the clamped left straight to the node (an external system — no setState, no
+  // cascading render) in a LAYOUT effect, so it lands before paint and never
+  // slides. jsdom has no layout, so every rect is 0 there and the bubble stays
+  // put: the clamp is exercised in the browser specs.
   useLayoutEffect(() => {
     const bubble = bubbleRef.current;
-    const bar = barRef.current;
-    if (!tip || !bubble || !bar) return;
+    const anchor = anchorRef.current;
+    if (!tip || !bubble || !anchor) return;
     const width = bubble.getBoundingClientRect().width;
-    const barWidth = bar.getBoundingClientRect().width;
-    const pad = 8;
+    const rowWidth = anchor.getBoundingClientRect().width;
     const half = width / 2;
     bubble.style.left = `${
-      barWidth > width + pad * 2
-        ? Math.min(Math.max(tip.center, half + pad), barWidth - half - pad)
-        : barWidth / 2
+      rowWidth > width ? Math.min(Math.max(tip.center, half), rowWidth - half) : rowWidth / 2
     }px`;
-  }, [tip, barRef]);
+  }, [tip, anchorRef]);
 
   return (
-    <div className="pointer-events-none relative -mb-0.5 h-0">
+    <div ref={anchorRef} className="pointer-events-none relative -mb-0.5 h-0">
       {tip ? (
         <div
           ref={bubbleRef}

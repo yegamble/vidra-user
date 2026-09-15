@@ -176,6 +176,11 @@ what colour these controls may be; the player pass settled what they must look
 like. The rules below govern `components/player/*` and nothing else — the app's
 own surfaces keep every rule in this document.
 
+- **Both focus rings need a forced-colors fallback.** `.focus-ring` and
+  `.focus-ring-media` are drawn with `box-shadow` over `outline: none`, and
+  forced-colors mode drops box-shadow — so in the mode that exists for people
+  who need a visible focus indicator, both were invisible. One shared
+  `@media (forced-colors: active)` rule restores a real `outline` in `Highlight`.
 - **Focus is `.focus-ring-media`, not `.focus-ring`.** The accent ring is built
   from `--surface` and `--focus`; both are surface colours, and over a bright or
   saturated frame the ring disappears. The media ring is a fixed black
@@ -186,8 +191,25 @@ own surfaces keep every rule in this document.
   over ~140px of ramp on a desktop stage (shorter on a phone, where the whole
   stage is ~185px). The HIG's answer to clear material over bright video is a
   real dimming layer; a 40px band leaves white glyphs standing on whatever frame
-  happens to be underneath. Measured against a near-white frame, the glyph row
-  sits at ~L93 — white/90 on it clears AA comfortably.
+  happens to be underneath.
+
+  The scrim is what every alpha in the bar is budgeted against, so the budget is
+  a MEASUREMENT, not a target. Sampled from composited element screenshots at a
+  1920 viewport (860px stage) with a near-white block under the control row —
+  the worst case a frame can present — the backdrop at the control row reads
+  **85-95**. Against that backdrop:
+
+  | layer | composited | ratio | floor |
+  | --- | --- | --- | --- |
+  | glyphs `text-white/90` | ~239 | 6.3:1 | 4.5 (text), 3 (glyph) |
+  | elapsed `text-white/85` | ~231 | 5.8:1 | 4.5 |
+  | chapter + separator `text-white/70` | ~207 | 4.6:1 | 4.5 |
+  | autoplay ON track `bg-white/80` | 219 | 4.6:1 | 3 |
+  | autoplay OFF track ring `ring-white/70` | 192 | 3.5:1 | 3 |
+
+  Nothing in the bar is allowed below `white/70`: `white/60` computes to 3.9:1,
+  which is a legible-looking value that fails AA for text. Re-sample on any
+  change to the gradient — every row above moves with it.
 - **Buttons.** 44pt round target, 22px glyph, `text-white/90` at rest, a
   `bg-white/12` hover disc with a 150ms scale (reduced-motion neutralises both).
   A toggle that is ON adds a 2px white underline under the glyph — `aria-pressed`
@@ -211,6 +233,17 @@ own surfaces keep every rule in this document.
   play/pause glyph. One component, used by the control bar and the end card. The
   overflow MENU keeps `menuitemcheckbox` rows — a switch inside `role="menu"` is
   the wrong ARIA, and that menu is a themed surface, not a media overlay.
+
+  OFF is a DARK track with a white hairline, never a dim white one: `bg-white/30`
+  measured 2.2:1 against the scrim, so the one state the control exists to
+  communicate was the one you could not see. The name does NOT carry the state
+  either — one function, one name across the bar, the menu and the end card
+  (WCAG 3.2.4); `aria-checked`, the knob and the tooltip carry it.
+- **Reduced motion must cancel the property the hover actually sets.** The
+  scale utilities compile to the `scale` PROPERTY in Tailwind v4, so
+  `motion-reduce:transform-none` cannot undo `hover:scale-105` — it looks like a
+  guard and does nothing. The one correct recipe lives in
+  `components/player/chrome.ts` (`MEDIA_PRESS`) and is imported, never retyped.
 
 ## Semantic color & protocol identity (2026-07-19)
 
