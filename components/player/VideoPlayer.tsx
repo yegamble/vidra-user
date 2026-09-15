@@ -843,7 +843,15 @@ export function VideoPlayer({
         // exact width the sidebar made the player narrower (356px stage, 200px
         // more bar). Container queries make the tiers track the real budget.
         "@container/stage relative w-full select-none overflow-hidden bg-black",
-        variant === "embed" ? "h-full" : "aspect-video rounded-2xl",
+        // The embed fills its iframe. In theater the band (WatchView) owns the
+        // height and the full-bleed edges, so the stage fills it with no radius
+        // — but only at the two-column breakpoint, where theater exists at all;
+        // below it theater is inert and the stage stays its own 16:9 card.
+        variant === "embed"
+          ? "h-full"
+          : theater
+            ? "aspect-video rounded-2xl xl:aspect-auto xl:h-full xl:rounded-none"
+            : "aspect-video rounded-2xl",
         // Hide the cursor with the chrome: a lone arrow floating over a
         // full-bleed frame is the one piece of UI left when everything else has
         // faded. Any pointer move calls bump() and brings both back.

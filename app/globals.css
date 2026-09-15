@@ -183,6 +183,22 @@
   --tile-pink: light-dark(#ff2d55, #ff375f);
   --tile-indigo: light-dark(#5856d6, #5e5ce6);
 
+  /*
+   * Watch-stage height ceiling — ONE number both watch layouts agree on.
+   *
+   * A 16:9 stage measured only from the page WIDTH runs off the bottom of the
+   * screen on any laptop: at 1280x720 a full-measure stage is 720px tall on a
+   * 720px viewport, which pushed the title, the channel row and every action
+   * below the fold (theater mode did it worst, but the default layout did it
+   * too whenever no related rail narrowed the column). YouTube solves this by
+   * capping the player to the viewport minus the masthead and the space the
+   * page owes the title below it; this is the same subtraction — 3.5rem of
+   * flush header plus ~10rem of title/meta — expressed once so the theater
+   * band (height) and the default player column (width, via 16:9) can never
+   * drift apart.
+   */
+  --watch-stage-max-h: calc(100dvh - 3.5rem - 10rem);
+
   /* legacy aliases (base body styles + older call sites) */
   --background: var(--canvas);
   --foreground: var(--fg);
@@ -784,4 +800,21 @@ body:has([data-messaging-shell]) {
 }
 body:has([data-messaging-shell]) > div:has(> #main-content) {
   min-height: 0;
+}
+
+/*
+ * Theater stage band (watch page, lg+): a full-bleed strip spanning #main-content
+ * edge to edge, with the player letterboxed on black inside it.
+ *
+ * Height = 16:9 of the BAND'S OWN width — not 100vw, which would over-measure by
+ * the scrollbar and letterbox every capped stage by a few pixels — clamped by
+ * --watch-stage-max-h so the masthead and the title row stay on screen, and
+ * floored so a short window still gets a usable stage rather than a slot. The
+ * <video> inside is object-contain in a h-full box, so the clamp letterboxes on
+ * black exactly the way the real thing does.
+ */
+.watch-theater-band {
+  aspect-ratio: 16 / 9;
+  max-height: var(--watch-stage-max-h);
+  min-height: min(480px, 56.25vw);
 }

@@ -34,7 +34,10 @@ export default async function WatchPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const initialVideo = await getPublicVideo(id);
   return (
-    <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-4 sm:px-6 sm:py-6">
+    // The page container lives INSIDE WatchView (components/watch/layout.ts):
+    // theater mode renders a full-bleed stage band that has to span the whole
+    // width of #main-content, which nothing inside a max-width <main> can do.
+    <main className="flex w-full min-w-0 flex-1 flex-col">
       <WatchView key={id} id={id} initialVideo={initialVideo} />
     </main>
   );

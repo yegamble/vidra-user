@@ -8,8 +8,13 @@ import { Skeleton } from "@/components/ui/Skeleton";
 // instead of flashing grid skeleton → centered spinner → two-column page.
 export function WatchSkeleton() {
   return (
-    <div aria-hidden className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-7">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
+    <div
+      aria-hidden
+      className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-center lg:gap-7"
+    >
+      {/* Same viewport cap and centring as the loaded page (see WatchView), so
+          the silhouette does not resize the moment the real stage replaces it. */}
+      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[calc(var(--watch-stage-max-h)*16/9)]">
         <Skeleton className="aspect-video w-full rounded-2xl" />
         <div className="flex flex-col gap-3">
           <Skeleton className="h-7 w-3/4 rounded-lg" />
