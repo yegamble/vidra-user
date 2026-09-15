@@ -238,17 +238,17 @@ test("the remote watch page plays the origin stream and always links the origin 
   await expect(originLink).toHaveAttribute("target", "_blank");
   await expect(originLink).toHaveAttribute("rel", "noopener noreferrer");
 
-  // Honest copy: AUTHORING lives at the origin — no local rating/save UI, and no
-  // comment composer. Since A29-F8 the copy distinguishes the two halves it used
-  // to conflate: replying happens on the origin, but the thread the origin sends
-  // us is shown here, so "comments live on the origin instance" was true about
-  // writing and had become misleading about reading.
+  // Honest copy: ratings/saving still live at the origin (no local Like/Save
+  // UI), but replying is now LOCAL — a signed-in viewer's comment is hosted on
+  // this instance and federated to the origin (migration 0147). The copy says
+  // exactly that, alongside the mirrored origin thread it shows below.
   await expect(page.getByText(/Ratings and saving live on the origin instance/)).toBeVisible();
-  await expect(page.getByText(/so does replying/)).toBeVisible();
+  await expect(page.getByText(/You can reply here/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Like" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
-  // No composer: the thread is a mirror, and nothing here writes one.
+  // Anonymous viewer: no composer textbox, but a prompt to sign in and author.
   await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByText(/to reply to this federated video/)).toBeVisible();
 });
 
 test("the remote watch page shows the comment thread the origin sent", async ({ page }) => {
@@ -256,9 +256,12 @@ test("the remote watch page shows the comment thread the origin sent", async ({ 
   await page.route(REMOTE_COMMENTS, (route) =>
     route.fulfill({
       json: {
+        // The new contract carries two disjoint arrays: the mirrored origin
+        // thread (local:false) and the local `authored` set (empty here).
         comments: [
           {
             id: "c1",
+            local: false,
             author_name: "ada",
             author_domain: "videos.example",
             actor_url: "https://videos.example/accounts/ada",
@@ -268,6 +271,7 @@ test("the remote watch page shows the comment thread the origin sent", async ({ 
             created_at: "2026-09-05T10:00:00Z",
           },
         ],
+        authored: [],
         total: 1,
         limit: 50,
         offset: 0,
@@ -279,7 +283,9 @@ test("the remote watch page shows the comment thread the origin sent", async ({ 
   await expect(page.getByRole("heading", { name: "Comments from the origin" })).toBeVisible();
   await expect(page.getByText("Beautiful grade — what camera?")).toBeVisible();
   await expect(page.getByText("ada")).toBeVisible();
-  // Still no composer, with a thread present.
+  // No local replies here, so the "Replies from this instance" section is absent.
+  await expect(page.getByRole("heading", { name: "Replies from this instance" })).toHaveCount(0);
+  // Anonymous viewer: no composer textbox even with a thread present.
   await expect(page.getByRole("textbox")).toHaveCount(0);
 });
 
@@ -288,7 +294,7 @@ test("an empty mirrored thread explains itself instead of claiming the video has
 }) => {
   await page.route(REMOTE_DETAIL, (route) => route.fulfill({ json: remoteDetail() }));
   await page.route(REMOTE_COMMENTS, (route) =>
-    route.fulfill({ json: { comments: [], total: 0, limit: 50, offset: 0 } }),
+    route.fulfill({ json: { comments: [], authored: [], total: 0, limit: 50, offset: 0 } }),
   );
 
   await page.goto("/remote/rv1");
@@ -296,6 +302,82 @@ test("an empty mirrored thread explains itself instead of claiming the video has
   // here followed the channel — saying "no comments" would be a claim about the
   // origin that this instance cannot make.
   await expect(page.getByText(/mirrors the comments its origin sends it/)).toBeVisible();
+});
+
+test("a signed-in viewer gets a composer and sees local authored replies with a delivery badge", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.route(REMOTE_DETAIL, (route) => route.fulfill({ json: remoteDetail() }));
+  await page.route(REMOTE_FOLLOWS, (route) =>
+    route.fulfill({ json: { follows: [], limit: 100, offset: 0 } }),
+  );
+  await page.route(SUBS, (route) =>
+    route.fulfill({
+      json: { videos: [remoteCard("rv1", "Remote Documentary")], sort: "recent", limit: 20, offset: 0 },
+    }),
+  );
+  // A local reply this instance authored (local:true) alongside the mirrored
+  // origin thread — the migration-0147 authoring the frontend adds here.
+  await page.route(REMOTE_COMMENTS, (route) =>
+    route.fulfill({
+      json: {
+        comments: [
+          {
+            id: "c1",
+            local: false,
+            author_name: "ada",
+            author_domain: "videos.example",
+            actor_url: "https://videos.example/accounts/ada",
+            object_url: "https://videos.example/comments/c1",
+            body: "Beautiful grade — what camera?",
+            edited: false,
+            created_at: "2026-09-05T10:00:00Z",
+          },
+        ],
+        authored: [
+          {
+            id: "a1",
+            remote_video_id: "rv1",
+            local: true,
+            author_id: "u1",
+            author_username: "ada",
+            author_display_name: "",
+            body: "Great, following from here.",
+            object_url: "https://home.example/notes/a1",
+            in_reply_to: "https://videos.example/videos/rv1",
+            delivery_state: "pending",
+            edited: false,
+            created_at: "2026-09-06T10:00:00Z",
+            updated_at: "2026-09-06T10:00:00Z",
+          },
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+      },
+    }),
+  );
+
+  // Reach the remote watch page via a subscriptions card (client-side nav keeps
+  // the in-memory session — a hard reload would drop it, since the mocked suite
+  // does not route the silent-refresh endpoint).
+  await page.getByRole("link", { name: "Subscriptions" }).click();
+  await page.getByRole("heading", { name: "Remote Documentary" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Remote Documentary" })).toBeVisible();
+
+  // The composer is present for a signed-in viewer.
+  await expect(page.getByRole("textbox", { name: "Add a comment" })).toBeVisible();
+  // The local reply renders in its own section with a delivery-state badge…
+  await expect(page.getByRole("heading", { name: "Replies from this instance" })).toBeVisible();
+  await expect(page.getByText("Great, following from here.")).toBeVisible();
+  await expect(page.getByRole("status", { name: "Delivery to origin: Pending" })).toBeVisible();
+  // …distinct from the mirrored origin thread, which never carries a badge.
+  await expect(page.getByRole("heading", { name: "Comments from the origin" })).toBeVisible();
+  await expect(page.getByText("Beautiful grade — what camera?")).toBeVisible();
+  // The author can act on their own reply.
+  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
 });
 
 test("a remote video without a stream shows the honest no-playback panel", async ({ page }) => {

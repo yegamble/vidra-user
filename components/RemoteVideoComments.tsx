@@ -55,8 +55,12 @@ export function RemoteVideoComments({ videoId, domain }: { videoId: string; doma
     api
       .getRemoteVideoComments(videoId, { limit: FULL_LIST_LIMIT }, controller.signal)
       .then((res) => {
-        setMirrored(res.comments);
-        setAuthored(res.authored);
+        setMirrored(res.comments ?? []);
+        // `authored` is required by the contract, but tolerate its absence: a
+        // core that has not yet deployed #247 answers the old shape, and the
+        // mirrored thread (which predates authoring) must still render rather
+        // than the whole surface crashing on `undefined.length`.
+        setAuthored(res.authored ?? []);
         setStatus("ready");
       })
       .catch(() => {
