@@ -14,7 +14,7 @@ import {
   type NavLinkDef,
 } from "@/components/nav-links";
 import { SidebarFollowing } from "@/components/SidebarFollowing";
-import { isStandaloneRoute } from "@/lib/app-shell";
+import { isAdminConsoleRoute, isStandaloneRoute } from "@/lib/app-shell";
 import { cn } from "@/lib/cn";
 import { useMessagingAvailable } from "@/lib/messaging/availability";
 import {
@@ -110,7 +110,7 @@ export function Sidebar() {
   // (app/admin/layout.tsx → AdminConsole) as the single left nav, so the global
   // app sidebar steps aside there. Non-admins keep it (they only ever see the
   // page's "Administrators only" gate on /admin, not the console).
-  if (pathname?.startsWith("/admin") && user?.role === "admin") {
+  if (isAdminConsoleRoute(pathname, user?.role)) {
     return null;
   }
 

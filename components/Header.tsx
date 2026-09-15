@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 import { Suspense, useSyncExternalStore } from "react";
 
 import { AccountMenu } from "@/components/auth/AccountMenu";
+import { useOptionalSession } from "@/components/auth/AuthProvider";
 import { MenuIcon, PlusIcon, PlusSquareIcon, TvIcon, UploadIcon } from "@/components/icons";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { ProtocolRibbon } from "@/components/ProtocolRibbon";
 import { SearchAutocomplete, SearchAutocompleteFallback } from "@/components/SearchAutocomplete";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
-import { isStandaloneRoute } from "@/lib/app-shell";
+import { isAdminConsoleRoute, isStandaloneRoute } from "@/lib/app-shell";
 import { brandingAssetUrl } from "@/lib/branding";
 import {
   MENU_BUTTON_ATTR,
@@ -108,6 +109,9 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, serverCollapsed);
   const immersive = useSyncExternalStore(subscribeImmersive, readImmersive, serverImmersive);
   const drawerOpen = useSyncExternalStore(subscribeDrawerOpen, readDrawerOpen, serverDrawerOpen);
+  // Optional (never throws): the header renders bare in unit tests, and the
+  // role is only needed to answer "is there a sidebar here to toggle?".
+  const role = useOptionalSession()?.user?.role;
 
   if (isStandaloneRoute(pathname)) {
     return null;
@@ -133,7 +137,12 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
             normally it collapses/expands the in-flow rail through the same store
             the rail's own Collapse button writes (so the two can never disagree);
             while a page asks for an IMMERSIVE shell (theater mode, where the rail
-            is hidden outright) it opens that rail back as an overlay drawer. */}
+            is hidden outright) it opens that rail back as an overlay drawer.
+            Absent on the admin console routes, where the app sidebar steps aside
+            for the console's own rail: there is nothing there for it to toggle,
+            and aria-controls pointing at an element that does not exist is a
+            critical axe violation as well as a lie. */}
+        {isAdminConsoleRoute(pathname, role) ? null : (
         <button
           type="button"
           {...{ [MENU_BUTTON_ATTR]: "" }}
@@ -145,6 +154,7 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
         >
           <MenuIcon size={22} strokeWidth={1.9} />
         </button>
+        )}
         <Link
           href="/"
           className="focus-ring flex min-h-11 flex-col justify-center gap-1 rounded-lg"

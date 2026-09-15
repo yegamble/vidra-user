@@ -21,6 +21,10 @@ vi.mock("next/navigation", () => ({
 
 // The header's satellite widgets have their own suites and need auth/toast
 // providers; this suite covers the W4 branding: logo slots + hide-name.
+const session = vi.hoisted(() => ({ role: undefined as string | undefined }));
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useOptionalSession: () => ({ user: session.role ? { id: "u1", role: session.role } : null }),
+}));
 vi.mock("@/components/auth/AccountMenu", () => ({ AccountMenu: () => null }));
 vi.mock("@/components/NotificationsBell", () => ({ NotificationsBell: () => null }));
 vi.mock("@/components/SearchAutocomplete", () => ({
@@ -50,6 +54,7 @@ const unset = { url: "", is_fallback: true };
 afterEach(() => {
   cleanup();
   pathname.value = "/";
+  session.role = undefined;
   act(() => {
     setImmersive(false);
     setCollapsed(false);
@@ -208,6 +213,20 @@ describe("Header Menu button", () => {
     expect(screen.getByRole("button", { name: "Menu" }).getAttribute("aria-expanded")).toBe("true");
     act(() => void fireEvent.click(screen.getByRole("button", { name: "Menu" })));
     expect(readDrawerOpen()).toBe(false);
+  });
+
+  it("is absent on the admin console, where the console rail replaces the sidebar", () => {
+    pathname.value = "/admin/users";
+    session.role = "admin";
+    render(<Header />);
+    expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
+  });
+
+  it("stays for a non-admin on /admin, who still has the app sidebar", () => {
+    pathname.value = "/admin";
+    session.role = "moderator";
+    render(<Header />);
+    expect(screen.getByRole("button", { name: "Menu" })).toBeTruthy();
   });
 
   it("is absent on standalone routes (no shell to toggle)", () => {

@@ -44,9 +44,25 @@ Hard rules:
   (`e2e/responsive.spec.ts` gates this).
 - **Touch targets ≥ 44×44pt** on interactive controls (HIG). Small visual
   glyphs get padding, not smaller hit areas.
-- **No hamburger menus.** Primary nav is the `BottomTabBar` (< `sm`) and the
-  `Sidebar` (≥ `sm`). Both are `aria-label="Primary"`; only one is ever in the
-  accessibility tree at a time.
+- **No hamburger menu holds the primary nav.** Primary nav is the `BottomTabBar`
+  (< `sm`) and the `Sidebar` (≥ `sm`). Both are `aria-label="Primary"`; only one
+  is ever in the accessibility tree at a time — the destinations are never
+  hidden behind a disclosure a viewer has to find first.
+  *Amended 2026-09-15 (watch theater).* The `Header` carries one nav CONTROL at
+  `sm`+ — a "Menu" icon button, left of the brand, `hidden sm:inline-flex`. It
+  does not hold the nav; it toggles the rail that does:
+  - **normally** it collapses/expands the `Sidebar` (the same
+    `lib/sidebar-state` store the rail's own Collapse row writes, so the two
+    controls can never disagree; the preference still persists);
+  - **in an immersive shell** — today only the watch page's theater mode, which
+    hides the rail so the stage can span the content area edge to edge, as
+    YouTube closes the guide there — it opens the same panel as an overlay
+    DRAWER over a scrim (Escape, scrim click and any route change close it;
+    focus enters the panel and returns to the button).
+  It is absent where there is no app sidebar to toggle: below `sm` (phones keep
+  the bottom tab bar and get no hamburger — `e2e/mobile-nav.spec.ts`), on
+  standalone routes, and on the admin console routes, where the console's own
+  rail replaces it.
 - **Safe areas**: the tab bar pads with `env(safe-area-inset-bottom)`
   (viewport-fit=cover is set in `app/layout.tsx`).
 - **WCAG 2.2 AA** minimum. axe (serious/critical) is a hard gate
@@ -313,7 +329,7 @@ none touches chrome:
 
 The following workflow-level patterns are sanctioned; guardrails must not be
 read as blocking them. Each keeps the existing nav rules (BottomTabBar/Sidebar
-primary nav, no hamburgers, one `<main>`, 44pt targets):
+primary nav, no hamburger holding that nav, one `<main>`, 44pt targets):
 
 - **Split-view settings** (macOS System Settings): Settings, Admin, and
   Moderation replace their long horizontal tab strips with a section sidebar
@@ -362,7 +378,8 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
   hidden for a pure editor) — via `SegmentedControl`. Live's create form and the create-channel
   form are launched `Modal`s (dialog on desktop / `variant="sheet"` on mobile),
   consistent with the stepped upload sheet. Keeps the nav rules
-  (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger, 44pt targets).
+  (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger holding that
+  nav, 44pt targets).
 - **"+ Create" dropdown** (YouTube two-tier Create pattern): a single global
   creator entry that fans out into the flows rather than dumping the user on the
   dashboard. Desktop lives in `Header` as a `Dropdown` (the outline "+ Create"
@@ -714,7 +731,8 @@ never substitute a library's variant when the design's path differs. Typed
 
 ## App shell
 
-- `Header` — brand, centered pill `SearchBox` (hidden < `sm`; Search is a tab
+- `Header` — Menu button (≥ `sm`; toggles the `Sidebar`, see the nav rule
+  above), brand, centered pill `SearchBox` (hidden < `sm`; Search is a tab
   there), pill Create → `/studio` (hidden < `sm`), `NotificationsBell`,
   `AccountMenu`. Sticky and **full-bleed**: `.glass-chrome .glass-chrome-flush`
   spanning the viewport with no top/side gutter and a single bottom hairline,
@@ -730,6 +748,12 @@ never substitute a library's variant when the design's path differs. Typed
 - `Sidebar` (≥ `sm`) — every primary destination + role-gated
   Moderation/Admin, `aria-current="page"`, collapsible icon rail (persisted),
   floating in a rounded `.glass-chrome` panel rather than anchoring to an edge.
+  ONE panel, TWO placements: that in-flow rail, and — while a page asks for an
+  immersive shell (watch theater) — the same panel as a `fixed` overlay drawer
+  over a scrim, opened by the header's Menu button. The link list is never
+  forked between the two. State lives in `lib/sidebar-state` (collapsed
+  persisted in localStorage; immersive + drawer-open in memory only, because a
+  persisted immersive flag would strand a viewer on a page with no navigation).
 - `BottomTabBar` (< `sm`) — Home / Search / Create / Inbox / Library, sticky
   bottom in a rounded `.glass-chrome` panel, in-flow (never overlaps content),
   unread dot on Inbox, `aria-current` on the active tab, safe-area padded.

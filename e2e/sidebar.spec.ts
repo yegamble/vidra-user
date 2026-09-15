@@ -67,8 +67,16 @@ test("the sidebar carries every primary destination and marks the active route",
   // Role-gated entries are absent for anonymous viewers.
   await expect(nav.getByRole("link", { name: "Moderation" })).toHaveCount(0);
   await expect(nav.getByRole("link", { name: "Admin" })).toHaveCount(0);
-  // The hamburger is a phone-only control; at desktop it is not exposed.
-  await expect(page.getByRole("button", { name: "Menu" })).toHaveCount(0);
+  // The header carries ONE nav control at desktop: a Menu button that toggles
+  // this rail (it also reopens it as a drawer in theater mode — see
+  // e2e/player-theater.spec.ts). It replaces the old "no Menu button at
+  // desktop" assertion deliberately: the rule is no hamburger for PRIMARY
+  // NAVIGATION, and the rail is still that. Phones remain hamburger-free
+  // (e2e/mobile-nav.spec.ts).
+  await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute(
+    "aria-controls",
+    "app-sidebar",
+  );
   // Playlists is no longer a primary destination (reached from Library instead).
   await expect(nav.getByRole("link", { name: "Playlists" })).toHaveCount(0);
   // Active-route marking follows navigation.
@@ -161,6 +169,38 @@ test("the sidebar collapses to an icon rail, stays usable, and persists", async 
   await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
   await page.getByRole("button", { name: "Expand sidebar" }).click();
   await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+});
+
+test("the header Menu button toggles the rail and stays in sync with Collapse", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  const menu = page.getByRole("button", { name: "Menu" });
+  await expect(nav).toHaveCSS("width", "224px");
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+
+  // Menu collapses the rail to the icon rail…
+  await menu.click();
+  await expect(nav).toHaveCSS("width", "64px");
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  // …and the rail's own control agrees, because both write one store.
+  await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+
+  // Expanding from the rail's own control updates the header button too.
+  await page.getByRole("button", { name: "Expand sidebar" }).click();
+  await expect(nav).toHaveCSS("width", "224px");
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+
+  // And the preference the Menu button wrote survives a reload like any other.
+  await menu.click();
+  await expect(nav).toHaveCSS("width", "64px");
+  await page.reload();
+  await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCSS("width", "64px");
+  await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
 });
 
 test("moderators see the Moderation entry but not Admin", async ({ page }) => {

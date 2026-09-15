@@ -44,7 +44,7 @@ function relatedVideo(id: string, title: string) {
   };
 }
 
-async function mockWatch(page: Page) {
+async function mockWatch(page: Page, videos = [relatedVideo("v2", "Up Next One"), relatedVideo("v3", "Up Next Two")]) {
   await page.route(DETAIL, (route) => route.fulfill({ json: DETAIL_JSON }));
   await page.route(ORIGINAL, (route) =>
     route.fulfill({ contentType: "video/mp4", body: Buffer.from(TINY_MP4_BASE64, "base64") }),
@@ -55,11 +55,7 @@ async function mockWatch(page: Page) {
     route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
   );
   // Related rail so the theater reflow can be asserted against a real element.
-  await page.route(CHANNEL_VIDEOS, (route) =>
-    route.fulfill({
-      json: { videos: [relatedVideo("v2", "Up Next One"), relatedVideo("v3", "Up Next Two")] },
-    }),
-  );
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos } }));
 }
 
 
@@ -87,7 +83,7 @@ async function playerControl(page: Page, menuName: string, barName = menuName) {
   };
 }
 
-test("theater mode widens the stage and reflows the related rail below, persisting across a reload", async ({
+test("theater mode widens the stage and moves the related rail below it, persisting across a reload", async ({
   page,
 }) => {
   await mockWatch(page);
@@ -124,12 +120,81 @@ test("theater mode widens the stage and reflows the related rail below, persisti
   // The rail now sits below the player (its top is past the player's bottom).
   expect(after.rail!.y).toBeGreaterThanOrEqual(after.player!.y + after.player!.height);
 
+  // FULL-BLEED: the stage spans the whole width of the content area — no
+  // max-width measure, no side padding, and no sidebar holding the left edge.
+  const main = (await page.locator("#main-content").boundingBox())!;
+  expect(Math.abs(after.player!.x - main.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.player!.width - main.width)).toBeLessThanOrEqual(1);
+  // The app's primary navigation steps aside in theater (YouTube closes the
+  // guide on a theater watch page) — which is what frees that left edge.
+  await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
+
+  // VIEWPORT-CAPPED: the stage never eats the masthead plus the space the page
+  // owes the title below it, so the title stays on screen.
+  const viewport = page.viewportSize()!;
+  expect(after.player!.height).toBeLessThanOrEqual(viewport.height - 56 - 160);
+  const title = (await page.getByRole("heading", { name: "Theater Clip" }).boundingBox())!;
+  expect(title.y + title.height).toBeLessThanOrEqual(viewport.height);
+
+  // The page under the band keeps the ordinary two-column layout: the rail is
+  // BELOW the stage and BESIDE the title/description column, not stacked under
+  // the whole page.
+  expect(after.rail!.x).toBeGreaterThan(title.x + title.width - 2);
+  expect(Math.abs(after.rail!.y - title.y)).toBeLessThanOrEqual(60);
+
+  // The rail is reachable again from the header's Menu button, which opens it
+  // as an overlay drawer over a scrim; Escape closes it.
+  const menu = page.getByRole("button", { name: "Menu" });
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await menu.click();
+  const drawer = page.getByRole("navigation", { name: "Primary" });
+  await expect(drawer).toBeVisible();
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("sidebar-scrim")).toBeVisible();
+  // An overlay, not a column: the stage keeps its full-bleed width behind it.
+  const stageWithDrawer = (await player.boundingBox())!;
+  expect(Math.abs(stageWithDrawer.width - main.width)).toBeLessThanOrEqual(1);
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+  await expect(page.getByTestId("sidebar-scrim")).toHaveCount(0);
+
   // Session-persisted: a reload in the same tab keeps theater mode.
   await page.reload();
   await expect(page.getByRole("heading", { name: "Theater Clip" })).toBeVisible();
   await expect(page.locator("[data-theater]").first()).toHaveAttribute("data-theater", "on");
   const afterReload = await playerControl(page, "Theater mode");
   await expect(afterReload.locator).toHaveAttribute(afterReload.stateAttr, "true");
+});
+
+test("with nothing related, the default layout keeps the stage on screen and centred", async ({
+  page,
+}) => {
+  // A watch page whose related rail resolves EMPTY used to hand the player
+  // column the whole 1280px measure, which is a 720px stage on a 720px screen:
+  // the title, the channel row and every action sat below the fold. The column
+  // is capped to the shared height ceiling expressed as a width, and the row
+  // centres what is left.
+  await mockWatch(page, []);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Theater Clip" })).toBeVisible();
+  // Wait for the rail to RESOLVE to empty — while the fetch is in flight it
+  // holds a 344px skeleton, which is the layout this test is not about.
+  await expect(page.getByRole("complementary", { name: "Related videos" })).toHaveCount(0);
+
+  const viewport = page.viewportSize()!;
+  const stage = (await page.getByTestId("video-player").boundingBox())!;
+  expect(stage.y + stage.height).toBeLessThan(viewport.height - 100);
+
+  // Centred in the content area rather than hugging the left edge.
+  const main = (await page.locator("#main-content").boundingBox())!;
+  const stageCentre = stage.x + stage.width / 2;
+  const mainCentre = main.x + main.width / 2;
+  expect(Math.abs(stageCentre - mainCentre)).toBeLessThanOrEqual(2);
+
+  // Still the default layout: the sidebar is present and the stage is not
+  // full-bleed (it keeps the page's measure and gutters).
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  expect(stage.width).toBeLessThan(main.width - 40);
 });
 
 test("the PiP button is hidden when the browser reports no Picture-in-Picture support", async ({
