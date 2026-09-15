@@ -94,19 +94,24 @@ function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
   });
 
   const status = (list.filters.status as RegistrationRequestFilter) ?? DEFAULT_STATUS;
-  const { patch, drop } = list;
+  const { patch } = list;
 
-  // The SERVER applies the status filter, so `total` counts the requests that
-  // match it. A request that has just been approved or rejected still matches
-  // "All", where the row simply flips to its new status (with the acting admin
-  // as reviewer) so the outcome is visible without a refetch. Under "Pending" it
-  // does not match any more, so it leaves the page and the count together.
+  // After an approve/reject the backend has RECORDED the outcome (the API answered
+  // 200 and the account is gated accordingly). We reflect it on the SAME row in
+  // place — the badge flips to approved/rejected and it names the acting reviewer —
+  // so the admin gets clear confirmation the action took effect. Earlier this
+  // dropped the row whenever it no longer matched the active filter, so under the
+  // default "Pending" queue every approve/reject made the row silently VANISH
+  // (Wave A finding): the admin saw the work disappear rather than succeed.
+  //
+  // The row keeps its slot regardless of the active filter. It then ages out of a
+  // filtered queue on the NEXT load, when the server re-applies the filter and no
+  // longer returns it — which is also the readback proving the change persisted
+  // rather than only showing optimistically. `total` is left untouched (patch, not
+  // drop): the resolved row is still on the page and still counted, so the count
+  // line keeps matching the rows on screen until that next load re-syncs both.
   const onResolved = useCallback(
     (id: string, newStatus: RegistrationRequestStatus, moderatorNote?: string) => {
-      if (status !== "all" && status !== newStatus) {
-        drop((r) => r.id !== id);
-        return;
-      }
       patch((requests) =>
         requests.map((r) =>
           r.id === id
@@ -121,7 +126,7 @@ function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
         ),
       );
     },
-    [drop, patch, reviewerUsername, status],
+    [patch, reviewerUsername],
   );
 
   return (

@@ -121,11 +121,13 @@ test("an admin lists the pending queue with applicant details", async ({ page })
   await expect(page.getByRole("button", { name: "Approve ada" })).toBeVisible();
 });
 
-test("approving takes the request out of the pending queue and off its count", async ({ page }) => {
+test("approving keeps the resolved request visible in place on the Pending queue", async ({ page }) => {
   await signIn(page, "admin");
-  // The status filter is the SERVER's now, so `total` counts the requests that
-  // match it: an approved request is no longer pending, and must leave both the
-  // page and the count rather than sitting there wearing a resolved badge.
+  // Owner decision (Wave A finding): on the default "Pending" queue an approve
+  // no longer DROPS the row. It stays in place with its status flipped to
+  // approved and the acting reviewer named, so the admin sees the action took
+  // effect instead of the row silently vanishing. It ages out on the next load,
+  // when the server re-applies the filter and no longer returns it.
   await page.route(REQUESTS, (route) =>
     route.fulfill({
       json: { requests: [pendingRequest("r1", "ada")], total: 1, limit: 100, offset: 0 },
@@ -142,9 +144,15 @@ test("approving takes the request out of the pending queue and off its count", a
   await page.getByRole("button", { name: "Approve ada" }).click();
   await approved;
 
+  // The row stays, shows the resolved status and reviewer, and offers no more actions.
+  await expect(page.getByText("ada@example.test")).toBeVisible();
+  await expect(page.getByText("approved", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Approved by boss/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve ada" })).toHaveCount(0);
-  await expect(page.getByText("0 registration requests")).toBeVisible();
-  await expect(page.getByText("No pending requests")).toBeVisible();
+  // No silent vanish: the empty state is NOT shown, and the count keeps matching
+  // the rows on screen (patch, not drop) until the next load re-syncs both.
+  await expect(page.getByText("No pending requests")).toHaveCount(0);
+  await expect(page.getByText("1 registration request")).toBeVisible();
 });
 
 test("the All view keeps a resolved request, flipped in place", async ({ page }) => {
