@@ -563,9 +563,9 @@ export function ServerIcon(props: IconProps) {
   );
 }
 
-/* ── Settings / destinations (redesign icon-tile rows) ───────────────────────
- * Feather Icons (MIT, credited in the header) vendored for the System-Settings
- * grouped rows (Profile / Security / Notifications / Playback / Search / Devices
+/* ── Settings / destinations ─────────────────────────────────────────────────
+ * Feather Icons (MIT, credited in the header) vendored for the settings section
+ * destinations (Profile / Security / Notifications / Playback / Search / Devices
  * / Connections / Donations / Privacy), Moderation mail triage, and Studio
  * storage. Same 24×24 / 1.8-stroke / round-cap convention as the rest of the set.
  */

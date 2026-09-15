@@ -33,9 +33,10 @@ executed deference as absence and made the app read gray-on-gray; it is
   echo the indigo the CTAs already leaned toward while staying clearly distinct
   from Bluesky's brand blue. Never introduce a second interactive hue.
 - **Color beyond the accent must be semantic**, never decorative: status
-  tokens for status, protocol colors inside badges, colored icon tiles in
-  settings-style lists (see "Semantic color & protocol identity"). A color that
-  doesn't *mean* something is still wrong.
+  tokens for status, protocol colors inside badges, tinted icon chips and
+  status dots (`EmptyState`, notification kinds, admin stats) — never behind
+  navigation (see "Semantic color & protocol identity"). A color that doesn't
+  *mean* something is still wrong.
 
 Hard rules:
 - **Mobile-first.** Phone layout (390px) is designed first; wider viewports
@@ -174,7 +175,13 @@ none touches chrome:
   active. Eleven saturated squares in a column the app otherwise renders in one
   hue read as a foreign surface, so **every nav row — the desktop
   `SettingsRail` and the mobile grouped rows included — leads with a plain
-  monochrome icon** (`<Icon size={18} strokeWidth={1.9} />`, `min-h-11` row).
+  monochrome icon**. The standard density is an **18px glyph on a 44px
+  (`min-h-11`) row** — Sidebar, `SettingsRail` and `ModerationSectionNav`; the
+  **admin console rail deliberately runs denser**, 16px on `h-9` rows, with its
+  "More" group carrying no icons at all. Stroke weight follows the caller
+  (`1.9` in the Sidebar and `SettingsRail`, the set's `1.8` default in
+  `ModerationSectionNav`). What is universal is the *treatment* — one plain
+  glyph, muted at rest, accent when active, never a tile.
   (Catalog: `components/settings/sections.tsx`; it carries no hue.)
 - **Tinted icon chips and status dots** keep the fixed `--tile-*` Apple-system
   palette in `globals.css` (blue `#007aff`/`#0a84ff`, gray `#8e8e93`/`#98989d`,
@@ -414,10 +421,14 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   variant="federated"` marks a remote origin with the tri-protocol ribbon on
   its top edge (the third pinned ribbon placement). The standalone ribbon is
   `<ProtocolRibbon>` (placements a + b).
-- **Nav row icons**: a plain `components/icons` glyph — `<Icon size={18}
-  strokeWidth={1.9} className="shrink-0" />` — muted at rest, accent when
-  active, on a `min-h-11` row. Rails and grouped Settings/Admin/Moderation rows
-  all use it; there is no colored icon-tile primitive (withdrawn 2026-09-15).
+- **Nav row icons**: a plain `components/icons` glyph — muted at rest, accent
+  when active, never a colored tile (the `IconTile` primitive was withdrawn
+  2026-09-15). Standard density is 18px on a `min-h-11` row (`<Icon size={18}
+  className="shrink-0" />`, `strokeWidth={1.9}` where the caller wants the
+  Sidebar's weight): Sidebar, `SettingsRail`, the mobile grouped settings rows,
+  `ModerationSectionNav`. `AdminConsole`'s rail is the one sanctioned
+  exception — 16px on `h-9`, icons on the primary group only — because it lists
+  fourteen destinations and progressive disclosure is the point of that rail.
 - **Grouped settings rows** (mobile settings): a `rounded-2xl overflow-hidden`
   group, rows `divide-y divide-border-subtle`, each row label + optional
   `text-fg-muted` sub-line + chevron; group headers `text-xs font-bold uppercase

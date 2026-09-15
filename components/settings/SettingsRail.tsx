@@ -16,11 +16,12 @@ import {
 
 // SettingsRail is the desktop (≥ lg) section sidebar of the settings split
 // view: a plain leading icon per destination, a short label, and a tint-pill
-// active row — the same nav recipe as the app Sidebar, StudioNav, the admin
-// rail and ModerationSectionNav (18px stroke glyph, muted at rest, accent when
-// active). It used to lead each row with a colored IconTile, which nothing
-// else in the app does; eleven saturated squares read as a foreign surface.
-// Below lg it collapses and the grouped-rows drill-in in SettingsView takes over.
+// active row — the app's shared nav recipe: a plain glyph, muted at rest,
+// accent when active. Density matches the Sidebar and ModerationSectionNav
+// (18px on a 44px row); AdminConsole's rail is deliberately denser (16px on
+// h-9) and is not the model here. It used to lead each row with a colored
+// IconTile, which nothing else in the app does; eleven saturated squares read
+// as a foreign surface. Below lg it collapses and SettingsView's rows take over.
 // Renders only for a signed-in user (the section pages themselves gate anon
 // access) — mirrors the mobile rows, which live inside the signed-in branch of
 // SettingsView.
