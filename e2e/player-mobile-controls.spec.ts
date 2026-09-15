@@ -168,8 +168,8 @@ for (const [label, width, height] of [
     await expect(page.getByTestId("player-controls")).toBeVisible();
 
     const bar = page.getByTestId("player-controls");
-    const inBar = async (name: string) =>
-      (await bar.getByRole("button", { name, exact: true }).count()) > 0;
+    const inBar = async (role: "button" | "switch", name: string) =>
+      (await bar.getByRole(role, { name, exact: true }).count()) > 0;
 
     await page.getByRole("button", { name: "More player options" }).click();
     const menu = page.getByRole("menu", { name: "More player options" });
@@ -177,8 +177,13 @@ for (const [label, width, height] of [
 
     for (const name of ["Mute", "Captions", "Autoplay next", "Theater mode"]) {
       const reachable =
-        (await inBar(name)) ||
-        (await inBar("Autoplay next is on")) ||
+        (await inBar("button", name)) ||
+        // Autoplay in the bar is a SWITCH (aria-checked), in the menu a
+        // checkbox row — but one function, one name, everywhere. The old
+        // spelling matched the bar switch by a state-carrying name and OR-ed
+        // that clause into every iteration, so one matching control quietly
+        // satisfied the whole loop.
+        (await inBar("switch", name)) ||
         (await menu.getByRole("menuitemcheckbox", { name, exact: true }).count()) > 0;
       expect(reachable, `${name} is unreachable at ${width}px`).toBe(true);
     }

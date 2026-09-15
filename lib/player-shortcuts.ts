@@ -108,6 +108,23 @@ export function shortcutForKey(
 }
 
 /**
+ * The keycap each bar control advertises in its hover tooltip. It lives here,
+ * beside the mapping, because the tooltip is a PROMISE about the keyboard: a
+ * bubble that says "Subtitles/closed captions [C]" while C does something else
+ * is worse than no bubble. The same set is documented in
+ * components/KeyboardShortcutsHelp — keep all three in sync (a unit test pins
+ * every entry against shortcutForKey).
+ */
+export const CONTROL_SHORTCUT_KEYS = {
+  play: "K",
+  mute: "M",
+  captions: "C",
+  theater: "T",
+  pip: "I",
+  fullscreen: "F",
+} as const;
+
+/**
  * clampSeekTarget clamps a relative seek to [0, duration]. An unknown duration
  * (NaN/Infinity before metadata) only clamps the lower bound — the element
  * ignores overshoot on its own.

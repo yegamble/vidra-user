@@ -422,15 +422,15 @@ describe("VideoPlayer shell", () => {
     expect(screen.queryByText("Intro")).toBeNull();
   });
 
-  it("shows an autoplay-next toggle whose pressed state follows the store and flips on click", () => {
+  it("shows an autoplay switch whose checked state follows the store and flips on click", () => {
     render(<Harness />);
     // Baked default is ON (serverAutoplay + unset session both read on).
-    const on = screen.getByRole("button", { name: "Autoplay next is on" });
-    expect(on.getAttribute("aria-pressed")).toBe("true");
+    const on = screen.getByRole("switch", { name: "Autoplay next" });
+    expect(on.getAttribute("aria-checked")).toBe("true");
     // A click flips the session preference the end card honours.
     fireEvent.click(on);
-    const off = screen.getByRole("button", { name: "Autoplay next is off" });
-    expect(off.getAttribute("aria-pressed")).toBe("false");
+    const off = screen.getByRole("switch", { name: "Autoplay next" });
+    expect(off.getAttribute("aria-checked")).toBe("false");
     expect(window.sessionStorage.getItem("vidra.autoplay-next")).toBe("0");
   });
 
@@ -439,7 +439,7 @@ describe("VideoPlayer shell", () => {
     // A signed-in user's server-backed settings are hydrated (autoplay on).
     hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, autoplay_next: true });
     render(<Harness />);
-    fireEvent.click(screen.getByRole("button", { name: "Autoplay next is on" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Autoplay next" }));
     // Fire-and-forget merge-PUT with just the flipped field.
     expect(put).toHaveBeenCalledWith({ autoplay_next: false });
   });
@@ -447,13 +447,92 @@ describe("VideoPlayer shell", () => {
   it("does not touch the account when no signed-in settings are loaded (anonymous / unsettled)", () => {
     const put = vi.spyOn(api, "updatePlayerSettings").mockResolvedValue(DEFAULT_PLAYER_SETTINGS);
     render(<Harness />); // settings not hydrated → no account to write to
-    fireEvent.click(screen.getByRole("button", { name: "Autoplay next is on" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Autoplay next" }));
     expect(put).not.toHaveBeenCalled();
   });
 
   it("does not render the autoplay toggle on the embed variant", () => {
     render(<Harness variant="embed" />);
-    expect(screen.queryByRole("button", { name: /Autoplay next/ })).toBeNull();
+    expect(screen.queryByRole("switch", { name: /Autoplay/ })).toBeNull();
+  });
+
+  it("hides the chrome the instant the pointer leaves the stage while playing", () => {
+    // YouTube parity, and the fourth of the owner's complaints: leaving the
+    // player must take the buttons AND the timeline with it, not start a 3s
+    // countdown the viewer has already walked away from.
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    const bar = screen.getByTestId("player-controls");
+    act(() => void fireEvent(video, new Event("play")));
+    expect(bar.className).toContain("opacity-100");
+    act(() => void fireEvent.pointerOut(screen.getByTestId("video-player"), {
+      relatedTarget: document.body,
+      pointerType: "mouse",
+    }));
+    expect(bar.className).toContain("opacity-0");
+  });
+
+  it("keeps the chrome up when a TOUCH pointer leaves the stage while playing", () => {
+    // Touch fires pointerout/pointerleave immediately after pointerup, so on a
+    // phone every tap on a control ran the mouse-leave path and hid the bar
+    // mid-playback — captions, fullscreen and the seek bar became unreachable
+    // by the only input the device has. Only a mouse can meaningfully "leave".
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    const bar = screen.getByTestId("player-controls");
+    act(() => void fireEvent(video, new Event("play")));
+    const stage = screen.getByTestId("video-player");
+    act(() => void fireEvent.pointerOut(stage, {
+      relatedTarget: document.body,
+      pointerType: "touch",
+    }));
+    expect(bar.className).toContain("opacity-100");
+    // ...and a pen behaves like touch, not like a mouse.
+    act(() => void fireEvent.pointerOut(stage, {
+      relatedTarget: document.body,
+      pointerType: "pen",
+    }));
+    expect(bar.className).toContain("opacity-100");
+  });
+
+  it("keeps the chrome up when the pointer leaves while paused", () => {
+    // Paused is the one state where the chrome is the point: a paused player
+    // with no visible controls reads as broken.
+    render(<Harness />);
+    const bar = screen.getByTestId("player-controls");
+    act(() => void fireEvent.pointerOut(screen.getByTestId("video-player"), {
+      relatedTarget: document.body,
+      pointerType: "mouse",
+    }));
+    expect(bar.className).toContain("opacity-100");
+  });
+
+  it("shows ONE tooltip above the transport, naming the control and its shortcut", () => {
+    render(<Harness tracks={CC_TRACKS} />);
+    const cc = screen.getByRole("button", { name: "Captions" });
+    // Keyboard focus shows it at once (no hover dwell to wait out).
+    act(() => void fireEvent.focus(cc));
+    const tip = screen.getByTestId("player-tooltip");
+    expect(tip.textContent).toContain("Subtitles/closed captions");
+    const cap = within(tip).getByText("C");
+    expect(cap.tagName).toBe("KBD");
+    // One bubble for the whole bar, never one per control.
+    expect(screen.getAllByTestId("player-tooltip")).toHaveLength(1);
+    act(() => void fireEvent.blur(cc));
+    expect(screen.queryByTestId("player-tooltip")).toBeNull();
+  });
+
+  it("re-labels the open tooltip when the hovered control's own label changes", () => {
+    // Pressing K while the pointer rests on Play used to leave "Play" hanging
+    // over a button that now pauses: the bubble snapshotted its text at show().
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    const play = screen.getByRole("button", { name: "Play" });
+    act(() => void fireEvent.focus(play));
+    expect(screen.getByTestId("player-tooltip").textContent).toContain("Play");
+    act(() => void fireEvent(video, new Event("play")));
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+    expect(screen.getByTestId("player-tooltip").textContent).toContain("Pause");
   });
 
   it("shows a replay-only end card (no next) when there is nothing queued", () => {

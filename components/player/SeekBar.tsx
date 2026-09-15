@@ -189,16 +189,20 @@ export function SeekBar({
       }}
       onBlur={() => setFocused(false)}
       onKeyDown={onKeyDown}
-      className="focus-ring group relative flex h-11 w-full cursor-pointer touch-none select-none items-center"
+      className="focus-ring-media group relative flex h-11 w-full cursor-pointer touch-none select-none items-center rounded-full"
     >
-      {/* The thin track line, centered in the tall hit area. */}
-      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/25 transition-[height] group-hover:h-2">
+      {/* The thin track line, centered in the tall hit area: 4px at rest,
+          thickening to 6px under the pointer or keyboard focus (the Apple TV
+          scrubber idiom — the bar grows toward you when it is the thing you are
+          operating). Focus-within matters as much as hover: a keyboard user
+          scrubbing with the arrows gets the same thickened target and thumb. */}
+      <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/25 transition-[height] duration-150 ease-out group-hover:h-1.5 group-focus-within:h-1.5 motion-reduce:transition-none">
         {/* Buffered ranges: a lighter band under the playhead. */}
         {bands.map((b, i) => (
           <div
             key={i}
             aria-hidden="true"
-            className="absolute inset-y-0 bg-white/30"
+            className="absolute inset-y-0 bg-white/45"
             style={{ left: `${b.left * 100}%`, width: `${b.width * 100}%` }}
           />
         ))}
@@ -230,7 +234,7 @@ export function SeekBar({
       {/* Playhead knob. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow-[0_1px_4px_rgba(0,0,0,0.55)] transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
         style={{ left: `${playedFrac * 100}%` }}
       />
       {/* Scrub bubble (hover / scrub / keyboard focus): a media thumbnail-style
@@ -239,7 +243,7 @@ export function SeekBar({
       {tooltipFrac !== null ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-8 z-10 flex -translate-x-1/2 flex-col items-center gap-1 rounded-lg bg-black/80 p-1 shadow-lg"
+          className="pointer-events-none absolute bottom-8 z-10 flex -translate-x-1/2 flex-col items-center gap-1 rounded-md bg-black/85 p-1 shadow-lg backdrop-blur-sm"
           style={bubbleStyle}
         >
           {cue && storyboard ? (
@@ -255,11 +259,11 @@ export function SeekBar({
             />
           ) : null}
           {bubbleChapter ? (
-            <span className="max-w-[10rem] truncate px-1 text-[11px] font-medium text-white/90">
+            <span className="max-w-[10rem] truncate px-1 text-[12px] font-medium text-white/80">
               {bubbleChapter.title}
             </span>
           ) : null}
-          <span className="px-1 text-[11px] font-medium tabular-nums text-white">
+          <span className="px-1 text-[12px] font-medium tabular-nums text-white">
             {formatDuration(tooltipTime)}
           </span>
         </div>

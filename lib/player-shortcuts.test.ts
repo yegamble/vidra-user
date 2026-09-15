@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CONTROL_SHORTCUT_KEYS,
   FRAME_STEP_SECONDS,
   clampSeekTarget,
   seekTargetForFraction,
@@ -127,5 +128,26 @@ describe("seekTargetForFraction", () => {
     expect(seekTargetForFraction(0.5, NaN)).toBeNull();
     expect(seekTargetForFraction(0.5, 0)).toBeNull();
     expect(seekTargetForFraction(0.5, Infinity)).toBeNull();
+  });
+});
+
+describe("CONTROL_SHORTCUT_KEYS", () => {
+  // The keycaps the player's hover tooltips print come from here, so the letter
+  // on the bubble cannot drift away from the key that actually does the thing.
+  it("advertises a key that really maps to that control's action", () => {
+    const expected: Record<keyof typeof CONTROL_SHORTCUT_KEYS, string> = {
+      play: "toggle-play",
+      mute: "toggle-mute",
+      captions: "toggle-captions",
+      theater: "toggle-theater",
+      pip: "toggle-pip",
+      fullscreen: "toggle-fullscreen",
+    };
+    for (const [control, key] of Object.entries(CONTROL_SHORTCUT_KEYS)) {
+      const mapped = shortcutForKey({ key: key.toLowerCase() });
+      expect(mapped, `${control} advertises ${key}`).toEqual({
+        kind: expected[control as keyof typeof CONTROL_SHORTCUT_KEYS],
+      });
+    }
   });
 });

@@ -46,6 +46,7 @@ export function QualityMenu({
       buttonLabel={`Quality: ${label}`}
       buttonText={label}
       menuLabel="Playback quality"
+      tip="Quality"
       variant={variant}
       icon={
         // Minified inline sliders icon

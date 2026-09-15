@@ -10,9 +10,25 @@ import {
   type RefObject,
 } from "react";
 
+import { AutoplaySwitch } from "@/components/player/AutoplaySwitch";
 import { CaptionLayer } from "@/components/player/CaptionLayer";
 import { EndCard } from "@/components/player/EndCard";
+import {
+  CaptionsGlyph,
+  FullscreenEnterGlyph,
+  FullscreenExitGlyph,
+  PauseGlyph,
+  PipGlyph,
+  PlayGlyph,
+  TheaterEnterGlyph,
+  TheaterExitGlyph,
+} from "@/components/player/icons";
 import { OverlayButton } from "@/components/player/OverlayButton";
+import {
+  PlayerTipProvider,
+  PlayerTooltipLayer,
+  usePlayerTooltip,
+} from "@/components/player/PlayerTooltip";
 import {
   PlayerOverflowMenu,
   type OverflowChoiceGroup,
@@ -58,6 +74,7 @@ import {
 import { isAutoQuality } from "@/lib/quality-id";
 import { readBuffered, stepVolume } from "@/lib/player-ui";
 import {
+  CONTROL_SHORTCUT_KEYS,
   SHORTCUT_IGNORE_SELECTOR,
   clampSeekTarget,
   seekTargetForFraction,
@@ -272,6 +289,32 @@ export function VideoPlayer({
     idleRef.current = window.setTimeout(() => setPointerActive(false), IDLE_HIDE_MS);
   }, []);
   useEffect(() => () => window.clearTimeout(idleRef.current), []);
+
+  // The MOUSE leaving the stage hides the chrome at once rather than starting a
+  // 3s countdown for a viewer who has already looked away — YouTube's rule, and
+  // the one the owner asked for ("when the pointer leaves the player, the
+  // buttons AND the timeline must disappear"). The other two guards still
+  // apply, because they are expressed in controlsVisible, not here: paused pins
+  // the chrome, and focus inside the bar (which an open menu holds) pins it too.
+  //
+  // `pointerType` is load-bearing, not defensive. A touch pointer fires
+  // pointerout/pointerleave immediately after pointerup — the finger really has
+  // left the screen — so without this guard every TAP on a control during
+  // playback ran this path and faded the bar to opacity 0 with
+  // pointer-events-none, i.e. captions, fullscreen and the seek bar became
+  // unreachable by the only input a phone has. A touch device hides the chrome
+  // through the idle timer, which is what it has always done.
+  const onStageLeave = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "mouse") return;
+    if (idleRef.current) window.clearTimeout(idleRef.current);
+    setPointerActive(false);
+  }, []);
+
+  // One tooltip for the whole bar, anchored above the transport. Its own
+  // zero-height row is the positioning frame (the bar's padding would otherwise
+  // shift every centre), and being a CHILD of the bar it fades with the chrome
+  // instead of needing a second piece of state kept in sync with it.
+  const { handle: tipHandle, tip, anchorRef: tipAnchorRef } = usePlayerTooltip();
 
   // Keep the latest progress-reporting callbacks in a ref so the media-event
   // subscription below stays mounted once (never re-subscribing on a new
@@ -801,9 +844,14 @@ export function VideoPlayer({
         // more bar). Container queries make the tiers track the real budget.
         "@container/stage relative w-full select-none overflow-hidden bg-black",
         variant === "embed" ? "h-full" : "aspect-video rounded-2xl",
+        // Hide the cursor with the chrome: a lone arrow floating over a
+        // full-bleed frame is the one piece of UI left when everything else has
+        // faded. Any pointer move calls bump() and brings both back.
+        !controlsVisible && "cursor-none",
       )}
       onPointerMove={bump}
       onPointerDown={bump}
+      onPointerLeave={onStageLeave}
       onFocus={() => setFocusWithin(true)}
       onBlur={onContainerBlur}
     >
@@ -843,10 +891,8 @@ export function VideoPlayer({
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 flex items-center justify-center"
         >
-          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm">
-            <svg viewBox="0 0 24 24" className="ml-0.5 h-7 w-7" fill="currentColor" aria-hidden="true">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+          <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/10 backdrop-blur-md">
+            <PlayGlyph size={28} />
           </span>
         </div>
       ) : null}
@@ -854,176 +900,161 @@ export function VideoPlayer({
       {/* The overlay control bar over a bottom scrim. Hidden = opacity only
           (never display), so focus is never lost; global reduced-motion neutralizes
           the fade. */}
-      <div
-        ref={controlsRef}
-        data-testid="player-controls"
-        className={cn(
-          "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0.5 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-1.5 pb-1.5 pt-10 transition-opacity sm:px-3 sm:pb-2",
-          controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
-        )}
-      >
-        <SeekBar
-          currentTime={currentTime}
-          duration={duration}
-          buffered={buffered}
-          onSeek={seekTo}
-          storyboard={storyboard}
-          chapters={chapters}
-        />
-        <div className="flex items-center gap-0.5 sm:gap-1">
-          <OverlayButton label={paused ? "Play" : "Pause"} onClick={togglePlay}>
-            {paused ? (
-              <svg viewBox="0 0 24 24" className="ml-0.5 h-5 w-5" fill="currentColor" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
-                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-              </svg>
-            )}
-          </OverlayButton>
-
-          {/* Mute joins the bar at a 480px stage; below that it lives in the
-              overflow menu (a phone's hardware volume covers the common case). */}
-          <div className="hidden @min-[480px]/stage:contents">
-            <VolumeControl
-              volume={volume}
-              muted={muted}
-              onToggleMute={toggleMute}
-              onSetVolume={applyVolume}
-            />
-          </div>
-
-          {/* Elapsed always; the "/ total" tail costs ~46px on a long video and is
-              held back until the stage can afford it. The total is never lost to
-              assistive tech — SeekBar's aria-valuetext reads "X of Y". */}
-          <span className="whitespace-nowrap px-0.5 text-[11px] font-medium tabular-nums text-white sm:text-xs">
-            {formatDuration(currentTime)}
-            <span className="hidden @min-[420px]/stage:inline">
-              <span className="text-white/70">/</span>
-              {formatDuration(duration)}
-            </span>
-          </span>
-
-          {/* Current chapter title (CORE-15): muted + truncated, held off the
-              narrowest phone bar (< sm) so it never crowds the core controls. */}
-          {currentChapterTitle ? (
-            <span className="hidden min-w-0 max-w-[8rem] truncate px-0.5 text-[11px] text-white/70 @min-[900px]/stage:inline-block @min-[1100px]/stage:max-w-[14rem]">
-              {currentChapterTitle}
-            </span>
-          ) : null}
-
-          <div className="flex-1" />
-
-          {/* Autoplay-next toggle (YouTube parity): leads the right-hand cluster
-              (YouTube's autoplay switch sits just before captions/settings). A
-              watch-page concern — an embed must never auto-chain to another
-              video — so it is held off the embed shell. pressed = autoplay on;
-              its snapshot flows through the same useSyncExternalStore wiring as
-              the end card, so SSR/first-client render is stable. */}
-          {variant === "watch" ? (
-            <div className="hidden @min-[700px]/stage:contents">
+      <PlayerTipProvider value={tipHandle}>
+        <div
+          ref={controlsRef}
+          data-testid="player-controls"
+          className={cn(
+            // The scrim is a TALL soft ramp (~140px on a desktop stage), not a
+            // 40px band: the HIG's clear-material-over-bright-video guidance is a
+            // 35% dimming layer, and a short ramp leaves white glyphs sitting on
+            // whatever frame happens to be under them. Held shorter on a phone
+            // stage, which is only ~185px tall in total.
+            "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0.5 bg-gradient-to-t from-black/80 via-black/45 via-55% to-transparent px-1.5 pb-1.5 pt-12 sm:px-3 sm:pb-2 @min-[480px]/stage:pt-20",
+            "transition-opacity duration-[250ms] ease-out motion-reduce:transition-none",
+            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+        >
+          <PlayerTooltipLayer tip={tip} anchorRef={tipAnchorRef} />
+          <SeekBar
+            currentTime={currentTime}
+            duration={duration}
+            buffered={buffered}
+            onSeek={seekTo}
+            storyboard={storyboard}
+            chapters={chapters}
+          />
+          <div className="flex items-center gap-0.5 sm:gap-1">
             <OverlayButton
-              label={autoplayEnabled ? "Autoplay next is on" : "Autoplay next is off"}
-              pressed={autoplayEnabled}
-              onClick={onToggleAutoplay}
+              label={paused ? "Play" : "Pause"}
+              tipKeys={CONTROL_SHORTCUT_KEYS.play}
+              onClick={togglePlay}
             >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="M10 9.5v5l4-2.5z" fill="currentColor" stroke="none" />
-              </svg>
+              {paused ? <PlayGlyph /> : <PauseGlyph />}
             </OverlayButton>
-            </div>
-          ) : null}
 
-          {tracks.length > 0 ? (
-            <OverlayButton label="Captions" pressed={captionsOn} onClick={toggleCaptions}>
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="M8 11.5a1.5 1.5 0 0 0-3 0v1a1.5 1.5 0 0 0 3 0M15 11.5a1.5 1.5 0 0 0-3 0v1a1.5 1.5 0 0 0 3 0" />
-              </svg>
+            {/* Mute joins the bar at a 480px stage; below that it lives in the
+                overflow menu (a phone's hardware volume covers the common case). */}
+            <div className="hidden @min-[480px]/stage:contents">
+              <VolumeControl
+                volume={volume}
+                muted={muted}
+                onToggleMute={toggleMute}
+                onSetVolume={applyVolume}
+              />
+            </div>
+
+            {/* Elapsed always; the "/ total" tail costs ~46px on a long video and is
+                held back until the stage can afford it. The total is never lost to
+                assistive tech — SeekBar's aria-valuetext reads "X of Y". */}
+            <span className="whitespace-nowrap px-1 text-[12px] font-medium tabular-nums text-white/85 @min-[480px]/stage:text-[13px]">
+              {formatDuration(currentTime)}
+              <span className="hidden @min-[420px]/stage:inline">
+                <span className="px-0.5 text-white/70">/</span>
+                {formatDuration(duration)}
+              </span>
+            </span>
+
+            {/* Current chapter title (CORE-15): muted + truncated, held off the
+                narrowest phone bar (< sm) so it never crowds the core controls. */}
+            {currentChapterTitle ? (
+              <span className="hidden min-w-0 max-w-[8rem] truncate px-1 text-[12px] text-white/70 @min-[900px]/stage:inline-block @min-[1100px]/stage:max-w-[14rem]">
+                {currentChapterTitle}
+              </span>
+            ) : null}
+
+            <div className="flex-1" />
+
+            {/* Autoplay-next toggle (YouTube parity): leads the right-hand cluster
+                (YouTube's autoplay switch sits just before captions/settings). A
+                watch-page concern — an embed must never auto-chain to another
+                video — so it is held off the embed shell. pressed = autoplay on;
+                its snapshot flows through the same useSyncExternalStore wiring as
+                the end card, so SSR/first-client render is stable. */}
+            {variant === "watch" ? (
+              <div className="hidden @min-[700px]/stage:contents">
+                <AutoplaySwitch enabled={autoplayEnabled} onToggle={onToggleAutoplay} />
+              </div>
+            ) : null}
+
+            {tracks.length > 0 ? (
+              <OverlayButton
+                label="Captions"
+                tip="Subtitles/closed captions"
+                tipKeys={CONTROL_SHORTCUT_KEYS.captions}
+                pressed={captionsOn}
+                onClick={toggleCaptions}
+              >
+                <CaptionsGlyph />
+              </OverlayButton>
+            ) : null}
+
+            <div className="hidden @min-[480px]/stage:contents">
+              <SpeedMenu speed={speed} onSelect={setSpeed} variant="overlay" />
+            </div>
+
+            {/* "Auto (1080p)" is 123px wide — the single widest control in the bar,
+                and the one that clipped Fullscreen even on a 1024px desktop. */}
+            <div className="hidden @min-[820px]/stage:contents">
+              <QualityMenu
+                levels={playback.levels}
+                currentQuality={playback.currentQuality}
+                activeHeight={playback.activeHeight}
+                pending={playback.pending}
+                onSelect={playback.setQuality}
+                variant="overlay"
+              />
+            </div>
+
+            {/* Theater is a watch-page layout mode and only reflows the two-column
+                stage at lg+, so the toggle appears only there (below lg the page is
+                already single-column — the button would be a no-op, and it would
+                crowd the phone control bar). display:contents keeps it a flush flex
+                item without an extra box. */}
+            {variant === "watch" ? (
+              <div className="hidden @min-[860px]/stage:contents">
+                <OverlayButton
+                  label="Theater mode"
+                  tipKeys={CONTROL_SHORTCUT_KEYS.theater}
+                  pressed={theater}
+                  onClick={() => toggleTheater()}
+                >
+                  {theater ? <TheaterExitGlyph /> : <TheaterEnterGlyph />}
+                </OverlayButton>
+              </div>
+            ) : null}
+
+            {/* PiP hidden (not disabled) where the browser can't support it; also
+                held off the narrowest phone bar (< sm) so it never crowds the
+                always-visible core controls. */}
+            {pipSupported ? (
+              <div className="hidden @min-[700px]/stage:contents">
+                <OverlayButton
+                  label={pipActive ? "Exit picture-in-picture" : "Picture-in-picture"}
+                  tip="Picture-in-picture"
+                  tipKeys={CONTROL_SHORTCUT_KEYS.pip}
+                  pressed={pipActive}
+                  onClick={togglePip}
+                >
+                  <PipGlyph />
+                </OverlayButton>
+              </div>
+            ) : null}
+
+            <PlayerOverflowMenu toggles={overflowToggles} groups={overflowGroups} />
+
+            <OverlayButton
+              label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              tip={isFullscreen ? "Exit full screen" : "Full screen"}
+              tipKeys={CONTROL_SHORTCUT_KEYS.fullscreen}
+              pressed={isFullscreen}
+              onClick={toggleFullscreen}
+            >
+              {isFullscreen ? <FullscreenExitGlyph /> : <FullscreenEnterGlyph />}
             </OverlayButton>
-          ) : null}
-
-          <div className="hidden @min-[480px]/stage:contents">
-            <SpeedMenu speed={speed} onSelect={setSpeed} variant="overlay" />
           </div>
-
-          {/* "Auto (1080p)" is 123px wide — the single widest control in the bar,
-              and the one that clipped Fullscreen even on a 1024px desktop. */}
-          <div className="hidden @min-[820px]/stage:contents">
-            <QualityMenu
-              levels={playback.levels}
-              currentQuality={playback.currentQuality}
-              activeHeight={playback.activeHeight}
-              pending={playback.pending}
-              onSelect={playback.setQuality}
-              variant="overlay"
-            />
-          </div>
-
-          {/* Theater is a watch-page layout mode and only reflows the two-column
-              stage at lg+, so the toggle appears only there (below lg the page is
-              already single-column — the button would be a no-op, and it would
-              crowd the phone control bar). display:contents keeps it a flush flex
-              item without an extra box. */}
-          {variant === "watch" ? (
-            <div className="hidden @min-[860px]/stage:contents">
-              <OverlayButton
-                label="Theater mode"
-                pressed={theater}
-                onClick={() => toggleTheater()}
-              >
-                {theater ? (
-                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="6" y="7" width="12" height="10" rx="1.5" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="3" y="6" width="18" height="12" rx="1.5" />
-                  </svg>
-                )}
-              </OverlayButton>
-            </div>
-          ) : null}
-
-          {/* PiP hidden (not disabled) where the browser can't support it; also
-              held off the narrowest phone bar (< sm) so it never crowds the
-              always-visible core controls. */}
-          {pipSupported ? (
-            <div className="hidden @min-[700px]/stage:contents">
-              <OverlayButton
-                label={pipActive ? "Exit picture-in-picture" : "Picture-in-picture"}
-                pressed={pipActive}
-                onClick={togglePip}
-              >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <rect x="11" y="11" width="8" height="5" rx="1" fill="currentColor" stroke="none" />
-                </svg>
-              </OverlayButton>
-            </div>
-          ) : null}
-
-          <PlayerOverflowMenu toggles={overflowToggles} groups={overflowGroups} />
-
-          <OverlayButton
-            label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            pressed={isFullscreen}
-            onClick={toggleFullscreen}
-          >
-            {isFullscreen ? (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M16 21v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" />
-              </svg>
-            )}
-          </OverlayButton>
         </div>
-      </div>
+      </PlayerTipProvider>
 
       {/* End-of-playback card (PLAY-08): autoplay-next countdown when a next
           video is available, else a plain replay affordance. Media-overlay zone. */}
@@ -1061,7 +1092,7 @@ export function VideoPlayer({
             <button
               type="button"
               onClick={playback.retry}
-              className="pointer-events-auto cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="focus-ring-media pointer-events-auto cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25"
             >
               Try again
             </button>
