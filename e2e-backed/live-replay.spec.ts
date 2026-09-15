@@ -31,8 +31,16 @@ test("creating a live stream with replay enabled persists replay_enabled = true"
   // on the Live tab; "Go live" opens the create modal.
   await page.getByRole("link", { name: "Live", exact: true }).click();
   await page.getByRole("button", { name: "Go live" }).click();
-  await page.getByLabel("Live stream title").fill(streamTitle);
-  await page.getByLabel("Save replay as a video").check();
+  // The create-live modal's title field is a labeled <Input label="Title">.
+  await page.getByLabel("Title").fill(streamTitle);
+  // "Save replay as a video" in the create form is a <Toggle> — a
+  // role="switch" <button> reflecting state via aria-checked, NOT a checkbox — so
+  // it is turned on by clicking it, not with .check() (which only drives
+  // checkbox/radio inputs). Scope to the switch role so it never collides with
+  // the per-row "Save replay as a video for …" checkboxes in the list behind it.
+  const replaySwitch = page.getByRole("switch", { name: "Save replay as a video" });
+  await replaySwitch.click();
+  await expect(replaySwitch).toHaveAttribute("aria-checked", "true");
   const created = page.waitForResponse(
     (r) => /\/channels\/[^/]+\/live$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
