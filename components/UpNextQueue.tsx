@@ -4,7 +4,6 @@ import Link from "next/link";
 
 import { CloseIcon } from "@/components/icons";
 import { remoteVideoThumbnailUrl, videoThumbnailUrl, type Video } from "@/lib/api";
-import { cn } from "@/lib/cn";
 import { nextVideoHref } from "@/lib/end-card";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { clearQueue, removeVideo, useVideoQueue } from "@/lib/video-queue";
@@ -18,15 +17,7 @@ import { clearQueue, removeVideo, useVideoQueue } from "@/lib/video-queue";
 // never momentarily lists itself. Each row links to its watch URL (local
 // /videos/{id}, remote /remote/{id}); a per-row remove button and a header
 // Clear-all edit the shared cross-tab queue store.
-export function UpNextQueue({
-  currentVideo,
-  belowLayout = false,
-}: {
-  currentVideo: Video | null;
-  /** Theater mode (matches RelatedVideos): drop the fixed rail width so the
-   * panel spans the full-width column stacked above the reflowed related grid. */
-  belowLayout?: boolean;
-}) {
+export function UpNextQueue({ currentVideo }: { currentVideo: Video | null }) {
   const queue = useVideoQueue();
   const items = queue.filter(
     (item) =>
@@ -40,10 +31,7 @@ export function UpNextQueue({
     <aside
       aria-label="Up next queue"
       data-testid="upnext-queue"
-      className={cn(
-        "flex w-full shrink-0 flex-col gap-3",
-        belowLayout ? null : "lg:w-[344px]",
-      )}
+      className="flex w-full shrink-0 flex-col gap-3 lg:w-[344px]"
     >
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-[13px] font-bold tracking-[0.02em] text-fg-muted">
