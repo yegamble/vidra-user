@@ -36,7 +36,6 @@ export {
   type FilterPanelProps,
 } from "./FilterPanel";
 export { IconButton, type IconButtonProps } from "./IconButton";
-export { IconTile, type TileColor } from "./IconTile";
 export { Input, type InputProps } from "./Input";
 export { LinkButton, type LinkButtonProps } from "./LinkButton";
 export { ListTail, type ListTailProps } from "./ListTail";
