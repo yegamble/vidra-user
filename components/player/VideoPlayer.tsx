@@ -453,9 +453,11 @@ export function VideoPlayer({
   // One playback attempt per video while enabled (watch variant only). The
   // guard ref resets when the video changes so navigating watch→watch can
   // auto-start again, but a viewer's explicit pause is never fought — once
-  // attempted, this never plays again for the same video. The attempt is
-  // best-effort: the browser may still block it (autoplay policy) and the
-  // rejection is swallowed, leaving the normal click-to-play surface.
+  // attempted, this never plays again for the same video. The one exception is
+  // an attempt the media element load algorithm ABORTED: that is not an answer
+  // about this video, so it re-arms (see the rejection handler below). The
+  // attempt is otherwise best-effort — the browser may still block it (autoplay
+  // policy) and that rejection stays swallowed, leaving click-to-play.
   const startAttempted = useRef(false);
   useEffect(() => {
     startAttempted.current = false;
