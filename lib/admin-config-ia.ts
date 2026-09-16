@@ -652,7 +652,7 @@ export const META: Record<string, SettingMeta> = {
   //     on an unreachable backend would be the worse failure.
   branding_hide_software_name: {
     label: "Hide software name",
-    help: "White-label this instance: removes “Vidra” and “Powered by Vidra” from public and signed-in pages, downloads, the PWA name and the About page. Presentation only — admin pages and machine-readable documents (NodeInfo, /version) still identify the software. Visitors see the change within about a minute; reload this browser to see it here. If the frontend cannot reach the API it falls back to showing the software name.",
+    help: "White-label this instance: removes “Vidra” and “Powered by Vidra” from public and signed-in pages, downloads, the PWA name and the About page. Product icons and decorative ribbons are replaced by custom or neutral branding. Presentation only — admin pages and machine-readable documents (NodeInfo, /version) still identify the software. Visitors see the change within about a minute; reload this browser to see it here. If the frontend cannot reach the API it falls back to showing the software name.",
     control: "toggle",
     page: "general",
     section: "branding",

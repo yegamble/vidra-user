@@ -66,6 +66,7 @@ describe("Header branding", () => {
   it("renders the hardcoded wordmark with no snapshot (backend unreachable)", () => {
     render(<Header />);
     expect(screen.getByRole("link", { name: "Vidra" })).toBeTruthy();
+    expect(document.querySelector(".protocol-ribbon")).not.toBeNull();
     expect(screen.queryByRole("img")).toBeNull();
   });
 
@@ -147,6 +148,7 @@ describe("Header branding", () => {
   it("keeps the software wordmark when the software name is not hidden", () => {
     render(<Header instance={snapshot({ hide_software_name: false }, "")} />);
     expect(screen.getByRole("link", { name: "Vidra" })).toBeTruthy();
+    expect(document.querySelector(".protocol-ribbon")).not.toBeNull();
   });
 
   it("falls back to a neutral home label when hidden and the instance has no name", () => {
@@ -159,6 +161,7 @@ describe("Header branding", () => {
   it("still prefers the instance's own name when hidden", () => {
     render(<Header instance={snapshot({ hide_software_name: true })} />);
     expect(screen.getByRole("link", { name: "ExampleTube" })).toBeTruthy();
+    expect(document.querySelector(".protocol-ribbon")).toBeNull();
   });
 
   it("stays hidden on standalone routes", () => {

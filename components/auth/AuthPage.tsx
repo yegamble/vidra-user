@@ -96,13 +96,14 @@ export function AuthWordmark({
   brandClassName?: string;
   instanceName?: string | null;
 }) {
+  const hidden = useSoftwareBrandHidden();
   return (
     <span className="flex flex-col items-center gap-2">
       <AuthBrandLink className={brandClassName} instanceName={instanceName} />
       {/* Constrain the full-width ribbon to a short accent rule under the mark. */}
-      <span className="block w-12">
-        <ProtocolRibbon />
-      </span>
+      {hidden ? null : (
+        <span className="block w-12"><ProtocolRibbon /></span>
+      )}
     </span>
   );
 }

@@ -62,6 +62,7 @@ describe("AuthPage while white-labelled", () => {
     // …and nothing on the screen names the software.
     expect(screen.queryByText(/powered by/i)).toBeNull();
     expect(document.body.textContent).not.toMatch(/vidra/i);
+    expect(document.querySelector(".protocol-ribbon")).toBeNull();
   });
 
   it("keeps the Powered by line and the software wordmark fallback otherwise", () => {
@@ -73,6 +74,7 @@ describe("AuthPage while white-labelled", () => {
     );
     expect(screen.getByText("Powered by Vidra")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Vidra" })).toBeTruthy();
+    expect(document.querySelector(".protocol-ribbon")).not.toBeNull();
   });
 
   it("falls back to a neutral home label when hidden and the instance is unnamed", () => {
@@ -81,5 +83,6 @@ describe("AuthPage while white-labelled", () => {
     renderIn(true, <AuthPageHeading title="Verify your email" instanceName="  " />);
     expect(screen.getByRole("link", { name: "Home" }).getAttribute("href")).toBe("/");
     expect(document.body.textContent).not.toMatch(/vidra/i);
+    expect(document.querySelector(".protocol-ribbon")).toBeNull();
   });
 });
