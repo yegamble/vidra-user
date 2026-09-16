@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { TINY_MP4_BASE64 } from "../e2e-backed/fixtures";
+import { TRANSPORT_AGREES, transportVsElement } from "./player-transport";
 
 // Mocked HLS playback coverage (a real backend is not running in `npm run ci`).
 // Tiny valid m3u8 fixtures are served via page.route so REAL hls.js parses a
@@ -200,6 +201,11 @@ test("a missing HLS playlist falls back to the original file", async ({ page }) 
     { timeout: 15_000 },
   );
   await expect(page.getByRole("button", { name: /^Quality:/ })).toHaveCount(0);
+  // The fallback re-runs the media element load algorithm, which pauses the
+  // element and rejects any pending play promise WITHOUT firing `pause`. This
+  // spec asserted the src and nothing about the chrome, so a transport left
+  // reading "Pause" over a stopped video went unnoticed.
+  await expect.poll(() => transportVsElement(page)).toMatch(TRANSPORT_AGREES);
 });
 
 test("the chosen playback speed survives an HLS→original fallback (PLAY-03)", async ({ page }) => {
