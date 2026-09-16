@@ -326,9 +326,19 @@ export function VideoPlayer({
 
   // ---- control actions (shared by the buttons and the keyboard shortcuts) ----
 
+  // Whether the viewer has operated the transport for THIS video. The bar
+  // button, the stage click and K/space all route through togglePlay, so this
+  // one seam records the intent start-on-open must never override. It is not
+  // derivable from the play promise: per the HTML spec the internal PAUSE steps
+  // reject a pending play promise with AbortError — the SAME name the load
+  // algorithm produces — so a viewer pausing a still-buffering kick is
+  // indistinguishable, at the rejection, from an engine re-attach.
+  const viewerActed = useRef(false);
+
   const togglePlay = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
+    viewerActed.current = true;
     if (el.paused) void el.play().catch(() => {});
     else el.pause();
   }, [videoRef]);
@@ -452,15 +462,18 @@ export function VideoPlayer({
 
   // One playback attempt per video while enabled (watch variant only). The
   // guard ref resets when the video changes so navigating watch→watch can
-  // auto-start again, but a viewer's explicit pause is never fought — once
-  // attempted, this never plays again for the same video. The one exception is
-  // an attempt the media element load algorithm ABORTED: that is not an answer
-  // about this video, so it re-arms (see the rejection handler below). The
-  // attempt is otherwise best-effort — the browser may still block it (autoplay
-  // policy) and that rejection stays swallowed, leaving click-to-play.
+  // auto-start again. Once attempted, this never plays again for the same video
+  // — with one exception: an attempt the media element load algorithm ABORTED is
+  // not an answer about this video, so it re-arms (see the rejection handler
+  // below). A viewer's explicit pause is never fought, and that is enforced by
+  // the viewerActed ref at togglePlay rather than by reading the rejection,
+  // which cannot tell the two aborts apart. The attempt is otherwise
+  // best-effort: the browser may still block it (autoplay policy) and that
+  // rejection stays swallowed, leaving click-to-play.
   const startAttempted = useRef(false);
   useEffect(() => {
     startAttempted.current = false;
+    viewerActed.current = false; // a new video is a new question to ask them
   }, [video.id]);
 
   // The live preference, held in a ref so the attempt below keeps ONE identity
@@ -473,6 +486,12 @@ export function VideoPlayer({
 
   const attemptStartOnOpen = useCallback(() => {
     if (variant !== "watch" || !startOnOpenRef.current || startAttempted.current) return;
+    // The viewer has already answered "should this be playing?" with the
+    // transport. Never ask again for this video — not on a re-attach, not on a
+    // re-arm. This is the guard that makes "an explicit pause is never fought"
+    // true; the latch alone cannot, because the re-arm below fires on a pause
+    // rejection as readily as on a load one.
+    if (viewerActed.current) return;
     const el = videoRef.current;
     if (!el || !el.paused) return;
     // HOLD UNTIL A SOURCE EXISTS. On an SPA feed→watch navigation the defaults
@@ -490,16 +509,22 @@ export function VideoPlayer({
     startAttempted.current = true;
     // el.play() may return undefined in non-browser test DOMs.
     void el.play()?.catch((err: unknown) => {
-      // Re-arm on AbortError ONLY. That name means the load algorithm
-      // interrupted us — a re-attach, not an answer about this video — so the
-      // next attach should start it. A NotAllowedError is the browser's autoplay
-      // policy refusing, and re-arming there would re-kick a refused play on
-      // every re-attach and flicker the transport label. The latch is also not
-      // re-armed once anything has actually played: a viewer's explicit pause is
-      // never fought.
+      // Whatever the reason, the element is not playing — and this rejection may
+      // be the LAST word on it. Whether a browser fires `play` before refusing
+      // is browser-dependent; where it does, no `pause` follows and no further
+      // loadstart arrives, so nothing else would ever correct React's paused.
+      setPaused(videoRef.current?.paused ?? true);
+      // Re-arm on AbortError only. A NotAllowedError is the autoplay policy
+      // refusing, and re-arming there would re-kick a refused play on every
+      // re-attach and flicker the transport label. AbortError does NOT prove a
+      // load abort — the internal pause steps produce it too — which is what the
+      // viewerActed guard above is for; `played` is the second half of that: once
+      // something has actually played, the viewer is watching and owns the
+      // transport. currentTime is deliberately NOT consulted, because a `?t=`
+      // deep link moves the head before anything has played.
       if ((err as { name?: string } | null)?.name !== "AbortError") return;
       const current = videoRef.current;
-      if (!current || current.played.length !== 0 || current.currentTime !== 0) return;
+      if (!current || current.played.length !== 0) return;
       startAttempted.current = false;
     });
   }, [variant, videoRef]);
@@ -542,8 +567,9 @@ export function VideoPlayer({
     // `abort` + `emptied` + `loadstart` and NEVER `pause`. Those three events are
     // therefore the only notice React gets, so resync from the element itself,
     // read LIVE at event time. On a normal first attach this is a no-op (the
-    // element was already paused); Chrome's autoplay-policy refusal fires no
-    // `play` at all, so there is nothing there to correct either.
+    // element was already paused). An autoplay-policy refusal is handled at the
+    // play promise instead: whether a browser fires `play` before refusing is
+    // browser-dependent, and where it does no `pause` follows.
     const onLoadResetEv = () => setPaused(el.paused);
     // A new source (navigation to another video within the page, or an
     // HLS→original fallback) resets the element, so drop any stale end card.
