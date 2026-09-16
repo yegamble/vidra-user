@@ -636,7 +636,9 @@ function MediaModeBadge({ run }: { run: PeerTubeImportRun }) {
 // video, which is why this gets the failure banner's treatment rather than one
 // more row in a table nobody reads to the bottom.
 function noPlayableMedia(report: PeerTubeImportRun["report"]): number {
-  return report?.entities?.video_no_media?.imported ?? 0;
+  const counts = report?.entities?.video_no_media;
+  // A preview predicts the gap under planned; it has imported nothing yet.
+  return (report?.dry_run ? counts?.planned : counts?.imported) ?? 0;
 }
 
 function hasReportGaps(report: PeerTubeImportRun["report"]): boolean {
@@ -716,8 +718,10 @@ function RunPanel({ run, onRetry, retryDisabled }: {
             {isDryRun ? "would arrive" : "arrived"} with nothing to play.
           </p>
           <p className="text-sm text-fg-muted">
-            They count as imported videos and appear in the catalogue like any other — the absence
-            shows up only when somebody presses play. This is what copy mode does to an HLS-only
+            {isDryRun
+              ? "These videos would appear in the catalogue despite having nothing to play."
+              : "These videos appear in the catalogue despite having nothing to play."}
+            {" "}This is what copy mode does to an HLS-only
             source: PeerTube hangs HLS renditions off the streaming playlist rather than the
             progressive files this importer copies, and only reference mode carries the HLS tree.
           </p>
@@ -737,7 +741,10 @@ function RunPanel({ run, onRetry, retryDisabled }: {
             ) : null}
             {noMedia > 0 ? (
               <p className="text-sm text-fg-muted">
-                Check the source files and media mode for videos with nothing to play.
+                {isDryRun
+                  ? "This preview writes nothing. Check source files and media mode before importing videos that may have nothing to play."
+                  : "Check the source files and media mode for videos with nothing to play."}
+                {" "}
                 A retry cannot recreate missing originals or replace completed media mappings.
               </p>
             ) : null}

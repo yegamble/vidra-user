@@ -384,6 +384,23 @@ describe("AdminPeerTubeImportView — report and history", () => {
     expect(within(panel).getByText("Report unavailable")).toBeTruthy();
   });
 
+  it("warns about planned playback gaps before a dry run imports anything", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({
+      mode: "dry_run", media_mode: "copy",
+      report: { ...report({ video_no_media: counts({ planned: 7, imported: 0 }) }), dry_run: true },
+    })] });
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    expect(within(panel).getByText("Finished with gaps")).toBeTruthy();
+    expect(within(panel).getByRole("alert").textContent).toMatch(/7 videos would arrive/);
+    const review = within(panel).getByRole("region", { name: "Review migration gaps" });
+    expect(review.textContent).toContain("This preview writes nothing");
+    expect(review.textContent).not.toContain("arrived");
+    expect(within(screen.getByRole("region", { name: "Import history" }))
+      .getByText("Finished with gaps")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry unfinished items" })).toBeNull();
+  });
+
   it("retries with the recorded media mode and safe gap-filling policy", async () => {
     mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({
       id: "22222222-2222-2222-2222-222222222222",
