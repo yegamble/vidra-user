@@ -179,7 +179,7 @@ test("white-label hides the software name everywhere, and turning it off brings 
         // Federation badges keep their protocol indicator; only product decoration disappears.
         const productRibbons = ["/login", "/signup", "/reset-password"].includes(path)
           ? ".protocol-ribbon"
-          : 'header .protocol-ribbon, [aria-label="Network"] > div:first-child .protocol-ribbon';
+          : 'header .protocol-ribbon, [aria-labelledby="about-network-heading"] > div:first-child .protocol-ribbon';
         await expect(page.locator(productRibbons)).toHaveCount(0);
       }).toPass({ timeout: CACHE_TTL_BUDGET });
     };
