@@ -15,8 +15,9 @@
 //   apple-touch-icon.png   — 180px, opaque full-bleed (iOS composites its own
 //                            rounded corners, so transparency must be flattened)
 //
-// neutral-apple-touch-icon.png is rasterised from neutral-icon.svg for hidden
-// instances: omitting the link lets Safari discover the product Apple icon.
+// Hidden instances get neutral Apple and 192/512px PWA PNGs from neutral-icon.svg.
+// Explicit Apple links stop Safari discovering the product icon. PWA rasters
+// retain installability when the operator's only image is a tiny favicon.
 //
 // Run: node scripts/generate-icons.mjs   (or `npm run generate:icons`)
 // sharp is a devDependency used ONLY here — app code never imports it, so the
@@ -115,9 +116,14 @@ async function main() {
   write("icon-maskable-512.png", await pngMaskable(512));
   write("apple-touch-icon.png", await pngSquare(180, { background: BRAND_BG }));
 
-  write("neutral-apple-touch-icon.png", await sharp(
-    readFileSync(join(PUBLIC_DIR, "neutral-icon.svg")), { density: 512 },
-  ).resize(180, 180).flatten({ background: "#f5f5f7" }).png().toBuffer());
+  // The neutral film glyph fits inside the central 80% safe circle; an opaque
+  // background makes the 512px raster suitable for both any and maskable uses.
+  for (const [name, size] of [
+    ["neutral-apple-touch-icon.png", 180], ["neutral-icon-192.png", 192], ["neutral-icon-512.png", 512],
+  ]) {
+    write(name, await sharp(readFileSync(join(PUBLIC_DIR, "neutral-icon.svg")), { density: 512 })
+      .resize(size, size).flatten({ background: "#f5f5f7" }).png().toBuffer());
+  }
 
   const icoSizes = [16, 32, 48];
   const icoImages = await Promise.all(

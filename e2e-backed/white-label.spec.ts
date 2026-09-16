@@ -176,7 +176,11 @@ test("white-label hides the software name everywhere, and turning it off brings 
         const icons = await page.locator('link[rel~="icon"], link[rel="apple-touch-icon"]')
           .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
         expect(icons.some((href) => href && PRODUCT_ICON.test(href)), `${path} uses a product icon`).toBe(false);
-        await expect(page.locator(".protocol-ribbon")).toHaveCount(0);
+        // Federation badges keep their protocol indicator; only product decoration disappears.
+        const productRibbons = ["/login", "/signup", "/reset-password"].includes(path)
+          ? ".protocol-ribbon"
+          : 'header .protocol-ribbon, [aria-label="Network"] > div:first-child .protocol-ribbon';
+        await expect(page.locator(productRibbons)).toHaveCount(0);
       }).toPass({ timeout: CACHE_TTL_BUDGET });
     };
 

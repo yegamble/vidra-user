@@ -136,7 +136,7 @@ export function buildRootMetadata(instance: InstanceConfigSnapshot | null): Meta
  * theme_color mirrors the light theme-color emitted by the root viewport
  * (app/layout.tsx); background_color is the light canvas token (--canvas in
  * app/globals.css) for a flash-free splash. Hidden instances use their operator
- * image or a neutral SVG instead of the committed product marks.
+ * image followed by neutral raster fallbacks instead of the product marks.
  */
 export function buildWebManifest(
   instance: InstanceConfigSnapshot | null,
@@ -152,9 +152,11 @@ export function buildWebManifest(
     background_color: "#f5f5f7",
     theme_color: "#ffffff",
     icons: hideSoftwareName(instance) ? [
-      operatorIcon !== null
-        ? { src: operatorIcon, purpose: "any" }
-        : { src: NEUTRAL_ICON, sizes: "any", type: "image/svg+xml", purpose: "any" },
+      // An operator favicon may be tiny: always retain installable raster sizes.
+      ...(operatorIcon !== null ? [{ src: operatorIcon, purpose: "any" as const }] : []),
+      { src: "/neutral-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/neutral-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/neutral-icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ] : [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

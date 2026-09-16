@@ -150,14 +150,18 @@ const hidden = (overrides: Record<string, unknown> = {}) =>
     ...overrides,
   }) as InstanceConfigSnapshot;
 
+const neutralAppIcons = [
+  { src: "/neutral-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+  { src: "/neutral-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+  { src: "/neutral-icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+];
+
 describe("buildRootMetadata while white-labelled", () => {
   it("replaces product icons with neutral icons when no operator image is set", () => {
     expect(buildRootMetadata(hidden()).icons).toEqual({
       icon: "/neutral-icon.svg", apple: "/neutral-apple-touch-icon.png",
     });
-    expect(buildWebManifest(hidden()).icons).toEqual([
-      { src: "/neutral-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
-    ]);
+    expect(buildWebManifest(hidden()).icons).toEqual(neutralAppIcons);
   });
 
   it("retains operator icons for the tab, Apple touch and installed app", () => {
@@ -171,6 +175,17 @@ describe("buildRootMetadata while white-labelled", () => {
     });
     expect(buildWebManifest(instance).icons).toEqual([
       { src: `${API}/api/v1/instance/logo/header-square`, purpose: "any" },
+      ...neutralAppIcons,
+    ]);
+  });
+
+  it("keeps raster and maskable fallbacks when the only operator image is a small favicon", () => {
+    const instance = snapshot({ branding: { hide_software_name: true, logos: {
+      favicon: set("https://example.test/favicon-16.png"),
+    } } });
+    expect(buildWebManifest(instance).icons).toEqual([
+      { src: "https://example.test/favicon-16.png", purpose: "any" },
+      ...neutralAppIcons,
     ]);
   });
 
