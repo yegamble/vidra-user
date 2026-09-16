@@ -37,15 +37,12 @@ const CONFLICT_POLICIES: { value: PeerTubeImportConflictPolicy; label: string }[
 // here and never a value on the wire.
 type MediaModeChoice = "" | PeerTubeImportMediaMode;
 
-// Ordered by how far each departs from leaving the server alone, and labelled
-// for the CONSEQUENCE rather than the field value. This is the most expensive
-// decision on the page and the only one whose damage surfaces months later — a
-// copy run costs disk, a reference run costs the ability to ever switch the old
-// instance off, and neither is visible in the counts afterwards.
+// Name the byte-handling decision: copying consumes storage; references need
+// matching keys in the configured store, including independently copied buckets.
 const MEDIA_MODES: { value: MediaModeChoice; label: string }[] = [
   { value: "", label: "Server default — whatever this instance is configured for" },
   { value: "copy", label: "Copy — bring every file into this instance's storage" },
-  { value: "reference", label: "Reference — play from the source's storage, copy nothing" },
+  { value: "reference", label: "Reference — use existing object keys, copy nothing" },
   { value: "none", label: "Metadata only — import no media at all" },
 ];
 
@@ -57,7 +54,7 @@ const MEDIA_MODES: { value: MediaModeChoice; label: string }[] = [
 // precisely because nobody would go back and check it.
 const RUN_MEDIA_MODE_LABELS: Record<PeerTubeImportMediaMode, string> = {
   copy: "Media copied",
-  reference: "Referenced media — source storage",
+  reference: "Referenced media — existing object keys",
   none: "Metadata only",
 };
 
@@ -414,14 +411,8 @@ function ImportPanel() {
   );
 }
 
-// The media-mode control. The three modes are not variations on one another and
-// the copy has to say so: they differ in what the operator is left owning when
-// the migration is over. Copy is the answer for an actual migration — it costs
-// time and twice the disk while both instances run, and it ends with a source
-// that can be switched off. Reference ends with one that cannot, ever, because
-// nothing was moved; that is the fact this field exists to state up front,
-// since every signal an operator gets afterwards (a fast run, full counts,
-// videos that play) looks like success. Metadata only is a rehearsal.
+// Reference mode does not prove byte availability: an independently mirrored
+// bucket is valid only after the operator verifies its matching keys and media.
 function MediaModeField({
   value,
   disabled,
@@ -447,22 +438,19 @@ function MediaModeField({
         ))}
       </Select>
       <p className="text-xs text-fg-muted">
-        Copy is the migration: every file is streamed into this instance&rsquo;s own storage, so it
-        is slow and needs the space on both sides while you cut over — but when it finishes, the
-        old instance can be switched off. Reference moves nothing; it records the source&rsquo;s
-        object keys and plays from that same storage. Metadata only writes no media at all, for
-        rehearsing the mapping.
+        Copy transfers supported media into this instance&rsquo;s storage. Reference moves no bytes:
+        it records the source&rsquo;s object keys for playback from Vidra&rsquo;s configured storage.
+        Metadata only writes no media. Verify media availability before decommissioning the source.
       </p>
       {value === "reference" ? (
         <div role="alert" className="flex flex-col gap-1 rounded-2xl bg-warning/15 p-3">
           <p className="text-sm font-semibold text-warning">
-            Reference mode does not migrate your media, and there is no later step that does.
+            Reference mode requires existing media with matching object keys.
           </p>
           <p className="text-sm text-fg-muted">
-            This instance will depend on the source&rsquo;s object storage to play these videos for
-            as long as they exist, so that storage can never be turned off and playback breaks the
-            day it goes away. Choose copy if the point of this migration is to decommission the old
-            instance.
+            Use the original bucket or a separately verified copy with the same object keys in
+            Vidra&rsquo;s configured storage. The importer does not verify every object in reference
+            mode. Verify the independent copy and playback before retiring the original storage.
           </p>
         </div>
       ) : null}
@@ -625,16 +613,12 @@ function CutoverBadge({ run }: { run: PeerTubeImportRun }) {
 function MediaModeBadge({ run }: { run: PeerTubeImportRun }) {
   const label = run.media_mode ? RUN_MEDIA_MODE_LABELS[run.media_mode] : undefined;
   if (!label) return <Badge variant="neutral">Media mode not recorded</Badge>;
-  // Reference is the one that ties this instance to storage it does not own.
+  // References require a separate check that the configured storage has the bytes.
   return <Badge variant={run.media_mode === "reference" ? "warning" : "neutral"}>{label}</Badge>;
 }
 
-// Videos that landed with NOTHING to play. Core counts the absence under
-// `imported` — they were inserted and tallied as imported videos, so every
-// other number on the report calls them a success and the gap only shows when
-// somebody presses play. On an HLS-only source in copy mode that is every
-// video, which is why this gets the failure banner's treatment rather than one
-// more row in a table nobody reads to the bottom.
+// Metadata success does not imply playback: show missing-media counts even
+// when the run itself reached the end, including planned gaps during preview.
 function noPlayableMedia(report: PeerTubeImportRun["report"]): number {
   const counts = report?.entities?.video_no_media;
   // A preview predicts the gap under planned; it has imported nothing yet.
@@ -721,9 +705,8 @@ function RunPanel({ run, onRetry, retryDisabled }: {
             {isDryRun
               ? "These videos would appear in the catalogue despite having nothing to play."
               : "These videos appear in the catalogue despite having nothing to play."}
-            {" "}This is what copy mode does to an HLS-only
-            source: PeerTube hangs HLS renditions off the streaming playlist rather than the
-            progressive files this importer copies, and only reference mode carries the HLS tree.
+            {" "}Check the source media, storage configuration, and reported failures. Verify
+            available originals or HLS playlists and segments before completing the migration.
           </p>
         </div>
       ) : null}

@@ -198,21 +198,22 @@ describe("AdminPeerTubeImportView — launch payload", () => {
     expect(Object.keys(body)).not.toContain("acknowledged_schema_version");
   });
 
-  it("warns that reference mode is permanent, and only for reference mode", async () => {
+  it("explains reference mode needs verified matching keys, only for that mode", async () => {
     render(<AdminPeerTubeImportView />);
     const select = await screen.findByLabelText("Media");
     const launch = screen.getByRole("region", { name: "Launch an import" });
 
-    // Copy is the answer for a real migration, so it gets no banner.
+    // Copy moves bytes itself, so it does not need the external-copy guidance.
     fireEvent.change(select, { target: { value: "copy" } });
     expect(within(launch).queryByRole("alert")).toBeNull();
 
-    // Reference copies nothing, so this instance plays out of the source's
-    // bucket for good. Finding that out after the old instance is switched off
-    // is the failure this banner exists to prevent.
+    // An independent mirror is valid, but matching keys must be verified separately.
     fireEvent.change(select, { target: { value: "reference" } });
     const alert = within(launch).getByRole("alert");
-    expect(alert.textContent).toMatch(/never|permanent/i);
+    expect(alert.textContent).toContain("matching object keys");
+    expect(alert.textContent).toContain("separately verified copy");
+    expect(alert.textContent).toContain("does not verify every object");
+    expect(alert.textContent).not.toMatch(/never be turned off|permanent/i);
 
     // It clears again: a property of the choice, not a sticky warning.
     fireEvent.change(select, { target: { value: "none" } });
@@ -393,6 +394,8 @@ describe("AdminPeerTubeImportView — report and history", () => {
     const panel = await screen.findByRole("region", { name: "Import run" });
     expect(within(panel).getByText("Finished with gaps")).toBeTruthy();
     expect(within(panel).getByRole("alert").textContent).toMatch(/7 videos would arrive/);
+    expect(within(panel).getByRole("alert").textContent).not.toMatch(/only reference|copy mode does/);
+    expect(within(panel).getByRole("alert").textContent).toContain("Check the source media");
     const review = within(panel).getByRole("region", { name: "Review migration gaps" });
     expect(review.textContent).toContain("This preview writes nothing");
     expect(review.textContent).not.toContain("arrived");
