@@ -51,9 +51,9 @@ Hard rules:
   *Amended 2026-09-15 (watch theater).* The `Header` carries one nav CONTROL at
   `sm`+ — a "Menu" icon button, left of the brand, `hidden sm:inline-flex`. It
   does not hold the nav; it toggles the rail that does:
-  - **normally** it collapses/expands the `Sidebar` (the same
-    `lib/sidebar-state` store the rail's own Collapse row writes, so the two
-    controls can never disagree; the preference still persists);
+  - **normally** it collapses/expands the `Sidebar` through `lib/sidebar-state`;
+    the preference persists. Menu is the sole rail control: there is no
+    redundant Collapse/Expand row inside the sidebar;
   - **in an immersive shell** — today only the watch page's theater mode, which
     hides the rail so the stage can span the content area edge to edge, as
     YouTube closes the guide there — it opens the same panel as an overlay
@@ -65,9 +65,8 @@ Hard rules:
     the page behind it there is the theater band's #000, where the translucent
     chrome drops `fg-muted` to 3.74:1. The scrim starts below the header and
     stays under its z-index, so the bar the drawer was opened from is still lit
-    and the Menu button can close what it opened. The rail's Collapse row is not
-    rendered in the drawer: the overlay is a fixed 224px panel, so it would flip
-    its own label and change nothing.
+    and the Menu button can close what it opened. The overlay remains a fixed
+    224px panel, independent of the persisted collapsed-rail preference.
   It is absent where there is no app sidebar to toggle: below `sm` (phones keep
   the bottom tab bar and get no hamburger — `e2e/mobile-nav.spec.ts`), on
   standalone routes, and on the admin console routes, where the console's own
@@ -692,7 +691,7 @@ never substitute a library's variant when the design's path differs. Typed
   the bespoke player chrome (`player/*`), keyboard keycaps (`KeyboardShortcutsHelp`),
   and a few app-specific marks with no design-vocabulary equivalent (federated
   globe, protocol/privacy glyphs, quality sliders, messaging attachment-kind
-  glyphs, the new-message compose mark, and the sidebar collapse double-chevron).
+  glyphs and the new-message compose mark).
 - **The player-chrome exception is ONE module (2026-09-15):
   `components/player/icons.tsx`.** `player/*` may inline SVG, but not at call
   sites: the bar's coherence is a property of the SET, and the old bar proved

@@ -369,8 +369,9 @@ test.describe("Apple HIG polish at desktop width", () => {
       "header/sidebar gap must not change on scroll",
     ).toBeLessThanOrEqual(1);
 
-    await page.getByRole("button", { name: "Collapse sidebar" }).click();
-    await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+    const menu = page.getByRole("button", { name: "Menu" });
+    await menu.click();
+    await expect(menu).toHaveAttribute("aria-expanded", "false");
     await expect(sidebar).toHaveCSS("width", "64px");
     const overflow = await sidebar.evaluate(
       (element) => element.scrollWidth - element.clientWidth,

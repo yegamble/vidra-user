@@ -62,11 +62,18 @@ describe("Sidebar — in-flow rail (the default placement)", () => {
     expect(document.querySelector("[data-testid='sidebar-scrim']")).toBeNull();
   });
 
-  it("reads the shared collapse store, so the header button and its own toggle agree", () => {
-    render(<Sidebar />);
-    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
+  it("follows the header's shared collapse state without a redundant rail control", () => {
+    const { unmount } = render(<Sidebar />);
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(nav.className).toContain("w-56");
+    expect(screen.queryByRole("button", { name: /(?:Collapse|Expand) sidebar/ })).toBeNull();
     act(() => setCollapsed(true));
-    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
+    expect(nav.className).toContain("w-16");
+    expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /(?:Collapse|Expand) sidebar/ })).toBeNull();
+    unmount();
+    render(<Sidebar />);
+    expect(screen.getByRole("navigation", { name: "Primary" }).className).toContain("w-16");
   });
 });
 
@@ -118,16 +125,13 @@ describe("Sidebar — immersive (theater) placement", () => {
     main.remove();
   });
 
-  it("drops the collapse toggle in the drawer — it would be a dead control there", () => {
+  it("keeps the drawer free of a redundant collapse control", () => {
     render(<Sidebar />);
-    // Present in the in-flow rail…
-    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
     act(() => {
       setImmersive(true);
       setDrawerOpen(true);
     });
-    // …and gone in the overlay, where the panel is a fixed 224px and flipping
-    // `collapsed` changed nothing but the button's own label.
+    // The drawer stays full width; Menu, Escape and the scrim close it.
     expect(screen.queryByRole("button", { name: "Collapse sidebar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Expand sidebar" })).toBeNull();
   });
