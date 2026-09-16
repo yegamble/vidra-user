@@ -37,15 +37,12 @@ const CONFLICT_POLICIES: { value: PeerTubeImportConflictPolicy; label: string }[
 // here and never a value on the wire.
 type MediaModeChoice = "" | PeerTubeImportMediaMode;
 
-// Ordered by how far each departs from leaving the server alone, and labelled
-// for the CONSEQUENCE rather than the field value. This is the most expensive
-// decision on the page and the only one whose damage surfaces months later — a
-// copy run costs disk, a reference run costs the ability to ever switch the old
-// instance off, and neither is visible in the counts afterwards.
+// Name the byte-handling decision: copying consumes storage; references need
+// matching keys in the configured store, including independently copied buckets.
 const MEDIA_MODES: { value: MediaModeChoice; label: string }[] = [
   { value: "", label: "Server default — whatever this instance is configured for" },
   { value: "copy", label: "Copy — bring every file into this instance's storage" },
-  { value: "reference", label: "Reference — play from the source's storage, copy nothing" },
+  { value: "reference", label: "Reference — use existing object keys, copy nothing" },
   { value: "none", label: "Metadata only — import no media at all" },
 ];
 
@@ -57,11 +54,13 @@ const MEDIA_MODES: { value: MediaModeChoice; label: string }[] = [
 // precisely because nobody would go back and check it.
 const RUN_MEDIA_MODE_LABELS: Record<PeerTubeImportMediaMode, string> = {
   copy: "Media copied",
-  reference: "Referenced media — source storage",
+  reference: "Referenced media — existing object keys",
   none: "Metadata only",
 };
 
-function isInFlight(run: PeerTubeImportRun | null): run is PeerTubeImportRun {
+function isInFlight(
+  run: PeerTubeImportRun | null,
+): run is PeerTubeImportRun & { state: "pending" | "running" } {
   return run !== null && (run.state === "pending" || run.state === "running");
 }
 
@@ -227,26 +226,35 @@ function ImportPanel() {
   const awaitingAcknowledgement = refusedVersion !== null && acknowledgedVersion !== refusedVersion;
 
   const launch = useCallback(
-    async (mode: PeerTubeImportMode) => {
+    async (mode: PeerTubeImportMode, repair = false) => {
       if (launching || isInFlight(activeRun)) return;
       // Blocked on an unacknowledged schema refusal — the buttons are disabled,
       // this is the second lock so no code path can launch around it.
       if (awaitingAcknowledgement) return;
+      // Repairs retain the recorded byte-handling decision, but never inherit
+      // a cutover's permission to overwrite existing data or its schema sign-off.
+      const launchMedia = repair ? activeRun?.media_mode ?? "" : mediaMode;
+      if (repair && !launchMedia) return;
+      if (repair) {
+        setConflictPolicy("skip");
+        setSourceAuthoritative(false);
+        setMediaMode(launchMedia);
+      }
       setLaunching(true);
       setLaunchError(null);
       setNotConfigured(false);
       try {
         const run = await api.launchPeerTubeImport({
           mode,
-          conflict_policy: conflictPolicy,
+          conflict_policy: repair ? "skip" : conflictPolicy,
           // Sent ONLY when ticked. The server default is already false, and an
           // explicit false would be this page stating a write policy the
           // operator never chose.
-          ...(sourceAuthoritative ? { source_authoritative: true } : {}),
+          ...(!repair && sourceAuthoritative ? { source_authoritative: true } : {}),
           // Sent ONLY when the operator picked a mode. Omitted, the instance's
           // configured default stands; naming one here by default would be this
           // page silently deciding whether the migration copies bytes.
-          ...(mediaMode !== "" ? { media_mode: mediaMode } : {}),
+          ...(launchMedia !== "" ? { media_mode: launchMedia } : {}),
           // Sent ONLY when the tick names the version the source currently
           // reports; omitted entirely in the normal case, leaving the gate up.
           ...(refusedVersion !== null && acknowledgedVersion === refusedVersion
@@ -390,21 +398,21 @@ function ImportPanel() {
         </section>
       )}
 
-      {activeRun ? <RunPanel run={activeRun} /> : null}
+      {activeRun ? (
+        <RunPanel
+          run={activeRun}
+          onRetry={() => void launch("run", true)}
+          retryDisabled={launchDisabled || !activeRun.media_mode}
+        />
+      ) : null}
 
       <HistorySection runs={runs} activeId={activeRun?.id} onSelect={setActiveRun} />
     </div>
   );
 }
 
-// The media-mode control. The three modes are not variations on one another and
-// the copy has to say so: they differ in what the operator is left owning when
-// the migration is over. Copy is the answer for an actual migration — it costs
-// time and twice the disk while both instances run, and it ends with a source
-// that can be switched off. Reference ends with one that cannot, ever, because
-// nothing was moved; that is the fact this field exists to state up front,
-// since every signal an operator gets afterwards (a fast run, full counts,
-// videos that play) looks like success. Metadata only is a rehearsal.
+// Reference mode does not prove byte availability: an independently mirrored
+// bucket is valid only after the operator verifies its matching keys and media.
 function MediaModeField({
   value,
   disabled,
@@ -430,22 +438,19 @@ function MediaModeField({
         ))}
       </Select>
       <p className="text-xs text-fg-muted">
-        Copy is the migration: every file is streamed into this instance&rsquo;s own storage, so it
-        is slow and needs the space on both sides while you cut over — but when it finishes, the
-        old instance can be switched off. Reference moves nothing; it records the source&rsquo;s
-        object keys and plays from that same storage. Metadata only writes no media at all, for
-        rehearsing the mapping.
+        Copy transfers supported media into this instance&rsquo;s storage. Reference moves no bytes:
+        it records the source&rsquo;s object keys for playback from Vidra&rsquo;s configured storage.
+        Metadata only writes no media. Verify media availability before decommissioning the source.
       </p>
       {value === "reference" ? (
         <div role="alert" className="flex flex-col gap-1 rounded-2xl bg-warning/15 p-3">
           <p className="text-sm font-semibold text-warning">
-            Reference mode does not migrate your media, and there is no later step that does.
+            Reference mode requires existing media with matching object keys.
           </p>
           <p className="text-sm text-fg-muted">
-            This instance will depend on the source&rsquo;s object storage to play these videos for
-            as long as they exist, so that storage can never be turned off and playback breaks the
-            day it goes away. Choose copy if the point of this migration is to decommission the old
-            instance.
+            Use the original bucket or a separately verified copy with the same object keys in
+            Vidra&rsquo;s configured storage. The importer does not verify every object in reference
+            mode. Verify the independent copy and playback before retiring the original storage.
           </p>
         </div>
       ) : null}
@@ -608,21 +613,28 @@ function CutoverBadge({ run }: { run: PeerTubeImportRun }) {
 function MediaModeBadge({ run }: { run: PeerTubeImportRun }) {
   const label = run.media_mode ? RUN_MEDIA_MODE_LABELS[run.media_mode] : undefined;
   if (!label) return <Badge variant="neutral">Media mode not recorded</Badge>;
-  // Reference is the one that ties this instance to storage it does not own.
+  // References require a separate check that the configured storage has the bytes.
   return <Badge variant={run.media_mode === "reference" ? "warning" : "neutral"}>{label}</Badge>;
 }
 
-// Videos that landed with NOTHING to play. Core counts the absence under
-// `imported` — they were inserted and tallied as imported videos, so every
-// other number on the report calls them a success and the gap only shows when
-// somebody presses play. On an HLS-only source in copy mode that is every
-// video, which is why this gets the failure banner's treatment rather than one
-// more row in a table nobody reads to the bottom.
+// Metadata success does not imply playback: show missing-media counts even
+// when the run itself reached the end, including planned gaps during preview.
 function noPlayableMedia(report: PeerTubeImportRun["report"]): number {
-  return report?.entities?.video_no_media?.imported ?? 0;
+  const counts = report?.entities?.video_no_media;
+  // A preview predicts the gap under planned; it has imported nothing yet.
+  return (report?.dry_run ? counts?.planned : counts?.imported) ?? 0;
 }
 
-function RunPanel({ run }: { run: PeerTubeImportRun }) {
+function hasReportGaps(report: PeerTubeImportRun["report"]): boolean {
+  return noPlayableMedia(report) > 0 || (report?.deferred?.length ?? 0) > 0 ||
+    Object.values(report?.entities ?? {}).some((counts) => counts.unsupported > 0);
+}
+
+function RunPanel({ run, onRetry, retryDisabled }: {
+  run: PeerTubeImportRun;
+  onRetry: () => void;
+  retryDisabled: boolean;
+}) {
   const inFlight = run.state === "pending" || run.state === "running";
   const isDryRun = run.mode === "dry_run";
   const modeLabel = isDryRun ? "Dry run" : "Import";
@@ -630,6 +642,10 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
   const failed = failedFamilies(run.report);
   const failedTotal = failed.reduce((n, f) => n + f.failed, 0);
   const noMedia = noPlayableMedia(run.report);
+  const unsupported = Object.entries(run.report?.entities ?? {})
+    .filter(([, counts]) => counts.unsupported > 0);
+  const canRetry = !isDryRun && !inFlight && !isUndetectableSchema(run) &&
+    (run.state === "failed" || failedTotal > 0);
 
   return (
     <section aria-label="Import run" className="flex flex-col gap-4">
@@ -673,8 +689,8 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
           </p>
           <p className="text-sm text-fg-muted">
             {failed.map((f) => `${f.kind} ${formatCount(f.failed)}`).join(" · ")}. Reaching the end
-            is all the run state reports — check the server logs for these before treating the
-            migration as complete.
+            is all the run state reports. Review the gaps below before treating the migration as
+            complete.
           </p>
         </div>
       ) : null}
@@ -686,12 +702,64 @@ function RunPanel({ run }: { run: PeerTubeImportRun }) {
             {isDryRun ? "would arrive" : "arrived"} with nothing to play.
           </p>
           <p className="text-sm text-fg-muted">
-            They count as imported videos and appear in the catalogue like any other — the absence
-            shows up only when somebody presses play. This is what copy mode does to an HLS-only
-            source: PeerTube hangs HLS renditions off the streaming playlist rather than the
-            progressive files this importer copies, and only reference mode carries the HLS tree.
+            {isDryRun
+              ? "These videos would appear in the catalogue despite having nothing to play."
+              : "These videos appear in the catalogue despite having nothing to play."}
+            {" "}Check the source media, storage configuration, and reported failures. Verify
+            available originals or HLS playlists and segments before completing the migration.
           </p>
         </div>
+      ) : null}
+
+      {!inFlight && (canRetry || failedTotal > 0 || hasReportGaps(run.report)) ? (
+        <Card className="flex flex-col gap-3">
+          <section aria-label="Review migration gaps" className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold text-fg">Review migration gaps</h3>
+            {unsupported.length > 0 ? (
+              <p className="text-sm text-fg-muted">
+                Unsupported entries: {unsupported.map(([kind, counts]) =>
+                  `${kind} ${formatCount(counts.unsupported)}`).join(" · ")}.
+                These entries cannot be mapped by this importer; retrying will leave them unchanged.
+              </p>
+            ) : null}
+            {noMedia > 0 ? (
+              <p className="text-sm text-fg-muted">
+                {isDryRun
+                  ? "This preview writes nothing. Check source files and media mode before importing videos that may have nothing to play."
+                  : "Check the source files and media mode for videos with nothing to play."}
+                {" "}
+                A retry cannot recreate missing originals or replace completed media mappings.
+              </p>
+            ) : null}
+            {(run.report?.deferred?.length ?? 0) > 0 ? (
+              <p className="text-sm text-fg-muted">
+                The families listed under Not migrated are outside this importer&rsquo;s coverage.
+                Preserve the source backup for these records; a retry will not restore them.
+              </p>
+            ) : null}
+            {canRetry ? (
+              <>
+                <p className="text-sm text-fg-muted">
+                  Retry scans the source again to fill gaps and retry failed entries. It skips
+                  completed and unsupported entries, keeps this run&rsquo;s media mode, and turns off
+                  cutover updates. Resolve source access or storage errors first; missing source
+                  files will still fail. This report contains family counts, not individual errors.
+                </p>
+                <div>
+                  <Button variant="secondary" disabled={retryDisabled} onClick={onRetry}>
+                    Retry unfinished items
+                  </Button>
+                </div>
+                {!run.media_mode ? (
+                  <p className="text-xs text-fg-muted">
+                    This run did not record its media mode. Choose a media mode in the launch form
+                    and start a new import with Skip and cutover updates off.
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+          </section>
+        </Card>
       ) : null}
 
       {run.report ? (
@@ -707,11 +775,14 @@ function RunStateBadge({ run }: { run: PeerTubeImportRun }) {
   if (run.state === "failed") return <Badge variant="danger">Failed</Badge>;
   if (run.state === "running") return <Badge variant="accent">Running</Badge>;
   if (run.state === "pending") return <Badge variant="neutral">Pending</Badge>;
+  if (!run.report) return <Badge variant="neutral">Report unavailable</Badge>;
   // `done` is the state of the RUN, not of its contents: core finishes a run
   // that reached the end even when every entity inside it failed. A success
   // pill over that reads as a clean migration, so the report decides here.
   return failedFamilies(run.report).length > 0 ? (
     <Badge variant="warning">Finished with failures</Badge>
+  ) : hasReportGaps(run.report) ? (
+    <Badge variant="warning">Finished with gaps</Badge>
   ) : (
     <Badge variant="success">Done</Badge>
   );
@@ -794,7 +865,7 @@ function ReportView({
 
       {report.deferred && report.deferred.length > 0 ? (
         <section aria-label="Not migrated" className="flex flex-col gap-1">
-          <h3 className="text-sm font-semibold text-fg">Not migrated (regenerate by hand)</h3>
+          <h3 className="text-sm font-semibold text-fg">Not migrated</h3>
           <ul className="flex flex-wrap gap-2">
             {report.deferred.map((d) => (
               <li key={d}>
