@@ -282,7 +282,7 @@ export function InstanceAboutView({ section }: { section: InstanceAboutSection }
         ) : null}
         {section === "vidra" && !softwareHidden ? <VidraSection instance={instance} /> : null}
         {section === "network" ? (
-          <NetworkSection instance={instance} platformLabel={label} />
+          <NetworkSection instance={instance} platformLabel={label} softwareHidden={softwareHidden} />
         ) : null}
       </div>
 
@@ -694,6 +694,7 @@ function VidraSection({ instance }: { instance: ExtendedInstanceResponse }) {
 function NetworkSection({
   instance,
   platformLabel: label,
+  softwareHidden,
 }: {
   instance: ExtendedInstanceResponse;
   /**
@@ -702,6 +703,7 @@ function NetworkSection({
    * (ActivityPub, Bluesky, IPFS) are networks, not this product, and stay.
    */
   platformLabel: string;
+  softwareHidden: boolean;
 }) {
   const federated = instance.federation_enabled;
   return (
@@ -716,7 +718,7 @@ function NetworkSection({
             : `${instance.name} runs as a local-only video platform today. ${label} is built to speak three open protocols, so the operator can join the wider network whenever they choose.`}
         </p>
         {/* Sanctioned ProtocolRibbon placement (b): the Network hero divider. */}
-        <ProtocolRibbon className="mt-6" />
+        {softwareHidden ? null : <ProtocolRibbon className="mt-6" />}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

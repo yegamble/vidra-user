@@ -181,7 +181,7 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
             ) : null}
             {hideName ? null : <span>{name}</span>}
           </span>
-          <ProtocolRibbon />
+          {hideSoftwareName(instance) ? null : <ProtocolRibbon />}
         </Link>
         {/* The single site-search box: a centered pill at sm+, a search icon
             button that expands to a full-screen sheet on phones. It renders its

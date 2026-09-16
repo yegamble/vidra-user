@@ -45,11 +45,11 @@ import {
 // two drift.
 export const FALLBACK_DESCRIPTION = "A federated, PeerTube-inspired video platform.";
 export const FALLBACK_ICON = "/icon.svg";
-// The committed PWA apple-touch icon (Wave F, scripts/generate-icons.mjs). It is
-// a SEPARATE metadata slot from `icon`, so wiring it never masks an operator's
-// uploaded favicon — there is no operator apple-touch slot, so the product mark
-// is the floor for the iOS home-screen icon regardless of branding.
+export const NEUTRAL_ICON = "/neutral-icon.svg";
+// The product Apple touch icon is only used when software branding is visible.
+// Hidden instances use an operator image or a neutral PNG; Safari cannot use SVG.
 export const APPLE_TOUCH_ICON = "/apple-touch-icon.png";
+export const NEUTRAL_APPLE_TOUCH_ICON = "/neutral-apple-touch-icon.png";
 
 /**
  * The site's NAME for a document/app slot (root <title>, PWA name): the
@@ -72,6 +72,14 @@ function siteDescription(instance: InstanceConfigSnapshot | null): string {
   return hideSoftwareName(instance) ? NEUTRAL_DESCRIPTION : FALLBACK_DESCRIPTION;
 }
 
+function installedIcon(instance: InstanceConfigSnapshot | null): string | null {
+  return (
+    brandingAssetUrl(instance?.branding?.logos?.header_square) ??
+    brandingAssetUrl(instance?.branding?.avatar) ??
+    brandingAssetUrl(instance?.branding?.logos?.favicon)
+  );
+}
+
 export function buildRootMetadata(instance: InstanceConfigSnapshot | null): Metadata {
   const title = siteTitle(instance);
   const description = siteDescription(instance);
@@ -82,7 +90,12 @@ export function buildRootMetadata(instance: InstanceConfigSnapshot | null): Meta
   // public asset otherwise. Keep this config-based: an app/icon file would
   // take precedence over generateMetadata and hide the uploaded favicon.
   const favicon = brandingAssetUrl(instance?.branding?.logos?.favicon);
-  metadata.icons = { icon: favicon ?? FALLBACK_ICON, apple: APPLE_TOUCH_ICON };
+  const hidden = hideSoftwareName(instance);
+  const apple = hidden ? installedIcon(instance) ?? NEUTRAL_APPLE_TOUCH_ICON : APPLE_TOUCH_ICON;
+  metadata.icons = {
+    icon: favicon ?? (hidden ? NEUTRAL_ICON : FALLBACK_ICON),
+    apple,
+  };
 
   // Social cards: the opengraph logo slot is the instance-wide og:image /
   // twitter:image default (a page-supplied image wins via segment merging,
@@ -122,13 +135,14 @@ export function buildRootMetadata(instance: InstanceConfigSnapshot | null): Meta
  *
  * theme_color mirrors the light theme-color emitted by the root viewport
  * (app/layout.tsx); background_color is the light canvas token (--canvas in
- * app/globals.css) for a flash-free splash. Icons are the committed product
- * marks — textless, so they carry no software name to hide.
+ * app/globals.css) for a flash-free splash. Hidden instances use their operator
+ * image or a neutral SVG instead of the committed product marks.
  */
 export function buildWebManifest(
   instance: InstanceConfigSnapshot | null,
 ): MetadataRoute.Manifest {
   const name = siteTitle(instance);
+  const operatorIcon = installedIcon(instance);
   return {
     name,
     short_name: name,
@@ -137,7 +151,11 @@ export function buildWebManifest(
     display: "standalone",
     background_color: "#f5f5f7",
     theme_color: "#ffffff",
-    icons: [
+    icons: hideSoftwareName(instance) ? [
+      operatorIcon !== null
+        ? { src: operatorIcon, purpose: "any" }
+        : { src: NEUTRAL_ICON, sizes: "any", type: "image/svg+xml", purpose: "any" },
+    ] : [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       {

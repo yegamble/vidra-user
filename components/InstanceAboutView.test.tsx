@@ -129,6 +129,7 @@ describe("About → Technical", () => {
 describe("About → Network", () => {
   it("names the software in the federation prose by default", async () => {
     await show("network", false);
+    expect(document.querySelector(".protocol-ribbon")).not.toBeNull();
     expect(
       screen.getByText(/Vidra speaks three open protocols/, { exact: false }),
     ).toBeTruthy();
@@ -139,6 +140,7 @@ describe("About → Network", () => {
 
   it("neutralizes the prose when hidden but keeps the protocol names", async () => {
     await show("network", true);
+    expect(document.querySelector(".protocol-ribbon")).toBeNull();
     expect(
       screen.getByText(/This platform speaks three open protocols/, { exact: false }),
     ).toBeTruthy();
