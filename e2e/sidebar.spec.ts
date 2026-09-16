@@ -149,15 +149,16 @@ test("the sidebar collapses to an icon rail, stays usable, and persists", async 
   await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Primary" });
 
-  // Keyboard-operable collapse toggle.
-  const collapse = page.getByRole("button", { name: "Collapse sidebar" });
-  await expect(collapse).toHaveAttribute("aria-expanded", "true");
-  await collapse.focus();
+  // The sole rail control is keyboard-operable from the header.
+  const menu = page.getByRole("button", { name: "Menu" });
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  await expect(nav.getByRole("button", { name: /(?:Collapse|Expand) sidebar/ })).toHaveCount(0);
+  await menu.focus();
   await page.keyboard.press("Enter");
 
-  const expand = page.getByRole("button", { name: "Expand sidebar" });
-  await expect(expand).toBeVisible();
-  await expect(expand).toHaveAttribute("aria-expanded", "false");
+  await expect(menu).toBeVisible();
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await expect(nav).toHaveCSS("width", "64px");
   // Collapsed links keep their accessible names (sr-only labels) and still work.
   const home = nav.getByRole("link", { name: "Home" });
   await expect(home).toBeVisible();
@@ -166,12 +167,14 @@ test("the sidebar collapses to an icon rail, stays usable, and persists", async 
 
   // The preference survives a reload.
   await page.reload();
-  await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
-  await page.getByRole("button", { name: "Expand sidebar" }).click();
-  await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await expect(nav).toHaveCSS("width", "64px");
+  await menu.click();
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  await expect(nav).toHaveCSS("width", "224px");
 });
 
-test("the header Menu button toggles the rail and stays in sync with Collapse", async ({
+test("the header Menu button is the sole rail toggle and reflects its width", async ({
   page,
 }) => {
   await page.goto("/");
@@ -184,11 +187,11 @@ test("the header Menu button toggles the rail and stays in sync with Collapse", 
   await menu.click();
   await expect(nav).toHaveCSS("width", "64px");
   await expect(menu).toHaveAttribute("aria-expanded", "false");
-  // …and the rail's own control agrees, because both write one store.
-  await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+  // The collapsed rail has no second control competing with Menu.
+  await expect(nav.getByRole("button", { name: /(?:Collapse|Expand) sidebar/ })).toHaveCount(0);
 
-  // Expanding from the rail's own control updates the header button too.
-  await page.getByRole("button", { name: "Expand sidebar" }).click();
+  // The same header button expands the rail again.
+  await menu.click();
   await expect(nav).toHaveCSS("width", "224px");
   await expect(menu).toHaveAttribute("aria-expanded", "true");
 

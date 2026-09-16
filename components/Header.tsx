@@ -103,9 +103,8 @@ function createItems(liveAvailable: boolean): DropdownItem[] {
 export function Header({ instance = null }: { instance?: InstanceConfigSnapshot | null }) {
   const pathname = usePathname();
   const liveAvailable = useLiveAvailable();
-  // The sidebar's own state, read (not owned) here so the Menu button and the
-  // rail's Collapse button drive one store — called before the standalone early
-  // return so the hook order is stable.
+  // Shared state keeps the Menu button and rendered rail in sync — called
+  // before the standalone early return so the hook order is stable.
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, serverCollapsed);
   const immersive = useSyncExternalStore(subscribeImmersive, readImmersive, serverImmersive);
   const drawerOpen = useSyncExternalStore(subscribeDrawerOpen, readDrawerOpen, serverDrawerOpen);
@@ -134,8 +133,8 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
       <div className="mx-auto flex h-16 w-full items-center gap-3 px-6 sm:h-14 sm:gap-5 sm:px-8">
         {/* Sidebar control (design-system.md). Desktop/tablet only: phones keep
             the BottomTabBar and get no hamburger. Two behaviours, one button —
-            normally it collapses/expands the in-flow rail through the same store
-            the rail's own Collapse button writes (so the two can never disagree);
+            normally it collapses/expands the in-flow rail through the shared
+            store that the Sidebar renders;
             while a page asks for an IMMERSIVE shell (theater mode, where the rail
             is hidden outright) it opens that rail back as an overlay drawer.
             Absent on the admin console routes, where the app sidebar steps aside

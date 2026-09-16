@@ -27,7 +27,6 @@ import {
   serverCollapsed,
   serverDrawerOpen,
   serverImmersive,
-  setCollapsed,
   setDrawerOpen,
   subscribeCollapsed,
   subscribeDrawerOpen,
@@ -57,7 +56,7 @@ import {
 //
 // The collapse preference, the immersive flag and the drawer flag all live in
 // lib/sidebar-state so the header's Menu button drives exactly the same state
-// this component renders (the two controls can never disagree).
+// this component renders; the header is the sole collapse/expand control.
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useSession();
@@ -146,33 +145,6 @@ export function Sidebar() {
           collapsed={railCollapsed(collapsed, immersive)}
           active={pathname === "/about" || pathname?.startsWith("/about/") === true}
         />
-        {/* The collapse toggle belongs to the IN-FLOW rail only. In the drawer
-            it was a dead control: the overlay is a fixed 224px panel, so
-            flipping `collapsed` there changed nothing but the button's own
-            label. Closing the drawer is the Menu button, Escape or the scrim. */}
-        {immersive ? null : (
-          <button
-            type="button"
-            onClick={() => setCollapsed(!collapsed)}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!collapsed}
-            className="focus-ring flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
-          >
-            <svg
-              aria-hidden
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.9"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-[18px] w-[18px] shrink-0"
-            >
-              {collapsed ? <path d="M13 17l5-5-5-5M6 17l5-5-5-5" /> : <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />}
-            </svg>
-            <span className="truncate">Collapse</span>
-          </button>
-        )}
       </div>
     </nav>
   );

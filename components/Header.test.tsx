@@ -173,8 +173,8 @@ describe("Header branding", () => {
 
 // The header Menu button is the shell's sidebar control (design-system.md: the
 // desktop/tablet rail is toggled from the header; phones keep the BottomTabBar
-// and no hamburger). It drives lib/sidebar-state directly, so it and the rail's
-// own Collapse button can never disagree, and in an IMMERSIVE shell (theater) it
+// and no hamburger). It drives lib/sidebar-state directly as the rail's sole
+// collapse control, and in an IMMERSIVE shell (theater) it
 // opens the rail as an overlay drawer instead of un-collapsing it.
 describe("Header Menu button", () => {
   it("renders left of the brand, labelled and wired to the sidebar", () => {
@@ -199,7 +199,7 @@ describe("Header Menu button", () => {
     expect(readCollapsed()).toBe(false);
   });
 
-  it("reflects a collapse made elsewhere (the rail's own toggle)", () => {
+  it("reflects changes to the shared collapse preference", () => {
     render(<Header />);
     act(() => setCollapsed(true));
     expect(screen.getByRole("button", { name: "Menu" }).getAttribute("aria-expanded")).toBe("false");
