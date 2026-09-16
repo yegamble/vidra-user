@@ -856,6 +856,123 @@ describe("VideoPlayer start-on-open", () => {
     expect(play).toHaveBeenCalledTimes(2);
   });
 
+  // REVIEW (PR #235): the internal PAUSE steps reject a pending play promise with
+  // AbortError too — the same name a load abort produces. So the rejection alone
+  // cannot tell "the engine re-attached" from "the viewer pressed pause while it
+  // was still buffering", and re-arming on it fought exactly the viewer the
+  // latch exists to protect. Intent is tracked at the control, not guessed from
+  // the error.
+  it("does not fight a viewer who pauses the kick while it is still buffering", async () => {
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    let rejectPlay: (reason: unknown) => void = () => {};
+    play.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectPlay = reject;
+        }),
+    );
+
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+
+    // The element has left the paused state and is buffering. jsdom's `paused`
+    // is a fixed getter; make it answer like the spec does.
+    let paused = false;
+    Object.defineProperty(video, "paused", { configurable: true, get: () => paused });
+    await act(async () => {
+      video.dispatchEvent(new Event("play"));
+    });
+
+    // The viewer presses pause. The bar button, the stage click and K/space all
+    // route through togglePlay, so pressing the button exercises all three.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+      paused = true;
+      // pause() runs the internal pause steps: the pending play promise is
+      // rejected with AbortError, and `pause` fires.
+      rejectPlay(Object.assign(new Error("interrupted by pause"), { name: "AbortError" }));
+      await Promise.resolve();
+      video.dispatchEvent(new Event("pause"));
+    });
+
+    // Now the engine re-attaches anyway (the HLS→original fallback). The video
+    // must stay stopped: the viewer answered this question already.
+    await act(async () => {
+      video.dispatchEvent(new Event("abort"));
+      video.dispatchEvent(new Event("emptied"));
+      video.dispatchEvent(new Event("loadstart"));
+    });
+
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
+  });
+
+  // REVIEW (PR #235): whether a browser fires `play` before refusing is
+  // browser-dependent. Where it does, no `pause` follows and no further
+  // loadstart arrives, so the rejection is the only place left to correct
+  // React's idea of the element.
+  it("resyncs the transport when the kick is refused after the element already said play", async () => {
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    let rejectPlay: (reason: unknown) => void = () => {};
+    play.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectPlay = reject;
+        }),
+    );
+
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+
+    let paused = false;
+    Object.defineProperty(video, "paused", { configurable: true, get: () => paused });
+    await act(async () => {
+      video.dispatchEvent(new Event("play"));
+    });
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+
+    await act(async () => {
+      paused = true;
+      rejectPlay(Object.assign(new Error("gesture required"), { name: "NotAllowedError" }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
+  });
+
+  // REVIEW (PR #235): a `?t=` deep link moves the head before anything has
+  // played. currentTime is where the head IS, not evidence that a viewer
+  // watched — `played` is that evidence.
+  it("re-arms after an abort even when a ?t= deep link moved the head", async () => {
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    let rejectPlay: (reason: unknown) => void = () => {};
+    play.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectPlay = reject;
+        }),
+    );
+
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+
+    video.currentTime = 7; // the #t= fragment landed; played is still empty
+    await act(async () => {
+      rejectPlay(Object.assign(new Error("interrupted by a new load"), { name: "AbortError" }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      video.dispatchEvent(new Event("abort"));
+      video.dispatchEvent(new Event("emptied"));
+      video.dispatchEvent(new Event("loadstart"));
+    });
+
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
   it("does not re-kick a play the browser's autoplay policy refused", async () => {
     const play = vi.mocked(HTMLMediaElement.prototype.play);
     play.mockImplementationOnce(() =>
