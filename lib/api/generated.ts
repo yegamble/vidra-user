@@ -9376,9 +9376,9 @@ export interface components {
             acknowledged_schema_version?: number;
             /**
              * @description What THIS run does with the source's media objects. Omit it to take the instance's configured default (PEERTUBE_IMPORT_MEDIA_MODE); the resolved value is recorded on the run.
-             *     copy streams the source's progressive originals into Vidra's own storage layout. reference records the source's EXISTING object keys in Vidra's database instead of moving bytes, and requires the Vidra server to be pointed at the same object store. none imports metadata only and writes no media rows at all.
+             *     copy streams progressive originals and flat HLS into Vidra's own storage layout. reference records the source's EXISTING object keys in Vidra's database instead of moving bytes, and requires the Vidra server to access matching keys in the original or verified copied store. none imports metadata only and writes no media rows at all.
              *     It is a FOURTH, ORTHOGONAL axis: the conflict policy resolves natural-key collisions, `source_authoritative` decides whether rows the import already owns may be updated, `acknowledged_schema_version` is a version gate, and none of them says anything about bytes. It is per-run because the answer changes during a migration, when restarting the API to change it is exactly what an operator cannot afford.
-             *     Only reference mode carries the source's HLS tree. In copy mode a video's HLS renditions are NOT copied and nothing re-transcodes them automatically, so a video whose source held only HLS (an ordinary PeerTube configuration: progressive downloads disabled) arrives with nothing to play. A dry run counts those under the report's `video_no_media` entity kind — check it before approving a copy-mode plan.
+             *     Copy mode carries flat local HLS dependencies; nested or external references need conversion. Check video_no_media before importing. Reference-mode counts do not verify that referenced objects exist.
              * @enum {string}
              */
             media_mode?: "copy" | "reference" | "none";
