@@ -744,8 +744,10 @@ never substitute a library's variant when the design's path differs. Typed
   there), pill Create → `/studio` (hidden < `sm`), `NotificationsBell`,
   `AccountMenu`. Sticky and **full-bleed**: `.glass-chrome .glass-chrome-flush`
   spanning the viewport with no top/side gutter and a single bottom hairline,
-  safe-area padded at the top. The row's own `px-6 sm:px-8` is the only inset,
-  which keeps the brand where the earlier floating toolbar put it optically.
+  safe-area padded at the top. The row uses `px-6` on phones and `sm:pl-5
+  sm:pr-8` on desktop/tablet. Menu and branding form a gapless desktop group:
+  the Menu glyph centers on the sidebar icons, and branding starts at its text
+  column. The outer gap to search and actions stays unchanged.
   Sticky offsets that park under it (e.g. `Sidebar`) measure from its `h-16
   sm:h-14` height, not from a gutter.
   The search pill carries a ⌘K / Ctrl K keycap and `aria-keyshortcuts`:
