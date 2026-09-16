@@ -191,6 +191,15 @@ test("a creator can add chapters that persist and show on the watch page", async
 
   // A fresh load of the watch page refetches the chapters (has_chapters flipped
   // true) and renders the current-chapter title beside the time readout.
+  //
+  // The current-chapter readout is a STAGE-width tier (@min-[900px]/stage) and
+  // the tier is correct: at 860px the bar already carries quality "Auto
+  // (1080p)" with no room to spare. But the watch page now reserves the
+  // secondary column's 344px track at the two-column breakpoint, which caps a
+  // two-column stage at 860 — so the widest ORDINARY stage is the single-column
+  // one just below that breakpoint (916px here). Measure the tier where it
+  // applies rather than lowering it or dropping the assertion.
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto(`/videos/${vid!.id}`);
   await expect(page.getByRole("heading", { name: videoTitle })).toBeVisible();
   await expect(page.getByTestId("video-player").getByText("Intro")).toBeVisible();

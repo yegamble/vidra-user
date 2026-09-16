@@ -35,6 +35,7 @@ import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
 import { TranscodingNote } from "@/components/watch/TranscodingNote";
 import { UpNextQueue } from "@/components/UpNextQueue";
+import { WATCH_CONTENT, WATCH_THEATER_INSET } from "@/components/watch/layout";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -58,6 +59,8 @@ import { feedDefaultsForLanding, resolveLandingPage } from "@/lib/feed-defaults"
 import { feedHref } from "@/lib/feed-url";
 import { formatCount, formatDuration, relativeTime } from "@/lib/format";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
+import { setImmersive } from "@/lib/sidebar-state";
+import { WATCH_TWO_COLUMN_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import { logger } from "@/lib/logger";
 import { readStoredTheater, serverTheater, subscribeTheater } from "@/lib/player-theater";
 import { trackSearchEvent } from "@/lib/search-events";
@@ -147,6 +150,10 @@ export function WatchView({
   // hydration the client restores the session's mode. Widens the stage to the
   // full content width and reflows the related rail below.
   const theater = useSyncExternalStore(subscribeTheater, readStoredTheater, serverTheater);
+  // Is the page actually two-column? The same breakpoint `.watch-layout` uses,
+  // read in JS because hiding the app rail is a JS decision and the two must
+  // agree: below it there is no band to make room for.
+  const twoColumn = useMediaQuery(WATCH_TWO_COLUMN_QUERY);
   // The "next" video for the player's autoplay end card (PLAY-08): the first
   // related entry, reported up by RelatedVideos so the end card reuses that fetch
   // (no second request). null until the rail resolves, or when nothing relates.
@@ -397,11 +404,35 @@ export function WatchView({
     else tryIpfs();
   }, [ipfsState, switchToServer, tryIpfs]);
 
+  // Theater asks the app SHELL to step aside — YouTube closes the guide on a
+  // theater watch page, and the full-bleed band has nowhere to go while a 224px
+  // rail holds the left edge. The header's Menu button brings it back as an
+  // overlay drawer.
+  //
+  // Three conditions, all load-bearing:
+  //   - `theater`   — the mode itself;
+  //   - `twoColumn` — below the breakpoint theater is inert (no band, no width
+  //     to gain), so hiding the rail there would take navigation away and give
+  //     nothing back;
+  //   - status ready — this effect runs BEFORE the not-found / error / locked /
+  //     restricted early returns, so without it a viewer who followed a dead
+  //     link in theater got an error page with no navigation on it.
+  //
+  // Cleared on unmount so leaving the watch page always restores the rail;
+  // nothing else in the app sets this flag.
+  useEffect(() => {
+    setImmersive(theater && twoColumn && status === "ready");
+    return () => setImmersive(false);
+  }, [theater, twoColumn, status]);
+
   function retry() {
     setStatus("loading");
     setReloadKey((k) => k + 1);
   }
 
+  // Every pre-player state wears the page container WatchView now owns (the
+  // route <main> is a bare flex child — see components/watch/layout.ts), so a
+  // skeleton, an error and the loaded page all sit on the same measure.
   if (status === "loading") {
     // Same silhouette as the route loading boundary and the loaded page, so
     // navigation → hydration → data reads as one surface filling in.
@@ -414,30 +445,40 @@ export function WatchView({
   }
   if (status === "notfound") {
     return (
-      <EmptyState
-        title="Video not found"
-        message="This video does not exist, or it is private."
-      />
+      <div className={WATCH_CONTENT}>
+        <EmptyState
+          title="Video not found"
+          message="This video does not exist, or it is private."
+        />
+      </div>
     );
   }
   // Password-protected and not yet unlocked: the prompt stands in for the whole
   // watch surface (the detail — title, actions, comments — is gated behind it).
   if (status === "locked") {
     return (
-      <div className="mx-auto w-full max-w-2xl">
-        <PasswordUnlockPanel videoId={id ?? lockedVideoId ?? ""} onUnlocked={handleUnlocked} />
+      <div className={WATCH_CONTENT}>
+        <div className="mx-auto w-full max-w-2xl">
+          <PasswordUnlockPanel videoId={id ?? lockedVideoId ?? ""} onUnlocked={handleUnlocked} />
+        </div>
       </div>
     );
   }
   if (status === "error" || video === null) {
-    return <ErrorState message="Could not load this video." onRetry={retry} />;
+    return (
+      <div className={WATCH_CONTENT}>
+        <ErrorState message="Could not load this video." onRetry={retry} />
+      </div>
+    );
   }
   if (restrictedMode && isSensitiveVideo(video)) {
     return (
-      <EmptyState
-        title="Unavailable in Restricted Mode"
-        message="Turn off Restricted Mode from your account menu to view sensitive content."
-      />
+      <div className={WATCH_CONTENT}>
+        <EmptyState
+          title="Unavailable in Restricted Mode"
+          message="Turn off Restricted Mode from your account menu to view sensitive content."
+        />
+      </div>
     );
   }
 
@@ -507,82 +548,110 @@ export function WatchView({
     }
   }
 
+  // The stage block — the player (or the sensitive-content gate standing in for
+  // it) plus the rows that belong directly beneath it. ONE definition and ONE
+  // DOM POSITION: it is the grid's `stage` area in both modes, and theater only
+  // moves that AREA (see .watch-layout in app/globals.css). Rendering it at two
+  // tree positions is a remount — React reconciles by position — which destroyed
+  // the <video>, restarted playback from 0 and counted a second view every time
+  // someone pressed `T`.
+  const stageBlock = (
+      <div className="watch-stage-area flex flex-col">
+        {isSensitiveVideo(video) &&
+        !sensitiveAccepted &&
+        (sensitivePolicy === "blur" ||
+          sensitivePolicy === "warn" ||
+          sensitivePolicy === "hide") ? (
+          // Confirmation scrim (media-overlay exception: theme-invariant dark
+          // stage in the player's slot) — playback only starts after an
+          // explicit choice.
+          <div
+            className={cn(
+              "flex w-full flex-col items-center justify-center gap-3 overflow-hidden bg-black px-6 text-center",
+              // The gate stands in for the player, so it takes the player's
+              // box. `.watch-theater-band` is inert below the two-column
+              // breakpoint, which is why the 16:9 card classes stay on in both
+              // modes and only the radius is dropped at xl.
+              "aspect-video rounded-2xl",
+              theater ? "watch-theater-band xl:rounded-none" : null,
+            )}
+          >
+            <WarningIcon size={28} className="text-white/80" />
+            <p className="text-sm font-semibold text-white">
+              This video contains sensitive content
+            </p>
+            <p className="max-w-md text-[13px] text-white/70">
+              The administrators of this instance flag such videos before playback.
+            </p>
+            {/* The creator's optional content-warning text, shown below the
+                generic line only when set. */}
+            {video.sensitive_reason ? (
+              <p className="max-w-md text-[13px] text-white/60">{video.sensitive_reason}</p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setSensitiveAccepted(true)}
+              className="focus-ring mt-1 inline-flex items-center rounded-[10px] bg-white px-4 py-2 text-[13px] font-semibold text-black transition-opacity hover:opacity-90"
+            >
+              Watch anyway
+            </button>
+          </div>
+        ) : (
+          <>
+            <Player
+              theater={theater}
+              video={video}
+              videoRef={playerRef}
+              startAt={startAt}
+              nextVideo={nextVideo}
+              nextHref={playlist.href}
+              hlsMasterOverride={hlsMasterOverride}
+              playbackToken={playbackToken}
+              overlay={playerOverlay}
+            />
+            {/* The rows that live directly under the stage. In theater the band
+                above them spans the whole content area, so they take the page's
+                content measure themselves and stay lined up with the title. */}
+            <div className={cn("flex flex-col", theater ? WATCH_THEATER_INSET : null)}>
+            {/* IPFS source bar — only when the video is gateway-mirrored. */}
+            {ipfsAvailable ? (
+              <IpfsSourceBar
+                state={ipfsState}
+                onToggle={toggleSource}
+                onRefetch={tryIpfs}
+              />
+            ) : null}
+            {/* Still-transcoding note (publish-timing): shown while the detail
+                reports a live transcode job; self-removes once a poll says the
+                transcode finished. Keyed by id so navigation resets it. */}
+            {video.transcoding === true ? (
+              <TranscodingNote
+                key={video.id}
+                videoId={video.id}
+                playbackToken={playbackToken}
+              />
+            ) : null}
+            </div>
+          </>
+        )}
+      </div>
+  );
+
   return (
+    // ONE grid, three areas (app/globals.css .watch-layout). Theater swaps the
+    // AREAS — the stage spans every track, full-bleed and flush under the
+    // header, and the page below it keeps the ordinary two columns — but the
+    // stage never changes its position in the tree, so toggling theater is a
+    // style change and nothing in the player unmounts. Below the two-column
+    // breakpoint theater is inert in CSS and the immersive flag is not set, so
+    // a phone sees exactly today's page.
     <div
       data-theater={theater ? "on" : "off"}
-      className={cn(
-        "flex flex-col gap-8",
-        // Two-column at lg by default; theater collapses to a single full-width
-        // column so the stage widens and the related rail reflows below.
-        theater ? null : "lg:flex-row lg:items-start lg:gap-7",
-      )}
+      className={cn("watch-layout", theater ? "watch-layout-theater" : null)}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-8">
+      {stageBlock}
+      <div className="watch-body-area flex flex-col gap-8">
       <article className="flex flex-col gap-4">
-        <div className="flex flex-col">
-          {isSensitiveVideo(video) &&
-          !sensitiveAccepted &&
-          (sensitivePolicy === "blur" ||
-            sensitivePolicy === "warn" ||
-            sensitivePolicy === "hide") ? (
-            // Confirmation scrim (media-overlay exception: theme-invariant dark
-            // stage in the player's slot) — playback only starts after an
-            // explicit choice.
-            <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl bg-black px-6 text-center">
-              <WarningIcon size={28} className="text-white/80" />
-              <p className="text-sm font-semibold text-white">
-                This video contains sensitive content
-              </p>
-              <p className="max-w-md text-[13px] text-white/70">
-                The administrators of this instance flag such videos before playback.
-              </p>
-              {/* The creator's optional content-warning text, shown below the
-                  generic line only when set. */}
-              {video.sensitive_reason ? (
-                <p className="max-w-md text-[13px] text-white/60">{video.sensitive_reason}</p>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setSensitiveAccepted(true)}
-                className="focus-ring mt-1 inline-flex items-center rounded-[10px] bg-white px-4 py-2 text-[13px] font-semibold text-black transition-opacity hover:opacity-90"
-              >
-                Watch anyway
-              </button>
-            </div>
-          ) : (
-            <>
-              <Player
-                video={video}
-                videoRef={playerRef}
-                startAt={startAt}
-                nextVideo={nextVideo}
-                nextHref={playlist.href}
-                hlsMasterOverride={hlsMasterOverride}
-                playbackToken={playbackToken}
-                overlay={playerOverlay}
-              />
-              {/* IPFS source bar — only when the video is gateway-mirrored. */}
-              {ipfsAvailable ? (
-                <IpfsSourceBar
-                  state={ipfsState}
-                  onToggle={toggleSource}
-                  onRefetch={tryIpfs}
-                />
-              ) : null}
-              {/* Still-transcoding note (publish-timing): shown while the detail
-                  reports a live transcode job; self-removes once a poll says the
-                  transcode finished. Keyed by id so navigation resets it. */}
-              {video.transcoding === true ? (
-                <TranscodingNote
-                  key={video.id}
-                  videoId={video.id}
-                  playbackToken={playbackToken}
-                />
-              ) : null}
-            </>
-          )}
-        </div>
-
         {playlist.active && playlist.status === "error" ? (
           <ErrorState message="Could not load this playlist. Playback continuation is unavailable." onRetry={playlist.retry} />
         ) : null}
@@ -687,13 +756,16 @@ export function WatchView({
       />
       </div>
 
-      {/* Right rail: the viewer's up-next queue (renders nothing when empty)
-          stacked above the related list. The wrapper takes no fixed width — each
-          child carries the rail's lg width — so an empty queue + empty related
-          leaves nothing occupying the column, preserving today's layout. */}
-      <div className={cn("flex flex-col gap-4", theater ? null : "shrink-0")}>
-        <UpNextQueue currentVideo={video} belowLayout={theater} />
-        <RelatedVideos video={video} belowLayout={theater} onFirstRelated={setRelatedNextVideo} />
+      {/* Secondary column: the viewer's up-next queue (renders nothing when
+          empty) stacked above the related list. At the two-column breakpoint
+          its 344px track is reserved by the GRID whether or not anything
+          renders into it — sizing it to its content meant a rail-less page
+          painted a narrow stage during the related fetch and then jumped when
+          the list resolved empty. Stacked, an empty column collapses
+          (`.watch-rail-area:empty`). */}
+      <div className="watch-rail-area flex flex-col gap-4">
+        <UpNextQueue currentVideo={video} />
+        <RelatedVideos video={video} onFirstRelated={setRelatedNextVideo} />
       </div>
     </div>
   );
@@ -716,6 +788,7 @@ function Player({
   hlsMasterOverride,
   playbackToken,
   overlay,
+  theater,
 }: {
   video: Video;
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -725,6 +798,10 @@ function Player({
   hlsMasterOverride: string | null;
   playbackToken: string | null;
   overlay: ReactNode;
+  /** Theater mode: the stage is the page's full-bleed band, so it drops its
+   * radius and its 16:9 box (the band owns the height) and the quiet row under
+   * it takes the page container so it stays on the content measure. */
+  theater: boolean;
 }) {
   const { status: sessionStatus } = useSession();
   const authed = sessionStatus === "authed";
@@ -840,8 +917,8 @@ function Player({
   const posterUrl = video.has_thumbnail ? videoThumbnailUrl(video.id, playbackToken) : null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="relative isolate">
+    <div className={cn("flex flex-col gap-2", theater ? "xl:gap-0" : null)}>
+      <div className={cn("relative isolate", theater ? "watch-theater-band" : null)}>
         <AmbientGlow posterUrl={posterUrl} videoRef={videoRef} />
         <VideoPlayer
           video={video}
@@ -865,6 +942,10 @@ function Player({
         className={cn(
           resumeAt !== null ? "flex" : "hidden sm:flex",
           "flex-wrap items-center gap-2",
+          // Under a full-bleed band this row would otherwise start at the
+          // viewport edge; give it the page container and the gap the band
+          // no longer provides.
+          theater ? `${WATCH_THEATER_INSET} xl:pt-2` : null,
         )}
       >
         {resumeAt !== null ? (

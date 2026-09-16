@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 
 import { IconButton } from "@/components/ui/IconButton";
 import { CloseIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-
-const FOCUSABLE =
-  'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 export type ModalProps = {
   /** Visible title, rendered as the dialog's <h2> and its accessible name. */
@@ -50,69 +48,12 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
-  // The latest onClose, read by the keydown handler through a ref so the
-  // focus/trap effect below can stay MOUNT-ONLY. Callers routinely pass a fresh
-  // inline `onClose={() => …}` on every render (e.g. UploadSection's sheet); if
-  // the effect depended on `onClose` it would re-run on every keystroke-driven
-  // re-render, re-focusing the first focusable (the header close button) and
-  // stealing focus out of whatever the user is typing in. The ref decouples the
-  // handler's identity from the effect's lifecycle.
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
-
-  // Initial focus + focus trap + Escape — set up ONCE on mount and torn down on
-  // unmount. Re-running this on a parent re-render is exactly the focus-steal bug
-  // (see onCloseRef above), so its dependency list is intentionally empty.
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const panel = panelRef.current;
-
-    // Move focus into the dialog: first focusable element, else the panel.
-    const focusables = panel?.querySelectorAll<HTMLElement>(FOCUSABLE);
-    if (focusables && focusables.length > 0) {
-      focusables[0].focus();
-    } else {
-      panel?.focus();
-    }
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== "Tab" || !panel) return;
-      // The FOCUSABLE selector already excludes disabled controls and
-      // tabindex="-1"; that is sufficient for our dialogs (no conditionally
-      // hidden focusables live inside them).
-      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (items.length === 0) {
-        // Nothing focusable but the panel itself — keep focus on it.
-        e.preventDefault();
-        panel.focus();
-        return;
-      }
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement;
-      if (e.shiftKey && (active === first || active === panel)) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      // Restore focus to whatever opened the modal.
-      previouslyFocused?.focus?.();
-    };
-  }, []);
+  // Initial focus, the Tab trap, Escape and focus restore — the shared dialog
+  // contract (lib/use-dialog-focus), which the immersive sidebar drawer uses
+  // too. It is mount-only and reads onClose through a ref, so a caller's fresh
+  // inline `onClose={() => …}` on every render cannot re-focus the first
+  // focusable mid-typing (the bug that shape exists for).
+  useDialogFocus(panelRef, onClose);
 
   const isSheet = variant === "sheet";
   return (

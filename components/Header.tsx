@@ -2,16 +2,32 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useSyncExternalStore } from "react";
 
 import { AccountMenu } from "@/components/auth/AccountMenu";
-import { PlusIcon, PlusSquareIcon, TvIcon, UploadIcon } from "@/components/icons";
+import { useOptionalSession } from "@/components/auth/AuthProvider";
+import { MenuIcon, PlusIcon, PlusSquareIcon, TvIcon, UploadIcon } from "@/components/icons";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { ProtocolRibbon } from "@/components/ProtocolRibbon";
 import { SearchAutocomplete, SearchAutocompleteFallback } from "@/components/SearchAutocomplete";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
-import { isStandaloneRoute } from "@/lib/app-shell";
+import { isAdminConsoleRoute, isStandaloneRoute } from "@/lib/app-shell";
 import { brandingAssetUrl } from "@/lib/branding";
+import {
+  MENU_BUTTON_ATTR,
+  SIDEBAR_ID,
+  readCollapsed,
+  readDrawerOpen,
+  readImmersive,
+  serverCollapsed,
+  serverDrawerOpen,
+  serverImmersive,
+  setCollapsed,
+  setDrawerOpen,
+  subscribeCollapsed,
+  subscribeDrawerOpen,
+  subscribeImmersive,
+} from "@/lib/sidebar-state";
 import { NEUTRAL_BRAND_FALLBACK, brandName, hideSoftwareName } from "@/lib/software-brand";
 import { useLiveAvailable } from "@/lib/live/availability";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
@@ -19,7 +35,10 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 // App shell header (design templates "Vidra App" + "Vidra Desktop"): the brand
 // wordmark, centered pill search, Create, notifications, account. Primary
 // navigation lives in the Sidebar (desktop/tablet) and the BottomTabBar
-// (phones) — no hamburger menu (design-system.md). On phones the "Vidra"
+// (phones). The bar carries ONE nav control: a Menu button, left of the brand and
+// desktop/tablet only (`hidden sm:inline-flex`) — it collapses/expands the rail,
+// and in an immersive shell (theater mode) opens the rail as an overlay drawer.
+// Phones keep the bottom tab bar and no hamburger (design-system.md). On phones the "Vidra"
 // wordmark reads as the large page title of the mobile app template
 // (text-2xl large-title feel) in a compact top row with a search icon button,
 // the bell, and the avatar; Create collapses away there (it is a bottom tab).
@@ -84,6 +103,15 @@ function createItems(liveAvailable: boolean): DropdownItem[] {
 export function Header({ instance = null }: { instance?: InstanceConfigSnapshot | null }) {
   const pathname = usePathname();
   const liveAvailable = useLiveAvailable();
+  // The sidebar's own state, read (not owned) here so the Menu button and the
+  // rail's Collapse button drive one store — called before the standalone early
+  // return so the hook order is stable.
+  const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, serverCollapsed);
+  const immersive = useSyncExternalStore(subscribeImmersive, readImmersive, serverImmersive);
+  const drawerOpen = useSyncExternalStore(subscribeDrawerOpen, readDrawerOpen, serverDrawerOpen);
+  // Optional (never throws): the header renders bare in unit tests, and the
+  // role is only needed to answer "is there a sidebar here to toggle?".
+  const role = useOptionalSession()?.user?.role;
 
   if (isStandaloneRoute(pathname)) {
     return null;
@@ -104,6 +132,29 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
   return (
     <header className="glass-chrome glass-chrome-flush sticky top-0 z-30 pt-[env(safe-area-inset-top)]">
       <div className="mx-auto flex h-16 w-full items-center gap-3 px-6 sm:h-14 sm:gap-5 sm:px-8">
+        {/* Sidebar control (design-system.md). Desktop/tablet only: phones keep
+            the BottomTabBar and get no hamburger. Two behaviours, one button —
+            normally it collapses/expands the in-flow rail through the same store
+            the rail's own Collapse button writes (so the two can never disagree);
+            while a page asks for an IMMERSIVE shell (theater mode, where the rail
+            is hidden outright) it opens that rail back as an overlay drawer.
+            Absent on the admin console routes, where the app sidebar steps aside
+            for the console's own rail: there is nothing there for it to toggle,
+            and aria-controls pointing at an element that does not exist is a
+            critical axe violation as well as a lie. */}
+        {isAdminConsoleRoute(pathname, role) ? null : (
+        <button
+          type="button"
+          {...{ [MENU_BUTTON_ATTR]: "" }}
+          onClick={() => (immersive ? setDrawerOpen(!drawerOpen) : setCollapsed(!collapsed))}
+          aria-label="Menu"
+          aria-controls={SIDEBAR_ID}
+          aria-expanded={immersive ? drawerOpen : !collapsed}
+          className="focus-ring hidden h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg sm:inline-flex"
+        >
+          <MenuIcon size={22} strokeWidth={1.9} />
+        </button>
+        )}
         <Link
           href="/"
           className="focus-ring flex min-h-11 flex-col justify-center gap-1 rounded-lg"

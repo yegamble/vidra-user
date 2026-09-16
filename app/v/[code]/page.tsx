@@ -110,7 +110,9 @@ export default async function ShortCodeWatchPage({
   // needs.
   const initialVideo = await getPublicVideoByCode(code);
   return (
-    <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-4 sm:px-6 sm:py-6">
+    // See app/videos/[id]/page.tsx: WatchView owns the page container so the
+    // theater band can be full-bleed.
+    <main className="flex w-full min-w-0 flex-1 flex-col">
       <WatchView key={code} code={code} initialVideo={initialVideo} />
     </main>
   );

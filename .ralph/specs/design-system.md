@@ -44,9 +44,34 @@ Hard rules:
   (`e2e/responsive.spec.ts` gates this).
 - **Touch targets ≥ 44×44pt** on interactive controls (HIG). Small visual
   glyphs get padding, not smaller hit areas.
-- **No hamburger menus.** Primary nav is the `BottomTabBar` (< `sm`) and the
-  `Sidebar` (≥ `sm`). Both are `aria-label="Primary"`; only one is ever in the
-  accessibility tree at a time.
+- **No hamburger menu holds the primary nav.** Primary nav is the `BottomTabBar`
+  (< `sm`) and the `Sidebar` (≥ `sm`). Both are `aria-label="Primary"`; only one
+  is ever in the accessibility tree at a time — the destinations are never
+  hidden behind a disclosure a viewer has to find first.
+  *Amended 2026-09-15 (watch theater).* The `Header` carries one nav CONTROL at
+  `sm`+ — a "Menu" icon button, left of the brand, `hidden sm:inline-flex`. It
+  does not hold the nav; it toggles the rail that does:
+  - **normally** it collapses/expands the `Sidebar` (the same
+    `lib/sidebar-state` store the rail's own Collapse row writes, so the two
+    controls can never disagree; the preference still persists);
+  - **in an immersive shell** — today only the watch page's theater mode, which
+    hides the rail so the stage can span the content area edge to edge, as
+    YouTube closes the guide there — it opens the same panel as an overlay
+    DRAWER. The drawer is modal-shaped, so it IS a modal: `role="dialog"
+    aria-modal="true"`, the shared focus contract (`lib/use-dialog-focus`, the
+    same hook `Modal` uses — focus in, Tab trapped, Escape closes, focus
+    restored to the Menu button) and `inert` on `#main-content` while it is up.
+    It wears `.glass-chrome-solid` — the material's own opaque fallback — because
+    the page behind it there is the theater band's #000, where the translucent
+    chrome drops `fg-muted` to 3.74:1. The scrim starts below the header and
+    stays under its z-index, so the bar the drawer was opened from is still lit
+    and the Menu button can close what it opened. The rail's Collapse row is not
+    rendered in the drawer: the overlay is a fixed 224px panel, so it would flip
+    its own label and change nothing.
+  It is absent where there is no app sidebar to toggle: below `sm` (phones keep
+  the bottom tab bar and get no hamburger — `e2e/mobile-nav.spec.ts`), on
+  standalone routes, and on the admin console routes, where the console's own
+  rail replaces it.
 - **Safe areas**: the tab bar pads with `env(safe-area-inset-bottom)`
   (viewport-fit=cover is set in `app/layout.tsx`).
 - **WCAG 2.2 AA** minimum. axe (serious/critical) is a hard gate
@@ -313,7 +338,7 @@ none touches chrome:
 
 The following workflow-level patterns are sanctioned; guardrails must not be
 read as blocking them. Each keeps the existing nav rules (BottomTabBar/Sidebar
-primary nav, no hamburgers, one `<main>`, 44pt targets):
+primary nav, no hamburger holding that nav, one `<main>`, 44pt targets):
 
 - **Split-view settings** (macOS System Settings): Settings, Admin, and
   Moderation replace their long horizontal tab strips with a section sidebar
@@ -362,7 +387,8 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
   hidden for a pure editor) — via `SegmentedControl`. Live's create form and the create-channel
   form are launched `Modal`s (dialog on desktop / `variant="sheet"` on mobile),
   consistent with the stepped upload sheet. Keeps the nav rules
-  (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger, 44pt targets).
+  (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger holding that
+  nav, 44pt targets).
 - **"+ Create" dropdown** (YouTube two-tier Create pattern): a single global
   creator entry that fans out into the flows rather than dumping the user on the
   dashboard. Desktop lives in `Header` as a `Dropdown` (the outline "+ Create"
@@ -714,7 +740,8 @@ never substitute a library's variant when the design's path differs. Typed
 
 ## App shell
 
-- `Header` — brand, centered pill `SearchBox` (hidden < `sm`; Search is a tab
+- `Header` — Menu button (≥ `sm`; toggles the `Sidebar`, see the nav rule
+  above), brand, centered pill `SearchBox` (hidden < `sm`; Search is a tab
   there), pill Create → `/studio` (hidden < `sm`), `NotificationsBell`,
   `AccountMenu`. Sticky and **full-bleed**: `.glass-chrome .glass-chrome-flush`
   spanning the viewport with no top/side gutter and a single bottom hairline,
@@ -730,12 +757,43 @@ never substitute a library's variant when the design's path differs. Typed
 - `Sidebar` (≥ `sm`) — every primary destination + role-gated
   Moderation/Admin, `aria-current="page"`, collapsible icon rail (persisted),
   floating in a rounded `.glass-chrome` panel rather than anchoring to an edge.
+  ONE panel, TWO placements: that in-flow rail, and — while a page asks for an
+  immersive shell (watch theater) — the same panel as a `fixed` overlay drawer
+  over a scrim, opened by the header's Menu button. The link list is never
+  forked between the two. State lives in `lib/sidebar-state` (collapsed
+  persisted in localStorage; immersive + drawer-open in memory only, because a
+  persisted immersive flag would strand a viewer on a page with no navigation).
 - `BottomTabBar` (< `sm`) — Home / Search / Create / Inbox / Library, sticky
   bottom in a rounded `.glass-chrome` panel, in-flow (never overlaps content),
   unread dot on Inbox, `aria-current` on the active tab, safe-area padded.
 - Both navs return `null` on `/embed/*` (bare iframe player).
 - Every page renders exactly ONE `<main>` (landmarks are gated by
   `e2e/a11y-landmarks.spec.ts`).
+
+**The watch page's layout (`.watch-layout`, added 2026-09-15).** The watch
+surface is ONE CSS grid with three areas — `stage` / `body` / `rail` — rather
+than nested flex columns, and theater mode swaps the AREAS. That is a
+correctness rule, not a styling preference: the stage must keep a single DOM
+position, because React reconciles by position and rendering it somewhere else
+in theater REMOUNTED the player (playback restarted at 0, the mid-watch "Resume
+from…" offer reappeared, and a second view was counted on every `T`). Three
+things follow, and each was a defect first:
+
+- **The two-column switch is `xl` (1280px), not `lg`.** At 1024 the sidebar
+  (224) plus the reserved rail (344) left a 368×207 stage with a three-line
+  title. YouTube drops to one column at about the same available width.
+- **The secondary column's 344px track is reserved whether or not anything
+  renders into it.** Sizing it to its content shifted the largest element on the
+  page when the related fetch resolved empty.
+- **Theater is inert below that breakpoint**, in CSS (`.watch-theater-band`,
+  `.watch-layout-theater`) and in JS (`WATCH_TWO_COLUMN_QUERY`, which also gates
+  the immersive flag): there is no second column to collapse, no width to gain,
+  and a full-bleed square-cornered phone player is not an improvement.
+
+The stage's size ceiling is one token, `--watch-stage-max-h` — the viewport
+minus the masthead and the space the page owes the title, floored at 480px —
+read by the theater band as a height and by the default player column as a width
+at 16:9, so the two modes cannot disagree.
 
 ## Accessibility baseline (unchanged contract, do not regress)
 

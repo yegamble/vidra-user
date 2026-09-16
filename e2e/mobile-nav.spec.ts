@@ -26,7 +26,11 @@ test("phones show the bottom tab bar, not a hamburger or the sidebar", async ({ 
   }
   // …and Create is a button (it opens the Create bottom sheet, it does not navigate).
   await expect(tabBar.getByRole("button", { name: "Create" })).toBeVisible();
-  // No hamburger button, and sidebar-only destinations are not exposed.
+  // No hamburger button, and sidebar-only destinations are not exposed. The
+  // header's Menu button (the desktop sidebar control, added with the theater
+  // drawer) is `hidden sm:inline-flex`: display:none keeps it out of the
+  // accessibility tree, so it is not exposed to a phone user — who has no
+  // sidebar for it to toggle — and this assertion still holds unchanged.
   await expect(page.getByRole("button", { name: "Menu" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Playlists" })).toHaveCount(0);
 });
