@@ -791,6 +791,8 @@ export function VideoPlayer({
       const shortcut = shortcutForKey(e, { playerFocused, paused: el.paused });
       if (!shortcut) return;
       e.preventDefault();
+      // Held Space stays consumed without repeatedly flipping playback.
+      if (e.repeat && shortcut.kind === "toggle-play") return;
       switch (shortcut.kind) {
         case "toggle-play":
           togglePlay();

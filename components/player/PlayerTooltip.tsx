@@ -26,14 +26,11 @@ import {
 // icon-only and already carry the whole label as their accessible name, so
 // describing them with the same words again is duplicate announcement.
 
-/** How long the pointer must rest on a control before its label appears. */
-export const TIP_HOVER_DELAY_MS = 350;
-
 export interface PlayerTipHandle {
-  /** Report hover/focus on a control. `immediate` skips the hover dwell (keyboard focus). */
-  show(el: HTMLElement | null, label: string, keys?: string, immediate?: boolean): void;
+  /** Show immediately; keyboard focus may show a label even on a touch device. */
+  show(el: HTMLElement | null, label: string, keys?: string, keyboardFocus?: boolean): void;
   /**
-   * Same, but only when nothing is already armed or showing — what a bare
+   * Same, but only when nothing is already showing — what a bare
    * pointermove uses, so a pointer that was ALREADY parked on a control when
    * the player hydrated still gets its label without re-triggering on every
    * one of the hundreds of moves that follow.
@@ -171,35 +168,27 @@ interface ActiveTip {
 export function usePlayerTooltip() {
   const anchorRef = useRef<HTMLDivElement | null>(null);
   const [tip, setTip] = useState<ActiveTip | null>(null);
-  const timerRef = useRef<number | undefined>(undefined);
-  // True from the moment a dwell is armed until the bubble is dismissed — what
-  // `showIfIdle` tests, so a stream of pointermoves cannot re-arm the timer.
+  // Ignore repeated pointermoves once shown; hovering needs no dwell timer.
   const activeRef = useRef(false);
   const activeElRef = useRef<HTMLElement | null>(null);
 
   const hide = useCallback(() => {
-    if (timerRef.current) window.clearTimeout(timerRef.current);
     activeRef.current = false;
     activeElRef.current = null;
     setTip(null);
   }, []);
 
-  const show = useCallback<PlayerTipHandle["show"]>((el, label, keys, immediate) => {
-    if (timerRef.current) window.clearTimeout(timerRef.current);
+  const show = useCallback<PlayerTipHandle["show"]>((el, label, keys, keyboardFocus) => {
     const anchor = anchorRef.current;
     if (!el || !anchor) return;
     // Touch has no hover: a tap would flash the label and leave it stranded
     // under the finger. Keyboard focus still shows it.
-    if (!immediate && window.matchMedia?.("(hover: none)").matches) return;
+    if (!keyboardFocus && window.matchMedia?.("(hover: none)").matches) return;
     activeRef.current = true;
     activeElRef.current = el;
-    const place = () => {
-      const anchorBox = anchor.getBoundingClientRect();
-      const box = el.getBoundingClientRect();
-      setTip({ label, keys, center: box.left + box.width / 2 - anchorBox.left });
-    };
-    if (immediate) place();
-    else timerRef.current = window.setTimeout(place, TIP_HOVER_DELAY_MS);
+    const anchorBox = anchor.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    setTip({ label, keys, center: box.left + box.width / 2 - anchorBox.left });
   }, []);
 
   const showIfIdle = useCallback<PlayerTipHandle["showIfIdle"]>(
@@ -218,8 +207,6 @@ export function usePlayerTooltip() {
         : { ...current, label, keys },
     );
   }, []);
-
-  useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
   // A bubble must not outlive the surface it was drawn over. Entering or
   // leaving fullscreen re-lays-out the stage under a pointer that never moves

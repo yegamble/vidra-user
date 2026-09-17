@@ -30,8 +30,8 @@ afterEach(() => {
 describe("PlayerOverflowMenu", () => {
   function open() {
     render(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} />);
-    fireEvent.click(screen.getByRole("button", { name: "More player options" }));
-    return screen.getByRole("menu", { name: "More player options" });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    return screen.getByRole("menu", { name: "Settings" });
   }
 
   it("renders nothing when it has no contents", () => {
@@ -52,7 +52,9 @@ describe("PlayerOverflowMenu", () => {
 
   it("exposes graded choices as a labelled radio group with the current value checked", () => {
     open();
-    const group = screen.getByRole("group", { name: "Playback speed" });
+    expect(screen.queryByRole("menuitemradio")).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: /Playback speed/ }));
+    const group = screen.getByRole("menu", { name: "Playback speed" });
     expect(group.querySelectorAll('[role="menuitemradio"]')).toHaveLength(3);
     expect(screen.getByRole("menuitemradio", { name: "1×" }).getAttribute("aria-checked")).toBe(
       "true",
@@ -63,22 +65,23 @@ describe("PlayerOverflowMenu", () => {
     open();
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Mute" }));
     expect(TOGGLES[0].onToggle).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("menu", { name: "More player options" })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "Settings" })).toBeNull();
   });
 
   it("selects a choice by its value and closes", () => {
     open();
+    fireEvent.click(screen.getByRole("menuitem", { name: /Playback speed/ }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "4×" }));
     expect(GROUPS[0].onSelect).toHaveBeenCalledWith("4");
-    expect(screen.queryByRole("menu", { name: "More player options" })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "Settings" })).toBeNull();
   });
 
   it("portals out of its trigger's subtree so the player stage cannot clip it", () => {
     // The stage is `overflow-hidden` and ~185px tall on a phone; this menu is
     // taller than that by design, so it must not live inside it.
     const { container } = render(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} />);
-    fireEvent.click(screen.getByRole("button", { name: "More player options" }));
-    const menu = screen.getByRole("menu", { name: "More player options" });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const menu = screen.getByRole("menu", { name: "Settings" });
     expect(container.contains(menu)).toBe(false);
     expect(menu.style.position).toBe("fixed");
   });
@@ -86,9 +89,9 @@ describe("PlayerOverflowMenu", () => {
   it("closes on Escape and returns focus to the trigger", () => {
     open();
     fireEvent.keyDown(screen.getByRole("menuitemcheckbox", { name: "Mute" }), { key: "Escape" });
-    expect(screen.queryByRole("menu", { name: "More player options" })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "Settings" })).toBeNull();
     expect(document.activeElement).toBe(
-      screen.getByRole("button", { name: "More player options" }),
+      screen.getByRole("button", { name: "Settings" }),
     );
   });
 
@@ -102,10 +105,38 @@ describe("PlayerOverflowMenu", () => {
 
     // Crossing from the toggles into the radio group must work like one menu.
     fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "0.5×" }));
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /Playback speed/ }));
 
     // And wrap from the first row back to the last.
     fireEvent.keyDown(mute, { key: "ArrowUp" });
-    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "4×" }));
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /Playback speed/ }));
+  });
+});
+
+
+describe("Settings submenus", () => {
+  it("returns focus to a group after navigating back, then closes on Escape", () => {
+    render(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Playback speed/ }));
+    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "1×" }));
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /Playback speed/ }));
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Settings" }));
+  });
+  it("opens a subtitle language submenu and applies the selected language", () => {
+    const onSelect = vi.fn();
+    render(<PlayerOverflowMenu toggles={[]} groups={[{
+      id: "subtitles", label: "Subtitles/CC", value: "off", items: [{ value: "off", label: "Off" }], onSelect: vi.fn(),
+      groups: [{ id: "language", label: "Language", value: "en", items: [{ value: "en", label: "English" }, { value: "es", label: "Spanish" }], onSelect }],
+    }]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Subtitles/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Language/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Spanish" }));
+    expect(onSelect).toHaveBeenCalledWith("es");
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

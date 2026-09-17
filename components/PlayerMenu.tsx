@@ -165,7 +165,7 @@ export function PlayerMenu<T extends string | number>({
                 }
               }}
               style={popupStyle}
-              className="z-50 max-h-[min(16rem,calc(100vh-1rem))] w-40 overflow-y-auto overscroll-contain rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
+              className="player-settings-menu z-50 max-h-[min(16rem,calc(100vh-1rem))] w-40 overflow-y-auto overscroll-contain rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
             >
               {items.map((item, i) => (
                 <button

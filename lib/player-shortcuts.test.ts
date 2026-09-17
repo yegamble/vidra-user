@@ -89,6 +89,7 @@ describe("shortcutForKey", () => {
     expect(shortcutForKey({ key: "5", metaKey: true })).toBeNull();
     expect(shortcutForKey({ key: "x" })).toBeNull();
     expect(shortcutForKey({ key: "Escape" })).toBeNull();
+    expect(shortcutForKey({ key: " ", isComposing: true })).toBeNull();
     // A shifted digit produces a symbol, not a decile seek.
     expect(shortcutForKey({ key: "%" })).toBeNull();
   });
