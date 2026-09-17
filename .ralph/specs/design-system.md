@@ -276,7 +276,9 @@ The right control group contains Autoplay, Captions (when available), Settings,
 Picture-in-Picture beside Settings, Cinema mode and Fullscreen. Speed, quality, subtitle language, available audio
 tracks, ambient mode, sleep timer and PiP live in Settings. Autoplay is also in
 Settings. Container-width tiers move controls that cannot fit into Settings;
-44px button targets never shrink. Glyphs are 24px; the transient center feedback uses
+44px button targets never shrink. Theater uses a square-cornered 20×14 rectangular frame with a 2px border,
+matching YouTube’s familiar theater affordance; its active state shows the smaller
+16×12 default-view frame. Glyphs are 24px; the transient center feedback uses
 36px glyphs and disappears after two seconds, including while paused.
 
 The seek track sits on the lower edge of its target, directly above the 44px

@@ -171,34 +171,27 @@ export function CaptionsGlyph(props: GlyphProps) {
   );
 }
 
-/**
- * rectangle.inset.filled → theater OFF: the wide stage the button switches TO.
- *
- * 22×9.5 — deliberately wider AND shorter than the PiP frame (20×14) beside it.
- * Both are rings of the same 2.2-unit weight, so aspect ratio is the only thing
- * telling them apart at 22px; at the first cut's 20×12.8 they were the same
- * silhouette with a dot in one of them.
- */
+/** YouTube-style theater frame: a 20×14 rectangle with a 2-unit border. */
 export function TheaterEnterGlyph(props: GlyphProps) {
   return (
     <Glyph {...props}>
       <path
         fillRule="evenodd"
         clipRule="evenodd"
-        d="M3.2 7.25h17.6A2.2 2.2 0 0 1 23 9.45v5.1a2.2 2.2 0 0 1-2.2 2.2H3.2A2.2 2.2 0 0 1 1 14.55v-5.1a2.2 2.2 0 0 1 2.2-2.2zm.2 2.2a.4.4 0 0 0-.4.4v4.3c0 .22.18.4.4.4h17.2a.4.4 0 0 0 .4-.4v-4.3a.4.4 0 0 0-.4-.4H3.4z"
+        d="M2 5h20v14H2V5zm2 2v10h16V7H4z"
       />
     </Glyph>
   );
 }
 
-/** theater ON: the smaller, default stage the button switches BACK to. */
+/** The smaller default-view rectangle shown while theater mode is active. */
 export function TheaterExitGlyph(props: GlyphProps) {
   return (
     <Glyph {...props}>
       <path
         fillRule="evenodd"
         clipRule="evenodd"
-        d="M7.2 7h9.6A2.2 2.2 0 0 1 19 9.2v5.6A2.2 2.2 0 0 1 16.8 17H7.2A2.2 2.2 0 0 1 5 14.8V9.2A2.2 2.2 0 0 1 7.2 7zm.2 2.4a.4.4 0 0 0-.4.4v4.4c0 .22.18.4.4.4h9.2a.4.4 0 0 0 .4-.4V9.8a.4.4 0 0 0-.4-.4H7.4z"
+        d="M4 6h16v12H4V6zm2 2v8h12V8H6z"
       />
     </Glyph>
   );
