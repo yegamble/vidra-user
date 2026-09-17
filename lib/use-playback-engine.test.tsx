@@ -1119,6 +1119,12 @@ describe("ordered HLS source fallback", () => {
     act(() => result.current.delivery?.select("ipfs"));
     await waitFor(() => expect(hlsMock.instances.at(-1)?.source).toBe(mirror));
     expect(hlsMock.instances.at(-1)?.config.startPosition).toBe(29);
+    const previous = hlsMock.instances.at(-1);
+    ref.current.currentTime = 34;
+    act(() => result.current.delivery?.select("ipfs"));
+    await waitFor(() => expect(hlsMock.instances.at(-1)).not.toBe(previous));
+    expect(hlsMock.instances.at(-1)?.config.startPosition).toBe(34);
+    expect(previous?.destroyed).toBe(true);
   });
 
   it("keeps a shared-link timestamp when the final original fails before metadata", async () => {
@@ -1234,6 +1240,16 @@ describe("ordered HLS source fallback", () => {
     act(() => el.dispatchEvent(new Event("error")));
     await waitFor(() => expect(result.current.mode).toBe("progressive"));
     expect(result.current.sourceUrl).toContain("/original");
+  });
+
+  it("reassigns an unchanged native source on explicit retry", async () => {
+    Reflect.deleteProperty(window, "MediaSource");
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably");
+    const ref = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(ref, video, null, mirror));
+    await waitFor(() => expect(ref.current.getAttribute("src")).toBe(mirror));
+    act(() => result.current.retry());
+    expect(ref.current.getAttribute("src")).toBe(mirror);
   });
 
   it("does not carry a failed mirror or old resume position to another video", async () => {

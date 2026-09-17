@@ -261,7 +261,8 @@ function usePlaybackEngine(
     tuning.hlsFallbacks?.map(({ hlsJs, nativeHls }) => [hlsJs, nativeHls])]);
   const [route, setRoute] = useState({ key: sourceKey, index: 0 });
   const routeIndex = route.key === sourceKey ? route.index : 0;
-  const key = `${sourceKey}:${routeIndex}`;
+  const [attempt, setAttempt] = useState(0);
+  const key = `${sourceKey}:${routeIndex}:${attempt}`;
   const fallbackCount = tuning.hlsFallbacks?.length ?? 0;
   const fallback = tuning.hlsFallbacks?.[routeIndex - 1];
   const hlsJs = routeIndex ? fallback?.hlsJs : sources.hlsJs;
@@ -334,6 +335,7 @@ function usePlaybackEngine(
     // element's resource selection; without this the attribute is unchanged and
     // the element sits on its cached failure.
     if (el) el.removeAttribute("src");
+    setAttempt((previous) => previous + 1);
     setRoute({ key: sourceKey, index: 0 });
     restored.current = null;
     setDeclined({ key, engines: [] });
@@ -697,7 +699,7 @@ function usePlaybackEngine(
     // leaving an empty player. Reconcile after teardown, without reloading an
     // already-correct source or touching the blob owned by an active HLS engine.
     if (el && src && el.getAttribute("src") !== src) el.setAttribute("src", src);
-  }, [src, videoRef]);
+  }, [src, key, videoRef]);
 
   useEffect(() => {
     const el = videoRef.current;
