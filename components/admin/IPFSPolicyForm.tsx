@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Button, Card, Checkbox, ErrorState, Input, Select, Spinner } from "@/components/ui";
 import { ApiError, api, errorMessage, type IPFSConfig, type IPFSConfigDocument } from "@/lib/api";
+import { IPFSManagedStatus } from "./IPFSManagedStatus";
 
 const numericFields = [
   { key: "budget_bytes", label: "Pin storage budget (GiB)", unit: 1024 ** 3, min: 1024 ** 2, max: 1024 ** 5 },
@@ -69,6 +70,8 @@ export function IPFSPolicyForm({ onSaved }: { onSaved: () => void }) {
   if (unavailable) return <p className="text-sm text-fg-muted">IPFS policy controls are not installed on this server.</p>;
   if (!draft || !document) return error ? <ErrorState message={error} onRetry={() => setReload((n) => n + 1)} />
     : <Spinner label="Loading IPFS publication policy" />;
+  const dirty = JSON.stringify(draft) !== JSON.stringify(document.config)
+    || numericFields.some(({ key, unit }) => Number(numbers[key]) * unit !== document.config[key] || !numbers[key].trim());
   return (
     <Card className="max-w-4xl">
       <form aria-label="IPFS publication policy" className="flex flex-col gap-5" onSubmit={(event) => void save(event)}>
@@ -79,8 +82,9 @@ export function IPFSPolicyForm({ onSaved }: { onSaved: () => void }) {
           {!document.policy_active ? <p className="mt-1 text-sm text-fg-muted">Existing deployment policy remains active until you save this policy.</p> : null}
         </div>
         <fieldset disabled={busy} className="flex flex-col gap-4">
-          <Select label="Node provider" value={draft.provider} onChange={(event) => setDraft({ ...draft, provider: event.target.value as IPFSConfig["provider"] })}>
-            <option value="internal">Managed internal node</option><option value="external">Configured external node</option>
+          <Select label="Node provider" hint="Choose who manages the configured node. External RPC access is configured by the operator; changing provider does not migrate pins."
+            value={draft.provider} onChange={(event) => setDraft({ ...draft, provider: event.target.value as IPFSConfig["provider"] })}>
+            <option value="internal">Managed Docker node</option><option value="external">Operator-managed node</option>
           </Select>
           <div className="flex flex-col gap-3">
             {publicationFields.map(([key, label]) => <Checkbox key={key} label={label} checked={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.checked })} />)}
@@ -97,6 +101,7 @@ export function IPFSPolicyForm({ onSaved }: { onSaved: () => void }) {
           <Button type="submit" disabled={busy || conflict}>{busy ? "Saving…" : "Save IPFS policy"}</Button>
           {conflict ? <Button variant="secondary" onClick={() => setReload((n) => n + 1)}>Reload saved settings</Button> : null}
         </div>
+        <IPFSManagedStatus document={document} dirty={dirty || busy || conflict} onReload={() => setReload((n) => n + 1)} />
       </form>
     </Card>
   );
