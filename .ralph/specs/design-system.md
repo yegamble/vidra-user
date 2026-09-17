@@ -43,7 +43,8 @@ Hard rules:
   progressively enhance. Never introduce horizontal overflow at 390/768
   (`e2e/responsive.spec.ts` gates this).
 - **Touch targets ≥ 44×44pt** on interactive controls (HIG). Small visual
-  glyphs get padding, not smaller hit areas.
+  glyphs get padding, not smaller hit areas. The narrow player seek strip has
+  a documented 24px exception below; its adjacent buttons remain 44px.
 - **No hamburger menu holds the primary nav.** Primary nav is the `BottomTabBar`
   (< `sm`) and the `Sidebar` (≥ `sm`). Both are `aria-label="Primary"`; only one
   is ever in the accessibility tree at a time — the destinations are never
@@ -234,7 +235,7 @@ own surfaces keep every rule in this document.
   Nothing in the bar is allowed below `white/70`: `white/60` computes to 3.9:1,
   which is a legible-looking value that fails AA for text. Re-sample on any
   change to the gradient — every row above moves with it.
-- **Buttons.** 44pt round target, 22px glyph, `text-white/90` at rest, a
+- **Buttons.** 44pt round target, 24px glyph, `text-white/90` at rest, a
   `bg-white/12` hover disc with a 150ms scale (reduced-motion neutralises both).
   A toggle that is ON adds a 2px white underline under the glyph — `aria-pressed`
   was always there, but nothing a SIGHTED viewer could read was.
@@ -242,8 +243,8 @@ own surfaces keep every rule in this document.
   the control bar, which draws a single `bg-black/85` bubble ABOVE the whole
   transport (the seek bar included), horizontally centred on the control and
   clamped inside the stage, with the keyboard shortcut in a `<kbd>` keycap
-  (thin `white/40` border, `white/80` text, 11px). 350ms hover dwell, immediate
-  on keyboard focus, never on touch (`hover: none`). Player controls therefore
+  (thin `white/40` border, `white/80` text, 11px). Immediate on mouse hover and
+  keyboard focus, never on touch (`hover: none`). Player controls therefore
   carry NO native `title`. Not wired to `aria-describedby`: an icon-only control
   already carries those words as its accessible name.
 - **Auto-hide.** The chrome fades over 250ms after 3s idle while playing, AND
@@ -268,6 +269,38 @@ own surfaces keep every rule in this document.
   `motion-reduce:transform-none` cannot undo `hover:scale-105` — it looks like a
   guard and does nothing. The one correct recipe lives in
   `components/player/chrome.ts` (`MEDIA_PRESS`) and is imported, never retyped.
+
+### Player transport and settings (2026-09-17)
+
+The right control group contains Autoplay, Captions (when available), Settings,
+Picture-in-Picture beside Settings, Cinema mode and Fullscreen. Speed, quality, subtitle language, available audio
+tracks, ambient mode, sleep timer and PiP live in Settings. Autoplay is also in
+Settings. Container-width tiers move controls that cannot fit into Settings;
+44px button targets never shrink. Glyphs are 24px; the transient center feedback uses
+36px glyphs and disappears after two seconds, including while paused.
+
+The seek track sits on the lower edge of its target, directly above the 44px
+button row. Below a 420px stage its target is 24px tall, an explicit compact
+exception to the usual 44px guidance; wider stages keep 44px. At a 320px phone
+viewport, the 288×162px video center otherwise falls inside the stacked 92px
+controls. The compact strip reduces that stack to 72px, leaving the center
+tappable. Do not enlarge hit areas into the video or overlap neighboring
+buttons. The track-to-button spacing stays unchanged. The scrim is an absolute
+background with no layout padding.
+Settings shows current values and navigable submenus; menus remeasure when
+contents resize, remain within the viewport and preserve keyboard focus.
+Hover/focus fills must differ from the menu surface in both themes.
+
+Space and K toggle play/pause except while typing or operating another native
+control. Fixed arrow-key jumps are 5 seconds; J/L and mobile side double-taps
+are 10 seconds. Rapid repeats show a cumulative total, resetting after 750ms
+or a direction change. Touch seeks use the outer 35% on each side; the middle
+30% reveals controls first if hidden, then single-tap toggles playback. Side
+single-taps only reveal controls; a second nearby tap within 300ms begins seeking.
+These regions/time windows are SizeTube/Vidra choices, not claimed YouTube
+constants. Drags, long presses and multitouch cancel tap recognition. Touch
+handlers attach only to the video surface and leave controls, scrolling and
+pinch zoom alone.
 
 ## Semantic color & protocol identity (2026-07-19)
 
@@ -704,8 +737,8 @@ never substitute a library's variant when the design's path differs. Typed
   and sizing through a `size` prop that sets the width/height ATTRIBUTES —
   never `h-*`/`w-*` classes, because `cn()` is a plain concat with no
   tailwind-merge and that is exactly how the kebab glyph got squeezed. Default
-  22px, on 44pt round targets. A glyph the chrome does not use does not belong
-  in it: speed and quality are text pills ("1×", "Auto (1080p)"), and menu rows
+  24px, on 44pt round targets. A glyph the chrome does not use does not belong
+  in it: speed and quality live in the Settings submenu, and menu rows
   use the app set's `CheckIcon`, because those rows are a themed surface.
 - **SVG only, never emoji or unicode-glyph icons.** `npm run lint:icons`
   (`scripts/check-no-emoji.mjs`) is a **hard CI gate** that fails on emoji

@@ -107,6 +107,17 @@ const MAX_RECOVERIES = 2;
 
 const NO_ENGINES: readonly EngineId[] = [];
 
+interface AudioTrackOption { value: string; label: string }
+interface AudioChoices {
+  scope: object;
+  tracks: AudioTrackOption[];
+  current: string;
+  select: (value: string) => void;
+}
+interface NativeAudioTrack { label: string; language: string; enabled: boolean }
+type NativeAudioTrackList = Partial<EventTarget> & ArrayLike<NativeAudioTrack>;
+const ignoreAudioSelection = () => {};
+
 /**
  * The narrow contract every playback surface codes against — the bespoke shell
  * (components/player/VideoPlayer.tsx) imports no hls.js type or value, only
@@ -126,6 +137,10 @@ export interface HlsPlayback {
   /** True while a manual rung switch has been requested but not yet confirmed. */
   pending: boolean;
   setQuality: (quality: QualitySelection) => void;
+  /** Actual selectable engine/browser tracks; empty when no capability is exposed. */
+  audioTracks: AudioTrackOption[];
+  currentAudioTrack: string;
+  setAudioTrack: (value: string) => void;
   /**
    * True once NOTHING left here can play this video: every candidate engine
    * dropped out (hls.js fatal after bounded recovery, then the media element
@@ -236,6 +251,7 @@ function usePlaybackEngine(
   // Pixel height of the rung the engine is actually playing (last LEVEL_SWITCHED).
   const [activeHeight, setActiveHeight] = useState<number | null>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const [audio, setAudio] = useState<AudioChoices | null>(null);
 
   // Engines that dropped out for THIS key. Keyed so navigating to another video
   // (or stream) starts from the full candidate list again.
@@ -288,6 +304,9 @@ function usePlaybackEngine(
         : mode === "progressive"
           ? progressive
           : undefined;
+  // Hide stale choices during the render that changes source, before effects run.
+  const audioScope = useMemo(() => ({ key, mode, activeSourceUrl }), [key, mode, activeSourceUrl]);
+  const currentAudio = audio?.scope === audioScope ? audio : null;
   const telemetry = usePlaybackQoE({
     videoRef,
     engine: mode,
@@ -304,6 +323,7 @@ function usePlaybackEngine(
     setCurrentQuality(AUTO_QUALITY);
     setPendingQuality(null);
     setActiveHeight(null);
+    setAudio(null);
     // Dynamic import: the hls.js chunk loads only once this engine has won
     // selection — never for native, progressive, or unplayable sources.
     void import("hls.js")
@@ -393,8 +413,30 @@ function usePlaybackEngine(
           hlsRef.current = null;
           declineEngines(key, ...HLS_ENGINES);
         };
+        const syncAudio = () => {
+          if (disposed || hlsRef.current !== hls) return;
+          const sourceTracks = (hls.audioTracks ?? []).slice();
+          const tracks = sourceTracks.map((track, index) => ({
+            value: `hlsjs:audio:${index}`,
+            label: track.name || track.lang || `Audio ${index + 1}`,
+          }));
+          setAudio({ scope: audioScope, tracks, current: tracks[hls.audioTrack]?.value ?? "",
+            select: (value) => {
+              const index = tracks.findIndex((track) => track.value === value);
+              // A menu can outlive a rendition-group update or engine teardown.
+              if (disposed || hlsRef.current !== hls || index < 0 ||
+                  hls.audioTracks[index] !== sourceTracks[index]) return;
+              hls.audioTrack = index;
+              syncAudio();
+            },
+          });
+        };
+        hls.on(HlsClass.Events.AUDIO_TRACKS_UPDATED, syncAudio);
+        hls.on(HlsClass.Events.AUDIO_TRACK_SWITCHING, syncAudio);
+        hls.on(HlsClass.Events.AUDIO_TRACK_SWITCHED, syncAudio);
         hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
           parsed = true;
+          syncAudio();
           // The rung hls.js is about to start on names the codec family it has
           // chosen: firstAutoLevel is ABR's own opening pick (we set no
           // startLevel, so that IS the start level). It can be -1 before ABR has
@@ -496,6 +538,7 @@ function usePlaybackEngine(
     bandwidth,
     declineEngines,
     telemetry,
+    audioScope,
   ]);
 
   const activeSrc =
@@ -512,6 +555,55 @@ function usePlaybackEngine(
   // old contract and reports nothing, because there is no file to point at.
   // Derived, not remembered, so it cannot outlive its own video.
   const src = activeSrc ?? (failed ? progressive : undefined);
+
+  useEffect(() => {
+    if ((mode !== "native-hls" && mode !== "progressive") || !activeSourceUrl) return;
+    const el = videoRef.current as (HTMLVideoElement & { audioTracks?: NativeAudioTrackList }) | null;
+    if (!el) return;
+    let disposed = false;
+    let observed: NativeAudioTrackList | undefined;
+    const events = ["change", "addtrack", "removetrack"];
+    const expectedSource = new URL(activeSourceUrl, window.location.href).href.split("#")[0];
+    const isCurrentSource = () => el.currentSrc.split("#")[0] === expectedSource;
+    const clearAudio = () => setAudio(null);
+    const syncAudio = () => {
+      if (disposed) return;
+      const list = el.audioTracks;
+      if (list !== observed) {
+        for (const event of events) observed?.removeEventListener?.(event, syncAudio);
+        observed = list;
+        for (const event of events) observed?.addEventListener?.(event, syncAudio);
+      }
+      // The element may still expose the previous source's tracks while loading.
+      if (!list || !isCurrentSource()) { clearAudio(); return; }
+      const sourceTracks = Array.from(list);
+      const tracks = sourceTracks.map((track, index) => ({
+        value: `native:audio:${index}`,
+        label: track.label || track.language || `Audio ${index + 1}`,
+      }));
+      setAudio({ scope: audioScope, tracks,
+        current: tracks[sourceTracks.findIndex((track) => track.enabled)]?.value ?? "",
+        select: (value) => {
+          const index = tracks.findIndex((track) => track.value === value);
+          const target = sourceTracks[index];
+          const available = Array.from(el.audioTracks ?? []);
+          if (disposed || !isCurrentSource() || !target || !available.includes(target)) return;
+          target.enabled = true;
+          for (const track of available) if (track !== target) track.enabled = false;
+          syncAudio();
+        },
+      });
+    };
+    syncAudio();
+    el.addEventListener("loadedmetadata", syncAudio);
+    el.addEventListener("emptied", clearAudio);
+    return () => {
+      disposed = true;
+      for (const event of events) observed?.removeEventListener?.(event, syncAudio);
+      el.removeEventListener("loadedmetadata", syncAudio);
+      el.removeEventListener("emptied", clearAudio);
+    };
+  }, [mode, activeSourceUrl, audioScope, videoRef]);
 
   // The engines that play through the media element itself (native HLS and the
   // progressive original) have no error channel of their own — hls.js reports
@@ -549,6 +641,9 @@ function usePlaybackEngine(
     src,
     failed,
     retry,
+    audioTracks: currentAudio?.tracks ?? [],
+    currentAudioTrack: currentAudio?.current ?? "",
+    setAudioTrack: currentAudio?.select ?? ignoreAudioSelection,
     // Only hls.js exposes controllable quality. Native HLS deliberately exposes
     // NO entries: there the browser owns variant selection outright, steered by
     // the SCORE attribute the backend emits on each variant, and nothing can

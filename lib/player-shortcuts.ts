@@ -46,10 +46,10 @@ export interface ShortcutContext {
  * belong to the browser.
  */
 export function shortcutForKey(
-  e: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean },
+  e: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; isComposing?: boolean },
   ctx: ShortcutContext = {},
 ): PlayerShortcut | null {
-  if (e.ctrlKey || e.metaKey || e.altKey) return null;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return null;
   switch (e.key) {
     case " ":
     case "k":
@@ -148,8 +148,9 @@ export function seekTargetForFraction(fraction: number, duration: number): numbe
 /**
  * Keydown targets that must never trigger player shortcuts: form fields and
  * other interactive controls (typing or operating them wins), plus the video
- * element itself (its focused native controls already handle these keys).
+ * element when native controls are enabled. Custom-control videos need our
+ * handler, including preventDefault so a focused video does not scroll on Space.
  * Content-editable hosts are handled separately in the DOM wiring.
  */
 export const SHORTCUT_IGNORE_SELECTOR =
-  "input, textarea, select, button, a, video, [contenteditable], [role='menu'], [role='dialog']";
+  "input, textarea, select, button, a, video[controls], [contenteditable], [role='menu'], [role='dialog']";

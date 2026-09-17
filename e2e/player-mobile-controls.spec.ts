@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openPlayerSetting, openPlayerSettings } from "./player-settings-menu";
 
 // PLAY-MOBILE: the player's option menus must be fully reachable on a phone.
 //
@@ -61,11 +62,8 @@ for (const [label, width, height] of [
     await page.goto("/videos/v1");
     await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
 
-    // At a phone-width stage the speed ladder lives in the overflow menu.
-    await page.getByRole("button", { name: "More player options" }).click();
-    const menu = page.getByRole("menu", { name: "More player options" });
-    await expect(menu).toBeVisible();
-    const rows = menu.getByRole("group", { name: "Playback speed" }).getByRole("menuitemradio");
+    const menu = await openPlayerSetting(page, "Playback speed");
+    const rows = menu.getByRole("menuitemradio");
     await expect(rows).toHaveCount(12);
 
     const offscreen = await page.evaluate(() => {
@@ -93,13 +91,11 @@ for (const [label, width, height] of [
 }
 
 test("the player's menus escape the overflow-hidden stage", async ({ page }) => {
-  // 900px viewport -> a stage wide enough for the bar's own Speed menu, so this
-  // covers BOTH popup paths (PlayerMenu and the overflow menu) in one place.
+  // The same Settings hierarchy must escape the stage at a wider viewport too.
   await page.setViewportSize({ width: 900, height: 700 });
   await mockWatchPage(page);
   await page.goto("/videos/v1");
-  await page.getByRole("button", { name: "Speed: 1×" }).click();
-  await expect(page.getByRole("menu", { name: "Playback speed" })).toBeVisible();
+  await openPlayerSetting(page, "Playback speed");
 
   const geo = await page.evaluate(() => {
     const stage = document.querySelector('[data-testid="video-player"]')!;
@@ -161,7 +157,7 @@ for (const [label, width, height] of [
 
   test(`every control stays reachable at ${label} (${width}px)`, async ({ page }) => {
     // Tiering a control out of the bar is only acceptable if it lands in the
-    // overflow menu. Assert the union, not the bar.
+    // Settings menu. Assert the union, not the bar.
     await page.setViewportSize({ width, height });
     await mockWatchPage(page);
     await page.goto("/videos/v1");
@@ -171,11 +167,9 @@ for (const [label, width, height] of [
     const inBar = async (role: "button" | "switch", name: string) =>
       (await bar.getByRole(role, { name, exact: true }).count()) > 0;
 
-    await page.getByRole("button", { name: "More player options" }).click();
-    const menu = page.getByRole("menu", { name: "More player options" });
-    await expect(menu).toBeVisible();
+    const menu = await openPlayerSettings(page);
 
-    for (const name of ["Mute", "Captions", "Autoplay next", "Theater mode"]) {
+    for (const name of ["Mute", "Autoplay next", "Theater mode"]) {
       const reachable =
         (await inBar("button", name)) ||
         // Autoplay in the bar is a SWITCH (aria-checked), in the menu a
@@ -187,12 +181,10 @@ for (const [label, width, height] of [
         (await menu.getByRole("menuitemcheckbox", { name, exact: true }).count()) > 0;
       expect(reachable, `${name} is unreachable at ${width}px`).toBe(true);
     }
-    // Speed is a graded choice: reachable either as the bar's menu button or as
-    // a radio group in the overflow menu.
-    const speedReachable =
-      (await bar.getByRole("button", { name: /^Speed:/ }).count()) > 0 ||
-      (await menu.getByRole("group", { name: "Playback speed" }).count()) > 0;
-    expect(speedReachable, `Speed is unreachable at ${width}px`).toBe(true);
+    const captionsReachable = (await inBar("button", "Captions")) ||
+      (await menu.getByRole("menuitem", { name: /^Subtitles\/CC/ }).count()) > 0;
+    expect(captionsReachable, `Captions is unreachable at ${width}px`).toBe(true);
+    await expect(menu.getByRole("menuitem", { name: /^Playback speed / })).toBeVisible();
 
     // Fullscreen is never tiered out — it is the control the old bar clipped.
     await expect(bar.getByRole("button", { name: "Fullscreen" })).toBeVisible();

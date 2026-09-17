@@ -29,6 +29,7 @@ import { ShareButton } from "@/components/ShareButton";
 import { SupportButton } from "@/components/SupportButton";
 import { TimestampedText } from "@/components/TimestampedText";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
+import { useAmbientMode } from "@/lib/player-ambient";
 import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
 import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar";
@@ -915,11 +916,12 @@ function Player({
   // the player for a soft halo (see AmbientGlow). Absent when the video has no
   // thumbnail — there is no imagery to bloom from.
   const posterUrl = video.has_thumbnail ? videoThumbnailUrl(video.id, playbackToken) : null;
+  const ambientEnabled = useAmbientMode();
 
   return (
     <div className={cn("flex flex-col gap-2", theater ? "xl:gap-0" : null)}>
       <div className={cn("relative isolate", theater ? "watch-theater-band" : null)}>
-        <AmbientGlow posterUrl={posterUrl} videoRef={videoRef} />
+        {ambientEnabled ? <AmbientGlow posterUrl={posterUrl} videoRef={videoRef} /> : null}
         <VideoPlayer
           video={video}
           videoRef={videoRef}

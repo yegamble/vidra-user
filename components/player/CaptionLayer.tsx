@@ -1,5 +1,6 @@
 "use client";
 
+import { captionTracks } from "@/lib/caption-tracks";
 import { useEffect, useRef, useState, type RefObject } from "react";
 
 // The app-rendered caption surface.
@@ -75,7 +76,7 @@ export function CaptionLayer({
     // fires `change` on the LIST, not on the track, so the re-subscribe hangs
     // off the list and re-reads which track — if any — we are now drawing.
     const resubscribe = () => {
-      const next = Array.from(list).find((t) => t.mode !== "disabled") ?? null;
+      const next = captionTracks(list).find((t) => t.mode !== "disabled") ?? null;
       if (next !== current) {
         current?.removeEventListener?.("cuechange", readCues);
         current = next;

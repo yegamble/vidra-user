@@ -148,7 +148,7 @@ describe("VideoPlayer shell", () => {
     expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Mute" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Fullscreen" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Speed: 1×" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy();
   });
 
   it("hides the quality selector and captions toggle when neither is available", () => {
@@ -157,6 +157,18 @@ describe("VideoPlayer shell", () => {
     expect(screen.queryByRole("button", { name: /^Quality:/ })).toBeNull();
     // No caption tracks → no captions toggle.
     expect(screen.queryByRole("button", { name: "Captions" })).toBeNull();
+  });
+
+  it("reflects decoded resolution changes in the Settings badge", () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video")!;
+    let height = 1080;
+    Object.defineProperty(video, "videoHeight", { get: () => height });
+    fireEvent.loadedMetadata(video);
+    expect(screen.getByTestId("player-resolution").textContent).toBe("1080p");
+    height = 360;
+    fireEvent(video, new Event("resize"));
+    expect(screen.getByTestId("player-resolution").textContent).toBe("360p");
   });
 
   it("shows a captions toggle when the video carries tracks", () => {
@@ -194,6 +206,25 @@ describe("VideoPlayer shell", () => {
       emit: (type: string) => (listeners[type] ?? []).forEach((fn) => fn()),
     };
   }
+
+  it("selects subtitle languages without disabling hidden HLS metadata", () => {
+    const fake = fakeTextTracks(["ID3", "English", "Spanish"]);
+    fake.tracks[0].kind = "metadata";
+    fake.tracks[0].mode = "hidden";
+    fake.tracks[1].language = "en";
+    fake.tracks[2].language = "es";
+    vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);
+    render(<Harness tracks={[{ language: "en", label: "English", url: "blob:en" }, { language: "es", label: "Spanish", url: "blob:es" }]} />);
+    expect(screen.getByRole("button", { name: "Captions" }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Subtitles/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Language/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Spanish" }));
+    expect(fake.tracks.map((track) => track.mode)).toEqual(["hidden", "disabled", "hidden"]);
+    fireEvent.click(screen.getByRole("button", { name: "Captions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Captions" }));
+    expect(fake.tracks.map((track) => track.mode)).toEqual(["hidden", "disabled", "hidden"]);
+  });
 
   it("turns captions on by default when the user asked for it", async () => {
     const fake = fakeTextTracks(["English"]);
@@ -254,7 +285,8 @@ describe("VideoPlayer shell", () => {
   it("opens the speed menu with the full 0.25×–4× ladder, applies a rate, relabels, and persists it", () => {
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
-    fireEvent.click(screen.getByRole("button", { name: "Speed: 1×" }));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Playback speed/ }));
     const menu = screen.getByRole("menu", { name: "Playback speed" });
     // Full mined ladder, ascending, normal reads "1×" (not "Normal"). The
     // selected item's check is a decorative <svg> (no text), so textContent is
@@ -264,7 +296,8 @@ describe("VideoPlayer shell", () => {
       "0.25×", "0.5×", "0.75×", "1×", "1.25×", "1.5×", "1.75×", "2×", "2.5×", "3×", "3.5×", "4×",
     ]);
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: "4×" }));
-    expect(screen.getByRole("button", { name: "Speed: 4×" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitem", { name: "Playback speed 4×" })).toBeTruthy();
     expect(video.playbackRate).toBe(4);
     expect(video.defaultPlaybackRate).toBe(4);
     // The choice is remembered for the session.
@@ -275,7 +308,8 @@ describe("VideoPlayer shell", () => {
     window.sessionStorage.setItem("vidra.player.speed", "2");
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
-    expect(screen.getByRole("button", { name: "Speed: 2×" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitem", { name: "Playback speed 2×" })).toBeTruthy();
     expect(video.playbackRate).toBe(2);
   });
 
@@ -285,7 +319,8 @@ describe("VideoPlayer shell", () => {
     hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, default_speed: 1.5 });
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
-    expect(screen.getByRole("button", { name: "Speed: 1.5×" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitem", { name: "Playback speed 1.5×" })).toBeTruthy();
     expect(video.playbackRate).toBe(1.5);
   });
 
@@ -331,18 +366,20 @@ describe("VideoPlayer shell", () => {
 
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
-    const pip = screen.getByRole("button", { name: "Picture-in-picture" });
-    expect(pip.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const pip = screen.getByRole("menuitemcheckbox", { name: "Picture-in-picture" });
+    expect(pip.getAttribute("aria-checked")).toBe("false");
 
     fireEvent.click(pip);
     expect(requestPip).toHaveBeenCalledTimes(1);
 
     // The element entering PiP (its event) flips the button's pressed state + label.
     act(() => void fireEvent(video, new Event("enterpictureinpicture")));
-    expect(screen.getByRole("button", { name: "Exit picture-in-picture" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitemcheckbox", { name: "Picture-in-picture" }).getAttribute("aria-checked")).toBe("true");
     // Leaving PiP (e.g. from the browser UI) returns it.
     act(() => void fireEvent(video, new Event("leavepictureinpicture")));
-    expect(screen.getByRole("button", { name: "Picture-in-picture" })).toBeTruthy();
+    expect(screen.getByRole("menuitemcheckbox", { name: "Picture-in-picture" }).getAttribute("aria-checked")).toBe("false");
   });
 
   it("wires the T shortcut to the theater toggle on the watch variant", () => {
@@ -362,7 +399,8 @@ describe("VideoPlayer shell", () => {
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
     act(() => void fireEvent.keyDown(document.body, { key: ">" }));
-    expect(screen.getByRole("button", { name: "Speed: 1.25×" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitem", { name: "Playback speed 1.25×" })).toBeTruthy();
     expect(video.playbackRate).toBe(1.25);
     expect(window.sessionStorage.getItem("vidra.player.speed")).toBe("1.25");
   });

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectPlayerSetting } from "../e2e/player-settings-menu";
 
 import { loginToken, playerSettings, seedPublishedChannel, uniqueId, waitForHls } from "./fixtures";
 
@@ -64,7 +65,7 @@ test("the default playback speed persists, refetches, and drives the player", as
   await waitForHls(request, seeded.videoId);
   await page.goto(`/videos/${seeded.videoId}`);
   await expect(page.getByRole("heading", { name: seeded.videoTitle })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Speed: 1.5×" })).toBeVisible();
+  await expectPlayerSetting(page, "Playback speed 1.5×");
   await expect
     .poll(() => page.locator("video").evaluate((el: HTMLVideoElement) => el.playbackRate))
     .toBe(1.5);

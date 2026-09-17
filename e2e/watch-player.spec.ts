@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectPlayerSetting, openPlayerSetting } from "./player-settings-menu";
 
 import { TINY_MP4_BASE64 } from "../e2e-backed/fixtures";
 
@@ -78,11 +79,9 @@ test("the speed selector offers the full 0.25×–4× ladder and applies the cho
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
 
-  // Normal speed reads "1×" on the button (PLAY-03 — not the old "Normal").
-  const button = page.getByRole("button", { name: "Speed: 1×" });
-  await button.click();
-  const menu = page.getByRole("menu", { name: "Playback speed" });
-  await expect(menu).toBeVisible();
+  // Normal speed reads "1×" in Settings (PLAY-03 — not the old "Normal").
+  await expectPlayerSetting(page, "Playback speed 1×");
+  const menu = await openPlayerSetting(page, "Playback speed");
   // The full mined ladder: 12 rungs, 1× currently checked, 4× at the bottom.
   await expect(menu.getByRole("menuitemradio")).toHaveCount(12);
   await expect(menu.getByRole("menuitemradio", { name: "1×" })).toHaveAttribute(
@@ -91,7 +90,7 @@ test("the speed selector offers the full 0.25×–4× ladder and applies the cho
   );
   await menu.getByRole("menuitemradio", { name: "4×" }).click();
 
-  await expect(page.getByRole("button", { name: "Speed: 4×" })).toBeVisible();
+  await expectPlayerSetting(page, "Playback speed 4×");
   await expect(page.getByRole("menu", { name: "Playback speed" })).toHaveCount(0);
   await expect
     .poll(() => page.locator("video").evaluate((el: HTMLVideoElement) => el.playbackRate))
@@ -180,16 +179,18 @@ test("the T shortcut toggles theater mode from anywhere on the watch page", asyn
 test("the > shortcut steps the playback speed up the ladder", async ({ page }) => {
   await mockWatchPage(page);
   await page.goto("/videos/v1");
-  await expect(page.getByRole("button", { name: "Speed: 1×" })).toBeVisible();
+  await expectPlayerSetting(page, "Playback speed 1×");
   await shortcutsReady(page);
 
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
   await page.keyboard.press(">");
-  await expect(page.getByRole("button", { name: "Speed: 1.25×" })).toBeVisible();
+  await expectPlayerSetting(page, "Playback speed 1.25×");
   await expect
     .poll(() => page.locator("video").evaluate((el: HTMLVideoElement) => el.playbackRate))
     .toBe(1.25);
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
   await page.keyboard.press(">");
-  await expect(page.getByRole("button", { name: "Speed: 1.5×" })).toBeVisible();
+  await expectPlayerSetting(page, "Playback speed 1.5×");
 });
 
 test("the number keys seek to deciles (5 jumps to 50%)", async ({ page }) => {
