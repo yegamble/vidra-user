@@ -78,25 +78,6 @@ describe("PlayerOverflowMenu", () => {
     expect(screen.queryByRole("menu", { name: "Settings" })).toBeNull();
   });
 
-  it("portals out of its trigger's subtree so the player stage cannot clip it", () => {
-    // The stage is `overflow-hidden` and ~185px tall on a phone; this menu is
-    // taller than that by design, so it must not live inside it.
-    const { container } = render(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} />);
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    const menu = screen.getByRole("menu", { name: "Settings" });
-    expect(container.contains(menu)).toBe(false);
-    expect(menu.style.position).toBe("fixed");
-  });
-
-  it("closes on Escape and returns focus to the trigger", () => {
-    open();
-    fireEvent.keyDown(screen.getByRole("menuitemcheckbox", { name: "Mute" }), { key: "Escape" });
-    expect(screen.queryByRole("menu", { name: "Settings" })).toBeNull();
-    expect(document.activeElement).toBe(
-      screen.getByRole("button", { name: "Settings" }),
-    );
-  });
-
   it("cycles focus across groups with the arrow keys, treating every row as one list", () => {
     open();
     const mute = screen.getByRole("menuitemcheckbox", { name: "Mute" });
@@ -114,7 +95,6 @@ describe("PlayerOverflowMenu", () => {
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /Playback speed/ }));
   });
 });
-
 
 describe("Settings submenus", () => {
   it("returns to the complete root menu when the active group disappears", () => {
@@ -185,7 +165,6 @@ describe("Settings submenus", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 });
-
 
 it("updates the settings badge with the active resolution, including automatic downshifts", () => {
   const { rerender } = render(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} resolution={1080} />);

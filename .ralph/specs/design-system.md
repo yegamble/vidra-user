@@ -276,9 +276,8 @@ The right control group contains Autoplay, Captions (when available), Settings,
 Picture-in-Picture beside Settings, Cinema mode and Fullscreen. Speed, quality, subtitle language, available audio
 tracks, ambient mode, sleep timer and PiP live in Settings. Autoplay is also in
 Settings. Container-width tiers move controls that cannot fit into Settings;
-44px button targets never shrink. Theater uses a square-cornered 20×14 rectangular frame with a 2px border,
-matching YouTube’s familiar theater affordance; its active state shows the smaller
-16×12 default-view frame. Glyphs are 24px; the transient center feedback uses
+44px button targets never shrink. Theater uses YouTube’s current screen-and-outward-chevrons glyph; the toggle’s
+pressed state communicates whether cinema mode is active. Glyphs are 24px; the transient center feedback uses
 36px glyphs and disappears after two seconds, including while paused.
 
 The seek track sits on the lower edge of its target, directly above the 44px
@@ -680,6 +679,11 @@ concentric: the tab bar's cell is 17px = 22 − (4px `p-1` + 1px border).
 
 ## Component primitives (`components/ui/`)
 
+Popup menus (`Dropdown`, `PlayerMenu`, `PlayerOverflowMenu`) share `MenuSurface`:
+raised panel, strong hover/keyboard-focus fill in both themes, and danger-tinted
+destructive rows. Disabled rows keep no interactive fill; each consumer retains
+its own placement, focus navigation, and selection behavior.
+
 Import from the barrel `@/components/ui`. All primitives are token-driven and
 carry the a11y contract (see their doc comments): `Button`/`LinkButton`
 (**`rounded-[10px]`**, primary = solid `accent` + accent focus ring; variants
@@ -734,7 +738,7 @@ never substitute a library's variant when the design's path differs. Typed
   triangle, which is what made a bespoke player read as a stock `<video>`. The
   module's house style: 24-unit viewBox; SOLID SF-Symbols-like forms
   (`play.fill`, `speaker.wave.2.fill`, `captions.bubble.fill`, `pip.fill`);
-  frames (theater, PiP) drawn as filled evenodd paths rather than hairlines so
+  frames drawn as filled paths with cutouts rather than hairlines so
   their optical weight matches the solids; `fill="currentColor"`, `aria-hidden`;
   and sizing through a `size` prop that sets the width/height ATTRIBUTES —
   never `h-*`/`w-*` classes, because `cn()` is a plain concat with no

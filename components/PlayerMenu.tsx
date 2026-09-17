@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { CheckIcon } from "@/components/icons";
+import { MenuSurface } from "@/components/ui";
 import { MEDIA_PRESS } from "@/components/player/chrome";
 import { usePlayerTipProps } from "@/components/player/PlayerTooltip";
 import { usePlayerPopup } from "@/components/player/use-player-popup";
@@ -153,7 +154,7 @@ export function PlayerMenu<T extends string | number>({
       </button>
       {open && container
         ? createPortal(
-            <div
+            <MenuSurface
               ref={popupRef}
               role="menu"
               aria-label={menuLabel}
@@ -165,7 +166,7 @@ export function PlayerMenu<T extends string | number>({
                 }
               }}
               style={popupStyle}
-              className="player-settings-menu z-50 max-h-[min(16rem,calc(100vh-1rem))] w-40 overflow-y-auto overscroll-contain rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
+              className="max-h-[min(16rem,calc(100vh-1rem))] w-40"
             >
               {items.map((item, i) => (
                 <button
@@ -187,7 +188,7 @@ export function PlayerMenu<T extends string | number>({
                       moveFocus(i, -1);
                     }
                   }}
-                  className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-muted"
+                  className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-fg transition-colors"
                 >
                   <span aria-hidden="true" className="flex w-4 justify-center">
                     {item.value === current ? <CheckIcon size={16} /> : null}
@@ -195,7 +196,7 @@ export function PlayerMenu<T extends string | number>({
                   <span>{item.label}</span>
                 </button>
               ))}
-            </div>,
+            </MenuSurface>,
             container,
           )
         : null}

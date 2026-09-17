@@ -23,8 +23,7 @@ import {
   PauseGlyph,
   PipGlyph,
   PlayGlyph,
-  TheaterEnterGlyph,
-  TheaterExitGlyph,
+  TheaterGlyph,
 } from "@/components/player/icons";
 import { OverlayButton } from "@/components/player/OverlayButton";
 import {
@@ -1167,7 +1166,7 @@ export function VideoPlayer({
                   pressed={theater}
                   onClick={() => toggleTheater()}
                 >
-                  {theater ? <TheaterExitGlyph /> : <TheaterEnterGlyph />}
+                  <TheaterGlyph />
                 </OverlayButton>
               </div>
             ) : null}
