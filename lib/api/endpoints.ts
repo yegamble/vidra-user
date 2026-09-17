@@ -27,6 +27,10 @@ import type {
   JobRunState,
   IPFSReconcileResult,
   IPFSStatus,
+  IPFSConfigDocument,
+  IPFSConfigUpdate,
+  IPFSOperationRequest,
+  IPFSOperationResult,
   MediaGCAdoptBucketResponse,
   MediaGCConfig,
   MediaGCResponse,
@@ -2367,6 +2371,16 @@ export const api = {
   /** GET /api/v1/ipfs/status — effective public/private mirror health and pin counts (admin). */
   getIPFSStatus: (signal?: AbortSignal) =>
     apiRequest<IPFSStatus>("/api/v1/ipfs/status", { signal }),
+
+  getIPFSConfig: (signal?: AbortSignal) =>
+    apiRequest<IPFSConfigDocument>("/api/v1/admin/ipfs/config", { signal }),
+
+  updateIPFSConfig: (body: IPFSConfigUpdate) =>
+    apiRequest<IPFSConfigDocument>("/api/v1/admin/ipfs/config", { method: "PATCH", body }),
+
+  // The caller retains the same request id when retrying an uncertain result.
+  runIPFSOperation: (action: "apply" | "restart", body: IPFSOperationRequest) =>
+    apiRequest<IPFSOperationResult>(`/api/v1/admin/ipfs/${action}`, { method: "POST", body }),
 
   /**
    * POST /api/v1/admin/ipfs/reconcile — re-arm failed work and seed missing
