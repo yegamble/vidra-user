@@ -288,10 +288,16 @@ function usePlaybackEngine(
   const bandwidth = fallback?.bandwidth ?? primaryBandwidth;
   const rememberState = useCallback(() => {
     const el = videoRef.current;
-    if (el) setResume({ key: subjectKey,
-      time: el.readyState === 0 && el.currentTime === 0 ? startPosition ?? 0 : el.currentTime,
+    if (!el) return;
+    const reset = el.readyState === 0 && el.currentTime === 0;
+    const snapshot = { key: subjectKey,
+      time: reset ? startPosition ?? 0 : el.currentTime,
       restoreTransport: el.readyState > 0 || el.currentTime > 0 || !el.paused, paused: el.paused,
-      rate: el.playbackRate, volume: el.volume, muted: el.muted });
+      rate: el.playbackRate, volume: el.volume, muted: el.muted };
+    // A second source may fail before restoring the first snapshot. Capture
+    // before destroy(), and never replace that position/rate with load resets.
+    setResume((previous) => reset && previous?.key === subjectKey
+      ? { ...previous, volume: snapshot.volume, muted: snapshot.muted } : snapshot);
   }, [subjectKey, videoRef, startPosition]);
 
   const [levels, setLevels] = useState<LevelOption[]>([]);

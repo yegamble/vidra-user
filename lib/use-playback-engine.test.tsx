@@ -1252,6 +1252,25 @@ describe("ordered HLS source fallback", () => {
     expect(ref.current.getAttribute("src")).toBe(mirror);
   });
 
+  it("retains the last meaningful snapshot when the next HLS source fails before metadata", async () => {
+    const el = document.createElement("video");
+    Object.defineProperty(el, "readyState", { configurable: true, writable: true, value: 4 });
+    vi.spyOn(el, "pause").mockImplementation(() => {});
+    const ref = { current: el };
+    const { result } = renderHook(() => useHlsPlayback(ref, video, 12, mirror));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    el.currentTime = 25; el.playbackRate = 1.5;
+    act(() => result.current.retry());
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(2));
+    Object.defineProperty(el, "readyState", { value: 0 });
+    el.currentTime = 0; el.playbackRate = 1;
+    act(() => hlsMock.instances.at(-1)!.emit("error", { fatal: true, type: "networkError" }));
+    await waitFor(() => expect(hlsMock.instances.at(-1)?.source).toBe("http://localhost:8080/master.m3u8"));
+    expect(hlsMock.instances.at(-1)?.config.startPosition).toBe(25);
+    act(() => el.dispatchEvent(new Event("loadedmetadata")));
+    expect([el.currentTime, el.playbackRate]).toEqual([25, 1.5]);
+  });
+
   it("does not carry a failed mirror or old resume position to another video", async () => {
     const el = document.createElement("video");
     vi.spyOn(el, "pause").mockImplementation(() => {});
