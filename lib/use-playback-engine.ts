@@ -191,6 +191,7 @@ interface HlsFallback extends Pick<EngineSources, "hlsJs" | "nativeHls"> {
 }
 interface PlaybackResume {
   key: string; time: number; paused: boolean; rate: number; volume: number; muted: boolean;
+  restoreTransport: boolean;
 }
 
 interface EngineTuning {
@@ -294,9 +295,11 @@ function usePlaybackEngine(
   const declineEngines = useCallback((forKey: string, ...ids: readonly EngineId[]) => {
     // Read before destroy()/resource selection clears the media element. A
     // capability decline alone must still try native HLS on the same origin.
-    if (ids.includes("native-hls") || ids.includes("progressive")) {
+    if (ids.includes("native-hls")) {
       const el = videoRef.current;
-      if (el) setResume({ key: sourceKey, time: el.currentTime, paused: el.paused,
+      if (el) setResume({ key: sourceKey,
+        time: el.readyState === 0 && el.currentTime === 0 ? startPosition ?? 0 : el.currentTime,
+        restoreTransport: el.readyState > 0 || el.currentTime > 0 || !el.paused, paused: el.paused,
         rate: el.playbackRate, volume: el.volume, muted: el.muted });
       if (ids.includes("native-hls") && routeIndex < fallbackCount) {
         setRoute({ key: sourceKey, index: routeIndex + 1 });
@@ -309,7 +312,7 @@ function usePlaybackEngine(
       if (added.length === 0) return prev;
       return { key: forKey, engines: [...base, ...added] };
     });
-  }, [sourceKey, routeIndex, fallbackCount, videoRef]);
+  }, [sourceKey, routeIndex, fallbackCount, videoRef, startPosition]);
 
   const retry = useCallback(() => {
     const el = videoRef.current;
@@ -721,8 +724,12 @@ function usePlaybackEngine(
       el.playbackRate = resumed.rate;
       el.volume = resumed.volume;
       el.muted = resumed.muted;
-      if (resumed.paused) el.pause();
-      else void el.play()?.catch(() => {});
+      // Before metadata, paused is the browser default, not a viewer pause;
+      // overriding it would cancel the shell's start-on-open on the new source.
+      if (resumed.restoreTransport) {
+        if (resumed.paused) el.pause();
+        else void el.play()?.catch(() => {});
+      }
     };
     el.addEventListener("loadedmetadata", restore);
     return () => el.removeEventListener("loadedmetadata", restore);

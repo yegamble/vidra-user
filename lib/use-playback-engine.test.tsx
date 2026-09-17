@@ -1103,6 +1103,30 @@ describe("ordered HLS source fallback", () => {
 
   afterEach(() => vi.useRealTimers());
 
+  it("keeps a shared-link timestamp when the final original fails before metadata", async () => {
+    sessionMock.video = null;
+    const ref = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(ref, { id: "video-1" }, 90));
+    await waitFor(() => expect(result.current.mode).toBe("progressive"));
+    act(() => ref.current.dispatchEvent(new Event("error")));
+    expect(result.current.failed).toBe(true);
+    expect(result.current.src).toMatch(/original#t=90$/);
+  });
+
+  it("does not overwrite start-on-open or its requested time after initial HLS failure", async () => {
+    const ref = { current: document.createElement("video") };
+    const pause = vi.spyOn(ref.current, "pause").mockImplementation(() => {});
+    const { result } = renderHook(() => useHlsPlayback(ref, video, 90));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    act(() => hlsMock.instances[0].emit("error", { fatal: true }));
+    await waitFor(() => expect(result.current.mode).toBe("progressive"));
+    expect(result.current.src).toMatch(/original#t=90$/);
+    // The shell has kicked autoplay on this newly attached original.
+    Object.defineProperty(ref.current, "paused", { value: false });
+    act(() => ref.current.dispatchEvent(new Event("loadedmetadata")));
+    expect(pause).not.toHaveBeenCalled();
+  });
+
   it.each(["hls-js", "native-hls"])("bounds silent %s startup at each origin before trying original", async (engine) => {
     if (engine === "native-hls") {
       Reflect.deleteProperty(window, "MediaSource");
