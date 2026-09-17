@@ -213,6 +213,19 @@ describe("StatusPanel status badge", () => {
 });
 
 describe("StatusPanel component vocabulary", () => {
+  it.each(["paused", "pending"])("shows managed IPFS %s without a fault badge", async (status) => {
+    mocks.getSystemStatus.mockResolvedValue(systemStatus(undefined, {
+      components: { ipfs: { status, error: "Node running; gateway checked separately", detail: { node_state: "running", publication: "paused" } } },
+    }));
+    render(<StatusPanel />);
+    expect(await screen.findByText("IPFS")).toBeTruthy();
+    const badge = screen.getByText(status === "paused" ? "Paused" : "Pending");
+    expect(badge.className).not.toContain("danger");
+    expect(badge.className).not.toContain("success");
+    expect(screen.getByText("Node running; gateway checked separately")).toBeTruthy();
+    expect(screen.queryByText("Not configured")).toBeNull();
+  });
+
   it("names probe keys and statuses for operators, humanizing unknown keys", async () => {
     mocks.getSystemStatus.mockResolvedValue(
       systemStatus(undefined, {
