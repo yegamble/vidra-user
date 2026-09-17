@@ -6593,6 +6593,13 @@ export interface components {
              * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/master.m3u8?v=ctw5ps0e8w00
              */
             hls_url?: string;
+            /** @description The ordinary generation-versioned HLS URL, equal to hls_url for ready VOD. Use this after a bounded IPFS startup or stall failure. Its segments use normal origin/CDN delivery and never redirect to IPFS. Omitted without a ready tree and on live sessions. */
+            authoritative_hls_url?: string;
+            /**
+             * Format: uri
+             * @description Optional public IPFS gateway master playlist URL for the exact current promoted generation, including its actual imported filename. Present only for clear public published media with a complete, eligible public pin, delivery enabled, and an affirmative gateway health observation. Never append credentials or playback tokens. Try with a bounded startup/stall deadline, then fall back to authoritative_hls_url. Omission never blocks ordinary playback.
+             */
+            ipfs_hls_url?: string;
             /**
              * @description Origin-relative path of the MPEG-DASH manifest. Present only when packaging_format is `cmaf` (an MPEG-TS tree has no MPD); both manifests describe the SAME segments. Deliberately UNVERSIONED and NOT immutable: a DASH player expands the manifest's SegmentTemplate patterns itself and fetches the segments without a query string, so a version here would fence only the manifest. The MPD is revalidated, as its segments are.
              * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/cmaf/stream.mpd

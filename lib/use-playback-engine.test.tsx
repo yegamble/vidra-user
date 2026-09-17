@@ -1103,6 +1103,30 @@ describe("ordered HLS source fallback", () => {
 
   afterEach(() => vi.useRealTimers());
 
+  it("uses eligible session IPFS and authoritative URLs and preserves time on explicit source changes", async () => {
+    sessionMock.video = { ...sessionMock.video, authoritative_hls_url: "/current.m3u8", ipfs_hls_url: mirror };
+    const ref = { current: document.createElement("video") };
+    vi.spyOn(ref.current, "pause").mockImplementation(() => {});
+    const { result } = renderHook(() => useHlsPlayback(ref, { ...video, ipfs: { hls_cid: "root" } }, null, null, null, true));
+    await waitFor(() => expect(hlsMock.instances.at(-1)?.source).toBe(mirror));
+    expect(result.current.delivery?.source).toBe("ipfs");
+    ref.current.currentTime = 23;
+    act(() => result.current.delivery?.select("server"));
+    await waitFor(() => expect(hlsMock.instances.at(-1)?.source).toBe("http://localhost:8080/current.m3u8"));
+    expect(hlsMock.instances.at(-1)?.config.startPosition).toBe(23);
+    expect(result.current.delivery?.source).toBe("hls");
+    ref.current.currentTime = 29;
+    act(() => result.current.delivery?.select("ipfs"));
+    await waitFor(() => expect(hlsMock.instances.at(-1)?.source).toBe(mirror));
+    expect(hlsMock.instances.at(-1)?.config.startPosition).toBe(29);
+    const previous = hlsMock.instances.at(-1);
+    ref.current.currentTime = 34;
+    act(() => result.current.delivery?.select("ipfs"));
+    await waitFor(() => expect(hlsMock.instances.at(-1)).not.toBe(previous));
+    expect(hlsMock.instances.at(-1)?.config.startPosition).toBe(34);
+    expect(previous?.destroyed).toBe(true);
+  });
+
   it("keeps a shared-link timestamp when the final original fails before metadata", async () => {
     sessionMock.video = null;
     const ref = { current: document.createElement("video") };
@@ -1216,6 +1240,35 @@ describe("ordered HLS source fallback", () => {
     act(() => el.dispatchEvent(new Event("error")));
     await waitFor(() => expect(result.current.mode).toBe("progressive"));
     expect(result.current.sourceUrl).toContain("/original");
+  });
+
+  it("reassigns an unchanged native source on explicit retry", async () => {
+    Reflect.deleteProperty(window, "MediaSource");
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably");
+    const ref = { current: document.createElement("video") };
+    const { result } = renderHook(() => useHlsPlayback(ref, video, null, mirror));
+    await waitFor(() => expect(ref.current.getAttribute("src")).toBe(mirror));
+    act(() => result.current.retry());
+    expect(ref.current.getAttribute("src")).toBe(mirror);
+  });
+
+  it("retains the last meaningful snapshot when the next HLS source fails before metadata", async () => {
+    const el = document.createElement("video");
+    Object.defineProperty(el, "readyState", { configurable: true, writable: true, value: 4 });
+    vi.spyOn(el, "pause").mockImplementation(() => {});
+    const ref = { current: el };
+    const { result } = renderHook(() => useHlsPlayback(ref, video, 12, mirror));
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    el.currentTime = 25; el.playbackRate = 1.5;
+    act(() => result.current.retry());
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(2));
+    Object.defineProperty(el, "readyState", { value: 0 });
+    el.currentTime = 0; el.playbackRate = 1;
+    act(() => hlsMock.instances.at(-1)!.emit("error", { fatal: true, type: "networkError" }));
+    await waitFor(() => expect(hlsMock.instances.at(-1)?.source).toBe("http://localhost:8080/master.m3u8"));
+    expect(hlsMock.instances.at(-1)?.config.startPosition).toBe(25);
+    act(() => el.dispatchEvent(new Event("loadedmetadata")));
+    expect([el.currentTime, el.playbackRate]).toEqual([25, 1.5]);
   });
 
   it("does not carry a failed mirror or old resume position to another video", async () => {
