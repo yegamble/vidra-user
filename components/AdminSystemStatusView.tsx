@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
+import { componentHealthPresentation } from "@/lib/component-health";
 import type {
   SystemStatus,
   SystemStatusCdnPurge,
@@ -44,21 +45,11 @@ const COMPONENT_LABEL: Record<string, string> = {
   // Named for what it IS rather than for the protocol: an operator asking "is
   // anything leaving this instance?" is asking about a queue.
   federation: "Federation queue",
-};
-
-/** ok | down | not_configured, said in words rather than wire enums. */
-const COMPONENT_STATUS_LABEL: Record<string, string> = {
-  ok: "OK",
-  down: "Down",
-  not_configured: "Not configured",
+  ipfs: "IPFS",
 };
 
 function componentLabel(key: string): string {
   return COMPONENT_LABEL[key] ?? key.replace(/_/g, " ");
-}
-
-function componentStatusLabel(status: string): string {
-  return COMPONENT_STATUS_LABEL[status] ?? status.replace(/_/g, " ");
 }
 
 /**
@@ -188,7 +179,7 @@ export function StatusPanel() {
           <ul className="flex flex-col divide-y divide-border-subtle rounded-2xl bg-surface-muted px-4">
             {componentNames.map((name) => {
               const c = data.components[name];
-              const down = c.status !== "ok" && c.status !== "not_configured";
+              const { fault: down, neutral, label } = componentHealthPresentation(c.status);
               return (
                 <li key={name} className="flex flex-col gap-1.5 py-3">
                   <span className="flex items-center justify-between gap-3">
@@ -198,7 +189,7 @@ export function StatusPanel() {
                       className={`h-2 w-2 flex-none rounded-full ${
                         down
                           ? "bg-danger-solid"
-                          : c.status === "not_configured"
+                          : neutral
                             ? "bg-border"
                             : "bg-success"
                       }`}
@@ -211,12 +202,12 @@ export function StatusPanel() {
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${
                       down
                         ? "bg-danger-surface text-danger"
-                        : c.status === "not_configured"
+                        : neutral
                           ? "bg-surface-strong text-fg-muted"
                           : "bg-success/15 text-success"
                     }`}
                   >
-                    {componentStatusLabel(c.status)}
+                    {label}
                   </span>
                   </span>
                   {/* The REASON, as text. It used to live only in a title
@@ -226,8 +217,8 @@ export function StatusPanel() {
                       serving stale instance settings", "the worker process X
                       has not checked in for 47s"). A dashboard that hides its
                       own diagnosis behind a hover is not a dashboard. */}
-                  {down && c.error ? (
-                    <span className="pl-[18px] text-[13px] leading-relaxed text-danger">
+                  {c.error ? (
+                    <span className={`pl-[18px] text-[13px] leading-relaxed ${down ? "text-danger" : "text-fg-muted"}`}>
                       {c.error}
                     </span>
                   ) : null}
