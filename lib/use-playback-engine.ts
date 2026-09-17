@@ -724,9 +724,12 @@ function usePlaybackEngine(
       lastTime = el.currentTime;
     };
     const metadata = () => { if (el.paused) clear(); };
+    // Resource selection emits pause while load() resets the element. Until
+    // metadata exists this is not evidence that a viewer paused usable media.
+    const pause = () => { if (el.readyState > 0) clear(); };
     const events: Record<string, () => void> = {
       waiting, stalled: waiting, play: arm, playing: clear, loadeddata: clear,
-      loadedmetadata: metadata, timeupdate: progress, pause: clear,
+      loadedmetadata: metadata, timeupdate: progress, pause,
     };
     arm();
     for (const [event, listener] of Object.entries(events)) el.addEventListener(event, listener);

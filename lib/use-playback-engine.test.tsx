@@ -1161,7 +1161,10 @@ describe("ordered HLS source fallback", () => {
     const { result } = renderHook(() => useHlsPlayback(ref, video, null, mirror));
     await act(async () => {});
     expect(result.current.mode).toBe(engine);
-    await act(async () => { vi.advanceTimersByTime(8_000); });
+    await act(async () => { vi.advanceTimersByTime(4_000); });
+    // Attaching a new source can emit pause while metadata is still missing.
+    act(() => ref.current.dispatchEvent(new Event("pause")));
+    await act(async () => { vi.advanceTimersByTime(4_000); });
     expect(result.current.mode).toBe(engine);
     expect(result.current.sourceUrl).toBe("http://localhost:8080/master.m3u8");
     await act(async () => { vi.advanceTimersByTime(8_000); });
@@ -1182,6 +1185,7 @@ describe("ordered HLS source fallback", () => {
     el.currentTime = 1; emit("timeupdate");
     await act(async () => { vi.advanceTimersByTime(8_000); });
     expect(result.current.sourceUrl).toBe(mirror);
+    Object.defineProperty(el, "readyState", { configurable: true, value: 1 });
     emit("waiting"); emit("pause");
     await act(async () => { vi.advanceTimersByTime(8_000); });
     expect(result.current.sourceUrl).toBe(mirror);
