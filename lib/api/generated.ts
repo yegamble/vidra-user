@@ -9472,6 +9472,8 @@ export interface components {
             updated?: number;
             skipped: number;
             failed: number;
+            /** @description Subset of failed artwork rows whose source HTTP fallback returned 404 or 410 after source storage could not supply the image. Restore the source file or backup before retrying. These remain retryable; do not add this count to failed. Absent in older reports. */
+            missing_source?: number;
             unsupported: number;
         };
         /** @description Machine-readable summary of a plan (dry-run) or run. Carries only counts, the detected source version, and safe conflict notes — never secrets/PII. */
