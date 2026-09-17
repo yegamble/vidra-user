@@ -5115,6 +5115,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ipfs/gateway/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check current public gateway root eligibility
+         * @description Read-only reverse proxy precheck. The proxy must overwrite X-Forwarded-Uri
+         *     and X-Forwarded-Method with the original request and must not cache this
+         *     result or the media response. This endpoint issues no access credential.
+         */
+        get: operations["authorizeIPFSGateway"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ipfs/status": {
         parameters: {
             query?: never;
@@ -5124,11 +5146,63 @@ export interface paths {
         };
         /**
          * IPFS mirror status (admin)
-         * @description Reports the hybrid IPFS media mirror's status (fix_plan P19, .ralph/specs/ipfs-media.md): whether it is enabled, node reachability, the public gateway URL in use, whether an IPFS Cluster is configured, and pin counts overall and per media class. IPFS is a MIRROR SIDECAR — local/S3 stays authoritative — so this never reflects on the readiness of media serving. Returns 503 ipfs_disabled when both IPFS_ENABLED=false and IPFS_MIRROR_PRIVATE=false. Restricted to admins. (Status aggregation is delivered in P19.2; until then an enabled instance answers 501 not_implemented.)
+         * @description Reports the hybrid IPFS media mirror's status (fix_plan P19, .ralph/specs/ipfs-media.md): whether it is enabled, node reachability, the public gateway URL in use, whether an IPFS Cluster is configured, and pin counts overall and per media class. IPFS is a MIRROR SIDECAR — local/S3 stays authoritative — so this never reflects on the readiness of media serving. Managed installations also report desired/applied configuration, host operations and nullable capacity measurements, including while publication is disabled. Legacy installations without the control service return 503 ipfs_disabled when both IPFS tiers are disabled. Restricted to admins.
          */
         get: operations["getIPFSStatus"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ipfs/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read atomic IPFS desired configuration */
+        get: operations["getIPFSConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Save atomic IPFS configuration with revision conflict protection */
+        patch: operations["updateIPFSConfig"];
+        trace?: never;
+    };
+    "/api/v1/admin/ipfs/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply saved internal node configuration */
+        post: operations["applyIPFSConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ipfs/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start or restart the configured internal node */
+        post: operations["restartIPFS"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9453,8 +9527,104 @@ export interface components {
         PeerTubeImportRunList: {
             runs: components["schemas"]["PeerTubeImportRun"][];
         };
+        IPFSConfig: {
+            /**
+             * @description Fixed managed internal node or operator-configured external node; no arbitrary URL is accepted.
+             * @enum {string}
+             */
+            provider: "internal" | "external";
+            /** @description Permit new publication admissions. Pausing keeps privacy withdrawals running. */
+            enabled: boolean;
+            auto_pin_new: boolean;
+            demand_pin: boolean;
+            /** @description Explicit old-catalogue fill; enabling or reading configuration never implicitly enables it. */
+            backfill_enabled: boolean;
+            /** Format: int64 */
+            budget_bytes: number;
+            /** Format: int64 */
+            min_free_bytes: number;
+            /**
+             * Format: int64
+             * @description Background copy into Kubo; does not limit all public swarm traffic.
+             */
+            copy_bytes_per_second: number;
+            workers: number;
+        };
+        IPFSConfigDocument: {
+            /** Format: int64 */
+            revision: number;
+            config: components["schemas"]["IPFSConfig"];
+            /** @description False until an explicit save adopts managed policy; reading status preserves legacy behavior. */
+            policy_active: boolean;
+            operation?: components["schemas"]["IPFSControlOperation"];
+        };
+        IPFSConfigUpdate: {
+            /** Format: int64 */
+            expected_revision: number;
+            config: components["schemas"]["IPFSConfig"];
+        };
+        IPFSOperationRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            /**
+             * Format: uuid
+             * @description Retain this id when retrying an uncertain response.
+             */
+            request_id: string;
+        };
+        IPFSControlOperation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            sequence: number;
+            /** Format: int64 */
+            config_revision: number;
+            /** @enum {string} */
+            state: "pending" | "running" | "succeeded" | "failed";
+        };
+        IPFSOperationResult: {
+            operation: components["schemas"]["IPFSControlOperation"];
+            /** Format: int64 */
+            revision: number;
+        };
+        IPFSManagementStatus: {
+            /** @enum {string} */
+            mode: "internal" | "external" | "unavailable";
+            available: boolean;
+            /** @enum {string} */
+            desired_state: "running" | "external";
+            /** @enum {string} */
+            observed_state: "absent" | "starting" | "running" | "unhealthy" | "stopped" | "unknown";
+            /** Format: int64 */
+            applied_config_revision: number;
+            operation: components["schemas"]["IPFSControlOperation"] | null;
+            last_error_code: string | null;
+            /** Format: date-time */
+            observed_at: string | null;
+        };
+        IPFSCapacityStatus: {
+            /** Format: int64 */
+            budget_bytes: number;
+            /**
+             * Format: int64
+             * @description Actual node repository usage; null when unavailable.
+             */
+            repo_used_bytes: number | null;
+            /** Format: int64 */
+            reserved_bytes: number;
+            /** Format: int64 */
+            filesystem_free_bytes: number | null;
+            /** Format: int64 */
+            min_free_bytes: number;
+            /** @description Server-computed reason, including stale_capacity, node_unavailable, configuration_pending, capacity_unknown, budget_exhausted or filesystem_headroom. */
+            admission_paused_reason: string | null;
+        };
         /** @description Status of the hybrid IPFS media mirror (fix_plan P19). IPFS is a mirror sidecar; these fields are informational and never gate media serving. */
         IPFSStatus: {
+            /** Format: int64 */
+            config_revision?: number;
+            management?: components["schemas"]["IPFSManagementStatus"];
+            capacity?: components["schemas"]["IPFSCapacityStatus"];
             /** @description Whether IPFS_ENABLED is set on this instance. */
             enabled: boolean;
             /** @description Whether the Kubo node answered the /api/v0/version health probe. */
@@ -24862,6 +25032,43 @@ export interface operations {
             };
         };
     };
+    authorizeIPFSGateway: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Forwarded-Uri": string;
+                "X-Forwarded-Method": "GET" | "HEAD";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The root has a currently eligible public pin */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown, withdrawn, malformed, or unavailable root */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getIPFSStatus: {
         parameters: {
             query?: never;
@@ -24908,6 +25115,296 @@ export interface operations {
                 };
             };
             /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getIPFSConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current desired configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSConfigDocument"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Administrator role required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control service is not installed. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateIPFSConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IPFSConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Current desired configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSConfigDocument"];
+                };
+            };
+            /** @description Desired configuration saved and internal apply queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSConfigDocument"];
+                };
+            };
+            /** @description Malformed or incomplete document. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Administrator role required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Configuration revision conflict or external-provider lifecycle request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Configuration is outside the supported limits. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control service is not installed. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    applyIPFSConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IPFSOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Idempotent node operation accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSOperationResult"];
+                };
+            };
+            /** @description Malformed or incomplete document. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Administrator role required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Configuration revision conflict or external-provider lifecycle request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control service is not installed. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Host manager integration is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    restartIPFS: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IPFSOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Idempotent node operation accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSOperationResult"];
+                };
+            };
+            /** @description Malformed or incomplete document. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Administrator role required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Configuration revision conflict or external-provider lifecycle request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control service is not installed. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Host manager integration is not configured. */
             503: {
                 headers: {
                     [name: string]: unknown;

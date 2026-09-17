@@ -244,6 +244,11 @@ export type StorageMigrationPausedReason = NonNullable<
   StorageMigration["paused_reason"]
 >;
 export type IPFSStatus = Schemas["IPFSStatus"];
+export type IPFSConfig = Schemas["IPFSConfig"];
+export type IPFSConfigDocument = Schemas["IPFSConfigDocument"];
+export type IPFSConfigUpdate = Schemas["IPFSConfigUpdate"];
+export type IPFSOperationRequest = Schemas["IPFSOperationRequest"];
+export type IPFSOperationResult = Schemas["IPFSOperationResult"];
 export type IPFSNetworks = Schemas["IPFSNetworks"];
 export type IPFSNetworkStatus = Schemas["IPFSNetworkStatus"];
 export type IPFSPinCounts = Schemas["IPFSPinCounts"];

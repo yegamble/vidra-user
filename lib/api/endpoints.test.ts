@@ -1888,6 +1888,32 @@ describe("api endpoints", () => {
     expect(init.method).toBe("POST");
   });
 
+  it("reads and atomically saves IPFS configuration with its expected revision", async () => {
+    fetchMock.mockImplementation(async () => okJson());
+    const controller = new AbortController();
+    await api.getIPFSConfig(controller.signal);
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/ipfs/config");
+    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+    fetchMock.mockClear();
+    const update = { expected_revision: 3, config: { provider: "internal" as const,
+      enabled: false, auto_pin_new: true, demand_pin: false, backfill_enabled: false,
+      budget_bytes: 21474836480, min_free_bytes: 21474836480, copy_bytes_per_second: 2097152, workers: 1 } };
+    await api.updateIPFSConfig(update);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/ipfs/config");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual(update);
+  });
+
+  it.each(["apply", "restart"] as const)("preserves the caller's idempotency key for IPFS %s", async (action) => {
+    const request = { expected_revision: 3, request_id: "22222222-2222-4222-8222-222222222222" };
+    await api.runIPFSOperation(action, request);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`http://localhost:8080/api/v1/admin/ipfs/${action}`);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual(request);
+  });
+
   it("omits the IPFS network query when reconciling all tiers", async () => {
     await api.reconcileIPFS();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/ipfs/reconcile");

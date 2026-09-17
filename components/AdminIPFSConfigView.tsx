@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
+import { IPFSPolicyForm } from "@/components/admin/IPFSPolicyForm";
 import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -22,9 +23,13 @@ type LoadState = "loading" | "ready" | "disabled" | "error";
 type ReconcileScope = "all" | "public" | "private";
 
 export function AdminIPFSConfigView() {
+  const [statusVersion, setStatusVersion] = useState(0);
   return (
     <RoleGate minRole="admin" action="configure IPFS mirroring">
-      <IPFSConfigPanel />
+      <div className="flex flex-col gap-8">
+        <IPFSPolicyForm onSaved={() => setStatusVersion((n) => n + 1)} />
+        <IPFSConfigPanel key={statusVersion} />
+      </div>
     </RoleGate>
   );
 }
