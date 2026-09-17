@@ -2,16 +2,16 @@
 
 import { RotateCwIcon } from "@/components/icons";
 
-// The four states the watch-page IPFS surface can be in (DR5). Drives both this
-// bar and the player overlay. Kept peer-free per spec §5.1 — the backend exposes
-// no per-video peer counts, so the copy never claims any.
-export type IpfsSource = "server" | "fetching" | "ipfs" | "error";
+// The engine's selected source, including fallback. No invented peer counts.
+export type IpfsSource = "server" | "fetching" | "ipfs" | "error" | "original" | "starting";
 
 const LABEL: Record<IpfsSource, string> = {
   server: "Playing from server (HLS)",
   fetching: "IPFS · fetching…",
-  ipfs: "IPFS · pinned",
+  ipfs: "Playing from IPFS",
   error: "IPFS · unavailable — playing from server",
+  original: "Playing from server (original)",
+  starting: "No active source",
 };
 
 // Dot colour by state — decorative (the label carries the meaning as text, so
@@ -22,6 +22,8 @@ const DOT: Record<IpfsSource, string> = {
   fetching: "bg-warning",
   ipfs: "bg-success",
   error: "bg-danger",
+  original: "bg-fg-subtle",
+  starting: "bg-warning",
 };
 
 // The toggle flips between the two sources. When already on (or fetching) IPFS,
@@ -32,10 +34,10 @@ function toggleLabel(state: IpfsSource): string {
 
 /**
  * IpfsSourceBar — the thin status/source row under the watch player, shown only
- * when the video is IPFS-mirrored (its detail carries `ipfs.hls_cid`/gateway).
+ * when the playback session offers an eligible IPFS source.
  * A status dot + peer-free label, a re-fetch control (when IPFS is the active or
  * failed source), and a tonal pill that toggles the playback source. Purely
- * presentational: WatchView owns the state machine and the actual source switch.
+ * presentational: the playback engine owns selection and reports fallback.
  */
 export function IpfsSourceBar({
   state,

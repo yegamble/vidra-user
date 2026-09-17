@@ -86,7 +86,7 @@ import {
 } from "@/lib/player-shortcuts";
 import { useChapters } from "@/lib/use-chapters";
 import { readStoredVolume, storeVolume } from "@/lib/player-volume";
-import { useHlsPlayback } from "@/lib/use-playback-engine";
+import { useHlsPlayback, type PlaybackDelivery } from "@/lib/use-playback-engine";
 import { useStoryboard } from "@/lib/use-storyboard";
 
 // How long the overlay controls linger after the last pointer activity while
@@ -144,6 +144,7 @@ export function VideoPlayer({
   onPlay,
   onTimeUpdate,
   onPause,
+  onDeliveryChange,
   children,
 }: {
   video: Video;
@@ -181,10 +182,14 @@ export function VideoPlayer({
   onPlay?: () => void;
   onTimeUpdate?: () => void;
   onPause?: () => void;
+  onDeliveryChange?: (delivery: PlaybackDelivery) => void;
   /** Rendered inside the media container, over the video (e.g. the embed title link). */
   children?: ReactNode;
 }) {
-  const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride, playbackToken);
+  const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride, playbackToken, variant === "watch");
+  useEffect(() => {
+    if (playback.delivery) onDeliveryChange?.(playback.delivery);
+  }, [playback.delivery, onDeliveryChange]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   // The overlay control bar, handed to CaptionLayer so the captions can be held
   // above its MEASURED height — it retiers by container query, so no pixel
@@ -1015,6 +1020,8 @@ export function VideoPlayer({
         ref={videoRef}
         playsInline
         className="h-full w-full touch-manipulation bg-black object-contain"
+        // Set before src: native IPFS loads must omit cross-origin credentials.
+        crossOrigin={playback.delivery?.source === "ipfs" ? "anonymous" : undefined}
         src={playback.src}
         poster={posterUrl}
         {...surfaceHandlers}

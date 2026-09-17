@@ -92,9 +92,8 @@ test(
       expect(init.status()).toBe(200);
     }
 
-    // 4. The watch page. It defaults to the authoritative server ladder and OFFERS
-    //    the mirror — the offer itself is a real assertion: it exists only because
-    //    the detail carried a pinned CID + gateway.
+    // 4. The session offers an eligible mirror. Initial preference is bounded,
+    //    so a slow session may leave CDN selected; explicitly exercise both sources.
     //
     // Everything below is scoped to the <main> landmark ON PURPOSE. This is a
     // FULL page load of a server-rendered route, so until React finishes hydrating
@@ -107,10 +106,14 @@ test(
     await page.goto(`/videos/${videoId}`);
     const stage = page.getByRole("main");
     await expect(stage.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
+    await expect(stage.getByRole("button", { name: /^Use (server|IPFS)$/ })).toBeVisible();
+    if (await stage.getByRole("button", { name: "Use server" }).isVisible()) {
+      await stage.getByRole("button", { name: "Use server" }).click();
+    }
     await expect(stage.getByText("Playing from server (HLS)")).toBeVisible();
 
-    // Opting in probes the gateway for real (WatchView fetches the master itself)
-    // and then hands the same URL to hls.js, which follows it INTO the tree. Both
+    // Switching back hands the session URL to hls.js, which follows it INTO the
+    // tree without a separate preflight fetch. Both
     // waiters are armed BEFORE the click: a waitForResponse only sees traffic that
     // happens after it is created, and the deeper fetch can land first.
     const probed = page.waitForResponse((r) => r.url() === masterURL && r.status() === 200, {
@@ -124,7 +127,7 @@ test(
     await probed;
 
     // The bar settles on the pinned source (peer-free copy) and offers the way back.
-    await expect(stage.getByText("IPFS · pinned")).toBeVisible();
+    await expect(stage.getByText("Playing from IPFS")).toBeVisible();
     await expect(stage.getByRole("button", { name: "Use server" })).toBeVisible();
     await expect(stage.getByText(/peer/i)).toHaveCount(0);
 
