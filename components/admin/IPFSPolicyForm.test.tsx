@@ -16,6 +16,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("explains the operator-managed capacity tradeoff before policy adoption", async () => {
+  render(<IPFSPolicyForm onSaved={() => {}} />);
+  fireEvent.change(await screen.findByLabelText("Node provider"), { target: { value: "external" } });
+  expect(screen.getByText(/Saving adopts capacity checks; copying pauses when host usage cannot be measured/)).toBeTruthy();
+  expect(api.updateIPFSConfig).not.toHaveBeenCalled();
+});
+
 it("loads without adopting policy and saves the complete document with revision and byte units", async () => {
   const onSaved = vi.fn();
   render(<IPFSPolicyForm onSaved={onSaved} />);

@@ -86,6 +86,7 @@ export function IPFSPolicyForm({ onSaved }: { onSaved: () => void }) {
             value={draft.provider} onChange={(event) => setDraft({ ...draft, provider: event.target.value as IPFSConfig["provider"] })}>
             <option value="internal">Managed Docker node</option><option value="external">Operator-managed node</option>
           </Select>
+          {draft.provider === "external" ? <p className="text-xs text-fg-muted">Saving adopts capacity checks; copying pauses when host usage cannot be measured. Existing deployment policy continues until the first save.</p> : null}
           <div className="flex flex-col gap-3">
             {publicationFields.map(([key, label]) => <Checkbox key={key} label={label} checked={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.checked })} />)}
           </div>
