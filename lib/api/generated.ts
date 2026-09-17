@@ -5115,6 +5115,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ipfs/gateway/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check current public gateway root eligibility
+         * @description Read-only reverse proxy precheck. The proxy must overwrite X-Forwarded-Uri
+         *     and X-Forwarded-Method with the original request and must not cache this
+         *     result or the media response. This endpoint issues no access credential.
+         */
+        get: operations["authorizeIPFSGateway"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ipfs/status": {
         parameters: {
             query?: never;
@@ -25001,6 +25023,43 @@ export interface operations {
             };
             /** @description No run with that id. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    authorizeIPFSGateway: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Forwarded-Uri": string;
+                "X-Forwarded-Method": "GET" | "HEAD";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The root has a currently eligible public pin */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown, withdrawn, malformed, or unavailable root */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

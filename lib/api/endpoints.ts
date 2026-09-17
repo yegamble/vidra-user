@@ -2380,7 +2380,9 @@ export const api = {
 
   // The caller retains the same request id when retrying an uncertain result.
   runIPFSOperation: (action: "apply" | "restart", body: IPFSOperationRequest) =>
-    apiRequest<IPFSOperationResult>(`/api/v1/admin/ipfs/${action}`, { method: "POST", body }),
+    action === "apply"
+      ? apiRequest<IPFSOperationResult>("/api/v1/admin/ipfs/apply", { method: "POST", body })
+      : apiRequest<IPFSOperationResult>("/api/v1/admin/ipfs/restart", { method: "POST", body }),
 
   /**
    * POST /api/v1/admin/ipfs/reconcile — re-arm failed work and seed missing
