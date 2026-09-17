@@ -10,7 +10,10 @@ type Operation = IPFSOperationResult["operation"];
 const PAUSE_REASONS: Record<string, string> = {
   stale_capacity: "Waiting for a fresh storage measurement", node_unavailable: "Waiting for the IPFS node",
   capacity_unknown: "Storage usage is unavailable", configuration_pending: "Waiting for saved configuration to apply",
-  disabled: "Publication is paused", budget_exhausted: "Pin storage budget reached",
+  disabled: "Publication is paused", publication_paused: "Publication is paused",
+  policy_not_adopted: "Save the policy to enable managed pinning",
+  recovering_interrupted_copy: "Recovering an interrupted copy before starting more pins",
+  budget_exhausted: "Pin storage budget reached",
   filesystem_headroom: "Keeping the required disk space free", recovering_copy_cleanup: "Finishing interrupted pin cleanup",
 };
 
@@ -59,6 +62,7 @@ export function IPFSManagedStatus({ document, dirty, onReload }: {
     } finally { setBusy(false); }
   };
   const capacity = status?.capacity;
+  const queue = status?.queue;
   // formatBytes uses 1024-step units; match the policy's binary GiB/MiB inputs.
   const bytes = (value: number | null | undefined) => value == null ? "Unavailable" : formatBytes(value).replace(/([KMGTPE])B$/, "$1iB");
   const rows = [
@@ -73,12 +77,25 @@ export function IPFSManagedStatus({ document, dirty, onReload }: {
     ["Required free space", bytes(capacity?.min_free_bytes)],
     ["Admission pause reason", capacity?.admission_paused_reason ? PAUSE_REASONS[capacity.admission_paused_reason] ?? "Pinning paused" : (capacity ? "None reported" : "Unavailable")],
   ];
+  const queueRows = queue ? [
+    ["Copying now", queue.copying], ["New videos waiting", queue.queued_new],
+    ["Requested videos waiting", queue.queued_demand], ["Waiting for capacity", queue.queued_capacity],
+    ["Removed to free space", queue.evicted], ["Interrupted copies", queue.expired_claims],
+    ["Read by active copies", bytes(queue.copied_bytes)],
+  ] : [];
   return <section aria-label="Managed IPFS node" className="flex flex-col gap-4 border-t border-border pt-5">
     <h3 className="text-sm font-semibold text-fg">Node and pin storage</h3>
     {!status && !loadError ? <Spinner label="Loading node status" /> : null}
     <dl className="grid gap-3 text-sm sm:grid-cols-2">
       {rows.map(([label, value]) => <div key={label}><dt className="text-fg-muted">{label}</dt><dd className="break-words text-fg">{value}</dd></div>)}
     </dl>
+    {queue ? <div className="flex flex-col gap-3">
+      <h4 className="text-sm font-semibold text-fg">Public pin queue</h4>
+      <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        {queueRows.map(([label, value]) => <div key={label}><dt className="text-fg-muted">{label}</dt><dd className="break-words text-fg">{value}</dd></div>)}
+      </dl>
+      <p className="text-xs text-fg-muted">Bytes read may include incomplete copies. A video is available through IPFS after its full copy is pinned.</p>
+    </div> : null}
     <p className="text-xs text-fg-muted">Publication may be paused while the node stays running to withdraw private content and serve retained public pins.</p>
     {dirty || !document.policy_active ? <p className="text-sm text-fg-muted">Save the policy before operating the node.</p> : null}
     {document.config.provider === "external" ? <p className="text-sm text-fg-muted">External node lifecycle is managed outside Vidra.</p> : null}
