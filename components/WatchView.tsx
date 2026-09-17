@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode,
   type RefObject,
 } from "react";
 
@@ -24,10 +23,10 @@ import { SupportButton } from "@/components/SupportButton";
 import { TimestampedText } from "@/components/TimestampedText";
 import { WatchActions } from "@/components/watch/WatchActions";
 import { WatchSignInProvider } from "@/components/watch/WatchSignInPrompt";
+import type { PlaybackDelivery } from "@/lib/use-playback-engine";
 import { useAmbientMode } from "@/lib/player-ambient";
 import { AmbientGlow } from "@/components/watch/AmbientGlow";
-import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
-import { IpfsSourceBar, type IpfsSource } from "@/components/watch/IpfsSourceBar";
+import { IpfsSourceBar } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
 import { TranscodingNote } from "@/components/watch/TranscodingNote";
 import { UpNextQueue } from "@/components/UpNextQueue";
@@ -39,7 +38,6 @@ import { WatchSkeleton } from "@/components/watch/WatchSkeleton";
 import {
   ApiError,
   api,
-  ipfsHlsMasterUrl,
   isSensitiveVideo,
   videoCaptionUrl,
   videoThumbnailUrl,
@@ -201,11 +199,8 @@ export function WatchView({
   const sensitivePolicy = useSensitiveContentPolicy();
   const restrictedMode = useRestrictedMode();
   const [sensitiveAccepted, setSensitiveAccepted] = useState(false);
-  // IPFS playback surface (DR5): the video streams from the authoritative server
-  // by default; a viewer can opt into the IPFS gateway mirror. "fetching" probes
-  // the gateway HLS master; "ipfs" plays from it; "error" fell back to server.
-  const [ipfsState, setIpfsState] = useState<IpfsSource>("server");
-  const ipfsProbeRef = useRef<AbortController | null>(null);
+  // The engine reports the source it selected, including automatic fallback.
+  const [delivery, setDelivery] = useState<PlaybackDelivery | null>(null);
 
   // A viewer-selected queue takes precedence over the automatic related pick.
   // Once a queued item becomes the current video it is consumed, preserving a
@@ -219,20 +214,6 @@ export function WatchView({
   );
   const playlist = usePlaylistNext(video?.id);
   const nextVideo = playlist.active ? playlist.next : queuedNextVideo ?? relatedNextVideo;
-
-  // Content-addressed IPFS HLS master, present only when the detail carries a
-  // pinned HLS CID + gateway AND the video has a transcoded ladder (IPFS
-  // playback is HLS). Drives whether the source bar is offered at all.
-  //
-  // The `ipfs` object IS the detail's pinned signal — it is emitted only for a
-  // public+published video whose ledger row is state='pinned' on the PUBLIC swarm.
-  // This deliberately does NOT gate on `ipfs_pinned`: that flag is a CARD/FEED
-  // field ("Drives the IPFS thumbnail badge on card/feed views"), set by the list
-  // handlers only, and GET /videos/{id} never sends it — so requiring it here hid
-  // the bar on every real backend while the mocked spec, which fabricated the
-  // flag, stayed green. e2e-backed/ipfs.spec.ts is the live-mirror regression test.
-  const ipfsMasterUrl = ipfsHlsMasterUrl(video?.ipfs);
-  const ipfsAvailable = Boolean(ipfsMasterUrl && video?.hls_url);
 
   useEffect(() => {
     // A hard navigation restores the bearer asynchronously. Reading before it
@@ -358,47 +339,9 @@ export function WatchView({
   const [seenVideoId, setSeenVideoId] = useState(currentVideoId);
   if (seenVideoId !== currentVideoId) {
     setSeenVideoId(currentVideoId);
-    setIpfsState("server");
+    setDelivery(null);
     setChannel(null);
   }
-
-  // Abort any in-flight IPFS probe when the video changes or the page unmounts.
-  useEffect(
-    () => () => {
-      ipfsProbeRef.current?.abort();
-      ipfsProbeRef.current = null;
-    },
-    [currentVideoId],
-  );
-
-  // Opt into IPFS: probe the gateway HLS master. A real fetch outcome — ok →
-  // play from IPFS, not-ok/network error → the error state (peer-free copy).
-  const tryIpfs = useCallback(() => {
-    if (!ipfsMasterUrl) return;
-    ipfsProbeRef.current?.abort();
-    const controller = new AbortController();
-    ipfsProbeRef.current = controller;
-    setIpfsState("fetching");
-    fetch(ipfsMasterUrl, { signal: controller.signal })
-      .then((res) => {
-        if (controller.signal.aborted) return;
-        setIpfsState(res.ok ? "ipfs" : "error");
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setIpfsState("error");
-      });
-  }, [ipfsMasterUrl]);
-
-  const switchToServer = useCallback(() => {
-    ipfsProbeRef.current?.abort();
-    ipfsProbeRef.current = null;
-    setIpfsState("server");
-  }, []);
-
-  const toggleSource = useCallback(() => {
-    if (ipfsState === "ipfs" || ipfsState === "fetching") switchToServer();
-    else tryIpfs();
-  }, [ipfsState, switchToServer, tryIpfs]);
 
   // Theater asks the app SHELL to step aside — YouTube closes the guide on a
   // theater watch page, and the full-bleed band has nowhere to go while a 224px
@@ -501,18 +444,6 @@ export function WatchView({
       : [{ kind: "channel", handle: channelHandle }]
     : [];
 
-  // Only stream from IPFS while it is the confirmed source; the server ladder
-  // stays the fallback inside the player. Fetching/error paint the overlay.
-  const hlsMasterOverride = ipfsState === "ipfs" ? ipfsMasterUrl : null;
-  const playerOverlay =
-    ipfsState === "fetching" || ipfsState === "error" ? (
-      <IpfsPlayerOverlay
-        state={ipfsState}
-        onRefetch={tryIpfs}
-        onUseServer={switchToServer}
-      />
-    ) : null;
-
   // Taxonomy chips only (category/language/license). Duration and pixel
   // dimensions are deliberately NOT chips: the player timeline already shows
   // duration and resolution lives in the quality menu — repeating them here as
@@ -601,20 +532,19 @@ export function WatchView({
               startAt={startAt}
               nextVideo={nextVideo}
               nextHref={playlist.href}
-              hlsMasterOverride={hlsMasterOverride}
+              onDeliveryChange={setDelivery}
               playbackToken={playbackToken}
-              overlay={playerOverlay}
             />
             {/* The rows that live directly under the stage. In theater the band
                 above them spans the whole content area, so they take the page's
                 content measure themselves and stay lined up with the title. */}
             <div className={cn("flex flex-col", theater ? WATCH_THEATER_INSET : null)}>
             {/* IPFS source bar — only when the video is gateway-mirrored. */}
-            {ipfsAvailable ? (
+            {delivery?.available ? (
               <IpfsSourceBar
-                state={ipfsState}
-                onToggle={toggleSource}
-                onRefetch={tryIpfs}
+                state={delivery.source === "hls" ? "server" : delivery.source ?? "starting"}
+                onToggle={() => delivery.select(delivery.source === "ipfs" ? "server" : "ipfs")}
+                onRefetch={() => delivery.select("ipfs")}
               />
             ) : null}
             {/* Still-transcoding note (publish-timing): shown while the detail
@@ -769,9 +699,8 @@ function Player({
   startAt,
   nextVideo,
   nextHref,
-  hlsMasterOverride,
+  onDeliveryChange,
   playbackToken,
-  overlay,
   theater,
 }: {
   video: Video;
@@ -779,9 +708,8 @@ function Player({
   startAt: number | null;
   nextVideo: Video | null;
   nextHref?: string;
-  hlsMasterOverride: string | null;
+  onDeliveryChange: (delivery: PlaybackDelivery) => void;
   playbackToken: string | null;
-  overlay: ReactNode;
   /** Theater mode: the stage is the page's full-bleed band, so it drops its
    * radius and its 16:9 box (the band owns the height) and the quiet row under
    * it takes the page container so it stays on the content measure. */
@@ -912,9 +840,8 @@ function Player({
           tracks={tracks}
           nextVideo={nextVideo}
           nextHref={nextHref}
-          hlsMasterOverride={hlsMasterOverride}
+          onDeliveryChange={onDeliveryChange}
           playbackToken={playbackToken}
-          overlay={overlay}
           onPlay={handlePlay}
           onTimeUpdate={recordThrottled}
           onPause={record}

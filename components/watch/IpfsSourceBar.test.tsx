@@ -15,10 +15,10 @@ describe("IpfsSourceBar", () => {
     expect(screen.queryByRole("button", { name: "Re-fetch from IPFS" })).toBeNull();
   });
 
-  it("shows 'IPFS · pinned' + a re-fetch control when playing from IPFS", () => {
+  it("shows 'Playing from IPFS' + a re-fetch control when playing from IPFS", () => {
     const onRefetch = vi.fn();
     render(<IpfsSourceBar state="ipfs" onToggle={() => {}} onRefetch={onRefetch} />);
-    expect(screen.getByText("IPFS · pinned")).toBeTruthy();
+    expect(screen.getByText("Playing from IPFS")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Use server" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Re-fetch from IPFS" }));
     expect(onRefetch).toHaveBeenCalledTimes(1);
@@ -42,5 +42,13 @@ describe("IpfsSourceBar", () => {
     render(<IpfsSourceBar state="server" onToggle={onToggle} onRefetch={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Use IPFS" }));
     expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("distinguishes original-file fallback and startup from server HLS", () => {
+    const { rerender } = render(<IpfsSourceBar state="original" onToggle={() => {}} onRefetch={() => {}} />);
+    expect(screen.getByText("Playing from server (original)")).toBeTruthy();
+    expect(screen.queryByText(/pinned/)).toBeNull();
+    rerender(<IpfsSourceBar state="starting" onToggle={() => {}} onRefetch={() => {}} />);
+    expect(screen.getByText("No active source")).toBeTruthy();
   });
 });
