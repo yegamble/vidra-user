@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { expectPlayerSetting, openPlayerSetting } from "../e2e/player-settings-menu";
 
 import {
   ADMIN_EMAIL,
@@ -311,9 +312,9 @@ test("a watch page whose media cannot be fetched says so and offers a retry", as
 test("player speed and volume survive a reload and a second tab", async ({ page, context }) => {
   test.slow();
   await page.goto(`/videos/${seeded.videoId}`);
-  await page.getByRole("button", { name: /^Speed/ }).first().click();
-  await page.getByRole("menuitemradio", { name: "1.5×" }).click();
-  await expect(page.getByRole("button", { name: "Speed: 1.5×" })).toBeVisible();
+  const speed = await openPlayerSetting(page, "Playback speed");
+  await speed.getByRole("menuitemradio", { name: "1.5×" }).click();
+  await expectPlayerSetting(page, "Playback speed 1.5×");
 
   const volume = page.getByRole("slider", { name: "Volume" });
   await volume.focus();
@@ -323,7 +324,7 @@ test("player speed and volume survive a reload and a second tab", async ({ page,
   expect(set).toBeLessThan(1);
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "Speed: 1.5×" })).toBeVisible();
+  await expectPlayerSetting(page, "Playback speed 1.5×");
   await expect
     .poll(() => page.evaluate(() => document.querySelector("video")?.volume ?? null))
     .toBeCloseTo(set as number, 2);
@@ -334,7 +335,7 @@ test("player speed and volume survive a reload and a second tab", async ({ page,
   // tab correctly opens at the default — asserted so the split stays deliberate.
   const tab = await context.newPage();
   await tab.goto(`/videos/${seeded.videoId}`);
-  await expect(tab.getByRole("button", { name: "Speed: 1×" })).toBeVisible();
+  await expectPlayerSetting(tab, "Playback speed 1×");
   await expect
     .poll(() => tab.evaluate(() => document.querySelector("video")?.volume ?? null))
     .toBeCloseTo(set as number, 2);

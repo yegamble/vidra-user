@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectPlayerSetting } from "./player-settings-menu";
 
 // Mocked player-settings coverage (PLAY-07 / W1.6). A real backend is not running
 // in `npm run ci`; the persistence round-trip is proven in
@@ -160,8 +161,8 @@ test("the bespoke player starts at the user's default speed on the watch page", 
   await expect(page.getByRole("heading", { name: "Watch Me" })).toBeVisible();
 
   // The shell consumed the per-user default_speed (no session pick made) — the
-  // Speed button reads 1.5× and the media element is at 1.5×.
-  await expect(page.getByRole("button", { name: "Speed: 1.5×" })).toBeVisible();
+  // Settings summary reads 1.5× and the media element is at 1.5×.
+  await expectPlayerSetting(page, "Playback speed 1.5×");
   await expect
     .poll(() => page.locator("video").evaluate((el: HTMLVideoElement) => el.playbackRate))
     .toBe(1.5);

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PlayerOverflowMenu } from "./PlayerOverflowMenu";
@@ -25,6 +25,8 @@ const GROUPS = [
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("PlayerOverflowMenu", () => {
@@ -115,6 +117,49 @@ describe("PlayerOverflowMenu", () => {
 
 
 describe("Settings submenus", () => {
+  it("returns to the complete root menu when the active group disappears", () => {
+    const audio = { id: "audio", label: "Audio track", value: "en", items: [{ value: "en", label: "English" }], onSelect: vi.fn() };
+    const { rerender } = render(<PlayerOverflowMenu toggles={TOGGLES} groups={[...GROUPS, audio]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Audio track/ }));
+    expect(screen.getByRole("menu", { name: "Audio track" })).toBeTruthy();
+    rerender(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} />);
+    expect(screen.getByRole("menu", { name: "Settings" })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("menuitemcheckbox", { name: "Mute" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Playback speed/ }));
+    expect(screen.getByRole("menu", { name: "Playback speed" })).toBeTruthy();
+  });
+
+  it("repositions after async content growth without taking keyboard focus", () => {
+    let resize = () => {};
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal("ResizeObserver", class {
+      observe = observe;
+      disconnect = disconnect;
+      constructor(callback: () => void) { resize = callback; }
+    });
+    let height = 200;
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(320);
+    const { rerender } = render(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} />);
+    const trigger = screen.getByRole("button", { name: "Settings" });
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({ top: 700, bottom: 744, left: 556, right: 600, width: 44, height: 44, x: 556, y: 700, toJSON() {} });
+    fireEvent.click(trigger);
+    const menu = screen.getByRole("menu", { name: "Settings" });
+    expect(menu.style.top).toBe("496px");
+    const speed = screen.getByRole("menuitem", { name: /Playback speed/ });
+    act(() => speed.focus());
+    height = 400;
+    rerender(<PlayerOverflowMenu toggles={TOGGLES} groups={[...GROUPS, { ...GROUPS[0], id: "extra", label: "New options" }]} />);
+    act(() => resize());
+    expect(menu.style.top).toBe("296px");
+    expect(document.activeElement).toBe(speed);
+    expect(observe).toHaveBeenCalledWith(menu);
+    fireEvent.keyDown(speed, { key: "Escape" });
+    expect(disconnect).toHaveBeenCalledOnce();
+  });
+
   it("returns focus to a group after navigating back, then closes on Escape", () => {
     render(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} />);
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));

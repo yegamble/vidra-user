@@ -38,6 +38,7 @@ export function SeekBar({
   duration,
   buffered,
   onSeek,
+  onSkip,
   storyboard,
   chapters,
 }: {
@@ -45,6 +46,7 @@ export function SeekBar({
   duration: number;
   buffered: ReadonlyArray<readonly [number, number]>;
   onSeek: (time: number) => void;
+  onSkip?: (seconds: number) => void;
   /** The video's seek-preview storyboard, when it has one (CORE-16). */
   storyboard?: SeekStoryboard | null;
   /** The video's seek-bar chapters, when it has any (CORE-15). */
@@ -140,6 +142,11 @@ export function SeekBar({
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (!hasDuration) return;
+    if (onSkip && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+      e.preventDefault();
+      onSkip(e.key === "ArrowRight" ? 5 : -5);
+      return;
+    }
     let next: number | null = null;
     switch (e.key) {
       case "ArrowRight":
@@ -189,9 +196,9 @@ export function SeekBar({
       }}
       onBlur={() => setFocused(false)}
       onKeyDown={onKeyDown}
-      className="focus-ring-media group relative flex h-11 w-full cursor-pointer touch-none select-none items-center rounded-full"
+      className="focus-ring-media group relative flex h-11 w-full cursor-pointer touch-none select-none items-end rounded-full"
     >
-      {/* The thin track line, centered in the tall hit area: 4px at rest,
+      {/* The thin track sits on the lower edge of its 44px target: 4px at rest,
           thickening to 6px under the pointer or keyboard focus (the Apple TV
           scrubber idiom — the bar grows toward you when it is the thing you are
           operating). Focus-within matters as much as hover: a keyboard user
@@ -226,7 +233,7 @@ export function SeekBar({
                 key={c.start_seconds}
                 data-testid="chapter-tick"
                 aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 h-2.5 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/85 ring-1 ring-black/30"
+                className="pointer-events-none absolute bottom-0.5 h-2.5 w-[3px] -translate-x-1/2 translate-y-1/2 rounded-full bg-white/85 ring-1 ring-black/30"
                 style={{ left: `${(c.start_seconds / duration) * 100}%` }}
               />
             ))
@@ -234,7 +241,7 @@ export function SeekBar({
       {/* Playhead knob. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow-[0_1px_4px_rgba(0,0,0,0.55)] transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
+        className="pointer-events-none absolute bottom-0.5 h-3 w-3 -translate-x-1/2 translate-y-1/2 rounded-full bg-white opacity-0 shadow-[0_1px_4px_rgba(0,0,0,0.55)] transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
         style={{ left: `${playedFrac * 100}%` }}
       />
       {/* Scrub bubble (hover / scrub / keyboard focus): a media thumbnail-style

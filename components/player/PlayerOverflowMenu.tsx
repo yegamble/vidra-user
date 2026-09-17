@@ -30,15 +30,19 @@ export function PlayerOverflowMenu({ toggles, groups }: {
   groups: OverflowChoiceGroup[];
 }) {
   const { open, container, rootRef, buttonRef, popupRef, openPopup, closePopup, popupStyle, remeasure } = usePlayerPopup();
-  const [path, setPath] = useState<string[]>([]);
+  const [navigation, setNavigation] = useState<{ path: string[]; focusIndex: number }>({ path: [], focusIndex: 0 });
+  const { path } = navigation;
   const rowRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const focusIndex = useRef(0);
   let active: OverflowChoiceGroup | undefined;
   let children = groups;
+  let invalidPath = false;
   for (const id of path) {
     active = children.find((group) => group.id === id);
+    if (!active) { invalidPath = true; children = groups; break; }
     children = active?.groups ?? [];
   }
+  // Engine fallback can remove the very group the viewer has open.
+  if (invalidPath) setNavigation({ path: [], focusIndex: 0 });
   const rows = active?.items ?? [];
   const switches = active ? [] : toggles;
   const offset = active ? 1 : 0;
@@ -48,9 +52,11 @@ export function PlayerOverflowMenu({ toggles, groups }: {
   // never on playback ticks that rebuild the menu's data while someone uses it.
   useLayoutEffect(() => {
     if (!open || !container) return;
-    rowRefs.current[focusIndex.current]?.focus({ preventScroll: true });
+    popupRef.current?.scrollTo?.({ top: 0 });
+    rowRefs.current[navigation.focusIndex]?.focus({ preventScroll: true });
+    rowRefs.current[navigation.focusIndex]?.scrollIntoView?.({ block: "nearest" });
     remeasure();
-  }, [open, container, path, remeasure]);
+  }, [open, container, navigation, remeasure, popupRef]);
 
   if (toggles.length === 0 && groups.length === 0) return null;
 
@@ -59,14 +65,12 @@ export function PlayerOverflowMenu({ toggles, groups }: {
     buttonRef.current?.focus({ preventScroll: true });
   }
   function openRoot() {
-    focusIndex.current = 0;
-    setPath([]);
+    setNavigation({ path: [], focusIndex: 0 });
     openPopup();
   }
   function enter(group: OverflowChoiceGroup) {
     const checked = group.items.findIndex((item) => item.value === group.value);
-    focusIndex.current = checked >= 0 ? checked + 1 : 0;
-    setPath([...path, group.id]);
+    setNavigation({ path: [...path, group.id], focusIndex: checked >= 0 ? checked + 1 : 0 });
   }
   function back() {
     let siblings = groups;
@@ -74,21 +78,20 @@ export function PlayerOverflowMenu({ toggles, groups }: {
     let parent: OverflowChoiceGroup | undefined;
     let level = groups;
     for (const id of path.slice(0, -1)) { parent = level.find((g) => g.id === id); level = parent?.groups ?? []; }
-    focusIndex.current = (parent ? 1 + parent.items.length : toggles.length) + siblings.findIndex((g) => g.id === path.at(-1));
-    setPath(path.slice(0, -1));
+    const focusIndex = (parent ? 1 + parent.items.length : toggles.length) + siblings.findIndex((g) => g.id === path.at(-1));
+    setNavigation({ path: path.slice(0, -1), focusIndex });
   }
-  const rowProps = (index: number, activate: () => void, submenu = false) => ({
+  const rowProps = (index: number, submenu = false) => ({
     ref: (el: HTMLButtonElement | null) => { rowRefs.current[index] = el; },
     tabIndex: -1,
-    onClick: activate,
-    onKeyDown: (e: React.KeyboardEvent) => {
+    onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => {
       let next: number | undefined;
       if (e.key === "ArrowDown") next = (index + 1) % count;
       if (e.key === "ArrowUp") next = (index - 1 + count) % count;
       if (e.key === "Home") next = 0;
       if (e.key === "End") next = count - 1;
       if (next !== undefined) { e.preventDefault(); rowRefs.current[next]?.focus({ preventScroll: true }); rowRefs.current[next]?.scrollIntoView?.({ block: "nearest" }); }
-      if (e.key === "ArrowRight" && submenu) { e.preventDefault(); activate(); }
+      if (e.key === "ArrowRight" && submenu) { e.preventDefault(); e.currentTarget.click(); }
     },
     className: "focus-ring flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-fg transition-colors",
   });
@@ -98,7 +101,7 @@ export function PlayerOverflowMenu({ toggles, groups }: {
       <OverlayButton ref={buttonRef} label="Settings" aria-haspopup="menu" aria-expanded={open}
         onClick={() => open ? closePopup() : openRoot()}
         onKeyDown={(e) => { if (e.key === "ArrowDown" && !open) { e.preventDefault(); openRoot(); } }}>
-        <SettingsIcon size={22} strokeWidth={2.3} />
+        <SettingsIcon size={24} strokeWidth={2.3} />
       </OverlayButton>
       {open && container ? createPortal(
         <div ref={popupRef} role="menu" aria-label={active?.label ?? "Settings"} style={popupStyle}
@@ -108,23 +111,24 @@ export function PlayerOverflowMenu({ toggles, groups }: {
             if (e.key === "ArrowLeft" && active) { e.preventDefault(); e.stopPropagation(); back(); }
             if (e.key === "Tab") closePopup();
           }}>
-          {active ? <button type="button" role="menuitem" aria-label="Back to settings" {...rowProps(0, back)}>
+          {active ? <button type="button" role="menuitem" aria-label="Back to settings" onClick={back} {...rowProps(0)}>
             <ChevronLeftIcon size={18} /><span>{active.label}</span>
           </button> : null}
           {switches.map((toggle, index) => <button key={toggle.id} type="button" role="menuitemcheckbox"
-            aria-checked={toggle.pressed} {...rowProps(index, () => { toggle.onToggle(); closeAndRefocus(); })}>
+            aria-checked={toggle.pressed} onClick={() => { toggle.onToggle(); closeAndRefocus(); }} {...rowProps(index)}>
             <span className="flex-1">{toggle.label}</span>
             <span aria-hidden="true" className={`flex h-5 w-8 shrink-0 items-center rounded-full px-0.5 ${toggle.pressed ? "justify-end bg-accent" : "bg-surface-strong ring-1 ring-border"}`}>
               <span className="h-4 w-4 rounded-full bg-surface" />
             </span>
           </button>)}
           {rows.map((item, index) => <button key={item.value} type="button" role="menuitemradio" aria-checked={item.value === active?.value}
-            {...rowProps(offset + index, () => { active?.onSelect(item.value); closeAndRefocus(); })}>
+            onClick={() => { active?.onSelect(item.value); closeAndRefocus(); }} {...rowProps(offset + index)}>
             <span aria-hidden="true" className="flex w-4 shrink-0 justify-center">{item.value === active?.value ? <CheckIcon size={16} /> : null}</span>
             <span>{item.label}</span>
           </button>)}
           {children.map((group, index) => <button key={group.id} type="button" role="menuitem" aria-haspopup="menu"
-            {...rowProps(offset + switches.length + rows.length + index, () => enter(group), true)}>
+            aria-label={`${group.label} ${group.valueLabel ?? group.items.find((item) => item.value === group.value)?.label ?? ""}`.trim()}
+            onClick={() => enter(group)} {...rowProps(offset + switches.length + rows.length + index, true)}>
             <span className="flex-1">{group.label}</span>
             <span className="max-w-[45%] truncate text-fg-muted">{group.valueLabel ?? group.items.find((item) => item.value === group.value)?.label}</span>
             <ChevronRightIcon size={16} className="shrink-0" />

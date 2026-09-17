@@ -249,9 +249,9 @@ test("the watch page passes axe in theater mode (reflowed layout)", async ({ pag
   if ((await inBar.count()) > 0) {
     await inBar.click();
   } else {
-    await page.getByRole("button", { name: "More player options" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
     await page
-      .getByRole("menu", { name: "More player options" })
+      .getByRole("menu", { name: "Settings" })
       .getByRole("menuitemcheckbox", { name: "Theater mode", exact: true })
       .click();
   }

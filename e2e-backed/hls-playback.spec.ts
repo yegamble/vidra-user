@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectPlayerSetting, openPlayerSetting } from "../e2e/player-settings-menu";
 
 import { API_URL, seedPublishedChannel, waitForHls } from "./fixtures";
 
@@ -154,23 +155,15 @@ test("a published video is transcoded to HLS and the watch page streams it with 
   // The watch page picks the HLS stream (hls.js over MSE — a blob: MediaSource
   // src, not the progressive original) and the quality menu lists Auto plus the
   // real transcoded rendition heights once the manifest parses.
-  // The quality menu is a STAGE-width tier (@min-[820px]/stage — "Auto (1080p)"
-  // is the widest control in the bar). The watch page reserves the secondary
-  // column's 344px track at the two-column breakpoint whether or not anything
-  // renders into it (components/WatchView.tsx), so the default 1280x720 window
-  // leaves a 624px stage and the menu correctly tiers into the overflow. This
-  // spec is about the transcode → HLS pipeline, not about control placement, so
-  // it measures at a width where the bar carries the menu.
+  // Settings carries the quality selector at every stage width.
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto(`/videos/${videoId}`);
   await expect(page.getByRole("heading", { name: videoTitle })).toBeVisible();
 
-  const quality = page.getByRole("button", { name: "Quality: Auto" });
-  await expect(quality).toBeVisible();
+  await expectPlayerSetting(page, /^Playback quality Auto\b/);
   expect(await page.locator("video").getAttribute("src")).toMatch(/^blob:/);
 
-  await quality.click();
-  const menu = page.getByRole("menu", { name: "Playback quality" });
+  const menu = await openPlayerSetting(page, "Playback quality");
   await expect(menu.getByRole("menuitemradio", { name: "Auto" })).toHaveAttribute(
     "aria-checked",
     "true",
@@ -181,5 +174,5 @@ test("a published video is transcoded to HLS and the watch page streams it with 
 
   // Pinning a rendition sticks in the UI (drives hls.currentLevel).
   await menu.getByRole("menuitemradio", { name: `${heights[0]}p` }).click();
-  await expect(page.getByRole("button", { name: `Quality: ${heights[0]}p` })).toBeVisible();
+  await expectPlayerSetting(page, new RegExp(`^Playback quality ${heights[0]}p`));
 });

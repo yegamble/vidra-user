@@ -62,7 +62,7 @@ async function mockWatch(page: Page, videos = [relatedVideo("v2", "Up Next One")
 // Theater and PiP tier out of the control bar on a narrow stage. The watch
 // page's stage is only ~624px at a 1280 viewport (the left sidebar and the
 // 344px related rail take the rest), which cannot hold the full control set —
-// so there they live in the "⋮" overflow menu instead. These specs assert that
+// so there they live in the Settings menu instead. These specs assert that
 // the control WORKS, not where it currently sits, so they stay true at every
 // stage width. `stateAttr` differs because a bar control is a toggle button
 // (aria-pressed) and a menu row is a menuitemcheckbox (aria-checked).
@@ -74,8 +74,8 @@ async function playerControl(page: Page, menuName: string, barName = menuName) {
     .getByTestId("player-controls")
     .getByRole("button", { name: barName, exact: true });
   if ((await inBar.count()) > 0) return { locator: inBar, stateAttr: "aria-pressed" };
-  const trigger = page.getByRole("button", { name: "More player options" });
-  const menu = page.getByRole("menu", { name: "More player options" });
+  const trigger = page.getByRole("button", { name: "Settings" });
+  const menu = page.getByRole("menu", { name: "Settings" });
   if ((await menu.count()) === 0) await trigger.click();
   return {
     locator: menu.getByRole("menuitemcheckbox", { name: menuName, exact: true }),
@@ -297,7 +297,7 @@ test("theater is inert on a phone, where there is no second column to collapse",
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
 });
 
-test("the PiP button is hidden when the browser reports no Picture-in-Picture support", async ({
+test("the PiP control is hidden when the browser reports no Picture-in-Picture support", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -310,9 +310,11 @@ test("the PiP button is hidden when the browser reports no Picture-in-Picture su
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Theater Clip" })).toBeVisible();
   await expect(page.getByRole("button", { name: /picture-in-picture/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Picture-in-picture" })).toHaveCount(0);
 });
 
-test("the PiP button shows when supported, enters PiP, and mirrors the element events", async ({
+test("the PiP control shows when supported, enters PiP, and mirrors the element events", async ({
   page,
 }) => {
   // Force PiP capability deterministically (headless Chromium may report it off)

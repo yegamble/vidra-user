@@ -5,14 +5,14 @@ import { cn } from "@/lib/cn";
 // The bespoke player's glyph set — the ONE module the design system sanctions
 // for inline SVG inside `player/*` (see .ralph/specs/design-system.md,
 // "Iconography"). It exists because the chrome is not the app: these glyphs sit
-// on video, at 22px inside 44px round targets, and they have to read as one
+// on video, at 24px inside 44px round targets, and they have to read as one
 // family at a glance. The app's feather-style set (components/icons) is a
 // 1.8px-stroke outline vocabulary tuned for themed surfaces; mixing the two is
 // exactly what made the old bar look like a stock <video> — outline speaker and
 // outline captions next to a solid play triangle.
 //
 // House style, deliberately narrow so nothing drifts:
-//   • 24-unit viewBox, rendered at 22px by default (`size`), `aria-hidden`.
+//   • 24-unit viewBox, rendered at 24px by default (`size`), `aria-hidden`.
 //   • SOLID, SF-Symbols-like forms (`play.fill`, `speaker.wave.2.fill`,
 //     `captions.bubble.fill`, `pip.fill`). Where a shape is a frame (theater,
 //     PiP), it is a FILLED path with an evenodd hole — not a thin stroke — so
@@ -26,7 +26,7 @@ import { cn } from "@/lib/cn";
 
 type GlyphProps = SVGProps<SVGSVGElement> & {
   /**
-   * Rendered edge, in px (default 22 — the bar's glyph size inside a 44pt
+   * Rendered edge, in px (default 24 — the bar's glyph size inside a 44pt
    * target). Set as WIDTH/HEIGHT ATTRIBUTES, not utility classes, for the same
    * reason components/icons does: `cn()` here is a plain concat with no
    * tailwind-merge, so a call site's `h-3` does not reliably beat a base
@@ -36,7 +36,7 @@ type GlyphProps = SVGProps<SVGSVGElement> & {
   size?: number;
 };
 
-function Glyph({ size = 22, className, children, ...rest }: GlyphProps) {
+function Glyph({ size = 24, className, children, ...rest }: GlyphProps) {
   return (
     <svg
       viewBox="0 0 24 24"

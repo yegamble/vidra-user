@@ -82,6 +82,16 @@ export function usePlayerPopup() {
     measure();
   }, [open, container, measure]);
 
+  // Audio/quality discovery and wrapping labels can resize an already-open menu.
+  // Observe dimensions only: playback renders must never move keyboard focus.
+  useEffect(() => {
+    const popup = popupRef.current;
+    if (!open || !container || !popup || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(popup);
+    return () => observer.disconnect();
+  }, [open, container, measure]);
+
   // Keep the fixed popup pinned to its trigger: capture-phase scroll catches any
   // scrolling ancestor, resize re-runs the flip (phone rotation into landscape
   // fullscreen is the case that matters here).
