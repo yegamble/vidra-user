@@ -1557,6 +1557,17 @@ export const META: Record<string, SettingMeta> = {
         ) === true,
     },
   },
+  delivery_ipfs_enabled: {
+    label: "IPFS delivery",
+    help: "Use the configured healthy public IPFS mirror for eligible media. Turning this off sends new requests through the server or CDN. It does not start or stop pinning, remove existing pins, or publish private videos. Manage publication and capacity on the IPFS page.",
+    control: "toggle",
+    page: "advanced",
+    section: "delivery",
+    warn: {
+      note: "The public IPFS mirror is not configured, so this switch currently does nothing. See IPFS configuration.",
+      isTriggered: (infra) => infra.features?.some((f) => f.key === "ipfs" && f.configured === false) === true,
+    },
+  },
   qoe_collection_enabled: {
     label: "Playback quality measurement",
     help: "Record how playback actually went for viewers — time to first frame, rebuffering, bitrate switches and errors, attributed to the delivery source that served the bytes. Measurements carry no account id and no IP address, only a keyed daily viewer digest that cannot be linked across days; individual events are deleted after 7 days, leaving hourly aggregates. Turning it off blanks the Playback health page from that moment on; already-written rollups stay until retention ages them out.",
