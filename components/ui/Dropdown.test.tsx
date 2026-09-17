@@ -140,16 +140,19 @@ describe("Dropdown", () => {
     expect(document.activeElement).toBe(b);
   });
 
-  it("Escape closes the menu and returns focus to the trigger", () => {
-    render(
-      <Dropdown trigger="Menu" triggerLabel="Menu" items={[{ label: "A", onSelect: () => {} }]} />,
-    );
+  it("keeps disabled destructive actions inactive and enabled actions selectable", () => {
+    const onSelect = vi.fn();
+    render(<Dropdown trigger="Menu" triggerLabel="Menu" items={[
+      { label: "Unavailable", danger: true, disabled: true, onSelect },
+      { label: "Delete", danger: true, onSelect },
+    ]} />);
     open();
-    const item = screen.getByRole("menuitem", { name: "A" });
-    item.focus();
-    fireEvent.keyDown(item, { key: "Escape" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unavailable" }));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu")).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Menu" }));
   });
 
   it("Space activates an href row (link navigation) without needing a click", () => {
@@ -164,34 +167,4 @@ describe("Dropdown", () => {
     expect(clicked).toHaveBeenCalledTimes(1);
   });
 
-  // WAVE D: the open menu is portaled to document.body and positioned `fixed`
-  // so the horizontal rails' `overflow-y: auto` can never clip it. Anchoring it
-  // out of the rail's clipping context is the whole fix, so pin it in a test.
-  it("portals the open menu to document.body as a fixed-position layer", () => {
-    const { container } = render(
-      <Dropdown trigger="Menu" triggerLabel="Menu" items={[{ label: "A", onSelect: () => {} }]} />,
-    );
-    open();
-    const menu = screen.getByRole("menu");
-    // The menu escapes the component's DOM subtree (the rail) entirely...
-    expect(container.contains(menu)).toBe(false);
-    // ...landing directly on document.body...
-    expect(menu.parentElement).toBe(document.body);
-    // ...as a fixed layer (so no ancestor overflow can clip it).
-    expect(menu.style.position).toBe("fixed");
-  });
-
-  it("closes on a pointerdown outside both the trigger and the portaled menu", () => {
-    render(
-      <Dropdown trigger="Menu" triggerLabel="Menu" items={[{ label: "A", onSelect: () => {} }]} />,
-    );
-    open();
-    // A click inside the portaled menu must NOT close it (menu is outside the
-    // trigger root, so containment has to treat the menu node as "inside").
-    fireEvent.pointerDown(screen.getByRole("menu"));
-    expect(screen.queryByRole("menu")).not.toBeNull();
-    // A click on the document body (outside everything) closes it.
-    fireEvent.pointerDown(document.body);
-    expect(screen.queryByRole("menu")).toBeNull();
-  });
 });

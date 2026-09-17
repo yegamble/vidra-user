@@ -599,11 +599,13 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
     0 0 12px 2px rgba(255, 255, 255, 0.35);
 }
 
-/* Player menu rows need a distinct fill in both themes: muted and raised are
- * identical in dark mode, so the generic hover fill disappears on this menu. */
-.player-settings-menu [role^="menuitem"]:not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) {
+/* All popup menus share a distinct hover/focus fill: muted and raised are
+ * identical in dark mode. Disabled rows must never suggest an action. */
+.menu-surface [role^="menuitem"]:not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) {
   background-color: var(--surface-strong);
-  color: var(--fg);
+}
+.menu-surface [data-menu-danger="true"]:not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) {
+  background-color: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 /*

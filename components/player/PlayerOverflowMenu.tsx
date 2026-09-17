@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SettingsIcon } from "@/components/icons";
 import { OverlayButton } from "@/components/player/OverlayButton";
+import { MenuSurface } from "@/components/ui";
 import { usePlayerPopup } from "@/components/player/use-player-popup";
 
 export interface OverflowToggle {
@@ -107,8 +108,8 @@ export function PlayerOverflowMenu({ toggles, groups, resolution }: {
           className="pointer-events-none absolute -right-0.5 top-0.5 rounded bg-black/90 px-1 text-[9px] font-bold leading-3 text-white ring-1 ring-white/40">{resolution}p</span> : null}
       </OverlayButton>
       {open && container ? createPortal(
-        <div ref={popupRef} role="menu" aria-label={active?.label ?? "Settings"} style={popupStyle}
-          className="player-settings-menu z-50 max-h-[min(25rem,calc(100dvh-1rem))] w-80 max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
+        <MenuSurface ref={popupRef} aria-label={active?.label ?? "Settings"} style={popupStyle}
+          className="max-h-[min(25rem,calc(100dvh-1rem))] w-80 max-w-[calc(100vw-1rem)]"
           onKeyDown={(e) => {
             if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAndRefocus(); }
             if (e.key === "ArrowLeft" && active) { e.preventDefault(); e.stopPropagation(); back(); }
@@ -136,7 +137,7 @@ export function PlayerOverflowMenu({ toggles, groups, resolution }: {
             <span className="max-w-[45%] truncate text-fg-muted">{group.valueLabel ?? group.items.find((item) => item.value === group.value)?.label}</span>
             <ChevronRightIcon size={16} className="shrink-0" />
           </button>)}
-        </div>, container,
+        </MenuSurface>, container,
       ) : null}
     </div>
   );
