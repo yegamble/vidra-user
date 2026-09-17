@@ -31,8 +31,17 @@ it("separates desired, observed and applied state and never turns missing capaci
   expect(screen.getByText("running")).toBeTruthy();
   expect(screen.getByText("2 / 3")).toBeTruthy();
   expect(screen.getAllByText("Unavailable")).toHaveLength(2);
-  expect(screen.getByText("stale_capacity")).toBeTruthy();
+  expect(screen.getByText("Waiting for a fresh storage measurement")).toBeTruthy();
+  expect(screen.getAllByText("20.0 GiB")).toHaveLength(2);
   expect(screen.getByText("2026-09-17T08:00:00Z")).toBeTruthy();
+});
+
+it.each([["recovering_copy_cleanup", "Finishing interrupted pin cleanup"], ["disabled", "Publication is paused"],
+  ["future_reason", "Pinning paused"]])("explains %s without displaying internal codes", async (reason, label) => {
+  vi.mocked(api.getIPFSStatus).mockResolvedValue({ ...status, capacity: { ...status.capacity!, admission_paused_reason: reason } });
+  render(<IPFSManagedStatus document={document} dirty={false} onReload={() => {}} />);
+  expect(await screen.findByText(label)).toBeTruthy();
+  expect(screen.queryByText(reason)).toBeNull();
 });
 
 it.each(["dirty", "external", "unavailable", "unadopted"])("blocks lifecycle writes when %s", async (reason) => {

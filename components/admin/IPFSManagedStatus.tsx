@@ -7,6 +7,12 @@ import { formatBytes } from "@/lib/format";
 
 type Action = "apply" | "restart";
 type Operation = IPFSOperationResult["operation"];
+const PAUSE_REASONS: Record<string, string> = {
+  stale_capacity: "Waiting for a fresh storage measurement", node_unavailable: "Waiting for the IPFS node",
+  capacity_unknown: "Storage usage is unavailable", configuration_pending: "Waiting for saved configuration to apply",
+  disabled: "Publication is paused", budget_exhausted: "Pin storage budget reached",
+  filesystem_headroom: "Keeping the required disk space free", recovering_copy_cleanup: "Finishing interrupted pin cleanup",
+};
 
 export function IPFSManagedStatus({ document, dirty, onReload }: {
   document: IPFSConfigDocument; dirty: boolean; onReload: () => void;
@@ -53,7 +59,8 @@ export function IPFSManagedStatus({ document, dirty, onReload }: {
     } finally { setBusy(false); }
   };
   const capacity = status?.capacity;
-  const bytes = (value: number | null | undefined) => value == null ? "Unavailable" : formatBytes(value);
+  // formatBytes uses 1024-step units; match the policy's binary GiB/MiB inputs.
+  const bytes = (value: number | null | undefined) => value == null ? "Unavailable" : formatBytes(value).replace(/([KMGTPE])B$/, "$1iB");
   const rows = [
     ["Desired node state", management?.desired_state ?? "Unavailable"],
     ["Observed node state", management?.observed_state ?? "Unavailable"],
@@ -64,7 +71,7 @@ export function IPFSManagedStatus({ document, dirty, onReload }: {
     ["Pin storage used", bytes(capacity?.repo_used_bytes)], ["Reserved for active pins", bytes(capacity?.reserved_bytes)],
     ["Pin budget", bytes(capacity?.budget_bytes)], ["Filesystem free", bytes(capacity?.filesystem_free_bytes)],
     ["Required free space", bytes(capacity?.min_free_bytes)],
-    ["Admission pause reason", capacity?.admission_paused_reason ?? (capacity ? "None reported" : "Unavailable")],
+    ["Admission pause reason", capacity?.admission_paused_reason ? PAUSE_REASONS[capacity.admission_paused_reason] ?? "Pinning paused" : (capacity ? "None reported" : "Unavailable")],
   ];
   return <section aria-label="Managed IPFS node" className="flex flex-col gap-4 border-t border-border pt-5">
     <h3 className="text-sm font-semibold text-fg">Node and pin storage</h3>
