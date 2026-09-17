@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { seedPublishedChannel, waitForHls, waitForIpfsPin } from "./fixtures";
+import { API_URL, seedPublishedChannel, waitForHls, waitForIpfsPin } from "./fixtures";
 
 // Proves the IPFS mirror end to end against a REAL vidra-core + PostgreSQL + a
 // REAL kubo node (the compose `ipfs` profile, stack started with
@@ -91,6 +91,14 @@ test(
       const init = await request.get(new URL(map[1], new URL(variants[0], masterURL)).toString());
       expect(init.status()).toBe(200);
     }
+
+    // A pin is not a health verdict: the periodic probe must independently
+    // fetch a published CID before the server authorizes the playback mirror.
+    await expect.poll(async () => {
+      const session = await request.get(`${API_URL}/api/v1/videos/${videoId}/playback-session`);
+      expect(session.ok()).toBe(true);
+      return (await session.json()).ipfs_hls_url;
+    }, { timeout: 30_000 }).toBe(masterURL);
 
     // 4. The watch page. It defaults to the authoritative server ladder and OFFERS
     //    the mirror — the offer itself is a real assertion: it exists only because
