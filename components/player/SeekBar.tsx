@@ -32,7 +32,7 @@ import type { SeekStoryboard } from "@/lib/use-storyboard";
 // fragments for every pointermove event.
 //
 // White fills on the media surface (design-system documented media-overlay
-// exception); no new hues. 44pt tall hit area (the visible bar is thin).
+// exception); no new hues. 24px compact / 44px wide hit area around a thin track.
 export function SeekBar({
   currentTime,
   duration,
@@ -141,7 +141,7 @@ export function SeekBar({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (!hasDuration) return;
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.nativeEvent.isComposing || !hasDuration) return;
     if (onSkip && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
       e.preventDefault();
       onSkip(e.key === "ArrowRight" ? 5 : -5);
@@ -196,12 +196,14 @@ export function SeekBar({
       }}
       onBlur={() => setFocused(false)}
       onKeyDown={onKeyDown}
-      className="focus-ring-media group relative flex h-11 w-full cursor-pointer touch-none select-none items-end rounded-full"
+      className="focus-ring-media group relative flex h-6 w-full cursor-pointer touch-none select-none items-end rounded-full @min-[420px]/stage:h-11"
     >
-      {/* The thin track sits on the lower edge of its 44px target: 4px at rest,
+      {/* The thin track stays on the lower edge of its target: 4px at rest,
           thickening to 6px under the pointer or keyboard focus (the Apple TV
           scrubber idiom — the bar grows toward you when it is the thing you are
-          operating). Focus-within matters as much as hover: a keyboard user
+          operating). Below a 420px stage the target is 24px, preserving a clear
+          center tap region on narrow phones; wider stages use 44px.
+          Focus-within matters as much as hover: a keyboard user
           scrubbing with the arrows gets the same thickened target and thumb. */}
       <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/25 transition-[height] duration-150 ease-out group-hover:h-1.5 group-focus-within:h-1.5 motion-reduce:transition-none">
         {/* Buffered ranges: a lighter band under the playhead. */}
@@ -223,7 +225,7 @@ export function SeekBar({
       {/* Chapter boundary ticks (CORE-15): a thin white notch with a subtle dark
           ring so it reads over both the played (white) fill and any video frame.
           Rendered outside the clipped track so it can poke past the thin line; the
-          whole 44pt-tall bar is the pointer target, so the small visual is enough.
+          whole bar is the pointer target, so the small visual is enough.
           The tick at 0s (left edge) and any past the duration are skipped. */}
       {chapters && hasDuration
         ? chapters.chapters

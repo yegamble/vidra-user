@@ -43,7 +43,8 @@ Hard rules:
   progressively enhance. Never introduce horizontal overflow at 390/768
   (`e2e/responsive.spec.ts` gates this).
 - **Touch targets ≥ 44×44pt** on interactive controls (HIG). Small visual
-  glyphs get padding, not smaller hit areas.
+  glyphs get padding, not smaller hit areas. The narrow player seek strip has
+  a documented 24px exception below; its adjacent buttons remain 44px.
 - **No hamburger menu holds the primary nav.** Primary nav is the `BottomTabBar`
   (< `sm`) and the `Sidebar` (≥ `sm`). Both are `aria-label="Primary"`; only one
   is ever in the accessibility tree at a time — the destinations are never
@@ -272,14 +273,20 @@ own surfaces keep every rule in this document.
 ### Player transport and settings (2026-09-17)
 
 The right control group contains Autoplay, Captions (when available), Settings,
-Cinema mode and Fullscreen. Speed, quality, subtitle language, available audio
+Picture-in-Picture beside Settings, Cinema mode and Fullscreen. Speed, quality, subtitle language, available audio
 tracks, ambient mode, sleep timer and PiP live in Settings. Autoplay is also in
 Settings. Container-width tiers move controls that cannot fit into Settings;
-44px targets never shrink. Glyphs are 24px; the transient center feedback uses
+44px button targets never shrink. Glyphs are 24px; the transient center feedback uses
 36px glyphs and disappears after two seconds, including while paused.
 
-The seek track sits on the lower edge of its 44px target, directly above the
-44px button row. The scrim is an absolute background with no layout padding.
+The seek track sits on the lower edge of its target, directly above the 44px
+button row. Below a 420px stage its target is 24px tall, an explicit compact
+exception to the usual 44px guidance; wider stages keep 44px. At a 320px phone
+viewport, the 288×162px video center otherwise falls inside the stacked 92px
+controls. The compact strip reduces that stack to 72px, leaving the center
+tappable. Do not enlarge hit areas into the video or overlap neighboring
+buttons. The track-to-button spacing stays unchanged. The scrim is an absolute
+background with no layout padding.
 Settings shows current values and navigable submenus; menus remeasure when
 contents resize, remain within the viewport and preserve keyboard focus.
 Hover/focus fills must differ from the menu surface in both themes.

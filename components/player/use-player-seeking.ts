@@ -61,6 +61,21 @@ export function usePlayerSeeking({ videoRef, controlsVisible, onTogglePlay, onSh
     };
   }, [cancelTouch]);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const reset = () => {
+      resetFeedback();
+      cancelTouch();
+      pointers.current.clear();
+    };
+    // Buttons, keyboard shortcuts and engine source changes share this seam.
+    for (const event of ["play", "pause", "loadstart"]) video.addEventListener(event, reset);
+    return () => {
+      for (const event of ["play", "pause", "loadstart"]) video.removeEventListener(event, reset);
+    };
+  }, [videoRef, resetFeedback, cancelTouch]);
+
   const seekBy = useCallback((seconds: number) => {
     const video = videoRef.current;
     if (!video || !Number.isFinite(seconds) || seconds === 0 || !Number.isFinite(video.currentTime)) return;

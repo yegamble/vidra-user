@@ -159,6 +159,18 @@ describe("VideoPlayer shell", () => {
     expect(screen.queryByRole("button", { name: "Captions" })).toBeNull();
   });
 
+  it("reflects decoded resolution changes in the Settings badge", () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video")!;
+    let height = 1080;
+    Object.defineProperty(video, "videoHeight", { get: () => height });
+    fireEvent.loadedMetadata(video);
+    expect(screen.getByTestId("player-resolution").textContent).toBe("1080p");
+    height = 360;
+    fireEvent(video, new Event("resize"));
+    expect(screen.getByTestId("player-resolution").textContent).toBe("360p");
+  });
+
   it("shows a captions toggle when the video carries tracks", () => {
     render(<Harness tracks={[{ language: "en", label: "English", url: "blob:cc" }]} />);
     const cc = screen.getByRole("button", { name: "Captions" });

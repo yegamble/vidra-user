@@ -25,9 +25,10 @@ export interface OverflowChoiceGroup {
 }
 
 /** One settings hierarchy, portaled outside the stage (or into fullscreen). */
-export function PlayerOverflowMenu({ toggles, groups }: {
+export function PlayerOverflowMenu({ toggles, groups, resolution }: {
   toggles: OverflowToggle[];
   groups: OverflowChoiceGroup[];
+  resolution?: number | null;
 }) {
   const { open, container, rootRef, buttonRef, popupRef, openPopup, closePopup, popupStyle, remeasure } = usePlayerPopup();
   const [navigation, setNavigation] = useState<{ path: string[]; focusIndex: number }>({ path: [], focusIndex: 0 });
@@ -98,10 +99,12 @@ export function PlayerOverflowMenu({ toggles, groups }: {
 
   return (
     <div ref={rootRef} className="relative shrink-0">
-      <OverlayButton ref={buttonRef} label="Settings" aria-haspopup="menu" aria-expanded={open}
+      <OverlayButton ref={buttonRef} label="Settings" tip={resolution ? `Settings · ${resolution}p` : "Settings"} aria-haspopup="menu" aria-expanded={open}
         onClick={() => open ? closePopup() : openRoot()}
         onKeyDown={(e) => { if (e.key === "ArrowDown" && !open) { e.preventDefault(); openRoot(); } }}>
         <SettingsIcon size={24} strokeWidth={2.3} />
+        {resolution && resolution > 0 ? <span data-testid="player-resolution" aria-hidden="true"
+          className="pointer-events-none absolute -right-0.5 top-0.5 rounded bg-black/90 px-1 text-[9px] font-bold leading-3 text-white ring-1 ring-white/40">{resolution}p</span> : null}
       </OverlayButton>
       {open && container ? createPortal(
         <div ref={popupRef} role="menu" aria-label={active?.label ?? "Settings"} style={popupStyle}

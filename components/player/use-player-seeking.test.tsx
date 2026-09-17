@@ -163,6 +163,20 @@ describe("player seeking", () => {
     expect(onTogglePlay).toHaveBeenCalledTimes(2);
   });
 
+  it.each(["play", "pause", "loadstart"])("resets feedback and in-flight touches on media %s", (event) => {
+    const { result, video, pointer, tap, onTogglePlay } = setup();
+    act(() => result.current.seekBy(5));
+    pointer("onPointerDown", 500);
+    act(() => video.dispatchEvent(new Event(event)));
+    expect(result.current.feedback).toBeNull();
+    pointer("onPointerUp", 500);
+    expect(onTogglePlay).not.toHaveBeenCalled();
+    tap();
+    expect(video.currentTime).toBe(55);
+    tap();
+    expect(result.current.feedback).toEqual({ direction: 1, seconds: 10 });
+  });
+
   it("clears pending gestures and feedback explicitly, and disposes timers on unmount", () => {
     const { result, tap, video, unmount } = setup();
     tap();

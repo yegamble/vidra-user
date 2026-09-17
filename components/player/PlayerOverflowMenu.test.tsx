@@ -185,3 +185,13 @@ describe("Settings submenus", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 });
+
+
+it("updates the settings badge with the active resolution, including automatic downshifts", () => {
+  const { rerender } = render(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} resolution={1080} />);
+  expect(screen.getByTestId("player-resolution").textContent).toBe("1080p");
+  rerender(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} resolution={360} />);
+  expect(screen.getByTestId("player-resolution").textContent).toBe("360p");
+  rerender(<PlayerOverflowMenu toggles={TOGGLES} groups={GROUPS} resolution={null} />);
+  expect(screen.queryByTestId("player-resolution")).toBeNull();
+});

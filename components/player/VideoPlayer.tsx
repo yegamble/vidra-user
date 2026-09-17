@@ -21,6 +21,7 @@ import {
   FullscreenEnterGlyph,
   FullscreenExitGlyph,
   PauseGlyph,
+  PipGlyph,
   PlayGlyph,
   TheaterEnterGlyph,
   TheaterExitGlyph,
@@ -260,6 +261,7 @@ export function VideoPlayer({
   const [paused, setPaused] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [decodedHeight, setDecodedHeight] = useState<number | null>(null);
   const [buffered, setBuffered] = useState<Array<[number, number]>>([]);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
@@ -601,6 +603,7 @@ export function VideoPlayer({
     // HLS→original fallback) resets the element, so drop any stale end card.
     const onLoadStartEv = () => {
       resetFeedback();
+      setDecodedHeight(null);
       setEnded(false);
       setPaused(el.paused);
       // A source has just been attached. For hls.js that is the only signal the
@@ -614,6 +617,7 @@ export function VideoPlayer({
       cbRef.current.onTimeUpdate?.();
     };
     const onProgressEv = () => setBuffered(readBuffered(el.buffered));
+    const onResizeEv = () => setDecodedHeight(el.videoHeight || null);
     const onDurationEv = () =>
       setDuration(Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0);
     const onVolumeEv = () => {
@@ -637,12 +641,15 @@ export function VideoPlayer({
     el.addEventListener("timeupdate", onTimeEv);
     el.addEventListener("progress", onProgressEv);
     el.addEventListener("loadedmetadata", onDurationEv);
+    el.addEventListener("loadedmetadata", onResizeEv);
+    el.addEventListener("resize", onResizeEv);
     el.addEventListener("durationchange", onDurationEv);
     el.addEventListener("volumechange", onVolumeEv);
     // Seed from the element's current state (it may already be primed).
     setPaused(el.paused);
     setCurrentTime(el.currentTime);
     onDurationEv();
+    onResizeEv();
     onProgressEv();
     setVolume(el.volume);
     setMuted(el.muted);
@@ -656,6 +663,8 @@ export function VideoPlayer({
       el.removeEventListener("timeupdate", onTimeEv);
       el.removeEventListener("progress", onProgressEv);
       el.removeEventListener("loadedmetadata", onDurationEv);
+      el.removeEventListener("loadedmetadata", onResizeEv);
+      el.removeEventListener("resize", onResizeEv);
       el.removeEventListener("durationchange", onDurationEv);
       el.removeEventListener("volumechange", onVolumeEv);
     };
@@ -833,11 +842,12 @@ export function VideoPlayer({
           seekBy(shortcut.seconds);
           break;
         case "frame-step":
+          resetFeedback();
           el.currentTime = clampSeekTarget(el.currentTime, shortcut.seconds, el.duration);
           break;
         case "seek-to-fraction": {
           const t = seekTargetForFraction(shortcut.fraction, el.duration);
-          if (t !== null) el.currentTime = t;
+          if (t !== null) seekTo(t);
           break;
         }
         case "volume-by":
@@ -877,6 +887,8 @@ export function VideoPlayer({
     videoRef,
     togglePlay,
     seekBy,
+    seekTo,
+    resetFeedback,
     toggleMute,
     toggleFullscreen,
     toggleCaptions,
@@ -1003,7 +1015,7 @@ export function VideoPlayer({
       <video
         ref={videoRef}
         playsInline
-        className="h-full w-full bg-black object-contain"
+        className="h-full w-full touch-manipulation bg-black object-contain"
         src={playback.src}
         poster={posterUrl}
         {...surfaceHandlers}
@@ -1132,7 +1144,14 @@ export function VideoPlayer({
               </OverlayButton>
             ) : null}
 
-            <PlayerOverflowMenu toggles={overflowToggles} groups={overflowGroups} />
+            <PlayerOverflowMenu toggles={overflowToggles} groups={overflowGroups} resolution={playback.activeHeight ?? decodedHeight} />
+            {pipSupported ? <div className="hidden @min-[600px]/stage:contents">
+              <OverlayButton label={pipActive ? "Exit picture-in-picture" : "Picture-in-picture"}
+                tip="Picture-in-picture" tipKeys={CONTROL_SHORTCUT_KEYS.pip} pressed={pipActive} onClick={togglePip}>
+                <PipGlyph />
+              </OverlayButton>
+            </div> : null}
+
 
             {/* Theater is a watch-page layout mode and only reflows the two-column
                 stage at lg+, so the toggle appears only there (below lg the page is

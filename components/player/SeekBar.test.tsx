@@ -31,6 +31,34 @@ describe("SeekBar", () => {
     expect(onSeek).toHaveBeenLastCalledWith(120);
   });
 
+  it.each(["ctrlKey", "metaKey", "altKey", "isComposing"])("preserves %s key gestures in both seek paths", (modifier) => {
+    const onSeek = vi.fn(), onSkip = vi.fn();
+    const { rerender } = render(<SeekBar currentTime={30} duration={120} buffered={[]} onSeek={onSeek} />);
+    const slider = screen.getByRole("slider", { name: "Seek" });
+    fireEvent.keyDown(slider, { key: "ArrowRight", [modifier]: true });
+    rerender(<SeekBar currentTime={30} duration={120} buffered={[]} onSeek={onSeek} onSkip={onSkip} />);
+    fireEvent.keyDown(slider, { key: "ArrowRight", [modifier]: true });
+    fireEvent.keyDown(slider, { key: "Home", [modifier]: true });
+    expect(onSeek).not.toHaveBeenCalled();
+    expect(onSkip).not.toHaveBeenCalled();
+  });
+
+  it("honors already-consumed keys and prevents a handled skip from seeking again at the document", () => {
+    const onSeek = vi.fn(), onSkip = vi.fn(), fallback = vi.fn();
+    render(<div onKeyDown={(event) => { if (!event.defaultPrevented) fallback(); }}>
+      <SeekBar currentTime={30} duration={120} buffered={[]} onSeek={onSeek} onSkip={onSkip} />
+    </div>);
+    const slider = screen.getByRole("slider", { name: "Seek" });
+    const consumed = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+    consumed.preventDefault();
+    fireEvent(slider, consumed);
+    expect(onSkip).not.toHaveBeenCalled();
+    fireEvent.keyDown(slider, { key: "ArrowRight", repeat: true });
+    expect(onSkip).toHaveBeenCalledExactlyOnceWith(5);
+    expect(onSeek).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
   it("clamps the seek step to the duration bounds", () => {
     const onSeek = vi.fn();
     render(<SeekBar currentTime={118} duration={120} buffered={[]} onSeek={onSeek} />);
