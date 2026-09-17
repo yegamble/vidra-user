@@ -1103,6 +1103,24 @@ describe("ordered HLS source fallback", () => {
 
   afterEach(() => vi.useRealTimers());
 
+  it("uses eligible session IPFS and authoritative URLs and preserves time on explicit source changes", async () => {
+    sessionMock.video = { ...sessionMock.video, authoritative_hls_url: "/current.m3u8", ipfs_hls_url: mirror };
+    const ref = { current: document.createElement("video") };
+    vi.spyOn(ref.current, "pause").mockImplementation(() => {});
+    const { result } = renderHook(() => useHlsPlayback(ref, { ...video, ipfs: { hls_cid: "root" } }, null, null, null, true));
+    await waitFor(() => expect(hlsMock.instances.at(-1)?.source).toBe(mirror));
+    expect(result.current.delivery?.source).toBe("ipfs");
+    ref.current.currentTime = 23;
+    act(() => result.current.delivery?.select("server"));
+    await waitFor(() => expect(hlsMock.instances.at(-1)?.source).toBe("http://localhost:8080/current.m3u8"));
+    expect(hlsMock.instances.at(-1)?.config.startPosition).toBe(23);
+    expect(result.current.delivery?.source).toBe("hls");
+    ref.current.currentTime = 29;
+    act(() => result.current.delivery?.select("ipfs"));
+    await waitFor(() => expect(hlsMock.instances.at(-1)?.source).toBe(mirror));
+    expect(hlsMock.instances.at(-1)?.config.startPosition).toBe(29);
+  });
+
   it("keeps a shared-link timestamp when the final original fails before metadata", async () => {
     sessionMock.video = null;
     const ref = { current: document.createElement("video") };
