@@ -37,6 +37,9 @@ it("separates desired, observed and applied state and never turns missing capaci
 });
 
 it.each([["recovering_copy_cleanup", "Finishing interrupted pin cleanup"], ["disabled", "Publication is paused"],
+  ["publication_paused", "Publication is paused"],
+  ["policy_not_adopted", "Save the policy to enable managed pinning"],
+  ["recovering_interrupted_copy", "Recovering an interrupted copy before starting more pins"],
   ["future_reason", "Pinning paused"]])("explains %s without displaying internal codes", async (reason, label) => {
   vi.mocked(api.getIPFSStatus).mockResolvedValue({ ...status, capacity: { ...status.capacity!, admission_paused_reason: reason } });
   render(<IPFSManagedStatus document={document} dirty={false} onReload={() => {}} />);
@@ -83,4 +86,25 @@ it("polls status while mounted and cancels the next poll on unmount", async () =
   unmount();
   await act(async () => { vi.advanceTimersByTime(5_000); });
   expect(api.getIPFSStatus).toHaveBeenCalledTimes(2);
+});
+
+it("shows the actual managed queue and active-copy bytes without inventing an ETA", async () => {
+  vi.mocked(api.getIPFSStatus).mockResolvedValue({ ...status, queue: {
+    copying: 1, queued_new: 2, queued_demand: 3, queued_capacity: 4,
+    evicted: 5, expired_claims: 6, copied_bytes: 7 * 1024 ** 2,
+  } });
+  render(<IPFSManagedStatus document={document} dirty={false} onReload={() => {}} />);
+  for (const [label, value] of [["Copying now", "1"], ["New videos waiting", "2"],
+    ["Requested videos waiting", "3"], ["Waiting for capacity", "4"], ["Removed to free space", "5"],
+    ["Interrupted copies", "6"], ["Read by active copies", "7.0 MiB"]]) {
+    const term = await screen.findByText(label);
+    expect(term.nextElementSibling?.textContent).toBe(value);
+  }
+  expect(screen.getByText(/Bytes read may include incomplete copies/)).toBeTruthy();
+});
+
+it("does not turn an absent managed queue into an empty queue", async () => {
+  render(<IPFSManagedStatus document={document} dirty={false} onReload={() => {}} />);
+  await screen.findByText("stopped");
+  expect(screen.queryByText("Copying now")).toBeNull();
 });

@@ -9623,8 +9623,25 @@ export interface components {
             filesystem_free_bytes: number | null;
             /** Format: int64 */
             min_free_bytes: number;
-            /** @description Server-computed reason, including stale_capacity, node_unavailable, configuration_pending, capacity_unknown, budget_exhausted or filesystem_headroom. */
+            /** @description Server-computed reason, including stale_capacity, node_unavailable, configuration_pending, capacity_unknown, budget_exhausted, filesystem_headroom, policy_not_adopted, publication_paused or recovering_interrupted_copy. */
             admission_paused_reason: string | null;
+        };
+        /** @description Public managed-copy queue and bytes read by active claims; no estimated completion time. */
+        IPFSQueueStatus: {
+            /** Format: int64 */
+            copying: number;
+            /** Format: int64 */
+            queued_new: number;
+            /** Format: int64 */
+            queued_demand: number;
+            /** Format: int64 */
+            queued_capacity: number;
+            /** Format: int64 */
+            evicted: number;
+            /** Format: int64 */
+            expired_claims: number;
+            /** Format: int64 */
+            copied_bytes: number;
         };
         /** @description Status of the hybrid IPFS media mirror (fix_plan P19). IPFS is a mirror sidecar; these fields are informational and never gate media serving. */
         IPFSStatus: {
@@ -9632,6 +9649,7 @@ export interface components {
             config_revision?: number;
             management?: components["schemas"]["IPFSManagementStatus"];
             capacity?: components["schemas"]["IPFSCapacityStatus"];
+            queue?: components["schemas"]["IPFSQueueStatus"];
             /** @description Whether IPFS_ENABLED is set on this instance. */
             enabled: boolean;
             /** @description Whether the Kubo node answered the /api/v0/version health probe. */
