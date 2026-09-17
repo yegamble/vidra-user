@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 
+import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
 import { ShareIcon } from "@/components/icons";
 import { Modal } from "@/components/ui";
 import { formatDuration } from "@/lib/format";
 import { watchPath as localWatchPath } from "@/lib/watch-path";
 
 const PILL =
-  "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
+  "focus-ring flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
 
 const COPY_BUTTON =
   "focus-ring shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted";
@@ -42,6 +43,7 @@ export function ShareButton({
   /** Reads the player's current position in seconds (for "Start at"). */
   getCurrentTime?: () => number;
 }) {
+  const watch = useWatchSignIn() !== null;
   const [open, setOpen] = useState(false);
   const [atSeconds, setAtSeconds] = useState(0);
 
@@ -55,10 +57,11 @@ export function ShareButton({
           setAtSeconds(Number.isFinite(t) && t > 0 ? t : 0);
           setOpen(true);
         }}
-        className={PILL}
+        title={watch ? "Share" : undefined}
+        className={PILL + (watch ? " w-11 justify-center px-0 @min-[340px]/watch-actions:w-auto @min-[340px]/watch-actions:px-3" : " px-4")}
       >
         <ShareIcon size={16} strokeWidth={2} />
-        <span>Share</span>
+        <span className={watch ? "sr-only @min-[340px]/watch-actions:not-sr-only" : undefined}>Share</span>
       </button>
       {open ? (
         <ShareDialog

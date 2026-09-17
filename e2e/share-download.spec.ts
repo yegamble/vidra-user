@@ -143,7 +143,8 @@ test("the download dialog offers the original file and fetches it", async ({ pag
   });
 
   await openWatch(page);
-  await page.getByRole("button", { name: "Download", exact: true }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Download", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Download" });
   await expect(dialog).toBeVisible();
 
@@ -163,7 +164,7 @@ test("the download dialog offers the original file and fetches it", async ({ pag
 // Per-video download policy (config-parity W9): the watch page button follows
 // the EFFECTIVE state — instance downloads feature AND the video's own
 // download_enabled flag from the detail payload.
-test("the download button follows the per-video download_enabled flag", async ({ page }) => {
+test("the download action follows the per-video download_enabled flag", async ({ page }) => {
   const INSTANCE = /\/api\/v1\/instance$/;
   const instanceDoc = {
     name: "Vidra",
@@ -173,7 +174,7 @@ test("the download button follows the per-video download_enabled flag", async ({
   };
   await page.route(INSTANCE, (route) => route.fulfill({ json: instanceDoc }));
 
-  // Instance gate on + per-video flag off => no Download button.
+  // Instance gate on + per-video flag off => no Download action.
   await page.route(DETAIL, (route) =>
     route.fulfill({ json: { ...detail, download_enabled: false } }),
   );
@@ -187,13 +188,16 @@ test("the download button follows the per-video download_enabled flag", async ({
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Share Me" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Share", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Download" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
-  // Same instance, per-video flag on => the button renders.
+  // Same instance, per-video flag on => the menu item renders.
   await page.route(DETAIL, (route) =>
     route.fulfill({ json: { ...detail, download_enabled: true } }),
   );
   await page.goto("/videos/v1");
   await expect(page.getByRole("heading", { name: "Share Me" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Download" })).toBeVisible();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Download" })).toBeVisible();
 });
