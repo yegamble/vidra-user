@@ -95,7 +95,7 @@ test(
     // A pin is not a health verdict: the periodic probe must independently
     // fetch a published CID before the server authorizes the playback mirror.
     await expect.poll(async () => {
-      const session = await request.get(`${API_URL}/api/v1/videos/${videoId}/playback-session`);
+      const session = await request.post(`${API_URL}/api/v1/videos/${videoId}/playback-session`);
       expect(session.ok()).toBe(true);
       return (await session.json()).ipfs_hls_url;
     }, { timeout: 30_000 }).toBe(masterURL);
