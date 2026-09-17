@@ -644,6 +644,8 @@ function RunPanel({ run, onRetry, retryDisabled }: {
   const noMedia = noPlayableMedia(run.report);
   const unsupported = Object.entries(run.report?.entities ?? {})
     .filter(([, counts]) => counts.unsupported > 0);
+  const missingSource = Object.entries(run.report?.entities ?? {})
+    .filter(([, counts]) => (counts.missing_source ?? 0) > 0);
   const canRetry = !isDryRun && !inFlight && !isUndetectableSchema(run) &&
     (run.state === "failed" || failedTotal > 0);
 
@@ -715,6 +717,15 @@ function RunPanel({ run, onRetry, retryDisabled }: {
         <Card className="flex flex-col gap-3">
           <section aria-label="Review migration gaps" className="flex flex-col gap-2">
             <h3 className="text-sm font-semibold text-fg">Review migration gaps</h3>
+            {missingSource.length > 0 ? (
+              <p className="text-sm text-fg-muted">
+                Missing on the source: {missingSource.map(([kind, counts]) =>
+                  `${kind} ${formatCount(counts.missing_source ?? 0)}`).join(" · ")}.
+                {" "}PeerTube could not supply this artwork (HTTP 404/410). Restore these files
+                on the source or from its backup, then retry unfinished items. These entries
+                are included in the failed counts; retrying cannot recreate missing files.
+              </p>
+            ) : null}
             {unsupported.length > 0 ? (
               <p className="text-sm text-fg-muted">
                 Unsupported entries: {unsupported.map(([kind, counts]) =>

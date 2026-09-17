@@ -544,6 +544,21 @@ describe("AdminPeerTubeImportView — report and history", () => {
   // run that reached the end with per-entity failures — the run did finish — so
   // a run in which every entity failed rendered the success branch: a green
   // "Done" badge with no alert, the only signal being a red integer in one cell.
+  it("explains missing source artwork without double counting failures", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({
+      media_mode: "reference",
+      report: report({ thumbnail: counts({ failed: 3, missing_source: 2 }), storyboard: counts({ failed: 1 }) }),
+    })] });
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    expect(within(panel).getByRole("alert").textContent).toContain("4");
+    const gaps = within(panel).getByRole("region", { name: "Review migration gaps" });
+    expect(gaps.textContent).toContain("Missing on the source: thumbnail 2");
+    expect(gaps.textContent).toContain("Restore these files");
+    expect(gaps.textContent).toContain("included in the failed counts");
+    expect((within(gaps).getByRole("button", { name: "Retry unfinished items" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("warns, instead of congratulating, when a done run's entities all failed", async () => {
     mocks.listPeerTubeImports.mockResolvedValue({
       runs: [
