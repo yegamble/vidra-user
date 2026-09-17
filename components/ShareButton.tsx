@@ -8,7 +8,7 @@ import { formatDuration } from "@/lib/format";
 import { watchPath as localWatchPath } from "@/lib/watch-path";
 
 const PILL =
-  "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
+  "focus-ring flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
 
 const COPY_BUTTON =
   "focus-ring shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted";

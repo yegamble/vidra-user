@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
 import { FollowBell } from "@/components/FollowBell";
 import { CheckIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
@@ -37,6 +38,7 @@ export function FollowButton({
   className?: string;
 }) {
   const { status } = useSession();
+  const requestSignIn = useWatchSignIn();
   const [following, setFollowing] = useState(initialFollowing);
   const [notification, setNotification] = useState<NotificationSetting>(
     initialNotificationSetting,
@@ -53,6 +55,8 @@ export function FollowButton({
   }
 
   if (status !== "authed") {
+    if (requestSignIn) return <Button variant="primary" className={className} disabled={status === "restoring"}
+      onClick={() => requestSignIn("follow this channel")}>Follow</Button>;
     return (
       <LinkButton href="/login" variant="tonal" className={className}>
         Sign in to follow

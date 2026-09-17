@@ -41,7 +41,8 @@ test("reporting a video from the watch page persists to the moderation queue", a
   await page.getByRole("heading", { name: videoTitle }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
 
-  await page.getByRole("button", { name: "Report this video" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Report", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Report this video" });
   await dialog.getByLabel("Reason for report").fill(reason);
   const reported = page.waitForResponse(

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
 import { ThumbsDownIcon, ThumbsUpIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { RatingValue, VideoRating } from "@/lib/api";
@@ -16,6 +17,7 @@ import { useSettledSession } from "@/lib/use-settled-session";
 // the rating you already hold clears it (toggle).
 export function RatingControls({ videoId }: { videoId: string }) {
   const { status } = useSession();
+  const requestSignIn = useWatchSignIn();
   const { settled, viewerKey } = useSettledSession();
   const [rating, setRating] = useState<VideoRating | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,7 +47,8 @@ export function RatingControls({ videoId }: { videoId: string }) {
   const authed = status === "authed";
 
   async function choose(value: RatingValue) {
-    if (rating === null || !authed || busy) return;
+    if (rating === null || busy || !settled) return;
+    if (!authed) { requestSignIn?.(`${value} this video`); return; }
     setBusy(true);
     try {
       const next =
@@ -69,7 +72,7 @@ export function RatingControls({ videoId }: { videoId: string }) {
           label="Like"
           count={rating.like_count}
           active={rating.my_rating === "like"}
-          disabled={!authed || busy}
+          disabled={!settled || busy || (!authed && !requestSignIn)}
           onClick={() => void choose("like")}
         />
         <span aria-hidden className="my-1.5 w-px shrink-0 bg-border" />
@@ -77,11 +80,11 @@ export function RatingControls({ videoId }: { videoId: string }) {
           label="Dislike"
           count={rating.dislike_count}
           active={rating.my_rating === "dislike"}
-          disabled={!authed || busy}
+          disabled={!settled || busy || (!authed && !requestSignIn)}
           onClick={() => void choose("dislike")}
         />
       </div>
-      {!authed ? (
+      {!authed && !requestSignIn ? (
         <Link
           href="/login"
           className="focus-ring shrink-0 whitespace-nowrap rounded text-[13px] font-semibold text-fg-muted underline transition-colors hover:text-fg"
@@ -114,7 +117,7 @@ function RatingButton({
       disabled={disabled}
       onClick={onClick}
       className={
-        "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 " +
+        "focus-ring flex min-h-11 min-w-11 shrink-0 items-center gap-1.5 whitespace-nowrap py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 " +
         (label === "Like" ? "pl-4 pr-3.5 " : "pl-3.5 pr-4 ") +
         (active ? "bg-accent text-accent-fg hover:bg-accent/90" : "text-fg hover:bg-surface-strong")
       }

@@ -88,8 +88,14 @@ async function signIn(page: Page) {
 test("anonymous viewers are prompted to sign in to report", async ({ page }) => {
   await mockWatch(page);
   await page.goto("/videos/v1");
-  await expect(page.getByRole("link", { name: "Sign in to report" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Report this video" })).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "More actions" }).press("ArrowUp");
+  await page.getByRole("menuitem", { name: "Report", exact: true }).press("Enter");
+  const prompt = page.getByRole("dialog", { name: "Sign in to report this video" });
+  await expect(prompt).toBeVisible();
+  await expect(prompt.getByRole("button", { name: "Close" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "More actions" })).toBeFocused();
 });
 
 test("an authenticated viewer can report a video", async ({ page }) => {
@@ -103,7 +109,8 @@ test("an authenticated viewer can report a video", async ({ page }) => {
 
   // Navigate to the watch page from the home feed card (keeps the in-memory session).
   await page.getByRole("heading", { name: "Watch Me" }).click();
-  await page.getByRole("button", { name: "Report this video" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Report", exact: true }).click();
 
   const dialog = page.getByRole("dialog", { name: "Report this video" });
   await expect(dialog).toBeVisible();

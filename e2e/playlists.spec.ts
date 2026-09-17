@@ -356,7 +356,8 @@ test("a signed-in viewer can add a video to a playlist from the watch page", asy
   await page.route(ADD, (route) => route.fulfill({ status: 204, body: "" }));
 
   await page.getByRole("heading", { name: "Watch Me" }).click();
-  await page.getByRole("button", { name: "Save to playlist" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Save to playlist" }).click();
   const addBtn = page.getByRole("button", { name: "My Mix" });
   await expect(addBtn).toBeVisible();
   await addBtn.click();

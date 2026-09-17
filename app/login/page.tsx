@@ -2,6 +2,7 @@ import { AuthPage } from "@/components/auth/AuthPage";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { OwnerClaimCard } from "@/components/OwnerClaimCard";
 import { getInstanceConfig } from "@/lib/instance-config.server";
+import { safeLoginReturn } from "@/lib/login-return";
 
 // The OAuth callback redirects back here carrying one-shot markers: ?oauth=1
 // (success landing — the session cookie was just set), ?oauth_error=<code>
@@ -12,7 +13,7 @@ import { getInstanceConfig } from "@/lib/instance-config.server";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ oauth?: string; oauth_error?: string; mfa?: string }>;
+  searchParams: Promise<{ oauth?: string; oauth_error?: string; mfa?: string; return_to?: string | string[] }>;
 }) {
   const [sp, instance] = await Promise.all([searchParams, getInstanceConfig()]);
   // The page is a thin standalone wrapper; the title lives inside LoginForm so each
@@ -28,6 +29,7 @@ export default async function LoginPage({
         oauthPending={sp.oauth === "1"}
         oauthError={sp.oauth_error ?? ""}
         mfaPending={sp.mfa === "required"}
+        returnTo={safeLoginReturn(sp.return_to)}
         initialProviders={instance?.oauth_providers}
         initialAtprotoLogin={instance?.atproto_login}
         instanceName={instance?.name}

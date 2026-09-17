@@ -18,6 +18,7 @@ import { OtpInput } from "@/components/ui/OtpInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import { loginCredentials, looksLikeEmail } from "@/lib/login-identifier";
+import { safeLoginReturn } from "@/lib/login-return";
 import { brandName } from "@/lib/software-brand";
 
 // LoginForm drives the whole sign-in surface:
@@ -28,10 +29,10 @@ import { brandName } from "@/lib/software-brand";
 //    challenge with the token in an httpOnly cookie instead of in state;
 //  - one "Continue with <Provider>" button per configured OIDC provider
 //    (GET /instance oauth_providers), navigating top-level to the backend's
-//    OAuth begin endpoint with return_to=/login?oauth=1;
+//    OAuth begin endpoint with a login callback retaining the local destination;
 //  - the OAuth landing: the callback issues the session as an httpOnly cookie
 //    and redirects back here, so ?oauth=1 waits for the boot-time silent
-//    refresh to settle (authed -> home) and ?oauth_error=<code> renders the
+//    refresh to settle (authed -> destination) and ?oauth_error=<code> renders the
 //    honest failure copy. Both markers are cleaned from the URL immediately.
 export function LoginForm({
   oauthPending = false,
@@ -40,6 +41,7 @@ export function LoginForm({
   initialProviders,
   initialAtprotoLogin,
   instanceName,
+  returnTo,
 }: {
   /** True when the URL carried the ?oauth=1 return_to marker. */
   oauthPending?: boolean;
@@ -63,8 +65,12 @@ export function LoginForm({
    * no backend to ask).
    */
   instanceName?: string | null;
+  /** Local destination after authentication; this never queues the original action. */
+  returnTo?: string;
 }) {
   const router = useRouter();
+  const destination = safeLoginReturn(returnTo);
+  const loginPath = destination === "/" ? "/login" : `/login?return_to=${encodeURIComponent(destination)}`;
   const { status, login, completeMfaChallenge } = useSession();
   // The sign-in heading names the destination: the instance, else the software,
   // else nothing at all once the software name is white-labelled away.
@@ -111,14 +117,14 @@ export function LoginForm({
   // Clean the one-shot OAuth markers out of the URL (they must not survive a
   // reload/bookmark); the outcome already lives in state.
   useEffect(() => {
-    if (oauthPending || oauthError || mfaPending) router.replace("/login");
-  }, [oauthPending, oauthError, mfaPending, router]);
+    if (oauthPending || oauthError || mfaPending) router.replace(loginPath);
+  }, [oauthPending, oauthError, mfaPending, router, loginPath]);
 
   // A successful OAuth landing: the silent refresh picked up the session
   // cookie the callback set — leave the login page.
   useEffect(() => {
-    if (oauthLanding && status === "authed") router.replace("/");
-  }, [oauthLanding, status, router]);
+    if (oauthLanding && status === "authed") router.replace(destination);
+  }, [oauthLanding, status, router, destination]);
 
   useEffect(() => {
     // Paint the server snapshot immediately, then revalidate it in place so a
@@ -153,7 +159,7 @@ export function LoginForm({
         setSubmitting(false);
         return;
       }
-      router.push("/");
+      router.push(destination);
     } catch (err) {
       if (
         err instanceof ApiError &&
@@ -187,7 +193,7 @@ export function LoginForm({
       // A null token is the provider path: the backend reads the pending
       // cookie the callback set, which the request carries with credentials.
       await completeMfaChallenge(mfaToken, code.trim());
-      router.push("/");
+      router.push(destination);
     } catch (err) {
       setSubmitting(false);
       if (err instanceof ApiError && err.status === 401) {
@@ -382,11 +388,11 @@ export function LoginForm({
 
       {/* One "or" rule for the whole alternative-auth group: OAuthButtons draws
           it above the provider list; when only Bluesky is enabled we draw it
-          here instead. The ATProto callback appends ?oauth=1 to a BARE return_to
-          itself, so the Bluesky button passes "/login" (not "/login?oauth=1"). */}
+          here instead. ATProto adds its own oauth marker while preserving
+          return_to; OIDC expects the marker in the callback URL we supply. */}
       {providers.length === 0 && atprotoEnabled ? <AuthOrDivider /> : null}
-      <OAuthButtons providers={providers} returnTo="/login?oauth=1" />
-      <BlueskyLoginButton enabled={atprotoEnabled} returnTo="/login" />
+      <OAuthButtons providers={providers} returnTo={`${loginPath}${destination === "/" ? "?" : "&"}oauth=1`} />
+      <BlueskyLoginButton enabled={atprotoEnabled} returnTo={loginPath} />
 
       <p className="text-center text-subhead text-fg-muted">
         No account?{" "}

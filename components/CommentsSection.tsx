@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
 import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import {
   ChevronDownIcon,
@@ -223,11 +224,17 @@ function CommentForm({
   onPosted: (c: Comment) => void;
 }) {
   const { status } = useSession();
+  const requestSignIn = useWatchSignIn();
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (status !== "authed") {
+    if (requestSignIn) return <button type="button" disabled={status === "restoring"}
+      onClick={() => requestSignIn("leave a comment")}
+      className="focus-ring min-h-11 w-full rounded-lg border-b border-border px-3 text-left text-sm text-fg-muted hover:bg-surface-muted">
+      Add a comment…
+    </button>;
     return (
       <p className="text-sm text-fg-muted">
         <Link
@@ -420,6 +427,7 @@ function CommentItem({
   onMutedInstance: (domain: string) => void;
 }) {
   const { user, status } = useSession();
+  const requestSignIn = useWatchSignIn();
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -832,7 +840,11 @@ function CommentItem({
                 <button
                   type="button"
                   aria-expanded={replying}
-                  onClick={() => setReplying((v) => !v)}
+                  disabled={status === "restoring"}
+                  onClick={() => {
+                    if (status !== "authed" && requestSignIn) requestSignIn("reply");
+                    else setReplying((v) => !v);
+                  }}
                   className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg"
                 >
                   Reply

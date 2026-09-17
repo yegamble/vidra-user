@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // The watch-page channel row + Support dialog (DR5), bound to the real public
 // channel + donation-address reads. Anonymous viewer (the Follow control resolves
-// to a sign-in link; Support is a public read, no auth needed).
+// opens a contextual sign-in prompt; Support is a public read, no auth needed).
 
 const DETAIL = /\/api\/v1\/videos\/v1$/;
 const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;
@@ -87,7 +87,10 @@ test("shows the channel row with follower count and a Follow affordance", async 
   const channelLink = page.getByRole("link", { name: /Grade House/ });
   await expect(channelLink.first()).toHaveAttribute("href", "/channels/grade-house");
   await expect(page.getByText("48.2K followers")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Sign in to follow" })).toBeVisible();
+  await page.getByRole("button", { name: "Follow", exact: true }).click();
+  const prompt = page.getByRole("dialog", { name: "Sign in to follow this channel" });
+  await expect(prompt).toBeVisible();
+  await expect(prompt.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login?return_to=%2Fvideos%2Fv1");
 });
 
 test("Support opens a dialog with the QR, mono address, and verified pill", async ({ page }) => {
@@ -114,4 +117,30 @@ test("no Support affordance when the creator exposes no address", async ({ page 
   // The channel row still renders; Support does not (nothing to support with).
   await expect(page.getByText("48.2K followers")).toBeVisible();
   await expect(page.getByRole("button", { name: "Support" })).toHaveCount(0);
+});
+
+
+test("guest actions fit a 320px watch page without horizontal scrolling", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await mockWatch(page, []);
+  await page.goto("/videos/v1");
+  const actions = page.getByRole("group", { name: "Video actions" });
+  await expect(actions.getByRole("button", { name: "Like", exact: true })).toBeVisible();
+  await expect(actions.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+  const geometry = await actions.evaluate((element) => ({
+    scrolls: element.scrollWidth > element.clientWidth,
+    pageScrolls: document.documentElement.scrollWidth > window.innerWidth,
+    buttons: Array.from(element.querySelectorAll("button"), (button) => {
+      const { left, right, height } = button.getBoundingClientRect();
+      return { left, right, height };
+    }),
+  }));
+  expect(geometry.scrolls).toBe(false);
+  expect(geometry.pageScrolls).toBe(false);
+  expect(geometry.buttons).toHaveLength(5);
+  for (const button of geometry.buttons) {
+    expect(button.left).toBeGreaterThanOrEqual(0);
+    expect(button.right).toBeLessThanOrEqual(320);
+    expect(button.height).toBeGreaterThanOrEqual(44);
+  }
 });

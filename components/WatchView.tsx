@@ -14,21 +14,16 @@ import {
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { WarningIcon } from "@/components/icons";
-import { AddToPlaylistButton } from "@/components/AddToPlaylistButton";
 import { CommentsSection } from "@/components/CommentsSection";
 import type { DonateSource } from "@/components/SupportButton";
-import { DownloadButton } from "@/components/DownloadButton";
 import { KeyboardShortcutsHelp } from "@/components/KeyboardShortcutsHelp";
 import { VideoPlayer, type CaptionTrack } from "@/components/player/VideoPlayer";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
-import { RatingControls } from "@/components/RatingControls";
 import { RelatedVideos } from "@/components/RelatedVideos";
-import { ReportButton } from "@/components/ReportButton";
-import { SaveButton } from "@/components/SaveButton";
-import { ShareButton } from "@/components/ShareButton";
 import { SupportButton } from "@/components/SupportButton";
 import { TimestampedText } from "@/components/TimestampedText";
-import { VideoActionsMenu } from "@/components/VideoActionsMenu";
+import { WatchActions } from "@/components/watch/WatchActions";
+import { WatchSignInProvider } from "@/components/watch/WatchSignInPrompt";
 import { useAmbientMode } from "@/lib/player-ambient";
 import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsPlayerOverlay } from "@/components/watch/IpfsPlayerOverlay";
@@ -646,19 +641,20 @@ export function WatchView({
     // style change and nothing in the player unmounts. Below the two-column
     // breakpoint theater is inert in CSS and the immersive flag is not set, so
     // a phone sees exactly today's page.
+    <WatchSignInProvider>
     <div
       data-theater={theater ? "on" : "off"}
       className={cn("watch-layout", theater ? "watch-layout-theater" : null)}
     >
       {stageBlock}
-      <div className="watch-body-area flex flex-col gap-8">
+      <div className="watch-body-area flex min-w-0 flex-col gap-8">
       <article className="flex flex-col gap-4">
         {playlist.active && playlist.status === "error" ? (
           <ErrorState message="Could not load this playlist. Playback continuation is unavailable." onRetry={playlist.retry} />
         ) : null}
 
         <div className="flex flex-col gap-3">
-          <h1 className="text-balance text-title2 sm:text-title">{video.title}</h1>
+          <h1 className="break-words text-balance text-title2 sm:text-title">{video.title}</h1>
           {/* views · age (+ owner-facing privacy badge). */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-footnote text-fg-muted">
             {/* Owner-facing badge: a private video only ever loads for its
@@ -683,25 +679,11 @@ export function WatchView({
               }
             />
           ) : null}
-          {/* Action row — Support (accent) leads, then the tonal pills; scrolls
-              horizontally on a phone (design), wraps on desktop. */}
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto lg:flex-wrap lg:overflow-x-visible">
-            {channelHandle ? (
-              <SupportButton sources={supportSources} name={channelName || "this creator"} />
-            ) : null}
-            <RatingControls videoId={video.id} />
-            <SaveButton videoId={video.id} />
-            <AddToPlaylistButton videoId={video.id} />
-            <ShareButton
-              videoId={video.id}
-              shortCode={video.short_code}
-              title={video.title}
-              getCurrentTime={() => playerRef.current?.currentTime ?? 0}
-            />
-            <DownloadButton video={video} playbackToken={playbackToken} />
-            <ReportButton kind="video" targetId={video.id} />
-            <VideoActionsMenu video={video} onDeleted={() => window.location.assign("/")} />
-          </div>
+          <WatchActions video={video} playbackToken={playbackToken}
+            getCurrentTime={() => playerRef.current?.currentTime ?? 0}
+            onDeleted={() => window.location.assign("/")} />
+          {channelHandle ? <SupportButton sources={supportSources} name={channelName || "this creator"}
+            className="self-start min-h-11" /> : null}
           {/* Secondary technical/taxonomy chips (duration, dimensions,
               category/language/license) on their own quiet row. */}
           {chips.length > 0 ? (
@@ -769,6 +751,7 @@ export function WatchView({
         <RelatedVideos video={video} onFirstRelated={setRelatedNextVideo} />
       </div>
     </div>
+    </WatchSignInProvider>
   );
 }
 

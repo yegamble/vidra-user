@@ -88,9 +88,10 @@ test("shows a video's comments and prompts anonymous viewers to sign in", async 
   await expect(page.getByText("First!")).toBeVisible();
   await expect(page.getByText("Nice one")).toBeVisible();
   await expect(page.getByText("Bob Jones").first()).toBeVisible();
-  // Anonymous viewers cannot post.
-  await expect(page.getByText("to leave a comment")).toBeVisible();
+  // Guests see the action first; it opens a prompt, never an editable composer.
   await expect(page.getByLabel("Add a comment")).toHaveCount(0);
+  await page.getByRole("button", { name: "Add a comment…" }).click();
+  await expect(page.getByRole("dialog", { name: "Sign in to leave a comment" })).toBeVisible();
 });
 
 test("an authenticated viewer can post a comment", async ({ page }) => {
@@ -505,8 +506,9 @@ test("an anonymous viewer is prompted to sign in when replying", async ({ page }
   // An anonymous viewer still sees a Reply control...
   await parentRow.getByRole("button", { name: "Reply", exact: true }).click();
   // ...but it prompts sign-in instead of opening a composer.
-  await expect(parentRow.getByText("to reply")).toBeVisible();
-  await expect(parentRow.getByRole("link", { name: "Sign in" })).toBeVisible();
+  const prompt = page.getByRole("dialog", { name: "Sign in to reply" });
+  await expect(prompt).toBeVisible();
+  await expect(prompt.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login?return_to=%2Fvideos%2Fv1");
   await expect(page.getByLabel("Write a reply")).toHaveCount(0);
 });
 
@@ -526,4 +528,5 @@ test("hides the composer behind a note when the video's comments are turned off 
   await expect(page.getByText("Still readable")).toBeVisible();
   await expect(page.getByLabel("Add a comment")).toHaveCount(0);
   await expect(page.getByText("to leave a comment")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add a comment…" })).toHaveCount(0);
 });

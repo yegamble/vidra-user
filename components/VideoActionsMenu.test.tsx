@@ -148,6 +148,16 @@ afterEach(() => {
 });
 
 describe("VideoActionsMenu", () => {
+  it("preserves a gated watch video's playback token when downloading from More", () => {
+    Object.assign(mocks.permissions, { canDownload: true });
+    render(<ToastProvider><VideoActionsMenu video={video()} watchPage playbackToken="viewer-access" /></ToastProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Download" }));
+    expect(mocks.downloadDialog).toHaveBeenCalledWith(expect.objectContaining({
+      videoId: "video-1", playbackToken: "viewer-access",
+    }));
+  });
+
   it("uses the larger vertical-dot glyph on a 44px action target with no squeeze", () => {
     renderMenu();
     const trigger = screen.getByRole("button", { name: "Actions for A carefully graded film" });
