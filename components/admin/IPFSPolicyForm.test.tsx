@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiError, api, type IPFSConfigDocument } from "@/lib/api";
 import { IPFSPolicyForm } from "./IPFSPolicyForm";
+vi.mock("./IPFSManagedStatus", () => ({ IPFSManagedStatus: ({ dirty }: { dirty: boolean }) => <button disabled={dirty}>Node action fixture</button> }));
 
 const saved: IPFSConfigDocument = { revision: 3, policy_active: false, config: {
   provider: "internal", enabled: false, auto_pin_new: true, demand_pin: false,
@@ -15,6 +16,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("explains the operator-managed capacity tradeoff before policy adoption", async () => {
+  render(<IPFSPolicyForm onSaved={() => {}} />);
+  fireEvent.change(await screen.findByLabelText("Node provider"), { target: { value: "external" } });
+  expect(screen.getByText(/Saving adopts capacity checks; copying pauses when host usage cannot be measured/)).toBeTruthy();
+  expect(api.updateIPFSConfig).not.toHaveBeenCalled();
+});
+
 it("loads without adopting policy and saves the complete document with revision and byte units", async () => {
   const onSaved = vi.fn();
   render(<IPFSPolicyForm onSaved={onSaved} />);
@@ -23,6 +31,7 @@ it("loads without adopting policy and saves the complete document with revision 
   expect(screen.getByText(/Existing deployment policy remains active until/)).toBeTruthy();
   fireEvent.click(enabled);
   fireEvent.change(screen.getByLabelText("Pin storage budget (GiB)"), { target: { value: "21.5" } });
+  expect(screen.getByRole("button", { name: "Node action fixture" })).toHaveProperty("disabled", true);
   fireEvent.click(screen.getByRole("button", { name: "Save IPFS policy" }));
   await waitFor(() => expect(api.updateIPFSConfig).toHaveBeenCalledWith({ expected_revision: 3,
     config: { ...saved.config, enabled: true, budget_bytes: 21.5 * 1024 ** 3 } }));
