@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 // The watch-page channel row + Support dialog (DR5), bound to the real public
-// channel + donation-address reads. Anonymous viewer (the Follow control resolves
-// opens a contextual sign-in prompt; Support is a public read, no auth needed).
+// channel + donation-address reads. For an anonymous viewer, Follow opens a
+// contextual sign-in prompt; Support is a public read, no auth needed.
 
 const DETAIL = /\/api\/v1\/videos\/v1$/;
 const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;
@@ -120,8 +120,8 @@ test("no Support affordance when the creator exposes no address", async ({ page 
 });
 
 
-test("guest actions fit a 320px watch page without horizontal scrolling", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 740 });
+for (const width of [320, 390]) test(`guest actions fit one row at ${width}px without horizontal scrolling`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 740 });
   await mockWatch(page, []);
   await page.goto("/videos/v1");
   const actions = page.getByRole("group", { name: "Video actions" });
@@ -129,6 +129,7 @@ test("guest actions fit a 320px watch page without horizontal scrolling", async 
   await expect(actions.getByRole("button", { name: "Save", exact: true })).toBeVisible();
   const geometry = await actions.evaluate((element) => ({
     scrolls: element.scrollWidth > element.clientWidth,
+    height: element.getBoundingClientRect().height,
     pageScrolls: document.documentElement.scrollWidth > window.innerWidth,
     buttons: Array.from(element.querySelectorAll("button"), (button) => {
       const { left, right, height } = button.getBoundingClientRect();
@@ -136,11 +137,12 @@ test("guest actions fit a 320px watch page without horizontal scrolling", async 
     }),
   }));
   expect(geometry.scrolls).toBe(false);
+  expect(geometry.height).toBeLessThanOrEqual(44);
   expect(geometry.pageScrolls).toBe(false);
   expect(geometry.buttons).toHaveLength(5);
   for (const button of geometry.buttons) {
     expect(button.left).toBeGreaterThanOrEqual(0);
-    expect(button.right).toBeLessThanOrEqual(320);
+    expect(button.right).toBeLessThanOrEqual(width);
     expect(button.height).toBeGreaterThanOrEqual(44);
   }
 });

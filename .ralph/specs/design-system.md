@@ -833,9 +833,11 @@ at 16:9, so the two modes cannot disagree.
 Like/Dislike, Share, Save, and More; Follow belongs beside the channel. More
 holds queue, playlist, download, report, and management actions as permissions
 allow, without duplicating Share or the Save/Watch later destination. The row
-wraps at narrow widths, with 44px targets and no horizontal swipe requirement.
-Guests see an Add a comment button instead of an editable composer. Protected
-actions open a contextual sign-in dialog only after activation, preserve the
+uses 4px gaps and keeps 44px targets without horizontal swiping. Below 340px of
+available action width, Share/Save keep accessible names but use icon-only
+buttons; wider columns show their labels. Wrapping remains a fallback for large
+counts or enlarged text. Guests see an Add a comment button instead of an
+editable composer. Protected actions open a contextual sign-in dialog only after activation, preserve the
 local watch path/query/hash through login, and never replay the action after
 sign-in. Public sharing and creator support remain available without a session.
 

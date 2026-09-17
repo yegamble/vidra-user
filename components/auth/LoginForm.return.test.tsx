@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   status: "anon" as "anon" | "authed" | "restoring",
   router: { push: vi.fn(), replace: vi.fn() },
+  location: { assign: vi.fn(), replace: vi.fn() },
   login: vi.fn(), challenge: vi.fn(), instance: vi.fn(), bluesky: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => mocks.router }));
@@ -19,13 +20,15 @@ import { LoginForm } from "./LoginForm";
 
 const destination = "/videos/v1?playlist=p1&t=32#comments";
 const loginPath = `/login?return_to=${encodeURIComponent(destination)}`;
+const locationDescriptor = Object.getOwnPropertyDescriptor(window, "location")!;
 beforeEach(() => {
+  Object.defineProperty(window, "location", { configurable: true, value: mocks.location });
   mocks.status = "anon";
   mocks.instance.mockResolvedValue({ oauth_providers: ["google"], atproto_login: true });
   mocks.login.mockResolvedValue({ status: "authed" });
   mocks.challenge.mockResolvedValue(undefined);
 });
-afterEach(() => { cleanup(); vi.resetAllMocks(); });
+afterEach(() => { cleanup(); Object.defineProperty(window, "location", locationDescriptor); vi.resetAllMocks(); });
 
 async function passwordSignIn() {
   fireEvent.change(screen.getByLabelText("Email or username"), { target: { value: "viewer" } });
@@ -39,10 +42,11 @@ async function completeChallenge() {
 }
 
 describe("LoginForm return destination", () => {
-  it("returns to the video query and fragment after password sign-in", async () => {
+  it("navigates the document after password sign-in so cached watch fragments are not duplicated", async () => {
     render(<LoginForm returnTo={destination} />);
     await passwordSignIn();
-    await waitFor(() => expect(mocks.router.push).toHaveBeenCalledWith(destination));
+    await waitFor(() => expect(mocks.location.assign).toHaveBeenCalledWith(destination));
+    expect(mocks.router.push).not.toHaveBeenCalled();
     expect(mocks.login).toHaveBeenCalledTimes(1);
   });
 
@@ -50,6 +54,7 @@ describe("LoginForm return destination", () => {
     render(<LoginForm returnTo="//outside.example/video" />);
     await passwordSignIn();
     await waitFor(() => expect(mocks.router.push).toHaveBeenCalledWith("/"));
+    expect(mocks.location.assign).not.toHaveBeenCalled();
   });
 
   it.each([{ oauthPending: true }, { oauthError: "access_denied" }, { mfaPending: true }])(
@@ -64,19 +69,29 @@ describe("LoginForm return destination", () => {
     render(<LoginForm mfaPending={source === "provider"} returnTo={destination} />);
     if (source === "password") await passwordSignIn();
     expect(mocks.router.push).not.toHaveBeenCalled();
+    expect(mocks.location.assign).not.toHaveBeenCalled();
     await completeChallenge();
     await waitFor(() => expect(mocks.challenge).toHaveBeenCalledWith(source === "provider" ? null : "pending-token", "a1b2c-3d4e5"));
-    await waitFor(() => expect(mocks.router.push).toHaveBeenCalledWith(destination));
+    await waitFor(() => expect(mocks.location.assign).toHaveBeenCalledWith(destination));
+    expect(mocks.router.push).not.toHaveBeenCalled();
   });
 
   it("returns only after the OAuth session has actually restored", async () => {
     mocks.status = "restoring";
     const view = render(<LoginForm oauthPending returnTo={destination} />);
     expect(screen.getByRole("status", { name: "Completing sign-in" })).toBeTruthy();
-    expect(mocks.router.replace).not.toHaveBeenCalledWith(destination);
+    expect(mocks.location.replace).not.toHaveBeenCalled();
     mocks.status = "authed";
     view.rerender(<LoginForm oauthPending returnTo={destination} />);
-    await waitFor(() => expect(mocks.router.replace).toHaveBeenCalledWith(destination));
+    await waitFor(() => expect(mocks.location.replace).toHaveBeenCalledWith(destination));
+    expect(mocks.router.replace).not.toHaveBeenCalledWith(destination);
+  });
+
+  it("keeps the normal OAuth home destination on the router", async () => {
+    mocks.status = "authed";
+    render(<LoginForm oauthPending />);
+    await waitFor(() => expect(mocks.router.replace).toHaveBeenCalledWith("/"));
+    expect(mocks.location.replace).not.toHaveBeenCalled();
   });
 
   it("carries the destination through both provider callback URLs", async () => {

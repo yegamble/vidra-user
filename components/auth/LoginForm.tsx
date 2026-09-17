@@ -121,9 +121,14 @@ export function LoginForm({
   }, [oauthPending, oauthError, mfaPending, router, loginPath]);
 
   // A successful OAuth landing: the silent refresh picked up the session
-  // cookie the callback set — leave the login page.
+  // cookie the callback set — leave the login page. Explicit returns load a
+  // fresh document: Next's cached watch canonical URL can duplicate its hash,
+  // and the new document restores the authenticated session from its cookie.
   useEffect(() => {
-    if (oauthLanding && status === "authed") router.replace(destination);
+    if (oauthLanding && status === "authed") {
+      if (destination === "/") router.replace("/");
+      else window.location.replace(destination);
+    }
   }, [oauthLanding, status, router, destination]);
 
   useEffect(() => {
@@ -159,7 +164,8 @@ export function LoginForm({
         setSubmitting(false);
         return;
       }
-      router.push(destination);
+      if (destination === "/") router.push("/");
+      else window.location.assign(destination);
     } catch (err) {
       if (
         err instanceof ApiError &&
@@ -193,7 +199,8 @@ export function LoginForm({
       // A null token is the provider path: the backend reads the pending
       // cookie the callback set, which the request carries with credentials.
       await completeMfaChallenge(mfaToken, code.trim());
-      router.push(destination);
+      if (destination === "/") router.push("/");
+      else window.location.assign(destination);
     } catch (err) {
       setSubmitting(false);
       if (err instanceof ApiError && err.status === 401) {
