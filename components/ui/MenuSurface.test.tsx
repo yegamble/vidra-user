@@ -27,7 +27,7 @@ describe.each(cases)("$name shared menu contract", ({ trigger, node }) => {
   });
   it("keeps inside presses open and closes outside the portal", () => {
     const { menu } = open();
-    fireEvent.pointerDown(menu);
+    fireEvent.pointerDown(menu.querySelector<HTMLElement>('[role^="menuitem"]')!);
     expect(screen.getByRole("menu")).toBe(menu);
     fireEvent.pointerDown(document.body);
     expect(screen.queryByRole("menu")).toBeNull();
