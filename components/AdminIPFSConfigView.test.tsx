@@ -80,6 +80,17 @@ afterEach(() => {
 });
 
 describe("IPFSConfigPanel", () => {
+  it("does not label an installed but disabled mirror configured or offer reconciliation", async () => {
+    mocks.getIPFSStatus.mockResolvedValue({ ...status, enabled: false, networks: {
+      public: { ...status.networks.public, enabled: false },
+      private: { ...status.networks.private, enabled: false },
+    } });
+    render(<IPFSConfigPanel />);
+    expect(await screen.findByText("Not enabled")).toBeTruthy();
+    expect(screen.queryByText("Configured")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reconcile all configured tiers" })).toHaveProperty("disabled", true);
+  });
+
   it("renders effective public/private configuration, health, and pin counts", async () => {
     render(<IPFSConfigPanel />);
 
