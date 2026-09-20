@@ -278,7 +278,7 @@ test("an admin starts a real import and watches it run to completion", async ({ 
   // The mode the run executed under is on the run itself. "Why is my object
   // store this large?" and "why does nothing play?" are asked long after this
   // row has scrolled away, and reference mode is the answer to both.
-  await expect(runRegion.getByText("Referenced media — source storage")).toBeVisible();
+  await expect(runRegion.getByText("Referenced media — existing object keys")).toBeVisible();
   // Whole-body equality, so this also proves `source_authoritative` and
   // `media_mode` are ABSENT — not sent as false, not sent as a guessed mode —
   // when the cutover box was never ticked and the media selector was left on

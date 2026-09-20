@@ -22,3 +22,19 @@ export function isStandaloneRoute(pathname: string | null): boolean {
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
+
+/**
+ * isAdminConsoleRoute — the admin routes where the GLOBAL app sidebar steps
+ * aside for the dedicated desktop console rail (app/admin/layout.tsx →
+ * AdminConsole), i.e. /admin/* viewed BY an admin. Non-admins never see the
+ * console (only the page's "Administrators only" gate), so they keep the app
+ * sidebar there.
+ *
+ * Shared by the Sidebar (which returns null here) and the header's Menu button
+ * (which must not render as a control whose aria-controls target does not
+ * exist — axe reports that as a critical aria-valid-attr-value violation, and a
+ * button that toggles nothing is worse than no button).
+ */
+export function isAdminConsoleRoute(pathname: string | null, role: string | undefined): boolean {
+  return pathname?.startsWith("/admin") === true && role === "admin";
+}

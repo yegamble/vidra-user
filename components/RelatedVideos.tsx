@@ -27,17 +27,16 @@ const RELATED_COUNT = 6;
 // itself while loading, on failure, and when nothing relates — it is pure polish
 // and must never break the watch page.
 //
-// `belowLayout` (theater mode, PLAY-04): when the watch page is in theater mode
-// the rail reflows to a full-width row of cards BELOW the stage instead of the
-// fixed-width right rail — the width cap is dropped and the card list becomes a
-// responsive multi-column grid.
+// The rail is ALWAYS the secondary column at lg. Theater no longer reflows it
+// into a full-width grid: it makes the stage a full-bleed band and leaves the
+// page below it two-column (YouTube's layout — the secondary column moves under
+// the player, it does not change shape), so the prop that dropped the width cap
+// and switched the list to a 3-up grid has no caller left and is gone.
 export function RelatedVideos({
   video,
-  belowLayout = false,
   onFirstRelated,
 }: {
   video: Video;
-  belowLayout?: boolean;
   /**
    * Reports the first related entry (or null) up to the watch page, so the
    * player's end card (PLAY-08) can queue it as "next" without a second fetch.
@@ -128,16 +127,13 @@ export function RelatedVideos({
   // of returning null — otherwise the player column renders full-width and
   // then visibly shrinks when the rail pops in. Only the lg+ two-column
   // layout needs the reservation (stacked layouts just append below), so the
-  // placeholder stays hidden under lg. A resolved-but-empty list collapses.
+  // placeholder stays hidden under xl. A resolved-but-empty list collapses.
   if (related === null) {
     return (
       <aside
         aria-label="Related videos"
         aria-busy="true"
-        className={cn(
-          "hidden w-full shrink-0 flex-col gap-3.5 lg:flex",
-          belowLayout ? null : "lg:w-[344px]",
-        )}
+        className="hidden w-full shrink-0 flex-col gap-3.5 xl:flex xl:w-[344px]"
       >
         <h2 className="text-[13px] font-bold tracking-[0.02em] text-fg-muted">Related videos</h2>
         <div aria-hidden className="flex flex-col gap-3.5">
@@ -165,17 +161,11 @@ export function RelatedVideos({
   return (
     <aside
       aria-label="Related videos"
-      className={cn(
-        "flex w-full shrink-0 flex-col gap-3.5",
-        belowLayout ? null : "lg:w-[344px]",
-      )}
+      className="flex w-full shrink-0 flex-col gap-3.5 xl:w-[344px]"
     >
       <h2 className="text-[13px] font-bold tracking-[0.02em] text-fg-muted">Related videos</h2>
       <ul
-        className={cn(
-          "grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2",
-          belowLayout ? "lg:grid-cols-3" : "lg:grid-cols-1 lg:gap-y-3.5",
-        )}
+        className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 xl:grid-cols-1 xl:gap-y-3.5"
       >
         {related.map((v) => (
           <li key={v.id}>

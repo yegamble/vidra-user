@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VideoPlayer, type CaptionTrack } from "./VideoPlayer";
 import { api, type Video } from "@/lib/api";
+import { setInstanceDefaultsForTests } from "@/lib/instance-defaults";
 import {
   DEFAULT_PLAYER_SETTINGS,
   hydratePlayerSettings,
@@ -13,6 +14,20 @@ import {
 
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+
+// hls.js is imported ONLY once that engine has won selection, so this stand-in
+// is inert for every test below except the start-on-open ones, which put the
+// player in MSE mode on purpose (MediaSource + an hls_url) to reproduce the
+// "<video> rendered with no src yet" window an SPA navigation lands in. It
+// declines, which walks the shell down to the progressive original — the same
+// transition a 404 master makes — without pulling the real chunk into jsdom.
+vi.mock("hls.js", () => ({
+  default: class MockHls {
+    static isSupported() {
+      return false;
+    }
+  },
+}));
 
 const VIDEO = {
   id: "v1",
@@ -133,7 +148,7 @@ describe("VideoPlayer shell", () => {
     expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Mute" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Fullscreen" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Speed: 1×" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy();
   });
 
   it("hides the quality selector and captions toggle when neither is available", () => {
@@ -142,6 +157,18 @@ describe("VideoPlayer shell", () => {
     expect(screen.queryByRole("button", { name: /^Quality:/ })).toBeNull();
     // No caption tracks → no captions toggle.
     expect(screen.queryByRole("button", { name: "Captions" })).toBeNull();
+  });
+
+  it("reflects decoded resolution changes in the Settings badge", () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video")!;
+    let height = 1080;
+    Object.defineProperty(video, "videoHeight", { get: () => height });
+    fireEvent.loadedMetadata(video);
+    expect(screen.getByTestId("player-resolution").textContent).toBe("1080p");
+    height = 360;
+    fireEvent(video, new Event("resize"));
+    expect(screen.getByTestId("player-resolution").textContent).toBe("360p");
   });
 
   it("shows a captions toggle when the video carries tracks", () => {
@@ -179,6 +206,25 @@ describe("VideoPlayer shell", () => {
       emit: (type: string) => (listeners[type] ?? []).forEach((fn) => fn()),
     };
   }
+
+  it("selects subtitle languages without disabling hidden HLS metadata", () => {
+    const fake = fakeTextTracks(["ID3", "English", "Spanish"]);
+    fake.tracks[0].kind = "metadata";
+    fake.tracks[0].mode = "hidden";
+    fake.tracks[1].language = "en";
+    fake.tracks[2].language = "es";
+    vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);
+    render(<Harness tracks={[{ language: "en", label: "English", url: "blob:en" }, { language: "es", label: "Spanish", url: "blob:es" }]} />);
+    expect(screen.getByRole("button", { name: "Captions" }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Subtitles/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Language/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Spanish" }));
+    expect(fake.tracks.map((track) => track.mode)).toEqual(["hidden", "disabled", "hidden"]);
+    fireEvent.click(screen.getByRole("button", { name: "Captions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Captions" }));
+    expect(fake.tracks.map((track) => track.mode)).toEqual(["hidden", "disabled", "hidden"]);
+  });
 
   it("turns captions on by default when the user asked for it", async () => {
     const fake = fakeTextTracks(["English"]);
@@ -239,7 +285,8 @@ describe("VideoPlayer shell", () => {
   it("opens the speed menu with the full 0.25×–4× ladder, applies a rate, relabels, and persists it", () => {
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
-    fireEvent.click(screen.getByRole("button", { name: "Speed: 1×" }));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Playback speed/ }));
     const menu = screen.getByRole("menu", { name: "Playback speed" });
     // Full mined ladder, ascending, normal reads "1×" (not "Normal"). The
     // selected item's check is a decorative <svg> (no text), so textContent is
@@ -249,7 +296,8 @@ describe("VideoPlayer shell", () => {
       "0.25×", "0.5×", "0.75×", "1×", "1.25×", "1.5×", "1.75×", "2×", "2.5×", "3×", "3.5×", "4×",
     ]);
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: "4×" }));
-    expect(screen.getByRole("button", { name: "Speed: 4×" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitem", { name: "Playback speed 4×" })).toBeTruthy();
     expect(video.playbackRate).toBe(4);
     expect(video.defaultPlaybackRate).toBe(4);
     // The choice is remembered for the session.
@@ -260,7 +308,8 @@ describe("VideoPlayer shell", () => {
     window.sessionStorage.setItem("vidra.player.speed", "2");
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
-    expect(screen.getByRole("button", { name: "Speed: 2×" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitem", { name: "Playback speed 2×" })).toBeTruthy();
     expect(video.playbackRate).toBe(2);
   });
 
@@ -270,7 +319,8 @@ describe("VideoPlayer shell", () => {
     hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, default_speed: 1.5 });
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
-    expect(screen.getByRole("button", { name: "Speed: 1.5×" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitem", { name: "Playback speed 1.5×" })).toBeTruthy();
     expect(video.playbackRate).toBe(1.5);
   });
 
@@ -316,18 +366,20 @@ describe("VideoPlayer shell", () => {
 
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
-    const pip = screen.getByRole("button", { name: "Picture-in-picture" });
-    expect(pip.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const pip = screen.getByRole("menuitemcheckbox", { name: "Picture-in-picture" });
+    expect(pip.getAttribute("aria-checked")).toBe("false");
 
     fireEvent.click(pip);
     expect(requestPip).toHaveBeenCalledTimes(1);
 
     // The element entering PiP (its event) flips the button's pressed state + label.
     act(() => void fireEvent(video, new Event("enterpictureinpicture")));
-    expect(screen.getByRole("button", { name: "Exit picture-in-picture" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitemcheckbox", { name: "Picture-in-picture" }).getAttribute("aria-checked")).toBe("true");
     // Leaving PiP (e.g. from the browser UI) returns it.
     act(() => void fireEvent(video, new Event("leavepictureinpicture")));
-    expect(screen.getByRole("button", { name: "Picture-in-picture" })).toBeTruthy();
+    expect(screen.getByRole("menuitemcheckbox", { name: "Picture-in-picture" }).getAttribute("aria-checked")).toBe("false");
   });
 
   it("wires the T shortcut to the theater toggle on the watch variant", () => {
@@ -347,7 +399,8 @@ describe("VideoPlayer shell", () => {
     const { container } = render(<Harness />);
     const video = container.querySelector("video") as HTMLVideoElement;
     act(() => void fireEvent.keyDown(document.body, { key: ">" }));
-    expect(screen.getByRole("button", { name: "Speed: 1.25×" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("menuitem", { name: "Playback speed 1.25×" })).toBeTruthy();
     expect(video.playbackRate).toBe(1.25);
     expect(window.sessionStorage.getItem("vidra.player.speed")).toBe("1.25");
   });
@@ -422,15 +475,15 @@ describe("VideoPlayer shell", () => {
     expect(screen.queryByText("Intro")).toBeNull();
   });
 
-  it("shows an autoplay-next toggle whose pressed state follows the store and flips on click", () => {
+  it("shows an autoplay switch whose checked state follows the store and flips on click", () => {
     render(<Harness />);
     // Baked default is ON (serverAutoplay + unset session both read on).
-    const on = screen.getByRole("button", { name: "Autoplay next is on" });
-    expect(on.getAttribute("aria-pressed")).toBe("true");
+    const on = screen.getByRole("switch", { name: "Autoplay next" });
+    expect(on.getAttribute("aria-checked")).toBe("true");
     // A click flips the session preference the end card honours.
     fireEvent.click(on);
-    const off = screen.getByRole("button", { name: "Autoplay next is off" });
-    expect(off.getAttribute("aria-pressed")).toBe("false");
+    const off = screen.getByRole("switch", { name: "Autoplay next" });
+    expect(off.getAttribute("aria-checked")).toBe("false");
     expect(window.sessionStorage.getItem("vidra.autoplay-next")).toBe("0");
   });
 
@@ -439,7 +492,7 @@ describe("VideoPlayer shell", () => {
     // A signed-in user's server-backed settings are hydrated (autoplay on).
     hydratePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, autoplay_next: true });
     render(<Harness />);
-    fireEvent.click(screen.getByRole("button", { name: "Autoplay next is on" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Autoplay next" }));
     // Fire-and-forget merge-PUT with just the flipped field.
     expect(put).toHaveBeenCalledWith({ autoplay_next: false });
   });
@@ -447,13 +500,92 @@ describe("VideoPlayer shell", () => {
   it("does not touch the account when no signed-in settings are loaded (anonymous / unsettled)", () => {
     const put = vi.spyOn(api, "updatePlayerSettings").mockResolvedValue(DEFAULT_PLAYER_SETTINGS);
     render(<Harness />); // settings not hydrated → no account to write to
-    fireEvent.click(screen.getByRole("button", { name: "Autoplay next is on" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Autoplay next" }));
     expect(put).not.toHaveBeenCalled();
   });
 
   it("does not render the autoplay toggle on the embed variant", () => {
     render(<Harness variant="embed" />);
-    expect(screen.queryByRole("button", { name: /Autoplay next/ })).toBeNull();
+    expect(screen.queryByRole("switch", { name: /Autoplay/ })).toBeNull();
+  });
+
+  it("hides the chrome the instant the pointer leaves the stage while playing", () => {
+    // YouTube parity, and the fourth of the owner's complaints: leaving the
+    // player must take the buttons AND the timeline with it, not start a 3s
+    // countdown the viewer has already walked away from.
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    const bar = screen.getByTestId("player-controls");
+    act(() => void fireEvent(video, new Event("play")));
+    expect(bar.className).toContain("opacity-100");
+    act(() => void fireEvent.pointerOut(screen.getByTestId("video-player"), {
+      relatedTarget: document.body,
+      pointerType: "mouse",
+    }));
+    expect(bar.className).toContain("opacity-0");
+  });
+
+  it("keeps the chrome up when a TOUCH pointer leaves the stage while playing", () => {
+    // Touch fires pointerout/pointerleave immediately after pointerup, so on a
+    // phone every tap on a control ran the mouse-leave path and hid the bar
+    // mid-playback — captions, fullscreen and the seek bar became unreachable
+    // by the only input the device has. Only a mouse can meaningfully "leave".
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    const bar = screen.getByTestId("player-controls");
+    act(() => void fireEvent(video, new Event("play")));
+    const stage = screen.getByTestId("video-player");
+    act(() => void fireEvent.pointerOut(stage, {
+      relatedTarget: document.body,
+      pointerType: "touch",
+    }));
+    expect(bar.className).toContain("opacity-100");
+    // ...and a pen behaves like touch, not like a mouse.
+    act(() => void fireEvent.pointerOut(stage, {
+      relatedTarget: document.body,
+      pointerType: "pen",
+    }));
+    expect(bar.className).toContain("opacity-100");
+  });
+
+  it("keeps the chrome up when the pointer leaves while paused", () => {
+    // Paused is the one state where the chrome is the point: a paused player
+    // with no visible controls reads as broken.
+    render(<Harness />);
+    const bar = screen.getByTestId("player-controls");
+    act(() => void fireEvent.pointerOut(screen.getByTestId("video-player"), {
+      relatedTarget: document.body,
+      pointerType: "mouse",
+    }));
+    expect(bar.className).toContain("opacity-100");
+  });
+
+  it("shows ONE tooltip above the transport, naming the control and its shortcut", () => {
+    render(<Harness tracks={CC_TRACKS} />);
+    const cc = screen.getByRole("button", { name: "Captions" });
+    // Keyboard focus shows it at once (no hover dwell to wait out).
+    act(() => void fireEvent.focus(cc));
+    const tip = screen.getByTestId("player-tooltip");
+    expect(tip.textContent).toContain("Subtitles/closed captions");
+    const cap = within(tip).getByText("C");
+    expect(cap.tagName).toBe("KBD");
+    // One bubble for the whole bar, never one per control.
+    expect(screen.getAllByTestId("player-tooltip")).toHaveLength(1);
+    act(() => void fireEvent.blur(cc));
+    expect(screen.queryByTestId("player-tooltip")).toBeNull();
+  });
+
+  it("re-labels the open tooltip when the hovered control's own label changes", () => {
+    // Pressing K while the pointer rests on Play used to leave "Play" hanging
+    // over a button that now pauses: the bubble snapshotted its text at show().
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    const play = screen.getByRole("button", { name: "Play" });
+    act(() => void fireEvent.focus(play));
+    expect(screen.getByTestId("player-tooltip").textContent).toContain("Play");
+    act(() => void fireEvent(video, new Event("play")));
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+    expect(screen.getByTestId("player-tooltip").textContent).toContain("Pause");
   });
 
   it("shows a replay-only end card (no next) when there is nothing queued", () => {
@@ -651,5 +783,253 @@ describe("VideoPlayer shell", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// The transport control is the only readout a viewer has for "is this playing?",
+// and the media element can leave playback WITHOUT firing `pause`. Owner report:
+// "if the video isn't autoplaying, the play button shows up as a pause button —
+// when clicking into the video, but not when using a link to watch it."
+describe("VideoPlayer transport ↔ element sync", () => {
+  it("follows the element out of playback when the load algorithm silently re-pauses it", async () => {
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+
+    // jsdom's `paused` is a fixed getter; make it settable so this test can model
+    // the spec behaviour exactly.
+    let paused = true;
+    Object.defineProperty(video, "paused", { configurable: true, get: () => paused });
+
+    // 1. Playback begins (a click, or the start-on-open kick).
+    await act(async () => {
+      paused = false;
+      video.dispatchEvent(new Event("play"));
+    });
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+
+    // 2. The engine re-attaches: hls.js `destroy()`/`detachMedia` does
+    //    removeAttribute("src") + load(), and the HLS→original fallback re-points
+    //    src. The media element load algorithm sets `paused` back to true and
+    //    rejects the pending play promise — firing abort + emptied + loadstart,
+    //    NEVER `pause`. Only play/pause wrote React's state, so it stayed false.
+    await act(async () => {
+      paused = true;
+      video.dispatchEvent(new Event("abort"));
+      video.dispatchEvent(new Event("emptied"));
+      video.dispatchEvent(new Event("loadstart"));
+    });
+
+    expect(video.paused).toBe(true);
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
+  });
+});
+
+// Start-on-open (config-parity W5) fires from an effect that used to run on the
+// FIRST render. On an SPA feed→watch navigation the defaults store and the
+// per-user layer are already settled by then, so the kick landed on an element
+// the engine had not attached anything to yet — and the attach that followed
+// aborted it. The video never started and the latch was already spent.
+describe("VideoPlayer start-on-open", () => {
+  const HLS_VIDEO = {
+    ...VIDEO,
+    hls_url: "/api/v1/videos/v1/hls/master.m3u8",
+  } as unknown as Video;
+
+  beforeEach(() => {
+    // The operator seeds start-on-open; the per-user layer is settled (the shared
+    // afterEach's resetPlayerSettings leaves it that way), so readStartOnOpen()
+    // is already true on the first render — the SPA-navigation ordering.
+    setInstanceDefaultsForTests({ player_autoplay: true });
+  });
+
+  afterEach(() => {
+    setInstanceDefaultsForTests(null);
+    Reflect.deleteProperty(window, "MediaSource");
+  });
+
+  it("holds the kick until the engine has attached a source, then starts exactly once", async () => {
+    // MSE present ⇒ hls.js wins selection provisionally and owns the element, so
+    // the shell renders <video> with NO src until the dynamic import resolves.
+    Object.defineProperty(window, "MediaSource", { configurable: true, value: class {} });
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+
+    const { container } = render(<Harness video={HLS_VIDEO} />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+
+    expect(video.getAttribute("src")).toBeNull();
+    expect(play).not.toHaveBeenCalled(); // nothing to play yet — do not fake it
+
+    // hls.js declines, the shell walks down to the progressive original: a source
+    // now exists, so the kick lands.
+    await waitFor(() => expect(video.getAttribute("src")).toBeTruthy());
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+  });
+
+  it("re-arms and re-kicks when an engine re-attach aborts the pending play", async () => {
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    let rejectPlay: (reason: unknown) => void = () => {};
+    play.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectPlay = reject;
+        }),
+    );
+
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+
+    // The load algorithm interrupts it: AbortError, then abort/emptied/loadstart.
+    await act(async () => {
+      rejectPlay(Object.assign(new Error("interrupted by a new load"), { name: "AbortError" }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      video.dispatchEvent(new Event("abort"));
+      video.dispatchEvent(new Event("emptied"));
+      video.dispatchEvent(new Event("loadstart"));
+    });
+
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
+  // REVIEW (PR #235): the internal PAUSE steps reject a pending play promise with
+  // AbortError too — the same name a load abort produces. So the rejection alone
+  // cannot tell "the engine re-attached" from "the viewer pressed pause while it
+  // was still buffering", and re-arming on it fought exactly the viewer the
+  // latch exists to protect. Intent is tracked at the control, not guessed from
+  // the error.
+  it("does not fight a viewer who pauses the kick while it is still buffering", async () => {
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    let rejectPlay: (reason: unknown) => void = () => {};
+    play.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectPlay = reject;
+        }),
+    );
+
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+
+    // The element has left the paused state and is buffering. jsdom's `paused`
+    // is a fixed getter; make it answer like the spec does.
+    let paused = false;
+    Object.defineProperty(video, "paused", { configurable: true, get: () => paused });
+    await act(async () => {
+      video.dispatchEvent(new Event("play"));
+    });
+
+    // The viewer presses pause. The bar button, the stage click and K/space all
+    // route through togglePlay, so pressing the button exercises all three.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+      paused = true;
+      // pause() runs the internal pause steps: the pending play promise is
+      // rejected with AbortError, and `pause` fires.
+      rejectPlay(Object.assign(new Error("interrupted by pause"), { name: "AbortError" }));
+      await Promise.resolve();
+      video.dispatchEvent(new Event("pause"));
+    });
+
+    // Now the engine re-attaches anyway (the HLS→original fallback). The video
+    // must stay stopped: the viewer answered this question already.
+    await act(async () => {
+      video.dispatchEvent(new Event("abort"));
+      video.dispatchEvent(new Event("emptied"));
+      video.dispatchEvent(new Event("loadstart"));
+    });
+
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
+  });
+
+  // REVIEW (PR #235): whether a browser fires `play` before refusing is
+  // browser-dependent. Where it does, no `pause` follows and no further
+  // loadstart arrives, so the rejection is the only place left to correct
+  // React's idea of the element.
+  it("resyncs the transport when the kick is refused after the element already said play", async () => {
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    let rejectPlay: (reason: unknown) => void = () => {};
+    play.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectPlay = reject;
+        }),
+    );
+
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+
+    let paused = false;
+    Object.defineProperty(video, "paused", { configurable: true, get: () => paused });
+    await act(async () => {
+      video.dispatchEvent(new Event("play"));
+    });
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+
+    await act(async () => {
+      paused = true;
+      rejectPlay(Object.assign(new Error("gesture required"), { name: "NotAllowedError" }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
+  });
+
+  // REVIEW (PR #235): a `?t=` deep link moves the head before anything has
+  // played. currentTime is where the head IS, not evidence that a viewer
+  // watched — `played` is that evidence.
+  it("re-arms after an abort even when a ?t= deep link moved the head", async () => {
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    let rejectPlay: (reason: unknown) => void = () => {};
+    play.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectPlay = reject;
+        }),
+    );
+
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+
+    video.currentTime = 7; // the #t= fragment landed; played is still empty
+    await act(async () => {
+      rejectPlay(Object.assign(new Error("interrupted by a new load"), { name: "AbortError" }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      video.dispatchEvent(new Event("abort"));
+      video.dispatchEvent(new Event("emptied"));
+      video.dispatchEvent(new Event("loadstart"));
+    });
+
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-kick a play the browser's autoplay policy refused", async () => {
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    play.mockImplementationOnce(() =>
+      Promise.reject(Object.assign(new Error("gesture required"), { name: "NotAllowedError" })),
+    );
+
+    const { container } = render(<Harness />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+
+    // Same re-attach, but the refusal was the browser's policy, not a load. A
+    // re-kick here would be refused again on every attach and flicker the label.
+    await act(async () => {
+      await Promise.resolve();
+      video.dispatchEvent(new Event("abort"));
+      video.dispatchEvent(new Event("emptied"));
+      video.dispatchEvent(new Event("loadstart"));
+    });
+
+    expect(play).toHaveBeenCalledTimes(1);
   });
 });

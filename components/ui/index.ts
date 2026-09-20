@@ -36,12 +36,12 @@ export {
   type FilterPanelProps,
 } from "./FilterPanel";
 export { IconButton, type IconButtonProps } from "./IconButton";
-export { IconTile, type TileColor } from "./IconTile";
 export { Input, type InputProps } from "./Input";
 export { LinkButton, type LinkButtonProps } from "./LinkButton";
 export { ListTail, type ListTailProps } from "./ListTail";
 export { LoadMoreButton, LoadMoreSentinel, PAGE_SIZE } from "./LoadMoreButton";
 export { Modal, type ModalProps } from "./Modal";
+export { MenuSurface } from "./MenuSurface";
 export { OtpInput, type OtpInputProps } from "./OtpInput";
 export { PillTabs, type PillTabItem, type PillTabsProps } from "./PillTabs";
 export { ProgressBar, type ProgressBarProps } from "./ProgressBar";

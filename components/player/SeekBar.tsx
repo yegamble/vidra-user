@@ -32,12 +32,13 @@ import type { SeekStoryboard } from "@/lib/use-storyboard";
 // fragments for every pointermove event.
 //
 // White fills on the media surface (design-system documented media-overlay
-// exception); no new hues. 44pt tall hit area (the visible bar is thin).
+// exception); no new hues. 24px compact / 44px wide hit area around a thin track.
 export function SeekBar({
   currentTime,
   duration,
   buffered,
   onSeek,
+  onSkip,
   storyboard,
   chapters,
 }: {
@@ -45,6 +46,7 @@ export function SeekBar({
   duration: number;
   buffered: ReadonlyArray<readonly [number, number]>;
   onSeek: (time: number) => void;
+  onSkip?: (seconds: number) => void;
   /** The video's seek-preview storyboard, when it has one (CORE-16). */
   storyboard?: SeekStoryboard | null;
   /** The video's seek-bar chapters, when it has any (CORE-15). */
@@ -139,7 +141,12 @@ export function SeekBar({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (!hasDuration) return;
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.nativeEvent.isComposing || !hasDuration) return;
+    if (onSkip && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+      e.preventDefault();
+      onSkip(e.key === "ArrowRight" ? 5 : -5);
+      return;
+    }
     let next: number | null = null;
     switch (e.key) {
       case "ArrowRight":
@@ -189,16 +196,22 @@ export function SeekBar({
       }}
       onBlur={() => setFocused(false)}
       onKeyDown={onKeyDown}
-      className="focus-ring group relative flex h-11 w-full cursor-pointer touch-none select-none items-center"
+      className="focus-ring-media group relative flex h-6 w-full cursor-pointer touch-none select-none items-end rounded-full @min-[420px]/stage:h-11"
     >
-      {/* The thin track line, centered in the tall hit area. */}
-      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/25 transition-[height] group-hover:h-2">
+      {/* The thin track stays on the lower edge of its target: 4px at rest,
+          thickening to 6px under the pointer or keyboard focus (the Apple TV
+          scrubber idiom — the bar grows toward you when it is the thing you are
+          operating). Below a 420px stage the target is 24px, preserving a clear
+          center tap region on narrow phones; wider stages use 44px.
+          Focus-within matters as much as hover: a keyboard user
+          scrubbing with the arrows gets the same thickened target and thumb. */}
+      <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/25 transition-[height] duration-150 ease-out group-hover:h-1.5 group-focus-within:h-1.5 motion-reduce:transition-none">
         {/* Buffered ranges: a lighter band under the playhead. */}
         {bands.map((b, i) => (
           <div
             key={i}
             aria-hidden="true"
-            className="absolute inset-y-0 bg-white/30"
+            className="absolute inset-y-0 bg-white/45"
             style={{ left: `${b.left * 100}%`, width: `${b.width * 100}%` }}
           />
         ))}
@@ -212,7 +225,7 @@ export function SeekBar({
       {/* Chapter boundary ticks (CORE-15): a thin white notch with a subtle dark
           ring so it reads over both the played (white) fill and any video frame.
           Rendered outside the clipped track so it can poke past the thin line; the
-          whole 44pt-tall bar is the pointer target, so the small visual is enough.
+          whole bar is the pointer target, so the small visual is enough.
           The tick at 0s (left edge) and any past the duration are skipped. */}
       {chapters && hasDuration
         ? chapters.chapters
@@ -222,7 +235,7 @@ export function SeekBar({
                 key={c.start_seconds}
                 data-testid="chapter-tick"
                 aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 h-2.5 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/85 ring-1 ring-black/30"
+                className="pointer-events-none absolute bottom-0.5 h-2.5 w-[3px] -translate-x-1/2 translate-y-1/2 rounded-full bg-white/85 ring-1 ring-black/30"
                 style={{ left: `${(c.start_seconds / duration) * 100}%` }}
               />
             ))
@@ -230,7 +243,7 @@ export function SeekBar({
       {/* Playhead knob. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        className="pointer-events-none absolute bottom-0.5 h-3 w-3 -translate-x-1/2 translate-y-1/2 rounded-full bg-white opacity-0 shadow-[0_1px_4px_rgba(0,0,0,0.55)] transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
         style={{ left: `${playedFrac * 100}%` }}
       />
       {/* Scrub bubble (hover / scrub / keyboard focus): a media thumbnail-style
@@ -239,7 +252,7 @@ export function SeekBar({
       {tooltipFrac !== null ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-8 z-10 flex -translate-x-1/2 flex-col items-center gap-1 rounded-lg bg-black/80 p-1 shadow-lg"
+          className="pointer-events-none absolute bottom-8 z-10 flex -translate-x-1/2 flex-col items-center gap-1 rounded-md bg-black/85 p-1 shadow-lg backdrop-blur-sm"
           style={bubbleStyle}
         >
           {cue && storyboard ? (
@@ -255,11 +268,11 @@ export function SeekBar({
             />
           ) : null}
           {bubbleChapter ? (
-            <span className="max-w-[10rem] truncate px-1 text-[11px] font-medium text-white/90">
+            <span className="max-w-[10rem] truncate px-1 text-[12px] font-medium text-white/80">
               {bubbleChapter.title}
             </span>
           ) : null}
-          <span className="px-1 text-[11px] font-medium tabular-nums text-white">
+          <span className="px-1 text-[12px] font-medium tabular-nums text-white">
             {formatDuration(tooltipTime)}
           </span>
         </div>

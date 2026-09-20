@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
+import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
 import { DownloadDialog } from "@/components/DownloadButton";
 import {
   CaptionsIcon,
@@ -10,6 +11,7 @@ import {
   DownloadIcon,
   FlagIcon,
   MoreVerticalIcon,
+  MoreHorizontalIcon,
   PlaylistIcon,
   PlusIcon,
   SettingsIcon,
@@ -44,12 +46,18 @@ export function VideoActionsMenu({
   video,
   onDeleted,
   compact = false,
+  watchPage = false,
+  playbackToken,
 }: {
   video: Video;
   onDeleted?: () => void;
   compact?: boolean;
+  watchPage?: boolean;
+  playbackToken?: string | null;
 }) {
   const router = useRouter();
+  const requestSignIn = useWatchSignIn();
+  const signIn = (action: string) => requestSignIn ? requestSignIn(action) : router.push("/login");
   const { toast } = useToast();
   const permissions = useVideoActionPermissions(video);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -77,12 +85,12 @@ export function VideoActionsMenu({
   ];
 
   if (local) {
-    items.push(
+    if (!watchPage) items.push(
       {
         label: <ActionLabel icon={<ClockIcon size={18} />}>Watch later</ActionLabel>,
         onSelect: () => {
           if (!permissions.signedIn) {
-            router.push("/login");
+            signIn("save this video");
             return;
           }
           void api
@@ -93,10 +101,12 @@ export function VideoActionsMenu({
             );
         },
       },
+    );
+    items.push(
       {
         label: <ActionLabel icon={<PlaylistIcon size={18} />}>Save to playlist</ActionLabel>,
         onSelect: () => {
-          if (!permissions.signedIn) router.push("/login");
+          if (!permissions.signedIn) signIn("save to a playlist");
           else setDialog("playlist");
         },
       },
@@ -109,7 +119,7 @@ export function VideoActionsMenu({
     }
   }
 
-  items.push({
+  if (!watchPage) items.push({
     label: <ActionLabel icon={<ShareIcon size={18} />}>Share</ActionLabel>,
     onSelect: () => setDialog("share"),
   });
@@ -164,7 +174,7 @@ export function VideoActionsMenu({
   items.push({
     label: <ActionLabel icon={<FlagIcon size={18} />}>Report</ActionLabel>,
     onSelect: () => {
-      if (!permissions.signedIn) router.push("/login");
+      if (!permissions.signedIn) signIn("report this video");
       else setDialog("report");
     },
   });
@@ -172,22 +182,22 @@ export function VideoActionsMenu({
   return (
     <>
       <Dropdown
-        trigger={<MoreVerticalIcon size={compact ? 24 : 26} />}
-        triggerLabel={`Actions for ${video.title}`}
+        trigger={watchPage ? <MoreHorizontalIcon size={24} /> : <MoreVerticalIcon size={compact ? 24 : 26} />}
+        triggerLabel={watchPage ? "More actions" : `Actions for ${video.title}`}
         items={items}
         align="end"
         triggerVariant="icon"
         // ≥44px touch target on the standard card (design-system.md:44), a
         // deliberate 40px dense-list exception when compact (matches YouTube).
         // Sizing lives here alone; the icon variant sets no padding to fight it.
-        triggerClassName={compact ? "h-10 w-10" : "h-11 w-11"}
+        triggerClassName={watchPage ? "h-11 w-11 bg-surface-muted hover:bg-surface-strong" : compact ? "h-10 w-10" : "h-11 w-11"}
       />
 
       {dialog === "playlist" ? (
         <PlaylistPickerDialog videoId={video.id} onClose={() => setDialog(null)} />
       ) : null}
       {dialog === "download" ? (
-        <DownloadDialog videoId={video.id} onClose={() => setDialog(null)} />
+        <DownloadDialog videoId={video.id} playbackToken={playbackToken} onClose={() => setDialog(null)} />
       ) : null}
       {dialog === "share" ? (
         <ShareDialog

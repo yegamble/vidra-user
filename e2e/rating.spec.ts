@@ -39,7 +39,7 @@ const session = {
   },
 };
 
-test("shows counts and prompts anonymous viewers to sign in to rate", async ({ page }) => {
+test("shows counts and prompts anonymous viewers only after a rating click", async ({ page }) => {
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());
   await page.route(COMMENTS, (route) => route.fulfill({ json: NO_COMMENTS }));
@@ -49,9 +49,13 @@ test("shows counts and prompts anonymous viewers to sign in to rate", async ({ p
 
   await page.goto("/videos/v1");
 
-  await expect(page.getByRole("button", { name: "Like", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Dislike", exact: true })).toBeDisabled();
-  await expect(page.getByText("Sign in to rate")).toBeVisible();
+  const like = page.getByRole("button", { name: "Like", exact: true });
+  await expect(like).toBeEnabled();
+  await expect(like).toContainText("3");
+  await expect(page.getByRole("button", { name: "Dislike", exact: true })).toContainText("1");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await like.click();
+  await expect(page.getByRole("dialog", { name: "Sign in to like this video" })).toBeVisible();
 });
 
 test("an authenticated viewer can like a video", async ({ page }) => {

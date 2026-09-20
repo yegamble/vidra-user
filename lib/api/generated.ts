@@ -5115,6 +5115,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ipfs/gateway/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check current public gateway root eligibility
+         * @description Read-only reverse proxy precheck. The proxy must overwrite X-Forwarded-Uri
+         *     and X-Forwarded-Method with the original request and must not cache this
+         *     result or the media response. This endpoint issues no access credential.
+         */
+        get: operations["authorizeIPFSGateway"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ipfs/status": {
         parameters: {
             query?: never;
@@ -5124,11 +5146,63 @@ export interface paths {
         };
         /**
          * IPFS mirror status (admin)
-         * @description Reports the hybrid IPFS media mirror's status (fix_plan P19, .ralph/specs/ipfs-media.md): whether it is enabled, node reachability, the public gateway URL in use, whether an IPFS Cluster is configured, and pin counts overall and per media class. IPFS is a MIRROR SIDECAR — local/S3 stays authoritative — so this never reflects on the readiness of media serving. Returns 503 ipfs_disabled when both IPFS_ENABLED=false and IPFS_MIRROR_PRIVATE=false. Restricted to admins. (Status aggregation is delivered in P19.2; until then an enabled instance answers 501 not_implemented.)
+         * @description Reports the hybrid IPFS media mirror's status (fix_plan P19, .ralph/specs/ipfs-media.md): whether it is enabled, node reachability, the public gateway URL in use, whether an IPFS Cluster is configured, and pin counts overall and per media class. IPFS is a MIRROR SIDECAR — local/S3 stays authoritative — so this never reflects on the readiness of media serving. Managed installations also report desired/applied configuration, host operations and nullable capacity measurements, including while publication is disabled. Legacy installations without the control service return 503 ipfs_disabled when both IPFS tiers are disabled. Restricted to admins.
          */
         get: operations["getIPFSStatus"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ipfs/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read atomic IPFS desired configuration */
+        get: operations["getIPFSConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Save atomic IPFS configuration with revision conflict protection */
+        patch: operations["updateIPFSConfig"];
+        trace?: never;
+    };
+    "/api/v1/admin/ipfs/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply saved internal node configuration */
+        post: operations["applyIPFSConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ipfs/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start or restart the configured internal node */
+        post: operations["restartIPFS"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5609,7 +5683,7 @@ export interface components {
         };
         ComponentStatus: {
             /**
-             * @description One of ok, degraded, down, not_configured. degraded is impaired but still serving and never takes the instance out of rotation — the mfa_kek component reports it when the configured MFA_KEY_KEK cannot decrypt the TOTP secrets this database holds, and the storage component reports it when the object store takes writes but refuses deletes. The storage component is the object store's WRITE verdict, re-probed every five minutes: every other storage check is a read, and a credential scoped to reads passes all of them while every upload fails. It reports down with the class of refusal (write_denied, quota_exceeded, unreachable) and never with the store's own text.
+             * @description One of ok, degraded, down, not_configured, paused, pending. For managed IPFS, paused means the node is running with publication paused; pending means configuration or gateway delivery is not ready. Neither is a fault. Node, publication and gateway facts are separate detail fields; an unavailable or stale managed node reports down even while paused. These live manager observations are admin-only; playback still requires its independent successful gateway probe. degraded is impaired but still serving and never takes the instance out of rotation — the mfa_kek component reports it when the configured MFA_KEY_KEK cannot decrypt the TOTP secrets this database holds, and the storage component reports it when the object store takes writes but refuses deletes. The storage component is the object store's WRITE verdict, re-probed every five minutes: every other storage check is a read, and a credential scoped to reads passes all of them while every upload fails. It reports down with the class of refusal (write_denied, quota_exceeded, unreachable) and never with the store's own text.
              * @example ok
              */
             status: string;
@@ -6519,6 +6593,13 @@ export interface components {
              * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/master.m3u8?v=ctw5ps0e8w00
              */
             hls_url?: string;
+            /** @description The ordinary generation-versioned HLS URL, equal to hls_url for ready VOD. Use this after a bounded IPFS startup or stall failure. Its segments use normal origin/CDN delivery and never redirect to IPFS. Omitted without a ready tree and on live sessions. */
+            authoritative_hls_url?: string;
+            /**
+             * Format: uri
+             * @description Optional public IPFS gateway master playlist URL for the exact current promoted generation, including its actual imported filename. Present only for clear public published media with a complete, eligible public pin, delivery enabled, and an affirmative gateway health observation. Never append credentials or playback tokens. Try with a bounded startup/stall deadline, then fall back to authoritative_hls_url. Omission never blocks ordinary playback.
+             */
+            ipfs_hls_url?: string;
             /**
              * @description Origin-relative path of the MPEG-DASH manifest. Present only when packaging_format is `cmaf` (an MPEG-TS tree has no MPD); both manifests describe the SAME segments. Deliberately UNVERSIONED and NOT immutable: a DASH player expands the manifest's SegmentTemplate patterns itself and fetches the segments without a query string, so a version here would fence only the manifest. The MPD is revalidated, as its segments are.
              * @example /api/v1/videos/6ba7b810-9dad-11d1-80b4-00c04fd430c8/hls/cmaf/stream.mpd
@@ -9376,9 +9457,9 @@ export interface components {
             acknowledged_schema_version?: number;
             /**
              * @description What THIS run does with the source's media objects. Omit it to take the instance's configured default (PEERTUBE_IMPORT_MEDIA_MODE); the resolved value is recorded on the run.
-             *     copy streams the source's progressive originals into Vidra's own storage layout. reference records the source's EXISTING object keys in Vidra's database instead of moving bytes, and requires the Vidra server to be pointed at the same object store. none imports metadata only and writes no media rows at all.
+             *     copy streams progressive originals and flat HLS into Vidra's own storage layout. reference records the source's EXISTING object keys in Vidra's database instead of moving bytes, and requires the Vidra server to access matching keys in the original or verified copied store. none imports metadata only and writes no media rows at all.
              *     It is a FOURTH, ORTHOGONAL axis: the conflict policy resolves natural-key collisions, `source_authoritative` decides whether rows the import already owns may be updated, `acknowledged_schema_version` is a version gate, and none of them says anything about bytes. It is per-run because the answer changes during a migration, when restarting the API to change it is exactly what an operator cannot afford.
-             *     Only reference mode carries the source's HLS tree. In copy mode a video's HLS renditions are NOT copied and nothing re-transcodes them automatically, so a video whose source held only HLS (an ordinary PeerTube configuration: progressive downloads disabled) arrives with nothing to play. A dry run counts those under the report's `video_no_media` entity kind — check it before approving a copy-mode plan.
+             *     Copy mode carries flat local HLS dependencies; nested or external references need conversion. Check video_no_media before importing. Reference-mode counts do not verify that referenced objects exist.
              * @enum {string}
              */
             media_mode?: "copy" | "reference" | "none";
@@ -9391,6 +9472,8 @@ export interface components {
             updated?: number;
             skipped: number;
             failed: number;
+            /** @description Subset of failed artwork rows whose source HTTP fallback returned 404 or 410 after source storage could not supply the image. Restore the source file or backup before retrying. These remain retryable; do not add this count to failed. Absent in older reports. */
+            missing_source?: number;
             unsupported: number;
         };
         /** @description Machine-readable summary of a plan (dry-run) or run. Carries only counts, the detected source version, and safe conflict notes — never secrets/PII. */
@@ -9401,7 +9484,7 @@ export interface components {
             conflict_policy: string;
             /** @description Whether this run was allowed to update rows the import already owns where the source and this instance had diverged. Recorded on the report because "why did that title change?" is asked long afterwards. */
             source_authoritative?: boolean;
-            /** @description Per-entity-kind counts, keyed by entity kind (category_taxonomy, user, user_suspension, user_quota_unlimited, channel, actor_avatar, actor_banner, video, video_sensitive, video_block, video_file, hls_playlist, video_no_media, thumbnail, storyboard, caption, tag, view_count, video_original_date, chapter, rating, rendition, comment, playlist, playlist_item, follow). video_no_media counts VIDEOS that land with NOTHING to play — no web-video file and no streaming playlist. It is the only count here that reports an absence, and it exists because the absence is otherwise invisible: such a video is inserted, counted as an imported video, and discovered when somebody presses play. It is common rather than exotic — on an HLS-only source (progressive downloads disabled, an ordinary PeerTube configuration) copy mode carries no media for any video, because only reference mode carries the HLS tree. It stays 0 for a metadata-only run (media_mode none, or no destination store), where nothing to play is what was asked for. user_suspension counts USERS whose source suspension (user.blocked) was carried onto is_active, video_sensitive counts VIDEOS the source flagged nsfw, and video_block counts VIDEOS the source had BLACKLISTED (moderator-removed there, carried into video_blocks so they are removed here too); all three count only what was CARRIED, never the whole family. user_quota_unlimited counts USERS the import CREATED and therefore gave an unlimited storage quota (storage_quota_bytes = 0): a migrated creator's back-catalogue is already stored and usage is recomputed live from video_files, so inheriting the instance default would put anyone with a larger catalogue over quota on their first upload after cutover. Quotas on migrated accounts are a deliberate admin action afterwards; the import states this once, at creation, and never on a re-run. view_count counts VIDEOS whose view total was carried, never views: the source records one lifetime number per video and no daily breakdown, so the total is applied as a delta to the video's counter and no per-day rows are invented. category_taxonomy is the INSTANCE's category list, so it is 0 or 1: 1 when the source replaces the stock taxonomy (a categories plugin) and the setting is the import's to write, 0 for the majority of sources, which run the stock list and get no override written. actor_avatar and actor_banner count the source's account and channel profile images, which are FETCHED over HTTP from the source instance rather than read from its object store (no PeerTube configuration puts them there), and which are never written over an image this instance already has. thumbnail and storyboard count VIDEOS whose poster and seek-preview sprite sheet were carried, and they follow the same rules: PeerTube keeps neither in object storage either, so both are read from a mounted source media root when there is one and fetched over HTTP otherwise, and neither is written over an asset this instance already holds. A storyboard is carried as its sprite sheet AND a WebVTT map synthesised from the source's grid geometry, because PeerTube stores no map of its own; expect a source to have fewer storyboards than videos, since it generates none for a video shorter than three seconds. */
+            /** @description Per-entity-kind counts, keyed by entity kind (category_taxonomy, user, user_suspension, user_quota_unlimited, channel, actor_avatar, actor_banner, video, video_sensitive, video_block, video_file, hls_playlist, video_no_media, thumbnail, storyboard, caption, tag, view_count, video_original_date, chapter, rating, rendition, comment, playlist, playlist_item, follow, watch_history). watch_history restores local-video resume positions and timestamps in batches; remote history is unsupported. Existing or cleared destination history is preserved even in source-authoritative mode. New accounts retain the source history-enabled preference when available. video_no_media counts VIDEOS that land with NOTHING to play — no web-video file and no streaming playlist. It is the only count here that reports an absence, and it exists because the absence is otherwise invisible: such a video is inserted, counted as an imported video, and discovered when somebody presses play. Copy mode carries flat local HLS dependencies; nested/external references need conversion. Reference-mode counts do not verify that referenced objects exist. It stays 0 for a metadata-only run (media_mode none, or no destination store), where nothing to play is what was asked for. user_suspension counts USERS whose source suspension (user.blocked) was carried onto is_active, video_sensitive counts VIDEOS the source flagged nsfw, and video_block counts VIDEOS the source had BLACKLISTED (moderator-removed there, carried into video_blocks so they are removed here too); all three count only what was CARRIED, never the whole family. user_quota_unlimited counts USERS the import CREATED and therefore gave an unlimited storage quota (storage_quota_bytes = 0): a migrated creator's back-catalogue is already stored and usage is recomputed live from video_files, so inheriting the instance default would put anyone with a larger catalogue over quota on their first upload after cutover. Quotas on migrated accounts are a deliberate admin action afterwards; the import states this once, at creation, and never on a re-run. view_count counts VIDEOS whose view total was carried, never views: the source records one lifetime number per video and no daily breakdown, so the total is applied as a delta to the video's counter and no per-day rows are invented. category_taxonomy is the INSTANCE's category list, so it is 0 or 1: 1 when the source replaces the stock taxonomy (a categories plugin) and the setting is the import's to write, 0 for the majority of sources, which run the stock list and get no override written. actor_avatar and actor_banner count the source's account and channel profile images, which are FETCHED over HTTP from the source instance rather than read from its object store (no PeerTube configuration puts them there), and which are never written over an image this instance already has. thumbnail and storyboard count VIDEOS whose poster and seek-preview sprite sheet were carried, and they follow the same rules: PeerTube keeps neither in object storage either, so both are read from a mounted source media root when there is one and fetched over HTTP otherwise, and neither is written over an asset this instance already holds. A storyboard is carried as its sprite sheet AND a WebVTT map synthesised from the source's grid geometry, because PeerTube stores no map of its own; expect a source to have fewer storyboards than videos, since it generates none for a video shorter than three seconds. */
             entities: {
                 [key: string]: components["schemas"]["PeerTubeImportCounts"];
             };
@@ -9453,8 +9536,122 @@ export interface components {
         PeerTubeImportRunList: {
             runs: components["schemas"]["PeerTubeImportRun"][];
         };
+        IPFSConfig: {
+            /**
+             * @description Fixed managed internal node or operator-configured external node; no arbitrary URL is accepted.
+             * @enum {string}
+             */
+            provider: "internal" | "external";
+            /** @description Permit new publication admissions. Pausing keeps privacy withdrawals running. */
+            enabled: boolean;
+            auto_pin_new: boolean;
+            demand_pin: boolean;
+            /** @description Explicit old-catalogue fill; enabling or reading configuration never implicitly enables it. */
+            backfill_enabled: boolean;
+            /** Format: int64 */
+            budget_bytes: number;
+            /** Format: int64 */
+            min_free_bytes: number;
+            /**
+             * Format: int64
+             * @description Background copy into Kubo; does not limit all public swarm traffic.
+             */
+            copy_bytes_per_second: number;
+            workers: number;
+        };
+        IPFSConfigDocument: {
+            /** Format: int64 */
+            revision: number;
+            config: components["schemas"]["IPFSConfig"];
+            /** @description False until an explicit save adopts managed policy; reading status preserves legacy behavior. */
+            policy_active: boolean;
+            operation?: components["schemas"]["IPFSControlOperation"];
+        };
+        IPFSConfigUpdate: {
+            /** Format: int64 */
+            expected_revision: number;
+            config: components["schemas"]["IPFSConfig"];
+        };
+        IPFSOperationRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            /**
+             * Format: uuid
+             * @description Retain this id when retrying an uncertain response.
+             */
+            request_id: string;
+        };
+        IPFSControlOperation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            sequence: number;
+            /** Format: int64 */
+            config_revision: number;
+            /** @enum {string} */
+            state: "pending" | "running" | "succeeded" | "failed";
+        };
+        IPFSOperationResult: {
+            operation: components["schemas"]["IPFSControlOperation"];
+            /** Format: int64 */
+            revision: number;
+        };
+        IPFSManagementStatus: {
+            /** @enum {string} */
+            mode: "internal" | "external" | "unavailable";
+            available: boolean;
+            /** @enum {string} */
+            desired_state: "running" | "external";
+            /** @enum {string} */
+            observed_state: "absent" | "starting" | "running" | "unhealthy" | "stopped" | "unknown";
+            /** Format: int64 */
+            applied_config_revision: number;
+            operation: components["schemas"]["IPFSControlOperation"] | null;
+            last_error_code: string | null;
+            /** Format: date-time */
+            observed_at: string | null;
+        };
+        IPFSCapacityStatus: {
+            /** Format: int64 */
+            budget_bytes: number;
+            /**
+             * Format: int64
+             * @description Actual node repository usage; null when unavailable.
+             */
+            repo_used_bytes: number | null;
+            /** Format: int64 */
+            reserved_bytes: number;
+            /** Format: int64 */
+            filesystem_free_bytes: number | null;
+            /** Format: int64 */
+            min_free_bytes: number;
+            /** @description Server-computed reason, including stale_capacity, node_unavailable, configuration_pending, capacity_unknown, budget_exhausted, filesystem_headroom, policy_not_adopted, publication_paused or recovering_interrupted_copy. */
+            admission_paused_reason: string | null;
+        };
+        /** @description Public managed-copy queue and bytes read by active claims; no estimated completion time. */
+        IPFSQueueStatus: {
+            /** Format: int64 */
+            copying: number;
+            /** Format: int64 */
+            queued_new: number;
+            /** Format: int64 */
+            queued_demand: number;
+            /** Format: int64 */
+            queued_capacity: number;
+            /** Format: int64 */
+            evicted: number;
+            /** Format: int64 */
+            expired_claims: number;
+            /** Format: int64 */
+            copied_bytes: number;
+        };
         /** @description Status of the hybrid IPFS media mirror (fix_plan P19). IPFS is a mirror sidecar; these fields are informational and never gate media serving. */
         IPFSStatus: {
+            /** Format: int64 */
+            config_revision?: number;
+            management?: components["schemas"]["IPFSManagementStatus"];
+            capacity?: components["schemas"]["IPFSCapacityStatus"];
+            queue?: components["schemas"]["IPFSQueueStatus"];
             /** @description Whether IPFS_ENABLED is set on this instance. */
             enabled: boolean;
             /** @description Whether the Kubo node answered the /api/v0/version health probe. */
@@ -24862,6 +25059,43 @@ export interface operations {
             };
         };
     };
+    authorizeIPFSGateway: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Forwarded-Uri": string;
+                "X-Forwarded-Method": "GET" | "HEAD";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The root has a currently eligible public pin */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown, withdrawn, malformed, or unavailable root */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getIPFSStatus: {
         parameters: {
             query?: never;
@@ -24908,6 +25142,296 @@ export interface operations {
                 };
             };
             /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getIPFSConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current desired configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSConfigDocument"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Administrator role required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control service is not installed. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateIPFSConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IPFSConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Current desired configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSConfigDocument"];
+                };
+            };
+            /** @description Desired configuration saved and internal apply queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSConfigDocument"];
+                };
+            };
+            /** @description Malformed or incomplete document. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Administrator role required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Configuration revision conflict or external-provider lifecycle request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Configuration is outside the supported limits. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control service is not installed. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    applyIPFSConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IPFSOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Idempotent node operation accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSOperationResult"];
+                };
+            };
+            /** @description Malformed or incomplete document. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Administrator role required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Configuration revision conflict or external-provider lifecycle request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control service is not installed. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Host manager integration is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    restartIPFS: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IPFSOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Idempotent node operation accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSOperationResult"];
+                };
+            };
+            /** @description Malformed or incomplete document. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Administrator role required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Configuration revision conflict or external-provider lifecycle request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Control service is not installed. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Host manager integration is not configured. */
             503: {
                 headers: {
                     [name: string]: unknown;

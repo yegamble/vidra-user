@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { CheckIcon, MoreVerticalIcon } from "@/components/icons";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SettingsIcon } from "@/components/icons";
 import { OverlayButton } from "@/components/player/OverlayButton";
+import { MenuSurface } from "@/components/ui";
 import { usePlayerPopup } from "@/components/player/use-player-popup";
 
-/** An on/off control (captions, autoplay, PiP, theater, mute). */
 export interface OverflowToggle {
   id: string;
   label: string;
@@ -15,177 +15,130 @@ export interface OverflowToggle {
   onToggle: () => void;
 }
 
-/**
- * A graded choice (speed, quality). Values are strings so a single menu can
- * carry groups of different underlying types; callers map back on select.
- */
 export interface OverflowChoiceGroup {
   id: string;
   label: string;
   value: string;
+  valueLabel?: string;
   items: { value: string; label: string }[];
   onSelect: (value: string) => void;
+  groups?: OverflowChoiceGroup[];
 }
 
-/**
- * PlayerOverflowMenu is the control bar's "⋮" escape hatch: it holds every
- * control the bar is too narrow to show, so no player control is ever
- * unreachable no matter how narrow the stage gets.
- *
- * It exists because the bar physically cannot hold the full control set. At a
- * 360px viewport the stage is 328px wide and the row's intrinsic width — with a
- * real long-video time readout, a quality menu and the PiP/theater controls — is
- * 488px. The bar's answer used to be to let the surplus overflow an
- * `overflow-hidden` stage, which silently CLIPPED the trailing controls
- * (Fullscreen first). Tiering controls out of the bar is only acceptable if
- * they land somewhere; this is that somewhere.
- *
- * The menu is portaled and viewport-positioned by usePlayerPopup for the same
- * reason the speed/quality ladders are: the stage is ~185px tall on a phone and
- * clips anything drawn inside it.
- */
-export function PlayerOverflowMenu({
-  toggles,
-  groups,
-}: {
+/** One settings hierarchy, portaled outside the stage (or into fullscreen). */
+export function PlayerOverflowMenu({ toggles, groups, resolution }: {
   toggles: OverflowToggle[];
   groups: OverflowChoiceGroup[];
+  resolution?: number | null;
 }) {
-  const { open, container, rootRef, buttonRef, popupRef, openPopup, closePopup, popupStyle } =
-    usePlayerPopup();
+  const { open, container, rootRef, buttonRef, popupRef, openPopup, closePopup, popupStyle, remeasure } = usePlayerPopup();
+  const [navigation, setNavigation] = useState<{ path: string[]; focusIndex: number }>({ path: [], focusIndex: 0 });
+  const { path } = navigation;
   const rowRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  let active: OverflowChoiceGroup | undefined;
+  let children = groups;
+  let invalidPath = false;
+  for (const id of path) {
+    active = children.find((group) => group.id === id);
+    if (!active) { invalidPath = true; children = groups; break; }
+    children = active?.groups ?? [];
+  }
+  // Engine fallback can remove the very group the viewer has open.
+  if (invalidPath) setNavigation({ path: [], focusIndex: 0 });
+  const rows = active?.items ?? [];
+  const switches = active ? [] : toggles;
+  const offset = active ? 1 : 0;
+  const count = offset + rows.length + switches.length + children.length;
 
-  // Focus the first row once the portal has mounted. Keyed on the open/portal
-  // transition only — never on the item arrays, which callers rebuild on every
-  // render and which would otherwise drag focus back mid-interaction.
-  useEffect(() => {
+  // Submenus have different dimensions. Measure and focus only on navigation,
+  // never on playback ticks that rebuild the menu's data while someone uses it.
+  useLayoutEffect(() => {
     if (!open || !container) return;
-    rowRefs.current[0]?.focus();
-  }, [open, container]);
+    popupRef.current?.scrollTo?.({ top: 0 });
+    rowRefs.current[navigation.focusIndex]?.focus({ preventScroll: true });
+    rowRefs.current[navigation.focusIndex]?.scrollIntoView?.({ block: "nearest" });
+    remeasure();
+  }, [open, container, navigation, remeasure, popupRef]);
 
   if (toggles.length === 0 && groups.length === 0) return null;
 
   function closeAndRefocus() {
     closePopup();
-    buttonRef.current?.focus();
+    buttonRef.current?.focus({ preventScroll: true });
   }
-
-  function moveFocus(from: number, delta: number) {
-    const rows = rowRefs.current.filter(Boolean) as HTMLButtonElement[];
-    if (rows.length === 0) return;
-    rows[(from + delta + rows.length) % rows.length]?.focus();
+  function openRoot() {
+    setNavigation({ path: [], focusIndex: 0 });
+    openPopup();
   }
-
-  // One flat, DOM-ordered index across every row, so the arrow keys traverse
-  // toggles and groups alike as a single menu. Offsets are derived rather than
-  // counted with a mutable cursor during render.
-  const groupOffsets = groups.reduce<number[]>((offsets, _g, i) => {
-    offsets.push(
-      i === 0 ? toggles.length : offsets[i - 1] + groups[i - 1].items.length,
-    );
-    return offsets;
-  }, []);
-
-  const rowProps = (i: number, onActivate: () => void) => {
-    return {
-      ref: (el: HTMLButtonElement | null) => {
-        rowRefs.current[i] = el;
-      },
-      tabIndex: -1,
-      onClick: () => {
-        onActivate();
-        closeAndRefocus();
-      },
-      onKeyDown: (e: React.KeyboardEvent) => {
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          moveFocus(i, 1);
-        } else if (e.key === "ArrowUp") {
-          e.preventDefault();
-          moveFocus(i, -1);
-        }
-      },
-      className:
-        "focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left text-sm text-fg transition-colors hover:bg-surface-muted",
-    };
-  };
+  function enter(group: OverflowChoiceGroup) {
+    const checked = group.items.findIndex((item) => item.value === group.value);
+    setNavigation({ path: [...path, group.id], focusIndex: checked >= 0 ? checked + 1 : 0 });
+  }
+  function back() {
+    let siblings = groups;
+    for (const id of path.slice(0, -1)) siblings = siblings.find((g) => g.id === id)?.groups ?? [];
+    let parent: OverflowChoiceGroup | undefined;
+    let level = groups;
+    for (const id of path.slice(0, -1)) { parent = level.find((g) => g.id === id); level = parent?.groups ?? []; }
+    const focusIndex = (parent ? 1 + parent.items.length : toggles.length) + siblings.findIndex((g) => g.id === path.at(-1));
+    setNavigation({ path: path.slice(0, -1), focusIndex });
+  }
+  const rowProps = (index: number, submenu = false) => ({
+    ref: (el: HTMLButtonElement | null) => { rowRefs.current[index] = el; },
+    tabIndex: -1,
+    onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => {
+      let next: number | undefined;
+      if (e.key === "ArrowDown") next = (index + 1) % count;
+      if (e.key === "ArrowUp") next = (index - 1 + count) % count;
+      if (e.key === "Home") next = 0;
+      if (e.key === "End") next = count - 1;
+      if (next !== undefined) { e.preventDefault(); rowRefs.current[next]?.focus({ preventScroll: true }); rowRefs.current[next]?.scrollIntoView?.({ block: "nearest" }); }
+      if (e.key === "ArrowRight" && submenu) { e.preventDefault(); e.currentTarget.click(); }
+    },
+    className: "focus-ring flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-fg transition-colors",
+  });
 
   return (
-    <div ref={rootRef} className="relative">
-      <OverlayButton
-        ref={buttonRef}
-        label="More player options"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => (open ? closePopup() : openPopup())}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown" && !open) {
-            e.preventDefault();
-            openPopup();
-          }
-        }}
-      >
-        <MoreVerticalIcon size={20} aria-hidden="true" />
+    <div ref={rootRef} className="relative shrink-0">
+      <OverlayButton ref={buttonRef} label="Settings" tip={resolution ? `Settings · ${resolution}p` : "Settings"} aria-haspopup="menu" aria-expanded={open}
+        onClick={() => open ? closePopup() : openRoot()}
+        onKeyDown={(e) => { if (e.key === "ArrowDown" && !open) { e.preventDefault(); openRoot(); } }}>
+        <SettingsIcon size={24} strokeWidth={2.3} />
+        {resolution && resolution > 0 ? <span data-testid="player-resolution" aria-hidden="true"
+          className="pointer-events-none absolute -right-0.5 top-0.5 rounded bg-black/90 px-1 text-[9px] font-bold leading-3 text-white ring-1 ring-white/40">{resolution}p</span> : null}
       </OverlayButton>
-      {open && container
-        ? createPortal(
-            <div
-              ref={popupRef}
-              role="menu"
-              aria-label="More player options"
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  closeAndRefocus();
-                }
-              }}
-              style={popupStyle}
-              className="z-50 max-h-[min(22rem,calc(100vh-1rem))] w-56 overflow-y-auto overscroll-contain rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
-            >
-              {toggles.map((t, ti) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="menuitemcheckbox"
-                  aria-checked={t.pressed}
-                  {...rowProps(ti, t.onToggle)}
-                >
-                  <span aria-hidden="true" className="flex w-4 justify-center">
-                    {t.pressed ? <CheckIcon size={16} /> : null}
-                  </span>
-                  <span>{t.label}</span>
-                </button>
-              ))}
-              {groups.map((g, gi) => (
-                <div key={g.id} role="group" aria-label={g.label} className="pt-1">
-                  {/* aria-hidden: the group already carries the name via
-                      aria-label, so announcing the heading again is noise. */}
-                  <p
-                    aria-hidden="true"
-                    className="px-2 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-fg-muted"
-                  >
-                    {g.label}
-                  </p>
-                  {g.items.map((item, ii) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={item.value === g.value}
-                      {...rowProps(groupOffsets[gi] + ii, () => g.onSelect(item.value))}
-                    >
-                      <span aria-hidden="true" className="flex w-4 justify-center">
-                        {item.value === g.value ? <CheckIcon size={16} /> : null}
-                      </span>
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>,
-            container,
-          )
-        : null}
+      {open && container ? createPortal(
+        <MenuSurface ref={popupRef} aria-label={active?.label ?? "Settings"} style={popupStyle}
+          className="max-h-[min(25rem,calc(100dvh-1rem))] w-80 max-w-[calc(100vw-1rem)]"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAndRefocus(); }
+            if (e.key === "ArrowLeft" && active) { e.preventDefault(); e.stopPropagation(); back(); }
+            if (e.key === "Tab") closePopup();
+          }}>
+          {active ? <button type="button" role="menuitem" aria-label="Back to settings" onClick={back} {...rowProps(0)}>
+            <ChevronLeftIcon size={18} /><span>{active.label}</span>
+          </button> : null}
+          {switches.map((toggle, index) => <button key={toggle.id} type="button" role="menuitemcheckbox"
+            aria-checked={toggle.pressed} onClick={() => { toggle.onToggle(); closeAndRefocus(); }} {...rowProps(index)}>
+            <span className="flex-1">{toggle.label}</span>
+            <span aria-hidden="true" className={`flex h-5 w-8 shrink-0 items-center rounded-full px-0.5 ${toggle.pressed ? "justify-end bg-accent" : "bg-surface-strong ring-1 ring-border"}`}>
+              <span className="h-4 w-4 rounded-full bg-surface" />
+            </span>
+          </button>)}
+          {rows.map((item, index) => <button key={item.value} type="button" role="menuitemradio" aria-checked={item.value === active?.value}
+            onClick={() => { active?.onSelect(item.value); closeAndRefocus(); }} {...rowProps(offset + index)}>
+            <span aria-hidden="true" className="flex w-4 shrink-0 justify-center">{item.value === active?.value ? <CheckIcon size={16} /> : null}</span>
+            <span>{item.label}</span>
+          </button>)}
+          {children.map((group, index) => <button key={group.id} type="button" role="menuitem" aria-haspopup="menu"
+            aria-label={`${group.label} ${group.valueLabel ?? group.items.find((item) => item.value === group.value)?.label ?? ""}`.trim()}
+            onClick={() => enter(group)} {...rowProps(offset + switches.length + rows.length + index, true)}>
+            <span className="flex-1">{group.label}</span>
+            <span className="max-w-[45%] truncate text-fg-muted">{group.valueLabel ?? group.items.find((item) => item.value === group.value)?.label}</span>
+            <ChevronRightIcon size={16} className="shrink-0" />
+          </button>)}
+        </MenuSurface>, container,
+      ) : null}
     </div>
   );
 }

@@ -302,14 +302,9 @@ jobs:
   # internal/config/config.go validateIPFS). They are passed explicitly here rather
   # than leaned on as compose defaults, so this job says what it depends on.
   #
-  # IPFS_GATEWAY_URL uses 127.0.0.1, NOT localhost: kubo runs a subdomain gateway
-  # for the `localhost` hostname and answers /ipfs/<cid> there with a 301 to
-  # http://<cid>.ipfs.localhost:9090/. Chromium resolves *.localhost to loopback,
-  # but Playwright's Node-side request context need not, and the redirect would
-  # make the spec's gateway assertions depend on the runner's resolver. A raw IP
-  # host serves the PATH gateway directly. The value reaches the browser verbatim
-  # (core echoes it as `ipfs.gateway_url`), so it must be host-reachable — the kubo
-  # service publishes its gateway on 127.0.0.1:9090.
+  # One gateway URL must work from the API's health probe AND the browser.
+  # Compose resolves ipfs internally; the Linux runner maps that same name to
+  # the inspected bridge address below. Avoid localhost's subdomain redirect.
   #
   # The node's own default IPFS_PUBLIC_NETWORK=false is kept: a local-only swarm,
   # so CI fixtures are pinned and resolved without ever being announced to the real
@@ -335,7 +330,7 @@ jobs:
       # additionally needs that admin to read GET /api/v1/ipfs/status.
       - name: Start vidra-core stack (IPFS mirror + transcoding enabled)
         working-directory: .core
-        run: MALWARE_SCAN_MODE=disabled RATE_LIMIT_ENABLED=false OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret TRANSCODING_ENABLED=true IPFS_ENABLED=true IPFS_API_URL=http://ipfs:5001 IPFS_GATEWAY_URL=http://127.0.0.1:9090 docker compose --profile core --profile ipfs up -d --build
+        run: MALWARE_SCAN_MODE=disabled RATE_LIMIT_ENABLED=false OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret TRANSCODING_ENABLED=true IPFS_ENABLED=true IPFS_API_URL=http://ipfs:5001 IPFS_GATEWAY_URL=http://ipfs:8080 IPFS_HEALTH_PROBE_INTERVAL=10s docker compose --profile core --profile ipfs up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
@@ -355,15 +350,24 @@ jobs:
       - name: Wait for the IPFS gateway to answer
         working-directory: .core
         run: |
+          set -euo pipefail
+          gateway_container=$(docker compose --profile core --profile ipfs ps -q ipfs)
+          test -n "$gateway_container"
+          gateway_ip=$(docker inspect "$gateway_container" | jq -er '
+            if length != 1 then error("expected one Kubo container") else .[0].NetworkSettings.Networks end |
+            to_entries | if length != 1 then error("expected one Kubo network") else .[0].value.IPAddress end |
+            select(test("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"))')
+          test -n "$gateway_ip"
+          printf '%s ipfs\n' "$gateway_ip" | sudo tee -a /etc/hosts >/dev/null
           for i in $(seq 1 60); do
             # The empty-file CID: always resolvable on any node, so a 200 means the
             # gateway is serving rather than that some block happens to be local.
-            if curl -fsS http://127.0.0.1:9090/ipfs/bafkqaaa >/dev/null 2>&1; then
+            if curl -fsS http://ipfs:8080/ipfs/bafkqaaa >/dev/null 2>&1; then
               echo "ipfs gateway ready after ${i} tries"; exit 0
             fi
             sleep 2
           done
-          echo "::error::the kubo IPFS gateway did not answer on 127.0.0.1:9090 in time"
+          echo "::error::the kubo IPFS gateway did not answer on ipfs:8080 in time"
           docker compose --profile core --profile ipfs logs --no-color ipfs | tail -200
           exit 1
 

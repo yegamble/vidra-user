@@ -37,6 +37,7 @@ import {
 } from "@/lib/playback-session";
 import { remotePlaybackSources } from "@/lib/remote-playback";
 import { usePlaybackQoE } from "@/lib/use-playback-qoe";
+import { useIPFSPreference } from "@/lib/use-ipfs-preference";
 import {
   AUTO_QUALITY,
   isAutoQuality,
@@ -104,8 +105,27 @@ import {
 // the playlist entirely. What "giving up" lands on is the surface's business:
 // VOD still has a progressive original, live and federated streams do not.
 const MAX_RECOVERIES = 2;
+// A mirror may hang without a fatal engine error; bound each HLS origin's wait.
+const HLS_SOURCE_WAIT_MS = 8_000;
 
 const NO_ENGINES: readonly EngineId[] = [];
+
+interface AudioTrackOption { value: string; label: string }
+interface AudioChoices {
+  scope: object;
+  tracks: AudioTrackOption[];
+  current: string;
+  select: (value: string) => void;
+}
+interface NativeAudioTrack { label: string; language: string; enabled: boolean }
+type NativeAudioTrackList = Partial<EventTarget> & ArrayLike<NativeAudioTrack>;
+const ignoreAudioSelection = () => {};
+
+export interface PlaybackDelivery {
+  source: "ipfs" | "hls" | "original" | null;
+  available: boolean;
+  select: (source: "server" | "ipfs") => void;
+}
 
 /**
  * The narrow contract every playback surface codes against — the bespoke shell
@@ -117,6 +137,11 @@ export interface HlsPlayback {
   mode: EngineId | null;
   /** src for the media element; undefined while hls.js owns it via MSE. */
   src: string | undefined;
+  /** Selected source before redirects, including HLS managed through MSE. */
+  sourceUrl?: string;
+  delivery?: PlaybackDelivery;
+  /** Preserve media state before an explicit same-video source switch. */
+  rememberState?: () => void;
   /** Quality menu entries (Auto + one per height); [] when nothing is selectable. */
   levels: LevelOption[];
   /** The user's selection (AUTO_QUALITY = adaptive). Drives the menu's checked entry. */
@@ -126,6 +151,10 @@ export interface HlsPlayback {
   /** True while a manual rung switch has been requested but not yet confirmed. */
   pending: boolean;
   setQuality: (quality: QualitySelection) => void;
+  /** Actual selectable engine/browser tracks; empty when no capability is exposed. */
+  audioTracks: AudioTrackOption[];
+  currentAudioTrack: string;
+  setAudioTrack: (value: string) => void;
   /**
    * True once NOTHING left here can play this video: every candidate engine
    * dropped out (hls.js fatal after bounded recovery, then the media element
@@ -166,7 +195,18 @@ export type LivePlayback = HlsPlayback;
 export type RemotePlayback = Pick<HlsPlayback, "mode" | "src">;
 
 /** The per-surface hls.js tuning. Everything absent here is shared, by design. */
+interface HlsFallback extends Pick<EngineSources, "hlsJs" | "nativeHls"> {
+  authToken?: string | null;
+  bandwidth: "measured" | "seeded" | "engine";
+}
+interface PlaybackResume {
+  key: string; time: number; paused: boolean; rate: number; volume: number; muted: boolean;
+  restoreTransport: boolean;
+}
+
 interface EngineTuning {
+  /** Ordered alternate HLS origins, tried before the progressive file. */
+  hlsFallbacks?: HlsFallback[];
   /** Seek position to open at; null/undefined leaves hls.js at its own default. */
   startPosition?: number | null;
   /** Seconds of played media hls.js may retain in MSE. */
@@ -213,20 +253,52 @@ interface EngineTuning {
  */
 function usePlaybackEngine(
   videoRef: RefObject<HTMLVideoElement | null>,
-  key: string,
+  subjectKey: string,
   sources: EngineSources,
   tuning: EngineTuning,
 ): HlsPlayback {
-  const { hlsJs, nativeHls, progressive } = sources;
+  const sourceKey = JSON.stringify([subjectKey, sources.hlsJs, sources.nativeHls,
+    tuning.hlsFallbacks?.map(({ hlsJs, nativeHls }) => [hlsJs, nativeHls])]);
+  const [route, setRoute] = useState({ key: sourceKey, index: 0 });
+  const routeIndex = route.key === sourceKey ? route.index : 0;
+  const [attempt, setAttempt] = useState(0);
+  const key = `${sourceKey}:${routeIndex}:${attempt}`;
+  const fallbackCount = tuning.hlsFallbacks?.length ?? 0;
+  const fallback = tuning.hlsFallbacks?.[routeIndex - 1];
+  const hlsJs = routeIndex ? fallback?.hlsJs : sources.hlsJs;
+  const [resume, setResume] = useState<PlaybackResume | null>(null);
+  const resumed = resume?.key === subjectKey ? resume : null;
+  const restored = useRef<PlaybackResume | null>(null);
+  // A native media fragment must not seek back to the original shared-link time
+  // after loadedmetadata restores the position at which the prior source failed.
+  const resumeUrl = (url: string | undefined) => url && resumed && (resumed.time > 0 || url.includes("#t="))
+    ? `${url.split("#")[0]}#t=${resumed.time}` : url;
+  const nativeHls = resumeUrl(routeIndex ? fallback?.nativeHls : sources.nativeHls);
+  const progressive = resumeUrl(sources.progressive);
   const {
     startPosition,
     backBufferLength,
     lowLatencyMode,
-    authToken,
-    bandwidth,
+    authToken: primaryToken,
+    bandwidth: primaryBandwidth,
     suspended = false,
     session = null,
   } = tuning;
+  const authToken = fallback ? fallback.authToken : primaryToken;
+  const bandwidth = fallback?.bandwidth ?? primaryBandwidth;
+  const rememberState = useCallback(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const reset = el.readyState === 0 && el.currentTime === 0;
+    const snapshot = { key: subjectKey,
+      time: reset ? startPosition ?? 0 : el.currentTime,
+      restoreTransport: el.readyState > 0 || el.currentTime > 0 || !el.paused, paused: el.paused,
+      rate: el.playbackRate, volume: el.volume, muted: el.muted };
+    // A second source may fail before restoring the first snapshot. Capture
+    // before destroy(), and never replace that position/rate with load resets.
+    setResume((previous) => reset && previous?.key === subjectKey
+      ? { ...previous, volume: snapshot.volume, muted: snapshot.muted } : snapshot);
+  }, [subjectKey, videoRef, startPosition]);
 
   const [levels, setLevels] = useState<LevelOption[]>([]);
   const [currentQuality, setCurrentQuality] = useState<QualitySelection>(AUTO_QUALITY);
@@ -236,6 +308,7 @@ function usePlaybackEngine(
   // Pixel height of the rung the engine is actually playing (last LEVEL_SWITCHED).
   const [activeHeight, setActiveHeight] = useState<number | null>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const [audio, setAudio] = useState<AudioChoices | null>(null);
 
   // Engines that dropped out for THIS key. Keyed so navigating to another video
   // (or stream) starts from the full candidate list again.
@@ -244,22 +317,35 @@ function usePlaybackEngine(
     engines: [],
   });
   const declineEngines = useCallback((forKey: string, ...ids: readonly EngineId[]) => {
+    // Read before destroy()/resource selection clears the media element. A
+    // capability decline alone must still try native HLS on the same origin.
+    if (ids.includes("native-hls")) {
+      rememberState();
+      if (ids.includes("native-hls") && routeIndex < fallbackCount) {
+        setRoute({ key: sourceKey, index: routeIndex + 1 });
+        return;
+      }
+    }
     setDeclined((prev) => {
       const base = prev.key === forKey ? prev.engines : [];
       const added = ids.filter((id) => !base.includes(id));
       if (added.length === 0) return prev;
       return { key: forKey, engines: [...base, ...added] };
     });
-  }, []);
+  }, [sourceKey, routeIndex, fallbackCount, rememberState]);
 
   const retry = useCallback(() => {
+    rememberState();
     const el = videoRef.current;
     // Drop the dead source so re-selecting the SAME engine re-runs the media
     // element's resource selection; without this the attribute is unchanged and
     // the element sits on its cached failure.
     if (el) el.removeAttribute("src");
+    setAttempt((previous) => previous + 1);
+    setRoute({ key: sourceKey, index: 0 });
+    restored.current = null;
     setDeclined({ key, engines: [] });
-  }, [key, videoRef]);
+  }, [key, sourceKey, videoRef, rememberState]);
 
   const candidates = useMemo(
     // Suspended: no candidates, so no engine is picked and nothing loads. The
@@ -288,6 +374,9 @@ function usePlaybackEngine(
         : mode === "progressive"
           ? progressive
           : undefined;
+  // Hide stale choices during the render that changes source, before effects run.
+  const audioScope = useMemo(() => ({ key, mode, activeSourceUrl }), [key, mode, activeSourceUrl]);
+  const currentAudio = audio?.scope === audioScope ? audio : null;
   const telemetry = usePlaybackQoE({
     videoRef,
     engine: mode,
@@ -304,6 +393,7 @@ function usePlaybackEngine(
     setCurrentQuality(AUTO_QUALITY);
     setPendingQuality(null);
     setActiveHeight(null);
+    setAudio(null);
     // Dynamic import: the hls.js chunk loads only once this engine has won
     // selection — never for native, progressive, or unplayable sources.
     void import("hls.js")
@@ -319,7 +409,7 @@ function usePlaybackEngine(
           return;
         }
         const hls = new HlsClass({
-          ...(typeof startPosition === "number" ? { startPosition } : {}),
+          ...(resumed ? { startPosition: resumed.time } : typeof startPosition === "number" ? { startPosition } : {}),
           // Keep long watches and autoplay sessions from retaining every played
           // fragment in MSE. Every surface gets this; a federated watch used to
           // get none of it.
@@ -389,12 +479,34 @@ function usePlaybackEngine(
         // broken master through native HLS would be worse than useless on the
         // Chromium builds whose canPlayType claims HLS they cannot play.
         const giveUpOnHls = () => {
+          declineEngines(key, ...HLS_ENGINES);
           hls.destroy();
           hlsRef.current = null;
-          declineEngines(key, ...HLS_ENGINES);
         };
+        const syncAudio = () => {
+          if (disposed || hlsRef.current !== hls) return;
+          const sourceTracks = (hls.audioTracks ?? []).slice();
+          const tracks = sourceTracks.map((track, index) => ({
+            value: `hlsjs:audio:${index}`,
+            label: track.name || track.lang || `Audio ${index + 1}`,
+          }));
+          setAudio({ scope: audioScope, tracks, current: tracks[hls.audioTrack]?.value ?? "",
+            select: (value) => {
+              const index = tracks.findIndex((track) => track.value === value);
+              // A menu can outlive a rendition-group update or engine teardown.
+              if (disposed || hlsRef.current !== hls || index < 0 ||
+                  hls.audioTracks[index] !== sourceTracks[index]) return;
+              hls.audioTrack = index;
+              syncAudio();
+            },
+          });
+        };
+        hls.on(HlsClass.Events.AUDIO_TRACKS_UPDATED, syncAudio);
+        hls.on(HlsClass.Events.AUDIO_TRACK_SWITCHING, syncAudio);
+        hls.on(HlsClass.Events.AUDIO_TRACK_SWITCHED, syncAudio);
         hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
           parsed = true;
+          syncAudio();
           // The rung hls.js is about to start on names the codec family it has
           // chosen: firstAutoLevel is ABR's own opening pick (we set no
           // startLevel, so that IS the start level). It can be -1 before ABR has
@@ -448,7 +560,7 @@ function usePlaybackEngine(
           setPendingQuality((p) => (p === null || sameQuality(switched, p) ? null : p));
         });
         hls.on(HlsClass.Events.ERROR, (_event, data) => {
-          if (!data.fatal) return;
+          if (disposed || !data.fatal) return;
           // Every fatal error is a quality event, including the ones the ladder
           // below recovers from: playback stopped, whether or not it resumed.
           // Non-fatal errors are not reported — hls.js emits them constantly and
@@ -490,12 +602,14 @@ function usePlaybackEngine(
     hlsJs,
     videoRef,
     startPosition,
+    resumed,
     backBufferLength,
     lowLatencyMode,
     authToken,
     bandwidth,
     declineEngines,
     telemetry,
+    audioScope,
   ]);
 
   const activeSrc =
@@ -512,6 +626,55 @@ function usePlaybackEngine(
   // old contract and reports nothing, because there is no file to point at.
   // Derived, not remembered, so it cannot outlive its own video.
   const src = activeSrc ?? (failed ? progressive : undefined);
+
+  useEffect(() => {
+    if ((mode !== "native-hls" && mode !== "progressive") || !activeSourceUrl) return;
+    const el = videoRef.current as (HTMLVideoElement & { audioTracks?: NativeAudioTrackList }) | null;
+    if (!el) return;
+    let disposed = false;
+    let observed: NativeAudioTrackList | undefined;
+    const events = ["change", "addtrack", "removetrack"];
+    const expectedSource = new URL(activeSourceUrl, window.location.href).href.split("#")[0];
+    const isCurrentSource = () => el.currentSrc.split("#")[0] === expectedSource;
+    const clearAudio = () => setAudio(null);
+    const syncAudio = () => {
+      if (disposed) return;
+      const list = el.audioTracks;
+      if (list !== observed) {
+        for (const event of events) observed?.removeEventListener?.(event, syncAudio);
+        observed = list;
+        for (const event of events) observed?.addEventListener?.(event, syncAudio);
+      }
+      // The element may still expose the previous source's tracks while loading.
+      if (!list || !isCurrentSource()) { clearAudio(); return; }
+      const sourceTracks = Array.from(list);
+      const tracks = sourceTracks.map((track, index) => ({
+        value: `native:audio:${index}`,
+        label: track.label || track.language || `Audio ${index + 1}`,
+      }));
+      setAudio({ scope: audioScope, tracks,
+        current: tracks[sourceTracks.findIndex((track) => track.enabled)]?.value ?? "",
+        select: (value) => {
+          const index = tracks.findIndex((track) => track.value === value);
+          const target = sourceTracks[index];
+          const available = Array.from(el.audioTracks ?? []);
+          if (disposed || !isCurrentSource() || !target || !available.includes(target)) return;
+          target.enabled = true;
+          for (const track of available) if (track !== target) track.enabled = false;
+          syncAudio();
+        },
+      });
+    };
+    syncAudio();
+    el.addEventListener("loadedmetadata", syncAudio);
+    el.addEventListener("emptied", clearAudio);
+    return () => {
+      disposed = true;
+      for (const event of events) observed?.removeEventListener?.(event, syncAudio);
+      el.removeEventListener("loadedmetadata", syncAudio);
+      el.removeEventListener("emptied", clearAudio);
+    };
+  }, [mode, activeSourceUrl, audioScope, videoRef]);
 
   // The engines that play through the media element itself (native HLS and the
   // progressive original) have no error channel of their own — hls.js reports
@@ -542,13 +705,71 @@ function usePlaybackEngine(
     // leaving an empty player. Reconcile after teardown, without reloading an
     // already-correct source or touching the blob owned by an active HLS engine.
     if (el && src && el.getAttribute("src") !== src) el.setAttribute("src", src);
-  }, [src, videoRef]);
+  }, [src, key, videoRef]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || fallbackCount === 0 || (mode !== "hls-js" && mode !== "native-hls")) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastTime = el.currentTime;
+    const clear = () => { clearTimeout(timer); timer = undefined; };
+    const arm = () => {
+      // waiting/stalled often arrive together: repeated events cannot keep an
+      // unresponsive gateway alive indefinitely by moving its deadline.
+      if (timer === undefined) timer = setTimeout(() => declineEngines(key, ...HLS_ENGINES), HLS_SOURCE_WAIT_MS);
+    };
+    const waiting = () => { if (!el.paused) arm(); };
+    const progress = () => {
+      if (el.currentTime > lastTime) clear();
+      lastTime = el.currentTime;
+    };
+    const metadata = () => { if (el.paused) clear(); };
+    // Resource selection emits pause while load() resets the element. Until
+    // metadata exists this is not evidence that a viewer paused usable media.
+    const pause = () => { if (el.readyState > 0) clear(); };
+    const events: Record<string, () => void> = {
+      waiting, stalled: waiting, play: arm, playing: clear, loadeddata: clear,
+      loadedmetadata: metadata, timeupdate: progress, pause,
+    };
+    arm();
+    for (const [event, listener] of Object.entries(events)) el.addEventListener(event, listener);
+    return () => {
+      clear();
+      for (const [event, listener] of Object.entries(events)) el.removeEventListener(event, listener);
+    };
+  }, [key, mode, fallbackCount, videoRef, declineEngines]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !resumed || !mode) return;
+    const restore = () => {
+      if (restored.current === resumed) return;
+      restored.current = resumed;
+      el.currentTime = Number.isFinite(el.duration) ? Math.min(resumed.time, el.duration) : resumed.time;
+      el.playbackRate = resumed.rate;
+      el.volume = resumed.volume;
+      el.muted = resumed.muted;
+      // Before metadata, paused is the browser default, not a viewer pause;
+      // overriding it would cancel the shell's start-on-open on the new source.
+      if (resumed.restoreTransport) {
+        if (resumed.paused) el.pause();
+        else void el.play()?.catch(() => {});
+      }
+    };
+    el.addEventListener("loadedmetadata", restore);
+    return () => el.removeEventListener("loadedmetadata", restore);
+  }, [mode, activeSourceUrl, resumed, videoRef]);
 
   return {
     mode,
     src,
+    sourceUrl: activeSourceUrl,
+    rememberState,
     failed,
     retry,
+    audioTracks: currentAudio?.tracks ?? [],
+    currentAudioTrack: currentAudio?.current ?? "",
+    setAudioTrack: currentAudio?.select ?? ignoreAudioSelection,
     // Only hls.js exposes controllable quality. Native HLS deliberately exposes
     // NO entries: there the browser owns variant selection outright, steered by
     // the SCORE attribute the backend emits on each variant, and nothing can
@@ -592,23 +813,25 @@ function usePlaybackEngine(
  */
 export function useHlsPlayback(
   videoRef: RefObject<HTMLVideoElement | null>,
-  video: { id: string; hls_url?: string; privacy?: string | null },
+  video: { id: string; hls_url?: string; privacy?: string | null; ipfs?: { hls_cid?: string | null } | null },
   startAt: number | null,
   // Optional HLS master URL to stream from INSTEAD of the server one — used to
   // play a video from its IPFS gateway mirror (DR5). It only overrides the HLS
-  // sources; the progressive fallback stays the authoritative server /original,
-  // so a mid-stream IPFS failure degrades to server playback, not a dead player.
+  // sources; a failed mirror first tries authoritative HLS, then /original.
   hlsMasterOverride?: string | null,
   // Optional video-scoped playback token for a password-protected video (CORE-17).
   // Through hls.js it rides as `Authorization: Bearer <pt>` on every request; a
   // media element cannot set a request header, so on the native-HLS and
   // progressive paths it is appended to the src as `?pt=`. A secret — never logged.
   playbackToken?: string | null,
+  preferIpfs = false,
 ): HlsPlayback {
   // The session is authorized exactly like the media routes, so the unlock
   // token — when the viewer has one — is what opens a password video's session.
   const sessionState = usePlaybackSession("video", video.id, playbackToken);
-  const master = playbackMasterUrl(sessionState, video.hls_url);
+  const master = sessionState.session?.authoritative_hls_url || playbackMasterUrl(sessionState, video.hls_url);
+  const preference = useIPFSPreference(video.id, preferIpfs, Boolean(video.ipfs?.hls_cid), sessionState);
+  const mirror = hlsMasterOverride || preference.url;
   // A session-scoped token, and ONLY where the server issued one. A public video
   // gets none, which is what keeps its bytes CDN-eligible; the session's token
   // supersedes the unlock token because the session id is signed into it, which
@@ -623,13 +846,13 @@ export function useHlsPlayback(
   const hasHls = Boolean(master);
   // The `?pt=` token (a query param) is placed before the `#t=` media fragment.
   const fragment = startAt !== null ? `#t=${startAt}` : "";
-  return usePlaybackEngine(
+  const playback = usePlaybackEngine(
     videoRef,
     video.id,
     {
-      hlsJs: hasHls ? hlsMasterOverride || videoHlsMasterUrl(video.id, null, master) : undefined,
+      hlsJs: hasHls ? mirror || videoHlsMasterUrl(video.id, null, master) : undefined,
       nativeHls: hasHls
-        ? (hlsMasterOverride || videoHlsMasterUrl(video.id, token, master)) + fragment
+        ? (mirror || videoHlsMasterUrl(video.id, token, master)) + fragment
         : undefined,
       progressive: videoOriginalUrl(video.id, token) + fragment,
     },
@@ -639,8 +862,14 @@ export function useHlsPlayback(
       // No token on the IPFS gateway mirror: a public gateway needs none, and a
       // non-simple Authorization header would trip its CORS preflight. Password
       // videos are never IPFS-mirrored anyway.
-      authToken: hlsMasterOverride ? null : token,
-      bandwidth: hlsMasterOverride ? "seeded" : "measured",
+      authToken: mirror ? null : token,
+      bandwidth: mirror ? "seeded" : "measured",
+      hlsFallbacks: mirror && hasHls ? [{
+        hlsJs: videoHlsMasterUrl(video.id, null, master),
+        nativeHls: videoHlsMasterUrl(video.id, token, master) + fragment,
+        authToken: token,
+        bandwidth: "measured",
+      }] : undefined,
       // Wait for the session rather than start on the detail's URL and swap —
       // but ONLY where the session has something the player cannot start
       // without. For a password video that is its token, which has to be in
@@ -656,10 +885,22 @@ export function useHlsPlayback(
       // URL — the session still decides what plays, it just no longer decides
       // WHEN. When it names the same master, which is the normal case, nothing
       // moves.
-      suspended: needsToken && sessionState.status === "pending",
+      suspended: (needsToken && sessionState.status === "pending") || (!hlsMasterOverride && preference.waiting),
       session: sessionState.session,
     },
   );
+  const { select: choose, available } = preference;
+  const { retry, rememberState, sourceUrl, mode } = playback;
+  const select = useCallback((source: "server" | "ipfs") => {
+    if (source === "ipfs" && !available) return;
+    if (source === "ipfs") retry(); else rememberState?.();
+    choose(source);
+  }, [available, retry, rememberState, choose]);
+  const delivery = useMemo<PlaybackDelivery>(() => ({
+    source: mode === "progressive" ? "original" : sourceUrl ? sourceUrl.split("#")[0] === mirror ? "ipfs" : "hls" : null,
+    available: Boolean(available), select,
+  }), [mode, sourceUrl, mirror, available, select]);
+  return { ...playback, delivery };
 }
 
 /**

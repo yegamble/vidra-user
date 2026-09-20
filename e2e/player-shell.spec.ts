@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { devices, expect, test, type Page } from "@playwright/test";
 
 import { TINY_MP4_BASE64 } from "../e2e-backed/fixtures";
 
@@ -190,4 +190,147 @@ test("the overlay controls are reachable by keyboard in order with visible focus
   await expect(page.getByRole("button", { name: "Mute" })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("slider", { name: "Volume" })).toBeFocused();
+});
+
+// The bar's one tooltip (the Apple TV chrome pass). Three properties are worth
+// a browser: WHERE it lands (jsdom has no layout, so the centring, the clamp
+// and the "above the transport" placement can only be asserted here), that
+// hovering a control produces exactly one of them, and that the rightmost
+// control's bubble does not hang off the stage.
+//
+// `hoverControl` exists because a bare `.hover()` on a freshly-loaded page is a
+// race the tooltip cannot win: Playwright's synthetic pointerenter can land on
+// SSR markup BEFORE React has attached its listeners, after which the pointer
+// never moves again and no further event is ever dispatched. Waiting for the
+// shell's own `data-shortcuts` stamp, then moving OFF and back ON, makes the
+// hover happen against a hydrated tree. (The product now also arms the dwell
+// from pointermove, so a pointer parked on a control before hydration still
+// gets its label — but the spec should not depend on that to be reliable.)
+async function hoverControl(page: Page, name: string) {
+  await expect(page.getByTestId("video-player")).toHaveAttribute("data-shortcuts", "ready");
+  const control = page.getByTestId("player-controls").getByRole("button", { name, exact: true });
+  await page.mouse.move(0, 0);
+  await control.hover();
+  return control;
+}
+
+test("hovering a control names it above the transport, with its shortcut, inside the stage", async ({
+  page,
+}) => {
+  await mockWatch(page, { captions: true });
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Shell Clip" })).toBeVisible();
+
+  const tip = page.getByTestId("player-tooltip");
+  await expect(tip).toHaveCount(0);
+
+  const cc = await hoverControl(page, "Captions");
+  await expect(tip).toBeVisible();
+  // The label AND the key that does the same thing, in a keycap.
+  await expect(tip).toContainText("Subtitles/closed captions");
+  await expect(tip.locator("kbd")).toHaveText("C");
+
+  const tipBox = (await tip.boundingBox())!;
+  const ccBox = (await cc.boundingBox())!;
+  const seekBox = (await page.getByRole("slider", { name: "Seek" }).boundingBox())!;
+  const stageBox = (await page.getByTestId("video-player").boundingBox())!;
+  // ABOVE the whole transport — it must never cover the timeline the viewer is
+  // aiming at, which is what a per-button tooltip anchored to the control does.
+  expect(tipBox.y + tipBox.height).toBeLessThanOrEqual(seekBox.y + 1);
+  // Centred ON the control. Measuring the centre in the bar's border box and
+  // applying it inside its padding box put every bubble one padding-width
+  // (12px at this stage) to the right of the button it names.
+  expect(Math.abs(tipBox.x + tipBox.width / 2 - (ccBox.x + ccBox.width / 2))).toBeLessThanOrEqual(2);
+  // ...and clamped inside the stage, which is overflow-hidden: a bubble that
+  // escapes it is a bubble that gets cut in half.
+  expect(tipBox.x).toBeGreaterThanOrEqual(stageBox.x - 0.5);
+  expect(tipBox.x + tipBox.width).toBeLessThanOrEqual(stageBox.x + stageBox.width + 0.5);
+
+  // Leaving the control takes the label with it.
+  await page.getByRole("slider", { name: "Seek" }).hover();
+  await expect(tip).toHaveCount(0);
+});
+
+test("the rightmost control's tooltip is clamped inside the stage, not clipped by it", async ({
+  page,
+}) => {
+  // Fullscreen is the last control in the row, so its centred bubble is the one
+  // that reaches past the stage's right edge — 4px of it were being eaten by
+  // `overflow-hidden` before the clamp was measured against the anchor row.
+  await mockWatch(page);
+  await page.goto("/videos/v1");
+  await expect(page.getByRole("heading", { name: "Shell Clip" })).toBeVisible();
+
+  await hoverControl(page, "Fullscreen");
+  const tip = page.getByTestId("player-tooltip");
+  await expect(tip).toBeVisible();
+  await expect(tip).toContainText("Full screen");
+  await expect(tip.locator("kbd")).toHaveText("F");
+
+  const tipBox = (await tip.boundingBox())!;
+  const stageBox = (await page.getByTestId("video-player").boundingBox())!;
+  expect(tipBox.x + tipBox.width).toBeLessThanOrEqual(stageBox.x + stageBox.width);
+  expect(tipBox.x).toBeGreaterThanOrEqual(stageBox.x);
+});
+
+test("the pointer leaving the stage while playing takes the controls with it", async ({ page }) => {
+  await mockWatch(page);
+  await page.goto("/videos/v1");
+  const bar = page.getByTestId("player-controls");
+  const stage = page.getByTestId("video-player");
+  await expect(bar).toBeVisible();
+
+  // Pointer over the bar, then playing: the chrome is up.
+  await bar.hover();
+  await page.locator("video").evaluate((el) => el.dispatchEvent(new Event("play")));
+  await expect(bar).toHaveCSS("opacity", "1");
+
+  // Out of the stage entirely → the buttons and the timeline go at once,
+  // without waiting out the 3s idle timer.
+  const box = (await stage.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height + 120);
+  await expect(bar).toHaveCSS("opacity", "0");
+  // Hidden by opacity only — never display — so focus is never lost.
+  await expect(bar).toHaveCount(1);
+});
+
+
+// A phone, for real: touch pointers fire pointerout/pointerleave the instant
+// the finger lifts, so the stage's mouse-leave hide ran on every tap. Nothing
+// in the desktop suite can see it — a mouse never leaves on click.
+// Picked field by field, not spread: `defaultBrowserType` is the one device
+// option Playwright cannot change per describe, and carrying it in makes the
+// whole FILE refuse to load. These five are what a touch test actually needs.
+const IPHONE_14 = {
+  viewport: devices["iPhone 14"].viewport,
+  userAgent: devices["iPhone 14"].userAgent,
+  deviceScaleFactor: devices["iPhone 14"].deviceScaleFactor,
+  isMobile: devices["iPhone 14"].isMobile,
+  hasTouch: devices["iPhone 14"].hasTouch,
+};
+
+test.describe("on a touch device", () => {
+  test.use(IPHONE_14);
+
+  test("tapping a control while playing leaves the chrome up", async ({ page }) => {
+    await mockWatch(page, { captions: true });
+    await page.goto("/videos/v1");
+    const bar = page.getByTestId("player-controls");
+    await expect(bar).toBeVisible();
+    await expect(page.getByTestId("video-player")).toHaveAttribute("data-shortcuts", "ready");
+
+    // Playing is the state where the chrome is allowed to hide at all.
+    await page.locator("video").evaluate((el) => el.dispatchEvent(new Event("play")));
+    await expect(bar).toHaveCSS("opacity", "1");
+
+    // A tap on a control: the control acts AND the bar survives, so the next
+    // control is still reachable by the only input this device has.
+    await bar.getByRole("button", { name: "Captions" }).tap();
+    await expect(page.getByRole("button", { name: "Captions" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(bar).toHaveCSS("opacity", "1");
+    await expect(bar.getByRole("button", { name: "Fullscreen" })).toBeVisible();
+  });
 });

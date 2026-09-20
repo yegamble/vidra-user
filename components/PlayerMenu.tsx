@@ -4,6 +4,9 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { CheckIcon } from "@/components/icons";
+import { MenuSurface } from "@/components/ui";
+import { MEDIA_PRESS } from "@/components/player/chrome";
+import { usePlayerTipProps } from "@/components/player/PlayerTooltip";
 import { usePlayerPopup } from "@/components/player/use-player-popup";
 import { cn } from "@/lib/cn";
 
@@ -34,6 +37,7 @@ export function PlayerMenu<T extends string | number>({
   buttonLabel,
   buttonText,
   menuLabel,
+  tip,
   icon,
   items,
   current,
@@ -43,6 +47,8 @@ export function PlayerMenu<T extends string | number>({
   buttonLabel: string;
   buttonText?: string;
   menuLabel: string;
+  /** Tooltip text on the overlay variant (the bar's shared bubble). */
+  tip?: string;
   icon: ReactNode;
   items: PlayerMenuItem<T>[];
   current: T;
@@ -61,6 +67,12 @@ export function PlayerMenu<T extends string | number>({
   } = usePlayerPopup();
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const overlay = variant === "overlay";
+  // Overlay triggers report into the player's one tooltip like every other
+  // control in the bar; the themed "bar" variant (LiveWatchView) has no
+  // provider above it, so the hook is a pass-through there.
+  const tipProps = usePlayerTipProps<HTMLButtonElement>(overlay ? (tip ?? buttonLabel) : undefined, undefined, {
+    onClick: () => (open ? closePopup() : openPopup()),
+  });
   // On the overlay the visible text is a compact tail (aria-label carries the
   // full name); the legacy bar shows the full label as its visible text (and so
   // as its accessible name, unchanged).
@@ -111,8 +123,8 @@ export function PlayerMenu<T extends string | number>({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={overlay ? buttonLabel : undefined}
-        title={overlay ? buttonLabel : undefined}
-        onClick={() => (open ? closePopup() : openPopup())}
+        // No native title on the overlay: the bar draws the label itself, above
+        // the transport, and two tooltips for one control is a bug, not a belt.
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" && !open) {
             e.preventDefault();
@@ -120,18 +132,29 @@ export function PlayerMenu<T extends string | number>({
           }
         }}
         className={cn(
-          "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold transition-colors",
+          "flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap font-semibold",
+          // min-w-11: a text pill is still a 44pt target. Without the icon the
+          // "1×" pill collapsed to 37px wide, which is under the floor every
+          // round button in the same row meets.
           overlay
-            ? "h-11 rounded-full px-2 text-[13px] text-white/90 hover:bg-white/15 hover:text-white"
-            : "rounded-full bg-surface-muted px-4 py-2 text-[13px] text-fg hover:bg-surface-strong",
+            ? cn(
+                "focus-ring-media h-11 min-w-11 justify-center rounded-full px-3 text-[12px] text-white/90 hover:bg-white/12 hover:text-white",
+                MEDIA_PRESS,
+              )
+            : "focus-ring rounded-full bg-surface-muted px-4 py-2 text-[13px] text-fg transition-colors hover:bg-surface-strong",
         )}
+        {...(overlay ? tipProps : { onClick: () => (open ? closePopup() : openPopup()) })}
       >
-        {icon}
+        {/* The overlay pill is TEXT ("1×", "Auto (1080p)"): the words already
+            say what the control is, and a second glyph beside them was the
+            outline-icon noise that made the bar look assembled rather than
+            designed. The themed bar variant keeps its icon. */}
+        {overlay ? null : icon}
         <span className="tabular-nums">{visibleText}</span>
       </button>
       {open && container
         ? createPortal(
-            <div
+            <MenuSurface
               ref={popupRef}
               role="menu"
               aria-label={menuLabel}
@@ -143,7 +166,7 @@ export function PlayerMenu<T extends string | number>({
                 }
               }}
               style={popupStyle}
-              className="z-50 max-h-[min(16rem,calc(100vh-1rem))] w-40 overflow-y-auto overscroll-contain rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
+              className="max-h-[min(16rem,calc(100vh-1rem))] w-40"
             >
               {items.map((item, i) => (
                 <button
@@ -165,7 +188,7 @@ export function PlayerMenu<T extends string | number>({
                       moveFocus(i, -1);
                     }
                   }}
-                  className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-muted"
+                  className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-fg transition-colors"
                 >
                   <span aria-hidden="true" className="flex w-4 justify-center">
                     {item.value === current ? <CheckIcon size={16} /> : null}
@@ -173,7 +196,7 @@ export function PlayerMenu<T extends string | number>({
                   <span>{item.label}</span>
                 </button>
               ))}
-            </div>,
+            </MenuSurface>,
             container,
           )
         : null}

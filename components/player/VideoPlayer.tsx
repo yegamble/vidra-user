@@ -10,9 +10,27 @@ import {
   type RefObject,
 } from "react";
 
+import { AutoplaySwitch } from "@/components/player/AutoplaySwitch";
+import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
+import { usePlayerSeeking } from "@/components/player/use-player-seeking";
 import { CaptionLayer } from "@/components/player/CaptionLayer";
+import { PlaybackFeedback } from "@/components/player/PlaybackFeedback";
 import { EndCard } from "@/components/player/EndCard";
+import {
+  CaptionsGlyph,
+  FullscreenEnterGlyph,
+  FullscreenExitGlyph,
+  PauseGlyph,
+  PipGlyph,
+  PlayGlyph,
+  TheaterGlyph,
+} from "@/components/player/icons";
 import { OverlayButton } from "@/components/player/OverlayButton";
+import {
+  PlayerTipProvider,
+  PlayerTooltipLayer,
+  usePlayerTooltip,
+} from "@/components/player/PlayerTooltip";
 import {
   PlayerOverflowMenu,
   type OverflowChoiceGroup,
@@ -20,9 +38,11 @@ import {
 } from "@/components/player/PlayerOverflowMenu";
 import { SeekBar } from "@/components/player/SeekBar";
 import { VolumeControl } from "@/components/player/VolumeControl";
-import { QualityMenu } from "@/components/QualityMenu";
-import { SpeedMenu } from "@/components/SpeedMenu";
+import { qualityLabel } from "@/lib/hls";
+import { toggleAmbientMode, useAmbientMode } from "@/lib/player-ambient";
+import { useSleepTimer } from "@/components/player/use-sleep-timer";
 import { api, videoThumbnailUrl, type Video } from "@/lib/api";
+import { captionTrackFor, captionTracks } from "@/lib/caption-tracks";
 import { cn } from "@/lib/cn";
 import { formatDuration } from "@/lib/format";
 import { qualityKey } from "@/lib/quality-id";
@@ -58,6 +78,7 @@ import {
 import { isAutoQuality } from "@/lib/quality-id";
 import { readBuffered, stepVolume } from "@/lib/player-ui";
 import {
+  CONTROL_SHORTCUT_KEYS,
   SHORTCUT_IGNORE_SELECTOR,
   clampSeekTarget,
   seekTargetForFraction,
@@ -65,7 +86,7 @@ import {
 } from "@/lib/player-shortcuts";
 import { useChapters } from "@/lib/use-chapters";
 import { readStoredVolume, storeVolume } from "@/lib/player-volume";
-import { useHlsPlayback } from "@/lib/use-playback-engine";
+import { useHlsPlayback, type PlaybackDelivery } from "@/lib/use-playback-engine";
 import { useStoryboard } from "@/lib/use-storyboard";
 
 // How long the overlay controls linger after the last pointer activity while
@@ -123,6 +144,7 @@ export function VideoPlayer({
   onPlay,
   onTimeUpdate,
   onPause,
+  onDeliveryChange,
   children,
 }: {
   video: Video;
@@ -160,15 +182,21 @@ export function VideoPlayer({
   onPlay?: () => void;
   onTimeUpdate?: () => void;
   onPause?: () => void;
+  onDeliveryChange?: (delivery: PlaybackDelivery) => void;
   /** Rendered inside the media container, over the video (e.g. the embed title link). */
   children?: ReactNode;
 }) {
-  const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride, playbackToken);
+  const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride, playbackToken, variant === "watch");
+  useEffect(() => {
+    if (playback.delivery) onDeliveryChange?.(playback.delivery);
+  }, [playback.delivery, onDeliveryChange]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   // The overlay control bar, handed to CaptionLayer so the captions can be held
   // above its MEASURED height — it retiers by container query, so no pixel
   // constant would be right at every stage width.
   const controlsRef = useRef<HTMLDivElement | null>(null);
+  const ambientEnabled = useAmbientMode();
+  const sleepTimer = useSleepTimer(videoRef, video.id);
 
   // Seek-preview storyboard (CORE-16): null when the detail has none, so the
   // seek bar's scrub bubble degrades to the timestamp alone. The VTT/sprite only
@@ -237,10 +265,13 @@ export function VideoPlayer({
   const [paused, setPaused] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [decodedHeight, setDecodedHeight] = useState<number | null>(null);
   const [buffered, setBuffered] = useState<Array<[number, number]>>([]);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
+  const [captionLanguage, setCaptionLanguage] = useState(0);
+  const captionLanguageRef = useRef(0);
   // Whether the viewer has operated the captions control on this player. The
   // per-user "captions on by default" re-asserts itself while the media element
   // is still settling (see below); once the viewer has chosen, it stops.
@@ -273,6 +304,32 @@ export function VideoPlayer({
   }, []);
   useEffect(() => () => window.clearTimeout(idleRef.current), []);
 
+  // The MOUSE leaving the stage hides the chrome at once rather than starting a
+  // 3s countdown for a viewer who has already looked away — YouTube's rule, and
+  // the one the owner asked for ("when the pointer leaves the player, the
+  // buttons AND the timeline must disappear"). The other two guards still
+  // apply, because they are expressed in controlsVisible, not here: paused pins
+  // the chrome, and focus inside the bar (which an open menu holds) pins it too.
+  //
+  // `pointerType` is load-bearing, not defensive. A touch pointer fires
+  // pointerout/pointerleave immediately after pointerup — the finger really has
+  // left the screen — so without this guard every TAP on a control during
+  // playback ran this path and faded the bar to opacity 0 with
+  // pointer-events-none, i.e. captions, fullscreen and the seek bar became
+  // unreachable by the only input a phone has. A touch device hides the chrome
+  // through the idle timer, which is what it has always done.
+  const onStageLeave = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "mouse") return;
+    if (idleRef.current) window.clearTimeout(idleRef.current);
+    setPointerActive(false);
+  }, []);
+
+  // One tooltip for the whole bar, anchored above the transport. Its own
+  // zero-height row is the positioning frame (the bar's padding would otherwise
+  // shift every centre), and being a CHILD of the bar it fades with the chrome
+  // instead of needing a second piece of state kept in sync with it.
+  const { handle: tipHandle, tip, anchorRef: tipAnchorRef } = usePlayerTooltip();
+
   // Keep the latest progress-reporting callbacks in a ref so the media-event
   // subscription below stays mounted once (never re-subscribing on a new
   // callback identity), matching WatchView's throttled reporting.
@@ -283,12 +340,26 @@ export function VideoPlayer({
 
   // ---- control actions (shared by the buttons and the keyboard shortcuts) ----
 
+  // Whether the viewer has operated the transport for THIS video. The bar
+  // button, the stage click and K/space all route through togglePlay, so this
+  // one seam records the intent start-on-open must never override. It is not
+  // derivable from the play promise: per the HTML spec the internal PAUSE steps
+  // reject a pending play promise with AbortError — the SAME name the load
+  // algorithm produces — so a viewer pausing a still-buffering kick is
+  // indistinguishable, at the rejection, from an engine re-attach.
+  const viewerActed = useRef(false);
+
   const togglePlay = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
+    viewerActed.current = true;
     if (el.paused) void el.play().catch(() => {});
     else el.pause();
   }, [videoRef]);
+
+  const { seekBy, feedback: seekFeedback, resetFeedback, surfaceHandlers } = usePlayerSeeking({
+    videoRef, controlsVisible, onTogglePlay: togglePlay, onShowControls: bump, onSeek: setCurrentTime,
+  });
 
   const toggleMute = useCallback(() => {
     const el = videoRef.current;
@@ -307,30 +378,44 @@ export function VideoPlayer({
 
   const seekTo = useCallback(
     (time: number) => {
+      resetFeedback();
       const el = videoRef.current;
       if (!el) return;
       if (typeof el.fastSeek === "function") el.fastSeek(time);
       else el.currentTime = time;
       setCurrentTime(time); // optimistic — timeupdate confirms
     },
-    [videoRef],
+    [videoRef, resetFeedback],
   );
 
   const toggleCaptions = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
-    const list = Array.from(el.textTracks);
+    const list = captionTracks(el.textTracks);
     if (list.length === 0) return;
     // ON is now "not disabled" rather than "showing": the selected track runs
     // hidden while our own layer draws it (see captionsOnMode).
     const anyOn = list.some((t) => t.mode !== "disabled");
     for (const t of list) t.mode = "disabled";
-    if (!anyOn) list[0].mode = captionsOnMode(el);
+    if (!anyOn) (captionTrackFor(el, tracks[captionLanguageRef.current]?.language ?? "") ?? list[0]).mode = captionsOnMode(el);
     setCaptionsOn(!anyOn);
     // The viewer has now said what they want, so the per-user default stops
     // re-asserting itself (see the captions_default effect below).
     captionsChosenRef.current = true;
-  }, [videoRef]);
+  }, [videoRef, tracks]);
+
+  function selectCaptionLanguage(value: string) {
+    const el = videoRef.current;
+    const index = Number(value);
+    const track = el && tracks[index] ? captionTrackFor(el, tracks[index].language) : undefined;
+    if (!el || !track) return;
+    captionsChosenRef.current = true;
+    captionLanguageRef.current = index;
+    for (const track of captionTracks(el.textTracks)) track.mode = "disabled";
+    track.mode = captionsOnMode(el);
+    setCaptionLanguage(index);
+    setCaptionsOn(true);
+  }
 
   // Move whichever track is currently ON between the two ON modes, without
   // turning captions on or off. Used when the video crosses into or out of
@@ -339,7 +424,7 @@ export function VideoPlayer({
     (mode: "hidden" | "showing") => {
       const el = videoRef.current;
       if (!el) return;
-      for (const t of Array.from(el.textTracks)) {
+      for (const t of captionTracks(el.textTracks)) {
         if (t.mode !== "disabled" && t.mode !== mode) t.mode = mode;
       }
     },
@@ -409,23 +494,81 @@ export function VideoPlayer({
 
   // One playback attempt per video while enabled (watch variant only). The
   // guard ref resets when the video changes so navigating watch→watch can
-  // auto-start again, but a viewer's explicit pause is never fought — once
-  // attempted, this never plays again for the same video. The attempt is
-  // best-effort: the browser may still block it (autoplay policy) and the
-  // rejection is swallowed, leaving the normal click-to-play surface.
+  // auto-start again. Once attempted, this never plays again for the same video
+  // — with one exception: an attempt the media element load algorithm ABORTED is
+  // not an answer about this video, so it re-arms (see the rejection handler
+  // below). A viewer's explicit pause is never fought, and that is enforced by
+  // the viewerActed ref at togglePlay rather than by reading the rejection,
+  // which cannot tell the two aborts apart. The attempt is otherwise
+  // best-effort: the browser may still block it (autoplay policy) and that
+  // rejection stays swallowed, leaving click-to-play.
   const startAttempted = useRef(false);
   useEffect(() => {
     startAttempted.current = false;
+    viewerActed.current = false; // a new video is a new question to ask them
   }, [video.id]);
+
+  // The live preference, held in a ref so the attempt below keeps ONE identity
+  // for the whole mount — the media-element subscription registers it as a
+  // listener and must never re-subscribe just because the store notified.
+  const startOnOpenRef = useRef(startOnOpen);
   useEffect(() => {
-    primeInstanceDefaults();
-    if (variant !== "watch" || !startOnOpen || startAttempted.current) return;
+    startOnOpenRef.current = startOnOpen;
+  }, [startOnOpen]);
+
+  const attemptStartOnOpen = useCallback(() => {
+    if (variant !== "watch" || !startOnOpenRef.current || startAttempted.current) return;
+    // The viewer has already answered "should this be playing?" with the
+    // transport. Never ask again for this video — not on a re-attach, not on a
+    // re-arm. This is the guard that makes "an explicit pause is never fought"
+    // true; the latch alone cannot, because the re-arm below fires on a pause
+    // rejection as readily as on a load one.
+    if (viewerActed.current) return;
     const el = videoRef.current;
     if (!el || !el.paused) return;
+    // HOLD UNTIL A SOURCE EXISTS. On an SPA feed→watch navigation the defaults
+    // store and the per-user layer are already settled, so this effect ran on
+    // the FIRST render — before the engine attached anything (in hls.js mode the
+    // shell renders <video> with no src at all and the MSE blob only arrives
+    // after `import("hls.js")` resolves). play() on an empty element does not
+    // error: the element reports paused=false at NETWORK_EMPTY and waits. Then
+    // the attach runs the load algorithm, which rejects that promise with
+    // AbortError and pauses again silently — so nothing played and the latch was
+    // already spent. currentSrc covers hls.js's blob:, the attribute covers the
+    // progressive/native URL. readyState is deliberately NOT part of this: hls.js
+    // sits at readyState 0 with a perfectly valid blob until the first fragment.
+    if (!el.currentSrc && !el.getAttribute("src")) return;
     startAttempted.current = true;
     // el.play() may return undefined in non-browser test DOMs.
-    void el.play()?.catch(() => {});
-  }, [startOnOpen, variant, video.id, videoRef]);
+    void el.play()?.catch((err: unknown) => {
+      // Whatever the reason, the element is not playing — and this rejection may
+      // be the LAST word on it. Whether a browser fires `play` before refusing
+      // is browser-dependent; where it does, no `pause` follows and no further
+      // loadstart arrives, so nothing else would ever correct React's paused.
+      setPaused(videoRef.current?.paused ?? true);
+      // Re-arm on AbortError only. A NotAllowedError is the autoplay policy
+      // refusing, and re-arming there would re-kick a refused play on every
+      // re-attach and flicker the transport label. AbortError does NOT prove a
+      // load abort — the internal pause steps produce it too — which is what the
+      // viewerActed guard above is for; `played` is the second half of that: once
+      // something has actually played, the viewer is watching and owns the
+      // transport. currentTime is deliberately NOT consulted, because a `?t=`
+      // deep link moves the head before anything has played.
+      if ((err as { name?: string } | null)?.name !== "AbortError") return;
+      const current = videoRef.current;
+      if (!current || current.played.length !== 0) return;
+      startAttempted.current = false;
+    });
+  }, [variant, videoRef]);
+
+  // Re-run on attach, not just on the preference landing: playback.src/mode is
+  // how the shell learns the engine re-pointed the element (the HLS→original
+  // fallback, an IPFS switch, a retry). The loadstart listener below covers the
+  // hls.js blob attach, which changes no React state at all.
+  useEffect(() => {
+    primeInstanceDefaults();
+    attemptStartOnOpen();
+  }, [attemptStartOnOpen, startOnOpen, video.id, playback.src, playback.mode]);
 
   // ---- media-element state subscription (mounted once) ----
 
@@ -447,15 +590,38 @@ export function VideoPlayer({
       setEnded(true);
       window.clearTimeout(idleRef.current); // the end card takes over the surface
     };
+    // THE ELEMENT CAN LEAVE PLAYBACK WITHOUT FIRING `pause`. Whenever the media
+    // element load algorithm runs on a source that already existed — hls.js
+    // `destroy()`/`detachMedia` does removeAttribute("src") + load(), and so does
+    // the HLS→original fallback after a 404 master, a session naming a different
+    // master, an IPFS source switch, or playback.retry() — the spec sets `paused`
+    // back to true and rejects any pending play promise with AbortError, firing
+    // `abort` + `emptied` + `loadstart` and NEVER `pause`. Those three events are
+    // therefore the only notice React gets, so resync from the element itself,
+    // read LIVE at event time. On a normal first attach this is a no-op (the
+    // element was already paused). An autoplay-policy refusal is handled at the
+    // play promise instead: whether a browser fires `play` before refusing is
+    // browser-dependent, and where it does no `pause` follows.
+    const onLoadResetEv = () => setPaused(el.paused);
     // A new source (navigation to another video within the page, or an
     // HLS→original fallback) resets the element, so drop any stale end card.
-    const onLoadStartEv = () => setEnded(false);
+    const onLoadStartEv = () => {
+      resetFeedback();
+      setDecodedHeight(null);
+      setEnded(false);
+      setPaused(el.paused);
+      // A source has just been attached. For hls.js that is the only signal the
+      // shell gets (attaching an MSE blob changes no React state), so this is
+      // where a held start-on-open kick lands on the SPA path.
+      attemptStartOnOpen();
+    };
     const onTimeEv = () => {
       setCurrentTime(el.currentTime);
       setBuffered(readBuffered(el.buffered));
       cbRef.current.onTimeUpdate?.();
     };
     const onProgressEv = () => setBuffered(readBuffered(el.buffered));
+    const onResizeEv = () => setDecodedHeight(el.videoHeight || null);
     const onDurationEv = () =>
       setDuration(Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0);
     const onVolumeEv = () => {
@@ -474,15 +640,20 @@ export function VideoPlayer({
     el.addEventListener("pause", onPauseEv);
     el.addEventListener("ended", onEndedEv);
     el.addEventListener("loadstart", onLoadStartEv);
+    el.addEventListener("abort", onLoadResetEv);
+    el.addEventListener("emptied", onLoadResetEv);
     el.addEventListener("timeupdate", onTimeEv);
     el.addEventListener("progress", onProgressEv);
     el.addEventListener("loadedmetadata", onDurationEv);
+    el.addEventListener("loadedmetadata", onResizeEv);
+    el.addEventListener("resize", onResizeEv);
     el.addEventListener("durationchange", onDurationEv);
     el.addEventListener("volumechange", onVolumeEv);
     // Seed from the element's current state (it may already be primed).
     setPaused(el.paused);
     setCurrentTime(el.currentTime);
     onDurationEv();
+    onResizeEv();
     onProgressEv();
     setVolume(el.volume);
     setMuted(el.muted);
@@ -491,13 +662,17 @@ export function VideoPlayer({
       el.removeEventListener("pause", onPauseEv);
       el.removeEventListener("ended", onEndedEv);
       el.removeEventListener("loadstart", onLoadStartEv);
+      el.removeEventListener("abort", onLoadResetEv);
+      el.removeEventListener("emptied", onLoadResetEv);
       el.removeEventListener("timeupdate", onTimeEv);
       el.removeEventListener("progress", onProgressEv);
       el.removeEventListener("loadedmetadata", onDurationEv);
+      el.removeEventListener("loadedmetadata", onResizeEv);
+      el.removeEventListener("resize", onResizeEv);
       el.removeEventListener("durationchange", onDurationEv);
       el.removeEventListener("volumechange", onVolumeEv);
     };
-  }, [videoRef, bump]);
+  }, [videoRef, bump, attemptStartOnOpen, resetFeedback]);
 
   // Track caption visibility from the element itself, so the toggle's
   // aria-pressed reflects changes made either here or via the C shortcut.
@@ -505,7 +680,12 @@ export function VideoPlayer({
     const el = videoRef.current;
     if (!el) return;
     const list = el.textTracks;
-    const sync = () => setCaptionsOn(Array.from(list).some((t) => t.mode !== "disabled"));
+    const sync = () => {
+      const selected = captionTracks(list).find((t) => t.mode !== "disabled");
+      const index = selected ? tracks.findIndex((track) => track.language === selected.language) : -1;
+      setCaptionsOn(!!selected);
+      if (index >= 0) { captionLanguageRef.current = index; setCaptionLanguage(index); }
+    };
     sync();
     // TextTrackList is an EventTarget in browsers; some test DOMs (jsdom) omit
     // the listener methods, so guard before wiring the live sync.
@@ -518,7 +698,7 @@ export function VideoPlayer({
       list.removeEventListener("addtrack", sync);
       list.removeEventListener("removetrack", sync);
     };
-  }, [videoRef, tracks.length]);
+  }, [videoRef, tracks]);
 
   // Apply the selected rate; re-applied when the src changes (a media load()
   // resets the element to its default rate).
@@ -554,7 +734,7 @@ export function VideoPlayer({
     if (!el) return;
     const apply = () => {
       if (captionsChosenRef.current) return;
-      const list = Array.from(el.textTracks);
+      const list = captionTracks(el.textTracks);
       if (list.length === 0) return; // <track>s not attached yet — retry on change
       // "Already on" is any mode but disabled: the ON mode is `hidden` (our own
       // layer draws the cues) except inside PiP, where it is `showing`.
@@ -656,17 +836,22 @@ export function VideoPlayer({
       const shortcut = shortcutForKey(e, { playerFocused, paused: el.paused });
       if (!shortcut) return;
       e.preventDefault();
+      // Held Space stays consumed without repeatedly flipping playback.
+      if (e.repeat && shortcut.kind === "toggle-play") return;
       switch (shortcut.kind) {
         case "toggle-play":
           togglePlay();
           break;
         case "seek-by":
+          seekBy(shortcut.seconds);
+          break;
         case "frame-step":
+          resetFeedback();
           el.currentTime = clampSeekTarget(el.currentTime, shortcut.seconds, el.duration);
           break;
         case "seek-to-fraction": {
           const t = seekTargetForFraction(shortcut.fraction, el.duration);
-          if (t !== null) el.currentTime = t;
+          if (t !== null) seekTo(t);
           break;
         }
         case "volume-by":
@@ -705,6 +890,9 @@ export function VideoPlayer({
   }, [
     videoRef,
     togglePlay,
+    seekBy,
+    seekTo,
+    resetFeedback,
     toggleMute,
     toggleFullscreen,
     toggleCaptions,
@@ -727,19 +915,10 @@ export function VideoPlayer({
   // truncated, beside the time readout. Null before the first chapter / no chapters.
   const currentChapterTitle = chapters?.chapterAt(currentTime)?.title ?? null;
 
-  // The overflow menu carries the FULL tier-able control set, not just the part
-  // the current stage width happens to have hidden. It is portaled to the
-  // viewport (see usePlayerPopup), so container queries cannot reach it to prune
-  // per-tier — and "everything is always in here" is a stronger guarantee than
-  // arithmetic anyway: no control can become unreachable at any stage width.
-  // The bar duplicates a few of these at wide tiers, which is what YouTube's
-  // settings gear does too; the roles differ (button vs menuitem*), so no
-  // accessible name is ambiguous.
+  // Settings keeps every secondary control reachable at all stage widths.
   const overflowToggles: OverflowToggle[] = [
     { id: "mute", label: muted ? "Unmute" : "Mute", pressed: muted, onToggle: toggleMute },
-    ...(tracks.length > 0
-      ? [{ id: "captions", label: "Captions", pressed: captionsOn, onToggle: toggleCaptions }]
-      : []),
+
     ...(variant === "watch"
       ? [
           {
@@ -749,6 +928,7 @@ export function VideoPlayer({
             onToggle: onToggleAutoplay,
           },
           { id: "theater", label: "Theater mode", pressed: theater, onToggle: () => toggleTheater() },
+          { id: "ambient", label: "Ambient mode", pressed: ambientEnabled, onToggle: toggleAmbientMode },
         ]
       : []),
     ...(pipSupported
@@ -777,6 +957,7 @@ export function VideoPlayer({
             id: "quality",
             label: "Playback quality",
             value: qualityKey(playback.currentQuality),
+            valueLabel: qualityLabel({ levels: playback.levels, selected: playback.currentQuality, activeHeight: playback.activeHeight, pending: playback.pending }),
             items: playback.levels.map((l) => ({ value: l.value, label: l.label })),
             onSelect: (value: string) => {
               const picked = playback.levels.find((l) => l.value === value);
@@ -785,6 +966,21 @@ export function VideoPlayer({
           },
         ]
       : []),
+    ...(tracks.length ? [{
+      id: "subtitles", label: "Subtitles/CC", value: captionsOn ? "on" : "off",
+      valueLabel: captionsOn ? (tracks[captionLanguage]?.label ?? "On") : "Off",
+      items: [{ value: "off", label: "Off" }, { value: "on", label: "On" }],
+      onSelect: (value: string) => { if ((value === "on") !== captionsOn) toggleCaptions(); },
+      groups: [{ id: "language", label: "Language", value: String(captionLanguage),
+        items: tracks.map((track, index) => ({ value: String(index), label: track.label })), onSelect: selectCaptionLanguage }],
+    }] : []),
+    ...(playback.audioTracks.length ? [{
+      id: "audio", label: "Audio track", value: playback.currentAudioTrack,
+      items: playback.audioTracks, onSelect: playback.setAudioTrack,
+    }] : []),
+    { id: "sleep", label: "Sleep timer", value: sleepTimer.value,
+      items: [{ value: "off", label: "Off" }, ...[10, 15, 30, 45, 60].map((minutes) => ({ value: String(minutes), label: `${minutes} minutes` })), { value: "end", label: "End of video" }],
+      onSelect: sleepTimer.select },
   ];
 
   return (
@@ -800,20 +996,35 @@ export function VideoPlayer({
         // exact width the sidebar made the player narrower (356px stage, 200px
         // more bar). Container queries make the tiers track the real budget.
         "@container/stage relative w-full select-none overflow-hidden bg-black",
-        variant === "embed" ? "h-full" : "aspect-video rounded-2xl",
+        // The embed fills its iframe. In theater the band (WatchView) owns the
+        // height and the full-bleed edges, so the stage fills it with no radius
+        // — but only at the two-column breakpoint, where theater exists at all;
+        // below it theater is inert and the stage stays its own 16:9 card.
+        variant === "embed"
+          ? "h-full"
+          : theater
+            ? "aspect-video rounded-2xl xl:aspect-auto xl:h-full xl:rounded-none"
+            : "aspect-video rounded-2xl",
+        // Hide the cursor with the chrome: a lone arrow floating over a
+        // full-bleed frame is the one piece of UI left when everything else has
+        // faded. Any pointer move calls bump() and brings both back.
+        !controlsVisible && "cursor-none",
       )}
       onPointerMove={bump}
       onPointerDown={bump}
+      onPointerLeave={onStageLeave}
       onFocus={() => setFocusWithin(true)}
       onBlur={onContainerBlur}
     >
       <video
         ref={videoRef}
         playsInline
-        className="h-full w-full bg-black object-contain"
+        className="h-full w-full touch-manipulation bg-black object-contain"
+        // Set before src: native IPFS loads must omit cross-origin credentials.
+        crossOrigin={playback.delivery?.source === "ipfs" ? "anonymous" : undefined}
         src={playback.src}
         poster={posterUrl}
-        onClick={togglePlay}
+        {...surfaceHandlers}
       >
         {tracks.map((t) => (
           <track key={t.language} kind="captions" srcLang={t.language} label={t.label} src={t.url} />
@@ -835,195 +1046,151 @@ export function VideoPlayer({
 
       {children}
 
-      {/* Center play affordance while paused — decorative; the surface click and
-          the bar's Play button are the real, accessible controls. Suppressed once
-          the end card takes over the surface. */}
-      {paused && !ended ? (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 flex items-center justify-center"
-        >
-          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm">
-            <svg viewBox="0 0 24 24" className="ml-0.5 h-7 w-7" fill="currentColor" aria-hidden="true">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </span>
-        </div>
-      ) : null}
+      {seekFeedback ? <div role="status" aria-live="polite" aria-label={`${seekFeedback.seconds} seconds ${seekFeedback.direction > 0 ? "forward" : "backward"}`}
+        data-testid="seek-feedback" className={`pointer-events-none absolute inset-y-0 flex w-[35%] items-center justify-center text-white ${seekFeedback.direction > 0 ? "right-0" : "left-0"}`}>
+        <span className="flex flex-col items-center gap-2 rounded-full bg-black/55 px-6 py-5 text-sm font-semibold">
+          {seekFeedback.direction > 0 ? <ChevronRightIcon size={24} /> : <ChevronLeftIcon size={24} />}
+          <span>{seekFeedback.seconds} seconds</span>
+        </span>
+      </div> : null}
+      {!ended ? <PlaybackFeedback key={`${video.id}-${paused}`} paused={paused} /> : null}
 
       {/* The overlay control bar over a bottom scrim. Hidden = opacity only
           (never display), so focus is never lost; global reduced-motion neutralizes
           the fade. */}
-      <div
-        ref={controlsRef}
-        data-testid="player-controls"
-        className={cn(
-          "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0.5 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-1.5 pb-1.5 pt-10 transition-opacity sm:px-3 sm:pb-2",
-          controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
-        )}
-      >
-        <SeekBar
-          currentTime={currentTime}
-          duration={duration}
-          buffered={buffered}
-          onSeek={seekTo}
-          storyboard={storyboard}
-          chapters={chapters}
-        />
-        <div className="flex items-center gap-0.5 sm:gap-1">
-          <OverlayButton label={paused ? "Play" : "Pause"} onClick={togglePlay}>
-            {paused ? (
-              <svg viewBox="0 0 24 24" className="ml-0.5 h-5 w-5" fill="currentColor" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
-                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-              </svg>
-            )}
-          </OverlayButton>
-
-          {/* Mute joins the bar at a 480px stage; below that it lives in the
-              overflow menu (a phone's hardware volume covers the common case). */}
-          <div className="hidden @min-[480px]/stage:contents">
-            <VolumeControl
-              volume={volume}
-              muted={muted}
-              onToggleMute={toggleMute}
-              onSetVolume={applyVolume}
-            />
-          </div>
-
-          {/* Elapsed always; the "/ total" tail costs ~46px on a long video and is
-              held back until the stage can afford it. The total is never lost to
-              assistive tech — SeekBar's aria-valuetext reads "X of Y". */}
-          <span className="whitespace-nowrap px-0.5 text-[11px] font-medium tabular-nums text-white sm:text-xs">
-            {formatDuration(currentTime)}
-            <span className="hidden @min-[420px]/stage:inline">
-              <span className="text-white/70">/</span>
-              {formatDuration(duration)}
-            </span>
-          </span>
-
-          {/* Current chapter title (CORE-15): muted + truncated, held off the
-              narrowest phone bar (< sm) so it never crowds the core controls. */}
-          {currentChapterTitle ? (
-            <span className="hidden min-w-0 max-w-[8rem] truncate px-0.5 text-[11px] text-white/70 @min-[900px]/stage:inline-block @min-[1100px]/stage:max-w-[14rem]">
-              {currentChapterTitle}
-            </span>
-          ) : null}
-
-          <div className="flex-1" />
-
-          {/* Autoplay-next toggle (YouTube parity): leads the right-hand cluster
-              (YouTube's autoplay switch sits just before captions/settings). A
-              watch-page concern — an embed must never auto-chain to another
-              video — so it is held off the embed shell. pressed = autoplay on;
-              its snapshot flows through the same useSyncExternalStore wiring as
-              the end card, so SSR/first-client render is stable. */}
-          {variant === "watch" ? (
-            <div className="hidden @min-[700px]/stage:contents">
+      <PlayerTipProvider value={tipHandle}>
+        <div
+          ref={controlsRef}
+          data-testid="player-controls"
+          className={cn(
+            // The scrim is a TALL soft ramp (~140px on a desktop stage), not a
+            // 40px band: the HIG's clear-material-over-bright-video guidance is a
+            // 35% dimming layer, and a short ramp leaves white glyphs sitting on
+            // whatever frame happens to be under them. Held shorter on a phone
+            // stage, which is only ~185px tall in total.
+            "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0 px-2 pb-1 sm:px-3 sm:pb-1",
+            "transition-opacity duration-[250ms] ease-out motion-reduce:transition-none",
+            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+        >
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-36 bg-gradient-to-t from-black/80 via-black/45 via-55% to-transparent" />
+          <PlayerTooltipLayer tip={tip} anchorRef={tipAnchorRef} />
+          <SeekBar
+            currentTime={currentTime}
+            duration={duration}
+            buffered={buffered}
+            onSeek={seekTo}
+            onSkip={seekBy}
+            storyboard={storyboard}
+            chapters={chapters}
+          />
+          <div className="flex items-center gap-0">
             <OverlayButton
-              label={autoplayEnabled ? "Autoplay next is on" : "Autoplay next is off"}
-              pressed={autoplayEnabled}
-              onClick={onToggleAutoplay}
+              label={paused ? "Play" : "Pause"}
+              tipKeys={CONTROL_SHORTCUT_KEYS.play}
+              onClick={togglePlay}
             >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="M10 9.5v5l4-2.5z" fill="currentColor" stroke="none" />
-              </svg>
+              {paused ? <PlayGlyph /> : <PauseGlyph />}
+            </OverlayButton>
+
+            {/* Mute joins the bar at a 480px stage; below that it lives in the
+                overflow menu (a phone's hardware volume covers the common case). */}
+            <div className="hidden @min-[480px]/stage:contents">
+              <VolumeControl
+                volume={volume}
+                muted={muted}
+                onToggleMute={toggleMute}
+                onSetVolume={applyVolume}
+              />
+            </div>
+
+            {/* Elapsed always; the "/ total" tail costs ~46px on a long video and is
+                held back until the stage can afford it. The total is never lost to
+                assistive tech — SeekBar's aria-valuetext reads "X of Y". */}
+            <span className="whitespace-nowrap px-1 text-[12px] font-medium tabular-nums text-white/85 @min-[480px]/stage:text-[13px]">
+              {formatDuration(currentTime)}
+              <span className="hidden @min-[420px]/stage:inline">
+                <span className="px-0.5 text-white/70">/</span>
+                {formatDuration(duration)}
+              </span>
+            </span>
+
+            {/* Current chapter title (CORE-15): muted + truncated, held off the
+                narrowest phone bar (< sm) so it never crowds the core controls. */}
+            {currentChapterTitle ? (
+              <span className="hidden min-w-0 max-w-[8rem] truncate px-1 text-[12px] text-white/70 @min-[900px]/stage:inline-block @min-[1100px]/stage:max-w-[14rem]">
+                {currentChapterTitle}
+              </span>
+            ) : null}
+
+            <div className="min-w-0 flex-1" />
+            <div className="flex shrink-0 items-center gap-0 @min-[600px]/stage:gap-1">
+
+            {/* Autoplay-next toggle (YouTube parity): leads the right-hand cluster
+                (YouTube's autoplay switch sits just before captions/settings). A
+                watch-page concern — an embed must never auto-chain to another
+                video — so it is held off the embed shell. pressed = autoplay on;
+                its snapshot flows through the same useSyncExternalStore wiring as
+                the end card, so SSR/first-client render is stable. */}
+            {variant === "watch" ? (
+              <div className="hidden @min-[420px]/stage:contents">
+                <AutoplaySwitch enabled={autoplayEnabled} onToggle={onToggleAutoplay} />
+              </div>
+            ) : null}
+
+            {tracks.length > 0 ? (
+              <OverlayButton
+                label="Captions"
+                tip="Subtitles/closed captions"
+                tipKeys={CONTROL_SHORTCUT_KEYS.captions}
+                pressed={captionsOn}
+                onClick={toggleCaptions}
+              >
+                <CaptionsGlyph />
+              </OverlayButton>
+            ) : null}
+
+            <PlayerOverflowMenu toggles={overflowToggles} groups={overflowGroups} resolution={playback.activeHeight ?? decodedHeight} />
+            {pipSupported ? <div className="hidden @min-[600px]/stage:contents">
+              <OverlayButton label={pipActive ? "Exit picture-in-picture" : "Picture-in-picture"}
+                tip="Picture-in-picture" tipKeys={CONTROL_SHORTCUT_KEYS.pip} pressed={pipActive} onClick={togglePip}>
+                <PipGlyph />
+              </OverlayButton>
+            </div> : null}
+
+
+            {/* Theater is a watch-page layout mode and only reflows the two-column
+                stage at lg+, so the toggle appears only there (below lg the page is
+                already single-column — the button would be a no-op, and it would
+                crowd the phone control bar). display:contents keeps it a flush flex
+                item without an extra box. */}
+            {variant === "watch" ? (
+              <div className="hidden @min-[600px]/stage:contents">
+                <OverlayButton
+                  label="Theater mode"
+                  tip="Cinema mode"
+                  tipKeys={CONTROL_SHORTCUT_KEYS.theater}
+                  pressed={theater}
+                  onClick={() => toggleTheater()}
+                >
+                  <TheaterGlyph />
+                </OverlayButton>
+              </div>
+            ) : null}
+
+            <OverlayButton
+              label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              tip={isFullscreen ? "Exit full screen" : "Full screen"}
+              tipKeys={CONTROL_SHORTCUT_KEYS.fullscreen}
+              pressed={isFullscreen}
+              onClick={toggleFullscreen}
+            >
+              {isFullscreen ? <FullscreenExitGlyph /> : <FullscreenEnterGlyph />}
             </OverlayButton>
             </div>
-          ) : null}
-
-          {tracks.length > 0 ? (
-            <OverlayButton label="Captions" pressed={captionsOn} onClick={toggleCaptions}>
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="M8 11.5a1.5 1.5 0 0 0-3 0v1a1.5 1.5 0 0 0 3 0M15 11.5a1.5 1.5 0 0 0-3 0v1a1.5 1.5 0 0 0 3 0" />
-              </svg>
-            </OverlayButton>
-          ) : null}
-
-          <div className="hidden @min-[480px]/stage:contents">
-            <SpeedMenu speed={speed} onSelect={setSpeed} variant="overlay" />
           </div>
-
-          {/* "Auto (1080p)" is 123px wide — the single widest control in the bar,
-              and the one that clipped Fullscreen even on a 1024px desktop. */}
-          <div className="hidden @min-[820px]/stage:contents">
-            <QualityMenu
-              levels={playback.levels}
-              currentQuality={playback.currentQuality}
-              activeHeight={playback.activeHeight}
-              pending={playback.pending}
-              onSelect={playback.setQuality}
-              variant="overlay"
-            />
-          </div>
-
-          {/* Theater is a watch-page layout mode and only reflows the two-column
-              stage at lg+, so the toggle appears only there (below lg the page is
-              already single-column — the button would be a no-op, and it would
-              crowd the phone control bar). display:contents keeps it a flush flex
-              item without an extra box. */}
-          {variant === "watch" ? (
-            <div className="hidden @min-[860px]/stage:contents">
-              <OverlayButton
-                label="Theater mode"
-                pressed={theater}
-                onClick={() => toggleTheater()}
-              >
-                {theater ? (
-                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="6" y="7" width="12" height="10" rx="1.5" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="3" y="6" width="18" height="12" rx="1.5" />
-                  </svg>
-                )}
-              </OverlayButton>
-            </div>
-          ) : null}
-
-          {/* PiP hidden (not disabled) where the browser can't support it; also
-              held off the narrowest phone bar (< sm) so it never crowds the
-              always-visible core controls. */}
-          {pipSupported ? (
-            <div className="hidden @min-[700px]/stage:contents">
-              <OverlayButton
-                label={pipActive ? "Exit picture-in-picture" : "Picture-in-picture"}
-                pressed={pipActive}
-                onClick={togglePip}
-              >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <rect x="11" y="11" width="8" height="5" rx="1" fill="currentColor" stroke="none" />
-                </svg>
-              </OverlayButton>
-            </div>
-          ) : null}
-
-          <PlayerOverflowMenu toggles={overflowToggles} groups={overflowGroups} />
-
-          <OverlayButton
-            label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            pressed={isFullscreen}
-            onClick={toggleFullscreen}
-          >
-            {isFullscreen ? (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M16 21v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" />
-              </svg>
-            )}
-          </OverlayButton>
         </div>
-      </div>
+      </PlayerTipProvider>
 
       {/* End-of-playback card (PLAY-08): autoplay-next countdown when a next
           video is available, else a plain replay affordance. Media-overlay zone. */}
@@ -1031,8 +1198,11 @@ export function VideoPlayer({
         <EndCard
           nextVideo={nextVideo}
           nextHref={nextHref}
-          autoplayEnabled={autoplayEnabled}
-          onToggleAutoplay={toggleAutoplay}
+          autoplayEnabled={autoplayEnabled && !sleepTimer.expired}
+          onToggleAutoplay={() => {
+            if (sleepTimer.expired) { sleepTimer.select("off"); if (!autoplayEnabled) onToggleAutoplay(); }
+            else onToggleAutoplay();
+          }}
           onReplay={replayVideo}
           onDismiss={dismissEndCard}
         />
@@ -1061,7 +1231,7 @@ export function VideoPlayer({
             <button
               type="button"
               onClick={playback.retry}
-              className="pointer-events-auto cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="focus-ring-media pointer-events-auto cursor-pointer rounded-full bg-white/15 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-white/25"
             >
               Try again
             </button>

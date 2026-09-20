@@ -1064,6 +1064,22 @@ describe("delivery wiring warnings (Advanced page)", () => {
     );
   });
 
+  it("keeps IPFS delivery separate from pinning and switchable when unconfigured", async () => {
+    mocks.getInstanceSettings.mockResolvedValue({ settings: [{
+      key: "delivery_ipfs_enabled", type: "bool", value: true, default: false,
+      overridden: true, page: "advanced", section: "delivery",
+    }] });
+    mocks.getInfrastructure.mockResolvedValue({ features: [{ key: "ipfs", enabled: true, configured: false }] });
+    render(<ConfigForm page="advanced" />);
+    const toggle = await screen.findByRole("switch", { name: "IPFS delivery" });
+    expect(screen.getByText(/does not start or stop pinning/)).toBeTruthy();
+    expect(await screen.findByText(/public IPFS mirror is not configured/)).toBeTruthy();
+    expect((toggle as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(mocks.updateInstanceSettings).toHaveBeenCalledWith({ delivery_ipfs_enabled: false }));
+  });
+
   it("shows no warn when the deploy backs both toggles", async () => {
     mocks.getInfrastructure.mockResolvedValue({
       storage: { backend: "s3" },

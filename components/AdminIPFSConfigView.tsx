@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
+import { IPFSPolicyForm } from "@/components/admin/IPFSPolicyForm";
 import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -22,9 +23,13 @@ type LoadState = "loading" | "ready" | "disabled" | "error";
 type ReconcileScope = "all" | "public" | "private";
 
 export function AdminIPFSConfigView() {
+  const [statusVersion, setStatusVersion] = useState(0);
   return (
     <RoleGate minRole="admin" action="configure IPFS mirroring">
-      <IPFSConfigPanel />
+      <div className="flex flex-col gap-8">
+        <IPFSPolicyForm onSaved={() => setStatusVersion((n) => n + 1)} />
+        <IPFSConfigPanel key={statusVersion} />
+      </div>
     </RoleGate>
   );
 }
@@ -114,6 +119,7 @@ export function IPFSConfigPanel() {
 
   const publicNetwork = status.networks.public;
   const privateNetwork = status.networks.private;
+  const anyEnabled = publicNetwork.enabled || privateNetwork.enabled;
 
   return (
     <div className="flex max-w-4xl flex-col gap-8">
@@ -124,7 +130,7 @@ export function IPFSConfigPanel() {
               <h2 id="ipfs-overview-heading" className="text-[15px] font-bold tracking-tight text-fg">
                 Mirror overview
               </h2>
-              <Badge variant="success">Configured</Badge>
+              <Badge variant={anyEnabled ? "success" : "neutral"}>{anyEnabled ? "Configured" : "Not enabled"}</Badge>
             </div>
             <p className="mt-1 text-[13px] text-fg-muted">
               IPFS is a bandwidth-saving mirror. Local or S3 storage remains authoritative.
@@ -191,7 +197,7 @@ export function IPFSConfigPanel() {
         </div>
         <Card className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={() => void reconcile("all")} disabled={reconciling !== null}>
+            <Button onClick={() => void reconcile("all")} disabled={!anyEnabled || reconciling !== null}>
               {reconciling === "all" ? "Reconciling…" : "Reconcile all configured tiers"}
             </Button>
             {reconciling !== null ? <Spinner label={`Reconciling ${reconciling} IPFS mirror`} /> : null}

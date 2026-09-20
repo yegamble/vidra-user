@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -21,6 +21,10 @@ vi.mock("next/navigation", () => ({
 
 // The header's satellite widgets have their own suites and need auth/toast
 // providers; this suite covers the W4 branding: logo slots + hide-name.
+const session = vi.hoisted(() => ({ role: undefined as string | undefined }));
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useOptionalSession: () => ({ user: session.role ? { id: "u1", role: session.role } : null }),
+}));
 vi.mock("@/components/auth/AccountMenu", () => ({ AccountMenu: () => null }));
 vi.mock("@/components/NotificationsBell", () => ({ NotificationsBell: () => null }));
 vi.mock("@/components/SearchAutocomplete", () => ({
@@ -30,6 +34,13 @@ vi.mock("@/components/SearchAutocomplete", () => ({
 
 import { Header } from "./Header";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
+import {
+  SIDEBAR_ID,
+  readCollapsed,
+  readDrawerOpen,
+  setCollapsed,
+  setImmersive,
+} from "@/lib/sidebar-state";
 
 const API = "http://localhost:8080";
 
@@ -43,12 +54,19 @@ const unset = { url: "", is_fallback: true };
 afterEach(() => {
   cleanup();
   pathname.value = "/";
+  session.role = undefined;
+  act(() => {
+    setImmersive(false);
+    setCollapsed(false);
+  });
+  window.localStorage.clear();
 });
 
 describe("Header branding", () => {
   it("renders the hardcoded wordmark with no snapshot (backend unreachable)", () => {
     render(<Header />);
     expect(screen.getByRole("link", { name: "Vidra" })).toBeTruthy();
+    expect(document.querySelector(".protocol-ribbon")).not.toBeNull();
     expect(screen.queryByRole("img")).toBeNull();
   });
 
@@ -130,6 +148,7 @@ describe("Header branding", () => {
   it("keeps the software wordmark when the software name is not hidden", () => {
     render(<Header instance={snapshot({ hide_software_name: false }, "")} />);
     expect(screen.getByRole("link", { name: "Vidra" })).toBeTruthy();
+    expect(document.querySelector(".protocol-ribbon")).not.toBeNull();
   });
 
   it("falls back to a neutral home label when hidden and the instance has no name", () => {
@@ -142,11 +161,80 @@ describe("Header branding", () => {
   it("still prefers the instance's own name when hidden", () => {
     render(<Header instance={snapshot({ hide_software_name: true })} />);
     expect(screen.getByRole("link", { name: "ExampleTube" })).toBeTruthy();
+    expect(document.querySelector(".protocol-ribbon")).toBeNull();
   });
 
   it("stays hidden on standalone routes", () => {
     pathname.value = "/embed/v1";
     const { container } = render(<Header instance={snapshot({})} />);
     expect(container.querySelector("header")).toBeNull();
+  });
+});
+
+// The header Menu button is the shell's sidebar control (design-system.md: the
+// desktop/tablet rail is toggled from the header; phones keep the BottomTabBar
+// and no hamburger). It drives lib/sidebar-state directly as the rail's sole
+// collapse control, and in an IMMERSIVE shell (theater) it
+// opens the rail as an overlay drawer instead of un-collapsing it.
+describe("Header Menu button", () => {
+  it("renders left of the brand, labelled and wired to the sidebar", () => {
+    render(<Header />);
+    const menu = screen.getByRole("button", { name: "Menu" });
+    expect(menu.getAttribute("aria-controls")).toBe(SIDEBAR_ID);
+    // Desktop/tablet only — phones keep the bottom tab bar.
+    expect(menu.className).toContain("sm:inline-flex");
+    expect(menu.className).toContain("hidden");
+    const brand = screen.getByRole("link", { name: "Vidra" });
+    expect(menu.compareDocumentPosition(brand) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("toggles the shared collapse store and mirrors it in aria-expanded", () => {
+    render(<Header />);
+    const menu = screen.getByRole("button", { name: "Menu" });
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
+    act(() => void fireEvent.click(menu));
+    expect(readCollapsed()).toBe(true);
+    expect(screen.getByRole("button", { name: "Menu" }).getAttribute("aria-expanded")).toBe("false");
+    act(() => void fireEvent.click(screen.getByRole("button", { name: "Menu" })));
+    expect(readCollapsed()).toBe(false);
+  });
+
+  it("reflects changes to the shared collapse preference", () => {
+    render(<Header />);
+    act(() => setCollapsed(true));
+    expect(screen.getByRole("button", { name: "Menu" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("opens the drawer instead of un-collapsing while the shell is immersive", () => {
+    render(<Header />);
+    act(() => setImmersive(true));
+    const menu = screen.getByRole("button", { name: "Menu" });
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
+    act(() => void fireEvent.click(menu));
+    expect(readDrawerOpen()).toBe(true);
+    expect(readCollapsed()).toBe(false); // the persisted preference is untouched
+    expect(screen.getByRole("button", { name: "Menu" }).getAttribute("aria-expanded")).toBe("true");
+    act(() => void fireEvent.click(screen.getByRole("button", { name: "Menu" })));
+    expect(readDrawerOpen()).toBe(false);
+  });
+
+  it("is absent on the admin console, where the console rail replaces the sidebar", () => {
+    pathname.value = "/admin/users";
+    session.role = "admin";
+    render(<Header />);
+    expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
+  });
+
+  it("stays for a non-admin on /admin, who still has the app sidebar", () => {
+    pathname.value = "/admin";
+    session.role = "moderator";
+    render(<Header />);
+    expect(screen.getByRole("button", { name: "Menu" })).toBeTruthy();
+  });
+
+  it("is absent on standalone routes (no shell to toggle)", () => {
+    pathname.value = "/login";
+    render(<Header />);
+    expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
   });
 });

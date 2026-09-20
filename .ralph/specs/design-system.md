@@ -33,19 +33,45 @@ executed deference as absence and made the app read gray-on-gray; it is
   echo the indigo the CTAs already leaned toward while staying clearly distinct
   from Bluesky's brand blue. Never introduce a second interactive hue.
 - **Color beyond the accent must be semantic**, never decorative: status
-  tokens for status, protocol colors inside badges, colored icon tiles in
-  settings-style lists (see "Semantic color & protocol identity"). A color that
-  doesn't *mean* something is still wrong.
+  tokens for status, protocol colors inside badges, tinted icon chips and
+  status dots (`EmptyState`, notification kinds, admin stats) — never behind
+  navigation (see "Semantic color & protocol identity"). A color that doesn't
+  *mean* something is still wrong.
 
 Hard rules:
 - **Mobile-first.** Phone layout (390px) is designed first; wider viewports
   progressively enhance. Never introduce horizontal overflow at 390/768
   (`e2e/responsive.spec.ts` gates this).
 - **Touch targets ≥ 44×44pt** on interactive controls (HIG). Small visual
-  glyphs get padding, not smaller hit areas.
-- **No hamburger menus.** Primary nav is the `BottomTabBar` (< `sm`) and the
-  `Sidebar` (≥ `sm`). Both are `aria-label="Primary"`; only one is ever in the
-  accessibility tree at a time.
+  glyphs get padding, not smaller hit areas. The narrow player seek strip has
+  a documented 24px exception below; its adjacent buttons remain 44px.
+- **No hamburger menu holds the primary nav.** Primary nav is the `BottomTabBar`
+  (< `sm`) and the `Sidebar` (≥ `sm`). Both are `aria-label="Primary"`; only one
+  is ever in the accessibility tree at a time — the destinations are never
+  hidden behind a disclosure a viewer has to find first.
+  *Amended 2026-09-15 (watch theater).* The `Header` carries one nav CONTROL at
+  `sm`+ — a "Menu" icon button, left of the brand, `hidden sm:inline-flex`. It
+  does not hold the nav; it toggles the rail that does:
+  - **normally** it collapses/expands the `Sidebar` through `lib/sidebar-state`;
+    the preference persists. Menu is the sole rail control: there is no
+    redundant Collapse/Expand row inside the sidebar;
+  - **in an immersive shell** — today only the watch page's theater mode, which
+    hides the rail so the stage can span the content area edge to edge, as
+    YouTube closes the guide there — it opens the same panel as an overlay
+    DRAWER. The drawer is modal-shaped, so it IS a modal: `role="dialog"
+    aria-modal="true"`, the shared focus contract (`lib/use-dialog-focus`, the
+    same hook `Modal` uses — focus in, Tab trapped, Escape closes, focus
+    restored to the Menu button) and `inert` on `#main-content` while it is up.
+    It wears `.glass-chrome-solid` — the material's own opaque fallback — because
+    the page behind it there is the theater band's #000, where the translucent
+    chrome drops `fg-muted` to 3.74:1. The scrim starts below the header and
+    stays under its z-index, so the bar the drawer was opened from is still lit
+    and the Menu button can close what it opened. The overlay remains a fixed
+    224px panel, independent of the persisted collapsed-rail preference.
+  It is absent where there is no app sidebar to toggle: below `sm` (phones keep
+  the bottom tab bar and get no hamburger — `e2e/mobile-nav.spec.ts`), on
+  standalone routes, and on the admin console routes, where the console's own
+  rail replaces it.
 - **Safe areas**: the tab bar pads with `env(safe-area-inset-bottom)`
   (viewport-fit=cover is set in `app/layout.tsx`).
 - **WCAG 2.2 AA** minimum. axe (serious/critical) is a hard gate
@@ -100,7 +126,7 @@ below is axe-verified against the redesign (see the contrast contract).
 | `warning-solid` | Apple systemOrange **fill** (dots/tiles) | `#ff9500` | `#ff9f0a` |
 | `live` | the LIVE pulse dot (sits on media) | `#ff453a` | `#ff453a` |
 | `protocol-activitypub` / `-bluesky` / `-ipfs` | tri-protocol identity (badges + ribbon only) | `#6364ff` / `#0085ff` / `#65c2cb` | same |
-| `tile-{blue,gray,red,purple,orange,teal,green,pink,indigo}` | Settings/Admin icon-tile squares | Apple system colors | theme-tuned |
+| `tile-{blue,gray,red,purple,orange,teal,green,pink,indigo}` | tinted icon chips + status dots (EmptyState, notification kinds, admin stats) | Apple system colors | theme-tuned |
 
 Contrast contract (axe-verified, redesign):
 - `fg`/`fg-muted` pass AA (≥4.5:1) on `canvas`, `surface`, `surface-muted`, and
@@ -157,27 +183,160 @@ follow-up.)
   backdrop-blur` pills (LIVE, IPFS), `bg-black/45` dialog scrim, white progress
   bars on media. They sit on imagery, not on themed surfaces.
 - **QR codes** — always dark modules on a white padded tile (scanability).
+- **Ambient glow** (watch page, `components/watch/AmbientGlow.tsx` +
+  `.ambient-glow` in `globals.css`) — the halo behind the player is the video's
+  OWN colour, so it is image, not palette. Invariants (numbers live in the CSS,
+  where they are tuned): **it may never have an edge** — it bleeds past the
+  stage, carries no `overflow` of its own, and its sideways bleed is capped at
+  the gutter so `#main-content`'s clip lands on nothing; the falloff is two
+  nested single-axis gradient masks, **never `mask-composite`** (whose
+  unsupported fallback is the union — a hard rectangle); opacity is a per-theme
+  pair whose ceiling is `text-fg-muted` contrast against a WHITE video frame,
+  not taste; the cross-fade is never longer than the sampling cadence; and it is
+  off entirely under `prefers-reduced-motion`, hidden under reduced
+  transparency / increased contrast / forced colors, and not painted below `md`.
+
+**Amended 2026-09-15 (the bespoke player's chrome).** The exception above says
+what colour these controls may be; the player pass settled what they must look
+like. The rules below govern `components/player/*` and nothing else — the app's
+own surfaces keep every rule in this document.
+
+- **Both focus rings need a forced-colors fallback.** `.focus-ring` and
+  `.focus-ring-media` are drawn with `box-shadow` over `outline: none`, and
+  forced-colors mode drops box-shadow — so in the mode that exists for people
+  who need a visible focus indicator, both were invisible. One shared
+  `@media (forced-colors: active)` rule restores a real `outline` in `Highlight`.
+- **Focus is `.focus-ring-media`, not `.focus-ring`.** The accent ring is built
+  from `--surface` and `--focus`; both are surface colours, and over a bright or
+  saturated frame the ring disappears. The media ring is a fixed black
+  separator + white ring + soft outer glow (tvOS focus is scale, shadow and
+  illumination — never a coloured ring). It lives beside `.focus-ring` in
+  `globals.css` and is used by every interactive element in `player/*`.
+- **Scrim.** `bg-gradient-to-t from-black/80 via-black/45 via-55% to-transparent`
+  over ~140px of ramp on a desktop stage (shorter on a phone, where the whole
+  stage is ~185px). The HIG's answer to clear material over bright video is a
+  real dimming layer; a 40px band leaves white glyphs standing on whatever frame
+  happens to be underneath.
+
+  The scrim is what every alpha in the bar is budgeted against, so the budget is
+  a MEASUREMENT, not a target. Sampled from composited element screenshots at a
+  1920 viewport (860px stage) with a near-white block under the control row —
+  the worst case a frame can present — the backdrop at the control row reads
+  **85-95**. Against that backdrop:
+
+  | layer | composited | ratio | floor |
+  | --- | --- | --- | --- |
+  | glyphs `text-white/90` | ~239 | 6.3:1 | 4.5 (text), 3 (glyph) |
+  | elapsed `text-white/85` | ~231 | 5.8:1 | 4.5 |
+  | chapter + separator `text-white/70` | ~207 | 4.6:1 | 4.5 |
+  | autoplay ON track `bg-white/80` | 219 | 4.6:1 | 3 |
+  | autoplay OFF track ring `ring-white/70` | 192 | 3.5:1 | 3 |
+
+  Nothing in the bar is allowed below `white/70`: `white/60` computes to 3.9:1,
+  which is a legible-looking value that fails AA for text. Re-sample on any
+  change to the gradient — every row above moves with it.
+- **Buttons.** 44pt round target, 24px glyph, `text-white/90` at rest, a
+  `bg-white/12` hover disc with a 150ms scale (reduced-motion neutralises both).
+  A toggle that is ON adds a 2px white underline under the glyph — `aria-pressed`
+  was always there, but nothing a SIGHTED viewer could read was.
+- **Tooltips: one per BAR, never one per button.** Controls report hover/focus to
+  the control bar, which draws a single `bg-black/85` bubble ABOVE the whole
+  transport (the seek bar included), horizontally centred on the control and
+  clamped inside the stage, with the keyboard shortcut in a `<kbd>` keycap
+  (thin `white/40` border, `white/80` text, 11px). Immediate on mouse hover and
+  keyboard focus, never on touch (`hover: none`). Player controls therefore
+  carry NO native `title`. Not wired to `aria-describedby`: an icon-only control
+  already carries those words as its accessible name.
+- **Auto-hide.** The chrome fades over 250ms after 3s idle while playing, AND
+  immediately when the pointer leaves the stage; the cursor goes with it
+  (`cursor-none`). It never hides while paused, while focus is inside the bar
+  (an open menu holds it), and it hides by OPACITY only — never `display` — so
+  focus is never lost.
+- **On/off controls that are settings, not actions, are switches.** Autoplay is
+  `components/player/AutoplaySwitch.tsx`: `role="switch"` + `aria-checked` (not
+  `aria-pressed`), a 36×14 track with an overlapping 20px knob carrying a dark
+  play/pause glyph. One component, used by the control bar and the end card. The
+  overflow MENU keeps `menuitemcheckbox` rows — a switch inside `role="menu"` is
+  the wrong ARIA, and that menu is a themed surface, not a media overlay.
+
+  OFF is a DARK track with a white hairline, never a dim white one: `bg-white/30`
+  measured 2.2:1 against the scrim, so the one state the control exists to
+  communicate was the one you could not see. The name does NOT carry the state
+  either — one function, one name across the bar, the menu and the end card
+  (WCAG 3.2.4); `aria-checked`, the knob and the tooltip carry it.
+- **Reduced motion must cancel the property the hover actually sets.** The
+  scale utilities compile to the `scale` PROPERTY in Tailwind v4, so
+  `motion-reduce:transform-none` cannot undo `hover:scale-105` — it looks like a
+  guard and does nothing. The one correct recipe lives in
+  `components/player/chrome.ts` (`MEDIA_PRESS`) and is imported, never retyped.
+
+### Player transport and settings (2026-09-17)
+
+The right control group contains Autoplay, Captions (when available), Settings,
+Picture-in-Picture beside Settings, Cinema mode and Fullscreen. Speed, quality, subtitle language, available audio
+tracks, ambient mode, sleep timer and PiP live in Settings. Autoplay is also in
+Settings. Container-width tiers move controls that cannot fit into Settings;
+44px button targets never shrink. Theater uses YouTube’s current screen-and-outward-chevrons glyph; the toggle’s
+pressed state communicates whether cinema mode is active. Glyphs are 24px; the transient center feedback uses
+36px glyphs and disappears after two seconds, including while paused.
+
+The seek track sits on the lower edge of its target, directly above the 44px
+button row. Below a 420px stage its target is 24px tall, an explicit compact
+exception to the usual 44px guidance; wider stages keep 44px. At a 320px phone
+viewport, the 288×162px video center otherwise falls inside the stacked 92px
+controls. The compact strip reduces that stack to 72px, leaving the center
+tappable. Do not enlarge hit areas into the video or overlap neighboring
+buttons. The track-to-button spacing stays unchanged. The scrim is an absolute
+background with no layout padding.
+Settings shows current values and navigable submenus; menus remeasure when
+contents resize, remain within the viewport and preserve keyboard focus.
+Hover/focus fills must differ from the menu surface in both themes.
+
+Space and K toggle play/pause except while typing or operating another native
+control. Fixed arrow-key jumps are 5 seconds; J/L and mobile side double-taps
+are 10 seconds. Rapid repeats show a cumulative total, resetting after 750ms
+or a direction change. Touch seeks use the outer 35% on each side; the middle
+30% reveals controls first if hidden, then single-tap toggles playback. Side
+single-taps only reveal controls; a second nearby tap within 300ms begins seeking.
+These regions/time windows are SizeTube/Vidra choices, not claimed YouTube
+constants. Drags, long presses and multitouch cancel tap recognition. Touch
+handlers attach only to the video surface and leave controls, scrolling and
+pinch zoom alone.
 
 ## Semantic color & protocol identity (2026-07-19)
 
 Color beyond the accent is allowed ONLY in these forms — each carries meaning,
 none touches chrome:
 
-- **Settings icon tiles** (System Settings pattern): grouped settings /
-  admin / moderation rows lead with a `rounded-lg` colored tile (28×28,
-  `IconTile` primitive) holding a white 16px glyph. The tile is *supporting*,
-  never the sole carrier of meaning (the adjacent label is); one hue per
-  destination, drawn from the fixed `--tile-*` palette in `globals.css` (blue
-  `#007aff`/`#0a84ff`, gray `#8e8e93`/`#98989d`, red `#ff3b30`/`#ff453a`,
-  purple `#af52de`/`#bf5af2`, orange `#ff9500`/`#ff9f0a`, teal
-  `#30b0c7`/`#40c8e0`, green `#34c759`/`#30d158`, pink `#ff2d55`/`#ff375f`,
-  indigo `#5856d6`/`#5e5ce6`) — never ad-hoc per-component hexes. Suggested
-  mapping (brief): Profile blue · Security gray · Notifications red · Playback
-  purple · Search orange · Devices teal · Connections green · Donations pink ·
-  Privacy indigo. Within Privacy & safety the two list destinations split by
-  severity: **Mutes = indigo, Blocked = red** (blocking is a harder boundary than
-  muting) — one hue per destination. Use `<IconTile color="blue">`; the white
-  glyph is decorative. (Catalog: `components/settings/sections.tsx`.)
+- **Navigation icons are monochrome — never colored tiles.** *(Rule changed
+  2026-09-15; the `IconTile` primitive and the per-destination hue mapping it
+  carried are **withdrawn and deleted**.)* Settings rows used to lead with a
+  28×28 Apple-system-color square holding a white glyph — the iOS System
+  Settings look. Nothing else in the app navigates that way: the Sidebar
+  (`components/Sidebar.tsx`), StudioNav, the admin rail
+  (`components/AdminConsole.tsx`) and `ModerationSectionNav` all draw a plain
+  stroke glyph, `text-fg-muted` at rest, the row's `text-accent-text` when
+  active. Eleven saturated squares in a column the app otherwise renders in one
+  hue read as a foreign surface, so **every nav row — the desktop
+  `SettingsRail` and the mobile grouped rows included — leads with a plain
+  monochrome icon**. The standard density is an **18px glyph on a 44px
+  (`min-h-11`) row** — Sidebar, `SettingsRail` and `ModerationSectionNav`; the
+  **admin console rail deliberately runs denser**, 16px on `h-9` rows, with its
+  "More" group carrying no icons at all. Stroke weight follows the caller
+  (`1.9` in the Sidebar and `SettingsRail`, the set's `1.8` default in
+  `ModerationSectionNav`). What is universal is the *treatment* — one plain
+  glyph, muted at rest, accent when active, never a tile.
+  (Catalog: `components/settings/sections.tsx`; it carries no hue.)
+- **Tinted icon chips and status dots** keep the fixed `--tile-*` Apple-system
+  palette in `globals.css` (blue `#007aff`/`#0a84ff`, gray `#8e8e93`/`#98989d`,
+  red `#ff3b30`/`#ff453a`, purple `#af52de`/`#bf5af2`, orange
+  `#ff9500`/`#ff9f0a`, teal `#30b0c7`/`#40c8e0`, green `#34c759`/`#30d158`,
+  pink `#ff2d55`/`#ff375f`, indigo `#5856d6`/`#5e5ce6`) — never ad-hoc
+  per-component hexes. It survives the tile's withdrawal because it is what
+  `EmptyState`'s icon-in-tinted-circle, the notification-kind chips
+  (`bg-tile-*/12 text-tile-*`) and the admin stat dots are drawn from: a ~12%
+  tint behind a same-hue glyph, or a solid dot — never a saturated fill under
+  navigation.
 - **Protocol colors inside badges**: federation/protocol identity is colored
   *inside* `Badge`-shaped elements only — the `Badge` `protocol` variant paints
   a ~12% brand tint + a full-strength brand **dot**, keeping an `fg` label (the
@@ -212,7 +371,7 @@ none touches chrome:
 
 The following workflow-level patterns are sanctioned; guardrails must not be
 read as blocking them. Each keeps the existing nav rules (BottomTabBar/Sidebar
-primary nav, no hamburgers, one `<main>`, 44pt targets):
+primary nav, no hamburger holding that nav, one `<main>`, 44pt targets):
 
 - **Split-view settings** (macOS System Settings): Settings, Admin, and
   Moderation replace their long horizontal tab strips with a section sidebar
@@ -261,7 +420,8 @@ primary nav, no hamburgers, one `<main>`, 44pt targets):
   hidden for a pure editor) — via `SegmentedControl`. Live's create form and the create-channel
   form are launched `Modal`s (dialog on desktop / `variant="sheet"` on mobile),
   consistent with the stepped upload sheet. Keeps the nav rules
-  (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger, 44pt targets).
+  (BottomTabBar/Sidebar primary nav, one `<main>`, no hamburger holding that
+  nav, 44pt targets).
 - **"+ Create" dropdown** (YouTube two-tier Create pattern): a single global
   creator entry that fans out into the flows rather than dumping the user on the
   dashboard. Desktop lives in `Header` as a `Dropdown` (the outline "+ Create"
@@ -358,7 +518,6 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
 | Modals (dialog) | `rounded-[20px]` |
 | Feature thumbnails / hero media (feed) | `rounded-2xl` |
 | Bottom sheets | `rounded-t-[22px]` |
-| Icon tiles (`IconTile`) | `rounded-lg` |
 | Menu items inside popovers | `rounded-lg` |
 
 ## Component patterns (from the templates)
@@ -407,10 +566,14 @@ Scale (Tailwind defaults; the premium look comes from weight + tracking):
   variant="federated"` marks a remote origin with the tri-protocol ribbon on
   its top edge (the third pinned ribbon placement). The standalone ribbon is
   `<ProtocolRibbon>` (placements a + b).
-- **Icon tiles**: `<IconTile color="blue">…</IconTile>` — a 28×28 `rounded-lg`
-  Apple-system-color square with a white 16px glyph, leading grouped
-  Settings/Admin/Moderation rows (one hue per destination; see the tile palette
-  above).
+- **Nav row icons**: a plain `components/icons` glyph — muted at rest, accent
+  when active, never a colored tile (the `IconTile` primitive was withdrawn
+  2026-09-15). Standard density is 18px on a `min-h-11` row (`<Icon size={18}
+  className="shrink-0" />`, `strokeWidth={1.9}` where the caller wants the
+  Sidebar's weight): Sidebar, `SettingsRail`, the mobile grouped settings rows,
+  `ModerationSectionNav`. `AdminConsole`'s rail is the one sanctioned
+  exception — 16px on `h-9`, icons on the primary group only — because it lists
+  fourteen destinations and progressive disclosure is the point of that rail.
 - **Grouped settings rows** (mobile settings): a `rounded-2xl overflow-hidden`
   group, rows `divide-y divide-border-subtle`, each row label + optional
   `text-fg-muted` sub-line + chevron; group headers `text-xs font-bold uppercase
@@ -516,6 +679,11 @@ concentric: the tab bar's cell is 17px = 22 − (4px `p-1` + 1px border).
 
 ## Component primitives (`components/ui/`)
 
+Popup menus (`Dropdown`, `PlayerMenu`, `PlayerOverflowMenu`) share `MenuSurface`:
+raised panel, strong hover/keyboard-focus fill in both themes, and danger-tinted
+destructive rows. Disabled rows keep no interactive fill; each consumer retains
+its own placement, focus navigation, and selection behavior.
+
 Import from the barrel `@/components/ui`. All primitives are token-driven and
 carry the a11y contract (see their doc comments): `Button`/`LinkButton`
 (**`rounded-[10px]`**, primary = solid `accent` + accent focus ring; variants
@@ -535,8 +703,8 @@ safe-area), `Dropdown` (menu-button pattern), `Tabs` (WAI-ARIA tabs), `Toast`
 pills **`inverse`** `bg-fg text-canvas` (ADMIN) / **`strong`**
 `bg-surface-strong text-fg-muted` (MOD), + **`protocol`** (brand tint + dot +
 `fg` label, `protocol` prop) / **`federated`** (remote origin, tri-protocol
-ribbon top edge)), `IconTile` (28×28 Apple-color tile + white glyph, `color`
-prop), `Avatar`, `Skeleton`, `Spinner`, `EmptyState` (icon-in-tinted-circle),
+ribbon top edge)), `Avatar`, `Skeleton`, `Spinner`, `EmptyState`
+(icon-in-tinted-circle),
 `ErrorState`, `LoadMoreButton`. `ProtocolRibbon` (components/) is the standalone
 tri-protocol gradient rule.
 Custom components, not UI-kit wrappers. Do not fork these patterns locally.
@@ -562,7 +730,22 @@ never substitute a library's variant when the design's path differs. Typed
   the bespoke player chrome (`player/*`), keyboard keycaps (`KeyboardShortcutsHelp`),
   and a few app-specific marks with no design-vocabulary equivalent (federated
   globe, protocol/privacy glyphs, quality sliders, messaging attachment-kind
-  glyphs, the new-message compose mark, and the sidebar collapse double-chevron).
+  glyphs and the new-message compose mark).
+- **The player-chrome exception is ONE module (2026-09-15):
+  `components/player/icons.tsx`.** `player/*` may inline SVG, but not at call
+  sites: the bar's coherence is a property of the SET, and the old bar proved
+  it — feather-style 2px outlines for speaker and captions next to a solid play
+  triangle, which is what made a bespoke player read as a stock `<video>`. The
+  module's house style: 24-unit viewBox; SOLID SF-Symbols-like forms
+  (`play.fill`, `speaker.wave.2.fill`, `captions.bubble.fill`, `pip.fill`);
+  frames drawn as filled paths with cutouts rather than hairlines so
+  their optical weight matches the solids; `fill="currentColor"`, `aria-hidden`;
+  and sizing through a `size` prop that sets the width/height ATTRIBUTES —
+  never `h-*`/`w-*` classes, because `cn()` is a plain concat with no
+  tailwind-merge and that is exactly how the kebab glyph got squeezed. Default
+  24px, on 44pt round targets. A glyph the chrome does not use does not belong
+  in it: speed and quality live in the Settings submenu, and menu rows
+  use the app set's `CheckIcon`, because those rows are a themed surface.
 - **SVG only, never emoji or unicode-glyph icons.** `npm run lint:icons`
   (`scripts/check-no-emoji.mjs`) is a **hard CI gate** that fails on emoji
   codepoints in `components/` and `app/` JSX. Non-icon glyphs it deliberately
@@ -595,12 +778,15 @@ never substitute a library's variant when the design's path differs. Typed
 
 ## App shell
 
-- `Header` — brand, centered pill `SearchBox` (hidden < `sm`; Search is a tab
+- `Header` — Menu button (≥ `sm`; toggles the `Sidebar`, see the nav rule
+  above), brand, centered pill `SearchBox` (hidden < `sm`; Search is a tab
   there), pill Create → `/studio` (hidden < `sm`), `NotificationsBell`,
   `AccountMenu`. Sticky and **full-bleed**: `.glass-chrome .glass-chrome-flush`
   spanning the viewport with no top/side gutter and a single bottom hairline,
-  safe-area padded at the top. The row's own `px-6 sm:px-8` is the only inset,
-  which keeps the brand where the earlier floating toolbar put it optically.
+  safe-area padded at the top. The row uses `px-6` on phones and `sm:pl-5
+  sm:pr-8` on desktop/tablet. Menu and branding form a gapless desktop group:
+  the Menu glyph centers on the sidebar icons, and branding starts at its text
+  column. The outer gap to search and actions stays unchanged.
   Sticky offsets that park under it (e.g. `Sidebar`) measure from its `h-16
   sm:h-14` height, not from a gutter.
   The search pill carries a ⌘K / Ctrl K keycap and `aria-keyshortcuts`:
@@ -611,12 +797,55 @@ never substitute a library's variant when the design's path differs. Typed
 - `Sidebar` (≥ `sm`) — every primary destination + role-gated
   Moderation/Admin, `aria-current="page"`, collapsible icon rail (persisted),
   floating in a rounded `.glass-chrome` panel rather than anchoring to an edge.
+  ONE panel, TWO placements: that in-flow rail, and — while a page asks for an
+  immersive shell (watch theater) — the same panel as a `fixed` overlay drawer
+  over a scrim, opened by the header's Menu button. The link list is never
+  forked between the two. State lives in `lib/sidebar-state` (collapsed
+  persisted in localStorage; immersive + drawer-open in memory only, because a
+  persisted immersive flag would strand a viewer on a page with no navigation).
 - `BottomTabBar` (< `sm`) — Home / Search / Create / Inbox / Library, sticky
   bottom in a rounded `.glass-chrome` panel, in-flow (never overlaps content),
   unread dot on Inbox, `aria-current` on the active tab, safe-area padded.
 - Both navs return `null` on `/embed/*` (bare iframe player).
 - Every page renders exactly ONE `<main>` (landmarks are gated by
   `e2e/a11y-landmarks.spec.ts`).
+
+**The watch page's layout (`.watch-layout`, added 2026-09-15).** The watch
+surface is ONE CSS grid with three areas — `stage` / `body` / `rail` — rather
+than nested flex columns, and theater mode swaps the AREAS. That is a
+correctness rule, not a styling preference: the stage must keep a single DOM
+position, because React reconciles by position and rendering it somewhere else
+in theater REMOUNTED the player (playback restarted at 0, the mid-watch "Resume
+from…" offer reappeared, and a second view was counted on every `T`). Three
+things follow, and each was a defect first:
+
+- **The two-column switch is `xl` (1280px), not `lg`.** At 1024 the sidebar
+  (224) plus the reserved rail (344) left a 368×207 stage with a three-line
+  title. YouTube drops to one column at about the same available width.
+- **The secondary column's 344px track is reserved whether or not anything
+  renders into it.** Sizing it to its content shifted the largest element on the
+  page when the related fetch resolved empty.
+- **Theater is inert below that breakpoint**, in CSS (`.watch-theater-band`,
+  `.watch-layout-theater`) and in JS (`WATCH_TWO_COLUMN_QUERY`, which also gates
+  the immersive flag): there is no second column to collapse, no width to gain,
+  and a full-bleed square-cornered phone player is not an improvement.
+
+The stage's size ceiling is one token, `--watch-stage-max-h` — the viewport
+minus the masthead and the space the page owes the title, floored at 480px —
+read by the theater band as a height and by the default player column as a width
+at 16:9, so the two modes cannot disagree.
+
+**Watch actions (2026-09-17).** Show functional labels for every viewer: joined
+Like/Dislike, Share, Save, and More; Follow belongs beside the channel. More
+holds queue, playlist, download, report, and management actions as permissions
+allow, without duplicating Share or the Save/Watch later destination. The row
+uses 4px gaps and keeps 44px targets without horizontal swiping. Below 340px of
+available action width, Share/Save keep accessible names but use icon-only
+buttons; wider columns show their labels. Wrapping remains a fallback for large
+counts or enlarged text. Guests see an Add a comment button instead of an
+editable composer. Protected actions open a contextual sign-in dialog only after activation, preserve the
+local watch path/query/hash through login, and never replay the action after
+sign-in. Public sharing and creator support remain available without a session.
 
 ## Accessibility baseline (unchanged contract, do not regress)
 

@@ -652,7 +652,7 @@ export const META: Record<string, SettingMeta> = {
   //     on an unreachable backend would be the worse failure.
   branding_hide_software_name: {
     label: "Hide software name",
-    help: "White-label this instance: removes “Vidra” and “Powered by Vidra” from public and signed-in pages, downloads, the PWA name and the About page. Presentation only — admin pages and machine-readable documents (NodeInfo, /version) still identify the software. Visitors see the change within about a minute; reload this browser to see it here. If the frontend cannot reach the API it falls back to showing the software name.",
+    help: "White-label this instance: removes “Vidra” and “Powered by Vidra” from public and signed-in pages, downloads, the PWA name and the About page. Product icons and decorative ribbons are replaced by custom or neutral branding. Presentation only — admin pages and machine-readable documents (NodeInfo, /version) still identify the software. Visitors see the change within about a minute; reload this browser to see it here. If the frontend cannot reach the API it falls back to showing the software name.",
     control: "toggle",
     page: "general",
     section: "branding",
@@ -1555,6 +1555,17 @@ export const META: Record<string, SettingMeta> = {
         infra.features?.some(
           (f) => f.key === "cdn" && f.configured === false,
         ) === true,
+    },
+  },
+  delivery_ipfs_enabled: {
+    label: "IPFS delivery",
+    help: "Use the configured healthy public IPFS mirror for eligible media. Turning this off sends new requests through the server or CDN. It does not start or stop pinning, remove existing pins, or publish private videos. Manage publication and capacity on the IPFS page.",
+    control: "toggle",
+    page: "advanced",
+    section: "delivery",
+    warn: {
+      note: "The public IPFS mirror is not configured, so this switch currently does nothing. See IPFS configuration.",
+      isTriggered: (infra) => infra.features?.some((f) => f.key === "ipfs" && f.configured === false) === true,
     },
   },
   qoe_collection_enabled: {

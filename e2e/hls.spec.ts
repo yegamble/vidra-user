@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectPlayerSetting, openPlayerSetting, openPlayerSettings } from "./player-settings-menu";
 
 import { TINY_MP4_BASE64 } from "../e2e-backed/fixtures";
+import { TRANSPORT_AGREES, transportVsElement } from "./player-transport";
 
 // Mocked HLS playback coverage (a real backend is not running in `npm run ci`).
 // Tiny valid m3u8 fixtures are served via page.route so REAL hls.js parses a
@@ -19,6 +21,11 @@ import { TINY_MP4_BASE64 } from "../e2e-backed/fixtures";
 // The player opens a PLAYBACK SESSION before it plays (phase-4 item 1) and drives
 // the master URL from it, so every test here mocks that call: it is what decides
 // what plays, and an unmocked one would only ever be exercising the fallback.
+//
+// These tests exercise HLS at a desktop viewport; the same Settings hierarchy
+// is checked at phone widths in e2e/player-mobile-controls.spec.ts.
+test.use({ viewport: { width: 1600, height: 900 } });
+
 const DETAIL = /\/api\/v1\/videos\/v1$/;
 const SESSION = /\/api\/v1\/videos\/v1\/playback-session$/;
 const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;
@@ -127,15 +134,12 @@ test("the watch page streams HLS via hls.js and the quality menu drives level se
   // hls.js fetched the master playlist and attached MediaSource to the element
   // (a blob: src, not the backend original URL).
   await masterRequested;
-  const quality = page.getByRole("button", { name: "Quality: Auto" });
-  await expect(quality).toBeVisible();
+  await expectPlayerSetting(page, /^Playback quality Auto\b/);
   expect(await page.locator("video").getAttribute("src")).toMatch(/^blob:/);
 
   // The menu lists Auto (checked) + one entry per parsed rendition height,
   // tallest first (three synthetic rungs).
-  await quality.click();
-  const menu = page.getByRole("menu", { name: "Playback quality" });
-  await expect(menu).toBeVisible();
+  const menu = await openPlayerSetting(page, "Playback quality");
   const items = menu.getByRole("menuitemradio");
   await expect(items).toHaveCount(4);
   await expect(items.nth(0)).toHaveAccessibleName("Auto");
@@ -147,15 +151,14 @@ test("the watch page streams HLS via hls.js and the quality menu drives level se
     "true",
   );
 
-  // Selecting a rendition pins it: the button relabels (a smooth switch that
-  // shows a busy "…" until it lands — no fragments load in the mock, so it stays
-  // pending, which the substring name match tolerates), the selection persists.
+  // Selecting a rendition pins it: Settings reports the selection even while
+  // the smooth switch remains pending (no fragments load in this mock).
   await menu.getByRole("menuitemradio", { name: "480p" }).click();
-  const pinned = page.getByRole("button", { name: "Quality: 480p" });
-  await expect(pinned).toBeVisible();
+  const settings = page.getByRole("button", { name: "Settings", exact: true });
   await expect(menu).toHaveCount(0);
-  await expect(pinned).toBeFocused();
-  await pinned.click();
+  await expect(settings).toBeFocused();
+  await expectPlayerSetting(page, /^Playback quality 480p/);
+  await openPlayerSetting(page, "Playback quality");
   await expect(menu.getByRole("menuitemradio", { name: "480p" })).toHaveAttribute(
     "aria-checked",
     "true",
@@ -164,7 +167,7 @@ test("the watch page streams HLS via hls.js and the quality menu drives level se
   // Escape closes the menu and returns focus to the button.
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
-  await expect(pinned).toBeFocused();
+  await expect(settings).toBeFocused();
 });
 
 test("a missing HLS playlist falls back to the original file", async ({ page }) => {
@@ -188,13 +191,17 @@ test("a missing HLS playlist falls back to the original file", async ({ page }) 
     "http://localhost:8080/api/v1/videos/v1/original",
     { timeout: 15_000 },
   );
-  await expect(page.getByRole("button", { name: /^Quality:/ })).toHaveCount(0);
+  await expect((await openPlayerSettings(page)).getByRole("menuitem", { name: /^Playback quality / })).toHaveCount(0);
+  // The fallback re-runs the media element load algorithm, which pauses the
+  // element and rejects any pending play promise WITHOUT firing `pause`. This
+  // spec asserted the src and nothing about the chrome, so a transport left
+  // reading "Pause" over a stopped video went unnoticed.
+  await expect.poll(() => transportVsElement(page)).toMatch(TRANSPORT_AGREES);
 });
 
 test("the chosen playback speed survives an HLS→original fallback (PLAY-03)", async ({ page }) => {
-  // The detail advertises hls_url, but the master resolves (slowly) to a 404 —
-  // giving us a window to pick a rate while hls.js is still in flight before the
-  // player degrades to the progressive original. The rate must ride through the
+  // The master is held until a rate is picked, then returns 404 and the player
+  // degrades to the progressive original. The rate must ride through the
   // src change (defaultPlaybackRate + the shell's re-apply-on-src effect), not be
   // reset to 1× by the media load.
   await page.route(DETAIL, (route) => route.fulfill({ json: HLS_DETAIL }));
@@ -203,24 +210,24 @@ test("the chosen playback speed survives an HLS→original fallback (PLAY-03)", 
     route.fulfill({ contentType: "video/mp4", body: Buffer.from(TINY_MP4_BASE64, "base64") }),
   );
   await mockWatchExtras(page);
+  let releaseMaster!: () => void;
+  const speedPicked = new Promise<void>((resolve) => { releaseMaster = resolve; });
   await page.route(MASTER, async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await speedPicked;
     await route.fulfill({
       status: 404,
       json: { error: { code: "not_found", message: "playlist not ready" } },
     });
   });
 
-  await page.goto("/videos/v1");
+  await page.goto("/videos/v1", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Adaptive Clip" })).toBeVisible();
 
-  // Pick 4× while hls.js is still attempting the master (fallback fires ~800ms in).
-  await page.getByRole("button", { name: "Speed: 1×" }).click();
-  await page
-    .getByRole("menu", { name: "Playback speed" })
-    .getByRole("menuitemradio", { name: "4×" })
-    .click();
-  await expect(page.getByRole("button", { name: "Speed: 4×" })).toBeVisible();
+  // Pick 4× before allowing the fallback; Settings navigation cannot race it.
+  const speed = await openPlayerSetting(page, "Playback speed");
+  await speed.getByRole("menuitemradio", { name: "4×" }).click();
+  await expectPlayerSetting(page, "Playback speed 4×");
+  releaseMaster();
 
   // hls.js gives up and the element degrades to the progressive original...
   await expect(page.locator("video")).toHaveAttribute(
@@ -259,7 +266,7 @@ test("without MSE the master playlist plays natively and no selector is shown", 
     "http://localhost:8080/api/v1/videos/v1/hls/master.m3u8",
   );
   // Native playback owns quality/ABR — nothing controllable, so no menu.
-  await expect(page.getByRole("button", { name: /^Quality:/ })).toHaveCount(0);
+  await expect((await openPlayerSettings(page)).getByRole("menuitem", { name: /^Playback quality / })).toHaveCount(0);
 });
 
 test("a video without hls_url keeps progressive original playback and no selector", async ({
@@ -279,7 +286,7 @@ test("a video without hls_url keeps progressive original playback and no selecto
     "src",
     "http://localhost:8080/api/v1/videos/v1/original",
   );
-  await expect(page.getByRole("button", { name: /^Quality:/ })).toHaveCount(0);
+  await expect((await openPlayerSettings(page)).getByRole("menuitem", { name: /^Playback quality / })).toHaveCount(0);
 });
 
 test("the SESSION decides which manifest plays, not the video detail", async ({ page }) => {
@@ -303,7 +310,7 @@ test("the SESSION decides which manifest plays, not the video detail", async ({ 
 
   await page.goto("/videos/v1");
   const request = await sessionMaster;
-  await expect(page.getByRole("button", { name: "Quality: Auto" })).toBeVisible();
+  await expectPlayerSetting(page, /^Playback quality Auto\b/);
   await detailMaster;
 
   // No credential on an ordinary video's media request — that is what keeps its
@@ -329,7 +336,7 @@ test("playback survives a session the backend cannot answer", async ({ page }) =
 
   await page.goto("/videos/v1");
   await masterRequested;
-  await expect(page.getByRole("button", { name: "Quality: Auto" })).toBeVisible();
+  await expectPlayerSetting(page, /^Playback quality Auto\b/);
 });
 
 test("a playback failure reaches the QoE beacon, classified and keyed by the session", async ({
@@ -395,5 +402,5 @@ test("the embed player streams HLS with the same custom shell and quality menu",
   // The embed runs the same bespoke shell (minus theater), so the quality menu
   // is present here too — the chrome-less native <video controls> is gone.
   expect(await page.locator("video").getAttribute("controls")).toBeNull();
-  await expect(page.getByRole("button", { name: "Quality: Auto" })).toBeVisible();
+  await expectPlayerSetting(page, /^Playback quality Auto\b/);
 });

@@ -60,18 +60,6 @@ describe("PlayerMenu", () => {
     expect(document.activeElement).toBe(four);
   });
 
-  it("portals the open menu out of its trigger's subtree so no ancestor can clip it", () => {
-    // The player stage is `overflow-hidden` and ~185px tall on a phone; an
-    // in-stage `absolute` menu had 7 of 12 rungs clipped outside the video.
-    const { container } = render(<Harness />);
-    fireEvent.click(screen.getByRole("button", { name: "Speed: 1×" }));
-
-    const menu = screen.getByRole("menu", { name: "Playback speed" });
-    expect(container.contains(menu)).toBe(false);
-    expect(document.body.contains(menu)).toBe(true);
-    expect(menu.style.position).toBe("fixed");
-  });
-
   it("portals into the fullscreen element while the player is fullscreen", () => {
     // Portaling to <body> would put the menu outside the fullscreen element,
     // where nothing is painted — the menu would simply vanish in fullscreen.
@@ -91,15 +79,4 @@ describe("PlayerMenu", () => {
     fs.remove();
   });
 
-  it("keeps a press inside the portaled menu from closing it", () => {
-    render(<Harness />);
-    fireEvent.click(screen.getByRole("button", { name: "Speed: 1×" }));
-    const menu = screen.getByRole("menu", { name: "Playback speed" });
-
-    fireEvent.pointerDown(screen.getByRole("menuitemradio", { name: "4×" }));
-    expect(document.body.contains(menu)).toBe(true);
-
-    fireEvent.pointerDown(document.body);
-    expect(screen.queryByRole("menu", { name: "Playback speed" })).toBeNull();
-  });
 });

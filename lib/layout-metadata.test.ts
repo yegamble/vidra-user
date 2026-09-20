@@ -150,7 +150,53 @@ const hidden = (overrides: Record<string, unknown> = {}) =>
     ...overrides,
   }) as InstanceConfigSnapshot;
 
+const neutralAppIcons = [
+  { src: "/neutral-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+  { src: "/neutral-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+  { src: "/neutral-icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+];
+
 describe("buildRootMetadata while white-labelled", () => {
+  it("replaces product icons with neutral icons when no operator image is set", () => {
+    expect(buildRootMetadata(hidden()).icons).toEqual({
+      icon: "/neutral-icon.svg", apple: "/neutral-apple-touch-icon.png",
+    });
+    expect(buildWebManifest(hidden()).icons).toEqual(neutralAppIcons);
+  });
+
+  it("retains operator icons for the tab, Apple touch and installed app", () => {
+    const instance = snapshot({ branding: { hide_software_name: true, logos: {
+      favicon: set("/api/v1/instance/logo/favicon"),
+      header_square: set("/api/v1/instance/logo/header-square"),
+    } } });
+    expect(buildRootMetadata(instance).icons).toEqual({
+      icon: `${API}/api/v1/instance/logo/favicon`,
+      apple: `${API}/api/v1/instance/logo/header-square`,
+    });
+    expect(buildWebManifest(instance).icons).toEqual([
+      { src: `${API}/api/v1/instance/logo/header-square`, purpose: "any" },
+      ...neutralAppIcons,
+    ]);
+  });
+
+  it("keeps raster and maskable fallbacks when the only operator image is a small favicon", () => {
+    const instance = snapshot({ branding: { hide_software_name: true, logos: {
+      favicon: set("https://example.test/favicon-16.png"),
+    } } });
+    expect(buildWebManifest(instance).icons).toEqual([
+      { src: "https://example.test/favicon-16.png", purpose: "any" },
+      ...neutralAppIcons,
+    ]);
+  });
+
+  it("keeps product icons when the operator explicitly shows the software", () => {
+    const instance = snapshot({ branding: { hide_software_name: false } });
+    expect(buildRootMetadata(instance).icons).toEqual({ icon: FALLBACK_ICON, apple: APPLE_TOUCH_ICON });
+    expect(buildWebManifest(instance).icons?.map((icon) => icon.src)).toEqual([
+      "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png",
+    ]);
+  });
+
   it("titles from the instance name and keeps the software name out of the description", () => {
     const meta = buildRootMetadata(hidden());
     expect(meta.title).toBe("ExampleTube");

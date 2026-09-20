@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { MenuSurface } from "./MenuSurface";
 
 import { anchoredPosition } from "@/lib/anchored-position";
 import { cn } from "@/lib/cn";
@@ -249,7 +250,7 @@ export function Dropdown({
           so `createPortal(..., document.body)` can never see an undefined DOM. */}
       {open && typeof document !== "undefined" ? (
         createPortal(
-          <div
+          <MenuSurface
             id={menuId}
             ref={menuRef}
             role="menu"
@@ -264,7 +265,7 @@ export function Dropdown({
               // z-[60]); fixed to the viewport so the rails' `overflow-y: auto`
               // can never clip it. Kept invisible until the first pre-paint
               // measurement lands, so it is never painted at the -9999 seed.
-              "z-50 min-w-52 overflow-y-auto rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-soft-strong",
+              "min-w-52",
               "max-h-[min(60vh,480px)]",
               pos ? "visible" : "invisible",
             )}
@@ -298,7 +299,7 @@ export function Dropdown({
               const rowIndex = (focusIndex += 1);
               const rowClass = cn(
                 "flex w-full items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition-colors focus-ring disabled:opacity-50",
-                item.danger ? "text-danger hover:bg-danger/10" : "text-fg hover:bg-surface-muted",
+                item.danger ? "text-danger" : "text-fg",
               );
               const body = (
                 <>
@@ -321,6 +322,7 @@ export function Dropdown({
                     role="menuitem"
                     tabIndex={-1}
                     aria-disabled={item.disabled || undefined}
+                    data-menu-danger={item.danger || undefined}
                     onKeyDown={(e) => onItemKeyDown(e, rowIndex)}
                     onClick={() => {
                       item.onSelect?.();
@@ -342,6 +344,7 @@ export function Dropdown({
                   role="menuitem"
                   tabIndex={-1}
                   disabled={item.disabled}
+                  data-menu-danger={item.danger || undefined}
                   onKeyDown={(e) => onItemKeyDown(e, rowIndex)}
                   onClick={() => {
                     item.onSelect?.();
@@ -354,7 +357,7 @@ export function Dropdown({
               );
             });
           })()}
-          </div>,
+          </MenuSurface>,
           document.body,
         )
       ) : null}

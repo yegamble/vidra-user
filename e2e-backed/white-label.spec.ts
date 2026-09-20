@@ -43,6 +43,8 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, API_URL, adminToken, instanceAbout } from 
 
 /** Anything that would name the software or attribute the platform to it. */
 const LEAK = /vidra|powered by/i;
+// Product imagery has neutral filenames, so the text sweep alone misses it.
+const PRODUCT_ICON = /\/(?:icon\.svg|apple-touch-icon\.png|icon-(?:192|512|maskable-512)\.png)(?:\?|$)/;
 
 /**
  * The instance's OWN name is not a leak even when it happens to contain the
@@ -171,6 +173,14 @@ test("white-label hides the software name everywhere, and turning it off brings 
       await expect(async () => {
         await page.goto(path);
         expect(await sweep(), `${label} ${path} names the software`).not.toMatch(LEAK);
+        const icons = await page.locator('link[rel~="icon"], link[rel="apple-touch-icon"]')
+          .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+        expect(icons.some((href) => href && PRODUCT_ICON.test(href)), `${path} uses a product icon`).toBe(false);
+        // Federation badges keep their protocol indicator; only product decoration disappears.
+        const productRibbons = ["/login", "/signup", "/reset-password"].includes(path)
+          ? ".protocol-ribbon"
+          : 'header .protocol-ribbon, [aria-labelledby="about-network-heading"] > div:first-child .protocol-ribbon';
+        await expect(page.locator(productRibbons)).toHaveCount(0);
       }).toPass({ timeout: CACHE_TTL_BUDGET });
     };
 
@@ -196,6 +206,9 @@ test("white-label hides the software name everywhere, and turning it off brings 
         maskInstanceName(await manifest.text(), (await instanceAbout(request)).name),
         "the PWA manifest names the software",
       ).not.toMatch(LEAK);
+      const app = await manifest.json();
+      expect(app.icons.length).toBeGreaterThan(0);
+      for (const icon of app.icons) expect(icon.src).not.toMatch(PRODUCT_ICON);
     }).toPass({ timeout: CACHE_TTL_BUDGET });
 
     await signInAsAdmin(page);

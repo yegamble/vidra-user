@@ -152,6 +152,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["featured_label", "homepage", "featured"],
   ["delivery_presign_enabled", "advanced", "delivery"],
   ["delivery_cdn_enabled", "advanced", "delivery"],
+  ["delivery_ipfs_enabled", "advanced", "delivery"],
   ["qoe_collection_enabled", "advanced", "delivery"],
   // White-label: the FIRST registry key the server homes in general/branding,
   // the section whose content had until now been the assets panel alone.
@@ -719,6 +720,7 @@ describe("ADVANCED / Delivery (phase-2 item 6, phase-4 items 2 & 4)", () => {
   const DELIVERY_KEYS = [
     "delivery_presign_enabled",
     "delivery_cdn_enabled",
+    "delivery_ipfs_enabled",
     "qoe_collection_enabled",
   ];
 

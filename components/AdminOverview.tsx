@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ADMIN_NAV_OVERVIEW } from "@/lib/admin-nav";
+import { componentHealthPresentation } from "@/lib/component-health";
 import { api } from "@/lib/api";
 import type { AdminStats, AuditLogEntry, JobsOverview, SystemStatus } from "@/lib/api";
 import { formatBytes, formatCount, formatUptime, formatVersion, relativeTime } from "@/lib/format";
@@ -319,7 +320,7 @@ function HealthCard({
           </div>
           {Object.keys(system.components).sort().map((name, i) => {
             const c = system.components[name];
-            const down = c.status !== "ok" && c.status !== "not_configured";
+            const { fault: down, neutral, label } = componentHealthPresentation(c.status);
             return (
               <div
                 key={name}
@@ -330,7 +331,7 @@ function HealthCard({
                   className={`h-2 w-2 flex-none rounded-full ${
                     down
                       ? "bg-danger-solid"
-                      : c.status === "not_configured"
+                      : neutral
                         ? "bg-border"
                         : "bg-success-solid"
                   }`}
@@ -340,7 +341,7 @@ function HealthCard({
                   className={`ml-auto text-[12.5px] ${down ? "text-danger" : "text-fg-muted"}`}
                   title={c.error || undefined}
                 >
-                  {c.status}
+                  {label}
                 </span>
               </div>
             );
@@ -508,6 +509,7 @@ function CardSpinner({ label }: { label: string }) {
 // Turn snake_case dependency/queue keys into readable labels (transcode_jobs →
 // "Transcode jobs", object_storage → "Object storage").
 function prettyComponent(key: string): string {
+  if (key === "ipfs") return "IPFS";
   const s = key.replace(/_/g, " ");
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

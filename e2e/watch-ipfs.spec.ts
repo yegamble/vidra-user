@@ -1,13 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 // The IPFS source bar + player states (DR5). The video is IPFS-mirrored: its
-// detail carries `ipfs_pinned` and the gateway CIDs. Playback defaults to the
-// authoritative server; a viewer can opt into the gateway mirror, whose real
-// fetch outcome drives the ok / error state (peer-free copy throughout).
+// detail advertises a mirror and the session authorizes its exact master URL.
+// The player prefers that mirror briefly, then falls back without an overlay.
 
 const GATEWAY = "https://ipfs.example.test";
 const HLS_CID = "bafyHLScid";
-const GATEWAY_MASTER = `${GATEWAY}/ipfs/${HLS_CID}/master.m3u8`;
+const GATEWAY_MASTER = `${GATEWAY}/ipfs/${HLS_CID}/hashed-import-master.m3u8`;
 
 const DETAIL = /\/api\/v1\/videos\/v1$/;
 const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;
@@ -46,6 +45,14 @@ async function mockWatch(
   page: import("@playwright/test").Page,
   detail: object = detailWithIpfs(),
 ) {
+  await page.route(/\/api\/v1\/videos\/v1\/playback-session$/, (route) => route.fulfill({ json: {
+    session_id: "fixture", video_id: "v1", hls_url: "/api/v1/videos/v1/hls/master.m3u8",
+    authoritative_hls_url: "/api/v1/videos/v1/hls/master.m3u8", ipfs_hls_url: GATEWAY_MASTER,
+  } }));
+  await page.route(new RegExp(`ipfs/${HLS_CID}/.+`), (route) => route.abort());
+  await page.route(GATEWAY_MASTER, (route) => route.fulfill({
+    headers: { "access-control-allow-origin": "*" }, contentType: "application/vnd.apple.mpegurl", body: SAMPLE_MASTER,
+  }));
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());
   await page.route(/\/api\/v1\/videos\/v1\/captions$/, (route) =>
@@ -57,21 +64,21 @@ async function mockWatch(
   await page.route(/\/api\/v1\/videos\/v1\/rating/, (route) =>
     route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
   );
+  await page.route(/\/api\/v1\/videos\/v1\/hls\/.+/, (route) => route.abort());
   await page.route(/\/api\/v1\/videos\/v1\/hls\/master\.m3u8$/, (route) =>
     route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: SAMPLE_MASTER }),
   );
-  await page.route(/\/api\/v1\/videos\/v1\/hls\/.+/, (route) => route.abort());
 }
 
-test("defaults to the server source with a peer-free bar and a 'Use IPFS' toggle", async ({
+test("prefers the session-authorized IPFS source with peer-free status", async ({
   page,
 }) => {
   await mockWatch(page);
   await page.goto("/videos/v1");
 
   await expect(page.getByRole("heading", { name: "Mirrored Clip" })).toBeVisible();
-  await expect(page.getByText("Playing from server (HLS)")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Use IPFS" })).toBeVisible();
+  await expect(page.getByText("Playing from IPFS")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use server" })).toBeVisible();
   // No fabricated peer count anywhere on the surface.
   await expect(page.getByText(/peer/i)).toHaveCount(0);
 });
@@ -91,46 +98,37 @@ test("offers the mirror on a REAL core payload: CIDs present, no ipfs_pinned fla
   await page.goto("/videos/v1");
 
   await expect(page.getByRole("heading", { name: "Mirrored Clip" })).toBeVisible();
-  await expect(page.getByText("Playing from server (HLS)")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Use IPFS" })).toBeVisible();
+  await expect(page.getByText("Playing from IPFS")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use server" })).toBeVisible();
 });
 
-test("opting into IPFS probes the gateway and, on success, plays from the mirror", async ({
-  page,
-}) => {
+test("source controls switch actual engines using the exact imported master name", async ({ page }) => {
   await mockWatch(page);
-  // Gateway variants/segments abort; the master fulfill is registered LAST so it
-  // wins for the master URL (Playwright matches most-recently-registered first).
-  await page.route(new RegExp(`ipfs/${HLS_CID}/.+`), (route) => route.abort());
-  await page.route(new RegExp(`${HLS_CID}/master\\.m3u8$`), (route) =>
-    route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: SAMPLE_MASTER }),
-  );
-
   await page.goto("/videos/v1");
+  await page.getByRole("button", { name: "Use server" }).click();
+  await expect(page.getByText("Playing from server (HLS)")).toBeVisible();
+  const request = page.waitForRequest(GATEWAY_MASTER);
   await page.getByRole("button", { name: "Use IPFS" }).click();
-
-  // The bar settles on the pinned IPFS source with a "Use server" toggle back.
-  await expect(page.getByText("IPFS · pinned")).toBeVisible();
+  const mirror = await request;
+  expect(mirror.headers().authorization).toBeUndefined();
+  expect(mirror.url()).not.toContain("pt=");
+  await expect(page.getByText("Playing from IPFS")).toBeVisible();
   await expect(page.getByRole("button", { name: "Use server" })).toBeVisible();
   await expect(page.getByText(/peer/i)).toHaveCount(0);
 });
 
-test("a failed gateway fetch shows the error state and 'Play from server' recovers", async ({
-  page,
-}) => {
+test("an unplayable gateway automatically returns to server HLS without covering the controls", async ({ page }) => {
   await mockWatch(page);
-  // The gateway is unreachable — the probe fetch fails.
-  await page.route(GATEWAY_MASTER, (route) => route.abort());
-
+  // Parsing fails immediately; this tests the real HLS error path, not a probe.
+  await page.route(GATEWAY_MASTER, (route) => route.fulfill({
+    headers: { "access-control-allow-origin": "*" }, contentType: "application/vnd.apple.mpegurl", body: "invalid manifest",
+  }));
+  const attempted = page.waitForRequest(GATEWAY_MASTER);
   await page.goto("/videos/v1");
-  await page.getByRole("button", { name: "Use IPFS" }).click();
-
-  // The player error overlay (peer-free) offers a re-fetch and a server fallback.
-  await expect(page.getByText("Couldn't retrieve this video from IPFS")).toBeVisible();
-  await expect(page.getByText(/peer/i)).toHaveCount(0);
-  await page.getByRole("button", { name: "Play from server" }).click();
-
-  // Back on the server source.
+  await attempted;
   await expect(page.getByText("Playing from server (HLS)")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use IPFS" })).toBeVisible();
+  await expect(page.getByTestId("player-controls")).toBeVisible();
   await expect(page.getByText("Couldn't retrieve this video from IPFS")).toHaveCount(0);
+  await expect(page.getByText(/peer/i)).toHaveCount(0);
 });

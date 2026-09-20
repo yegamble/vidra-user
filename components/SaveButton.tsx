@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
 import { CheckIcon, PlusIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
@@ -13,6 +14,9 @@ import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 // clicking saves or unsaves, with the server treated as the source of truth.
 export function SaveButton({ videoId }: { videoId: string }) {
   const { status } = useSession();
+  const requestSignIn = useWatchSignIn();
+  const watchSize = requestSignIn ? "w-11 justify-center px-0 @min-[340px]/watch-actions:w-auto @min-[340px]/watch-actions:px-3" : "px-4";
+  const labelClass = requestSignIn ? "sr-only @min-[340px]/watch-actions:not-sr-only" : undefined;
   const [saved, setSaved] = useState<boolean | null>(null); // null = not yet known
   const [busy, setBusy] = useState(false);
 
@@ -29,6 +33,11 @@ export function SaveButton({ videoId }: { videoId: string }) {
   }, [videoId, status]);
 
   if (status !== "authed") {
+    if (requestSignIn) return <button type="button" disabled={status === "restoring"}
+      onClick={() => requestSignIn("save this video")} title="Save"
+      className={"focus-ring inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-surface-muted text-[13px] font-semibold text-fg hover:bg-surface-strong " + watchSize}>
+      <PlusIcon size={16} /><span className={labelClass}>Save</span>
+    </button>;
     return (
       <Link
         href="/login"
@@ -61,17 +70,18 @@ export function SaveButton({ videoId }: { videoId: string }) {
     <button
       type="button"
       aria-pressed={saved === true}
+      title={requestSignIn ? (saved ? "Saved" : "Save") : undefined}
       disabled={busy || saved === null}
       onClick={() => void toggle()}
       className={
-        "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-4 py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 " +
-        (saved
+        "focus-ring flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 " +
+        watchSize + " " + (saved
           ? "bg-accent text-accent-fg hover:bg-accent/90"
           : "bg-surface-muted text-fg hover:bg-surface-strong")
       }
     >
       {saved ? <CheckIcon size={16} /> : <PlusIcon size={16} />}
-      <span>{saved ? "Saved" : "Save"}</span>
+      <span className={labelClass}>{saved ? "Saved" : "Save"}</span>
     </button>
   );
 }

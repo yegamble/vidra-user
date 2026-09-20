@@ -46,19 +46,21 @@ test("create a playlist, add a video from the watch page, then remove it", async
   await expect(page.getByRole("heading", { level: 1, name: videoTitle })).toBeVisible();
 
   // Create a playlist AND add this video in one go via "Save to playlist".
-  await page.getByRole("button", { name: "Save to playlist" }).click();
-  await page.getByLabel("New playlist name").fill("My Mix");
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Save to playlist" }).click();
+  const picker = page.getByRole("dialog", { name: "Save to playlist" });
+  await picker.getByLabel("New playlist").fill("My Mix");
   const created = page.waitForResponse(
     (r) => /\/api\/v1\/playlists$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   const added = page.waitForResponse(
     (r) => /\/playlists\/[^/]+\/videos$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
-  // Scope to the page content: the global header also carries a "Create" menu
-  // button, so an unscoped getByRole would be a strict-mode violation.
-  await page.locator("#main-content").getByRole("button", { name: "Create" }).click();
+  // The global header also carries a Create menu; target this picker only.
+  await picker.getByRole("button", { name: "Create" }).click();
   await created;
   await added;
+  await picker.getByRole("button", { name: "Close" }).click();
 
   // The playlist now contains the video (a fresh detail fetch from the backend).
   await openPlaylists(page);

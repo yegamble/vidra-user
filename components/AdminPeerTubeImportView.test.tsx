@@ -198,21 +198,22 @@ describe("AdminPeerTubeImportView — launch payload", () => {
     expect(Object.keys(body)).not.toContain("acknowledged_schema_version");
   });
 
-  it("warns that reference mode is permanent, and only for reference mode", async () => {
+  it("explains reference mode needs verified matching keys, only for that mode", async () => {
     render(<AdminPeerTubeImportView />);
     const select = await screen.findByLabelText("Media");
     const launch = screen.getByRole("region", { name: "Launch an import" });
 
-    // Copy is the answer for a real migration, so it gets no banner.
+    // Copy moves bytes itself, so it does not need the external-copy guidance.
     fireEvent.change(select, { target: { value: "copy" } });
     expect(within(launch).queryByRole("alert")).toBeNull();
 
-    // Reference copies nothing, so this instance plays out of the source's
-    // bucket for good. Finding that out after the old instance is switched off
-    // is the failure this banner exists to prevent.
+    // An independent mirror is valid, but matching keys must be verified separately.
     fireEvent.change(select, { target: { value: "reference" } });
     const alert = within(launch).getByRole("alert");
-    expect(alert.textContent).toMatch(/never|permanent/i);
+    expect(alert.textContent).toContain("matching object keys");
+    expect(alert.textContent).toContain("separately verified copy");
+    expect(alert.textContent).toContain("does not verify every object");
+    expect(alert.textContent).not.toMatch(/never be turned off|permanent/i);
 
     // It clears again: a property of the choice, not a sticky warning.
     fireEvent.change(select, { target: { value: "none" } });
@@ -360,6 +361,109 @@ describe("AdminPeerTubeImportView — in-flight polling", () => {
 });
 
 describe("AdminPeerTubeImportView — report and history", () => {
+  it.each([
+    ["unsupported entries", report({ rendition: counts({ unsupported: 3 }) })],
+    ["missing playable media", report({ video_no_media: counts({ imported: 2 }) })],
+    ["deferred families", { ...report({}), deferred: ["history"] }],
+  ])("keeps %s visible as gaps in the report and history", async (_name, summary) => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({ report: summary })] });
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    expect(within(panel).queryByText("Done")).toBeNull();
+    expect(within(panel).getByText("Finished with gaps")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Import history" }))
+      .getByText("Finished with gaps")).toBeTruthy();
+    expect(within(panel).getByRole("region", { name: "Review migration gaps" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry unfinished items" })).toBeNull();
+  });
+
+  it("does not call a completed run successful without its report", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run()] });
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    expect(within(panel).queryByText("Done")).toBeNull();
+    expect(within(panel).getByText("Report unavailable")).toBeTruthy();
+  });
+
+  it("warns about planned playback gaps before a dry run imports anything", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({
+      mode: "dry_run", media_mode: "copy",
+      report: { ...report({ video_no_media: counts({ planned: 7, imported: 0 }) }), dry_run: true },
+    })] });
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    expect(within(panel).getByText("Finished with gaps")).toBeTruthy();
+    expect(within(panel).getByRole("alert").textContent).toMatch(/7 videos would arrive/);
+    expect(within(panel).getByRole("alert").textContent).not.toMatch(/only reference|copy mode does/);
+    expect(within(panel).getByRole("alert").textContent).toContain("Check the source media");
+    const review = within(panel).getByRole("region", { name: "Review migration gaps" });
+    expect(review.textContent).toContain("This preview writes nothing");
+    expect(review.textContent).not.toContain("arrived");
+    expect(within(screen.getByRole("region", { name: "Import history" }))
+      .getByText("Finished with gaps")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry unfinished items" })).toBeNull();
+  });
+
+  it("retries with the recorded media mode and safe gap-filling policy", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({
+      id: "22222222-2222-2222-2222-222222222222",
+      media_mode: "reference", source_authoritative: true, conflict_policy: "merge",
+      source_version: 1040, acknowledged_schema_version: 1040,
+      report: report({ thumbnail: counts({ failed: 2 }) }),
+    })] });
+    render(<AdminPeerTubeImportView />);
+    const retry = await screen.findByRole("button", { name: "Retry unfinished items" });
+    fireEvent.change(screen.getByLabelText("Conflict policy"), { target: { value: "merge" } });
+    fireEvent.change(screen.getByLabelText("Media"), { target: { value: "copy" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /the source win/i }));
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.launchPeerTubeImport).toHaveBeenCalled());
+    expect(launchBody()).toEqual({ mode: "run", conflict_policy: "skip", media_mode: "reference" });
+    expect((screen.getByRole("checkbox", { name: /the source win/i }) as HTMLInputElement).checked)
+      .toBe(false);
+  });
+
+  it("keeps the schema acknowledgement gate on a repair attempt", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({
+      id: "22222222-2222-2222-2222-222222222222",
+      state: "failed", media_mode: "copy", source_version: 1040,
+      error_code: "unverified_schema",
+    })] });
+    render(<AdminPeerTubeImportView />);
+    const retry = await screen.findByRole("button", { name: "Retry unfinished items" });
+    expect((retry as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(retry);
+    expect(mocks.launchPeerTubeImport).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /I accept PeerTube schema v1040/ }));
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.launchPeerTubeImport).toHaveBeenCalled());
+    expect(launchBody()).toEqual({
+      mode: "run", conflict_policy: "skip", media_mode: "copy", acknowledged_schema_version: 1040,
+    });
+  });
+
+  it("does not guess a legacy run's media mode when retrying", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({
+      report: report({ thumbnail: counts({ failed: 2 }) }),
+    })] });
+    render(<AdminPeerTubeImportView />);
+    const retry = await screen.findByRole("button", { name: "Retry unfinished items" });
+    expect((retry as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Choose a media mode in the launch form/)).toBeTruthy();
+  });
+
+  it.each([
+    { mode: "dry_run", state: "done" },
+    { mode: "run", state: "running" },
+  ] as const)("offers no repair launch for $mode / $state", async (state) => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({
+      ...state, media_mode: "copy", report: report({ thumbnail: counts({ failed: 2 }) }),
+    })] });
+    render(<AdminPeerTubeImportView />);
+    await screen.findByRole("region", { name: "Import run" });
+    expect(screen.queryByRole("button", { name: "Retry unfinished items" })).toBeNull();
+  });
+
   it("renders the per-entity counts of a finished run", async () => {
     mocks.listPeerTubeImports.mockResolvedValue({
       runs: [
@@ -440,6 +544,21 @@ describe("AdminPeerTubeImportView — report and history", () => {
   // run that reached the end with per-entity failures — the run did finish — so
   // a run in which every entity failed rendered the success branch: a green
   // "Done" badge with no alert, the only signal being a red integer in one cell.
+  it("explains missing source artwork without double counting failures", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({
+      media_mode: "reference",
+      report: report({ thumbnail: counts({ failed: 3, missing_source: 2 }), storyboard: counts({ failed: 1 }) }),
+    })] });
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    expect(within(panel).getByRole("alert").textContent).toContain("4");
+    const gaps = within(panel).getByRole("region", { name: "Review migration gaps" });
+    expect(gaps.textContent).toContain("Missing on the source: thumbnail 2");
+    expect(gaps.textContent).toContain("Restore these files");
+    expect(gaps.textContent).toContain("included in the failed counts");
+    expect((within(gaps).getByRole("button", { name: "Retry unfinished items" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("warns, instead of congratulating, when a done run's entities all failed", async () => {
     mocks.listPeerTubeImports.mockResolvedValue({
       runs: [
