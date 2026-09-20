@@ -60,7 +60,7 @@ export function mailFailureCopy(
   reason: MailSendFailureReason,
   port: number | undefined,
   ctx: FailureContext,
-): string {
+): string | undefined {
   const host = ctx.smtpHost && ctx.smtpHost !== "" ? ctx.smtpHost : "the mail server";
   const effectivePort = port ?? ctx.smtpPort;
   const where =
@@ -91,6 +91,12 @@ export function mailFailureCopy(
     case "secret_undecryptable":
       return "The saved credential can no longer be read. Enter it again and save, then test.";
   }
+  // Unreachable while the switch is exhaustive — and tsc still fails here the
+  // day core adds a member. But core and this client ship on separate tags, so
+  // at RUNTIME a newer reason really can arrive, and returning undefined from
+  // an exhaustive switch is how the only diagnostic button on the page answers
+  // a 502 with a blank screen. The caller substitutes the generic copy.
+  return undefined;
 }
 
 /**
@@ -124,24 +130,30 @@ export function MailTestCard({
       setPhase("sent");
     } catch (err) {
       setPhase("idle");
-      if (err instanceof ApiError && err.mailReason) {
-        setError(mailFailureCopy(err.mailReason, err.mailPort, { smtpHost, smtpPort, fromAddress }));
-        return;
-      }
-      setError(
-        errorMessage(err, "Could not send the test message.", {
-          // All three server messages are typed errors with stable codes
-          // (mail_not_configured / conflict / mail_test_failed) precisely so
-          // the api's generic 5xx scrub cannot replace them on the wire; these
-          // overrides only add the "what do I do next" half for this UI.
-          "503":
-            "This instance has no outbound mail configured yet. Choose how mail should be sent, save, then test again.",
-          "409":
-            "No instance contact email is set, so there is nowhere to send the test. Set contact_email on the General config page first.",
-          mail_test_failed:
-            "The mail relay refused the message. The relay's own answer is in the server log — it routinely quotes the recipient address, so it is not repeated here.",
-        }),
-      );
+      const reasonCopy =
+        err instanceof ApiError && err.mailReason
+          ? mailFailureCopy(err.mailReason, err.mailPort, { smtpHost, smtpPort, fromAddress })
+          : undefined;
+      // A reason this build predates yields no copy, and an empty Alert is a
+      // 502 answered with a blank screen — so the generic path is the floor,
+      // never a branch the typed path skips past.
+      const fallback = errorMessage(err, "Could not send the test message.", {
+        // All four server messages are typed errors with stable codes
+        // (mail_not_configured / conflict / rate_limited / mail_test_failed)
+        // precisely so the api's generic 5xx scrub cannot replace them on the
+        // wire; these overrides only add the "what do I do next" half.
+        "503":
+          "This instance has no outbound mail configured yet. Choose how mail should be sent, save, then test again.",
+        "409":
+          "No instance contact email is set, so there is nowhere to send the test. Set contact_email on the General config page first.",
+        // The app-wide 429 copy says "wait a moment"; this endpoint's budget is
+        // 10 messages per admin per hour, so a moment is the wrong advice.
+        "429":
+          "This instance allows 10 test messages per admin per hour, and that budget is spent. Try again later in the hour.",
+        mail_test_failed:
+          "The mail relay refused the message. The relay's own answer is in the server log — it routinely quotes the recipient address, so it is not repeated here.",
+      });
+      setError(reasonCopy ?? fallback);
     } finally {
       inFlight.current = false;
     }

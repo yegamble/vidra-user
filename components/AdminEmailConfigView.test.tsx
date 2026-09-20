@@ -85,6 +85,13 @@ const saveButton = () => screen.getByRole("button", { name: /Save mail settings|
 const transportSelect = () => screen.getByLabelText("How this instance sends mail");
 const savedBody = () => mocks.updateMailConfig.mock.calls[0]?.[0];
 
+/** Type a server address and leave the field — the repoint rule is blur-time. */
+function typeHost(value: string) {
+  const host = screen.getByLabelText("Server address");
+  fireEvent.change(host, { target: { value } });
+  fireEvent.blur(host);
+}
+
 async function saveAndWait() {
   fireEvent.click(saveButton());
   await waitFor(() => expect(mocks.updateMailConfig).toHaveBeenCalled());
@@ -160,9 +167,12 @@ describe("the untouched-secret contract (AC3)", () => {
     await mount(smtpState());
     // A stored credential belongs to the host it was issued for; carrying it to
     // a different server would hand that password to whoever was just typed in.
-    fireEvent.change(screen.getByLabelText("Server address"), {
-      target: { value: "relay.elsewhere.net" },
-    });
+    typeHost("relay.elsewhere.net");
+    // Said where the hands are, and announced — the password field moving two
+    // rows below the caret is invisible to a screen reader.
+    expect(
+      screen.getByText("The saved password must be entered again for a different server."),
+    ).toBeTruthy();
     const field = screen.getByLabelText("Password") as HTMLInputElement;
     expect(field.type).toBe("password");
     expect(field.value).toBe("");
@@ -173,25 +183,45 @@ describe("the untouched-secret contract (AC3)", () => {
 
   it("sends an empty password for a re-pointed relay the admin leaves blank", async () => {
     await mount(smtpState());
-    fireEvent.change(screen.getByLabelText("Server address"), {
-      target: { value: "anonymous.example.net" },
-    });
+    typeHost("anonymous.example.net");
     await saveAndWait();
     expect(savedBody().smtp).toHaveProperty("password", "");
   });
 
   it("omits the password again once the original server address is restored", async () => {
     await mount(smtpState());
-    fireEvent.change(screen.getByLabelText("Server address"), {
-      target: { value: "relay.elsewhere.net" },
-    });
-    fireEvent.change(screen.getByLabelText("Server address"), {
-      target: { value: "smtp.example.com" },
-    });
+    typeHost("relay.elsewhere.net");
+    typeHost("smtp.example.com");
     expect(screen.queryByLabelText("Password")).toBeNull();
+    expect(
+      screen.queryByText("The saved password must be entered again for a different server."),
+    ).toBeNull();
     fireEvent.change(screen.getByLabelText("Sender name"), { target: { value: "Renamed" } });
     await saveAndWait();
     expect(savedBody().smtp).not.toHaveProperty("password");
+  });
+
+  it("treats a re-capitalised host as the same server, as the server does", async () => {
+    await mount(smtpState());
+    // iOS capitalises a bare text input. A panel that called this a different
+    // server would clear a password the server then refuses to do without.
+    typeHost("SMTP.Example.com");
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    expect(screen.getByRole("button", { name: "Replace Password" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Sender name"), { target: { value: "Renamed" } });
+    await saveAndWait();
+    expect(savedBody().smtp).not.toHaveProperty("password");
+  });
+
+  it("asks the browser not to capitalise or correct a hostname or a login", async () => {
+    await mount(smtpState());
+    for (const label of ["Server address", "Username"]) {
+      const el = screen.getByLabelText(label);
+      expect(el.getAttribute("autocapitalize")).toBe("none");
+      expect(el.getAttribute("autocorrect")).toBe("off");
+    }
+    fireEvent.change(transportSelect(), { target: { value: "mailgun" } });
+    expect(screen.getByLabelText("Sending domain").getAttribute("autocapitalize")).toBe("none");
   });
 
   it("leaves a stored key alone when only the Mailgun region moves", async () => {
@@ -251,6 +281,37 @@ describe("field-level 422 (AC4)", () => {
     await saveAndWait();
     const alert = await screen.findByText(/smtp\.tls_policy: not supported here/);
     expect(alert.getAttribute("role")).toBe("alert");
+  });
+
+  it("lands focus on the Mailgun region group, which has no input of its own", async () => {
+    await mount(
+      smtpState({
+        config: {
+          transport: "mailgun",
+          from_address: "no-reply@example.org",
+          from_name: "Example",
+          reply_to: "",
+          mailgun: { domain: "mail.example.org", region: "us", api_key_set: true },
+        },
+      }),
+    );
+    mocks.updateMailConfig.mockRejectedValue(
+      new ApiError({
+        status: 422,
+        code: "unprocessable_entity",
+        message: "invalid",
+        fields: [{ field: "mailgun.region", message: "domain not found in this region" }],
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Europe" }));
+    await saveAndWait();
+    const message = await screen.findByText("domain not found in this region");
+    const wrapper = document.getElementById("mail-field-mailgun-region");
+    expect(wrapper).not.toBeNull();
+    // Without a focusable wrapper, focusFirstError falls THROUGH this key and
+    // lands on a later field while the message sits wired to nothing.
+    expect(document.activeElement).toBe(wrapper);
+    expect(wrapper?.getAttribute("aria-describedby")).toBe(message.id);
   });
 
   it("renders a secret's own 422 on the secret field", async () => {
@@ -399,13 +460,23 @@ describe("an undecryptable credential (AC8)", () => {
 
 describe("discarding the configuration (AC9)", () => {
   it("confirms in a dialog, and Escape closes it without deleting anything", async () => {
-    await mount(smtpState({ environment: { configured: true, host: "mx.example.net", port: 587 } }));
+    await mount(
+      smtpState({
+        environment: {
+          configured: true,
+          host: "mx.example.net",
+          port: 587,
+          from: "env@example.net",
+        },
+      }),
+    );
     const trigger = screen.getByRole("button", { name: "Use environment configuration" });
     trigger.focus();
     fireEvent.click(trigger);
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/go back to the mail settings/)).toBeTruthy();
+    expect(within(dialog).getByText(/Mail will then come from env@example\.net/)).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(mocks.resetMailConfig).not.toHaveBeenCalled();
@@ -474,11 +545,40 @@ describe("the status block", () => {
         environment: { configured: true, host: "mx.example.net", port: 25, from: "a@example.net" },
       }),
     );
-    expect(screen.getByText(/mx\.example\.net, port 25/)).toBeTruthy();
+    // The From address is shipped for exactly one purpose: so the outcome of a
+    // DELETE is visible before it is pressed.
+    expect(screen.getByText(/mx\.example\.net, port 25, from a@example\.net/)).toBeTruthy();
   });
 });
 
 describe("the port rule", () => {
+  it("never rewrites a port that came from the server", async () => {
+    await mount(
+      smtpState({
+        config: {
+          transport: "smtp",
+          from_address: "no-reply@example.org",
+          from_name: "Example",
+          reply_to: "",
+          smtp: {
+            host: "smtp.example.com",
+            port: 2525,
+            encryption: "starttls",
+            username: "postmaster",
+            password_set: true,
+          },
+        },
+      }),
+    );
+    const port = screen.getByLabelText("Port") as HTMLInputElement;
+    expect(port.value).toBe("2525");
+    // A stored port was chosen by someone: toggling encryption twice must not
+    // turn a working 2525 relay back into the blocked 587 it was moved off.
+    fireEvent.change(screen.getByLabelText("Encryption"), { target: { value: "none" } });
+    fireEvent.change(screen.getByLabelText("Encryption"), { target: { value: "starttls" } });
+    expect(port.value).toBe("2525");
+  });
+
   it("follows the encryption mode only until the admin types a port", async () => {
     await mount();
     const port = screen.getByLabelText("Port") as HTMLInputElement;

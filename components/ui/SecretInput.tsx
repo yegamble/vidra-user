@@ -229,9 +229,10 @@ export function SecretInput({
               disabled={disabled}
               autoFocus={focusOnMount === "cancel"}
               aria-label={`Cancel ${label} change`}
-              // The pending-removal case: Cancel takes focus with nothing else
-              // on screen to say what it is cancelling.
-              aria-describedby={cleared ? statusId : undefined}
+              // Deliberately NOT described by the status row: Remove changes
+              // that row's text, which the live region announces, and then
+              // moves focus here — describing it would read the same sentence
+              // twice in a row.
             >
               Cancel
             </Button>

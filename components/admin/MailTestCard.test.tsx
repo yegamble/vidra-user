@@ -13,6 +13,7 @@ vi.mock("@/lib/api", async (importActual) => {
 });
 
 import { ApiError } from "@/lib/api";
+import type { MailSendFailureReason } from "@/lib/api";
 
 import { MailTestCard, mailFailureCopy } from "./MailTestCard";
 
@@ -112,6 +113,30 @@ describe("MailTestCard", () => {
     expect(alert.textContent).toContain("DigitalOcean blocks all three");
   });
 
+  it("still says something when the reason is newer than this build", async () => {
+    // core and this client ship on separate tags, so a reason this switch has
+    // never seen can really arrive. Silence is the one answer the only
+    // diagnostic button on the page must never give.
+    mocks.sendTestMail.mockRejectedValue(
+      mailError({ reason: "greylisted" as MailSendFailureReason }),
+    );
+    render(<MailTestCard />);
+    fireEvent.click(sendButton());
+    const alert = await screen.findByRole("alert");
+    expect((alert.textContent ?? "").trim().length).toBeGreaterThan(10);
+  });
+
+  it("says how large the test budget actually is when it is spent", async () => {
+    mocks.sendTestMail.mockRejectedValue(
+      new ApiError({ status: 429, code: "rate_limited", message: "rate limit exceeded" }),
+    );
+    render(<MailTestCard />);
+    fireEvent.click(sendButton());
+    const alert = await screen.findByRole("alert");
+    // The app-wide copy says "wait a moment"; the budget is per HOUR.
+    expect(alert.textContent).toContain("10 test messages per admin per hour");
+  });
+
   it("offers the way out of a dead end only where that is somewhere else", () => {
     const { unmount } = render(<MailTestCard configureHref="/admin/config/email" />);
     expect(screen.getByRole("link", CONFIGURE).getAttribute("href")).toBe(
@@ -149,7 +174,7 @@ describe("mailFailureCopy", () => {
   });
 
   it("degrades to neutral wording when the panel knows no host", () => {
-    expect(mailFailureCopy("connect_failed", 2525, {})).toBe(
+    expect(mailFailureCopy("connect_failed", 2525, {} as never)).toBe(
       "Could not reach the mail server on port 2525. Check the address and port, and that this server is allowed to make outbound connections.",
     );
   });
@@ -167,7 +192,7 @@ describe("mailFailureCopy", () => {
       "secret_undecryptable",
     ] as const;
     for (const reason of reasons) {
-      expect(mailFailureCopy(reason, undefined, ctx).length).toBeGreaterThan(20);
+      expect((mailFailureCopy(reason, undefined, ctx) ?? "").length).toBeGreaterThan(20);
     }
   });
 });

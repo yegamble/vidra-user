@@ -224,8 +224,16 @@ export function storedSecret(state: MailConfigState, transport: MailTransport): 
 export function smtpHostRepointed(draft: MailDraft, state: MailConfigState): boolean {
   if (draft.transport !== "smtp") return false;
   if (!storedSecret(state, "smtp")) return false;
-  const savedHost = state.config?.smtp?.host ?? "";
-  return draft.smtp.host.trim() !== savedHost;
+  // Case-insensitive and trimmed, matching the server's own comparison
+  // (EqualFold on the trimmed values). A hostname is case-insensitive by
+  // definition, and an iPhone capitalises a bare text input: a panel that
+  // called `Smtp.example.com` a different server would clear a password the
+  // server then refuses to do without, over one autocapitalised letter.
+  return normalizeHost(draft.smtp.host) !== normalizeHost(state.config?.smtp?.host ?? "");
+}
+
+function normalizeHost(host: string): string {
+  return host.trim().toLowerCase();
 }
 
 function portNumber(raw: string): number {

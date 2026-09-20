@@ -20,9 +20,14 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, API_URL, adminToken, uniqueId } from "./fi
 // them empty), so this deployment can seal no credential: `secrets_available`
 // is false and every secret input is disabled. That is why the configuration
 // saved here is a PASSWORD-LESS relay — the one shape that is legitimately
-// storable without a key-encryption key. The expectations are derived from the
-// GET rather than hard-coded, so a lane that later gains a KEK fails loudly on
-// the assertion it invalidates instead of quietly testing something else.
+// storable without a key-encryption key.
+//
+// Both facts are PINNED, not branched on. A conditional expectation cannot fail
+// a mis-provisioned lane: whichever way the stack came up, some branch passes
+// and the spec reports green having proved nothing about the stack it was
+// written for. If this lane ever gains a KEK the assertion below fails loudly,
+// which is the correct outcome — the secret paths then need real coverage, not
+// a silently skipped `else`.
 //
 // WRITE-ONLY in this loop: authored for the `backend-backed` project
 // (npm run e2e:backed), not part of the mocked `npm run ci` gate.
@@ -73,15 +78,12 @@ test("an outbound-mail document saves, survives a reload, and can be removed", a
   // Dev capture is announced as the silent-failure it is: nothing is delivered.
   await expect(page.getByText(/captured for development instead of sent/)).toBeVisible();
 
-  const secretsBlocked = before.secrets_available === false;
-  if (secretsBlocked) {
-    // No key-encryption key: the page says so at page level AND disables the
-    // credential input, because a PUT carrying one would be refused with 409.
-    await expect(page.getByText(/no key to encrypt credentials with/)).toBeVisible();
-    await expect(page.getByLabel("Password")).toBeDisabled();
-  } else {
-    await expect(page.getByText(/no key to encrypt credentials with/)).toHaveCount(0);
-  }
+  // No key-encryption key in this lane: the page says so at page level AND
+  // disables the credential input, because a PUT carrying one would be refused
+  // with 409 mail_secrets_key_missing.
+  expect(before.secrets_available).toBe(false);
+  await expect(page.getByText(/no key to encrypt credentials with/)).toBeVisible();
+  await expect(page.getByLabel("Password")).toBeDisabled();
 
   // A password-less relay — storable with or without a key-encryption key.
   const host = `relay-${uniqueId()}.example.test`;
@@ -117,9 +119,10 @@ test("an outbound-mail document saves, survives a reload, and can be removed", a
   ).toBeVisible();
 
   // Removing it: the confirmation names the consequence before the delete.
-  const discardLabel = before.environment.configured
-    ? "Use environment configuration"
-    : "Remove this configuration";
+  // No SMTP_* in the lane's environment either, so removing the document leaves
+  // no mail path at all — the harsher of the two confirmations.
+  expect(before.environment.configured).toBe(false);
+  const discardLabel = "Remove this configuration";
   await page.getByRole("button", { name: discardLabel }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();

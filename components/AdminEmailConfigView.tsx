@@ -96,6 +96,11 @@ export function EmailConfigPanel() {
   // someone chose is how a working 2525 relay turns back into a blocked 587.
   const [portTouched, setPortTouched] = useState(false);
   const [preset, setPreset] = useState<string>(CUSTOM_PRESET);
+  // Whether the SMTP host has been pointed at a different server, decided when
+  // the field is LEFT rather than on every character: mid-word the host is
+  // always "different", so a per-keystroke rule flips the password field in and
+  // out under the caret and announces the change on each backspace.
+  const [hostRepointed, setHostRepointed] = useState(false);
   const inFlight = useRef(false);
 
   useEffect(() => {
@@ -105,8 +110,12 @@ export function EmailConfigPanel() {
       .then((data) => {
         setState(data);
         setDraft(draftFromState(data));
-        setPortTouched(false);
+        // A stored port was chosen by someone, so it is already "touched": an
+        // encryption toggle must never rewrite a working 2525 relay back to
+        // the 587 its operator deliberately moved off.
+        setPortTouched(Boolean(data.config?.smtp));
         setPreset(CUSTOM_PRESET);
+        setHostRepointed(false);
         setLoadState("ready");
       })
       .catch((err: unknown) => {
@@ -137,6 +146,10 @@ export function EmailConfigPanel() {
     // enforced here instead of by the DOM.
     if (inFlight.current || !draft || !state) return;
     if (!isDirty(draft, draftFromState(state))) return;
+    // Enter submits without blurring, so settle the repoint question here too:
+    // buildMailConfigInput decides what to send from the draft either way, and
+    // this keeps what is on screen agreeing with what travelled.
+    setHostRepointed(smtpHostRepointed(draft, state));
     inFlight.current = true;
     setSaving(true);
     setErrors({});
@@ -145,8 +158,9 @@ export function EmailConfigPanel() {
       const saved = await api.updateMailConfig(buildMailConfigInput(draft, state));
       setState(saved);
       setDraft(draftFromState(saved));
-      setPortTouched(false);
+      setPortTouched(Boolean(saved.config?.smtp));
       setPreset(CUSTOM_PRESET);
+      setHostRepointed(false);
       setResult({ kind: "saved" });
       // The public capability snapshot carries features.mail, which gates three
       // settings rows and the password-reset affordance. Re-prime it here so
@@ -249,7 +263,7 @@ export function EmailConfigPanel() {
   const transport = draft.transport;
   const secretField = SECRET_FIELD[transport];
   const secretsBlocked = state.secrets_available === false;
-  const repointed = smtpHostRepointed(draft, state);
+  const repointed = hostRepointed;
   const secretStored = storedSecret(state, transport) && !(transport === "smtp" && repointed);
   const dirty = isDirty(draft, baseline);
   const suggested = suggestedPort(draft.smtp.encryption);
@@ -349,18 +363,31 @@ export function EmailConfigPanel() {
                   </option>
                 ))}
               </Select>
-              <Input
-                id={fieldElementId("smtp.host")}
-                label="Server address"
-                inputMode="url"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="smtp.example.com"
-                hint="The hostname your provider gave you."
-                error={errors["smtp.host"]}
-                value={draft.smtp.host}
-                onChange={(e) => setHost(e.target.value)}
-              />
+              <div className="flex flex-col gap-1">
+                <Input
+                  id={fieldElementId("smtp.host")}
+                  label="Server address"
+                  inputMode="url"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="smtp.example.com"
+                  hint="The hostname your provider gave you."
+                  error={errors["smtp.host"]}
+                  value={draft.smtp.host}
+                  onChange={(e) => setHost(e.target.value)}
+                  onBlur={() => setHostRepointed(smtpHostRepointed(current, state))}
+                />
+                {/* The consequence, where the hands are. Moving the password
+                    field two rows below the caret is invisible to a screen
+                    reader; this says it, once, when the field is left. */}
+                {repointed ? (
+                  <p role="status" className="text-xs text-fg-muted">
+                    The saved password must be entered again for a different server.
+                  </p>
+                ) : null}
+              </div>
               <Input
                 id={fieldElementId("smtp.port")}
                 label="Port"
@@ -391,6 +418,8 @@ export function EmailConfigPanel() {
                 id={fieldElementId("smtp.username")}
                 label="Username"
                 autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
                 spellCheck={false}
                 hint="Leave empty for a relay that accepts mail without a login."
                 error={errors["smtp.username"]}
@@ -421,6 +450,8 @@ export function EmailConfigPanel() {
                 id={fieldElementId("mailgun.domain")}
                 label="Sending domain"
                 autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
                 spellCheck={false}
                 placeholder="mail.example.com"
                 hint="The domain you added in Mailgun, e.g. mail.example.com."
@@ -428,7 +459,24 @@ export function EmailConfigPanel() {
                 value={draft.mailgun.domain}
                 onChange={(e) => patch({ mailgun: { ...draft.mailgun, domain: e.target.value } })}
               />
-              <div className="flex flex-col gap-1">
+              {/* SegmentedControl takes no id, so the group gets a focusable
+                  wrapper: without one, focusFirstError falls THROUGH a 422 on
+                  this key and lands on a later field, leaving the message on
+                  screen wired to nothing. */}
+              <div
+                id={fieldElementId("mailgun.region")}
+                tabIndex={-1}
+                // No role of its own: SegmentedControl already renders the
+                // labelled group, and nesting a second one would announce two.
+                // This wrapper exists to be FOCUSABLE, so a 422 on the key has
+                // somewhere to land, and to carry the problem as its
+                // description — `aria-invalid` is not supported on a group and
+                // would be decoration.
+                aria-describedby={
+                  errors["mailgun.region"] ? "mail-mailgun-region-error" : undefined
+                }
+                className="flex flex-col gap-1 focus:outline-none"
+              >
                 <span id="mail-mailgun-region-label" className="text-sm font-medium text-fg">
                   Mailgun region
                 </span>
@@ -441,12 +489,14 @@ export function EmailConfigPanel() {
                   value={draft.mailgun.region}
                   onChange={(region) => patch({ mailgun: { ...draft.mailgun, region } })}
                 />
-                <p className="text-xs text-fg-muted">
+                <p id="mail-mailgun-region-hint" className="text-xs text-fg-muted">
                   Must match where the domain was created — the wrong one looks like a missing
                   domain.
                 </p>
                 {errors["mailgun.region"] ? (
-                  <p className="text-xs text-danger">{errors["mailgun.region"]}</p>
+                  <p id="mail-mailgun-region-error" className="text-xs text-danger">
+                    {errors["mailgun.region"]}
+                  </p>
                 ) : null}
               </div>
               <SecretInput
@@ -543,14 +593,35 @@ export function EmailConfigPanel() {
           />
         </Card>
 
+        {/* Outside the sticky row below: an Alert that grew INSIDE the bar
+            would make it taller at the exact moment a 422 moved focus to a
+            field, and a field scrolled to the viewport floor would land under
+            the enlarged bar (WCAG 2.4.11). */}
+        {result?.kind === "saved" ? (
+          <Alert variant="success">
+            Mail settings saved. Send a test message below to confirm they work.
+          </Alert>
+        ) : null}
+        {result?.kind === "reset" ? (
+          <Alert variant="success">The stored configuration was removed.</Alert>
+        ) : null}
+        {result?.kind === "error" ? <Alert variant="danger">{result.message}</Alert> : null}
+
         {/* The house save row, copied from the instance-settings form rather
             than invented a second time. In-flow below sm so it never fights the
             bottom tab bar; opaque bg-canvas so content cannot bleed through. */}
         <div className="z-10 flex flex-wrap items-center gap-3 border-t border-border-subtle bg-canvas py-3 sm:sticky sm:bottom-0">
           {/* aria-disabled, never disabled: a browser blurs a focused element
               the moment it is disabled, so the keyboard user who just pressed
-              Save would be dropped to <body> for the length of the request. */}
-          <Button type="submit" aria-disabled={!dirty || saving || undefined}>
+              Save would be dropped to <body> for the length of the request.
+              The dimming has to be asked for, though — an unstyled aria-disabled
+              primary looks live, and a primary that does nothing on click reads
+              as a broken page. */}
+          <Button
+            type="submit"
+            aria-disabled={!dirty || saving || undefined}
+            className="aria-disabled:opacity-60"
+          >
             {saving ? "Saving…" : "Save mail settings"}
           </Button>
           {/* Shown whenever a document is STORED, which is `source ===
@@ -564,34 +635,24 @@ export function EmailConfigPanel() {
               variant="danger-outline"
               size="sm"
               onClick={() => setConfirmDiscard(true)}
+              aria-disabled={discarding || undefined}
+              className="aria-disabled:opacity-60"
             >
               {state.environment.configured
                 ? "Use environment configuration"
                 : "Remove this configuration"}
             </Button>
           ) : null}
-          {result?.kind === "saved" ? (
-            <Alert variant="success" className="w-full">
-              Mail settings saved. Send a test message below to confirm they work.
-            </Alert>
-          ) : null}
-          {result?.kind === "reset" ? (
-            <Alert variant="success" className="w-full">
-              The stored configuration was removed.
-            </Alert>
-          ) : null}
-          {result?.kind === "error" ? (
-            <Alert variant="danger" className="w-full">
-              {result.message}
-            </Alert>
-          ) : null}
         </div>
       </form>
 
+      {/* The SAVED configuration, never the draft: the test send goes through
+          what the server holds, so naming a half-typed host in the failure
+          would name a server the probe never tried. */}
       <MailTestCard
-        smtpHost={transport === "smtp" ? draft.smtp.host : undefined}
-        smtpPort={transport === "smtp" ? Number(draft.smtp.port) || undefined : undefined}
-        fromAddress={draft.from_address}
+        smtpHost={state.config?.smtp?.host}
+        smtpPort={state.config?.smtp?.port}
+        fromAddress={state.config?.from_address}
       />
 
       <p className="text-[13px] text-fg-muted">
@@ -610,6 +671,12 @@ export function EmailConfigPanel() {
               ? "This instance will go back to the mail settings in its server environment. The credential saved here is deleted and cannot be recovered."
               : "This instance will stop sending email entirely. Password resets and verification links will be silently dropped."}
           </p>
+          {state.environment.configured && state.environment.from ? (
+            <p className="mt-2 text-sm text-fg-muted">
+              Mail will then come from {state.environment.from}
+              {state.environment.host ? `, through ${state.environment.host}` : ""}.
+            </p>
+          ) : null}
           <div className="mt-5 flex flex-wrap justify-end gap-2">
             <Button variant="ghost" onClick={() => setConfirmDiscard(false)}>
               Keep it
@@ -618,6 +685,7 @@ export function EmailConfigPanel() {
               variant="danger"
               onClick={() => void discard()}
               aria-disabled={discarding || undefined}
+              className="aria-disabled:opacity-60"
             >
               {discarding ? "Discarding…" : "Discard configuration"}
             </Button>
@@ -644,11 +712,16 @@ function focusFirstError(fields: Record<string, string>, transport: MailTranspor
   }
 }
 
-/** The deploy-time facts the GET is allowed to show — never the SMTP login. */
+/**
+ * The deploy-time facts the GET is allowed to show — never the SMTP login. The
+ * From address is here because the contract ships it for exactly one purpose:
+ * so an admin can see what a DELETE would revert to BEFORE pressing it.
+ */
 function environmentDetail(state: MailConfigState): string {
-  const { host, port } = state.environment;
+  const { host, port, from } = state.environment;
   if (!host) return "";
-  return port === undefined ? ` (${host})` : ` (${host}, port ${port})`;
+  const where = port === undefined ? host : `${host}, port ${port}`;
+  return from ? ` (${where}, from ${from})` : ` (${where})`;
 }
 
 /**

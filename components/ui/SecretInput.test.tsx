@@ -116,10 +116,11 @@ describe("SecretInput", () => {
     // "" reads as the removal it is, not as an empty box waiting for input —
     // and it is announced, because the only other change is where focus went.
     expect(status().textContent).toBe("Will be removed when you save");
-    // Cancel is the control focus lands on, and it is described by that
-    // sentence: "Cancel SMTP password change" alone never says what is pending.
+    // Cancel is the control focus lands on. It is deliberately NOT described by
+    // that sentence: the live region above has just announced it, and a
+    // description would read it straight back a second time.
     expect(document.activeElement).toBe(cancelButton());
-    expect(cancelButton().getAttribute("aria-describedby")).toBe(status().id);
+    expect(cancelButton().getAttribute("aria-describedby")).toBeNull();
   });
 
   it("Cancel undoes a pending removal", () => {
