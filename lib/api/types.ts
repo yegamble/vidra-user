@@ -191,6 +191,28 @@ export type InfrastructureDelivery = NonNullable<InfrastructureStatus["delivery"
 export type InfrastructureLive = NonNullable<InfrastructureStatus["live"]>;
 export type InfrastructureFeature = Schemas["InfrastructureFeature"];
 export type MailTestResult = Schemas["MailTestResult"];
+// Outbound-mail configuration (GET/PUT/DELETE /admin/mail-config). The READ
+// document reports each credential as a `*_set` boolean; the INPUT replaces
+// those flags with the write-only secret itself, which is why the two shapes
+// are separate types rather than one with optional fields.
+export type MailConfigState = Schemas["MailConfigState"];
+export type MailConfigSource = MailConfigState["source"];
+export type MailConfigSecretStatus = MailConfigState["secret_status"];
+export type MailConfigEnvironment = Schemas["MailConfigEnvironment"];
+export type MailConfigDocument = Schemas["MailConfigDocument"];
+export type MailTransport = MailConfigDocument["transport"];
+export type MailConfigSMTP = Schemas["MailConfigSMTP"];
+export type MailSMTPEncryption = MailConfigSMTP["encryption"];
+export type MailConfigMailgun = Schemas["MailConfigMailgun"];
+export type MailgunRegion = MailConfigMailgun["region"];
+export type MailConfigInput = Schemas["MailConfigInput"];
+/**
+ * How an outbound send failed, from the `mail_test_failed` 502 envelope. A
+ * closed vocabulary the API defines — never the relay's own words, which quote
+ * the recipient address — so the panel can name the remedy instead of saying
+ * "it did not work".
+ */
+export type MailSendFailureReason = NonNullable<ApiErrorEnvelope["error"]["reason"]>;
 export type AdminStats = Schemas["AdminStats"];
 export type UpdateUserRequest = Schemas["UpdateUserRequest"];
 export type TransferOwnershipRequest = Schemas["TransferOwnershipRequest"];

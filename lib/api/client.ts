@@ -4,7 +4,13 @@ import { logger } from "@/lib/logger";
 import { activeTraceFields, injectTraceContext } from "@/lib/observability/trace";
 
 import { getAccessToken, notifySessionExpired, setAccessToken } from "./auth-store";
-import type { ApiErrorEnvelope, AuthResponse, FieldError, RefreshRequest } from "./types";
+import type {
+  ApiErrorEnvelope,
+  AuthResponse,
+  FieldError,
+  MailSendFailureReason,
+  RefreshRequest,
+} from "./types";
 
 /**
  * ApiError is thrown for any non-2xx response. It carries the backend's stable
@@ -22,6 +28,15 @@ export class ApiError extends Error {
    * uuid that POST /videos/{id}/unlock is keyed on.
    */
   readonly videoId?: string;
+  /**
+   * How an outbound mail send failed. Core sends it ONLY on `mail_test_failed`
+   * (502). Parsed here rather than at the one call site because the envelope is
+   * consumed through this class everywhere else too — a component reaching into
+   * a raw response body would be the second parser of the same field.
+   */
+  readonly mailReason?: MailSendFailureReason;
+  /** The SMTP port that failed, alongside `mailReason`. Absent for API providers. */
+  readonly mailPort?: number;
 
   constructor(args: {
     status: number;
@@ -30,6 +45,8 @@ export class ApiError extends Error {
     requestId?: string;
     fields?: FieldError[];
     videoId?: string;
+    mailReason?: MailSendFailureReason;
+    mailPort?: number;
   }) {
     super(args.message);
     this.name = "ApiError";
@@ -38,6 +55,8 @@ export class ApiError extends Error {
     this.requestId = args.requestId;
     this.fields = args.fields;
     this.videoId = args.videoId;
+    this.mailReason = args.mailReason;
+    this.mailPort = args.mailPort;
   }
 }
 
@@ -102,6 +121,8 @@ export function apiErrorFromBody(status: number, text: string): ApiError {
   let requestId: string | undefined;
   let fields: FieldError[] | undefined;
   let videoId: string | undefined;
+  let mailReason: MailSendFailureReason | undefined;
+  let mailPort: number | undefined;
   try {
     const body = JSON.parse(text) as Partial<ApiErrorEnvelope>;
     if (body.error) {
@@ -110,11 +131,22 @@ export function apiErrorFromBody(status: number, text: string): ApiError {
       requestId = body.error.request_id;
       fields = body.error.fields;
       videoId = body.error.video_id;
+      mailReason = body.error.reason;
+      mailPort = body.error.port;
     }
   } catch {
     // Non-JSON or empty body — keep the generic message.
   }
-  return new ApiError({ status, code, message, requestId, fields, videoId });
+  return new ApiError({
+    status,
+    code,
+    message,
+    requestId,
+    fields,
+    videoId,
+    mailReason,
+    mailPort,
+  });
 }
 
 async function toApiError(res: Response): Promise<ApiError> {

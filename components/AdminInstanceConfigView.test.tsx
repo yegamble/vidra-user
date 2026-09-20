@@ -509,6 +509,33 @@ describe("page placement and progressive disclosure", () => {
     expect(await screen.findByText(/FEDERATION_ENABLED/)).toBeTruthy();
   });
 
+  // A bootDep LOCKS the row, so its note is the whole of what the reader gets.
+  // Before the Email page existed it ended on "set up mail delivery" with no
+  // destination; the link comes off the same meta.bootDep as the note, so every
+  // row declaring the dependency gets it, not just the ones someone edited.
+  it("gives a mail-blocked row the way out, not just the diagnosis", async () => {
+    mocks.getInstanceCached.mockResolvedValue({ features: { mail: false } });
+    mocks.getInstanceSettings.mockResolvedValue({
+      settings: [
+        {
+          key: "email_subject_prefix",
+          type: "string",
+          value: "",
+          default: "",
+          overridden: false,
+        },
+      ],
+    });
+    render(<ConfigForm page="customization" />);
+    const row = (await screen.findByLabelText(
+      "Email subject prefix",
+    )) as HTMLInputElement;
+    expect(row.disabled).toBe(true);
+    expect(
+      screen.getByRole("link", { name: /Configure email/ }).getAttribute("href"),
+    ).toBe("/admin/config/email");
+  });
+
   it("discard resets every pending edit back to the server truth", async () => {
     render(<ConfigForm page="vod" />);
     const sessions = await screen.findByLabelText(

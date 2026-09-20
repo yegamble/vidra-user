@@ -51,6 +51,7 @@ export {
   type SegmentedControlProps,
   type SegmentedOption,
 } from "./SegmentedControl";
+export { SecretInput, type SecretInputProps } from "./SecretInput";
 export { Select, type SelectProps } from "./Select";
 export { Skeleton, type SkeletonProps } from "./Skeleton";
 export { Spinner } from "./Spinner";

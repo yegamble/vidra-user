@@ -17,6 +17,8 @@ import type {
   InstanceSettingsResponse,
   InstanceSettingsValidationResponse,
   InfrastructureStatus,
+  MailConfigInput,
+  MailConfigState,
   MailTestResult,
   UpdateInstanceSettingsRequest,
   InstanceAboutResponse,
@@ -2367,6 +2369,38 @@ export const api = {
    */
   sendTestMail: () =>
     apiRequest<MailTestResult>("/api/v1/admin/mail/test", { method: "POST" }),
+
+  /**
+   * GET /api/v1/admin/mail-config — the outbound-mail configuration and the
+   * state it is in (admin only): which source is in force, whether this
+   * deployment can seal a credential at all, whether the stored one still
+   * decrypts, and what the environment would fall back to. It NEVER returns a
+   * credential — each transport block reports only a `*_set` boolean.
+   */
+  getMailConfig: (signal?: AbortSignal) =>
+    apiRequest<MailConfigState>("/api/v1/admin/mail-config", { signal }),
+
+  /**
+   * PUT /api/v1/admin/mail-config — save the whole document: transport, sender
+   * identity and the one block matching the transport (admin only). Each
+   * block's secret is write-only with three meanings: OMITTED keeps the stored
+   * credential (valid only when the transport is unchanged), `""` clears it
+   * (only `smtp.password`), any other value replaces it. A masked field the
+   * admin did not touch must therefore be left OUT of the body, never echoed
+   * back as its mask. 409 `mail_secrets_key_missing` = no KEK to seal with;
+   * 422 `fields` carries DOTTED paths (`smtp.host`) that bind to the inputs.
+   */
+  updateMailConfig: (body: MailConfigInput) =>
+    apiRequest<MailConfigState>("/api/v1/admin/mail-config", { method: "PUT", body }),
+
+  /**
+   * DELETE /api/v1/admin/mail-config — drop the stored document so the
+   * instance reverts to its ENVIRONMENT mail configuration, or to no outbound
+   * mail at all (the GET's `environment.configured` says which in advance).
+   * The stored credential is deleted with it. 204, idempotent.
+   */
+  resetMailConfig: () =>
+    apiRequest<void>("/api/v1/admin/mail-config", { method: "DELETE" }),
 
   /** GET /api/v1/ipfs/status — effective public/private mirror health and pin counts (admin). */
   getIPFSStatus: (signal?: AbortSignal) =>

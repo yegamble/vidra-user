@@ -3,7 +3,7 @@ import { AdminTabs } from "@/components/AdminTabs";
 import { PageHeader } from "@/components/PageHeader";
 
 // The instance-configuration shell (config-parity W2): /admin/config is a
-// layout route with a persistent left rail of pages (general | vod | live |
+// layout route with a persistent left rail of pages (general | email | vod | live |
 // federation | customization | homepage | ipfs | advanced — lib/admin-config-ia.ts),
 // each page rendering its own grouped sections with an in-page anchor rail.
 // The bare /admin/config index redirects to /admin/config/general.

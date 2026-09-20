@@ -2,7 +2,7 @@
 // architecture note 4). The single /admin/config page split into the
 // PeerTube-mirroring multi-page IA:
 //
-//   general | vod | live | federation | customization | homepage | ipfs | advanced
+//   general | email | vod | live | federation | customization | homepage | ipfs | advanced
 //
 // This module is the client-side placement registry: which page + section
 // every known setting renders on, how it is edited, validated, and disclosed.
@@ -84,6 +84,7 @@ export type InfrastructureWiringInfo = {
 
 export type ConfigPageId =
   | "general"
+  | "email"
   | "vod"
   | "live"
   | "federation"
@@ -110,6 +111,12 @@ export const CONFIG_PAGES: readonly ConfigPageDef[] = [
     label: "General",
     description:
       "Platform identity, the About page, terms and moderation, sign-up, and comments.",
+  },
+  {
+    id: "email",
+    label: "Email",
+    description:
+      "How this instance sends mail: the relay or provider, the sender address, and a delivery test.",
   },
   {
     id: "vod",
@@ -265,6 +272,13 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
         "Everything shown on the public About page: legal links, how people can support the instance, the terms and code of conduct, and your answers about who runs it.",
     },
   ],
+  // Outbound mail is a dedicated document (transport, credentials, sender), not
+  // registry keys: the instance-settings registry echoes every value on GET and
+  // so structurally cannot hold a write-only secret. Its route renders
+  // AdminEmailConfigView; the empty section list keeps ConfigPageId's registry
+  // exhaustive, the same shape the IPFS page uses. The PRESENTATION strings
+  // (subject prefix, signature) stay registry keys on Customization → Email.
+  email: [],
   vod: [
     {
       id: "uploads",
@@ -572,6 +586,15 @@ export type SettingMeta = {
   bootDep?: {
     note: string;
     isSatisfied: (instance: InstanceBootInfo) => boolean;
+    /**
+     * Where the operator goes to satisfy the dependency, rendered at the end of
+     * the note. Optional because not every boot dependency HAS an admin
+     * destination — a boot-env knob is fixed until the next restart, and a link
+     * promising a control that is not there is worse than no link. When one
+     * does exist the note must carry it, or the row is a diagnosis that leaves
+     * the reader to guess the next step.
+     */
+    link?: { href: string; label: string };
   };
   /**
    * Deploy-wiring warning: when the admin-only /admin/infrastructure snapshot
@@ -586,6 +609,16 @@ export type SettingMeta = {
     isTriggered: (infra: InfrastructureWiringInfo) => boolean;
   };
 };
+
+/**
+ * The destination every mail-dependent row sends to. One constant, because the
+ * three rows that flag "this server sends no mail" are the same finding with
+ * the same fix, and three copies of a path is three places for it to rot.
+ */
+const CONFIGURE_EMAIL_LINK = {
+  href: "/admin/config/email",
+  label: "Configure email",
+} as const;
 
 // In DISPLAY ORDER within each section. Any key the backend returns that is
 // not listed here still renders (per the placement precedence above) so a new
@@ -776,8 +809,9 @@ export const META: Record<string, SettingMeta> = {
     page: "customization",
     section: "email",
     bootDep: {
-      note: "Outgoing mail is not configured on this server (SMTP), so emails are never sent. This setting takes effect once mail delivery is set up.",
+      note: "Outgoing mail is not configured on this server, so emails are never sent. This setting takes effect once mail delivery is set up.",
       isSatisfied: (instance) => instance.features?.mail !== false,
+      link: CONFIGURE_EMAIL_LINK,
     },
   },
   email_body_signature: {
@@ -787,8 +821,9 @@ export const META: Record<string, SettingMeta> = {
     page: "customization",
     section: "email",
     bootDep: {
-      note: "Outgoing mail is not configured on this server (SMTP), so emails are never sent. This setting takes effect once mail delivery is set up.",
+      note: "Outgoing mail is not configured on this server, so emails are never sent. This setting takes effect once mail delivery is set up.",
       isSatisfied: (instance) => instance.features?.mail !== false,
+      link: CONFIGURE_EMAIL_LINK,
     },
   },
   // GENERAL / Broadcast message (config-parity W3): message/level/dismissable
@@ -1039,8 +1074,9 @@ export const META: Record<string, SettingMeta> = {
     section: "signup",
     parent: "registration_enabled",
     bootDep: {
-      note: "Outgoing mail is not configured on this server (SMTP), so verification emails cannot be sent. This gate has no effect until mail delivery is set up.",
+      note: "Outgoing mail is not configured on this server, so verification emails cannot be sent. This gate has no effect until mail delivery is set up.",
       isSatisfied: (instance) => instance.features?.mail !== false,
+      link: CONFIGURE_EMAIL_LINK,
     },
   },
   registration_user_limit: {

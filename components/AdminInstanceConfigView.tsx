@@ -24,6 +24,7 @@ import { Modal } from "@/components/ui/Modal";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
+import { TextLink } from "@/components/ui/TextLink";
 import { Textarea } from "@/components/ui/Textarea";
 import { Toggle } from "@/components/ui/Toggle";
 import {
@@ -99,7 +100,7 @@ function sectionAnchorId(sectionId: string): string {
 }
 
 // AdminInstanceConfigView is one PAGE of the admin instance configuration
-// (config-parity W2 IA: general | vod | live | federation | customization |
+// (config-parity W2 IA: general | email | vod | live | federation | customization |
 // homepage | ipfs | advanced — see lib/admin-config-ia.ts). The IPFS route uses
 // its dedicated status/reconcile view; this registry view loads the effective
 // settings overlay (GET /admin/instance-settings), renders THIS page's grouped
@@ -726,8 +727,25 @@ function SettingRow({
               Not supported by this server yet.
             </span>
           ) : null}
+          {/* The note says what is missing; the link says where to fix it. Both
+              come off the SAME meta.bootDep, so a dependency that grows an
+              admin destination gets its way out on every row that declares it
+              rather than on the one somebody remembered to edit. */}
           {bootNote !== null && !unsupported ? (
-            <span className="block text-xs text-fg-muted">{bootNote}</span>
+            <span className="block text-xs text-fg-muted">
+              {bootNote}
+              {meta?.bootDep?.link ? (
+                <>
+                  {" "}
+                  <TextLink
+                    href={meta.bootDep.link.href}
+                    className="text-xs"
+                  >
+                    {meta.bootDep.link.label} →
+                  </TextLink>
+                </>
+              ) : null}
+            </span>
           ) : null}
           {/* Wiring warn: warning ink, and deliberately NOT part of `inactive`
               above — see the warnNote prop doc. */}

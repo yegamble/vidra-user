@@ -271,7 +271,11 @@ test("the mail probe reports acceptance without printing the address", async ({
   await openInfrastructure(page);
 
   await page.getByRole("button", { name: "Send test message" }).click();
-  await expect(page.getByText("Handed to the relay")).toBeVisible();
+  // Success is announced, not just drawn: it lands in a live region, because a
+  // silent green card answers the only button on the page with nothing.
+  await expect(
+    page.getByRole("region", { name: "Outbound mail test" }).getByRole("status"),
+  ).toBeVisible();
   // 202 is a promise to try, and the copy says so rather than claiming delivery.
   await expect(page.getByText(/not proof of delivery/)).toBeVisible();
   // No recipient travels: the server picks it, so the button cannot be a relay.
@@ -330,5 +334,5 @@ test("mail probe failures explain what to do next", async ({ page }) => {
   await expect(alert).toContainText(/server log/);
 
   // A failed probe never claims success.
-  await expect(page.getByText("Handed to the relay")).toHaveCount(0);
+  await expect(page.getByText(/not proof of delivery/)).toHaveCount(0);
 });
