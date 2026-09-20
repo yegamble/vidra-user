@@ -293,12 +293,23 @@ export async function seedPublishedChannel(
     data: { title: videoTitle, privacy: "public" },
   });
   const videoId = ((await vid.json()) as { id: string }).id;
-  await request.post(`${API_URL}/api/v1/videos/${videoId}/file`, {
+  const upload = await request.post(`${API_URL}/api/v1/videos/${videoId}/file`, {
     headers: auth,
     multipart: {
       file: { name: "clip.mp4", mimeType: "video/mp4", buffer: Buffer.from(TINY_MP4_BASE64, "base64") },
     },
   });
+  // A REFUSED upload must fail the seed here, loudly, instead of returning a
+  // fileless video for a downstream `test.skip()` to misdiagnose. Precedent:
+  // frontend-e2e-optional.yml lacked MALWARE_SCAN_MODE=disabled, so every
+  // upload answered 503 scanner_not_configured, the video never reached
+  // `quarantined`, and for two weeks the quarantine specs skipped saying
+  // "QUARANTINE_NEW_UPLOADS is not enabled" — a flag that was on the whole
+  // time. The status and body below name the real refusal at the seam.
+  expect(
+    upload.ok(),
+    `seed upload failed: ${upload.status()} ${await upload.text()}`,
+  ).toBe(true);
 
   return { handle, displayName, videoId, videoTitle, token };
 }
