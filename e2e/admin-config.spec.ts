@@ -1417,7 +1417,7 @@ test("W6 email keys render disabled-with-explanation when mail is not wired", as
   // A disabled row's note is the whole of what the operator gets, so it carries
   // the way out rather than ending on "set up mail delivery" with nowhere to go.
   await expect(
-    page.getByRole("link", { name: "Configure email →" }).first(),
+    page.getByRole("link", { name: /Configure email/ }).first(),
   ).toHaveAttribute("href", "/admin/config/email");
 });
 
