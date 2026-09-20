@@ -2,7 +2,7 @@
 // architecture note 4). The single /admin/config page split into the
 // PeerTube-mirroring multi-page IA:
 //
-//   general | vod | live | federation | customization | homepage | ipfs | advanced
+//   general | email | vod | live | federation | customization | homepage | ipfs | advanced
 //
 // This module is the client-side placement registry: which page + section
 // every known setting renders on, how it is edited, validated, and disclosed.
@@ -84,6 +84,7 @@ export type InfrastructureWiringInfo = {
 
 export type ConfigPageId =
   | "general"
+  | "email"
   | "vod"
   | "live"
   | "federation"
@@ -110,6 +111,12 @@ export const CONFIG_PAGES: readonly ConfigPageDef[] = [
     label: "General",
     description:
       "Platform identity, the About page, terms and moderation, sign-up, and comments.",
+  },
+  {
+    id: "email",
+    label: "Email",
+    description:
+      "How this instance sends mail: the relay or provider, the sender address, and a delivery test.",
   },
   {
     id: "vod",
@@ -265,6 +272,13 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
         "Everything shown on the public About page: legal links, how people can support the instance, the terms and code of conduct, and your answers about who runs it.",
     },
   ],
+  // Outbound mail is a dedicated document (transport, credentials, sender), not
+  // registry keys: the instance-settings registry echoes every value on GET and
+  // so structurally cannot hold a write-only secret. Its route renders
+  // AdminEmailConfigView; the empty section list keeps ConfigPageId's registry
+  // exhaustive, the same shape the IPFS page uses. The PRESENTATION strings
+  // (subject prefix, signature) stay registry keys on Customization → Email.
+  email: [],
   vod: [
     {
       id: "uploads",

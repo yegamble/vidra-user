@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 // `npm run ci`; PATCH persistence against the real stack is proven in
 // e2e-backed/instance-settings.spec.ts). Covers the config-parity W2 IA:
 // /admin/config as a layout route with a persistent left rail of pages
-// (general | vod | live | federation | customization | homepage | ipfs | advanced),
+// (general | email | vod | live | federation | customization | homepage | ipfs | advanced),
 // per-page grouped sections, progressive disclosure, server-backed dry-run
 // field validation (the client keeps no copy of the backend's rules), the
 // per-section save, the badge-only-when-overridden rule with the config
@@ -244,10 +244,11 @@ test("/admin/config redirects to the general page and shows the page rail", asyn
   await page.route(SETTINGS, (route) => route.fulfill({ json: settings }));
   await openConfig(page);
 
-  // The eight-page rail, in IA order.
+  // The nine-page rail, in IA order.
   const nav = configNav(page);
   for (const label of [
     "General",
+    "Email",
     "VOD",
     "Live",
     "Federation",

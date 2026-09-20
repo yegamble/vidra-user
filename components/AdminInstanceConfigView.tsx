@@ -99,7 +99,7 @@ function sectionAnchorId(sectionId: string): string {
 }
 
 // AdminInstanceConfigView is one PAGE of the admin instance configuration
-// (config-parity W2 IA: general | vod | live | federation | customization |
+// (config-parity W2 IA: general | email | vod | live | federation | customization |
 // homepage | ipfs | advanced — see lib/admin-config-ia.ts). The IPFS route uses
 // its dedicated status/reconcile view; this registry view loads the effective
 // settings overlay (GET /admin/instance-settings), renders THIS page's grouped
