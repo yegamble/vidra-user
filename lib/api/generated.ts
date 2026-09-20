@@ -4785,7 +4785,7 @@ export interface paths {
          * Save the outbound-mail configuration (admin)
          * @description Saves the WHOLE document: the transport, the sender identity and the one block that matches the transport. Only that block is read; a switched-away provider's settings are not kept, so the panel can never show a Mailgun domain for an instance that sends over Resend.
          *
-         *     SECRET SEMANTICS. Each block's secret field is write-only and has three meanings. Absent or null keeps the stored credential — valid ONLY when the transport is unchanged, because a stored secret belongs to the provider it was entered for; switching transport without a new secret is 422. An empty string clears it, which is valid only for `smtp.password` (an anonymous relay is a real shape; a provider with no API key is not a configuration). Any other value replaces it.
+         *     SECRET SEMANTICS. Each block's secret field is write-only and has three meanings. Absent or null keeps the stored credential — valid ONLY when the transport is unchanged, because a stored secret belongs to the provider it was entered for; switching transport without a new secret is 422. For `smtp`, the stored password is also kept only while `smtp.host` is unchanged (compared case-insensitively, trimmed): a kept credential is never re-pointed at a different server, so changing the relay address costs the password again — 422 on `smtp.password`. `smtp.username`, `smtp.port` and `smtp.encryption` reach the same server and do not, and neither do `mailgun.domain`/`mailgun.region`, whose hosts are the vendor's. An empty string clears it, which is valid only for `smtp.password` (an anonymous relay is a real shape; a provider with no API key is not a configuration). Any other value replaces it.
          *
          *     Validation is the transport builder's own, so a configuration that saves is a configuration that resolves, and `fields` on a 422 carries DOTTED PATHS (`smtp.host`, `mailgun.api_key`) that bind one-to-one to the form's inputs.
          *
@@ -9291,7 +9291,9 @@ export interface components {
         /**
          * @description The PUT body: the same shape as MailConfigDocument, with a WRITE-ONLY secret in place of each block's `*_set` flag.
          *
-         *     Each secret has three meanings. OMITTED (or null) keeps the stored credential — valid only when `transport` is unchanged, since a stored secret belongs to the provider it was entered for. An EMPTY STRING clears it, which is valid only for `smtp.password`. Any other value replaces it. A masked field the admin did not touch must therefore be OMITTED from the body, never sent back as its mask.
+         *     Each secret has three meanings. OMITTED (or null) keeps the stored credential — valid only when `transport` is unchanged, since a stored secret belongs to the provider it was entered for, and for `smtp` only while `smtp.host` is unchanged as well. An EMPTY STRING clears it, which is valid only for `smtp.password`. Any other value replaces it. A masked field the admin did not touch must therefore be OMITTED from the body, never sent back as its mask.
+         *
+         *     `from_address` and `reply_to` are BARE addresses: no display name and no angle brackets. `Vidra <no-reply@example.org>` is a 422 — it parses, and it is what would reach `MAIL FROM`. The display name is `from_name`.
          */
         MailConfigInput: {
             /** @enum {string} */
@@ -9312,7 +9314,11 @@ export interface components {
             username?: string;
             /** @enum {string} */
             encryption: "starttls" | "tls" | "none";
-            /** @description Write-only. Omit to keep the stored password, "" to clear it (an anonymous relay), or a value to replace it. Never returned. */
+            /**
+             * @description Write-only. Omit to keep the stored password, "" to clear it (an anonymous relay), or a value to replace it. Never returned.
+             *
+             *     Omitting it keeps the password only while `host` is unchanged (case-insensitive, trimmed). A save that moves the relay to a different address with the password omitted is 422 on `smtp.password`: a stored credential is never re-pointed at a server the admin has not just authenticated to. `username`, `port` and `encryption` may change freely with the password omitted.
+             */
             password?: string;
         };
         MailConfigMailgunInput: {
@@ -24153,7 +24159,11 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The document is invalid. `fields` carries one entry per problem, keyed by the DOTTED path of the offending input (`from_address`, `smtp.host`, `smtp.port`, `smtp.encryption`, `mailgun.domain`, `mailgun.region`, `resend.api_key`, `postmark.server_token`, …). */
+            /**
+             * @description The document is invalid. `fields` carries one entry per problem, keyed by the DOTTED path of the offending input (`from_address`, `smtp.host`, `smtp.port`, `smtp.encryption`, `mailgun.domain`, `mailgun.region`, `resend.api_key`, `postmark.server_token`, …).
+             *
+             *     Two cases a panel should expect. `from_address` and `reply_to` must be a BARE address — `no-reply@example.org`, never `Vidra <no-reply@example.org>` and never `<no-reply@example.org>`; a display name belongs in `from_name`. And a save that changes `smtp.host` while omitting `smtp.password` is 422 on `smtp.password` ("required: changing the server address requires the password again"): the stored credential is never re-pointed at a server the admin has not just authenticated to. Re-render the password input as empty and required when that arrives.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
