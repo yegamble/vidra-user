@@ -118,6 +118,36 @@ describe("apiRequest", () => {
     });
   });
 
+  it("carries the mail_test_failed reason and port off the envelope", async () => {
+    // The 502's machine-readable half. Parsed here so the one panel that maps
+    // it to a remedy reads a typed field instead of re-parsing the body.
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "mail_test_failed",
+            message: "the relay refused the message",
+            reason: "connect_failed",
+            port: 587,
+          },
+        },
+        502,
+      ),
+    );
+    const err = (await apiRequest("/api/v1/admin/mail/test").catch((e) => e)) as ApiError;
+    expect(err.mailReason).toBe("connect_failed");
+    expect(err.mailPort).toBe(587);
+  });
+
+  it("leaves the mail fields undefined on an ordinary error", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: "not_found", message: "nope" } }, 404),
+    );
+    const err = (await apiRequest("/x").catch((e) => e)) as ApiError;
+    expect(err.mailReason).toBeUndefined();
+    expect(err.mailPort).toBeUndefined();
+  });
+
   it("falls back to a generic ApiError for a non-envelope error body", async () => {
     fetchMock.mockResolvedValue(new Response("oops", { status: 500 }));
     const err = (await apiRequest("/x").catch((e) => e)) as ApiError;
