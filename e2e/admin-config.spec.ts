@@ -1409,7 +1409,7 @@ test("W6 email keys render disabled-with-explanation when mail is not wired", as
   await expect(page.getByLabel("Email signature")).toBeDisabled();
   await expect(
     page
-      .getByText("Outgoing mail is not configured on this server (SMTP)", {
+      .getByText("Outgoing mail is not configured on this server", {
         exact: false,
       })
       .first(),

@@ -37,6 +37,8 @@ function Harness({
 }
 
 const field = () => screen.getByLabelText(LABEL) as HTMLInputElement;
+/** The stored state is a status row, not a control — read it by its live region. */
+const status = () => screen.getByRole("status");
 const replaceButton = () =>
   screen.getByRole("button", { name: `Replace ${LABEL}` });
 const cancelButton = () =>
@@ -59,12 +61,22 @@ describe("SecretInput", () => {
     expect(field().value).toBe("hunter2");
   });
 
-  it("shows a stored secret as a read-only saved state, never a value", () => {
+  it("shows a stored secret as a status row, never a textbox holding a mask", () => {
     render(<Harness isSet />);
-    expect(field().value).toBe("•••••••• saved");
-    expect(field().readOnly).toBe(true);
-    expect(field().type).toBe("text");
+    // A textbox would announce its VALUE verbatim, so eight bullet characters
+    // would precede the one word that matters. There is no textbox here.
+    expect(screen.queryByLabelText(LABEL)).toBeNull();
+    expect(status().textContent).toBe("Saved");
     expect(replaceButton()).toBeTruthy();
+  });
+
+  it("names the credential's state from every button that acts on it", () => {
+    render(<Harness isSet allowClear />);
+    const id = status().id;
+    expect(replaceButton().getAttribute("aria-describedby")).toBe(id);
+    expect(
+      screen.getByRole("button", { name: `Remove ${LABEL}` }).getAttribute("aria-describedby"),
+    ).toBe(id);
   });
 
   it("Replace opens an empty password box and moves focus into it", () => {
@@ -88,7 +100,7 @@ describe("SecretInput", () => {
     // undefined is the whole point: the caller omits the field, so the stored
     // secret survives a save the admin did not mean to change it in.
     expect(onValue).toHaveBeenLastCalledWith(undefined);
-    expect(field().value).toBe("•••••••• saved");
+    expect(status().textContent).toBe("Saved");
     expect(document.activeElement).toBe(replaceButton());
   });
 
@@ -101,21 +113,40 @@ describe("SecretInput", () => {
     render(<Harness isSet allowClear onValue={onValue} />);
     fireEvent.click(screen.getByRole("button", { name: `Remove ${LABEL}` }));
     expect(onValue).toHaveBeenLastCalledWith("");
-    // "" reads as the removal it is, not as an empty box waiting for input.
-    expect(field().value).toBe("Will be removed when you save");
-    expect(field().readOnly).toBe(true);
+    // "" reads as the removal it is, not as an empty box waiting for input —
+    // and it is announced, because the only other change is where focus went.
+    expect(status().textContent).toBe("Will be removed when you save");
+    // Cancel is the control focus lands on, and it is described by that
+    // sentence: "Cancel SMTP password change" alone never says what is pending.
     expect(document.activeElement).toBe(cancelButton());
+    expect(cancelButton().getAttribute("aria-describedby")).toBe(status().id);
   });
 
   it("Cancel undoes a pending removal", () => {
     render(<Harness isSet allowClear />);
     fireEvent.click(screen.getByRole("button", { name: `Remove ${LABEL}` }));
     fireEvent.click(cancelButton());
-    expect(field().value).toBe("•••••••• saved");
+    expect(status().textContent).toBe("Saved");
     expect(replaceButton()).toBeTruthy();
   });
 
   it("disables every control and explains why, wired to the field", () => {
+    render(
+      <Harness
+        isSet={false}
+        disabled
+        disabledReason="This deployment holds no key to seal a secret with."
+      />,
+    );
+    expect(field().disabled).toBe(true);
+    const note = screen.getByRole("note");
+    expect(note.textContent).toBe(
+      "This deployment holds no key to seal a secret with.",
+    );
+    expect(field().getAttribute("aria-describedby")).toContain(note.id);
+  });
+
+  it("disables the buttons of a stored secret and still explains why", () => {
     render(
       <Harness
         isSet
@@ -124,15 +155,15 @@ describe("SecretInput", () => {
         disabledReason="This deployment holds no key to seal a secret with."
       />,
     );
-    expect(field().disabled).toBe(true);
     for (const button of screen.getAllByRole("button")) {
       expect((button as HTMLButtonElement).disabled).toBe(true);
     }
-    const note = screen.getByRole("note");
-    expect(note.textContent).toBe(
+    // A disabled control is not focusable, so this note is unreachable by
+    // keyboard on its own — the page-level warning beside it is what carries
+    // the explanation, and this is only the field-local echo of it.
+    expect(screen.getByRole("note").textContent).toBe(
       "This deployment holds no key to seal a secret with.",
     );
-    expect(field().getAttribute("aria-describedby")).toContain(note.id);
   });
 
   it("keeps the ordinary hint when the field is not disabled", () => {
@@ -141,8 +172,11 @@ describe("SecretInput", () => {
     expect(screen.getByText("Paste the key from your provider.")).toBeTruthy();
   });
 
-  it("defaults autocomplete away from this site's saved password", () => {
+  it("never invites the browser to generate a password", () => {
+    // "new-password" is the token Safari/Chrome read as "offer a generated
+    // strong password here", and a generated one cannot authenticate against
+    // the provider that issued the real key.
     render(<Harness isSet={false} />);
-    expect(field().getAttribute("autocomplete")).toBe("new-password");
+    expect(field().getAttribute("autocomplete")).toBe("off");
   });
 });

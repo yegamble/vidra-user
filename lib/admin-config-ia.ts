@@ -809,7 +809,7 @@ export const META: Record<string, SettingMeta> = {
     page: "customization",
     section: "email",
     bootDep: {
-      note: "Outgoing mail is not configured on this server (SMTP), so emails are never sent. This setting takes effect once mail delivery is set up.",
+      note: "Outgoing mail is not configured on this server, so emails are never sent. This setting takes effect once mail delivery is set up.",
       isSatisfied: (instance) => instance.features?.mail !== false,
       link: CONFIGURE_EMAIL_LINK,
     },
@@ -821,7 +821,7 @@ export const META: Record<string, SettingMeta> = {
     page: "customization",
     section: "email",
     bootDep: {
-      note: "Outgoing mail is not configured on this server (SMTP), so emails are never sent. This setting takes effect once mail delivery is set up.",
+      note: "Outgoing mail is not configured on this server, so emails are never sent. This setting takes effect once mail delivery is set up.",
       isSatisfied: (instance) => instance.features?.mail !== false,
       link: CONFIGURE_EMAIL_LINK,
     },
@@ -1074,7 +1074,7 @@ export const META: Record<string, SettingMeta> = {
     section: "signup",
     parent: "registration_enabled",
     bootDep: {
-      note: "Outgoing mail is not configured on this server (SMTP), so verification emails cannot be sent. This gate has no effect until mail delivery is set up.",
+      note: "Outgoing mail is not configured on this server, so verification emails cannot be sent. This gate has no effect until mail delivery is set up.",
       isSatisfied: (instance) => instance.features?.mail !== false,
       link: CONFIGURE_EMAIL_LINK,
     },
