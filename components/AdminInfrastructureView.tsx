@@ -312,7 +312,7 @@ export function InfrastructurePanel() {
 
       <FeatureList features={data.features} />
 
-      <MailTestCard />
+      <MailTestCard configureHref="/admin/config/email" />
     </div>
   );
 }
@@ -588,8 +588,12 @@ const FEATURE_LABEL: Record<string, string> = {
  * client's to own (the contract fixes the keys, not the destinations).
  */
 const FEATURE_CONFIG_PAGE: Record<string, string> = {
-  // The probe below sends to the contact address, which lives on General.
-  mail: "/admin/config/general",
+  // The mail configuration itself — transport, credentials, sender — now has a
+  // page of its own. It used to point at General because the only mail-adjacent
+  // control anywhere was the contact address the probe sends to; a row labelled
+  // "Outbound mail" landing on a page with no mail control was the exact defect
+  // this mapping's doc comment warns about.
+  mail: "/admin/config/email",
   // Object storage has no runtime switch and never will — it is a boot-env
   // decision. It earns a link anyway because this page now reports the live
   // store: reachability, and any migration in flight. Sending the operator

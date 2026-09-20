@@ -6,11 +6,22 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
+import { TextLink } from "@/components/ui/TextLink";
 import { api, errorMessage } from "@/lib/api";
 
 // --- Outbound-mail probe ----------------------------------------------------
 
 type MailPhase = "idle" | "sending" | "sent";
+
+export type MailTestCardProps = {
+  /**
+   * Where to go and change the mail configuration. Passed by surfaces that are
+   * NOT that page (Infrastructure), omitted by the page itself — a link back to
+   * where you already are is noise, and the card must not grow two behaviours
+   * for one prop's absence.
+   */
+  configureHref?: string;
+};
 
 /**
  * The one control that answers "does outbound mail actually work". Lifted out
@@ -18,7 +29,7 @@ type MailPhase = "idle" | "sending" | "sent";
  * component instead of cloning it — a second copy would be a second place for
  * the typed-error copy below to drift.
  */
-export function MailTestCard() {
+export function MailTestCard({ configureHref }: MailTestCardProps = {}) {
   const [phase, setPhase] = useState<MailPhase>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +78,14 @@ export function MailTestCard() {
           </Button>
           {phase === "sending" ? (
             <Spinner label="Sending test message" />
+          ) : null}
+          {/* The next move after a failed probe, and the only one this card
+              cannot make itself. Beside the button rather than inside an error,
+              so it is also there for an operator who has not tested yet. */}
+          {configureHref ? (
+            <TextLink href={configureHref} className="text-sm">
+              Configure email →
+            </TextLink>
           ) : null}
         </div>
       </Card>

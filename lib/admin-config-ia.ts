@@ -586,6 +586,15 @@ export type SettingMeta = {
   bootDep?: {
     note: string;
     isSatisfied: (instance: InstanceBootInfo) => boolean;
+    /**
+     * Where the operator goes to satisfy the dependency, rendered at the end of
+     * the note. Optional because not every boot dependency HAS an admin
+     * destination — a boot-env knob is fixed until the next restart, and a link
+     * promising a control that is not there is worse than no link. When one
+     * does exist the note must carry it, or the row is a diagnosis that leaves
+     * the reader to guess the next step.
+     */
+    link?: { href: string; label: string };
   };
   /**
    * Deploy-wiring warning: when the admin-only /admin/infrastructure snapshot
@@ -600,6 +609,16 @@ export type SettingMeta = {
     isTriggered: (infra: InfrastructureWiringInfo) => boolean;
   };
 };
+
+/**
+ * The destination every mail-dependent row sends to. One constant, because the
+ * three rows that flag "this server sends no mail" are the same finding with
+ * the same fix, and three copies of a path is three places for it to rot.
+ */
+const CONFIGURE_EMAIL_LINK = {
+  href: "/admin/config/email",
+  label: "Configure email",
+} as const;
 
 // In DISPLAY ORDER within each section. Any key the backend returns that is
 // not listed here still renders (per the placement precedence above) so a new
@@ -792,6 +811,7 @@ export const META: Record<string, SettingMeta> = {
     bootDep: {
       note: "Outgoing mail is not configured on this server (SMTP), so emails are never sent. This setting takes effect once mail delivery is set up.",
       isSatisfied: (instance) => instance.features?.mail !== false,
+      link: CONFIGURE_EMAIL_LINK,
     },
   },
   email_body_signature: {
@@ -803,6 +823,7 @@ export const META: Record<string, SettingMeta> = {
     bootDep: {
       note: "Outgoing mail is not configured on this server (SMTP), so emails are never sent. This setting takes effect once mail delivery is set up.",
       isSatisfied: (instance) => instance.features?.mail !== false,
+      link: CONFIGURE_EMAIL_LINK,
     },
   },
   // GENERAL / Broadcast message (config-parity W3): message/level/dismissable
@@ -1055,6 +1076,7 @@ export const META: Record<string, SettingMeta> = {
     bootDep: {
       note: "Outgoing mail is not configured on this server (SMTP), so verification emails cannot be sent. This gate has no effect until mail delivery is set up.",
       isSatisfied: (instance) => instance.features?.mail !== false,
+      link: CONFIGURE_EMAIL_LINK,
     },
   },
   registration_user_limit: {

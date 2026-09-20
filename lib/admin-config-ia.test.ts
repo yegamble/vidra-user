@@ -789,6 +789,27 @@ describe("ADVANCED / Delivery (phase-2 item 6, phase-4 items 2 & 4)", () => {
     expect(help).toContain("7 days");
   });
 
+  // A bootDep disables the row, so the note is the whole of what the operator
+  // gets. Until the Email page existed all three mail-dependent rows ended on
+  // "once mail delivery is set up" with nowhere to go; the link is the half
+  // that turns the diagnosis into a next step, and it must be on ALL of them.
+  it("sends every mail-dependent row to the Email page", () => {
+    const mailKeys = Object.entries(META)
+      .filter(([, m]) => m.bootDep?.isSatisfied({ features: { mail: false } }) === false)
+      .map(([key]) => key);
+    expect(mailKeys).toEqual([
+      "email_subject_prefix",
+      "email_body_signature",
+      "registration_require_email_verification",
+    ]);
+    for (const key of mailKeys) {
+      expect(META[key].bootDep?.link, key).toEqual({
+        href: "/admin/config/email",
+        label: "Configure email",
+      });
+    }
+  });
+
   // bootDep DISABLES a row (AdminInstanceConfigView locks it), and the failure
   // these toggles need flagged is "on but wired to nothing" — a state the
   // operator must stay able to flip back OFF. So they must never carry a
