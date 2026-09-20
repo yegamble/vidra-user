@@ -11,6 +11,13 @@ export type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   hint?: string;
   /** Error text; also sets aria-invalid + a danger border + aria-describedby. */
   error?: string;
+  /**
+   * ARIA role for the hint paragraph. Default is none, because a hint is
+   * normally part of the field's own instructions. Pass "note" when the hint is
+   * an aside ABOUT the field rather than guidance for filling it in — e.g. why
+   * a write-only secret field is currently disabled (SecretInput).
+   */
+  hintRole?: "note";
 };
 
 /**
@@ -20,7 +27,15 @@ export type InputProps = InputHTMLAttributes<HTMLInputElement> & {
  * border/focus styling on tokens. Any native input prop (type, name, value,
  * onChange, autoComplete, required, …) passes straight through.
  */
-export function Input({ label, hint, error, id, className, ...props }: InputProps) {
+export function Input({
+  label,
+  hint,
+  hintRole,
+  error,
+  id,
+  className,
+  ...props
+}: InputProps) {
   const reactId = useId();
   const inputId = id ?? reactId;
   const errorId = `${inputId}-error`;
@@ -46,7 +61,7 @@ export function Input({ label, hint, error, id, className, ...props }: InputProp
         {...props}
       />
       {hint && !error ? (
-        <p id={hintId} className="text-xs text-fg-muted">
+        <p id={hintId} role={hintRole} className="text-xs text-fg-muted">
           {hint}
         </p>
       ) : null}
