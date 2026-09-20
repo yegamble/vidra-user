@@ -65,7 +65,24 @@ jobs:
       # fixtures behave identically.
       - name: Start vidra-core stack (uploads quarantined for review)
         working-directory: .core
-        run: RATE_LIMIT_ENABLED=false DEV_MAIL_CAPTURE_ENABLED=true QUARANTINE_NEW_UPLOADS=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
+        # MALWARE_SCAN_MODE=disabled: since vidra-core#201 scanning is on by
+        # default and an instance with no clamd REFUSES every upload, import and
+        # image (503 scanner_not_configured). This stack runs no clamd on purpose
+        # (the scan profile pulls a 1.5-2 GiB clamd + signature download this lane
+        # does not exercise), so it takes the documented, audited opt-out
+        # explicitly instead of failing every ingestion spec.
+        #
+        # This lane was added the same morning the opt-out swept the three jobs in
+        # frontend-e2e-backed.yml and was missed by that sweep — it runs on neither
+        # push nor pull_request, so it could not go red in the PR that broke it. From
+        # its first cron run the seeded upload was refused, nothing ever reached
+        # `quarantined`, and both specs self-skipped blaming QUARANTINE_NEW_UPLOADS,
+        # which was on the whole time.
+        #
+        # So this lane proves NOTHING about scanning, by design: it proves the
+        # quarantine moderation queue. Real-clamd coverage lives in vidra-core's
+        # required `integration` check (a live clamav service + EICAR tests).
+        run: RATE_LIMIT_ENABLED=false MALWARE_SCAN_MODE=disabled DEV_MAIL_CAPTURE_ENABLED=true QUARANTINE_NEW_UPLOADS=true OWNER_CLAIM_TOKEN=e2e-owner-claim-token-not-secret docker compose --profile core up -d --build
 
       - name: Wait for the API to be healthy
         working-directory: .core
