@@ -5,7 +5,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Video } from "@/lib/api";
 import type { HlsPlayback } from "@/lib/use-playback-engine";
 import { VideoPlayer } from "./VideoPlayer";
-
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push() {} }) }));
 vi.mock("@/lib/instance-defaults", async (original) => ({ ...await original<typeof import("@/lib/instance-defaults")>(), primeInstanceDefaults() {} }));
 const mock = vi.hoisted(() => ({ failed: false }));
@@ -20,15 +19,11 @@ function Harness({ startAt = null }: { startAt?: number | null }) {
   return <VideoPlayer video={clip} videoRef={ref} startAt={startAt} />;
 }
 function setup(startAt?: number) {
-  const view = render(<Harness startAt={startAt} />);
-  const video = view.container.querySelector("video")!;
+  const view = render(<Harness startAt={startAt} />), video = view.container.querySelector("video")!;
   const state = { readyState: 0, paused: true, seeking: false };
-  for (const key of ["readyState", "paused", "seeking"] as const) {
-    Object.defineProperty(video, key, { get: () => state[key] });
-  }
+  for (const key of ["readyState", "paused", "seeking"] as const) Object.defineProperty(video, key, { get: () => state[key] });
   vi.spyOn(video, "play").mockImplementation(() => {
-    state.paused = false;
-    fireEvent.play(video);
+    state.paused = false; fireEvent.play(video);
     return new Promise(() => {});
   });
   const event = (name: string, next = {}) => { Object.assign(state, next); fireEvent(video, new Event(name)); };
@@ -37,91 +32,46 @@ function setup(startAt?: number) {
 const loading = () => screen.queryByRole("status", { name: "Loading video" });
 beforeEach(() => { mock.failed = false; });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
-
-it("replaces first-play feedback with loading until playback can start", () => {
-  const { event } = setup();
-  expect(loading()).not.toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Play" }));
-  expect(loading()).not.toBeNull();
-  expect(screen.queryByTestId("playback-feedback")).toBeNull();
-  event("loadeddata", { readyState: 2 }); // a frame is not yet playable forward
-  expect(loading()).not.toBeNull();
-  event("canplay", { readyState: 3 });
-  expect(loading()).toBeNull();
-  event("playing", { readyState: 4 });
-  expect(loading()).toBeNull();
-});
-
-it("shows loading again when resuming a paused video needs more data", () => {
-  const { event } = setup();
-  event("canplay", { readyState: 4 });
-  fireEvent.click(screen.getByRole("button", { name: "Play" }));
-  expect(loading()).toBeNull(); // warm play incurs no artificial loading delay
-  event("pause", { paused: true });
-  expect(loading()).toBeNull();
-  event("progress", { readyState: 2 });
-  fireEvent.click(screen.getByRole("button", { name: "Play" }));
-  expect(loading()).not.toBeNull();
-  event("playing", { readyState: 4 });
-  expect(loading()).toBeNull();
-});
-
-it.each([true, false])("tracks an unbuffered seek, including saved-position resume (paused=%s)", (paused) => {
-  const { event, video } = setup(75);
-  event("canplay", { readyState: 4, paused });
-  video.currentTime = 75;
-  event("seeking", { seeking: true, readyState: 1 });
-  expect(loading()).not.toBeNull();
-  expect(screen.queryByTestId("playback-feedback")).toBeNull();
-  event("seeked", { seeking: false, readyState: 1 });
-  expect(loading()).not.toBeNull(); // seek completion alone does not mean data arrived
-  event("canplay", { readyState: 3 });
-  expect(loading()).toBeNull();
-  event("seeking", { seeking: true, readyState: 4 });
-  expect(loading()).toBeNull(); // buffered seeks stay immediate
-  event("seeked", { seeking: false });
-  expect(loading()).toBeNull();
-});
-
-it("covers mid-play stalls and clears on cancellation, end, error and source replacement", () => {
-  const { event, rerender } = setup();
-  event("playing", { paused: false, readyState: 4 });
-  event("waiting", { readyState: 2 });
-  expect(loading()).not.toBeNull();
-  event("pause", { paused: true });
-  expect(loading()).toBeNull();
-  event("loadstart", { readyState: 0 });
-  expect(loading()).not.toBeNull();
-  event("loadeddata", { readyState: 2 });
-  expect(loading()).toBeNull(); // a paused preview needs only the current frame
-  event("waiting", { paused: false });
-  event("ended");
-  expect(loading()).toBeNull();
-  event("loadstart");
-  event("error");
-  expect(loading()).toBeNull();
-  event("loadstart");
-  mock.failed = true;
-  rerender(<Harness />);
-  expect(loading()).toBeNull();
-  expect(screen.getByRole("alert")).toBeTruthy();
-});
-
-it("does not replay an expired play glyph after a long load", () => {
+function expectLoading(expected: boolean) {
+  expect(loading() !== null).toBe(expected);
+  if (expected) expect(screen.queryByTestId("playback-feedback")).toBeNull();
+}
+it.each([true, false])("tracks first play, resume, stalls and saved-position seeks (paused seek=%s)", (paused) => {
   vi.useFakeTimers();
-  const { event } = setup();
-  fireEvent.click(screen.getByRole("button", { name: "Play" }));
+  const { event, video } = setup(75);
+  const step = (name: string, state: object, loading: boolean) => { event(name, state); expectLoading(loading); };
+  expectLoading(true);
+  fireEvent.click(screen.getByRole("button", { name: "Play" })); expectLoading(true);
+  step("loadeddata", { readyState: 2 }, true);
   act(() => vi.advanceTimersByTime(2100));
-  event("playing", { readyState: 4 });
-  expect(loading()).toBeNull();
-  expect(screen.queryByTestId("playback-feedback")).toBeNull();
+  step("canplay", { readyState: 3 }, false);
+  step("playing", { readyState: 4 }, false);
+  expect(screen.queryByTestId("playback-feedback")).toBeNull(); // expired feedback stays expired
+  step("waiting", { readyState: 2 }, true);
+  step("pause", { paused: true }, false);
+  fireEvent.click(screen.getByRole("button", { name: "Play" })); expectLoading(true);
+  step("playing", { readyState: 4 }, false);
+  step("pause", { paused: true }, false);
+  fireEvent.click(screen.getByRole("button", { name: "Play" })); expectLoading(false); // warm resume
+  video.currentTime = 75;
+  step("seeking", { paused, seeking: true, readyState: 1 }, true);
+  step("seeked", { seeking: false }, true); // completion alone is not readiness
+  step("canplay", { readyState: 3 }, false);
+  step("seeking", { seeking: true, readyState: 4 }, false); // buffered seek
+  step("seeked", { seeking: false }, false);
 });
-
+it("clears loading on cancellation, end, errors and source replacement", () => {
+  const { event, rerender } = setup();
+  for (const [name, state] of [["pause", { paused: true }], ["loadeddata", { readyState: 2 }], ["ended", {}], ["error", {}]] as const) {
+    event("loadstart", { readyState: 0 }); expectLoading(true);
+    event(name, state); expectLoading(false);
+  }
+  event("loadstart"); mock.failed = true; rerender(<Harness />);
+  expectLoading(false); expect(screen.getByRole("alert")).toBeTruthy();
+});
 it("loads the time selected by a pointer click on the timeline", () => {
-  const { video, event } = setup();
-  Object.defineProperty(video, "duration", { value: 120 });
-  event("loadedmetadata");
-  event("playing", { readyState: 4, paused: false });
+  const { video, event } = setup(); Object.defineProperty(video, "duration", { value: 120 });
+  event("loadedmetadata"); event("playing", { readyState: 4, paused: false });
   const slider = screen.getByRole("slider", { name: "Seek" });
   Object.assign(slider, {
     getBoundingClientRect: () => ({ left: 0, width: 200 }),
@@ -133,12 +83,9 @@ it("loads the time selected by a pointer click on the timeline", () => {
     fireEvent(slider, pointer);
   }
   expect(video.currentTime).toBe(90);
-  event("seeking", { seeking: true, readyState: 1 });
-  expect(loading()).not.toBeNull();
-  event("seeked", { seeking: false, readyState: 3 });
-  expect(loading()).toBeNull();
+  event("seeking", { seeking: true, readyState: 1 }); expectLoading(true);
+  event("seeked", { seeking: false, readyState: 3 }); expectLoading(false);
 });
-
 it("clears a rejected play attempt even when the browser emits no pause", async () => {
   const { video, event } = setup();
   vi.mocked(video.play).mockImplementation(() => {
@@ -146,6 +93,5 @@ it("clears a rejected play attempt even when the browser emits no pause", async 
     return Promise.reject(new DOMException("Gesture required", "NotAllowedError"));
   });
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Play" })));
-  expect(loading()).toBeNull();
-  expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
+  expectLoading(false); expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
 });

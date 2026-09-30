@@ -748,9 +748,7 @@ html[data-home-shelves="2"] [data-home-shelves-slot]:empty {
  * starts. Anything else that branches on this in JS needs the same excuse.
  */
 /* Media loading: a growing/shrinking arc, neutralized by the motion reset below. */
-.player-loading-arc {
-  animation: player-loading-arc 1.4s ease-in-out infinite;
-}
+.player-loading-arc { animation: player-loading-arc 1.4s ease-in-out infinite; }
 @keyframes player-loading-arc {
   0% { stroke-dasharray: 1 63; stroke-dashoffset: 0; }
   50% { stroke-dasharray: 45 63; stroke-dashoffset: -15; }

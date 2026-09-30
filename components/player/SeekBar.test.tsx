@@ -218,3 +218,30 @@ describe("SeekBar", () => {
     expect(screen.getByText("0:00")).toBeTruthy();
   });
 });
+
+it.each(["pointerup", "pointercancel", "lostpointercapture"])("dismisses pointer previews after %s without stealing keyboard focus", (finish) => {
+  const { container } = render(<SeekBar currentTime={30} duration={120} buffered={[]} onSeek={() => {}}
+    storyboard={{ activate() {}, cueAt: () => ({ start: 0, end: 120, x: 0, y: 0, w: 160, h: 90 }), spriteUrl: "/storyboard.jpg" }} />);
+  const slider = screen.getByRole("slider", { name: "Seek" });
+  Object.assign(slider, { getBoundingClientRect: () => ({ left: 0, width: 200 }), setPointerCapture() {}, releasePointerCapture() {} });
+  const frame = () => container.querySelector('[style*="storyboard.jpg"]');
+  const pointer = (type: string) => {
+    const event = new Event(type, { bubbles: true });
+    Object.assign(event, { button: 0, pointerId: 1, pointerType: "mouse", clientX: 100 });
+    fireEvent(slider, event);
+  };
+  fireEvent.focus(slider); // keyboard focus initially previews
+  expect(frame()).not.toBeNull();
+  pointer("pointermove"); pointer("pointerdown");
+  fireEvent.focus(slider); // browser focuses a tabindex slider on pointerdown
+  expect(frame()).not.toBeNull();
+  pointer(finish); fireEvent.pointerLeave(slider);
+  fireEvent.keyDown(slider, { key: " " });
+  expect(slider.classList.contains("focus-ring-media")).toBe(false);
+  expect(frame()).toBeNull();
+  fireEvent.keyDown(slider, { key: "ArrowRight" }); // same focused slider, keyboard again
+  expect(slider.classList.contains("focus-ring-media")).toBe(true);
+  expect(frame()).not.toBeNull();
+  fireEvent.blur(slider);
+  expect(frame()).toBeNull();
+});
