@@ -56,6 +56,7 @@ export function SeekBar({
   const [scrubFrac, setScrubFrac] = useState<number | null>(null);
   const [hoverFrac, setHoverFrac] = useState<number | null>(null);
   const [focused, setFocused] = useState(false);
+  const pointerFocus = useRef(false);
   const [trackWidth, setTrackWidth] = useState(0);
 
   const hasDuration = Number.isFinite(duration) && duration > 0;
@@ -111,6 +112,10 @@ export function SeekBar({
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0 && e.pointerType === "mouse") return;
+    // Clicking focuses a tabindex slider too; that must not pin a hover preview.
+    pointerFocus.current = true;
+    setFocused(false);
+    setHoverFrac(null);
     storyboard?.activate();
     trackRef.current?.setPointerCapture(e.pointerId);
     const frac = fracFromEvent(e.clientX);
@@ -142,6 +147,11 @@ export function SeekBar({
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.nativeEvent.isComposing || !hasDuration) return;
+    if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) {
+      pointerFocus.current = false;
+      setFocused(true);
+      storyboard?.activate();
+    }
     if (onSkip && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
       e.preventDefault();
       onSkip(e.key === "ArrowRight" ? 5 : -5);
@@ -189,14 +199,15 @@ export function SeekBar({
       onPointerMove={onPointerMove}
       onPointerUp={commitScrub}
       onPointerCancel={cancelScrub}
+      onLostPointerCapture={() => { setScrubFrac(null); setHoverFrac(null); }}
       onPointerLeave={() => setHoverFrac(null)}
       onFocus={() => {
-        setFocused(true);
+        setFocused(!pointerFocus.current);
         storyboard?.activate();
       }}
-      onBlur={() => setFocused(false)}
+      onBlur={() => { pointerFocus.current = false; setFocused(false); }}
       onKeyDown={onKeyDown}
-      className="focus-ring-media group relative flex h-6 w-full cursor-pointer touch-none select-none items-end rounded-full @min-[420px]/stage:h-11"
+      className={`${focused ? "focus-ring-media" : "outline-none"} group relative flex h-6 w-full cursor-pointer touch-none select-none items-end rounded-full @min-[420px]/stage:h-11`}
     >
       {/* The thin track stays on the lower edge of its target: 4px at rest,
           thickening to 6px under the pointer or keyboard focus (the Apple TV

@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 
+import { Spinner } from "@/components/ui";
 import { AutoplaySwitch } from "@/components/player/AutoplaySwitch";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { usePlayerSeeking } from "@/components/player/use-player-seeking";
@@ -263,6 +264,7 @@ export function VideoPlayer({
   const restoreFocus = useRef(false);
 
   const [paused, setPaused] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [decodedHeight, setDecodedHeight] = useState<number | null>(null);
@@ -353,7 +355,7 @@ export function VideoPlayer({
     const el = videoRef.current;
     if (!el) return;
     viewerActed.current = true;
-    if (el.paused) void el.play().catch(() => {});
+    if (el.paused) void el.play().catch(() => { setLoading(false); setPaused(el.paused); });
     else el.pause();
   }, [videoRef]);
 
@@ -471,7 +473,7 @@ export function VideoPlayer({
     const el = videoRef.current;
     if (!el) return;
     el.currentTime = 0;
-    void el.play().catch(() => {});
+    void el.play().catch(() => { setLoading(false); setPaused(el.paused); });
   }, [videoRef]);
 
   const dismissEndCard = useCallback(() => {
@@ -546,6 +548,7 @@ export function VideoPlayer({
       // is browser-dependent; where it does, no `pause` follows and no further
       // loadstart arrives, so nothing else would ever correct React's paused.
       setPaused(videoRef.current?.paused ?? true);
+      setLoading(false);
       // Re-arm on AbortError only. A NotAllowedError is the autoplay policy
       // refusing, and re-arming there would re-kick a refused play on every
       // re-attach and flicker the transport label. AbortError does NOT prove a
@@ -576,17 +579,20 @@ export function VideoPlayer({
     const el = videoRef.current;
     if (!el) return;
     const onPlayEv = () => {
+      setLoading(el.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
       setPaused(false);
       setEnded(false); // any (re)start clears the end card
       bump(); // playback started → begin the auto-hide countdown
       cbRef.current.onPlay?.();
     };
     const onPauseEv = () => {
+      setLoading(false);
       setPaused(true);
       window.clearTimeout(idleRef.current); // pause pins the controls visible
       cbRef.current.onPause?.();
     };
     const onEndedEv = () => {
+      setLoading(false);
       setEnded(true);
       window.clearTimeout(idleRef.current); // the end card takes over the surface
     };
@@ -602,10 +608,11 @@ export function VideoPlayer({
     // element was already paused). An autoplay-policy refusal is handled at the
     // play promise instead: whether a browser fires `play` before refusing is
     // browser-dependent, and where it does no `pause` follows.
-    const onLoadResetEv = () => setPaused(el.paused);
+    const onLoadResetEv = () => { setPaused(el.paused); setLoading(true); };
     // A new source (navigation to another video within the page, or an
     // HLS→original fallback) resets the element, so drop any stale end card.
     const onLoadStartEv = () => {
+      setLoading(true);
       resetFeedback();
       setDecodedHeight(null);
       setEnded(false);
@@ -615,6 +622,21 @@ export function VideoPlayer({
       // where a held start-on-open kick lands on the SPA path.
       attemptStartOnOpen();
     };
+    // `play` is intent, not a decoded frame. Track readiness independently so
+    // first play, resume and unbuffered seeks never masquerade as playback.
+    const onWaitingEv = () => setLoading(!el.paused);
+    const onReadyEv = () => {
+      if (!el.seeking && el.readyState >= (el.paused
+        ? HTMLMediaElement.HAVE_CURRENT_DATA : HTMLMediaElement.HAVE_FUTURE_DATA)) setLoading(false);
+    };
+    const onSeekingEv = () => setLoading(el.readyState < (el.paused
+      ? HTMLMediaElement.HAVE_CURRENT_DATA : HTMLMediaElement.HAVE_FUTURE_DATA));
+    const onSettledEv = () => setLoading(false);
+    const loadingEvents = {
+      waiting: onWaitingEv, seeking: onSeekingEv, seeked: onReadyEv,
+      loadeddata: onReadyEv, canplay: onReadyEv, playing: onSettledEv, error: onSettledEv,
+    };
+    for (const [name, handler] of Object.entries(loadingEvents)) el.addEventListener(name, handler);
     const onTimeEv = () => {
       setCurrentTime(el.currentTime);
       setBuffered(readBuffered(el.buffered));
@@ -651,6 +673,7 @@ export function VideoPlayer({
     el.addEventListener("volumechange", onVolumeEv);
     // Seed from the element's current state (it may already be primed).
     setPaused(el.paused);
+    setLoading(el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA);
     setCurrentTime(el.currentTime);
     onDurationEv();
     onResizeEv();
@@ -658,6 +681,7 @@ export function VideoPlayer({
     setVolume(el.volume);
     setMuted(el.muted);
     return () => {
+      for (const [name, handler] of Object.entries(loadingEvents)) el.removeEventListener(name, handler);
       el.removeEventListener("play", onPlayEv);
       el.removeEventListener("pause", onPauseEv);
       el.removeEventListener("ended", onEndedEv);
@@ -1053,7 +1077,14 @@ export function VideoPlayer({
           <span>{seekFeedback.seconds} seconds</span>
         </span>
       </div> : null}
-      {!ended ? <PlaybackFeedback key={`${video.id}-${paused}`} paused={paused} /> : null}
+      {loading && !ended && !playback.failed && !overlay ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-black/55">
+            <Spinner label="Loading video" variant="media" />
+          </span>
+        </div>
+      ) : null}
+      {!ended ? <PlaybackFeedback key={`${video.id}-${paused}`} paused={paused} hidden={loading || playback.failed || !!overlay} /> : null}
 
       {/* The overlay control bar over a bottom scrim. Hidden = opacity only
           (never display), so focus is never lost; global reduced-motion neutralizes
