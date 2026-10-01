@@ -17,6 +17,7 @@ import { getInstanceCached, invalidateInstanceCache } from "@/lib/api/instance-p
 import {
   isOwnerClaimPending,
   OWNER_CLAIM_INVALID_CODE,
+  OWNER_CLAIM_CLI_COMMAND,
   OWNER_CLAIM_LOG_COMMAND,
   OWNER_CLAIM_LOG_MARKER,
   readClaimTokenFromHash,
@@ -200,7 +201,7 @@ export function ClaimOwnerForm({
         value={token}
         onChange={(e) => setToken(e.target.value)}
         error={fieldErrs.token}
-        hint="Your server printed this when it started. A restart replaces it with a new one."
+        hint="Run `vidra claim` on your server for a link that fills this in. A restart replaces the token."
         className="min-h-12 font-mono text-base"
       />
 
@@ -299,7 +300,16 @@ function InvalidTokenHelp() {
         </Link>{" "}
         instead.
       </p>
-      <p className="text-fg-muted">To read the current token from your server&apos;s log:</p>
+      <p className="text-fg-muted">
+        To get a fresh link with the current token filled in, run this on your server:
+      </p>
+      <code className="block whitespace-pre-wrap break-words rounded-lg bg-surface-muted px-3 py-2 font-mono text-[13px] leading-relaxed text-fg">
+        {OWNER_CLAIM_CLI_COMMAND}
+      </code>
+      <p className="text-fg-muted">
+        If your server&apos;s <code>vidra</code> command does not have it yet, read the current
+        token from the log instead:
+      </p>
       <code className="block whitespace-pre-wrap break-words rounded-lg bg-surface-muted px-3 py-2 font-mono text-[13px] leading-relaxed text-fg">
         {OWNER_CLAIM_LOG_COMMAND}
       </code>
