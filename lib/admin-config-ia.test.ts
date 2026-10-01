@@ -134,6 +134,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["live_max_instance_lives", "live", "limits"],
   ["live_max_user_lives", "live", "limits"],
   ["live_max_duration_secs", "live", "limits"],
+  ["live_recording_retention_hours", "live", "replay"],
   ["federation_accept_remote_comments", "federation", "comments"],
   ["federation_allow_channel_followers", "federation", "followers"],
   ["federation_follower_approval", "federation", "followers"],
@@ -292,6 +293,7 @@ describe("buildPageModel", () => {
     expect(model.find((s) => s.section.id === "replay")?.keys).toEqual([
       "live_allow_replay",
       "live_default_save_replay",
+      "live_recording_retention_hours",
     ]);
     expect(model.find((s) => s.section.id === "limits")?.keys).toEqual([
       "live_max_instance_lives",
@@ -687,11 +689,25 @@ describe("server registry mirror (config-parity closure slice)", () => {
     }
   });
 
+  // live_recording_retention_hours DELETES files: the admin must read, next to
+  // the field, that lowering it (or leaving 0) removes recordings on the next
+  // sweep, including the only copy of a failed or replay-disabled broadcast.
+  it("warns that the live retention knob deletes recordings", () => {
+    const help = META.live_recording_retention_hours.help;
+    expect(help).toMatch(/hours/i);
+    expect(help).toMatch(/0.*published/);
+    expect(help).toMatch(/delet/i);
+    expect(help).toMatch(/only copy/);
+  });
+
   it("wires the two-level live replay disclosure", () => {
     expect(META.live_allow_replay.parent).toBe("live_enabled");
     expect(META.live_default_save_replay.parent).toBe("live_allow_replay");
     expect(META.channel_sync_max_per_user.parent).toBe("channel_sync_enabled");
     expect(META.channel_sync_interval_minutes.parent).toBe("channel_sync_enabled");
+    // Recordings are kept (and swept) whether or not replays are on, so the
+    // retention row hangs off live itself, not off the replay switch.
+    expect(META.live_recording_retention_hours.parent).toBe("live_enabled");
     // The server bounds it 5..10080 minutes; the help text must say so in the
     // unit the field takes, or an admin types hours and gets a 400.
     expect(META.channel_sync_interval_minutes.help).toMatch(/minutes/);
