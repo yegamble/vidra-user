@@ -620,6 +620,16 @@ const CONFIGURE_EMAIL_LINK = {
   label: "Configure email",
 } as const;
 
+// Shared by import_http_enabled and channel_sync_enabled: one boot fact, one
+// sentence, so the two rows can never disagree about why they are inert.
+const URL_IMPORTS_WARN: NonNullable<SettingMeta["warn"]> = {
+  note: "This server was not booted with URL imports wired (YTDLP_IMPORT_ENABLED with yt-dlp installed), so this switch currently does nothing — URL imports and channel sync stay unavailable. See Infrastructure → Optional features.",
+  isTriggered: (infra) =>
+    infra.features?.some(
+      (f) => f.key === "url_imports" && f.configured === false,
+    ) === true,
+};
+
 // In DISPLAY ORDER within each section. Any key the backend returns that is
 // not listed here still renders (per the placement precedence above) so a new
 // setting is never hidden. Conversely, every key here renders even while the
@@ -1189,6 +1199,12 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "imports",
     parent: "imports_enabled",
+    // Both import toggles can only PAUSE a path the boot wired: the yt-dlp
+    // resolver and the channel-sync worker hang off YTDLP_IMPORT_ENABLED, and
+    // a missing binary fails every job (core reports both halves as
+    // features[url_imports].configured). `warn`, never bootDep: an on-but-inert
+    // switch must stay flippable back off.
+    warn: URL_IMPORTS_WARN,
   },
   import_jobs_concurrency: {
     label: "Import job concurrency",
@@ -1204,6 +1220,12 @@ export const META: Record<string, SettingMeta> = {
     control: "toggle",
     page: "vod",
     section: "imports",
+    // Both import toggles can only PAUSE a path the boot wired: the yt-dlp
+    // resolver and the channel-sync worker hang off YTDLP_IMPORT_ENABLED, and
+    // a missing binary fails every job (core reports both halves as
+    // features[url_imports].configured). `warn`, never bootDep: an on-but-inert
+    // switch must stay flippable back off.
+    warn: URL_IMPORTS_WARN,
   },
   channel_sync_max_per_user: {
     label: "Max channel syncs per user",
