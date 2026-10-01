@@ -909,6 +909,39 @@ describe("ADVANCED / Delivery (phase-2 item 6, phase-4 items 2 & 4)", () => {
       }
     });
 
+    // ADM F2 (ruling P1): the smart-search master toggle is ANDed with a boot
+    // capability (SEARCH_SERVICE_URL) the admin cannot see from this page, so ON
+    // with no vidra-search wired silently serves the SQL fallback. The
+    // infrastructure `search` row already reports the configured half, so this
+    // is the one inert toggle of the three that the existing contract can warn
+    // on. (import_http_enabled / channel_sync_enabled need a url_imports feature
+    // row core does not expose yet — no warn until it does.)
+    const searchUnwired: InfrastructureWiringInfo = {
+      features: [{ key: "search", enabled: false, configured: false }],
+    };
+    const searchWired: InfrastructureWiringInfo = {
+      features: [{ key: "search", enabled: true, configured: true }],
+    };
+
+    it("warns on the smart search toggle when no search service is wired", () => {
+      const note = wiringWarnNote(META.search_service_enabled, searchUnwired);
+      expect(note).toContain("SEARCH_SERVICE_URL");
+      expect(note).toContain("does nothing");
+      expect(note).toContain("Infrastructure");
+      expect(wiringWarnNote(META.search_service_enabled, searchWired)).toBeNull();
+    });
+
+    it("keeps the smart search row flippable and silent without a search row", () => {
+      expect(META.search_service_enabled.bootDep).toBeUndefined();
+      expect(wiringWarnNote(META.search_service_enabled, null)).toBeNull();
+      expect(wiringWarnNote(META.search_service_enabled, {})).toBeNull();
+      expect(
+        wiringWarnNote(META.search_service_enabled, {
+          features: [{ key: "cdn", enabled: true, configured: false }],
+        }),
+      ).toBeNull();
+    });
+
     // The admin-only fetch is spent only where a warn check can consume it.
     it("marks the pages that carry a wiring check", () => {
       expect(pageHasWiringChecks("advanced")).toBe(true);
