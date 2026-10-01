@@ -913,9 +913,8 @@ describe("ADVANCED / Delivery (phase-2 item 6, phase-4 items 2 & 4)", () => {
     // capability (SEARCH_SERVICE_URL) the admin cannot see from this page, so ON
     // with no vidra-search wired silently serves the SQL fallback. The
     // infrastructure `search` row already reports the configured half, so this
-    // is the one inert toggle of the three that the existing contract can warn
-    // on. (import_http_enabled / channel_sync_enabled need a url_imports feature
-    // row core does not expose yet — no warn until it does.)
+    // was the first inert toggle of the three the contract could warn on; the
+    // other two ride core's url_imports row (tested below).
     const searchUnwired: InfrastructureWiringInfo = {
       features: [{ key: "search", enabled: false, configured: false }],
     };
@@ -941,6 +940,35 @@ describe("ADVANCED / Delivery (phase-2 item 6, phase-4 items 2 & 4)", () => {
         }),
       ).toBeNull();
     });
+
+    // import_http_enabled and channel_sync_enabled only PAUSE a path the boot
+    // wired: both hang off YTDLP_IMPORT_ENABLED plus a resolvable yt-dlp, which
+    // core reports as features[url_imports].configured.
+    const importsUnwired: InfrastructureWiringInfo = {
+      features: [{ key: "url_imports", enabled: true, configured: false }],
+    };
+    const importsWired: InfrastructureWiringInfo = {
+      features: [{ key: "url_imports", enabled: true, configured: true }],
+    };
+
+    it.each(["import_http_enabled", "channel_sync_enabled"] as const)(
+      "warns on %s when URL imports are not wired at boot",
+      (key) => {
+        const note = wiringWarnNote(META[key], importsUnwired);
+        expect(note).toContain("YTDLP_IMPORT_ENABLED");
+        expect(note).toContain("does nothing");
+        expect(note).toContain("Infrastructure");
+        expect(wiringWarnNote(META[key], importsWired)).toBeNull();
+        // warn, never bootDep: an on-but-inert switch must stay flippable off.
+        expect(META[key].bootDep).toBeUndefined();
+        expect(wiringWarnNote(META[key], {})).toBeNull();
+        expect(
+          wiringWarnNote(META[key], {
+            features: [{ key: "search", enabled: false, configured: false }],
+          }),
+        ).toBeNull();
+      },
+    );
 
     // The admin-only fetch is spent only where a warn check can consume it.
     it("marks the pages that carry a wiring check", () => {
