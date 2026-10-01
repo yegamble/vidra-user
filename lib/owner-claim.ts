@@ -70,3 +70,27 @@ export type OwnerClaimSignal = { owner_claim_pending?: boolean } | null | undefi
 export function isOwnerClaimPending(instance: OwnerClaimSignal): boolean {
   return instance?.owner_claim_pending === true;
 }
+
+/**
+ * The setup token carried by a claim link's fragment (`#token=<token>`, what
+ * the core CLI's `vidra claim` prints), or null when there is none to use.
+ *
+ * Fragment only, by design: a fragment never leaves the browser, so the token
+ * stays out of server and proxy logs and Referer headers. Callers must not
+ * fall back to `?token=`. Parsed by hand rather than URLSearchParams, which
+ * would turn a literal "+" in the token into a space. A blank value or an
+ * escape that does not decode is "no token" — never a half-decoded guess.
+ */
+export function readClaimTokenFromHash(hash: string): string | null {
+  for (const pair of hash.replace(/^#/, "").split("&")) {
+    const eq = pair.indexOf("=");
+    if (eq < 0 || pair.slice(0, eq) !== "token") continue;
+    try {
+      const token = decodeURIComponent(pair.slice(eq + 1)).trim();
+      return token === "" ? null : token;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}

@@ -19,6 +19,7 @@ import {
   OWNER_CLAIM_INVALID_CODE,
   OWNER_CLAIM_LOG_COMMAND,
   OWNER_CLAIM_LOG_MARKER,
+  readClaimTokenFromHash,
 } from "@/lib/owner-claim";
 
 // ClaimOwnerForm — the first-run wizard. One screen, two states:
@@ -56,6 +57,29 @@ export function ClaimOwnerForm({
   const [formError, setFormError] = useState<ReactNode>(null);
   const [submitting, setSubmitting] = useState(false);
   const [claimed, setClaimed] = useState(false);
+  const [tokenFromLink, setTokenFromLink] = useState(false);
+
+  // Prefill from a `vidra claim` link (`/setup/claim#token=...`). Client-only on
+  // purpose: the fragment never reaches the server, which is the whole reason
+  // the token rides there. Once read it is scrubbed from the address bar (path
+  // and query kept) so it does not linger in history or a shared screenshot. An
+  // empty or malformed fragment is left exactly as found.
+  useEffect(() => {
+    const linked = readClaimTokenFromHash(window.location.hash);
+    if (linked === null) return;
+    // One-shot read of an external system (the address bar) that only exists in
+    // the browser: reading it in a state initializer would differ from the
+    // server render and break hydration, so it has to land after mount.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setToken(linked);
+    setTokenFromLink(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    window.history.replaceState(
+      window.history.state,
+      "",
+      window.location.pathname + window.location.search,
+    );
+  }, []);
 
   // Live re-check of the first-run signal (see the note above). Skipped once
   // the claim has landed: the server then correctly reports "no longer
@@ -155,6 +179,13 @@ export function ClaimOwnerForm({
         <Alert as="div" className="flex flex-col gap-2">
           {formError}
         </Alert>
+      ) : null}
+
+      {tokenFromLink ? (
+        <p className="flex items-start gap-2.5 rounded-xl bg-surface-muted px-3.5 py-3 text-[13px] leading-relaxed text-fg-muted">
+          <InfoIcon size={14} strokeWidth={2} className="mt-0.5 shrink-0" />
+          Setup token filled in from your link.
+        </p>
       ) : null}
 
       <Input
