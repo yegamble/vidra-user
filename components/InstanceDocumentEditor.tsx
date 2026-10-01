@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Markdown } from "@/components/Markdown";
+import { useOptionalSession } from "@/components/auth/AuthProvider";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
@@ -34,6 +36,20 @@ import {
 // behind a typed confirmation: the operator must type "run this code" into a
 // danger-styled modal that spells out that the script runs in every
 // visitor's browser.
+//
+// Owner gating (core #281): publishing NON-EMPTY custom_js/custom_css is
+// owner-only — core answers 403 `owner_only` to any other admin, because that
+// code runs for every visitor and the owner is the one accountable for it.
+// Clearing (empty body) stays open to every admin, and `homepage` is
+// unchanged. So a non-owner gets no Save for non-empty code (a button that can
+// only fail is the thing AdminUsersView's transfer card also refuses to
+// offer), an explanatory line, and a Clear that still works. The viewer's
+// `is_owner` comes from the cached session, which can be stale if ownership was
+// transferred since sign-in; a 403 `owner_only` therefore gets its own message
+// and a session refresh instead of the generic "could not save".
+
+const OWNER_ONLY_NOTE =
+  "Only the instance owner can publish custom code. You can still clear it.";
 
 type Status = "loading" | "error" | "ready";
 
@@ -61,6 +77,12 @@ export function InstanceDocumentEditor({
   rows?: number;
 }) {
   const cap = INSTANCE_DOCUMENT_CAPS[name];
+  const session = useOptionalSession();
+  // No session (standalone render) reads as non-owner: the safe default, since
+  // core enforces the real rule either way.
+  const viewerIsOwner = session?.user?.is_owner === true;
+  const reloadUser = session?.reloadUser;
+  const ownerGated = name !== "homepage" && !viewerIsOwner;
   const [status, setStatus] = useState<Status>("loading");
   const [reloadKey, setReloadKey] = useState(0);
   // The server truth (last loaded/saved body) and the working copy.
@@ -109,6 +131,10 @@ export function InstanceDocumentEditor({
       } catch (err) {
         if (err instanceof ApiError && err.status === 422 && err.fields?.length) {
           setSaveError(err.fields[0].message);
+        } else if (err instanceof ApiError && err.status === 403 && err.code === "owner_only") {
+          setSaveError(OWNER_ONLY_NOTE);
+          // The cached session said we could; refresh it so the gate follows.
+          void reloadUser?.();
         } else {
           setSaveError(errorMessage(err, "Could not save the document."));
         }
@@ -116,11 +142,12 @@ export function InstanceDocumentEditor({
         setSaving(false);
       }
     },
-    [name],
+    [name, reloadUser],
   );
 
   const requestSave = useCallback(() => {
     if (saving || !dirty || overCap) return;
+    if (ownerGated && body !== "") return;
     // The typed confirmation guards code that will RUN in visitors' browsers;
     // clearing (empty body) removes that code and needs no ceremony.
     if (dangerConfirm && body.trim() !== "") {
@@ -129,7 +156,7 @@ export function InstanceDocumentEditor({
       return;
     }
     void persist(body);
-  }, [saving, dirty, overCap, dangerConfirm, body, persist]);
+  }, [saving, dirty, overCap, ownerGated, dangerConfirm, body, persist]);
 
   if (status === "loading") {
     return (
@@ -197,12 +224,14 @@ export function InstanceDocumentEditor({
         {describeDocumentSize(body, cap)}
       </span>
 
+      {ownerGated ? <p className="text-sm text-fg-muted">{OWNER_ONLY_NOTE}</p> : null}
+
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"
           variant={dangerConfirm ? "danger" : "primary"}
           size="sm"
-          disabled={!dirty || saving || overCap}
+          disabled={!dirty || saving || overCap || (ownerGated && body !== "")}
           onClick={requestSave}
         >
           {saving ? "Saving…" : `Save ${label.toLowerCase()}`}
@@ -268,9 +297,9 @@ export function InstanceDocumentEditor({
           </span>
         ) : null}
         {saveError ? (
-          <span role="alert" className="text-sm text-danger">
+          <Alert variant="danger" className="min-w-0">
             {saveError}
-          </span>
+          </Alert>
         ) : null}
       </div>
 

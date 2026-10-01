@@ -6,6 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getInstanceDocument: vi.fn(),
   putInstanceDocument: vi.fn(),
+  reloadUser: vi.fn(),
+  // Who is viewing: the owner by default so the pre-existing custom-JS cases
+  // keep exercising the owner path; the owner-gating suite flips it.
+  session: { user: { id: "u1", role: "admin", is_owner: true } } as {
+    user: Record<string, unknown> | null;
+  },
+}));
+
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useOptionalSession: () => ({ ...mocks.session, reloadUser: mocks.reloadUser }),
 }));
 
 // Spread the real module (keeping ApiError/errorMessage) and override only
@@ -29,6 +39,8 @@ function doc(body: string) {
 }
 
 beforeEach(() => {
+  mocks.session = { user: { id: "u1", role: "admin", is_owner: true } };
+  mocks.reloadUser.mockResolvedValue(undefined);
   mocks.getInstanceDocument.mockResolvedValue(doc(""));
   mocks.putInstanceDocument.mockImplementation((_name: string, body: string) =>
     Promise.resolve(doc(body)),
@@ -185,5 +197,100 @@ describe("InstanceDocumentEditor (custom JS: typed confirmation)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm clearing Custom JavaScript" }));
     await waitFor(() => expect(mocks.putInstanceDocument).toHaveBeenCalledWith("custom_js", ""));
+  });
+});
+
+// core #281: a NON-EMPTY custom_js/custom_css write is owner-only (403
+// `owner_only`); clearing stays open to every admin. The editor mirrors that so
+// a plain admin is not handed a Save that can only fail.
+describe("InstanceDocumentEditor (owner-only custom code)", () => {
+  const NOTE = "Only the instance owner can publish custom code. You can still clear it.";
+  const cases = [
+    { name: "custom_js", label: "Custom JavaScript", dangerConfirm: true },
+    { name: "custom_css", label: "Custom CSS", dangerConfirm: false },
+  ] as const;
+
+  for (const c of cases) {
+    const renderEditor = () =>
+      render(
+        <InstanceDocumentEditor
+          name={c.name}
+          label={c.label}
+          code
+          dangerConfirm={c.dangerConfirm}
+        />,
+      );
+
+    it(`${c.name}: a non-owner sees Save disabled, the explanation, and Clear enabled`, async () => {
+      mocks.session = { user: { id: "a2", role: "admin", is_owner: false } };
+      mocks.getInstanceDocument.mockResolvedValue(doc("body{}"));
+      renderEditor();
+      const field = await screen.findByLabelText(c.label);
+
+      expect(screen.getByText(NOTE)).toBeTruthy();
+      fireEvent.change(field, { target: { value: "body{color:red}" } });
+      const save = screen.getByRole("button", { name: `Save ${c.label.toLowerCase()}` });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole("button", { name: "Clear" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+    });
+
+    it(`${c.name}: a non-owner can still clear via an empty-body PUT`, async () => {
+      mocks.session = { user: { id: "a2", role: "admin", is_owner: false } };
+      mocks.getInstanceDocument.mockResolvedValue(doc("body{}"));
+      renderEditor();
+      await screen.findByLabelText(c.label);
+      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      fireEvent.click(screen.getByRole("button", { name: `Confirm clearing ${c.label}` }));
+      await waitFor(() => expect(mocks.putInstanceDocument).toHaveBeenCalledWith(c.name, ""));
+    });
+
+    it(`${c.name}: the owner has Save enabled and no explanation`, async () => {
+      renderEditor();
+      const field = await screen.findByLabelText(c.label);
+      fireEvent.change(field, { target: { value: "x" } });
+      expect(
+        (
+          screen.getByRole("button", {
+            name: `Save ${c.label.toLowerCase()}`,
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false);
+      expect(screen.queryByText(NOTE)).toBeNull();
+    });
+
+    it(`${c.name}: a 403 owner_only (stale ownership) renders the specific message`, async () => {
+      const { ApiError } = await import("@/lib/api");
+      mocks.putInstanceDocument.mockRejectedValue(
+        new ApiError({ status: 403, code: "owner_only", message: "forbidden" }),
+      );
+      renderEditor();
+      const field = await screen.findByLabelText(c.label);
+      fireEvent.change(field, { target: { value: "x" } });
+      fireEvent.click(screen.getByRole("button", { name: `Save ${c.label.toLowerCase()}` }));
+      if (c.dangerConfirm) {
+        fireEvent.change(await screen.findByLabelText(/to confirm/), {
+          target: { value: "run this code" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save and run it" }));
+      }
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("Only the instance owner can publish custom code");
+      expect(alert.textContent).not.toContain("Could not save");
+      // The cached session said owner; ownership moved — refresh it.
+      await waitFor(() => expect(mocks.reloadUser).toHaveBeenCalled());
+    });
+  }
+
+  it("homepage is unaffected for a non-owner", async () => {
+    mocks.session = { user: { id: "a2", role: "admin", is_owner: false } };
+    render(<InstanceDocumentEditor name="homepage" label="Homepage content" markdown />);
+    const field = await screen.findByLabelText("Homepage content");
+    fireEvent.change(field, { target: { value: "# Hi" } });
+    expect(screen.queryByText(NOTE)).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Save homepage content" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 });
