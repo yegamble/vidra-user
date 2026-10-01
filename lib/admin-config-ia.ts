@@ -1498,6 +1498,17 @@ export const META: Record<string, SettingMeta> = {
     control: "toggle",
     page: "advanced",
     section: "search",
+    // ADM F2. The toggle is ANDed with SEARCH_SERVICE_URL at boot (core reports
+    // that half as features[search].configured), so ON with no vidra-search
+    // wired quietly serves the deterministic SQL fallback. `warn`, never
+    // bootDep: an on-but-inert switch must stay flippable back off.
+    warn: {
+      note: "This server was not booted with a search service (SEARCH_SERVICE_URL), so this switch currently does nothing — search and suggestions still use the built-in fallback. See Infrastructure → Optional features.",
+      isTriggered: (infra) =>
+        infra.features?.some(
+          (f) => f.key === "search" && f.configured === false,
+        ) === true,
+    },
   },
   search_mode: {
     label: "Ranking mode",
