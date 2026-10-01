@@ -102,6 +102,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["import_http_enabled", "vod", "imports"],
   ["channel_sync_enabled", "vod", "imports"],
   ["channel_sync_max_per_user", "vod", "imports"],
+  ["channel_sync_interval_minutes", "vod", "imports"],
   ["storyboards_enabled", "vod", "storyboards"],
   ["video_card_previews_enabled", "vod", "playback"],
   ["video_card_previews_default_enabled", "vod", "playback"],
@@ -690,6 +691,11 @@ describe("server registry mirror (config-parity closure slice)", () => {
     expect(META.live_allow_replay.parent).toBe("live_enabled");
     expect(META.live_default_save_replay.parent).toBe("live_allow_replay");
     expect(META.channel_sync_max_per_user.parent).toBe("channel_sync_enabled");
+    expect(META.channel_sync_interval_minutes.parent).toBe("channel_sync_enabled");
+    // The server bounds it 5..10080 minutes; the help text must say so in the
+    // unit the field takes, or an admin types hours and gets a 400.
+    expect(META.channel_sync_interval_minutes.help).toMatch(/minutes/);
+    expect(META.channel_sync_interval_minutes.help).toMatch(/5.10080|5–10,080/);
   });
 });
 

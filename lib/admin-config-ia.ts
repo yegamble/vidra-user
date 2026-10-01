@@ -1235,6 +1235,14 @@ export const META: Record<string, SettingMeta> = {
     section: "imports",
     parent: "channel_sync_enabled",
   },
+  channel_sync_interval_minutes: {
+    label: "Channel sync interval",
+    help: "How often each bound channel is re-checked for new videos, in minutes (5–10,080, i.e. up to 7 days). A change applies at each channel's next scheduled check. The default comes from CHANNEL_SYNC_INTERVAL.",
+    control: "number",
+    page: "vod",
+    section: "imports",
+    parent: "channel_sync_enabled",
+  },
   // VOD / Transcoding (config-parity W10). transcoding_enabled is the master;
   // the ladder + tuning knobs disclose under it.
   transcoding_enabled: {
