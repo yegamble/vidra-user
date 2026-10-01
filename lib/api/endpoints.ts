@@ -17,7 +17,7 @@ import type {
   InstanceSettingsResponse,
   InstanceSettingsValidationResponse,
   InfrastructureStatus,
-  MailConfigInput,
+  MailConfigPutRequest,
   MailConfigState,
   MailTestResult,
   UpdateInstanceSettingsRequest,
@@ -2389,8 +2389,15 @@ export const api = {
    * admin did not touch must therefore be left OUT of the body, never echoed
    * back as its mask. 409 `mail_secrets_key_missing` = no KEK to seal with;
    * 422 `fields` carries DOTTED paths (`smtp.host`) that bind to the inputs.
+   *
+   * Every save must also carry exactly ONE fresh credential in the same body
+   * (core #282): `current_password`, or `step_up_token` for a passwordless
+   * admin. None / spent token → 403 `step_up_required`; wrong password → 403
+   * `forbidden`; both proofs, or a step-up from an account that has a password
+   * → 422; a password sent by a passwordless admin → 409 `conflict`. Neither
+   * proof is stored, echoed or logged. DELETE needs none.
    */
-  updateMailConfig: (body: MailConfigInput) =>
+  updateMailConfig: (body: MailConfigPutRequest) =>
     apiRequest<MailConfigState>("/api/v1/admin/mail-config", { method: "PUT", body }),
 
   /**
