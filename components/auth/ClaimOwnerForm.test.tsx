@@ -29,7 +29,11 @@ vi.mock("@/lib/api/instance-platform", () => ({
 }));
 
 import { ApiError } from "@/lib/api";
-import { OWNER_CLAIM_INVALID_CODE, OWNER_CLAIM_LOG_COMMAND } from "@/lib/owner-claim";
+import {
+  OWNER_CLAIM_CLI_COMMAND,
+  OWNER_CLAIM_INVALID_CODE,
+  OWNER_CLAIM_LOG_COMMAND,
+} from "@/lib/owner-claim";
 
 import { ClaimOwnerForm } from "./ClaimOwnerForm";
 
@@ -115,6 +119,12 @@ describe("ClaimOwnerForm", () => {
     // pick up the dev override on a prod host.
     expect(alert.textContent).toContain(OWNER_CLAIM_LOG_COMMAND);
     expect(alert.textContent).toContain("--env-file env/production.env");
+    // The CLI that prints a ready, prefilled link is offered first; the log
+    // command stays for hosts whose CLI predates it.
+    expect(alert.textContent).toContain(OWNER_CLAIM_CLI_COMMAND);
+    expect(alert.textContent!.indexOf(OWNER_CLAIM_CLI_COMMAND)).toBeLessThan(
+      alert.textContent!.indexOf(OWNER_CLAIM_LOG_COMMAND),
+    );
   });
 
   it("points a conflict at signing in instead", async () => {

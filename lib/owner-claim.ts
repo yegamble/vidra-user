@@ -55,6 +55,13 @@ export const OWNER_CLAIM_LOG_COMMAND =
   "docker compose -f docker-compose.yml -f docker-compose.prod.yml " +
   "--env-file env/production.env logs api | grep 'FIRST-RUN'";
 
+/**
+ * The CLI verb that prints the CURRENT token as a ready claim link
+ * (`<origin>/setup/claim#token=…`, which this form prefills from). Offered
+ * before the log command; hosts whose CLI predates it still have the log.
+ */
+export const OWNER_CLAIM_CLI_COMMAND = "vidra claim";
+
 /** The marker the server prints the token beside, so it can be searched for. */
 export const OWNER_CLAIM_LOG_MARKER = "FIRST-RUN SETUP REQUIRED";
 
