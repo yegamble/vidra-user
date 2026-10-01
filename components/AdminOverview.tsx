@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { AdminSetupChecklist } from "@/components/AdminSetupChecklist";
 import { RoleGate } from "@/components/RoleGate";
 import { ChevronRightIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/Badge";
@@ -58,6 +59,7 @@ export function AdminOverview() {
 function OverviewBody() {
   return (
     <div className="flex flex-col gap-6">
+      <AdminSetupChecklist />
       <Dashboard />
       <section aria-label="Admin sections">
         <h2 className="px-0.5 pb-2 text-[12px] font-bold uppercase tracking-[0.06em] text-fg-muted">
