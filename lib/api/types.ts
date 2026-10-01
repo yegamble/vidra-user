@@ -206,6 +206,7 @@ export type MailSMTPEncryption = MailConfigSMTP["encryption"];
 export type MailConfigMailgun = Schemas["MailConfigMailgun"];
 export type MailgunRegion = MailConfigMailgun["region"];
 export type MailConfigInput = Schemas["MailConfigInput"];
+export type MailConfigPutRequest = Schemas["MailConfigPutRequest"];
 /**
  * How an outbound send failed, from the `mail_test_failed` 502 envelope. A
  * closed vocabulary the API defines — never the relay's own words, which quote

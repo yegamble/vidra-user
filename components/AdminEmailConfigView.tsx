@@ -70,6 +70,15 @@ type SaveResult =
 
 const CUSTOM_PRESET = "custom";
 
+/**
+ * The errors key and DOM id of the fresh-credential field. It is not a field of
+ * the document (core reads it from the same body but never stores it), so it
+ * lives beside the dotted document paths rather than in FIELD_ORDER.
+ */
+const CONFIRM_KEY = "current_password";
+const CONFIRM_ID = "mail-confirm-password";
+const CONFIRM_REQUIRED = "Enter your password to confirm this change.";
+
 /** What each transport calls its one credential. */
 const SECRET_LABEL: Record<MailTransport, string> = {
   smtp: "Password",
@@ -89,6 +98,10 @@ export function EmailConfigPanel() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [result, setResult] = useState<SaveResult>(null);
   const [saving, setSaving] = useState(false);
+  // The admin's own password, re-asked on every save (core #282: this document
+  // decides where password-reset mail goes, so a stolen access token alone must
+  // not be able to rewrite it). Held only until the request settles.
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [discarding, setDiscarding] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // The port is only auto-filled until the admin types one. After that a
@@ -146,6 +159,15 @@ export function EmailConfigPanel() {
     // enforced here instead of by the DOM.
     if (inFlight.current || !draft || !state) return;
     if (!isDirty(draft, draftFromState(state))) return;
+    // Refused here rather than sent to be refused: core answers an empty proof
+    // 403 step_up_required, which reads as a server fault when the cause is an
+    // empty box on this page.
+    if (confirmPassword === "") {
+      setErrors({ [CONFIRM_KEY]: CONFIRM_REQUIRED });
+      setResult(null);
+      document.getElementById(CONFIRM_ID)?.focus();
+      return;
+    }
     // Enter submits without blurring, so settle the repoint question here too:
     // buildMailConfigInput decides what to send from the draft either way, and
     // this keeps what is on screen agreeing with what travelled.
@@ -154,8 +176,16 @@ export function EmailConfigPanel() {
     setSaving(true);
     setErrors({});
     setResult(null);
+    // Taken out of state BEFORE the request: whatever happens next, the secret
+    // must not outlive this attempt in a controlled input (a wrong password is
+    // retyped, a right one is spent). It is sent, never logged or echoed.
+    const proof = confirmPassword;
+    setConfirmPassword("");
     try {
-      const saved = await api.updateMailConfig(buildMailConfigInput(draft, state));
+      const saved = await api.updateMailConfig({
+        ...buildMailConfigInput(draft, state),
+        current_password: proof,
+      });
       setState(saved);
       setDraft(draftFromState(saved));
       setPortTouched(Boolean(saved.config?.smtp));
@@ -167,6 +197,14 @@ export function EmailConfigPanel() {
       // the rest of the app stops claiming mail is unavailable.
       refreshInstanceFeatures();
     } catch (err) {
+      // The proof was refused: say so on the field that holds it, not in a
+      // form-level banner the admin has to connect back to a password box.
+      const refusal = confirmRefusal(err);
+      if (refusal) {
+        setErrors({ [CONFIRM_KEY]: refusal });
+        document.getElementById(CONFIRM_ID)?.focus();
+        return;
+      }
       if (err instanceof ApiError && err.status === 422) {
         const fields = fieldErrors(err);
         if (fields) {
@@ -201,7 +239,7 @@ export function EmailConfigPanel() {
       inFlight.current = false;
       setSaving(false);
     }
-  }, [draft, state]);
+  }, [draft, state, confirmPassword]);
 
   const discard = useCallback(async () => {
     setDiscarding(true);
@@ -593,6 +631,26 @@ export function EmailConfigPanel() {
           />
         </Card>
 
+        <Card className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-[15px] font-bold tracking-tight">Confirm it is you</h2>
+            <p className="mt-1 text-sm text-fg-muted">
+              Mail settings decide where password resets and verification links are sent, so
+              saving them asks for your password again.
+            </p>
+          </div>
+          <Input
+            id={CONFIRM_ID}
+            type="password"
+            label="Confirm with your password"
+            autoComplete="current-password"
+            hint="Your own account password. No password yet? Set one in Settings → Security first."
+            error={errors[CONFIRM_KEY]}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+        </Card>
+
         {/* Outside the sticky row below: an Alert that grew INSIDE the bar
             would make it taller at the exact moment a 422 moved focus to a
             field, and a field scrolled to the viewport floor would land under
@@ -710,6 +768,28 @@ function focusFirstError(fields: Record<string, string>, transport: MailTranspor
       return;
     }
   }
+}
+
+/**
+ * What a refused fresh credential says, or null when `err` is not one. Core's
+ * wrong-password answer is a plain 403 (`forbidden`) and a missing or spent
+ * proof is 403 `step_up_required`; a passwordless admin who typed a password
+ * gets 409 `conflict` (a 409 `mail_secrets_key_missing` is a different problem
+ * and keeps its own message). Never echoes the server's text: it is not worded
+ * for this form.
+ */
+function confirmRefusal(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  if (err.status === 403 && err.code === "step_up_required") {
+    return "Confirm this change with your password, then save again.";
+  }
+  if (err.status === 403 && err.code === "forbidden") {
+    return "That password is not correct. Nothing was saved.";
+  }
+  if (err.status === 409 && err.code === "conflict") {
+    return "Set a password on your account first (Settings → Security) to change mail settings.";
+  }
+  return null;
 }
 
 /**

@@ -4791,7 +4791,7 @@ export interface paths {
          *
          *     The change takes effect immediately in this process and within one settings-poll interval (10s) across every other replica and worker — no restart. Audited as `admin.mail_config.update` with the transport, the changed field NAMES and whether the credential was replaced; never a value.
          *
-         *     Restricted to admins (moderators get 403).
+         *     Restricted to admins (moderators get 403), and every admin must also present a FRESH credential — exactly one of `current_password` or, for a passwordless account, `step_up_token` (see `POST /api/v1/auth/step-up/start`) — because this document decides where password-reset and verification mail is sent. With neither, or a spent, expired or foreign assertion, the answer is 403 `step_up_required`. `DELETE` (revert to the environment) needs no such proof, so a locked-out admin can always recover.
          */
         put: operations["updateMailConfig"];
         post?: never;
@@ -9289,6 +9289,12 @@ export interface components {
             /** @description The stream messages are sent on. Defaults to Postmark's own transactional stream, "outbound", and is stored explicitly so the panel can show what a message will actually be sent on. */
             message_stream: string;
             readonly server_token_set: boolean;
+        };
+        /** @description A MailConfigInput plus the caller's fresh credential: exactly one of `current_password` (the admin's own password) or `step_up_token` (a passwordless admin's single-use assertion). Neither is stored, echoed or logged. */
+        MailConfigPutRequest: components["schemas"]["MailConfigInput"] & {
+            /** Format: password */
+            current_password?: string;
+            step_up_token?: string;
         };
         /**
          * @description The PUT body: the same shape as MailConfigDocument, with a WRITE-ONLY secret in place of each block's `*_set` flag.
@@ -24112,7 +24118,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MailConfigInput"];
+                "application/json": components["schemas"]["MailConfigPutRequest"];
             };
         };
         responses: {
@@ -24143,7 +24149,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The caller is not an admin. */
+            /** @description The caller is not an admin; the supplied `current_password` is incorrect; or `step_up_required` — no fresh credential was supplied, or the step-up assertion is spent, expired, or issued to another session or account. `error.step_up_providers` names the sign-ins that can satisfy it (empty for a password account, which sends `current_password`). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -24162,7 +24168,7 @@ export interface operations {
                 };
             };
             /**
-             * @description The document is invalid. `fields` carries one entry per problem, keyed by the DOTTED path of the offending input (`from_address`, `smtp.host`, `smtp.port`, `smtp.encryption`, `mailgun.domain`, `mailgun.region`, `resend.api_key`, `postmark.server_token`, …).
+             * @description Both `current_password` and `step_up_token` were sent (exactly one proof is read); `password_already_set` — a step-up assertion was sent for an account that has a password, which must use it instead; or the document is invalid. `fields` carries one entry per problem, keyed by the DOTTED path of the offending input (`from_address`, `smtp.host`, `smtp.port`, `smtp.encryption`, `mailgun.domain`, `mailgun.region`, `resend.api_key`, `postmark.server_token`, …).
              *
              *     Two cases a panel should expect. `from_address` and `reply_to` must be a BARE address — `no-reply@example.org`, never `Vidra <no-reply@example.org>` and never `<no-reply@example.org>`; a display name belongs in `from_name`. And a save that changes `smtp.host` while omitting `smtp.password` is 422 on `smtp.password` ("required: changing the server address requires the password again"): the stored credential is never re-pointed at a server the admin has not just authenticated to. Re-render the password input as empty and required when that arrives.
              */
