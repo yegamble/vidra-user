@@ -36,6 +36,9 @@ function session(role: Role) {
       username: "boss",
       email: "boss@example.test",
       role,
+      // The signed-in admin is the instance owner (the single-owner shape):
+      // publishing custom JS/CSS is owner-only, and W6 exercises that path.
+      is_owner: role === "admin",
       email_verified: true,
       display_name: "Boss",
       bio: "",

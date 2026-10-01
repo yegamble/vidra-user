@@ -5033,6 +5033,8 @@ export interface paths {
         /**
          * Set or clear an instance document (admin)
          * @description Stores an instance document body (homepage max 100KB; custom_css and custom_js max 200KB) or clears it with an empty body — the public delivery routes 404 while a document is unset. Changes take effect immediately (the in-memory cache reloads) and the new content hash shows in the GET /api/v1/instance customization/homepage blocks for cache busting. Restricted to admins; every write is audited (admin.instance_document.update with the document name + content hash, never the body). Custom JS runs in every visitor's browser — clients must gate the editor behind an explicit warning flow.
+         *
+         *     WRITING `custom_js` or `custom_css` (a non-empty body) is further restricted to THE instance owner: an ordinary admin is 403 `owner_only`, because that code executes in every visitor's browser. CLEARING either (an empty body) stays open to every admin, so a non-owner admin can always take a script down. `homepage` is unaffected.
          */
         put: operations["putInstanceDocument"];
         post?: never;
@@ -24906,7 +24908,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The caller is not an admin. */
+            /** @description The caller is not an admin, or — for a non-empty `custom_js` / `custom_css` body — is an admin but not the instance owner (`owner_only`). */
             403: {
                 headers: {
                     [name: string]: unknown;
