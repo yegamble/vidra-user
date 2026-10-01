@@ -1437,6 +1437,16 @@ export const META: Record<string, SettingMeta> = {
     section: "replay",
     parent: "live_allow_replay",
   },
+  // vidra-core #293. A DELETE knob, so the consequence lives in the help text
+  // the admin reads next to the field, not only in the API docs.
+  live_recording_retention_hours: {
+    label: "Keep live recordings for",
+    help: "Hours to keep a finished stream's original recording (0–8,760). 0 deletes it as soon as its replay is published and otherwise keeps it. Lowering this, or raising it from 0, deletes existing recordings older than the new window on the next hourly sweep, including the only copy of a broadcast whose replay failed or was turned off. The default comes from LIVE_RECORDING_RETENTION.",
+    control: "number",
+    page: "live",
+    section: "replay",
+    parent: "live_enabled",
+  },
   // LIVE / Limits (config-parity W11).
   live_max_instance_lives: {
     label: "Max concurrent live streams (instance)",
