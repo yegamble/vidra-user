@@ -83,7 +83,9 @@ test("an outbound-mail document saves, survives a reload, and can be removed", a
   // with 409 mail_secrets_key_missing.
   expect(before.secrets_available).toBe(false);
   await expect(page.getByText(/no key to encrypt credentials with/)).toBeVisible();
-  await expect(page.getByLabel("Password")).toBeDisabled();
+  // exact: the save flow's "Confirm with your password" field (vidra-core #282)
+  // also carries the word, and it is deliberately enabled.
+  await expect(page.getByLabel("Password", { exact: true })).toBeDisabled();
 
   // A password-less relay — storable with or without a key-encryption key.
   const host = `relay-${uniqueId()}.example.test`;
@@ -93,6 +95,9 @@ test("an outbound-mail document saves, survives a reload, and can be removed", a
   await page.getByLabel("Username").fill("");
   await page.getByLabel("Sender name").fill("Vidra backed");
   await page.getByLabel("Sender address").fill(sender);
+  // Core requires a fresh credential on every mail-config save (vidra-core
+  // #282): the deterministic admin confirms with its own password.
+  await page.getByLabel("Confirm with your password").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Save mail settings" }).click();
 
   await expect(page.getByText("Mail settings saved.")).toBeVisible();
