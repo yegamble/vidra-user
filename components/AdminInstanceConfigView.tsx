@@ -622,7 +622,7 @@ function sectionPanel(page: ConfigPageId, sectionId: string): ReactNode | null {
       <InstanceDocumentEditor
         name="custom_css"
         label="Custom CSS"
-        help="Served to every visitor as a stylesheet, after the built-in styles."
+        help="Served to every visitor as a stylesheet, after the built-in styles. This site enforces a Content-Security-Policy: an @import of another site's stylesheet, a web font from another site, and embedded frames are blocked, so host fonts and stylesheets here."
         placeholder={`.header {\n  /* … */\n}`}
         code
       />
@@ -633,7 +633,7 @@ function sectionPanel(page: ConfigPageId, sectionId: string): ReactNode | null {
       <InstanceDocumentEditor
         name="custom_js"
         label="Custom JavaScript"
-        help="Runs in every visitor's browser on every page. Saving asks for a typed confirmation."
+        help="Runs in every visitor's browser on every page. Saving asks for a typed confirmation. This site enforces a Content-Security-Policy, so frames from other sites are blocked. If a saved script breaks the site, clear it here, or set CSP_REPORT_ONLY=true and run vidra deploy to stop enforcing the policy while you fix it."
         placeholder={`// console.log("hello");`}
         code
         dangerConfirm

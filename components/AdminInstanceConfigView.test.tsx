@@ -503,6 +503,19 @@ describe("page placement and progressive disclosure", () => {
     expect(screen.getByLabelText("Homepage content")).toBeTruthy();
   });
 
+  it("tells the editor of custom CSS and JS what the enforced Content-Security-Policy blocks", async () => {
+    // The frontend ENFORCES its CSP: a third-party @import, webfont or iframe in
+    // these documents is silently blocked. Without saying so here, the owner's
+    // only clue is a log line on the server.
+    render(<ConfigForm page="advanced" />);
+    const css = await screen.findByRole("group", { name: "Custom CSS editor" });
+    expect(css.textContent).toMatch(/Content-Security-Policy/);
+    expect(css.textContent).toMatch(/font/i);
+    const js = screen.getByRole("group", { name: "Custom JavaScript editor" });
+    expect(js.textContent).toMatch(/Content-Security-Policy/);
+    expect(js.textContent).toMatch(/CSP_REPORT_ONLY/);
+  });
+
   it("shows the federation boot note when federation is disabled at boot", async () => {
     mocks.getInstanceCached.mockResolvedValue({ federation_enabled: false });
     render(<ConfigForm page="federation" />);
