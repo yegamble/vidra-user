@@ -119,4 +119,83 @@ describe("PasswordResetLinkCard", () => {
     resolve({ reset_url: URL_, expires_at: EXPIRES });
     await screen.findByLabelText(/^reset link$/i);
   });
+
+  it("copies the link and says so", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    mocks.create.mockResolvedValue({ reset_url: URL_, expires_at: EXPIRES });
+    render(<PasswordResetLinkCard user={target()} />);
+    open();
+    submit();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^copy link$/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(URL_));
+    expect(await screen.findByText(/copied/i)).toBeTruthy();
+  });
+
+  it("falls back to a manual copy when the clipboard is unavailable", async () => {
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) } });
+    mocks.create.mockResolvedValue({ reset_url: URL_, expires_at: EXPIRES });
+    render(<PasswordResetLinkCard user={target()} />);
+    open();
+    submit();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^copy link$/i }));
+    expect(await screen.findByText(/could not copy/i)).toBeTruthy();
+  });
+
+  it("shows the server's own message on a refusal, with no link, and lets the admin retry", async () => {
+    mocks.create.mockRejectedValue(
+      new ApiError({ status: 403, code: "forbidden", message: "That password is not correct." }),
+    );
+    render(<PasswordResetLinkCard user={target()} />);
+    open();
+    submit("fixture-wrong-value");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("That password is not correct.");
+    expect(screen.queryByLabelText(/^reset link$/i)).toBeNull();
+    const button = screen.getByRole("button", { name: /^create link$/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+  });
+
+  it("falls back to a plain message on a 503, which carries no link", async () => {
+    mocks.create.mockRejectedValue(new ApiError({ status: 503, code: "unavailable", message: "audit down" }));
+    render(<PasswordResetLinkCard user={target()} />);
+    open();
+    submit();
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not create a reset link");
+  });
+
+  it("forgets the link and the password when the dialog closes", async () => {
+    mocks.create.mockResolvedValue({ reset_url: URL_, expires_at: EXPIRES });
+    render(<PasswordResetLinkCard user={target()} />);
+    open();
+    submit();
+    await screen.findByLabelText(/^reset link$/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /^done$/i }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.body.textContent).not.toContain("s3cr3t-token");
+    expect(document.body.innerHTML).not.toContain("s3cr3t-token");
+
+    open();
+    expect((screen.getByLabelText(/your password/i) as HTMLInputElement).value).toBe("");
+    expect(screen.queryByLabelText(/^reset link$/i)).toBeNull();
+  });
+
+  it("drops a link that arrives after the dialog was closed", async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.create.mockReturnValue(new Promise((r) => (resolve = r)));
+    render(<PasswordResetLinkCard user={target()} />);
+    open();
+    submit();
+    fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+    resolve({ reset_url: URL_, expires_at: EXPIRES });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.body.innerHTML).not.toContain("s3cr3t-token");
+  });
 });

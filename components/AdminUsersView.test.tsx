@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   deleteAdminUser: vi.fn(),
   transferInstanceOwnership: vi.fn(),
   removeAdminUserMFA: vi.fn(),
+  createAdminUserPasswordResetLink: vi.fn(),
   reloadUser: vi.fn(),
   // The signed-in viewer, mutable so a test can be the OWNER rather than just
   // an admin — the ownership-transfer control turns on exactly that difference.
@@ -32,6 +33,7 @@ vi.mock("@/lib/api", () => ({
     deleteAdminUser: mocks.deleteAdminUser,
     transferInstanceOwnership: mocks.transferInstanceOwnership,
     removeAdminUserMFA: mocks.removeAdminUserMFA,
+    createAdminUserPasswordResetLink: mocks.createAdminUserPasswordResetLink,
   },
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
@@ -717,5 +719,46 @@ describe("AdminUsersView second factor", () => {
     expect(
       desktop().queryByRole("button", { name: /remove second factor for ada/i }),
     ).toBeNull();
+  });
+});
+
+// Recovery for a user on an instance with no mail: the console mints a one-time
+// link (the dialog itself is covered in admin/PasswordResetLinkCard.test.tsx).
+// Core refuses the owner, staff and inactive targets, so the console offers the
+// action only where it can work.
+describe("AdminUsersView password reset link", () => {
+  beforeEach(() => {
+    mocks.session = { user: { id: "admin-1", role: "admin" } };
+    mocks.createAdminUserPasswordResetLink.mockReset();
+  });
+
+  async function openAccount(overrides: Record<string, unknown>) {
+    const user = account(0, { id: "user-9", username: "ada", ...overrides });
+    mocks.getAdminUsers.mockResolvedValue({ users: [user], total: 1, limit: PAGE, offset: 0 });
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open ada" }));
+  }
+
+  const action = () =>
+    desktop().queryByRole("button", { name: /create password reset link for ada/i });
+
+  it("offers the action on an ordinary account and opens the password prompt", async () => {
+    await openAccount({});
+    fireEvent.click(action()!);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(mocks.createAdminUserPasswordResetLink).not.toHaveBeenCalled();
+  });
+
+  it.each([["moderator"], ["admin"]])("does not offer it on a %s", async (role) => {
+    await openAccount({ role });
+    expect(action()).toBeNull();
+  });
+
+  it("does not offer it on the owner or on a tombstone", async () => {
+    await openAccount({ is_owner: true, role: "admin" });
+    expect(action()).toBeNull();
+    cleanup();
+    await openAccount({ deleted_at: "2026-02-02T00:00:00Z" });
+    expect(action()).toBeNull();
   });
 });
