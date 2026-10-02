@@ -114,6 +114,21 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ notification_setting: "none" });
   });
 
+  it("createAdminUserPasswordResetLink POSTs the admin's password to the target's reset-link route", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({ reset_url: "https://v.example/reset-password/confirm?token=t", expires_at: "2026-10-02T13:00:00Z" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const res = await api.createAdminUserPasswordResetLink("u/1", { password: "hunter2" });
+    expect(calledUrl()).toContain("/api/v1/admin/users/u%2F1/password-reset-link");
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ password: "hunter2" }));
+    expect(res.reset_url).toContain("token=t");
+  });
+
   it("contactInstance posts the visitor message", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 202 }));
     await api.contactInstance({
