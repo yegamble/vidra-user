@@ -8,8 +8,16 @@ vi.mock("@/lib/instance-config.server", () => ({
   getInstanceConfig: mocks.getInstanceConfig,
   INSTANCE_CONFIG_REVALIDATE_SECONDS: 60,
 }));
+// proxy.ts sets x-nonce per request; the enforced CSP blocks scripts without it.
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ "x-nonce": "n0nce" }),
+}));
 
 import RootLayout, { dynamic } from "./layout";
+import Script from "next/script";
+
+import { InstanceBanner } from "@/components/InstanceBanner";
+import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 
 /**
@@ -45,6 +53,14 @@ describe("RootLayout", () => {
     expect(html.props.suppressHydrationWarning).toBe(true);
     expect(body.type).toBe("body");
     expect(body.props.suppressHydrationWarning).toBe(true);
+  });
+
+  it("threads the request nonce to every script the layout emits", async () => {
+    const html = await renderWith(null);
+    expect(findElement(html, Script).props.nonce).toBe("n0nce");
+    expect(findElement(html, "script").props.nonce).toBe("n0nce");
+    expect(findElement(html, InstanceCustomization).props.nonce).toBe("n0nce");
+    expect(findElement(html, InstanceBanner).props.nonce).toBe("n0nce");
   });
 });
 

@@ -103,6 +103,17 @@ describe("InstanceBanner", () => {
     expect(document.querySelector("#broadcast-banner script")).toBeNull();
   });
 
+  it("nonces the pre-paint dismiss script so the enforced CSP runs it", () => {
+    render(
+      <InstanceBanner
+        instance={snapshot({ enabled: true, message: "Read me", dismissable: true })}
+        nonce="n0nce"
+      />,
+    );
+    const tag = document.querySelector<HTMLScriptElement>("#broadcast-banner script");
+    expect(tag?.nonce).toBe("n0nce");
+  });
+
   it("dismissing hides the banner and persists the message hash", () => {
     render(
       <InstanceBanner
