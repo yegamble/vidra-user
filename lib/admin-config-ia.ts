@@ -482,6 +482,15 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       description:
         "Letting people take their account data with them, and the limits on exports.",
     },
+    {
+      // Server id "audit" (vidra-core #296): the audit-trail retention knob.
+      // Curated so its one row does not sit under an auto-titled header with
+      // no word on what the trail is for.
+      id: "audit",
+      title: "Audit log",
+      description:
+        "How long the record of administrative actions — settings changes, role and account changes, moderation — is kept before it is pruned.",
+    },
   ],
 };
 
@@ -1532,6 +1541,15 @@ export const META: Record<string, SettingMeta> = {
   //
   // The master toggle: when off, search routes to the built-in deterministic
   // (backup SQL) path and suggestions are disabled instance-wide.
+  // vidra-core #296. The env value is a FLOOR: core rejects (422) anything that
+  // would delete sooner, so the help text says what the field can and cannot do.
+  audit_log_retention_days: {
+    label: "Keep the audit log for",
+    help: "Days to keep audit records before they are pruned (0 = keep forever). This can only make the trail longer than AUDIT_LOG_RETENTION on the server, never shorter; a shorter value is refused and the error names the minimum. If AUDIT_LOG_RETENTION is 0 the trail is already kept forever and this setting has no effect.",
+    control: "number",
+    page: "advanced",
+    section: "audit",
+  },
   search_service_enabled: {
     label: "Smart search service",
     help: "Use the smart search service for ranking and autocomplete. When off, Vidra falls back to the built-in deterministic search and suggestions are disabled.",

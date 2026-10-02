@@ -135,6 +135,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["live_max_user_lives", "live", "limits"],
   ["live_max_duration_secs", "live", "limits"],
   ["live_recording_retention_hours", "live", "replay"],
+  ["audit_log_retention_days", "advanced", "audit"],
   ["federation_accept_remote_comments", "federation", "comments"],
   ["federation_allow_channel_followers", "federation", "followers"],
   ["federation_follower_approval", "federation", "followers"],
@@ -698,6 +699,20 @@ describe("server registry mirror (config-parity closure slice)", () => {
     expect(help).toMatch(/0.*published/);
     expect(help).toMatch(/delet/i);
     expect(help).toMatch(/only copy/);
+  });
+
+  // audit_log_retention_days can only LENGTHEN what AUDIT_LOG_RETENTION keeps
+  // (vidra-core rejects a lower value with a 422 naming the floor), and 0 is
+  // "keep forever". The admin must read both before typing a number.
+  it("curates the audit section and states the retention floor", () => {
+    const audit = PAGE_SECTIONS.advanced.find((s) => s.id === "audit");
+    expect(audit?.title).toBe("Audit log");
+    expect(audit?.description).toBeTruthy();
+    const help = META.audit_log_retention_days.help;
+    expect(help).toMatch(/days/i);
+    expect(help).toMatch(/0.*forever/i);
+    expect(help).toMatch(/AUDIT_LOG_RETENTION/);
+    expect(help).toMatch(/longer|lengthen/i);
   });
 
   it("wires the two-level live replay disclosure", () => {
