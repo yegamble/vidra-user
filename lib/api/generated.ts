@@ -9429,6 +9429,16 @@ export interface components {
                 s3_region: string;
                 s3_use_ssl: boolean;
                 s3_force_path_style: boolean;
+                /** @description Capacity of the filesystem holding local_root, measured per request. ABSENT — not zeroed — on s3 and when the measurement fails. Inside a container this is the filesystem backing the mounted volume, which is the disk that actually fills. No threshold or verdict is reported; `vidra doctor` owns the tiers. */
+                disk?: {
+                    /** Format: int64 */
+                    total_bytes: number;
+                    /**
+                     * Format: int64
+                     * @description Bytes an unprivileged process can still write (excludes root-reserved blocks), the same definition `vidra doctor` uses.
+                     */
+                    free_bytes: number;
+                };
             };
             /** @description How media bytes leave the deployment when this process is not the one serving them. ABSENT — not empty — when no CDN is wired (DELIVERY_CDN_BASE_URL unset). The purge endpoint template and its token are never reported: an invalidation API routinely carries the credential in the URL. */
             delivery?: {
