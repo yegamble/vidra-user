@@ -31,14 +31,24 @@ it("explains instead of collecting an address when the instance cannot send mail
   expect(requestPasswordReset).not.toHaveBeenCalled();
 });
 
-// No admin screen can set another user's password, so the copy must not send
-// the reader to ask for one; the owner's own way back is the host command.
+// An administrator CAN now create a one-time reset link for an ordinary account
+// when the instance has no mail, so the copy says so in one sentence; it must
+// still not promise that an admin can set the password for them (they cannot),
+// and the owner's own way back is the host command.
 it("names only recoveries that exist when the instance cannot send mail", () => {
   render(<ResetPasswordForm mailEnabled={false} />);
 
   expect(screen.queryByText(/reset your password for you/i)).toBeNull();
   expect(screen.getByText(/set up outgoing mail/i)).toBeTruthy();
   expect(screen.getByText("vidra owner reset")).toBeTruthy();
+});
+
+it("tells users an administrator can create a reset link when the instance has no mail", () => {
+  render(<ResetPasswordForm mailEnabled={false} />);
+
+  expect(
+    screen.getByText(/ask an administrator of this instance to create a password reset link for you/i),
+  ).toBeTruthy();
 });
 
 it("asks for the address and confirms neutrally when mail is configured", async () => {
