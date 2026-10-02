@@ -271,6 +271,22 @@ describe("InfrastructurePanel storage surfacing", () => {
       expect(panel.getByText(WARNING)).toBeTruthy();
     });
 
+    // axe's definition-list / dlitem rules (run by e2e-backed required-controls):
+    // a <dl> may wrap a name/value group in one <div>, and that div must hold
+    // exactly a <dt> then a <dd>. The warning state is the one that grows the
+    // row, so it is the one checked.
+    it("keeps the warning row a valid <dl> group", async () => {
+      withDisk({ total_bytes: 20 * GIB, free_bytes: 4 * GIB });
+      render(<InfrastructurePanel />);
+
+      const panel = await storagePanel();
+      const term = panel.getByText("Disk space");
+      const group = term.parentElement as HTMLElement;
+      expect(group.parentElement?.tagName).toBe("DL");
+      expect(Array.from(group.children).map((c) => c.tagName)).toEqual(["DT", "DD"]);
+      expect(group.querySelector("dd")?.textContent).toContain(WARNING);
+    });
+
     it("warns when free space is under 5 GiB even if it is above 10%", async () => {
       withDisk({ total_bytes: 20 * GIB, free_bytes: 4 * GIB });
       render(<InfrastructurePanel />);

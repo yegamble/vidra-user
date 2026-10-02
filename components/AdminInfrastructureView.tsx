@@ -813,11 +813,15 @@ function DiskRow({
   const low =
     free / total < DISK_WARN_FREE_FRACTION || free < DISK_WARN_FREE_BYTES;
   const percent = Math.round((free / total) * 100);
+  // One wrapper div holding exactly one <dt> and one <dd>, like Row: a <dl>
+  // allows a div around a name/value group but not a nested one, and a second
+  // bare <dd> outside the group fails axe's definition-list/dlitem rules. The
+  // warning is therefore part of the value, not a sibling of it.
   return (
-    <div className="border-b border-border-subtle py-1.5">
-      <div className="flex justify-between gap-3">
-        <dt className="text-fg-muted">Disk space</dt>
-        <dd
+    <div className="flex justify-between gap-3 border-b border-border-subtle py-1.5">
+      <dt className="text-fg-muted">Disk space</dt>
+      <dd className="text-right">
+        <span
           className={
             low
               ? "rounded bg-warning/15 px-1.5 text-warning tabular-nums"
@@ -825,14 +829,14 @@ function DiskRow({
           }
         >
           {`${formatBytes(free)} free of ${formatBytes(total)} (${percent}%)`}
-        </dd>
-      </div>
-      {low && (
-        <dd className="mt-1 text-[13px] text-warning">
-          Uploads fail when this disk fills, and on a single-disk host the
-          database stops with them; free space before it fills.
-        </dd>
-      )}
+        </span>
+        {low && (
+          <span className="mt-1 block text-[13px] text-warning">
+            Uploads fail when this disk fills, and on a single-disk host the
+            database stops with them; free space before it fills.
+          </span>
+        )}
+      </dd>
     </div>
   );
 }
