@@ -31,6 +31,16 @@ it("explains instead of collecting an address when the instance cannot send mail
   expect(requestPasswordReset).not.toHaveBeenCalled();
 });
 
+// No admin screen can set another user's password, so the copy must not send
+// the reader to ask for one; the owner's own way back is the host command.
+it("names only recoveries that exist when the instance cannot send mail", () => {
+  render(<ResetPasswordForm mailEnabled={false} />);
+
+  expect(screen.queryByText(/reset your password for you/i)).toBeNull();
+  expect(screen.getByText(/set up outgoing mail/i)).toBeTruthy();
+  expect(screen.getByText("vidra owner reset")).toBeTruthy();
+});
+
 it("asks for the address and confirms neutrally when mail is configured", async () => {
   requestPasswordReset.mockResolvedValue(undefined);
   render(<ResetPasswordForm mailEnabled />);
