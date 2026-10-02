@@ -241,6 +241,72 @@ describe("InfrastructurePanel storage surfacing", () => {
     ).toBe("/admin/infrastructure");
   });
 
+  describe("disk space row", () => {
+    const GIB = 1024 ** 3;
+    const WARNING =
+      "Media uploads and the database share this disk; free space before it fills.";
+
+    function withDisk(disk?: { total_bytes: number; free_bytes: number }) {
+      mocks.getInfrastructure.mockResolvedValue(
+        infrastructure({ ...localStorageBackend, ...(disk ? { disk } : {}) } as typeof localStorageBackend),
+      );
+    }
+
+    it("shows free of total with a percentage and no warning when there is plenty", async () => {
+      withDisk({ total_bytes: 160 * GIB, free_bytes: 80 * GIB });
+      render(<InfrastructurePanel />);
+
+      const panel = await storagePanel();
+      expect(panel.getByText("Disk space")).toBeTruthy();
+      expect(panel.getByText("80.0 GB free of 160.0 GB (50%)")).toBeTruthy();
+      expect(panel.queryByText(WARNING)).toBeNull();
+    });
+
+    it("warns when free space is under 10% even if it is above 5 GiB", async () => {
+      withDisk({ total_bytes: 1000 * GIB, free_bytes: 99 * GIB });
+      render(<InfrastructurePanel />);
+
+      const panel = await storagePanel();
+      expect(panel.getByText("99.0 GB free of 1000.0 GB (10%)")).toBeTruthy();
+      expect(panel.getByText(WARNING)).toBeTruthy();
+    });
+
+    it("warns when free space is under 5 GiB even if it is above 10%", async () => {
+      withDisk({ total_bytes: 20 * GIB, free_bytes: 4 * GIB });
+      render(<InfrastructurePanel />);
+
+      const panel = await storagePanel();
+      expect(panel.getByText(WARNING)).toBeTruthy();
+    });
+
+    it("does not warn at exactly the thresholds (doctor warns strictly below)", async () => {
+      withDisk({ total_bytes: 50 * GIB, free_bytes: 5 * GIB });
+      render(<InfrastructurePanel />);
+
+      const panel = await storagePanel();
+      expect(panel.getByText("Disk space")).toBeTruthy();
+      expect(panel.queryByText(WARNING)).toBeNull();
+    });
+
+    it("shows nothing when the local backend reports no disk measurement", async () => {
+      withDisk(undefined);
+      render(<InfrastructurePanel />);
+
+      const panel = await storagePanel();
+      expect(panel.getByText("Media directory")).toBeTruthy();
+      expect(panel.queryByText("Disk space")).toBeNull();
+      expect(panel.queryByText(/unknown/i)).toBeNull();
+    });
+
+    it("shows nothing on s3", async () => {
+      render(<InfrastructurePanel />);
+
+      const panel = await storagePanel();
+      expect(panel.getByText("Endpoint")).toBeTruthy();
+      expect(panel.queryByText("Disk space")).toBeNull();
+    });
+  });
+
   it("does not offer the discovery card once a campaign exists", async () => {
     mocks.getInfrastructure.mockResolvedValue(infrastructure(localStorageBackend));
     mocks.getStorageMigrations.mockResolvedValue({ migrations: [copying] });
