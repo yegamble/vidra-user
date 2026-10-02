@@ -48,7 +48,8 @@ export function ResetPasswordForm({ mailEnabled = true }: { mailEnabled?: boolea
         <Alert>
           This instance cannot send email yet, so it cannot send you a reset link.
           Ask whoever runs it to set up outgoing mail (SMTP), then request a link
-          here. If you run this instance and are locked out of the owner account,
+          here. Or ask an administrator of this instance to create a password
+          reset link for you. If you run this instance and are locked out of the owner account,
           run <code>vidra owner reset</code> on the server (vidra newer than
           v0.7.5).
         </Alert>
