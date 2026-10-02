@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { Suspense } from "react";
 
 import { FeaturedBanner } from "@/components/FeaturedBanner";
@@ -93,6 +94,9 @@ export default async function Home({
   // banner (fail-safe), including in the mocked e2e where server reads have no
   // backend at all.
   const featured = await resolveFeatured(instance?.featured);
+  // proxy.ts's per-request CSP nonce: the enforced policy blocks the inline
+  // pre-paint hint below without it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <PageShell className="pb-12 pt-7 sm:pb-16 sm:pt-10">
       {/* RSS auto-discovery (Wave F F3): the public videos feed lives on
@@ -106,7 +110,7 @@ export default async function Home({
           remembered shelf count onto <html> before first paint so the signed-in
           shelves band below can reserve that many skeleton shelves and never
           shove the chips + grid down when it resolves. */}
-      <script dangerouslySetInnerHTML={{ __html: buildHomeShelvesHintScript() }} />
+      <script nonce={nonce} dangerouslySetInnerHTML={{ __html: buildHomeShelvesHintScript() }} />
       {/* First-run signpost: while the server has no owner, nothing else on
           this page matters as much as claiming it, so the card leads — above
           even the featured banner. Renders nothing on every normal server. */}

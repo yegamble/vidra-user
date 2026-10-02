@@ -27,7 +27,10 @@ import { buildAccentOverrideCss } from "@/lib/contrast";
 
 const HEX_HASH = /^[0-9a-f]{8,128}$/i;
 
-export function InstanceCustomization({ instance }: { instance: InstanceConfigSnapshot | null }) {
+// nonce: under the enforced nonce + 'strict-dynamic' CSP a parser-inserted
+// <script src> runs only with it; CSP3 browsers ignore the API-origin allowlist.
+type Props = { instance: InstanceConfigSnapshot | null; nonce?: string };
+export function InstanceCustomization({ instance, nonce }: Props) {
   const customization = instance?.customization;
   const cssHash = customization?.css_hash;
   const jsHash = customization?.js_hash;
@@ -47,7 +50,9 @@ export function InstanceCustomization({ instance }: { instance: InstanceConfigSn
           href={`${apiBaseUrl}/api/v1/instance/custom.css?v=${css}`}
         />
       ) : null}
-      {js ? <script defer src={`${apiBaseUrl}/api/v1/instance/custom.js?v=${js}`} /> : null}
+      {js ? (
+        <script defer nonce={nonce} src={`${apiBaseUrl}/api/v1/instance/custom.js?v=${js}`} />
+      ) : null}
     </>
   );
 }

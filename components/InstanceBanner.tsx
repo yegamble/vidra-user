@@ -49,7 +49,10 @@ const LEVEL_STYLES: Record<BroadcastLevel, { wrapper: string; icon: string }> = 
   error: { wrapper: "border-danger-border bg-danger-surface", icon: "text-danger" },
 };
 
-export function InstanceBanner({ instance }: { instance: InstanceConfigSnapshot | null }) {
+// nonce: the request CSP nonce (proxy.ts); the enforced policy blocks the
+// dismiss script without it.
+type Props = { instance: InstanceConfigSnapshot | null; nonce?: string };
+export function InstanceBanner({ instance, nonce }: Props) {
   const broadcast = instance?.broadcast;
   const message = typeof broadcast?.message === "string" ? broadcast.message.trim() : "";
   if (broadcast?.enabled !== true || message === "") return null;
@@ -58,6 +61,7 @@ export function InstanceBanner({ instance }: { instance: InstanceConfigSnapshot 
       message={message}
       level={normalizeBroadcastLevel(broadcast.level)}
       dismissable={broadcast.dismissable === true}
+      nonce={nonce}
     />
   );
 }
@@ -78,10 +82,12 @@ function BroadcastBanner({
   message,
   level,
   dismissable,
+  nonce,
 }: {
   message: string;
   level: BroadcastLevel;
   dismissable: boolean;
+  nonce?: string;
 }) {
   const hash = broadcastMessageHash(message);
   // localStorage as an external store: the server snapshot always shows the
@@ -139,7 +145,7 @@ function BroadcastBanner({
         ) : null}
       </div>
       {dismissable ? (
-        <script dangerouslySetInnerHTML={{ __html: buildBroadcastDismissScript(hash) }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: buildBroadcastDismissScript(hash) }} />
       ) : null}
     </aside>
   );

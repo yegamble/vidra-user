@@ -126,6 +126,7 @@ App vars are read once, typed, in `lib/config.ts` (`LOG_LEVEL` in `lib/logger.ts
 | `API_BASE_URL` | runtime, server only | Server-side fetch target (compose/service DNS, e.g. `http://api:8080`) |
 | `INTERNAL_API_BASE_URL` | runtime, server only | Historical alias for `API_BASE_URL` (wins when both are set); falls back to the public URL |
 | `PUBLIC_BASE_URL` | runtime, server only | The **site** origin — a different thing from the API origins above. Its scheme decides whether `proxy.ts` emits `Strict-Transport-Security`: https, unset, or unparseable emit (fail-secure); an explicit `http://` origin (the deliberate plain-http deployment mode) suppresses it |
+| `CSP_REPORT_ONLY` | runtime, server only | `true` sends the per-request Content-Security-Policy (`proxy.ts`) as `-Report-Only` instead of enforcing it — the recovery switch when admin custom JS breaks under the enforced policy, no rebuild needed. Violations log as `csp violation` either way. Default: enforce |
 | `LOG_LEVEL` | server | `debug \| info \| warn \| error` (default `info`) |
 | `OTEL_ENABLED` | server | `true` registers the OTel SDK and injects W3C `traceparent` on server-side calls |
 | `OTEL_SERVICE_NAME` | server | OTel service identity (default `vidra-user`) |

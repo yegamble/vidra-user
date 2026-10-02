@@ -1,14 +1,19 @@
 import { expect, test } from "@playwright/test";
 
-test("responses expose the report-only CSP and baseline hardening headers", async ({
-  request,
-}) => {
+// Intent changed (owner-approved): the CSP is ENFORCED with a per-request nonce,
+// so every spec in this suite now runs under it.
+test("responses enforce the nonce CSP and baseline hardening headers", async ({ request }) => {
   const response = await request.get("/");
   expect(response.ok()).toBe(true);
   const headers = response.headers();
 
-  expect(headers["content-security-policy"]).toBeUndefined();
-  expect(headers["content-security-policy-report-only"]).toContain("worker-src 'self' blob:");
+  const csp = headers["content-security-policy"];
+  expect(headers["content-security-policy-report-only"]).toBeUndefined();
+  expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
+  expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+  expect(csp).toContain("worker-src 'self' blob:");
+  expect(csp).toContain("frame-ancestors 'self'");
+  expect(headers["reporting-endpoints"]).toBe('csp="/csp-report"');
   expect(headers["x-content-type-options"]).toBe("nosniff");
   expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
   expect(headers["permissions-policy"]).toContain("camera=()");
@@ -38,4 +43,6 @@ test("HSTS reaches the embed routes the old next.config rule covered", async ({ 
   expect(response.headers()["strict-transport-security"]).toBe(
     "max-age=31536000; includeSubDomains",
   );
+  // Embeds exist to be framed by any site.
+  expect(response.headers()["content-security-policy"]).not.toContain("frame-ancestors");
 });
