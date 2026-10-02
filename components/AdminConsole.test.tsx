@@ -34,10 +34,10 @@ import { AdminConsole } from "./AdminConsole";
 const page = (total: number) => ({ total, limit: 1, offset: 0, reports: [], requests: [] });
 const queuesLink = () => screen.getByRole("link", { name: /^Queues/ });
 const registrationLink = () => screen.getByRole("link", { name: /^Registration/ });
-// The pill's accessible name is its full label; its visible text is the number
-// alone, so the number appears once in the DOM (a text locator finds one node).
-const badge = (link: HTMLElement) =>
-  link.querySelector('[role="img"]')?.getAttribute("aria-label") ?? "";
+// The pill's description lives in `title`; its text is the number alone, so the
+// count appears once in the DOM and no label/text query matches the description.
+const pill = (link: HTMLElement) => link.querySelector<HTMLElement>("span[title]");
+const badge = (link: HTMLElement) => pill(link)?.title ?? "";
 
 beforeEach(() => {
   session.user = { id: "u1", username: "boss", role: "admin" };
@@ -57,7 +57,8 @@ describe("AdminConsole count badges", () => {
     expect(badge(registrationLink())).toContain("1 sign-up waiting for approval");
     // The reports badge never absorbs sign-ups: its page lists only reports.
     expect(badge(queuesLink())).not.toContain("sign-up");
-    expect(queuesLink().querySelector('[role="img"]')?.textContent).toBe("2");
+    expect(pill(queuesLink())?.textContent).toBe("2");
+    expect(queuesLink().querySelector("[aria-label], .sr-only")).toBeNull();
     expect(getReports).toHaveBeenCalledWith({ status: "open", limit: 1 }, expect.any(AbortSignal));
     expect(getRegistrationRequests).toHaveBeenCalledWith(
       { status: "pending", limit: 1 },

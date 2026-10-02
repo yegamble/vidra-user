@@ -189,16 +189,17 @@ function ConsoleLink({
   );
 }
 
-// The pill is one labelled image: assistive tech reads its full label ("150 open
-// reports", exact even past the visible "99+" cap), and the DOM holds the number
-// once. An sr-only copy of the label alongside the visible number duplicated the
-// count as text, which any text query (and some readers' browse mode) saw twice.
+// The pill's only text is the number, so the link reads "Queues 3" (as it always
+// has) and the DOM holds the count once. The full description rides in `title`
+// for pointer users. Deliberately NOT an aria-label or an sr-only copy: both put
+// "3 open reports" into the accessibility tree as label/text, which every label
+// or text query on the admin pages then matches by substring (an `sr-only` copy
+// collided with getByText("3"); an aria-label with getByLabel("Port"), via
+// "re-port").
 function CountPill({ badge }: { badge: CountBadge | null }) {
   if (!badge) return null;
   return (
     <span
-      role="img"
-      aria-label={badge.label}
       title={badge.label}
       className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger-solid px-[5px] text-[10.5px] font-bold tabular-nums text-danger-fg"
     >
