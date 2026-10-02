@@ -1252,6 +1252,30 @@ export const META: Record<string, SettingMeta> = {
     section: "imports",
     parent: "channel_sync_enabled",
   },
+  channel_sync_batch: {
+    label: "Uploads per sync pass",
+    help: "Newest uploads imported from each synced channel per pass (1–100). Read at the start of every pass, so a change applies without a restart. The default comes from CHANNEL_SYNC_BATCH.",
+    control: "number",
+    page: "vod",
+    section: "imports",
+    parent: "channel_sync_enabled",
+  },
+  channel_sync_cooldown_minutes: {
+    label: "Sync-now cooldown",
+    help: "Minimum minutes between manual sync-now requests for the same sync (1–1,440). Read per request, so a change applies without a restart. The default comes from CHANNEL_SYNC_COOLDOWN; the throttle can only be turned off with CHANNEL_SYNC_COOLDOWN=0 at boot.",
+    control: "number",
+    page: "vod",
+    section: "imports",
+    parent: "channel_sync_enabled",
+  },
+  channel_sync_backoff_max_hours: {
+    label: "Failed sync retry cap",
+    help: "Longest wait in hours before retrying a sync whose runs keep failing (1–720). The wait doubles from the sync interval up to this cap. Read at each failure, so a change applies without a restart. The default comes from CHANNEL_SYNC_BACKOFF_MAX.",
+    control: "number",
+    page: "vod",
+    section: "imports",
+    parent: "channel_sync_enabled",
+  },
   // VOD / Transcoding (config-parity W10). transcoding_enabled is the master;
   // the ladder + tuning knobs disclose under it.
   transcoding_enabled: {

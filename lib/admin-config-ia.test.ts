@@ -103,6 +103,9 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["channel_sync_enabled", "vod", "imports"],
   ["channel_sync_max_per_user", "vod", "imports"],
   ["channel_sync_interval_minutes", "vod", "imports"],
+  ["channel_sync_batch", "vod", "imports"],
+  ["channel_sync_cooldown_minutes", "vod", "imports"],
+  ["channel_sync_backoff_max_hours", "vod", "imports"],
   ["storyboards_enabled", "vod", "storyboards"],
   ["video_card_previews_enabled", "vod", "playback"],
   ["video_card_previews_default_enabled", "vod", "playback"],
@@ -727,6 +730,24 @@ describe("server registry mirror (config-parity closure slice)", () => {
     // unit the field takes, or an admin types hours and gets a 400.
     expect(META.channel_sync_interval_minutes.help).toMatch(/minutes/);
     expect(META.channel_sync_interval_minutes.help).toMatch(/5.10080|5–10,080/);
+  });
+
+  it("discloses the channel-sync timing knobs under the sync switch, in the unit each field takes", () => {
+    // Server bounds (vidra-core registry): batch 1..100 uploads, cooldown
+    // 1..1440 minutes, backoff cap 1..720 hours. A help text in the wrong unit
+    // sends an admin's value straight into a 422.
+    const cases = [
+      ["channel_sync_batch", /uploads/i, /1.100|1–100/, /CHANNEL_SYNC_BATCH/],
+      ["channel_sync_cooldown_minutes", /minutes/i, /1.1440|1–1,440/, /CHANNEL_SYNC_COOLDOWN/],
+      ["channel_sync_backoff_max_hours", /hours/i, /1.720|1–720/, /CHANNEL_SYNC_BACKOFF_MAX/],
+    ] as const;
+    for (const [key, unit, range, env] of cases) {
+      expect(META[key].parent).toBe("channel_sync_enabled");
+      expect(META[key].control).toBe("number");
+      expect(META[key].help).toMatch(unit);
+      expect(META[key].help).toMatch(range);
+      expect(META[key].help).toMatch(env);
+    }
   });
 });
 
