@@ -66,8 +66,13 @@ export type AdminNavItem = {
   Icon?: (props: IconProps) => ReactElement;
   /** Only lit when the path matches exactly (the /admin Overview index). */
   exact?: boolean;
-  /** Carries the live open-reports count badge (the design's red Queues badge). */
-  badge?: boolean;
+  /**
+   * Carries a live red count badge, and names which count: "reports" is the
+   * open-reports queue, "signups" the pending registration requests. One badge
+   * per destination, each counting only what its own page lists, so a badge
+   * never sends the operator to a page with nothing to act on.
+   */
+  badge?: "reports" | "signups";
   /**
    * Lives outside /admin: the moderation surfaces keep their own moderator nav,
    * so the admin console never lights up for them (it renders on /admin/* only).
@@ -113,7 +118,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     description: "Review and resolve abuse reports filed by viewers.",
     group: "primary",
     Icon: ShieldIcon,
-    badge: true,
+    badge: "reports",
     external: true,
     // The Overview already leads to the report queue through its open-reports
     // callout ("N open reports · Moderation queue"), which carries the live
@@ -143,6 +148,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     label: "Registration",
     description: "Review pending signups and approve or reject them.",
     group: "more",
+    badge: "signups",
   },
   {
     href: "/admin/federation/follower-requests",

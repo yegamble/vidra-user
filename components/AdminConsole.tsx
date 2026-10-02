@@ -14,6 +14,7 @@ import {
 } from "@/lib/admin-nav";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useVisiblePoll } from "@/lib/use-visible-poll";
 
 // Both groups come from the one admin-nav registry (lib/admin-nav.ts): the
 // design's five primary console destinations (Overview / Users / Instance are
@@ -24,10 +25,23 @@ import { cn } from "@/lib/cn";
 // not enumerate, so no admin route is stranded (there is no admin bottom-tab bar
 // and the AdminTabs Select is hidden at this width).
 
-// The open-reports count is capped for display; the exact figure lives on the
-// Overview open-reports callout (and the Moderation queue itself).
+// The badge count is capped for display; the exact figures live on the Overview
+// callout and the queues themselves.
 const BADGE_CAP = 99;
-const REPORTS_PAGE = 100;
+// Badge staleness bound while the tab is visible; navigation refetches at once.
+const BADGE_POLL_MS = 60_000;
+
+interface CountBadge {
+  text: string;
+  label: string;
+}
+
+// The bare number says nothing about what is waiting, so each badge carries its
+// own label (title + screen-reader text): "2 open reports".
+function countBadge(n: number | null, one: string, many: string): CountBadge | null {
+  if (!n || n <= 0) return null;
+  return { text: n > BADGE_CAP ? `${BADGE_CAP}+` : String(n), label: `${n} ${n === 1 ? one : many}` };
+}
 
 // AdminConsole is the design's desktop admin sidebar — a 230px rail with the
 // "Vidra ADMIN" wordmark, the five primary console destinations (a live red
@@ -40,27 +54,47 @@ export function AdminConsole() {
   const pathname = usePathname();
   const { user } = useSession();
   const [openReports, setOpenReports] = useState<number | null>(null);
+  const [pendingSignups, setPendingSignups] = useState<number | null>(null);
+  const [pollKey, setPollKey] = useState(0);
+  const isAdmin = user?.role === "admin";
 
+  // Refetch on every navigation (acting on a queue then moving on is exactly
+  // when the count changes) and, via the repo's visibility-aware poll, while the
+  // tab stays open. Fetching once on mount left the badge stale for the session.
   useEffect(() => {
-    if (user?.role !== "admin") return;
+    // GET /admin/registration-requests is requireRole(admin) in vidra-core
+    // (internal/httpapi/server.go), and this console renders for admins only, so
+    // one gate covers both reads; a moderator never draws a 403 per navigation.
+    if (!isAdmin) return;
     const controller = new AbortController();
+    // limit=1 + `total`: the page is irrelevant, only the match count is read.
+    // Each source swallows its own failure (the badge is a convenience, never a
+    // thrown rejection) and keeps its last value, so one failing source cannot
+    // zero the other.
     api
-      .getReports({ status: "open", limit: REPORTS_PAGE }, controller.signal)
-      // Best-effort: the badge is a convenience, so a failed read simply omits it
-      // (swallowed — never a thrown rejection or a blank console).
-      .then((res) => setOpenReports(res.reports.length))
+      .getReports({ status: "open", limit: 1 }, controller.signal)
+      .then((res) => setOpenReports(res.total))
+      .catch(() => {});
+    api
+      .getRegistrationRequests({ status: "pending", limit: 1 }, controller.signal)
+      .then((res) => setPendingSignups(res.total))
       .catch(() => {});
     return () => controller.abort();
-  }, [user?.role]);
+  }, [isAdmin, pathname, pollKey]);
 
-  if (user?.role !== "admin") return null;
+  useVisiblePoll({
+    enabled: isAdmin,
+    intervalMs: BADGE_POLL_MS,
+    onPoll: () => setPollKey((k) => k + 1),
+  });
 
-  const badgeText =
-    openReports && openReports > 0
-      ? openReports > BADGE_CAP
-        ? `${BADGE_CAP}+`
-        : String(openReports)
-      : null;
+  if (!isAdmin || !user) return null;
+
+  // One badge per destination, each counting what its own page lists.
+  const badges: Record<NonNullable<AdminNavItem["badge"]>, CountBadge | null> = {
+    reports: countBadge(openReports, "open report", "open reports"),
+    signups: countBadge(pendingSignups, "sign-up waiting for approval", "sign-ups waiting for approval"),
+  };
 
   return (
     <nav
@@ -80,7 +114,7 @@ export function AdminConsole() {
             <ConsoleLink
               item={item}
               active={isAdminNavItemActive(item, pathname)}
-              badge={item.badge ? badgeText : null}
+              badge={item.badge ? badges[item.badge] : null}
             />
           </li>
         ))}
@@ -105,7 +139,8 @@ export function AdminConsole() {
                       : "font-medium text-fg-muted hover:bg-surface-muted hover:text-fg",
                   )}
                 >
-                  {item.label}
+                  <span className="truncate">{item.label}</span>
+                  {item.badge ? <CountPill badge={badges[item.badge]} /> : null}
                 </Link>
               </li>
             );
@@ -133,7 +168,7 @@ function ConsoleLink({
 }: {
   item: AdminNavItem;
   active: boolean;
-  badge: string | null;
+  badge: CountBadge | null;
 }) {
   // Only the primary group carries an icon in the registry — the "More" group
   // is label-only by design, so the glyph is rendered when there is one.
@@ -149,11 +184,20 @@ function ConsoleLink({
     >
       {Icon ? <Icon size={16} strokeWidth={1.9} className="shrink-0" /> : null}
       <span className="truncate">{item.label}</span>
-      {badge ? (
-        <span className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger-solid px-[5px] text-[10.5px] font-bold tabular-nums text-danger-fg">
-          {badge}
-        </span>
-      ) : null}
+      <CountPill badge={badge} />
     </Link>
+  );
+}
+
+function CountPill({ badge }: { badge: CountBadge | null }) {
+  if (!badge) return null;
+  return (
+    <span
+      title={badge.label}
+      className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger-solid px-[5px] text-[10.5px] font-bold tabular-nums text-danger-fg"
+    >
+      <span aria-hidden="true">{badge.text}</span>
+      <span className="sr-only">{badge.label}</span>
+    </span>
   );
 }
