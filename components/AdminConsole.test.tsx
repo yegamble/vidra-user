@@ -34,6 +34,10 @@ import { AdminConsole } from "./AdminConsole";
 const page = (total: number) => ({ total, limit: 1, offset: 0, reports: [], requests: [] });
 const queuesLink = () => screen.getByRole("link", { name: /^Queues/ });
 const registrationLink = () => screen.getByRole("link", { name: /^Registration/ });
+// The pill's accessible name is its full label; its visible text is the number
+// alone, so the number appears once in the DOM (a text locator finds one node).
+const badge = (link: HTMLElement) =>
+  link.querySelector('[role="img"]')?.getAttribute("aria-label") ?? "";
 
 beforeEach(() => {
   session.user = { id: "u1", username: "boss", role: "admin" };
@@ -49,10 +53,11 @@ afterEach(() => {
 describe("AdminConsole count badges", () => {
   it("gives each destination its own count, reading only `total`", async () => {
     render(<AdminConsole />);
-    await waitFor(() => expect(queuesLink().textContent).toContain("2 open reports"));
-    expect(registrationLink().textContent).toContain("1 sign-up waiting for approval");
+    await waitFor(() => expect(badge(queuesLink())).toContain("2 open reports"));
+    expect(badge(registrationLink())).toContain("1 sign-up waiting for approval");
     // The reports badge never absorbs sign-ups: its page lists only reports.
-    expect(queuesLink().textContent).not.toContain("sign-up");
+    expect(badge(queuesLink())).not.toContain("sign-up");
+    expect(queuesLink().querySelector('[role="img"]')?.textContent).toBe("2");
     expect(getReports).toHaveBeenCalledWith({ status: "open", limit: 1 }, expect.any(AbortSignal));
     expect(getRegistrationRequests).toHaveBeenCalledWith(
       { status: "pending", limit: 1 },
@@ -63,27 +68,27 @@ describe("AdminConsole count badges", () => {
   it("keeps the other badge when one read fails", async () => {
     getReports.mockRejectedValue(new Error("boom"));
     render(<AdminConsole />);
-    await waitFor(() => expect(registrationLink().textContent).toContain("1 sign-up waiting"));
-    expect(queuesLink().textContent).not.toContain("open report");
+    await waitFor(() => expect(badge(registrationLink())).toContain("1 sign-up waiting"));
+    expect(badge(queuesLink())).not.toContain("open report");
 
     cleanup();
     getReports.mockResolvedValue(page(2));
     getRegistrationRequests.mockRejectedValue(new Error("boom"));
     render(<AdminConsole />);
-    await waitFor(() => expect(queuesLink().textContent).toContain("2 open reports"));
-    expect(registrationLink().textContent).not.toContain("sign-up waiting");
+    await waitFor(() => expect(badge(queuesLink())).toContain("2 open reports"));
+    expect(badge(registrationLink())).not.toContain("sign-up waiting");
   });
 
   it("refetches when the pathname changes", async () => {
     const { rerender } = render(<AdminConsole />);
-    await waitFor(() => expect(registrationLink().textContent).toContain("1 sign-up waiting"));
+    await waitFor(() => expect(badge(registrationLink())).toContain("1 sign-up waiting"));
     getRegistrationRequests.mockResolvedValue(page(0));
 
     nav.pathname = "/admin/registration-requests";
     rerender(<AdminConsole />);
 
-    await waitFor(() => expect(registrationLink().textContent).not.toContain("sign-up waiting"));
-    expect(queuesLink().textContent).toContain("2 open reports");
+    await waitFor(() => expect(badge(registrationLink())).not.toContain("sign-up waiting"));
+    expect(badge(queuesLink())).toContain("2 open reports");
     expect(getReports).toHaveBeenCalledTimes(2);
     expect(getRegistrationRequests).toHaveBeenCalledTimes(2);
   });

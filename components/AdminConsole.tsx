@@ -189,15 +189,20 @@ function ConsoleLink({
   );
 }
 
+// The pill is one labelled image: assistive tech reads its full label ("150 open
+// reports", exact even past the visible "99+" cap), and the DOM holds the number
+// once. An sr-only copy of the label alongside the visible number duplicated the
+// count as text, which any text query (and some readers' browse mode) saw twice.
 function CountPill({ badge }: { badge: CountBadge | null }) {
   if (!badge) return null;
   return (
     <span
+      role="img"
+      aria-label={badge.label}
       title={badge.label}
       className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger-solid px-[5px] text-[10.5px] font-bold tabular-nums text-danger-fg"
     >
-      <span aria-hidden="true">{badge.text}</span>
-      <span className="sr-only">{badge.label}</span>
+      {badge.text}
     </span>
   );
 }
