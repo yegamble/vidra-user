@@ -5703,6 +5703,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/{id}/password-reset-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint a one-time password-reset link for a locked-out user (admin)
+         * @description Recovery for an ordinary user on an instance with no working mail. Admin-only; the CALLER re-confirms their OWN password (same step-up and strict limiter as DELETE /api/v1/admin/users/{id}/mfa). Only an active account with role `user` can be targeted: the owner and staff recover through the host (`vidra owner reset`). The link is the ordinary single-use reset token (1 hour); a new mint invalidates older unused links, and redeeming one signs the user out everywhere. Fail-closed: the action is audited (`admin.user.password_reset_link`) BEFORE the link is returned, and a failed audit write withholds it and withdraws the token (503). The token is never logged or audited; the response is no-store.
+         */
+        post: operations["adminCreateUserPasswordResetLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -8032,6 +8052,15 @@ export interface components {
         AdminRemoveUserMFARequest: {
             /** @description The CALLING administrator's own current password. Not the target's: the target is, by construction, the party who cannot prove anything right now. */
             password: string;
+        };
+        AdminPasswordResetLink: {
+            /**
+             * Format: uri
+             * @description PUBLIC_BASE_URL + /reset-password/confirm?token=..., shown once.
+             */
+            reset_url: string;
+            /** Format: date-time */
+            expires_at: string;
         };
         /** @description Admin projection of an account (never includes the password hash). */
         AdminUser: {
@@ -27179,6 +27208,96 @@ export interface operations {
                 };
             };
             /** @description Two-factor authentication is not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminCreateUserPasswordResetLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminRemoveUserMFARequest"];
+            };
+        };
+        responses: {
+            /** @description The one-time link. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPasswordResetLink"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not an admin; wrong password; or the target is the owner or staff. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such user. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Target deactivated, caller has no password, or PUBLIC_BASE_URL unset. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (no password supplied). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts (strict auth limiter). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The audit write failed, so no link was issued. */
             503: {
                 headers: {
                     [name: string]: unknown;
