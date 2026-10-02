@@ -829,8 +829,8 @@ function DiskRow({
       </div>
       {low && (
         <dd className="mt-1 text-[13px] text-warning">
-          Media uploads and the database share this disk; free space before it
-          fills.
+          Uploads fail when this disk fills, and on a single-disk host the
+          database stops with them; free space before it fills.
         </dd>
       )}
     </div>

@@ -244,7 +244,7 @@ describe("InfrastructurePanel storage surfacing", () => {
   describe("disk space row", () => {
     const GIB = 1024 ** 3;
     const WARNING =
-      "Media uploads and the database share this disk; free space before it fills.";
+      "Uploads fail when this disk fills, and on a single-disk host the database stops with them; free space before it fills.";
 
     function withDisk(disk?: { total_bytes: number; free_bytes: number }) {
       mocks.getInfrastructure.mockResolvedValue(
