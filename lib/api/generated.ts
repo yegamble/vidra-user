@@ -24219,6 +24219,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Too many attempts (strict auth limiter): the PUT checks the caller's password. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description This deployment does not carry the outbound-mail configuration service. */
             501: {
                 headers: {
