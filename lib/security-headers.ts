@@ -59,7 +59,8 @@ export function apiOriginOf(apiBaseUrl: string): string | null {
 
 /** CSP_REPORT_ONLY=true is the operator's escape hatch (README): an admin
  *  custom.js the enforced policy breaks is recovered by an env change and a
- *  restart, no rebuild — the same policy is then only reported. */
+ *  container RECREATE (`vidra deploy`; `vidra restart` keeps the old env), no
+ *  rebuild — the same policy is then only reported. */
 export function cspHeaderName(reportOnly: string | undefined) {
   return reportOnly === "true" ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy";
 }
