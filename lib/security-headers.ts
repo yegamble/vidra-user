@@ -2,6 +2,13 @@
 // Vidra supports operator-configured backend/IPFS media origins and third-party
 // framing of /embed, so enforcement should follow observation in real deploys.
 
+/** Same-origin path of the violation sink (app/csp-report/route.ts). Not under
+ *  /api/: in the single-origin topology Caddy routes /api/* to vidra-core. */
+export const CSP_REPORT_PATH = "/csp-report";
+/** Reporting-Endpoints group name the policy's report-to names. */
+export const CSP_REPORT_GROUP = "csp";
+export const REPORTING_ENDPOINTS = `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`;
+
 export const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -17,6 +24,9 @@ export const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
   // it fall back to main-thread work and reintroduces playback frame drops.
   "worker-src 'self' blob:",
   "manifest-src 'self'",
+  // report-to for current browsers; report-uri for those without the Reporting API.
+  `report-uri ${CSP_REPORT_PATH}`,
+  `report-to ${CSP_REPORT_GROUP}`,
 ].join("; ");
 
 export const SECURITY_HEADERS = [
@@ -24,6 +34,7 @@ export const SECURITY_HEADERS = [
     key: "Content-Security-Policy-Report-Only",
     value: CONTENT_SECURITY_POLICY_REPORT_ONLY,
   },
+  { key: "Reporting-Endpoints", value: REPORTING_ENDPOINTS },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {

@@ -17,6 +17,14 @@ describe("global security headers", () => {
     expect(CONTENT_SECURITY_POLICY_REPORT_ONLY).toContain("worker-src 'self' blob:");
   });
 
+  it("sends violations to the same-origin sink, in both report formats", () => {
+    expect(CONTENT_SECURITY_POLICY_REPORT_ONLY).toContain("report-uri /csp-report");
+    expect(CONTENT_SECURITY_POLICY_REPORT_ONLY).toContain("report-to csp");
+    expect(SECURITY_HEADERS.find((h) => h.key === "Reporting-Endpoints")?.value).toBe(
+      'csp="/csp-report"',
+    );
+  });
+
   it("ships the baseline MIME, referrer, and permissions policies", () => {
     const keys = SECURITY_HEADERS.map((header) => header.key);
     expect(keys).toEqual(
