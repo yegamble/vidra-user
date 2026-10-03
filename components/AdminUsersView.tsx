@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { AdminPagination, RolePill } from "@/components/admin/AdminControls";
+import { PasswordResetLinkCard } from "@/components/admin/PasswordResetLinkCard";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { ListSearch } from "@/components/admin/ListToolbar";
 import { useSession } from "@/components/auth/AuthProvider";
@@ -1016,6 +1017,8 @@ function UserDetail({
           {!deleted ? (
             <RemoveSecondFactorCard user={user} onUpdated={onUpdated} />
           ) : null}
+
+          {!deleted ? <PasswordResetLinkCard user={user} /> : null}
 
           {viewerIsOwner && !isSelf ? (
             <TransferOwnershipCard user={user} onTransferred={onTransferred} />

@@ -482,6 +482,15 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       description:
         "Letting people take their account data with them, and the limits on exports.",
     },
+    {
+      // Server id "audit" (vidra-core #296): the audit-trail retention knob.
+      // Curated so its one row does not sit under an auto-titled header with
+      // no word on what the trail is for.
+      id: "audit",
+      title: "Audit log",
+      description:
+        "How long the record of administrative actions — settings changes, role and account changes, moderation — is kept before it is pruned.",
+    },
   ],
 };
 
@@ -619,6 +628,16 @@ const CONFIGURE_EMAIL_LINK = {
   href: "/admin/config/email",
   label: "Configure email",
 } as const;
+
+// Shared by import_http_enabled and channel_sync_enabled: one boot fact, one
+// sentence, so the two rows can never disagree about why they are inert.
+const URL_IMPORTS_WARN: NonNullable<SettingMeta["warn"]> = {
+  note: "This server was not booted with URL imports wired (YTDLP_IMPORT_ENABLED with yt-dlp installed), so this switch currently does nothing — URL imports and channel sync stay unavailable. See Infrastructure → Optional features.",
+  isTriggered: (infra) =>
+    infra.features?.some(
+      (f) => f.key === "url_imports" && f.configured === false,
+    ) === true,
+};
 
 // In DISPLAY ORDER within each section. Any key the backend returns that is
 // not listed here still renders (per the placement precedence above) so a new
@@ -1189,6 +1208,12 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "imports",
     parent: "imports_enabled",
+    // Both import toggles can only PAUSE a path the boot wired: the yt-dlp
+    // resolver and the channel-sync worker hang off YTDLP_IMPORT_ENABLED, and
+    // a missing binary fails every job (core reports both halves as
+    // features[url_imports].configured). `warn`, never bootDep: an on-but-inert
+    // switch must stay flippable back off.
+    warn: URL_IMPORTS_WARN,
   },
   import_jobs_concurrency: {
     label: "Import job concurrency",
@@ -1204,10 +1229,48 @@ export const META: Record<string, SettingMeta> = {
     control: "toggle",
     page: "vod",
     section: "imports",
+    // Both import toggles can only PAUSE a path the boot wired: the yt-dlp
+    // resolver and the channel-sync worker hang off YTDLP_IMPORT_ENABLED, and
+    // a missing binary fails every job (core reports both halves as
+    // features[url_imports].configured). `warn`, never bootDep: an on-but-inert
+    // switch must stay flippable back off.
+    warn: URL_IMPORTS_WARN,
   },
   channel_sync_max_per_user: {
     label: "Max channel syncs per user",
     help: "How many channel-sync bindings one account may create. 0 = unlimited.",
+    control: "number",
+    page: "vod",
+    section: "imports",
+    parent: "channel_sync_enabled",
+  },
+  channel_sync_interval_minutes: {
+    label: "Channel sync interval",
+    help: "How often each bound channel is re-checked for new videos, in minutes (5–10,080, i.e. up to 7 days). A change applies at each channel's next scheduled check. The default comes from CHANNEL_SYNC_INTERVAL.",
+    control: "number",
+    page: "vod",
+    section: "imports",
+    parent: "channel_sync_enabled",
+  },
+  channel_sync_batch: {
+    label: "Uploads per sync pass",
+    help: "Newest uploads imported from each synced channel per pass (1–100). Read at the start of every pass, so a change applies without a restart. The default comes from CHANNEL_SYNC_BATCH.",
+    control: "number",
+    page: "vod",
+    section: "imports",
+    parent: "channel_sync_enabled",
+  },
+  channel_sync_cooldown_minutes: {
+    label: "Sync-now cooldown",
+    help: "Minimum minutes between manual sync-now requests for the same sync (1–1,440). Read per request, so a change applies without a restart. The default comes from CHANNEL_SYNC_COOLDOWN; the throttle can only be turned off with CHANNEL_SYNC_COOLDOWN=0 at boot.",
+    control: "number",
+    page: "vod",
+    section: "imports",
+    parent: "channel_sync_enabled",
+  },
+  channel_sync_backoff_max_hours: {
+    label: "Failed sync retry cap",
+    help: "Longest wait in hours before retrying a sync whose runs keep failing (1–720). The wait doubles from the sync interval up to this cap. Read at each failure, so a change applies without a restart. The default comes from CHANNEL_SYNC_BACKOFF_MAX.",
     control: "number",
     page: "vod",
     section: "imports",
@@ -1407,6 +1470,16 @@ export const META: Record<string, SettingMeta> = {
     section: "replay",
     parent: "live_allow_replay",
   },
+  // vidra-core #293. A DELETE knob, so the consequence lives in the help text
+  // the admin reads next to the field, not only in the API docs.
+  live_recording_retention_hours: {
+    label: "Keep live recordings for",
+    help: "Hours to keep a finished stream's original recording (0–8,760). 0 deletes it as soon as its replay is published and otherwise keeps it. Lowering this, or raising it from 0, deletes existing recordings older than the new window on the next hourly sweep, including the only copy of a broadcast whose replay failed or was turned off. The default comes from LIVE_RECORDING_RETENTION.",
+    control: "number",
+    page: "live",
+    section: "replay",
+    parent: "live_enabled",
+  },
   // LIVE / Limits (config-parity W11).
   live_max_instance_lives: {
     label: "Max concurrent live streams (instance)",
@@ -1492,12 +1565,32 @@ export const META: Record<string, SettingMeta> = {
   //
   // The master toggle: when off, search routes to the built-in deterministic
   // (backup SQL) path and suggestions are disabled instance-wide.
+  // vidra-core #296. The env value is a FLOOR: core rejects (422) anything that
+  // would delete sooner, so the help text says what the field can and cannot do.
+  audit_log_retention_days: {
+    label: "Keep the audit log for",
+    help: "Days to keep audit records before they are pruned (0 = keep forever). This can only make the trail longer than AUDIT_LOG_RETENTION on the server, never shorter; a shorter value is refused and the error names the minimum. If AUDIT_LOG_RETENTION is 0 the trail is already kept forever and this setting has no effect.",
+    control: "number",
+    page: "advanced",
+    section: "audit",
+  },
   search_service_enabled: {
     label: "Smart search service",
     help: "Use the smart search service for ranking and autocomplete. When off, Vidra falls back to the built-in deterministic search and suggestions are disabled.",
     control: "toggle",
     page: "advanced",
     section: "search",
+    // ADM F2. The toggle is ANDed with SEARCH_SERVICE_URL at boot (core reports
+    // that half as features[search].configured), so ON with no vidra-search
+    // wired quietly serves the deterministic SQL fallback. `warn`, never
+    // bootDep: an on-but-inert switch must stay flippable back off.
+    warn: {
+      note: "This server was not booted with a search service (SEARCH_SERVICE_URL), so this switch currently does nothing — search and suggestions still use the built-in fallback. See Infrastructure → Optional features.",
+      isTriggered: (infra) =>
+        infra.features?.some(
+          (f) => f.key === "search" && f.configured === false,
+        ) === true,
+    },
   },
   search_mode: {
     label: "Ranking mode",

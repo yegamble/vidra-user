@@ -67,6 +67,13 @@ describe("InstanceCustomization", () => {
     expect(tag!.textContent).toBe("");
   });
 
+  it("nonces custom.js so the enforced CSP (strict-dynamic) loads it", () => {
+    const { container } = render(
+      <InstanceCustomization instance={snapshot({ js_hash: "abcdef0123456789" })} nonce="n0nce" />,
+    );
+    expect(script(container)?.nonce).toBe("n0nce");
+  });
+
   it("injects both tags when both hashes exist", () => {
     // A DIFFERENT hash from the single-tag tests: React's stylesheet
     // hoisting dedupes by href per document, so a reused href would be

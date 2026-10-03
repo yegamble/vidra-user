@@ -108,9 +108,12 @@ function report(id: string) {
   };
 }
 
+// `total` is required by the contract (PageMeta): the console's Queues badge
+// reads it with limit=1, so a fixture without it is a response core never sends.
 function reports(n: number) {
   return {
     reports: Array.from({ length: n }, (_, i) => report(`r${i}`)),
+    total: n,
     limit: 100,
     offset: 0,
   };
@@ -215,7 +218,8 @@ test("a full first page of open reports renders as 100+", async ({ page }) => {
   await page.route(STATS, (route) => route.fulfill({ json: adminStats }));
   await page.route(JOBS, (route) => route.fulfill({ json: jobsOverview }));
   await page.route(AUDIT, (route) => route.fulfill({ json: auditLog }));
-  // The list carries no total, so a full page is shown as a lower bound.
+  // The overview callout counts the page it fetched, so a full page is shown as
+  // a lower bound.
   await page.route(REPORTS, (route) => route.fulfill({ json: reports(100) }));
 
   await openOverview(page);

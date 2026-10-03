@@ -1,20 +1,62 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  CONTENT_SECURITY_POLICY_REPORT_ONLY,
   SECURITY_HEADERS,
   STRICT_TRANSPORT_SECURITY,
+  apiOriginOf,
+  buildContentSecurityPolicy,
   shouldSendHsts,
 } from "./security-headers";
 
+// Intent changed (owner-approved): the CSP is ENFORCED, built per request in
+// proxy.ts around a nonce, instead of a static report-only constant.
+describe("buildContentSecurityPolicy", () => {
+  const base = { nonce: "abc123", apiOrigin: null, frameable: false, isDev: false };
+
+  it("allows scripts by nonce only (no 'unsafe-inline'), keeps wasm/media/workers", () => {
+    expect(buildContentSecurityPolicy(base)).toBe(
+      "default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; " +
+        "script-src 'self' 'nonce-abc123' 'strict-dynamic' 'wasm-unsafe-eval'; " +
+        "style-src 'self' 'unsafe-inline'; font-src 'self' data:; " +
+        "img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; " +
+        "connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:; manifest-src 'self'; " +
+        "frame-ancestors 'self'; report-uri /csp-report; report-to csp",
+    );
+  });
+
+  it("adds a cross-origin API to script-src and style-src for custom.js/css", () => {
+    const policy = buildContentSecurityPolicy({ ...base, apiOrigin: "https://api.example" });
+    expect(policy).toContain("'wasm-unsafe-eval' https://api.example;");
+    expect(policy).toContain("style-src 'self' 'unsafe-inline' https://api.example;");
+  });
+
+  it("lets any site frame /embed, and allows eval only in development", () => {
+    expect(buildContentSecurityPolicy({ ...base, frameable: true })).not.toContain("frame-ancestors");
+    expect(buildContentSecurityPolicy({ ...base, isDev: true })).toContain(" 'unsafe-eval';");
+  });
+});
+
+describe("apiOriginOf", () => {
+  it.each([
+    ["same-origin (empty)", "", null],
+    ["a cross-origin API with a path", "https://api.example:8443/base", "https://api.example:8443"],
+    ["a non-http scheme", "javascript:alert(1)", null],
+  ])("%s", (_label, value, expected) => {
+    expect(apiOriginOf(value)).toBe(expected);
+  });
+});
+
 describe("global security headers", () => {
-  it("keeps CSP report-only and preserves the hls.js blob worker", () => {
-    expect(SECURITY_HEADERS.map((header) => header.key)).not.toContain("Content-Security-Policy");
-    expect(
-      SECURITY_HEADERS.find((header) => header.key === "Content-Security-Policy-Report-Only")
-        ?.value,
-    ).toBe(CONTENT_SECURITY_POLICY_REPORT_ONLY);
-    expect(CONTENT_SECURITY_POLICY_REPORT_ONLY).toContain("worker-src 'self' blob:");
+  it("leaves the CSP out of the build-time list — proxy.ts sets it per request", () => {
+    const keys = SECURITY_HEADERS.map((header) => header.key as string);
+    expect(keys).not.toContain("Content-Security-Policy");
+    expect(keys).not.toContain("Content-Security-Policy-Report-Only");
+  });
+
+  it("declares the report-to endpoint group the per-request policy names", () => {
+    expect(SECURITY_HEADERS.find((h) => h.key === "Reporting-Endpoints")?.value).toBe(
+      'csp="/csp-report"',
+    );
   });
 
   it("ships the baseline MIME, referrer, and permissions policies", () => {

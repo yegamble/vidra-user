@@ -102,6 +102,10 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["import_http_enabled", "vod", "imports"],
   ["channel_sync_enabled", "vod", "imports"],
   ["channel_sync_max_per_user", "vod", "imports"],
+  ["channel_sync_interval_minutes", "vod", "imports"],
+  ["channel_sync_batch", "vod", "imports"],
+  ["channel_sync_cooldown_minutes", "vod", "imports"],
+  ["channel_sync_backoff_max_hours", "vod", "imports"],
   ["storyboards_enabled", "vod", "storyboards"],
   ["video_card_previews_enabled", "vod", "playback"],
   ["video_card_previews_default_enabled", "vod", "playback"],
@@ -133,6 +137,8 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["live_max_instance_lives", "live", "limits"],
   ["live_max_user_lives", "live", "limits"],
   ["live_max_duration_secs", "live", "limits"],
+  ["live_recording_retention_hours", "live", "replay"],
+  ["audit_log_retention_days", "advanced", "audit"],
   ["federation_accept_remote_comments", "federation", "comments"],
   ["federation_allow_channel_followers", "federation", "followers"],
   ["federation_follower_approval", "federation", "followers"],
@@ -291,6 +297,7 @@ describe("buildPageModel", () => {
     expect(model.find((s) => s.section.id === "replay")?.keys).toEqual([
       "live_allow_replay",
       "live_default_save_replay",
+      "live_recording_retention_hours",
     ]);
     expect(model.find((s) => s.section.id === "limits")?.keys).toEqual([
       "live_max_instance_lives",
@@ -686,10 +693,61 @@ describe("server registry mirror (config-parity closure slice)", () => {
     }
   });
 
+  // live_recording_retention_hours DELETES files: the admin must read, next to
+  // the field, that lowering it (or leaving 0) removes recordings on the next
+  // sweep, including the only copy of a failed or replay-disabled broadcast.
+  it("warns that the live retention knob deletes recordings", () => {
+    const help = META.live_recording_retention_hours.help;
+    expect(help).toMatch(/hours/i);
+    expect(help).toMatch(/0.*published/);
+    expect(help).toMatch(/delet/i);
+    expect(help).toMatch(/only copy/);
+  });
+
+  // audit_log_retention_days can only LENGTHEN what AUDIT_LOG_RETENTION keeps
+  // (vidra-core rejects a lower value with a 422 naming the floor), and 0 is
+  // "keep forever". The admin must read both before typing a number.
+  it("curates the audit section and states the retention floor", () => {
+    const audit = PAGE_SECTIONS.advanced.find((s) => s.id === "audit");
+    expect(audit?.title).toBe("Audit log");
+    expect(audit?.description).toBeTruthy();
+    const help = META.audit_log_retention_days.help;
+    expect(help).toMatch(/days/i);
+    expect(help).toMatch(/0.*forever/i);
+    expect(help).toMatch(/AUDIT_LOG_RETENTION/);
+    expect(help).toMatch(/longer|lengthen/i);
+  });
+
   it("wires the two-level live replay disclosure", () => {
     expect(META.live_allow_replay.parent).toBe("live_enabled");
     expect(META.live_default_save_replay.parent).toBe("live_allow_replay");
     expect(META.channel_sync_max_per_user.parent).toBe("channel_sync_enabled");
+    expect(META.channel_sync_interval_minutes.parent).toBe("channel_sync_enabled");
+    // Recordings are kept (and swept) whether or not replays are on, so the
+    // retention row hangs off live itself, not off the replay switch.
+    expect(META.live_recording_retention_hours.parent).toBe("live_enabled");
+    // The server bounds it 5..10080 minutes; the help text must say so in the
+    // unit the field takes, or an admin types hours and gets a 400.
+    expect(META.channel_sync_interval_minutes.help).toMatch(/minutes/);
+    expect(META.channel_sync_interval_minutes.help).toMatch(/5.10080|5–10,080/);
+  });
+
+  it("discloses the channel-sync timing knobs under the sync switch, in the unit each field takes", () => {
+    // Server bounds (vidra-core registry): batch 1..100 uploads, cooldown
+    // 1..1440 minutes, backoff cap 1..720 hours. A help text in the wrong unit
+    // sends an admin's value straight into a 422.
+    const cases = [
+      ["channel_sync_batch", /uploads/i, /1.100|1–100/, /CHANNEL_SYNC_BATCH/],
+      ["channel_sync_cooldown_minutes", /minutes/i, /1.1440|1–1,440/, /CHANNEL_SYNC_COOLDOWN/],
+      ["channel_sync_backoff_max_hours", /hours/i, /1.720|1–720/, /CHANNEL_SYNC_BACKOFF_MAX/],
+    ] as const;
+    for (const [key, unit, range, env] of cases) {
+      expect(META[key].parent).toBe("channel_sync_enabled");
+      expect(META[key].control).toBe("number");
+      expect(META[key].help).toMatch(unit);
+      expect(META[key].help).toMatch(range);
+      expect(META[key].help).toMatch(env);
+    }
   });
 });
 
@@ -908,6 +966,67 @@ describe("ADVANCED / Delivery (phase-2 item 6, phase-4 items 2 & 4)", () => {
         expect(wiringWarnNote(META[key], { features: [] }), key).toBeNull();
       }
     });
+
+    // ADM F2 (ruling P1): the smart-search master toggle is ANDed with a boot
+    // capability (SEARCH_SERVICE_URL) the admin cannot see from this page, so ON
+    // with no vidra-search wired silently serves the SQL fallback. The
+    // infrastructure `search` row already reports the configured half, so this
+    // was the first inert toggle of the three the contract could warn on; the
+    // other two ride core's url_imports row (tested below).
+    const searchUnwired: InfrastructureWiringInfo = {
+      features: [{ key: "search", enabled: false, configured: false }],
+    };
+    const searchWired: InfrastructureWiringInfo = {
+      features: [{ key: "search", enabled: true, configured: true }],
+    };
+
+    it("warns on the smart search toggle when no search service is wired", () => {
+      const note = wiringWarnNote(META.search_service_enabled, searchUnwired);
+      expect(note).toContain("SEARCH_SERVICE_URL");
+      expect(note).toContain("does nothing");
+      expect(note).toContain("Infrastructure");
+      expect(wiringWarnNote(META.search_service_enabled, searchWired)).toBeNull();
+    });
+
+    it("keeps the smart search row flippable and silent without a search row", () => {
+      expect(META.search_service_enabled.bootDep).toBeUndefined();
+      expect(wiringWarnNote(META.search_service_enabled, null)).toBeNull();
+      expect(wiringWarnNote(META.search_service_enabled, {})).toBeNull();
+      expect(
+        wiringWarnNote(META.search_service_enabled, {
+          features: [{ key: "cdn", enabled: true, configured: false }],
+        }),
+      ).toBeNull();
+    });
+
+    // import_http_enabled and channel_sync_enabled only PAUSE a path the boot
+    // wired: both hang off YTDLP_IMPORT_ENABLED plus a resolvable yt-dlp, which
+    // core reports as features[url_imports].configured.
+    const importsUnwired: InfrastructureWiringInfo = {
+      features: [{ key: "url_imports", enabled: true, configured: false }],
+    };
+    const importsWired: InfrastructureWiringInfo = {
+      features: [{ key: "url_imports", enabled: true, configured: true }],
+    };
+
+    it.each(["import_http_enabled", "channel_sync_enabled"] as const)(
+      "warns on %s when URL imports are not wired at boot",
+      (key) => {
+        const note = wiringWarnNote(META[key], importsUnwired);
+        expect(note).toContain("YTDLP_IMPORT_ENABLED");
+        expect(note).toContain("does nothing");
+        expect(note).toContain("Infrastructure");
+        expect(wiringWarnNote(META[key], importsWired)).toBeNull();
+        // warn, never bootDep: an on-but-inert switch must stay flippable off.
+        expect(META[key].bootDep).toBeUndefined();
+        expect(wiringWarnNote(META[key], {})).toBeNull();
+        expect(
+          wiringWarnNote(META[key], {
+            features: [{ key: "search", enabled: false, configured: false }],
+          }),
+        ).toBeNull();
+      },
+    );
 
     // The admin-only fetch is spent only where a warn check can consume it.
     it("marks the pages that carry a wiring check", () => {

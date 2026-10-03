@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import Script from "next/script";
 import "./globals.css";
 
@@ -78,6 +79,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const instance = await getInstanceConfig();
+  // Per-request CSP nonce from proxy.ts; the enforced policy runs no script
+  // without it. Next stamps its own scripts; these are the ones we emit.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
@@ -86,15 +90,16 @@ export default async function RootLayout({
             RUNNING server's env, so one image serves any domain. It must be
             beforeInteractive — lib/config.ts reads the injected global at
             module-evaluation time, before any app chunk runs. */}
-        <Script src="/runtime-config.js" strategy="beforeInteractive" />
+        <Script src="/runtime-config.js" strategy="beforeInteractive" nonce={nonce} />
         {/* Apply the stored theme preference (or, failing that, the instance
             default from the SSR snapshot) before first paint — no flash. */}
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: buildThemeBootstrapScript(instance?.defaults?.theme),
           }}
         />
-        <InstanceCustomization instance={instance} />
+        <InstanceCustomization instance={instance} nonce={nonce} />
         <a href="#main-content" className="skip-link">
           {t("a11y.skipToContent")}
         </a>
@@ -102,7 +107,7 @@ export default async function RootLayout({
           <AuthProvider>
             <PlayerSettingsBootstrap />
             <ToastProvider>
-              <InstanceBanner instance={instance} />
+              <InstanceBanner instance={instance} nonce={nonce} />
               <Header instance={instance} />
               <div className="flex w-full flex-1">
                 <Sidebar />

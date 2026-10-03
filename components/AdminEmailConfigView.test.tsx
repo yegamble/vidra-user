@@ -92,7 +92,16 @@ function typeHost(value: string) {
   fireEvent.blur(host);
 }
 
+const PASSWORD = "correct horse";
+const confirmField = () => screen.getByLabelText("Confirm with your password") as HTMLInputElement;
+
+/** Fill the fresh-credential field core's PUT now demands (vidra-core #282). */
+function typeConfirmPassword(value: string = PASSWORD) {
+  fireEvent.change(confirmField(), { target: { value } });
+}
+
 async function saveAndWait() {
+  typeConfirmPassword();
   fireEvent.click(saveButton());
   await waitFor(() => expect(mocks.updateMailConfig).toHaveBeenCalled());
 }
@@ -137,6 +146,105 @@ describe("transport switching (AC2)", () => {
     expect((screen.getByLabelText("Sending domain") as HTMLInputElement).value).toBe(
       "mail.example.org",
     );
+  });
+});
+
+// --- fresh credential (vidra-core #282) -------------------------------------
+
+describe("confirm with your password", () => {
+  const rename = () =>
+    fireEvent.change(screen.getByLabelText("Sender name"), { target: { value: "Renamed" } });
+
+  it("sends current_password alongside the document, and never as a step-up token", async () => {
+    await mount(smtpState());
+    rename();
+    await saveAndWait();
+    expect(savedBody().current_password).toBe(PASSWORD);
+    expect(savedBody().from_name).toBe("Renamed");
+    expect(savedBody()).not.toHaveProperty("step_up_token");
+  });
+
+  it("is a password input that offers the saved password to the manager", async () => {
+    await mount(smtpState());
+    expect(confirmField().type).toBe("password");
+    expect(confirmField().autocomplete).toBe("current-password");
+  });
+
+  it("blocks the save with an inline message when the password is empty", async () => {
+    await mount(smtpState());
+    rename();
+    fireEvent.click(saveButton());
+    await screen.findByText("Enter your password to confirm this change.");
+    expect(mocks.updateMailConfig).not.toHaveBeenCalled();
+    expect(confirmField().getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(confirmField());
+  });
+
+  it("clears the password after a successful save", async () => {
+    await mount(smtpState());
+    rename();
+    await saveAndWait();
+    await screen.findByText(/Mail settings saved/);
+    expect(confirmField().value).toBe("");
+  });
+
+  it("shows a wrong password on its own field, clears it, and focuses it", async () => {
+    await mount(smtpState());
+    mocks.updateMailConfig.mockRejectedValue(
+      new ApiError({ status: 403, code: "forbidden", message: "incorrect password" }),
+    );
+    rename();
+    await saveAndWait();
+    await screen.findByText("That password is not correct. Nothing was saved.");
+    expect(confirmField().getAttribute("aria-invalid")).toBe("true");
+    expect(confirmField().value).toBe("");
+    expect(document.activeElement).toBe(confirmField());
+  });
+
+  it("shows step_up_required inline on the password field", async () => {
+    await mount(smtpState());
+    mocks.updateMailConfig.mockRejectedValue(
+      new ApiError({ status: 403, code: "step_up_required", message: "confirm it is you" }),
+    );
+    rename();
+    await saveAndWait();
+    await screen.findByText("Confirm this change with your password, then save again.");
+    expect(confirmField().getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("points a passwordless admin (409) at Settings → Security", async () => {
+    await mount(smtpState());
+    mocks.updateMailConfig.mockRejectedValue(
+      new ApiError({ status: 409, code: "conflict", message: "your account has no password" }),
+    );
+    rename();
+    await saveAndWait();
+    await screen.findByText(
+      "Set a password on your account first (Settings → Security) to change mail settings.",
+    );
+    expect(confirmField().value).toBe("");
+  });
+
+  it("still reports a 409 mail_secrets_key_missing as the key problem, not a password one", async () => {
+    await mount(smtpState());
+    mocks.updateMailConfig.mockRejectedValue(
+      new ApiError({ status: 409, code: "mail_secrets_key_missing", message: "no key" }),
+    );
+    rename();
+    await saveAndWait();
+    await screen.findByText(/no key to encrypt the credential with/);
+    expect(confirmField().getAttribute("aria-invalid")).toBeNull();
+  });
+
+  it("reverts to the environment with one click and no password", async () => {
+    mocks.resetMailConfig.mockResolvedValue(undefined);
+    await mount(smtpState());
+    expect(confirmField().value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: /^(Use environment configuration|Remove this configuration)$/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Discard configuration" }));
+    await waitFor(() => expect(mocks.resetMailConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.resetMailConfig).toHaveBeenCalledWith();
   });
 });
 
@@ -403,6 +511,7 @@ describe("the save button (AC6)", () => {
     expect(mocks.updateMailConfig).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByLabelText("Sender name"), { target: { value: "Renamed" } });
+    typeConfirmPassword();
     expect(button.getAttribute("aria-disabled")).toBeNull();
     fireEvent.click(button);
     await waitFor(() => expect(mocks.updateMailConfig).toHaveBeenCalledTimes(1));

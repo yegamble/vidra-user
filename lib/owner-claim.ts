@@ -55,6 +55,13 @@ export const OWNER_CLAIM_LOG_COMMAND =
   "docker compose -f docker-compose.yml -f docker-compose.prod.yml " +
   "--env-file env/production.env logs api | grep 'FIRST-RUN'";
 
+/**
+ * The CLI verb that prints the CURRENT token as a ready claim link
+ * (`<origin>/setup/claim#token=…`, which this form prefills from). Offered
+ * before the log command; hosts whose CLI predates it still have the log.
+ */
+export const OWNER_CLAIM_CLI_COMMAND = "vidra claim";
+
 /** The marker the server prints the token beside, so it can be searched for. */
 export const OWNER_CLAIM_LOG_MARKER = "FIRST-RUN SETUP REQUIRED";
 
@@ -69,4 +76,28 @@ export type OwnerClaimSignal = { owner_claim_pending?: boolean } | null | undefi
  */
 export function isOwnerClaimPending(instance: OwnerClaimSignal): boolean {
   return instance?.owner_claim_pending === true;
+}
+
+/**
+ * The setup token carried by a claim link's fragment (`#token=<token>`, what
+ * the core CLI's `vidra claim` prints), or null when there is none to use.
+ *
+ * Fragment only, by design: a fragment never leaves the browser, so the token
+ * stays out of server and proxy logs and Referer headers. Callers must not
+ * fall back to `?token=`. Parsed by hand rather than URLSearchParams, which
+ * would turn a literal "+" in the token into a space. A blank value or an
+ * escape that does not decode is "no token" — never a half-decoded guess.
+ */
+export function readClaimTokenFromHash(hash: string): string | null {
+  for (const pair of hash.replace(/^#/, "").split("&")) {
+    const eq = pair.indexOf("=");
+    if (eq < 0 || pair.slice(0, eq) !== "token") continue;
+    try {
+      const token = decodeURIComponent(pair.slice(eq + 1)).trim();
+      return token === "" ? null : token;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }

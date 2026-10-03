@@ -223,7 +223,13 @@ export function InfrastructurePanel() {
             />
           </>
         ) : (
-          <Row label="Media directory" value={storage.local_root} mono />
+          <>
+            <Row label="Media directory" value={storage.local_root} mono />
+            {/* ABSENT (never zeroed) when the measurement failed, and on s3
+                where it does not apply — absent renders nothing, because the
+                Backend row above already names the store. */}
+            {storage.disk && <DiskRow disk={storage.disk} />}
+          </>
         )}
       </Panel>
 
@@ -782,6 +788,56 @@ function Panel({
       </dl>
       {footer}
     </section>
+  );
+}
+
+/**
+ * Free-space tiers for the local media disk. These are the same tiers as
+ * `vidra doctor`'s warn level (warn below 10% free or below 5 GiB free) —
+ * vidra-core internal/doctor/checks_state.go — so this page and the CLI never
+ * disagree about when the disk is a problem. Keep them in step with that file.
+ * The server reports capacity only, never a verdict; the tier lives here.
+ */
+const DISK_WARN_FREE_FRACTION = 0.1;
+const DISK_WARN_FREE_BYTES = 5 * 1024 ** 3;
+
+function DiskRow({
+  disk,
+}: {
+  disk: NonNullable<InfrastructureStorage["disk"]>;
+}) {
+  const { total_bytes: total, free_bytes: free } = disk;
+  // A zero/negative total is a bogus measurement, not a full disk: say nothing
+  // rather than print "NaN%" or a false alarm.
+  if (!(total > 0) || !(free >= 0)) return null;
+  const low =
+    free / total < DISK_WARN_FREE_FRACTION || free < DISK_WARN_FREE_BYTES;
+  const percent = Math.round((free / total) * 100);
+  // One wrapper div holding exactly one <dt> and one <dd>, like Row: a <dl>
+  // allows a div around a name/value group but not a nested one, and a second
+  // bare <dd> outside the group fails axe's definition-list/dlitem rules. The
+  // warning is therefore part of the value, not a sibling of it.
+  return (
+    <div className="flex justify-between gap-3 border-b border-border-subtle py-1.5">
+      <dt className="text-fg-muted">Disk space</dt>
+      <dd className="text-right">
+        <span
+          className={
+            low
+              ? "rounded bg-warning/15 px-1.5 text-warning tabular-nums"
+              : "text-fg tabular-nums"
+          }
+        >
+          {`${formatBytes(free)} free of ${formatBytes(total)} (${percent}%)`}
+        </span>
+        {low && (
+          <span className="mt-1 block text-[13px] text-warning">
+            Uploads fail when this disk fills, and on a single-disk host the
+            database stops with them; free space before it fills.
+          </span>
+        )}
+      </dd>
+    </div>
   );
 }
 

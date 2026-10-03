@@ -1,13 +1,52 @@
 "use client";
 
+import Link from "next/link";
+
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { ListSearch } from "@/components/admin/ListToolbar";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { RoleGate } from "@/components/RoleGate";
 import { api } from "@/lib/api";
 import type { AuditLogEntry } from "@/lib/api";
-import { relativeTime } from "@/lib/format";
+import { formatDateTime, relativeTime } from "@/lib/format";
 import { usePagedList } from "@/lib/use-paged-list";
+
+// MAX_VALUE_CHARS bounds one rendered before/after value. The server already
+// caps stored values, but a long one would still push the row off a phone, so
+// the row shows a prefix and the full text rides in a title attribute.
+const MAX_VALUE_CHARS = 60;
+
+function ChangeValue({ value }: { value: string | undefined }) {
+  // The envelope omits an empty side (before is absent on a first write), so
+  // "" means "had no value" — said as such instead of printing nothing.
+  if (!value) return <span className="text-fg-muted italic">(not set)</span>;
+  const clipped = value.length > MAX_VALUE_CHARS;
+  return (
+    <span className="font-semibold text-fg" title={clipped ? value : undefined}>
+      {clipped ? `${value.slice(0, MAX_VALUE_CHARS)}…` : value}
+    </span>
+  );
+}
+
+// ChangeLine renders one safe before/after difference. A change with NEITHER
+// side is the server's redacted form (secret / free-text settings: "this
+// changed", values deliberately withheld), so it reads "changed" and never a
+// guessed value.
+function ChangeLine({ change }: { change: NonNullable<AuditLogEntry["changes"]>[number] }) {
+  const redacted = !change.before && !change.after;
+  return (
+    <li className="min-w-0 break-words">
+      <code className="font-mono text-xs text-fg">{change.field}</code>:{" "}
+      {redacted ? (
+        <span className="text-fg-muted">changed</span>
+      ) : (
+        <>
+          <ChangeValue value={change.before} /> → <ChangeValue value={change.after} />
+        </>
+      )}
+    </li>
+  );
+}
 
 // AdminAuditLogView is the admin-only security audit trail, role-gated by
 // RoleGate (an under-privileged/anonymous viewer sees the shared permission
@@ -73,7 +112,13 @@ function AuditList() {
                 >
                   {e.result}
                 </span>
-                <span className="text-xs text-fg-muted">{relativeTime(e.occurred_at)}</span>
+                <span className="text-xs text-fg-muted">
+                  <time dateTime={e.occurred_at} title={e.occurred_at}>
+                    {formatDateTime(e.occurred_at)}
+                  </time>
+                  {" · "}
+                  {relativeTime(e.occurred_at)}
+                </span>
               </div>
               <div className="flex flex-wrap gap-x-4 text-[13px] text-fg-muted">
                 <span>
@@ -83,7 +128,32 @@ function AuditList() {
                   </span>
                 </span>
                 {e.reason ? <span>Reason: {e.reason}</span> : null}
+                {e.resource_type || e.resource_id ? (
+                  // Only a video has a route keyed by the id the audit row
+                  // carries (the user page is keyed by username), so every other
+                  // type stays plain text rather than a guessed href.
+                  <span className="min-w-0 break-all">
+                    Target: {e.resource_type}{" "}
+                    {e.resource_type === "video" && e.resource_id ? (
+                      <Link
+                        href={`/videos/${encodeURIComponent(e.resource_id)}`}
+                        className="focus-ring rounded font-medium text-fg underline underline-offset-2"
+                      >
+                        {e.resource_id}
+                      </Link>
+                    ) : (
+                      e.resource_id
+                    )}
+                  </span>
+                ) : null}
               </div>
+              {e.changes && e.changes.length > 0 ? (
+                <ul aria-label="Changes" className="flex flex-col gap-0.5 text-[13px] text-fg-muted">
+                  {e.changes.map((c) => (
+                    <ChangeLine key={c.field} change={c} />
+                  ))}
+                </ul>
+              ) : null}
             </li>
           ))}
         </ul>

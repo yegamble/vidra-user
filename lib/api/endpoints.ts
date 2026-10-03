@@ -8,6 +8,7 @@ import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  AdminPasswordResetLink,
   AdminStats,
   AdminUser,
   AdminUserListResponse,
@@ -17,7 +18,7 @@ import type {
   InstanceSettingsResponse,
   InstanceSettingsValidationResponse,
   InfrastructureStatus,
-  MailConfigInput,
+  MailConfigPutRequest,
   MailConfigState,
   MailTestResult,
   UpdateInstanceSettingsRequest,
@@ -2104,6 +2105,23 @@ export const api = {
     }),
 
   /**
+   * POST /api/v1/admin/users/{id}/password-reset-link — mint a one-time reset
+   * link for a locked-out ordinary user on an instance with no working mail
+   * (admin). The password in the body is the CALLER's own, as for
+   * removeAdminUserMFA. The response carries the ONLY copy of the link
+   * (no-store): the caller must show it once and keep it nowhere else.
+   *
+   * 403 wrong password / owner or staff target, 404 unknown user, 409 inactive
+   * target, caller with no password, or PUBLIC_BASE_URL unset, 422 no password,
+   * 429 rate limited, 503 audit log unavailable (no link was issued).
+   */
+  createAdminUserPasswordResetLink: (id: string, body: { password: string }) =>
+    apiRequest<AdminPasswordResetLink>(
+      `/api/v1/admin/users/${encodeURIComponent(id)}/password-reset-link`,
+      { method: "POST", body },
+    ),
+
+  /**
    * DELETE /api/v1/admin/users/{id} — IRREVERSIBLE admin hard delete of an
    * account (same semantics as the self-serve DELETE /auth/me: channels and
    * videos purged, comments tombstoned, per-user data erased, sessions
@@ -2389,8 +2407,15 @@ export const api = {
    * admin did not touch must therefore be left OUT of the body, never echoed
    * back as its mask. 409 `mail_secrets_key_missing` = no KEK to seal with;
    * 422 `fields` carries DOTTED paths (`smtp.host`) that bind to the inputs.
+   *
+   * Every save must also carry exactly ONE fresh credential in the same body
+   * (core #282): `current_password`, or `step_up_token` for a passwordless
+   * admin. None / spent token → 403 `step_up_required`; wrong password → 403
+   * `forbidden`; both proofs, or a step-up from an account that has a password
+   * → 422; a password sent by a passwordless admin → 409 `conflict`. Neither
+   * proof is stored, echoed or logged. DELETE needs none.
    */
-  updateMailConfig: (body: MailConfigInput) =>
+  updateMailConfig: (body: MailConfigPutRequest) =>
     apiRequest<MailConfigState>("/api/v1/admin/mail-config", { method: "PUT", body }),
 
   /**

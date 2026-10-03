@@ -29,12 +29,20 @@ vi.mock("@/lib/api/instance-platform", () => ({
 }));
 
 import { ApiError } from "@/lib/api";
-import { OWNER_CLAIM_INVALID_CODE, OWNER_CLAIM_LOG_COMMAND } from "@/lib/owner-claim";
+import {
+  OWNER_CLAIM_CLI_COMMAND,
+  OWNER_CLAIM_INVALID_CODE,
+  OWNER_CLAIM_LOG_COMMAND,
+} from "@/lib/owner-claim";
 
 import { ClaimOwnerForm } from "./ClaimOwnerForm";
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
+  // jsdom keeps one location across tests; a fragment left by one case would
+  // prefill the next.
+  window.history.replaceState(null, "", "/");
   routerReplace.mockReset();
   routerPush.mockReset();
   claimOwnerMock.mockReset();
@@ -111,6 +119,12 @@ describe("ClaimOwnerForm", () => {
     // pick up the dev override on a prod host.
     expect(alert.textContent).toContain(OWNER_CLAIM_LOG_COMMAND);
     expect(alert.textContent).toContain("--env-file env/production.env");
+    // The CLI that prints a ready, prefilled link is offered first; the log
+    // command stays for hosts whose CLI predates it.
+    expect(alert.textContent).toContain(OWNER_CLAIM_CLI_COMMAND);
+    expect(alert.textContent!.indexOf(OWNER_CLAIM_CLI_COMMAND)).toBeLessThan(
+      alert.textContent!.indexOf(OWNER_CLAIM_LOG_COMMAND),
+    );
   });
 
   it("points a conflict at signing in instead", async () => {
@@ -185,5 +199,75 @@ describe("ClaimOwnerForm", () => {
     pendingInstance();
     render(<ClaimOwnerForm fromSignup />);
     expect(screen.getByText(/Sign-ups are on hold until this server has an owner/)).toBeTruthy();
+  });
+
+  // `vidra claim` prints <origin>/setup/claim#token=<token>. A fragment — not a
+  // query string — because a fragment is never sent to the server, so the
+  // token stays out of access logs and Referer headers.
+  describe("setup token from the link fragment", () => {
+    const tokenField = () => screen.getByLabelText("Setup token") as HTMLInputElement;
+
+    it("prefills the token from #token=, URL-decoded, and says so", async () => {
+      pendingInstance();
+      window.history.replaceState(null, "", "/setup/claim#token=ab%2Bc%2Fd%3D");
+      render(<ClaimOwnerForm />);
+
+      await waitFor(() => expect(tokenField().value).toBe("ab+c/d="));
+      expect(screen.getByText("Setup token filled in from your link.")).toBeTruthy();
+    });
+
+    it("keeps the prefilled token editable and does not submit on its own", async () => {
+      pendingInstance();
+      window.history.replaceState(null, "", "/setup/claim#token=from-link");
+      render(<ClaimOwnerForm />);
+
+      await waitFor(() => expect(tokenField().value).toBe("from-link"));
+      fireEvent.change(tokenField(), { target: { value: "typed-instead" } });
+      expect(tokenField().value).toBe("typed-instead");
+      expect(claimOwnerMock).not.toHaveBeenCalled();
+    });
+
+    it("clears the fragment from the address bar, keeping path and query", async () => {
+      pendingInstance();
+      window.history.replaceState(null, "", "/setup/claim?from=signup#token=from-link");
+      const replace = vi.spyOn(window.history, "replaceState");
+      render(<ClaimOwnerForm />);
+
+      await waitFor(() => expect(tokenField().value).toBe("from-link"));
+      expect(replace).toHaveBeenCalledTimes(1);
+      expect(replace.mock.calls[0][2]).toBe("/setup/claim?from=signup");
+      expect(window.location.hash).toBe("");
+      expect(window.location.pathname + window.location.search).toBe("/setup/claim?from=signup");
+    });
+
+    it("ignores a ?token= query string and leaves the URL alone", async () => {
+      pendingInstance();
+      window.history.replaceState(null, "", "/setup/claim?token=from-query");
+      const replace = vi.spyOn(window.history, "replaceState");
+      render(<ClaimOwnerForm />);
+
+      await waitFor(() => expect(getInstanceCachedMock).toHaveBeenCalled());
+      expect(tokenField().value).toBe("");
+      expect(screen.queryByText("Setup token filled in from your link.")).toBeNull();
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["an empty fragment", "#"],
+      ["an empty token value", "#token="],
+      ["a blank token value", "#token=%20%20"],
+      ["a fragment without a token key", "#other=1"],
+      ["a malformed percent-escape", "#token=%E0%A4%A"],
+    ])("changes nothing for %s", async (_label, hash) => {
+      pendingInstance();
+      window.history.replaceState(null, "", `/setup/claim${hash}`);
+      const replace = vi.spyOn(window.history, "replaceState");
+      render(<ClaimOwnerForm />);
+
+      await waitFor(() => expect(getInstanceCachedMock).toHaveBeenCalled());
+      expect(tokenField().value).toBe("");
+      expect(screen.queryByText("Setup token filled in from your link.")).toBeNull();
+      expect(replace).not.toHaveBeenCalled();
+    });
   });
 });

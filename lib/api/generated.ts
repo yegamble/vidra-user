@@ -4791,7 +4791,7 @@ export interface paths {
          *
          *     The change takes effect immediately in this process and within one settings-poll interval (10s) across every other replica and worker — no restart. Audited as `admin.mail_config.update` with the transport, the changed field NAMES and whether the credential was replaced; never a value.
          *
-         *     Restricted to admins (moderators get 403).
+         *     Restricted to admins (moderators get 403), and every admin must also present a FRESH credential — exactly one of `current_password` or, for a passwordless account, `step_up_token` (see `POST /api/v1/auth/step-up/start`) — because this document decides where password-reset and verification mail is sent. With neither, or a spent, expired or foreign assertion, the answer is 403 `step_up_required`. `DELETE` (revert to the environment) needs no such proof, so a locked-out admin can always recover.
          */
         put: operations["updateMailConfig"];
         post?: never;
@@ -4993,7 +4993,7 @@ export interface paths {
         head?: never;
         /**
          * Update instance settings (admin)
-         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
+         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, channel_sync_interval_minutes (5..10080, default CHANNEL_SYNC_INTERVAL in whole minutes; the re-list cadence and backoff base, read at each reschedule so a change applies without a restart), channel_sync_batch (1..100, default CHANNEL_SYNC_BATCH; the newest uploads one sync pass imports, read at the start of each pass), channel_sync_cooldown_minutes (1..1440, default CHANNEL_SYNC_COOLDOWN in whole minutes; the minimum spacing between manual sync-now triggers, read per request so a change applies without a restart), channel_sync_backoff_max_hours (1..720, default CHANNEL_SYNC_BACKOFF_MAX in whole hours; the cap on the exponential backoff of a failing sync, read at each failure so a change applies without a restart), user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), live_recording_retention_hours (0..8760, default LIVE_RECORDING_RETENTION in whole hours rounded up; 0 = delete a session recording as soon as its replay is published and sweep nothing, else the hourly sweep deletes recordings older than that many hours. This setting DELETES FILES: lowering it, or raising it from 0, makes the next sweep delete every recording older than the new window, including recordings kept as the only copy of a failed or replay-disabled broadcast; read at every use, no restart), audit_log_retention_days (0..36500, default AUDIT_LOG_RETENTION in whole days rounded up; 0 = keep the audit trail forever. The env value is a FLOOR: the effective window is max(setting, env), so this setting can only keep the trail LONGER, and a value below the floor is a 422 naming it. When AUDIT_LOG_RETENTION=0 the trail is already kept forever and only 0 is accepted, so the setting has no effect. Read by every hourly sweep, no restart; changes are audited old -> new), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
          */
         patch: operations["updateInstanceSettings"];
         trace?: never;
@@ -5033,6 +5033,8 @@ export interface paths {
         /**
          * Set or clear an instance document (admin)
          * @description Stores an instance document body (homepage max 100KB; custom_css and custom_js max 200KB) or clears it with an empty body — the public delivery routes 404 while a document is unset. Changes take effect immediately (the in-memory cache reloads) and the new content hash shows in the GET /api/v1/instance customization/homepage blocks for cache busting. Restricted to admins; every write is audited (admin.instance_document.update with the document name + content hash, never the body). Custom JS runs in every visitor's browser — clients must gate the editor behind an explicit warning flow.
+         *
+         *     WRITING `custom_js` or `custom_css` (a non-empty body) is further restricted to THE instance owner: an ordinary admin is 403 `owner_only`, because that code executes in every visitor's browser. CLEARING either (an empty body) stays open to every admin, so a non-owner admin can always take a script down. `homepage` is unaffected.
          */
         put: operations["putInstanceDocument"];
         post?: never;
@@ -5696,6 +5698,26 @@ export interface paths {
          * @description Removes a target account's TOTP configuration and every recovery code. Restricted to admins, and the CALLER re-confirms their OWN password — the target cannot supply theirs, which is the situation this exists for (an authenticator lost together with the recovery codes; self-service removal needs both the account's password and a session it can no longer obtain). The action removes protection and never grants access: nothing secret is read or returned, the response has no body, and no admin route anywhere discloses the shared secret or a recovery code. The target's sessions are revoked and the target is mailed a notice naming an administrator as the actor. Removing your OWN second factor here is allowed — an owner who loses their authenticator has nobody above them to ask — and in that case the acting session survives. Every outcome is audited (`admin.user.mfa_reset`) with the target named.
          */
         delete: operations["adminRemoveUserMFA"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/password-reset-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint a one-time password-reset link for a locked-out user (admin)
+         * @description Recovery for an ordinary user on an instance with no working mail. Admin-only; the CALLER re-confirms their OWN password (same step-up and strict limiter as DELETE /api/v1/admin/users/{id}/mfa). Only an active account with role `user` can be targeted: the owner and staff recover through the host (`vidra owner reset`). The link is the ordinary single-use reset token (1 hour); a new mint invalidates older unused links, and redeeming one signs the user out everywhere. Fail-closed: the action is audited (`admin.user.password_reset_link`) BEFORE the link is returned, and a failed audit write withholds it and withdraws the token (503). The token is never logged or audited; the response is no-store.
+         */
+        post: operations["adminCreateUserPasswordResetLink"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -8031,6 +8053,15 @@ export interface components {
             /** @description The CALLING administrator's own current password. Not the target's: the target is, by construction, the party who cannot prove anything right now. */
             password: string;
         };
+        AdminPasswordResetLink: {
+            /**
+             * Format: uri
+             * @description PUBLIC_BASE_URL + /reset-password/confirm?token=..., shown once.
+             */
+            reset_url: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
         /** @description Admin projection of an account (never includes the password hash). */
         AdminUser: {
             /** Format: uuid */
@@ -9288,6 +9319,12 @@ export interface components {
             message_stream: string;
             readonly server_token_set: boolean;
         };
+        /** @description A MailConfigInput plus the caller's fresh credential: exactly one of `current_password` (the admin's own password) or `step_up_token` (a passwordless admin's single-use assertion). Neither is stored, echoed or logged. */
+        MailConfigPutRequest: components["schemas"]["MailConfigInput"] & {
+            /** Format: password */
+            current_password?: string;
+            step_up_token?: string;
+        };
         /**
          * @description The PUT body: the same shape as MailConfigDocument, with a WRITE-ONLY secret in place of each block's `*_set` flag.
          *
@@ -9343,7 +9380,7 @@ export interface components {
             /** @enum {string} */
             status: "sent";
         };
-        /** @description One optional subsystem's honest state. enabled is "the operator turned this on"; configured is "the deployment supplies what it needs to work". The two come apart (WHISPER_ENABLED with no endpoint, ATPROTO with no sealing key, MAIL_ENABLED behind a relay nobody set) and the gap is the interesting case, which is why one boolean was not enough. note carries the operator-facing sentence: what the gap is and what closing it buys. It is present when a feature is off (discovery — an operator cannot turn on what they never knew shipped) or enabled-but-unconfigured (a finding), and absent when the feature is on and complete. The key vocabulary is fixed and the list is returned in a stable order: object_storage, mail, search, federation, atproto, atproto_login, malware_scan, captions, live, ipfs, cdn, drm, tracing, metrics, vp9_alternates. A client that does not recognise a key must render it rather than drop it — this list is how an operator discovers a feature the server shipped before the client learned its name. Every row is computed from boot config with TWO exceptions, both a delivery posture whose only spelling is a runtime setting: cdn's enabled half is the runtime delivery_cdn_enabled setting, because a CDN has no env spelling of "on" (DELIVERY_CDN_BASE_URL is the wiring, the setting is the posture) and a boot-only reading could report nothing but "off" on an instance actively serving through an edge — its configured half is still boot config, which is what lets the row contradict a switch turned on with nothing behind it. And object_storage's NOTE (never its columns) reads the runtime delivery_presign_enabled setting: on an s3 install with the switch off the API proxies every media byte, and the active row's note is where an operator discovers the Advanced-page switch and its CORS precondition. DRM reports the provider's state and the PRESENCE of DRM_KEY_KEK, never the key. The only provider this build ships is clearkey-test, which protects nothing (it hands the content key to any authorised viewer over TLS) and encrypts nothing yet — the note says so IN EVERY STATE, including active: drm is the one row that carries a note while enabled and configured, because a green pill next to the word DRM is a sentence an operator repeats to somebody else. The warning is pinned to the clearkey-test provider value, so a future real provider will not inherit it. DASH is deliberately absent even though vidra produces it (the default cmaf packager writes an MPEG-DASH manifest beside the HLS playlists): packaging format is a per-VIDEO property recorded when that video's tree was written, with no switch and nothing to half-configure, so no (enabled, configured) pair could describe an instance serving both. */
+        /** @description One optional subsystem's honest state. enabled is "the operator turned this on"; configured is "the deployment supplies what it needs to work". The two come apart (WHISPER_ENABLED with no endpoint, ATPROTO with no sealing key, MAIL_ENABLED behind a relay nobody set) and the gap is the interesting case, which is why one boolean was not enough. note carries the operator-facing sentence: what the gap is and what closing it buys. It is present when a feature is off (discovery — an operator cannot turn on what they never knew shipped) or enabled-but-unconfigured (a finding), and absent when the feature is on and complete. The key vocabulary is fixed and the list is returned in a stable order: object_storage, mail, search, federation, atproto, atproto_login, malware_scan, captions, live, ipfs, cdn, drm, tracing, metrics, vp9_alternates, url_imports. url_imports is the boot capability behind the import_http_enabled and channel_sync_enabled settings: enabled is YTDLP_IMPORT_ENABLED, configured is the yt-dlp executable resolving; with it off those two settings save but do nothing. A client that does not recognise a key must render it rather than drop it — this list is how an operator discovers a feature the server shipped before the client learned its name. Every row is computed from boot config with TWO exceptions, both a delivery posture whose only spelling is a runtime setting: cdn's enabled half is the runtime delivery_cdn_enabled setting, because a CDN has no env spelling of "on" (DELIVERY_CDN_BASE_URL is the wiring, the setting is the posture) and a boot-only reading could report nothing but "off" on an instance actively serving through an edge — its configured half is still boot config, which is what lets the row contradict a switch turned on with nothing behind it. And object_storage's NOTE (never its columns) reads the runtime delivery_presign_enabled setting: on an s3 install with the switch off the API proxies every media byte, and the active row's note is where an operator discovers the Advanced-page switch and its CORS precondition. DRM reports the provider's state and the PRESENCE of DRM_KEY_KEK, never the key. The only provider this build ships is clearkey-test, which protects nothing (it hands the content key to any authorised viewer over TLS) and encrypts nothing yet — the note says so IN EVERY STATE, including active: drm is the one row that carries a note while enabled and configured, because a green pill next to the word DRM is a sentence an operator repeats to somebody else. The warning is pinned to the clearkey-test provider value, so a future real provider will not inherit it. DASH is deliberately absent even though vidra produces it (the default cmaf packager writes an MPEG-DASH manifest beside the HLS playlists): packaging format is a per-VIDEO property recorded when that video's tree was written, with no switch and nothing to half-configure, so no (enabled, configured) pair could describe an instance serving both. */
         InfrastructureFeature: {
             /** @example object_storage */
             key: string;
@@ -9421,6 +9458,16 @@ export interface components {
                 s3_region: string;
                 s3_use_ssl: boolean;
                 s3_force_path_style: boolean;
+                /** @description Capacity of the filesystem holding local_root, measured per request. ABSENT — not zeroed — on s3 and when the measurement fails. Inside a container this is the filesystem backing the mounted volume, which is the disk that actually fills. No threshold or verdict is reported; `vidra doctor` owns the tiers. */
+                disk?: {
+                    /** Format: int64 */
+                    total_bytes: number;
+                    /**
+                     * Format: int64
+                     * @description Bytes an unprivileged process can still write (excludes root-reserved blocks), the same definition `vidra doctor` uses.
+                     */
+                    free_bytes: number;
+                };
             };
             /** @description How media bytes leave the deployment when this process is not the one serving them. ABSENT — not empty — when no CDN is wired (DELIVERY_CDN_BASE_URL unset). The purge endpoint template and its token are never reported: an invalidation API routinely carries the credential in the URL. */
             delivery?: {
@@ -10102,7 +10149,7 @@ export interface components {
             last_error?: string;
             /**
              * Format: int32
-             * @description Consecutive failed runs. 0 means the last run succeeded. The scheduler backs off exponentially on this count — the next attempt is CHANNEL_SYNC_INTERVAL x 2^(failure_count-1) after the failure, capped at CHANNEL_SYNC_BACKOFF_MAX — so a source that stays down is re-listed ever more slowly instead of at the plain cadence forever. A single success resets it. Requesting a sync now bypasses the backoff.
+             * @description Consecutive failed runs. 0 means the last run succeeded. The scheduler backs off exponentially on this count — the next attempt is CHANNEL_SYNC_INTERVAL (or the channel_sync_interval_minutes setting) x 2^(failure_count-1) after the failure, capped at CHANNEL_SYNC_BACKOFF_MAX (or the channel_sync_backoff_max_hours setting) — so a source that stays down is re-listed ever more slowly instead of at the plain cadence forever. A single success resets it. Requesting a sync now bypasses the backoff.
              */
             failure_count: number;
             /**
@@ -24110,7 +24157,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MailConfigInput"];
+                "application/json": components["schemas"]["MailConfigPutRequest"];
             };
         };
         responses: {
@@ -24141,7 +24188,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The caller is not an admin. */
+            /** @description The caller is not an admin; the supplied `current_password` is incorrect; or `step_up_required` — no fresh credential was supplied, or the step-up assertion is spent, expired, or issued to another session or account. `error.step_up_providers` names the sign-ins that can satisfy it (empty for a password account, which sends `current_password`). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -24160,11 +24207,20 @@ export interface operations {
                 };
             };
             /**
-             * @description The document is invalid. `fields` carries one entry per problem, keyed by the DOTTED path of the offending input (`from_address`, `smtp.host`, `smtp.port`, `smtp.encryption`, `mailgun.domain`, `mailgun.region`, `resend.api_key`, `postmark.server_token`, …).
+             * @description Both `current_password` and `step_up_token` were sent (exactly one proof is read); `password_already_set` — a step-up assertion was sent for an account that has a password, which must use it instead; or the document is invalid. `fields` carries one entry per problem, keyed by the DOTTED path of the offending input (`from_address`, `smtp.host`, `smtp.port`, `smtp.encryption`, `mailgun.domain`, `mailgun.region`, `resend.api_key`, `postmark.server_token`, …).
              *
              *     Two cases a panel should expect. `from_address` and `reply_to` must be a BARE address — `no-reply@example.org`, never `Vidra <no-reply@example.org>` and never `<no-reply@example.org>`; a display name belongs in `from_name`. And a save that changes `smtp.host` while omitting `smtp.password` is 422 on `smtp.password` ("required: changing the server address requires the password again"): the stored credential is never re-pointed at a server the admin has not just authenticated to. Re-render the password input as empty and required when that arrives.
              */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts (strict auth limiter): the PUT checks the caller's password. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -24906,7 +24962,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The caller is not an admin. */
+            /** @description The caller is not an admin, or — for a non-empty `custom_js` / `custom_css` body — is an admin but not the instance owner (`owner_only`). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -27161,6 +27217,96 @@ export interface operations {
                 };
             };
             /** @description Two-factor authentication is not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminCreateUserPasswordResetLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminRemoveUserMFARequest"];
+            };
+        };
+        responses: {
+            /** @description The one-time link. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPasswordResetLink"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not an admin; wrong password; or the target is the owner or staff. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such user. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Target deactivated, caller has no password, or PUBLIC_BASE_URL unset. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (no password supplied). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts (strict auth limiter). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The audit write failed, so no link was issued. */
             503: {
                 headers: {
                     [name: string]: unknown;

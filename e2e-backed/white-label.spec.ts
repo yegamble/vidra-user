@@ -78,12 +78,19 @@ async function setHideSoftwareName(
   token: string,
   value: boolean | null,
 ): Promise<void> {
-  const res = await request.patch(`${API_URL}/api/v1/admin/instance-settings`, {
-    headers: { Authorization: `Bearer ${token}` },
-    // null clears the DB overlay back to the compiled default — the only honest
-    // reset, since "false" would leave the key marked overridden.
-    data: { branding_hide_software_name: value },
-  });
+  const patch = (bearer: string) =>
+    request.patch(`${API_URL}/api/v1/admin/instance-settings`, {
+      headers: { Authorization: `Bearer ${bearer}` },
+      // null clears the DB overlay back to the compiled default — the only honest
+      // reset, since "false" would leave the key marked overridden.
+      data: { branding_hide_software_name: value },
+    });
+  let res = await patch(token);
+  // The token is minted once at test start and this test can run for minutes,
+  // while other workers share the same admin account (fullyParallel): a session
+  // they revoke turns the `finally` cleanup into a 401 that leaves every later
+  // spec white-labelled. Re-mint once; a second 401 is real and still fails.
+  if (res.status() === 401) res = await patch(await adminToken(request));
   // CORE-FIRST. The backed lanes build against vidra-core's DEFAULT BRANCH, so
   // until the matching core change merges this PATCH is rejected for an unknown
   // key and this whole file is red — the same correct red the `contract` lane
