@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { exceedsParseBudget } from "@/lib/user-text-plugins";
+
 import { PlainTextBoundary, UserText, safeUserUrl } from "./UserText";
 
 afterEach(cleanup);
@@ -225,6 +227,12 @@ describe("UserText: structure", () => {
     expect(a.getAttribute("target")).toBeNull();
   });
 
+  it("keeps footnote source text instead of dropping it", () => {
+    const t = html("hi[^1]\n\n[^1]: note").textContent!;
+    expect(t).toContain("hi[^1]");
+    expect(t).toContain("note");
+  });
+
   it("does not leak footnote chrome", () => {
     const c = html("hi[^1]\n\n[^1]: note");
     expect(c.textContent).not.toContain("Footnotes");
@@ -250,5 +258,48 @@ describe("safeUserUrl", () => {
   it("rejects non-strings", () => {
     expect(safeUserUrl(undefined)).toBe("");
     expect(safeUserUrl(null)).toBe("");
+  });
+});
+
+describe("UserText: parse budget", () => {
+  const big = (unit: string, head = "", tail = "") =>
+    head + unit.repeat(Math.ceil(5000 / unit.length)) + tail;
+  const PATTERNS: Record<string, string> = {
+    "~a": big("~a"),
+    "*a_": big("*a_"),
+    table: "|a".repeat(1200) + "|\n" + "|-".repeat(1200) + "|\n",
+    "a*": big("a*"),
+    "[a](x)": big("[a](x)"),
+    "[ a\\]": big("a\\]", "["),
+    "> 1. a": big("> 1. a\n"),
+  };
+
+  it.each(Object.entries(PATTERNS))("renders %s at ~5000 bytes within the time budget", (_n, text) => {
+    expect(text.length).toBeGreaterThanOrEqual(4800);
+    const t0 = performance.now();
+    html(text);
+    html(text, "comment");
+    expect(performance.now() - t0).toBeLessThan(300);
+  });
+
+  it("pins the thresholds", () => {
+    expect(exceedsParseBudget("-".repeat(99))).toBe(false);
+    expect(exceedsParseBudget("-".repeat(100))).toBe(true);
+    expect(exceedsParseBudget("~a".repeat(256))).toBe(false);
+    expect(exceedsParseBudget("~a".repeat(257))).toBe(true);
+    expect(exceedsParseBudget("a".repeat(3000))).toBe(false);
+    expect(exceedsParseBudget("a".repeat(3001))).toBe(true);
+    expect(exceedsParseBudget("\u00e9".repeat(1600))).toBe(true); // 3200 UTF-8 bytes
+    expect(exceedsParseBudget("- a\n".repeat(257))).toBe(true); // list markers count
+  });
+
+  it("over budget: no markdown, but safe bare-URL links and timestamps remain", () => {
+    const text = "[x](javascript:alert(1)) https://e.test/a). at 1:23 www.e.test/p " + "~a".repeat(300);
+    const c = render(<UserText text={text} variant="description" durationSeconds={600} />).container;
+    const hrefs = Array.from(c.querySelectorAll("a:not([data-timestamp-seconds])")).map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["https://e.test/a", "http://www.e.test/p"]);
+    expect(c.querySelector("a[data-timestamp-seconds]")).toBeTruthy();
+    expect(c.textContent).toContain("[x](javascript:alert(1))");
+    expect(c.querySelector("a")!.getAttribute("rel")).toBe("nofollow noopener noreferrer ugc");
   });
 });

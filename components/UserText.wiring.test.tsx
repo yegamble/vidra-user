@@ -29,3 +29,18 @@ describe("UserText URL layers are independently wired", () => {
     }
   });
 });
+
+describe("UserText error boundary is wired", () => {
+  it("falls back to the raw text when the markdown render throws", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const original = vi.mocked(ReactMarkdown).getMockImplementation()!;
+    // Persistent (React retries a failed render once before the boundary takes it).
+    vi.mocked(ReactMarkdown).mockImplementation(() => {
+      throw new Error("boom");
+    });
+    const c = render(<UserText text="raw **text**" variant="comment" />).container;
+    vi.mocked(ReactMarkdown).mockImplementation(original);
+    spy.mockRestore();
+    expect(c.textContent).toBe("raw **text**");
+  });
+});

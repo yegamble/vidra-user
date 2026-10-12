@@ -91,12 +91,22 @@ export function rehypeTimestamps(options: { durationSeconds?: number | null; ski
   return (tree: Node) => walk(tree);
 }
 
-// Markdown parsing is quadratic in nested/repeated structure markers (measured:
-// ~2,000 bytes of "- " or "*" blocks the main thread for seconds). Real text
-// never strings 100+ structure markers together, so such a body is shown as plain
-// text instead of being parsed.
-const MARKER_RUN_RE = /(?:[>*_~`+\-\[\]()!<\\#]\s*|\d{1,3}[.)]\s+){100}/;
+// Markdown parsing cost is superlinear in delimiter structure, and the watch
+// description is rendered on the server on every uncached view. So parse cost is
+// bounded up front: a body above ANY budget below skips the parser and renders as
+// plain text (with safe bare-URL links and timestamps; see UserText).
+export const MAX_PARSE_BYTES = 3000;
+export const MAX_DELIMITERS = 256;
 
-export function isPathologicalMarkdown(text: string): boolean {
-  return MARKER_RUN_RE.test(text);
+// 100+ consecutive structure markers (measured: ~2,000 bytes of "- " blocks the
+// thread for seconds) — also catches long runs of characters not counted below.
+const MARKER_RUN_RE = /(?:[>*_~`+\-\[\]()!<\\#]\s*|\d{1,3}[.)]\s+){100}/;
+const DELIMITER_RE = /[*_~`\[\]|<>]/g;
+const LIST_MARKER_RE = /^[ \t]*(?:[-+]|\d{1,9}[.)])[ \t]/gm;
+
+export function exceedsParseBudget(text: string): boolean {
+  if (text.length > MAX_PARSE_BYTES) return true; // UTF-16 units <= UTF-8 bytes; exact check below
+  if (new TextEncoder().encode(text).length > MAX_PARSE_BYTES) return true;
+  const delimiters = (text.match(DELIMITER_RE)?.length ?? 0) + (text.match(LIST_MARKER_RE)?.length ?? 0);
+  return delimiters > MAX_DELIMITERS || MARKER_RUN_RE.test(text);
 }

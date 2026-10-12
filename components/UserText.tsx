@@ -3,7 +3,8 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "@/lib/cn";
-import { isPathologicalMarkdown, remarkBoundTree, rehypeTimestamps } from "@/lib/user-text-plugins";
+import { splitTimestamps } from "@/lib/timestamp-links";
+import { exceedsParseBudget, remarkBoundTree, rehypeTimestamps } from "@/lib/user-text-plugins";
 
 /*
  * UserText — the ONE renderer for UNTRUSTED user-authored text: video and
@@ -25,8 +26,11 @@ import { isPathologicalMarkdown, remarkBoundTree, rehypeTimestamps } from "@/lib
  *     protocol-relative `//host`, relative paths, entity/whitespace-obfuscated
  *     schemes, which the parser decodes before we see them) renders as plain text.
  *  4. http(s) links open in a new tab with rel="nofollow noopener noreferrer ugc".
- *  5. Nesting depth is bounded (remarkBoundTree) and an error boundary falls
- *     back to plain text, so a hostile body can never take the page down.
+ *  5. Parse cost is bounded: nesting depth is capped (remarkBoundTree) and a
+ *     body above a size/delimiter budget skips the parser entirely (plain text
+ *     with the same safe links/timestamps). That is what protects server
+ *     rendering; PlainTextBoundary is a CLIENT-side net only (React does not run
+ *     error boundaries during SSR).
  *
  * Timestamps: (h:)mm:ss tokens become seek links via a hast plugin (existing
  * lib/timestamp-links grammar + duration clamp); text inside links (and, for
@@ -65,8 +69,104 @@ const LINK_CLASS =
 const TS_CLASS =
   "focus-ring rounded-sm font-semibold text-accent-text underline underline-offset-2 tabular-nums";
 
-function PlainText({ text, className }: { text: string; className?: string }) {
-  return <div className={cn("min-w-0 whitespace-pre-wrap break-words", className)}>{text}</div>;
+const BARE_URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+
+// Drop sentence punctuation and unbalanced closers from the end of a bare URL.
+function trimUrl(url: string): string {
+  let end = url.length;
+  const open = (url.match(/\(/g) ?? []).length;
+  let close = (url.match(/\)/g) ?? []).length;
+  while (end > 0) {
+    const ch = url[end - 1];
+    if (".,;:!?\"'".includes(ch)) end--;
+    else if (ch === ")" && close > open) {
+      close--;
+      end--;
+    } else break;
+  }
+  return url.slice(0, end);
+}
+
+function TimestampLink({
+  seconds,
+  onSeek,
+  children,
+}: {
+  seconds: number;
+  onSeek?: (seconds: number) => void;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={`?t=${seconds}`}
+      data-timestamp-seconds={seconds}
+      className={TS_CLASS}
+      onClick={
+        onSeek
+          ? (event: MouseEvent<HTMLAnchorElement>) => {
+              // Modified / non-primary clicks keep open-in-new-tab semantics.
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                return;
+              }
+              event.preventDefault();
+              onSeek(seconds);
+            }
+          : undefined
+      }
+    >
+      {children}
+    </a>
+  );
+}
+
+function PlainText({
+  text,
+  className,
+  linkify = false,
+  durationSeconds,
+  onSeek,
+}: {
+  text: string;
+  className?: string;
+  linkify?: boolean;
+  durationSeconds?: number | null;
+  onSeek?: (seconds: number) => void;
+}) {
+  const nodes: ReactNode[] = [];
+  if (linkify) {
+    let last = 0;
+    const pushText = (chunk: string) => {
+      for (const seg of splitTimestamps(chunk, durationSeconds)) {
+        nodes.push(
+          typeof seg === "string" ? (
+            seg
+          ) : (
+            <TimestampLink key={nodes.length} seconds={seg.seconds} onSeek={onSeek}>
+              {seg.token}
+            </TimestampLink>
+          ),
+        );
+      }
+    };
+    for (const m of text.matchAll(BARE_URL_RE)) {
+      const raw = trimUrl(m[0]);
+      const href = safeUserUrl(/^www\./i.test(raw) ? `http://${raw}` : raw);
+      if (!href) continue;
+      pushText(text.slice(last, m.index));
+      nodes.push(
+        <a key={nodes.length} href={href} target="_blank" rel="nofollow noopener noreferrer ugc" className={LINK_CLASS}>
+          {raw}
+        </a>,
+      );
+      last = m.index + raw.length;
+    }
+    pushText(text.slice(last));
+  }
+  return (
+    <div className={cn("min-w-0 whitespace-pre-wrap break-words", className)}>
+      {linkify ? nodes : text}
+    </div>
+  );
 }
 
 /** Error boundary: any render failure degrades to the raw text, never the page. */
@@ -128,25 +228,9 @@ export function UserText({ text, variant, className, durationSeconds = null, onS
       const seconds = node?.properties?.dataTimestampSeconds;
       if (typeof seconds === "number") {
         return (
-          <a
-            href={`?t=${seconds}`}
-            data-timestamp-seconds={seconds}
-            className={TS_CLASS}
-            onClick={
-              onSeek
-                ? (event: MouseEvent<HTMLAnchorElement>) => {
-                    // Modified / non-primary clicks keep open-in-new-tab semantics.
-                    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-                      return;
-                    }
-                    event.preventDefault();
-                    onSeek(seconds);
-                  }
-                : undefined
-            }
-          >
+          <TimestampLink seconds={seconds} onSeek={onSeek}>
             {children}
-          </a>
+          </TimestampLink>
         );
       }
       const safe = safeUserUrl(href);
@@ -165,7 +249,9 @@ export function UserText({ text, variant, className, durationSeconds = null, onS
     },
   };
 
-  if (isPathologicalMarkdown(text)) return <PlainText text={text} className={className} />;
+  if (exceedsParseBudget(text)) {
+    return <PlainText linkify text={text} className={className} durationSeconds={durationSeconds} onSeek={onSeek} />;
+  }
 
   return (
     <PlainTextBoundary text={text} className={className}>
