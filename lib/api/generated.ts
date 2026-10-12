@@ -7828,8 +7828,16 @@ export interface components {
         RejectQuarantinedVideoRequest: {
             reason?: string;
         };
+        /** @description Who filed the report. A report another instance sent as an ActivityPub Flag (PeerTube, Mastodon, ...) has remote=true, actor_url and domain, and username carries that domain. */
         ReportReporter: {
             username: string;
+            remote?: boolean;
+            /**
+             * Format: uri
+             * @description The remote reporter's ActivityPub actor (remote reports only).
+             */
+            actor_url?: string;
+            domain?: string;
         };
         Report: {
             /** Format: uuid */
