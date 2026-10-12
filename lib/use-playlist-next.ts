@@ -47,7 +47,8 @@ function readPlayed(id: string): number[] {
 }
 function writePlayed(id: string, played: number[]) {
   try {
-    window.sessionStorage.setItem(playedKey(id), JSON.stringify(played));
+    if (played.length === 0) window.sessionStorage.removeItem(playedKey(id));
+    else window.sessionStorage.setItem(playedKey(id), JSON.stringify(played));
   } catch {
     // Session storage unavailable: shuffle just forgets its history.
   }
@@ -79,8 +80,10 @@ export function usePlaylistNext(video: Video | undefined) {
   // ?playlist= link (VideoCard) has no index and is located by id.
   const hinted = index === null ? -1 : index - 1;
   const byId = video ? items.findIndex((v) => v.id === video.id) : -1;
-  const pos = !video ? -1 : items[hinted]?.id === video.id ? hinted : byId >= 0 ? byId : hinted >= items.length ? hinted : -1;
+  const rawPos = !video ? -1 : items[hinted]?.id === video.id ? hinted : byId >= 0 ? byId : hinted >= items.length ? hinted : -1;
   const total = list.total ?? (list.status === "ready" && !list.hasMore ? items.length : null);
+  // A stale link (index past the end) must not read "1000 / 5" or pick a next.
+  const pos = total !== null && rawPos >= total ? -1 : rawPos;
 
   // Landing deep in a long playlist: page forward until the playing item is held.
   const needMore = active && list.status === "ready" && list.hasMore && (index !== null ? hinted >= items.length : byId < 0);
@@ -98,7 +101,8 @@ export function usePlaylistNext(video: Video | undefined) {
     [active, playlistId, pos, total, loop, shuffle],
   );
   useEffect(() => {
-    if (shuffle && picked) writePlayed(playlistId, picked.played);
+    // An exhausted non-loop shuffle forgets its history, so shuffling again starts fresh.
+    if (shuffle && picked) writePlayed(playlistId, picked.next === null ? [] : picked.played);
   }, [shuffle, picked, playlistId]);
   const nextPos = picked?.next ?? null;
 
@@ -130,7 +134,10 @@ export function usePlaylistNext(video: Video | undefined) {
     status: failed ? ("error" as const) : list.status,
     playlistId, meta, list, pos, total, loop, shuffle,
     setLoop: (on: boolean) => setFlag("loop", on),
-    setShuffle: (on: boolean) => setFlag("shuffle", on),
+    setShuffle: (on: boolean) => {
+      if (on) writePlayed(playlistId, []);
+      setFlag("shuffle", on);
+    },
     itemHref: (v: Video, i: number) => playlistWatchHref(v, playlistId, i + 1, { loop, shuffle }),
   };
 }

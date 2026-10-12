@@ -86,3 +86,29 @@ it("is inert without a playlist param", async () => {
   expect(result.current.next).toBeNull();
   expect(mocks.get).not.toHaveBeenCalled();
 });
+
+it("does not report a position past the end of the playlist", async () => {
+  at(1000);
+  const { result } = renderHook(() => usePlaylistNext({ id: "not-in-list", title: "x" } as Video));
+  await waitFor(() => expect(result.current.total).toBe(25));
+  expect(result.current.pos).toBe(-1);
+  expect(result.current.next).toBeNull();
+});
+
+it("clears shuffle history when it exhausts, so shuffling again starts fresh", async () => {
+  at(25, "&shuffle=1");
+  window.sessionStorage.setItem("vidra:playlist-played:p1", JSON.stringify(Array.from({ length: 24 }, (_, i) => i)));
+  const { result } = renderHook(() => usePlaylistNext(vid(25)));
+  await waitFor(() => expect(result.current.pos).toBe(24));
+  expect(result.current.next).toBeNull();
+  await waitFor(() => expect(window.sessionStorage.getItem("vidra:playlist-played:p1")).toBeNull());
+});
+
+it("turning shuffle on starts with empty history", async () => {
+  at(25);
+  window.sessionStorage.setItem("vidra:playlist-played:p1", JSON.stringify(Array.from({ length: 25 }, (_, i) => i)));
+  const { result } = renderHook(() => usePlaylistNext(vid(25)));
+  await waitFor(() => expect(result.current.pos).toBe(24));
+  act(() => result.current.setShuffle(true));
+  await waitFor(() => expect(result.current.next).not.toBeNull());
+});
