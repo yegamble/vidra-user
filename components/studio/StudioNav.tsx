@@ -22,7 +22,9 @@ const TABS: ReadonlyArray<{ href: string; label: string; live?: true }> = [
   { href: "/studio", label: "Dashboard" },
   { href: "/studio/content", label: "Content" },
   { href: "/studio/live", label: "Live", live: true },
-  { href: "/studio/comments", label: "Comments" },
+  // "Comment queue", not "Comments": the dashboard/analytics stat grids
+  // already label a column "Comments", and the tab must not read as one.
+  { href: "/studio/comments", label: "Comment queue" },
   { href: "/studio/analytics", label: "Analytics" },
   { href: "/studio/channel", label: "Channel" },
 ];
