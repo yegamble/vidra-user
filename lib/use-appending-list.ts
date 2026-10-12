@@ -271,20 +271,35 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
   const errored = failed?.key === fetchKey && failed.attempt === attempt;
   const status: AppendingStatus = current ? "ready" : errored ? "error" : "loading";
 
+  // The one in-flight "Load more" request, if any. A ref rather than state so a
+  // second call made before React re-renders (a double click, or the auto-load
+  // sentinel firing alongside a click) still sees it and returns early.
+  const moreController = useRef<AbortController | null>(null);
+  // A query change (or reload, or unmount) abandons the page being fetched: abort
+  // it so it cannot append under the new query, and clear its busy/error state so
+  // the new list does not inherit the old list's button.
+  useEffect(() => {
+    return () => {
+      moreController.current?.abort();
+      moreController.current = null;
+      setMoreStatus("idle");
+    };
+  }, [fetchKey, attempt]);
+
   const loadMore = useCallback(() => {
     // Nothing to extend: the first page has not settled, so there is no window
     // to advance past. The button and the sentinel are both absent in that
     // state; this only guards a caller calling it directly.
-    if (!current) return;
+    if (!current || moreController.current) return;
     setMoreStatus("loading");
     const offset = current.items.length;
-    // No abort on unmount, deliberately: a page that lands late is dropped by
-    // the key/attempt check below, and cancelling would also cancel the page a
-    // reader on a slow connection is waiting for whenever React re-runs.
     const controller = new AbortController();
+    moreController.current = controller;
     Promise.resolve()
       .then(() => loadRef.current({ limit: pageSize, offset }, controller.signal))
       .then((page) => {
+        if (controller.signal.aborted) return;
+        moreController.current = null;
         setLoaded((prev) => {
           // A page that landed after the query moved on belongs to a list nobody
           // is looking at any more; dropping it is what stops results for the
@@ -309,7 +324,11 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
         });
         setMoreStatus("idle");
       })
-      .catch(() => setMoreStatus("error"));
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        moreController.current = null;
+        setMoreStatus("error");
+      });
   }, [attempt, current, fetchKey, getId, pageSize]);
 
   const reload = useCallback(() => {

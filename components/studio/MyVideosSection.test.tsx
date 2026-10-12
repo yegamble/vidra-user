@@ -45,4 +45,25 @@ describe("MyVideosSection paging", () => {
     );
     expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
   });
+
+  it("restarts from offset 0 and drops the old channel's rows when the handle changes", async () => {
+    const { rerender } = render(<MyVideosSection handle="creator" config={null} />);
+    await screen.findByText("Mine 0");
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    await screen.findByText("Mine 24");
+
+    mocks.listChannelVideos.mockImplementation(() =>
+      Promise.resolve({ videos: [{ id: "o1", title: "Other 1" }], total: 1, limit: 20, offset: 0 }),
+    );
+    rerender(<MyVideosSection handle="other" config={null} />);
+    expect(await screen.findByText("Other 1")).toBeTruthy();
+    expect(screen.queryByText("Mine 0")).toBeNull();
+    expect(screen.queryByText("Mine 24")).toBeNull();
+    expect(mocks.listChannelVideos).toHaveBeenLastCalledWith(
+      "other",
+      undefined,
+      expect.anything(),
+      expect.objectContaining({ offset: 0 }),
+    );
+  });
 });
