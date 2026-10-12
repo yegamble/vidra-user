@@ -4,12 +4,12 @@ import { BASE_VIDEO_ACCEPT, isAcceptedVideoFile, videoAcceptAttr } from "./uploa
 
 describe("videoAcceptAttr", () => {
   it("keeps the permissive video/* accept while the extended set is on", () => {
-    expect(videoAcceptAttr(true)).toBe("video/*");
+    expect(videoAcceptAttr(true)).toBe("video/*,audio/*");
   });
 
   it("fails open when the flag is unknown (older backend / failed fetch)", () => {
-    expect(videoAcceptAttr(undefined)).toBe("video/*");
-    expect(videoAcceptAttr(null)).toBe("video/*");
+    expect(videoAcceptAttr(undefined)).toBe("video/*,audio/*");
+    expect(videoAcceptAttr(null)).toBe("video/*,audio/*");
   });
 
   it("narrows to the base containers once the admin turns the extended set off", () => {
@@ -18,6 +18,8 @@ describe("videoAcceptAttr", () => {
     for (const ext of [".mp4", ".webm", ".ogv", ".ogg"]) {
       expect(accept).toContain(ext);
     }
+    expect(accept).toContain(".mp3");
+    expect(accept).toContain("audio/mpeg");
     expect(accept).not.toContain(".mkv");
     expect(accept).not.toContain("video/*");
   });
@@ -43,5 +45,12 @@ describe("isAcceptedVideoFile (drag-and-drop filter)", () => {
     expect(isAcceptedVideoFile({ name: "clip.mp4", type: "video/mp4" }, false)).toBe(true);
     // A container the server would 415 is filtered client-side too.
     expect(isAcceptedVideoFile({ name: "clip.mkv", type: "video/x-matroska" }, false)).toBe(false);
+  });
+
+  it("accepts audio-only files in every mode (base containers server-side)", () => {
+    expect(isAcceptedVideoFile({ name: "ep.mp3", type: "audio/mpeg" }, true)).toBe(true);
+    expect(isAcceptedVideoFile({ name: "ep.flac", type: "" }, true)).toBe(true);
+    expect(isAcceptedVideoFile({ name: "ep.m4a", type: "audio/mp4" }, false)).toBe(true);
+    expect(isAcceptedVideoFile({ name: "ep.wav", type: "" }, false)).toBe(true);
   });
 });

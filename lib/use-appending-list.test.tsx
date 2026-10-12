@@ -301,4 +301,64 @@ describe("useAppendingList — holding a viewer-scoped list until the session se
     await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("a"));
     expect(load).toHaveBeenCalledTimes(1);
   });
+
+  it("drops a row an appended page repeats when the caller supplies getId", async () => {
+    // A row removed server-side between two clicks shifts the offset window, so
+    // page two re-sends the last row of page one.
+    const load = vi.fn(async (w: { offset: number }) =>
+      (w.offset === 0
+        ? { items: rows("a", "b"), total: 4 }
+        : { items: rows("b", "c"), total: 4 }) as AppendingPage<Row>,
+    );
+    render(<List queryKey="q" pageSize={2} getId={(r) => r.id} load={load} />);
+    await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("a,b"));
+    act(() => screen.getByText("more").click());
+    await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("a,b,c"));
+  });
+
+  it("sends one request for two loadMore calls made before a re-render", async () => {
+    const calls: number[] = [];
+    const load = vi.fn(async (w: { offset: number }) => {
+      calls.push(w.offset);
+      return (w.offset === 0
+        ? { items: rows("a", "b"), total: 6 }
+        : { items: rows("c", "d"), total: 6 }) as AppendingPage<Row>;
+    });
+    render(<List queryKey="q" pageSize={2} load={load} />);
+    await waitFor(() => expect(text("rows")).toBe("a,b"));
+    act(() => {
+      screen.getByText("more").click();
+      screen.getByText("more").click();
+    });
+    await waitFor(() => expect(text("rows")).toBe("a,b,c,d"));
+    expect(calls).toEqual([0, 2]);
+  });
+
+  it("aborts an in-flight page on a key change, never appends it, and resets moreStatus", async () => {
+    let moreSignal!: AbortSignal;
+    let rejectMore!: (e: unknown) => void;
+    const load = vi.fn((w: { offset: number }, signal: AbortSignal) => {
+      if (w.offset === 0) {
+        return Promise.resolve({ items: rows("a", "b"), total: 6 } as AppendingPage<Row>);
+      }
+      moreSignal = signal;
+      return new Promise<AppendingPage<Row>>((_, reject) => {
+        rejectMore = reject;
+      });
+    });
+    const { rerender } = render(<List queryKey="latest" pageSize={2} load={load} />);
+    await waitFor(() => expect(text("rows")).toBe("a,b"));
+    act(() => screen.getByText("more").click());
+    await waitFor(() => expect(text("more-status")).toBe("loading"));
+
+    rerender(<List queryKey="oldest" pageSize={2} load={load} />);
+    expect(moreSignal.aborted).toBe(true);
+    // Immediately, before the new first page resolves: the old list's busy
+    // button must not carry over.
+    expect(text("more-status")).toBe("idle");
+    await waitFor(() => expect(text("rows")).toBe("a,b"));
+    await act(async () => rejectMore(new Error("aborted")));
+    expect(text("more-status")).toBe("idle");
+    expect(text("rows")).toBe("a,b");
+  });
 });

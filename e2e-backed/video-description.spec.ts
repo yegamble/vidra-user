@@ -62,6 +62,16 @@ test("a creator sets and edits a video description", async ({ page, request }) =
   expect((await videoDetail(request, videoId)).description).toBe(newDescription);
 
   // Displayed: the watch page (a fresh load) shows the edited description.
+  //
+  // Count only VISIBLE copies. The server-seeded watch page streams its body
+  // after the loading.tsx skeleton, as a `<div hidden id="S:n">` segment that
+  // React's inline `$RV` script reveals up to ~300ms later. If AuthProvider's
+  // boot-time session restore commits first, React client-renders the page
+  // from the RSC payload instead, and the parked server copy stays in the DOM,
+  // hidden, until `$RV` throws it away. A bare getByText counts that hidden
+  // copy, which caused a strict-mode violation ("resolved to 2 elements") in
+  // CI. Filtering to visible elements still fails if the description really
+  // does render twice on screen.
   await page.goto(`/videos/${videoId}`);
-  await expect(page.getByText(newDescription)).toBeVisible();
+  await expect(page.getByText(newDescription).filter({ visible: true })).toBeVisible();
 });

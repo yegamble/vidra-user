@@ -6,6 +6,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { ClockIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ListTail } from "@/components/ui/ListTail";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoGrid } from "@/components/VideoGrid";
@@ -13,7 +14,8 @@ import { api } from "@/lib/api";
 import type { HistoryItem } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
 import { resumeFraction } from "@/lib/resume-progress";
-import { useApiResource } from "@/lib/use-api-resource";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { SignInGate } from "@/components/SignInGate";
 
 // WatchHistoryView shows the signed-in user's watch history (most-recently
@@ -34,36 +36,34 @@ export function WatchHistoryView() {
 }
 
 function History() {
-  const {
-    status,
-    data,
-    retry,
-    setData: setItems,
-  } = useApiResource<HistoryItem[]>((signal) =>
-    api.getWatchHistory({}, signal).then((res) => res.videos),
-  );
-  const items = data ?? [];
+  const autoLoad = useBrowseAutoLoad();
+  // Paged from the server; history used to stop at the backend's default 20.
+  const list = useAppendingList<HistoryItem>({
+    queryKey: "history",
+    getId: (it) => it.id,
+    load: (window, signal) =>
+      api.getWatchHistory(window, signal).then((res) => ({ items: res.videos, total: res.total })),
+  });
+  const { status, items } = list;
   const [clearing, setClearing] = useState(false);
 
   async function remove(id: string) {
-    const prev = items;
-    setItems((list) => (list ?? []).filter((it) => it.id !== id)); // optimistic
+    list.drop((it) => it.id !== id); // optimistic
     try {
       await api.deleteHistoryEntry(id);
     } catch {
-      setItems(prev); // restore on failure
+      list.reload(); // re-read the truth rather than guess the page window back
     }
   }
 
   async function clearAll() {
     if (clearing) return;
     setClearing(true);
-    const prev = items;
-    setItems([]); // optimistic
+    list.patch(() => []); // optimistic
     try {
       await api.clearWatchHistory();
     } catch {
-      setItems(prev);
+      list.reload();
     } finally {
       setClearing(false);
     }
@@ -77,7 +77,7 @@ function History() {
     );
   }
   if (status === "error") {
-    return <ErrorState message="Could not load your history." onRetry={retry} />;
+    return <ErrorState message="Could not load your history." onRetry={list.reload} />;
   }
   if (items.length === 0) {
     return (
@@ -109,7 +109,7 @@ function History() {
               progressFraction={
                 resumeFraction(item.position_seconds, item.duration_seconds) ?? undefined
               }
-              onDeleted={() => setItems((list) => (list ?? []).filter((it) => it.id !== item.id))}
+              onDeleted={() => list.drop((it) => it.id !== item.id)}
             />
             <div className="flex items-center justify-between gap-2 text-[13px] text-fg-muted">
               <span className="tabular-nums">
@@ -130,6 +130,13 @@ function History() {
           </li>
         ))}
       </VideoGrid>
+      <ListTail
+        hasMore={list.hasMore}
+        autoLoad={autoLoad}
+        busy={list.moreStatus === "loading"}
+        error={list.moreStatus === "error" ? "Could not load more videos." : null}
+        onLoadMore={list.loadMore}
+      />
     </div>
   );
 }

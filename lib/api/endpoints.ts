@@ -10,6 +10,7 @@ import type {
   AdminCommentListResponse,
   AdminCreateUserRequest,
   AdminCreateUserResponse,
+  BulkRemoveCommentsResponse,
   AdminPasswordResetLink,
   AdminStats,
   AdminUser,
@@ -566,11 +567,20 @@ export const api = {
       { signal },
     ),
 
-  /** GET /api/v1/channels/{handle}/videos — a channel's videos (cards). */
-  listChannelVideos: (handle: string, token?: string, signal?: AbortSignal) =>
+  /**
+   * GET /api/v1/channels/{handle}/videos — a channel's videos (cards). Paginated
+   * (limit 1–100, default 20, plus offset) and sortable server-side: `sort` is
+   * `-published_at` (newest first, the default) or `published_at` (oldest first).
+   */
+  listChannelVideos: (
+    handle: string,
+    token?: string,
+    signal?: AbortSignal,
+    params: PageParams & { sort?: "-published_at" | "published_at" } = {},
+  ) =>
     apiRequest<VideoListResponse>(
       `/api/v1/channels/${encodeURIComponent(handle)}/videos`,
-      { token, signal },
+      { token, signal, query: { sort: params.sort, ...pageQuery(params) } },
     ),
 
   /**
@@ -2626,6 +2636,17 @@ export const api = {
     apiRequest<AdminCommentListResponse>("/api/v1/admin/comments", {
       query: { q: params.q, ...pageQuery(params) },
       signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/comments/bulk-remove — hard-delete every comment by one
+   * local username (or remote actor URL), instance-wide (moderator/admin).
+   * Resolves with how many were removed; an unknown username is a 404.
+   */
+  bulkRemoveAdminComments: (account: string) =>
+    apiRequest<BulkRemoveCommentsResponse>("/api/v1/admin/comments/bulk-remove", {
+      method: "POST",
+      body: { account },
     }),
 
   /** GET /api/v1/admin/watched-words — the watched-words list, newest first (moderator/admin). */

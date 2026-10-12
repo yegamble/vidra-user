@@ -1482,6 +1482,14 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/comments?q=spam&limit=100");
   });
 
+  it("bulkRemoveAdminComments POSTs the account to the bulk-remove endpoint", async () => {
+    await api.bulkRemoveAdminComments("spammer");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/comments/bulk-remove");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ account: "spammer" });
+  });
+
   it("getCaptions targets the video captions endpoint", async () => {
     await api.getCaptions("v1");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/v1/captions");
