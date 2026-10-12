@@ -2,7 +2,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import RouteError from "@/app/error";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Spinner } from "@/components/ui";
+import { fr } from "@/lib/i18n/fr";
 
 import { I18nProvider, useT } from "./I18nProvider";
 
@@ -39,5 +42,20 @@ describe("I18nProvider", () => {
       </I18nProvider>,
     );
     expect(screen.getByRole("status", { name: "Chargement" })).toBeTruthy();
+  });
+
+  // Review finding on #301: with vidra_locale=fr the Modal said "Fermer" while
+  // feature components on the English-only t() still said "Cancel". Every
+  // externalized string must follow the provider, or none of them should.
+  it("reaches the feature call sites too, not just the primitives", () => {
+    render(
+      <I18nProvider locale="fr" messages={fr}>
+        <ThemeToggle />
+        <RouteError error={new Error("boom")} reset={() => {}} />
+      </I18nProvider>,
+    );
+    expect(screen.getByText("Apparence")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Réessayer" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Une erreur est survenue" })).toBeTruthy();
   });
 });

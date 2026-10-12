@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { createTranslator, intlFor, t } from "./index";
+import { createTranslator, intlFor } from "./index";
 
-describe("t", () => {
+const t = createTranslator("en");
+
+describe("t (en)", () => {
   it("returns the catalog string for a known key", () => {
     expect(t("common.close")).toBe("Close");
     expect(t("report.submit")).toBe("Submit report");
