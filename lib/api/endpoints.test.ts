@@ -793,6 +793,31 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ title: "New title", privacy: "unlisted" });
   });
 
+  it("listMyVideos sends only the filters that are set, plus the page window", async () => {
+    await api.listMyVideos({ q: "holiday", privacy: "internal", channel_id: "c1", limit: 20, offset: 40 });
+    const url = new URL(calledUrl());
+    expect(url.pathname).toBe("/api/v1/me/videos");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      q: "holiday",
+      privacy: "internal",
+      channel_id: "c1",
+      limit: "20",
+      offset: "40",
+    });
+  });
+
+  it("bulkMyVideos POSTs the action to /me/videos/bulk", async () => {
+    await api.bulkMyVideos({ video_ids: ["a", "b"], action: "set_privacy", privacy: "private" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/videos/bulk");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      video_ids: ["a", "b"],
+      action: "set_privacy",
+      privacy: "private",
+    });
+  });
+
   it("deleteVideo DELETEs the video", async () => {
     await api.deleteVideo("v1");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

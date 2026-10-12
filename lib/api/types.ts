@@ -68,6 +68,11 @@ export type FeedSort = NonNullable<Schemas["VideoFeedResponse"]["sort"]>;
 export type FeedScope = NonNullable<Schemas["VideoFeedResponse"]["scope"]>;
 export type VideoFeedResponse = Schemas["VideoFeedResponse"];
 export type VideoListResponse = Schemas["VideoListResponse"];
+// Studio "My videos": the account-wide owner list filters and the bulk
+// delete / set-privacy request + per-id results (POST /me/videos/bulk).
+export type BulkVideosRequest = Schemas["BulkVideosRequest"];
+export type BulkVideosResponse = Schemas["BulkVideosResponse"];
+export type BulkVideoResult = Schemas["BulkVideoResult"];
 export type VideoSearchResponse = Schemas["VideoSearchResponse"];
 export type VideoDownloadFile = Schemas["VideoDownloadFile"];
 export type VideoDownloadResponse = Schemas["VideoDownloadResponse"];
@@ -418,6 +423,12 @@ export type ReportReporter = Schemas["ReportReporter"];
 export type Report = Schemas["Report"];
 export type ReportListResponse = Schemas["ReportListResponse"];
 export type ResolveReportRequest = Schemas["ResolveReportRequest"];
+/** One message in a report's reporter↔staff thread (core 0163). */
+export type ReportMessage = Schemas["ReportMessage"];
+export type ReportMessageListResponse = Schemas["ReportMessageListResponse"];
+/** One of the caller's own reports ("My reports") — never the moderator's note. */
+export type MyReport = Schemas["MyReport"];
+export type MyReportListResponse = Schemas["MyReportListResponse"];
 export type BlockVideoRequest = Schemas["BlockVideoRequest"];
 export type BlockedVideo = Schemas["BlockedVideo"];
 export type BlockedVideoListResponse = Schemas["BlockedVideoListResponse"];

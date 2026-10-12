@@ -8,6 +8,8 @@ import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  BulkVideosRequest,
+  BulkVideosResponse,
   AdminCreateUserRequest,
   AdminCreateUserResponse,
   BulkRemoveCommentsResponse,
@@ -157,7 +159,11 @@ import type {
   RegistrationRequestFilter,
   RegistrationRequestListResponse,
   RejectRegistrationRequest,
+  MyReport,
+  MyReportListResponse,
   ReportListResponse,
+  ReportMessage,
+  ReportMessageListResponse,
   ReportStatusFilter,
   ResolveReportRequest,
   UnreadCountResponse,
@@ -583,6 +589,43 @@ export const api = {
       `/api/v1/channels/${encodeURIComponent(handle)}/videos`,
       { token, signal, query: { sort: params.sort, ...pageQuery(params) } },
     ),
+
+  /**
+   * GET /api/v1/me/videos — every video on the channels the caller OWNS, with
+   * optional title search (`q`), `privacy`, `state` and `channel_id` filters and
+   * the usual sort / limit / offset. Another account's `channel_id` yields an
+   * empty page, never their videos. Powers the Studio "My videos" list.
+   */
+  listMyVideos: (
+    params: PageParams & {
+      q?: string;
+      privacy?: VideoPrivacy;
+      state?: VideoState;
+      channel_id?: string;
+      sort?: "-published_at" | "published_at";
+    } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<VideoListResponse>("/api/v1/me/videos", {
+      signal,
+      query: {
+        q: params.q,
+        privacy: params.privacy,
+        state: params.state,
+        channel_id: params.channel_id,
+        sort: params.sort,
+        ...pageQuery(params),
+      },
+    }),
+
+  /**
+   * POST /api/v1/me/videos/bulk — delete or change the privacy of up to 100 of
+   * the caller's own videos. One foreign/unknown id is a 404 for the whole
+   * request (nothing changes); otherwise the per-id `results` say which items
+   * failed and why.
+   */
+  bulkMyVideos: (body: BulkVideosRequest) =>
+    apiRequest<BulkVideosResponse>("/api/v1/me/videos/bulk", { method: "POST", body }),
 
   /**
    * GET /api/v1/users/{username}/videos — an account's public videos across ALL
@@ -2169,6 +2212,33 @@ export const api = {
    */
   deleteReport: (id: string) =>
     apiRequest<void>(`/api/v1/admin/reports/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /**
+   * GET /api/v1/reports/{id}/messages — a report's reporter↔staff thread, oldest
+   * first. Open to the report's reporter and to staff; anyone else gets the same
+   * 404 as an unknown report. `can_reply` is false for a report another instance
+   * filed (no local reporter to write to).
+   */
+  getReportMessages: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<ReportMessageListResponse>(`/api/v1/reports/${encodeURIComponent(id)}/messages`, {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** GET /api/v1/me/reports — the caller's own reports, most recently active first. */
+  getMyReports: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<MyReportListResponse>("/api/v1/me/reports", { query: pageQuery(params), signal }),
+
+  /** GET /api/v1/me/reports/{id} — one of the caller's own reports (anyone else's is 404). */
+  getMyReport: (id: string, signal?: AbortSignal) =>
+    apiRequest<MyReport>(`/api/v1/me/reports/${encodeURIComponent(id)}`, { signal }),
+
+  /** POST /api/v1/reports/{id}/messages — add to the thread (1–3000 chars; 409 when read-only). */
+  postReportMessage: (id: string, body: string) =>
+    apiRequest<ReportMessage>(`/api/v1/reports/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      body: { body },
+    }),
 
   /**
    * GET /api/v1/admin/users — accounts newest first (admin only). Optional `q`
