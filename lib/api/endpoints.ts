@@ -8,6 +8,8 @@ import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  AdminCreateUserRequest,
+  AdminCreateUserResponse,
   AdminPasswordResetLink,
   AdminStats,
   AdminUser,
@@ -2103,6 +2105,19 @@ export const api = {
       method: "DELETE",
       body,
     }),
+
+  /**
+   * POST /api/v1/admin/users — create an account on the user's behalf (admin).
+   * No account password: the holder sets one through a one-time link, which is
+   * either emailed (`link_emailed`) or returned ONCE in `reset_url` (no-store).
+   * `password` is the CALLER's own (step-up).
+   *
+   * 403 wrong password, 409 username/email taken (or no origin for the link),
+   * 422 validation, 429 rate limited, 502/503 account created but no link
+   * could be issued (mail failed / audit write failed).
+   */
+  createAdminUser: (body: AdminCreateUserRequest) =>
+    apiRequest<AdminCreateUserResponse>("/api/v1/admin/users", { method: "POST", body }),
 
   /**
    * POST /api/v1/admin/users/{id}/password-reset-link — mint a one-time reset
