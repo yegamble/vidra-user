@@ -34,6 +34,7 @@ export function NotificationTypeIcon({ type }: { type: string }) {
   switch (type) {
     case "comment":
     case "comment_reply":
+    case "comment_mention":
     case "message":
       return <MessageCircleIcon size={16} />;
     case "video_rejected":
@@ -66,6 +67,7 @@ const NOTIF_CHIP: Record<string, string> = {
   follow: "bg-tile-blue/12 text-tile-blue",
   comment: "bg-accent/12 text-accent",
   comment_reply: "bg-accent/12 text-accent",
+  comment_mention: "bg-accent/12 text-accent",
   message: "bg-tile-green/12 text-tile-green",
   video_rejected: "bg-tile-red/12 text-tile-red",
   video_blocked: "bg-tile-red/12 text-tile-red",
@@ -127,6 +129,17 @@ export function describeNotification(n: Notification): {
     return {
       lead: actor,
       rest: ` replied to your comment${where}`,
+      href: n.video_id ? `/videos/${n.video_id}` : "#",
+    };
+  }
+  if (n.type === "comment_mention") {
+    // A comment @-mentioned the recipient. The actor is absent when the comment
+    // came from another instance, hence the "Someone" fallback. Like the reply
+    // above, the link goes to the video: comment-level anchors do not exist yet.
+    const where = n.video_title ? ` on “${n.video_title}”` : "";
+    return {
+      lead: actor,
+      rest: ` mentioned you in a comment${where}`,
       href: n.video_id ? `/videos/${n.video_id}` : "#",
     };
   }
