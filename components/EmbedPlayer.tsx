@@ -14,6 +14,7 @@ import {
 import { decideEmbed, type EmbedContext } from "@/lib/embed-privacy";
 import { type EmbedParams, parseEmbedParams } from "@/lib/embed-params";
 import { startEmbedApi } from "@/lib/embed-player-api";
+import { isSignInRequired } from "@/lib/video-privacy";
 import { watchPath } from "@/lib/watch-path";
 
 // The embed-privacy gate outcome (CORE-17): whether this framing may show the
@@ -53,8 +54,9 @@ function EmbedNotice({ children }: { children: React.ReactNode }) {
 // direct top-level open is always allowed. Then it loads the video, running the
 // same password-unlock flow as the watch page in a compact panel when the detail
 // answers 401 password_required. Only public/unlisted (or unlocked) videos play;
-// a private/unknown video is "not available". No app chrome, comments, or
-// auth-only controls; the app Header hides itself on /embed routes.
+// a private/unknown video — and an internal one for an anonymous viewer — is
+// "not available". No app chrome, comments, or auth-only controls; the app
+// Header hides itself on /embed routes.
 export function EmbedPlayer({ id }: { id: string }) {
   const [gate, setGate] = useState<Gate>("checking");
   const [status, setStatus] = useState<Status>("loading");
@@ -100,6 +102,10 @@ export function EmbedPlayer({ id }: { id: string }) {
         if (controller.signal.aborted) return;
         if (err instanceof ApiError && err.status === 401 && err.code === "password_required") {
           setStatus("locked");
+        } else if (isSignInRequired(err)) {
+          // Internal (members-only) and the viewer is anonymous: an embed on
+          // somebody else's page treats it exactly like a private video.
+          setStatus("notfound");
         } else {
           setStatus(err instanceof ApiError && err.status === 404 ? "notfound" : "error");
         }

@@ -36,6 +36,7 @@ import { logger } from "@/lib/logger";
 import { isAcceptedVideoFile, videoAcceptAttr } from "@/lib/upload-accept";
 import { titleFromFilename } from "@/lib/upload-queue";
 import { watchPath } from "@/lib/watch-path";
+import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
 import {
   IMPORT_STAGES,
   importActiveStage,
@@ -1439,9 +1440,11 @@ export function UploadSection({
                         aria-describedby={fieldErrors.privacy ? "publish-privacy-error" : undefined}
                         className={SELECT_FIELD}
                       >
-                        <option value="public">Public</option>
-                        <option value="unlisted">Unlisted</option>
-                        <option value="private">Private</option>
+                        {VIDEO_PRIVACY_CHOICES.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {c.label}
+                          </option>
+                        ))}
                       </select>
                       <ChevronDownIcon
                         size={16}

@@ -220,3 +220,32 @@ describe("PlaylistDetailView items", () => {
     expect(link.getAttribute("href")).toBe("https://example.test/notes");
   });
 });
+
+describe("PlaylistDetailView play all", () => {
+  const videos = [
+    { id: "a1", title: "First" },
+    { id: "b2", title: "Second" },
+  ];
+  beforeEach(() => {
+    mocks.getPlaylist.mockResolvedValue({ ...playlist, video_count: 2, total: 2, videos });
+  });
+
+  it("opens the first video in playlist mode", async () => {
+    render(<PlaylistDetailView id="p1" />);
+    const link = await screen.findByRole("link", { name: /Play all/ });
+    expect(link.getAttribute("href")).toBe("/videos/a1?playlist=p1&index=1");
+  });
+
+  it("each item can start playback from its own position", async () => {
+    render(<PlaylistDetailView id="p1" />);
+    const link = await screen.findByRole("link", { name: "Play Second in the playlist" });
+    expect(link.getAttribute("href")).toBe("/videos/b2?playlist=p1&index=2");
+  });
+
+  it("offers no Play all for an empty playlist", async () => {
+    mocks.getPlaylist.mockResolvedValue({ ...playlist, total: 0 });
+    render(<PlaylistDetailView id="p1" />);
+    await screen.findByText("This playlist is empty");
+    expect(screen.queryByRole("link", { name: /Play all/ })).toBeNull();
+  });
+});
