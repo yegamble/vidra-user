@@ -8,6 +8,8 @@ import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  BulkVideosRequest,
+  BulkVideosResponse,
   AdminCreateUserRequest,
   AdminCreateUserResponse,
   BulkRemoveCommentsResponse,
@@ -597,6 +599,43 @@ export const api = {
       `/api/v1/channels/${encodeURIComponent(handle)}/videos`,
       { token, signal, query: { sort: params.sort, ...pageQuery(params) } },
     ),
+
+  /**
+   * GET /api/v1/me/videos — every video on the channels the caller OWNS, with
+   * optional title search (`q`), `privacy`, `state` and `channel_id` filters and
+   * the usual sort / limit / offset. Another account's `channel_id` yields an
+   * empty page, never their videos. Powers the Studio "My videos" list.
+   */
+  listMyVideos: (
+    params: PageParams & {
+      q?: string;
+      privacy?: VideoPrivacy;
+      state?: VideoState;
+      channel_id?: string;
+      sort?: "-published_at" | "published_at";
+    } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<VideoListResponse>("/api/v1/me/videos", {
+      signal,
+      query: {
+        q: params.q,
+        privacy: params.privacy,
+        state: params.state,
+        channel_id: params.channel_id,
+        sort: params.sort,
+        ...pageQuery(params),
+      },
+    }),
+
+  /**
+   * POST /api/v1/me/videos/bulk — delete or change the privacy of up to 100 of
+   * the caller's own videos. One foreign/unknown id is a 404 for the whole
+   * request (nothing changes); otherwise the per-id `results` say which items
+   * failed and why.
+   */
+  bulkMyVideos: (body: BulkVideosRequest) =>
+    apiRequest<BulkVideosResponse>("/api/v1/me/videos/bulk", { method: "POST", body }),
 
   /**
    * GET /api/v1/videos/{id}/stats — creator statistics for a video (auth, owner
