@@ -110,6 +110,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["video_card_previews_enabled", "vod", "playback"],
   ["video_card_previews_default_enabled", "vod", "playback"],
   ["transcription_enabled", "vod", "transcription"],
+  ["auto_transcribe_new_uploads", "vod", "transcription"],
   ["user_import_enabled", "advanced", "user_data"],
   ["user_export_enabled", "advanced", "user_data"],
   ["user_export_expiration_hours", "advanced", "user_data"],
