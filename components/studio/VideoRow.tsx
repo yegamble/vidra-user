@@ -24,7 +24,7 @@ import {
   resumableUpload,
   videoThumbnailUrl,
 } from "@/lib/api";
-import type { Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
+import type { Channel, Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { watchPath } from "@/lib/watch-path";
 
@@ -46,6 +46,7 @@ import {
 export function VideoRow({
   video,
   config,
+  channels,
   onUpdated,
   onDeleted,
   initiallyEditing = false,
@@ -55,6 +56,9 @@ export function VideoRow({
 }: {
   video: Video;
   config: VideoConfigResponse | null;
+  /** Channels the caller can manage (owner + editor). With more than one, the
+   * edit form offers "Channel" so the video can move; omitted → no move UI. */
+  channels?: Channel[];
   onUpdated: (v: Video) => void;
   onDeleted: () => void;
   initiallyEditing?: boolean;
@@ -95,6 +99,9 @@ export function VideoRow({
   // The schedule as a datetime-local value; the owner list rows carry
   // publish_at once set (per the contract), the detail fetch refreshes it.
   const [publishAt, setPublishAt] = useState(toLocalInputValue(video.publish_at));
+  // The channel the video lives on, edited via the Channel select (T20).
+  const [channelId, setChannelId] = useState(video.channel_id ?? "");
+  const canMove = (channels?.length ?? 0) > 1 && !!video.channel_id;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The full detail fetched when Edit opens — the only view carrying hls_url/
@@ -151,6 +158,8 @@ export function VideoRow({
             }
           : {}),
         ...(scheduleChanged ? { publish_at: scheduleIso } : {}),
+        // Only a CHANGED choice is a move; a plain edit never names the channel.
+        ...(canMove && channelId !== video.channel_id ? { channel_id: channelId } : {}),
       });
       onUpdated(updated);
       setMode("view");
@@ -175,6 +184,7 @@ export function VideoRow({
     setCommentsPolicy((detail ?? video).comments_policy === "disabled" ? "disabled" : "enabled");
     setDownloadEnabled((detail ?? video).download_enabled !== false);
     setPublishAt(toLocalInputValue((detail ?? video).publish_at));
+    setChannelId(video.channel_id ?? "");
     setError(null);
   }
 
@@ -272,6 +282,20 @@ export function VideoRow({
             Password-protected
           </option>
         </Select>
+        {canMove ? (
+          <Select
+            label="Channel"
+            value={channelId}
+            onChange={(e) => setChannelId(e.target.value)}
+            aria-label="Edit channel"
+          >
+            {channels?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.display_name || c.handle} (@{c.handle})
+              </option>
+            ))}
+          </Select>
+        ) : null}
         {/* Password management (CORE-17) appears when privacy is password; it
             reports its count up so the Save guard can block an empty set. */}
         {!basicOnly && privacy === "password" ? (

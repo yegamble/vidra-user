@@ -1781,7 +1781,7 @@ export interface paths {
         head?: never;
         /**
          * Update a video
-         * @description Partial update of a video's metadata (title, description, privacy and the other fields in UpdateVideoRequest). The owner may update their own video; moderators and admins may manage any local video. An ordinary non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The handle is immutable.
+         * @description Partial update of a video's metadata (title, description, privacy and the other fields in UpdateVideoRequest). The owner may update their own video; moderators and admins may manage any local video. An ordinary non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The handle is immutable. Setting channel_id moves the video to another channel the caller manages; a missing or unmanaged target channel is reported as 404 (the two are indistinguishable).
          */
         patch: operations["updateVideo"];
         trace?: never;
@@ -7056,6 +7056,11 @@ export interface components {
             download_enabled?: boolean;
             /** @description Set the publish-after-transcode opt-in (omit to leave unchanged). Setting it true on an already-published video that has never been publicly visible and still has a live transcode job holds the video (state "transcoding") until that transcode completes; a publicly-visible video is never pulled back to hidden. */
             publish_after_transcode?: boolean;
+            /**
+             * Format: uuid
+             * @description Move the video to this channel (omit to leave it where it is). The caller must manage BOTH the video's current channel and this one (owner or editor member); moderators/admins get no extra reach over the target. The channel the video is already on is a no-op. Allowed in any video state, including mid-transcode. Search is reindexed and federation sends an Update for the video, which now names the target channel as its attributedTo actor.
+             */
+            channel_id?: string;
         };
         /** @description A WebVTT caption track's metadata (the file is fetched separately). */
         Caption: {
@@ -7828,8 +7833,16 @@ export interface components {
         RejectQuarantinedVideoRequest: {
             reason?: string;
         };
+        /** @description Who filed the report. A report another instance sent as an ActivityPub Flag (PeerTube, Mastodon, ...) has remote=true, actor_url and domain, and username carries that domain. */
         ReportReporter: {
             username: string;
+            remote?: boolean;
+            /**
+             * Format: uri
+             * @description The remote reporter's ActivityPub actor (remote reports only).
+             */
+            actor_url?: string;
+            domain?: string;
         };
         Report: {
             /** Format: uuid */
@@ -15213,7 +15226,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No such video, or the caller is neither its owner nor a moderator/admin. */
+            /** @description No such video, or the caller is neither its owner nor a moderator/admin; or channel_id names a channel that does not exist or that the caller does not manage. */
             404: {
                 headers: {
                     [name: string]: unknown;

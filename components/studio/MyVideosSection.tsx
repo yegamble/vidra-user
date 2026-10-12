@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
-import type { Video, VideoConfigResponse } from "@/lib/api";
+import type { Channel, Video, VideoConfigResponse } from "@/lib/api";
 import { videoAcceptAttr } from "@/lib/upload-accept";
 
 import { type Status } from "./shared";
@@ -21,9 +21,12 @@ import { VideoRow } from "./VideoRow";
 export function MyVideosSection({
   handle,
   config,
+  channels,
 }: {
   handle: string;
   config: VideoConfigResponse | null;
+  /** The caller's manageable channels; enables moving a video between them. */
+  channels?: Channel[];
 }) {
   const [status, setStatus] = useState<Status>("loading");
   const [videos, setVideos] = useState<Video[]>([]);
@@ -95,9 +98,17 @@ export function MyVideosSection({
               key={v.id}
               video={v}
               config={config}
+              channels={channels}
               replaceEnabled={replaceEnabled}
               replaceAccept={videoAcceptAttr(additionalExts)}
-              onUpdated={(u) => setVideos((list) => list.map((x) => (x.id === u.id ? u : x)))}
+              onUpdated={(u) =>
+                setVideos((list) =>
+                  // A moved video leaves this channel's list (T20).
+                  list.flatMap((x) =>
+                    x.id !== u.id ? [x] : u.channel_id && u.channel_id !== x.channel_id ? [] : [u],
+                  ),
+                )
+              }
               onDeleted={() => setVideos((list) => list.filter((x) => x.id !== v.id))}
             />
           ))}

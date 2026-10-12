@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const updateVideo = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/api", () => ({
-  api: {},
+  api: { updateVideo },
   errorMessage: (_error: unknown, fallback: string) => fallback,
   isSensitiveVideo: () => false,
   isUploadCancelled: () => false,
@@ -12,7 +14,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { VideoRow } from "@/components/studio/VideoRow";
-import type { Video } from "@/lib/api";
+import type { Channel, Video } from "@/lib/api";
 
 afterEach(cleanup);
 
@@ -76,5 +78,60 @@ describe("VideoRow — moderation state", () => {
     renderRow(row({ blocked: true }));
     expect(screen.queryByText(/reason/i)).toBeNull();
     expect(screen.getByText(/not available to viewers/i)).toBeTruthy();
+  });
+});
+
+// T20: a creator can move a video to another channel they manage. The select is
+// only worth showing when there IS another channel to move to, and the request
+// carries channel_id only when the choice actually changed (a plain title edit
+// must not look like a move to the server).
+describe("VideoRow — move to another channel", () => {
+  const channel = (id: string, handle: string): Channel =>
+    ({ id, handle, display_name: `Name ${handle}` }) as Channel;
+  const A = channel("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "alpha");
+  const B = channel("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "beta");
+
+  function renderEditing(channels: Channel[] | undefined, onUpdated = vi.fn()) {
+    render(
+      <VideoRow
+        video={row({ channel_id: A.id })}
+        config={null}
+        channels={channels}
+        initiallyEditing
+        basicOnly
+        onUpdated={onUpdated}
+        onDeleted={() => {}}
+      />,
+    );
+    return onUpdated;
+  }
+
+  it("hides the Channel select when the caller manages one channel or none are passed", () => {
+    renderEditing([A]);
+    expect(screen.queryByLabelText("Edit channel")).toBeNull();
+    cleanup();
+    renderEditing(undefined);
+    expect(screen.queryByLabelText("Edit channel")).toBeNull();
+  });
+
+  it("omits channel_id from an edit that did not change the channel", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ channel_id: A.id }));
+    renderEditing([A, B]);
+    expect((screen.getByLabelText("Edit channel") as HTMLSelectElement).value).toBe(A.id);
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).not.toHaveProperty("channel_id");
+  });
+
+  it("sends the chosen channel_id and reports the moved video", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ channel_id: B.id }));
+    const onUpdated = renderEditing([A, B]);
+    fireEvent.change(screen.getByLabelText("Edit channel"), { target: { value: B.id } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ channel_id: B.id });
+    await waitFor(() => expect(onUpdated).toHaveBeenCalled());
   });
 });
