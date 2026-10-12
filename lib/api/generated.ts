@@ -1229,6 +1229,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{username}/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an account's public videos
+         * @description The profile Videos tab: an account's public, published videos across ALL of its channels, newest first, paginated with a `total`. Gated like GET /users/{username}/profile (a private, inactive or unknown profile is 404; a signed-in owner may preview their own). Carries the same visibility filters as GET /channels/{handle}/videos for a non-manager: no private, unlisted, draft, quarantined or moderator-blocked video, the signed-in viewer's mute/block clause, and the viewer's sensitive-content setting.
+         */
+        get: operations["listUserVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/donation-addresses": {
         parameters: {
             query?: never;
@@ -1531,6 +1551,46 @@ export interface paths {
         get: operations["listSubscriptionVideos"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own videos (studio "My videos")
+         * @description Every video on every channel the caller OWNS, in any state or privacy (drafts and private videos included), newest first by default, with discovery-card data. Optional filters combine with AND: q (case- insensitive title substring; LIKE wildcards are literal), privacy, state, and channel_id (one of the caller's channels; another account's channel id simply matches nothing, so the result is empty with total 0, never that account's videos). Unknown privacy/state values and a malformed channel_id are 422. Paginated via limit (1-100, default 20) and offset, and reports the filtered total.
+         */
+        get: operations["listMyVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk delete or change the privacy of the caller's own videos
+         * @description Applies one action to up to 100 of the caller's own videos. Every id must be a video the caller owns: if any id is foreign OR does not exist the whole request answers 404 "video not found" (identically, so it is no existence oracle) and NOTHING is changed. Each item then runs the same pipeline as the single-video route (DELETE /videos/{id} or PATCH /videos/{id} with `privacy`), so federation, the search outbox, storage cleanup, edge purge and audit all fire per item. Items are independent: one that fails (for example `set_privacy` to `password` on a video with no stored password -> 400, exactly as the single route) is reported in `results` and does not stop the others. `privacy` is validated like the single PATCH, including `internal`. Only the caller's own videos are reachable: staff and channel collaborators get no extra reach here.
+         */
+        post: operations["bulkMyVideos"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2924,6 +2984,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/give-ownership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Offer a video to another local user
+         * @description Starts an ownership change (PeerTube's "give ownership"): the named local account is asked to take over the video and answers from GET /me/video-ownership-changes. Only the video's owner may give it — not a channel editor, not staff. The recipient is notified (video_ownership_request) unless they muted the caller; the request stands either way. Nothing moves until the recipient accepts. Rate limited like every other API write.
+         */
+        post: operations["giveVideoOwnership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/video-ownership-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the ownership changes offered to you
+         * @description The video ownership changes addressed to the caller, newest first, whatever their status: pending ones are answered with the accept and refuse routes, answered ones stay as history. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listVideoOwnershipChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/video-ownership-changes/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a video offered to you
+         * @description Accepts a pending ownership change addressed to the caller by moving the video into one of the caller's channels. The video's stored bytes must fit the caller's storage quota (and daily upload quota), exactly as an upload would. The move happens in the same statement that marks the request accepted, and only while the giver still owns the video. It has the side effects of any channel move: search reindex, a federation Update to the new channel's followers and a Delete to followers of only the old one, and a content.video.move audit event.
+         */
+        post: operations["acceptVideoOwnershipChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/video-ownership-changes/{id}/refuse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refuse a video offered to you
+         * @description Refuses a pending ownership change addressed to the caller. The video stays where it is, and its owner may offer it again.
+         */
+        post: operations["refuseVideoOwnershipChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/watch-progress": {
         parameters: {
             query?: never;
@@ -3037,7 +3177,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone. Alongside it, `email` maps each type that can ALSO be delivered by email (comment, comment_reply, new_video) to whether it is; email is opt-in, so a type never configured is false.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_ownership_request, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone. Alongside it, `email` maps each type that can ALSO be delivered by email (comment, comment_reply, new_video) to whether it is; email is opt-in, so a type never configured is false.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -7157,6 +7297,29 @@ export interface components {
             /** @description Every channel handle this account publishes under, sorted. Present so a client can recognise a channel that belongs to a muted account without a lookup per handle: autocomplete suggestions (GET /search/suggestions) are viewer-agnostic by design and carry only channel_handle, so the client drops the ones naming a muted or blocked account itself. An account with no channel yields an empty array, never null. */
             channel_handles: string[];
         };
+        VideoOwnershipChange: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "pending" | "accepted" | "refused";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            video: {
+                /** Format: uuid */
+                id: string;
+                title: string;
+            };
+            /** @description The account that offered the video (its owner when it did). */
+            initiator: {
+                username: string;
+                display_name: string;
+            };
+        };
+        VideoOwnershipChangeListResponse: components["schemas"]["PageMeta"] & {
+            changes: components["schemas"]["VideoOwnershipChange"][];
+        };
         MutedAccountListResponse: components["schemas"]["PageMeta"] & {
             accounts: components["schemas"]["MutedAccount"][];
         };
@@ -7470,6 +7633,30 @@ export interface components {
              */
             my_rating: "like" | "dislike" | null;
         };
+        BulkVideosRequest: {
+            video_ids: string[];
+            /** @enum {string} */
+            action: "delete" | "set_privacy";
+            /**
+             * @description Required when action is set_privacy; ignored otherwise.
+             * @enum {string}
+             */
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+        };
+        BulkVideoResult: {
+            /** Format: uuid */
+            video_id: string;
+            ok: boolean;
+            /** @description The HTTP status the single-video route would have answered. */
+            status: number;
+            /** @description Client-safe reason; present only when ok is false. */
+            error?: string;
+        };
+        BulkVideosResponse: {
+            results: components["schemas"]["BulkVideoResult"][];
+            succeeded: number;
+            failed: number;
+        };
         VideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
         };
@@ -7596,10 +7783,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one). video_ownership_request = another local user offered you one of their videos (actor = the giver, video_id/video_title = the video); answer it from GET /me/video-ownership-changes.
              * @enum {string}
              */
-            type: "follow" | "comment" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
+            type: "follow" | "comment" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready" | "video_ownership_request";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -7672,6 +7859,7 @@ export interface components {
              *       "report_resolved": true,
              *       "upload_quarantined": true,
              *       "video_blocked": true,
+             *       "video_ownership_request": true,
              *       "video_rejected": true,
              *       "video_unblocked": true
              *     }
@@ -7694,7 +7882,7 @@ export interface components {
         /** @description At least one type must be named in prefs or email (an update naming none is 422). */
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_ownership_request, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }
@@ -13840,6 +14028,44 @@ export interface operations {
             };
         };
     };
+    listUserVideos: {
+        parameters: {
+            query?: {
+                /** @description `-published_at` (newest first, the default) or `published_at` (oldest first). */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's public videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description The profile is private, inactive, or unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listUserDonationAddresses: {
         parameters: {
             query?: never;
@@ -14736,6 +14962,107 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyVideos: {
+        parameters: {
+            query?: {
+                /** @description Title search (at most 200 characters). */
+                q?: string;
+                privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+                state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
+                channel_id?: string;
+                /** @description `-published_at` (newest first, default) or `published_at` (oldest first); same convention as the per-channel list. */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown privacy/state, malformed channel_id, or an over-long q. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bulkMyVideos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkVideosRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-id results (the request itself was accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkVideosResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description At least one id is not a video the caller owns; nothing was changed. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Zero ids, more than 100, a malformed or duplicate id, an unknown action, or an invalid privacy. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -18941,6 +19268,261 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    giveVideoOwnership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The recipient's username (case-insensitive). */
+                    username: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The request is pending the recipient's answer. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The recipient already owns the video. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The video does not exist or the caller does not own it ("video not found"), or no eligible recipient has that username ("user not found" — one answer for an unknown, banned or deleted account and for a block in either direction). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A request for this video is already pending, or the video is still uploading or processing (state draft or processing). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (username is required). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Ownership changes are not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listVideoOwnershipChanges: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of ownership changes (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoOwnershipChangeListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Ownership changes are not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    acceptVideoOwnershipChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description One of the caller's own channels.
+                     */
+                    channel_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted; the video now belongs to the caller. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such request addressed to the caller ("ownership change not found"), or the channel does not exist or is not the caller's ("channel not found"). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request was already accepted or refused, the giver no longer owns the video, or the video is still uploading or processing. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (channel_id must be a channel id), or the video does not fit the caller's quota (code quota_exceeded or daily_quota_exceeded). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Ownership changes are not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    refuseVideoOwnershipChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Refused. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such request addressed to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request was already accepted or refused. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Ownership changes are not configured on this server. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

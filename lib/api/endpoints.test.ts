@@ -1220,6 +1220,28 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/mutes/accounts?limit=100");
   });
 
+  it("getVideoOwnershipChanges pages the caller's incoming ownership requests", async () => {
+    await api.getVideoOwnershipChanges({ limit: 20, offset: 20 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/me/video-ownership-changes?limit=20&offset=20",
+    );
+  });
+
+  it("acceptVideoOwnershipChange POSTs the chosen channel", async () => {
+    await api.acceptVideoOwnershipChange("oc1", "c2");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/video-ownership-changes/oc1/accept");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ channel_id: "c2" });
+  });
+
+  it("refuseVideoOwnershipChange POSTs to the refuse route", async () => {
+    await api.refuseVideoOwnershipChange("oc1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/video-ownership-changes/oc1/refuse");
+    expect(init.method).toBe("POST");
+  });
+
   it("startConversation POSTs the recipient id to the conversations endpoint", async () => {
     await api.startConversation("u2");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
