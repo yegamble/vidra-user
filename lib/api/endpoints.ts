@@ -666,8 +666,11 @@ export const api = {
     ),
 
   /** GET /api/v1/me/channels — the caller's own channels (auth). */
-  getMyChannels: (signal?: AbortSignal) =>
-    apiRequest<ChannelListResponse>("/api/v1/me/channels", { signal }),
+  getMyChannels: (signal?: AbortSignal, params?: PageParams) =>
+    apiRequest<ChannelListResponse>("/api/v1/me/channels", {
+      signal,
+      ...(params ? { query: pageQuery(params) } : {}),
+    }),
 
   /**
    * GET /api/v1/me/quota — the caller's storage usage + effective quota (auth):

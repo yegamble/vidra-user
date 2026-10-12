@@ -125,3 +125,37 @@ describe("OwnershipRequestsView", () => {
     expect(await screen.findByText("Gift Clip")).toBeTruthy();
   });
 });
+
+describe("OwnershipRequestsView — channels arriving late", () => {
+  // The requests can load before the studio's channel list. The picker must
+  // follow the channels once they arrive (a one-channel user could otherwise
+  // never enable Accept), and "Create a channel" must not flash while they load.
+  it("does not offer channel creation while channels load, then accepts into the first one", async () => {
+    mocks.getVideoOwnershipChanges.mockResolvedValue(page([change()]));
+    mocks.acceptVideoOwnershipChange.mockResolvedValue(undefined);
+    const { rerender } = render(<OwnershipRequestsView channels={[]} channelsStatus="loading" />);
+
+    await screen.findByText("Gift Clip");
+    expect(screen.queryByRole("link", { name: /Create a channel/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Refuse" })).toBeTruthy();
+
+    rerender(<OwnershipRequestsView channels={[channel("c1", "only")]} channelsStatus="ready" />);
+    const accept = screen.getByRole("button", { name: "Accept" });
+    expect(accept.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(accept);
+    await waitFor(() => expect(mocks.acceptVideoOwnershipChange).toHaveBeenCalledWith("oc1", "c1"));
+  });
+
+  it("labels withdrawn and expired requests and offers no actions on them", async () => {
+    mocks.getVideoOwnershipChanges.mockResolvedValue(
+      page([change({ id: "a", status: "cancelled" }), change({ id: "b", status: "expired" })]),
+    );
+    render(<OwnershipRequestsView channels={mine} />);
+
+    expect(await screen.findByText("Withdrawn")).toBeTruthy();
+    expect(screen.getByText("Expired")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refuse" })).toBeNull();
+  });
+});

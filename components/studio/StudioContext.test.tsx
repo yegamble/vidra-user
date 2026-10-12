@@ -10,6 +10,7 @@ vi.mock("@/lib/api", () => ({
 
 import { api } from "@/lib/api";
 import type { Channel } from "@/lib/api";
+import type { PageParams } from "@/lib/api/pagination";
 
 import { StudioProvider, useStudio } from "./StudioContext";
 
@@ -75,6 +76,29 @@ afterEach(() => {
 });
 
 describe("StudioProvider", () => {
+  // The channel list is paged by the server; a caller with more channels than
+  // its first page must still see (and be able to pick) every one of them —
+  // the ownership requests page offers only channels from this list.
+  it("loads every page of the caller's channels", async () => {
+    const first = Array.from({ length: 20 }, (_, i) => channel(`c${i}`));
+    getMyChannels.mockImplementation((_signal?: AbortSignal, page?: PageParams) =>
+      Promise.resolve(
+        page?.offset
+          ? { total: 22, limit: page.limit ?? 100, offset: page.offset, channels: [channel("c20"), channel("c21")] }
+          : { total: 22, limit: 20, offset: 0, channels: first },
+      ),
+    );
+
+    renderStudio();
+
+    await ready();
+    expect(screen.getByTestId("count").textContent).toBe("22");
+    // The first request is the unparameterised one it always was; only the
+    // remainder is asked for by window.
+    expect(getMyChannels.mock.calls[0][1]).toBeUndefined();
+    expect(getMyChannels.mock.calls[1][1]).toEqual({ limit: 100, offset: 20 });
+  });
+
   it("restores the persisted current channel when it still exists", async () => {
     window.localStorage.setItem(STORAGE_KEY, "second");
     getMyChannels.mockResolvedValue({ total: 2, limit: 20, offset: 0, channels: [channel("first"), channel("second")] });
