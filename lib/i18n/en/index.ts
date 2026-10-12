@@ -4,6 +4,7 @@ import { a11y } from "./a11y";
 import { auth } from "./auth";
 import { common } from "./common";
 import { home } from "./home";
+import { header } from "./header";
 import { report } from "./report";
 import { search } from "./search";
 import { state } from "./state";
@@ -21,13 +22,14 @@ import { theme } from "./theme";
  * Values are plain text. `{name}` placeholders become `t()`'s typed vars; a
  * plural is an object of CLDR forms (`one`, `other`, …) picked by `count`.
  */
-export const EN_NAMESPACES = { a11y, auth, common, home, report, search, state, theme };
+export const EN_NAMESPACES = { a11y, auth, common, header, home, report, search, state, theme };
 
 export const en = {
   ...a11y,
   ...auth,
   ...common,
   ...home,
+  ...header,
   ...report,
   ...search,
   ...state,
