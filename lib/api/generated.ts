@@ -1585,6 +1585,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{handle}/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a channel's playlists
+         * @description The channel page's Playlists tab, newest first, paginated with a `total`. Anyone sees the channel's public playlists; a playlist's owner (bearer token) also sees their own unlisted and private ones. Other users and anonymous callers never see those.
+         */
+        get: operations["listChannelPlaylists"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/videos": {
         parameters: {
             query?: never;
@@ -8016,6 +8036,11 @@ export interface components {
              * @description The owning user. Compare it with the signed-in user to decide owner controls; GET /me/playlists is paged and cannot answer that.
              */
             owner_id: string;
+            /**
+             * Format: uuid
+             * @description The owner's channel this playlist is shown under (its Playlists tab, GET /channels/{handle}/playlists). Omitted when the playlist is not attributed to a channel, or after that channel was deleted.
+             */
+            channel_id?: string;
             /** @example Watch later picks */
             title: string;
             description: string;
@@ -8048,6 +8073,11 @@ export interface components {
              * @enum {string}
              */
             visibility?: "public" | "unlisted" | "private";
+            /**
+             * Format: uuid
+             * @description Optional channel to show the playlist under. It must be a channel the caller owns; otherwise the request fails with 404.
+             */
+            channel_id?: string;
         };
         /** @description Partial update; provide at least one field. */
         UpdatePlaylistRequest: {
@@ -8055,6 +8085,11 @@ export interface components {
             description?: string;
             /** @enum {string} */
             visibility?: "public" | "unlisted" | "private";
+            /**
+             * Format: uuid
+             * @description Attach the playlist to a channel the caller owns (404 otherwise), or null to detach it. Omit to leave it unchanged.
+             */
+            channel_id?: string | null;
         };
         AddPlaylistItemRequest: {
             /** Format: uuid */
@@ -15155,6 +15190,42 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listChannelPlaylists: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel's playlists visible to the caller. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistListResponse"];
+                };
+            };
+            /** @description No channel with that handle. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
