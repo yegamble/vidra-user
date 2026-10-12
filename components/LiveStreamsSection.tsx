@@ -13,7 +13,10 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
 import type { CreateLiveStreamRequest, LiveStream } from "@/lib/api";
+import { LiveScheduleDialog } from "@/components/LiveScheduleDialog";
+import { scheduleToIso } from "@/components/studio/shared";
 import { cn } from "@/lib/cn";
+import { formatDateTime } from "@/lib/format";
 import { useLiveAvailable } from "@/lib/live/availability";
 import { terminationHeadline } from "@/lib/live/termination";
 
@@ -53,6 +56,10 @@ export function LiveStreamsSection({
   const [privacy, setPrivacy] = useState<LivePrivacy>("public");
   const [permanent, setPermanent] = useState(false);
   const [replayEnabled, setReplayEnabled] = useState(false);
+  // datetime-local value ("" = unscheduled) and the stream whose schedule is
+  // being edited. A planned start is an announcement only (see LiveScheduleDialog).
+  const [scheduledStart, setScheduledStart] = useState("");
+  const [scheduling, setScheduling] = useState<LiveStream | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<RevealedKey | null>(null);
@@ -123,12 +130,14 @@ export function LiveStreamsSection({
         privacy,
         permanent,
         replay_enabled: replayEnabled,
+        ...(scheduleToIso(scheduledStart) ? { scheduled_start_at: scheduleToIso(scheduledStart) } : {}),
       });
       setStreams((prev) => [res.live_stream, ...prev]);
       setRevealed({ id: res.live_stream.id, key: res.stream_key, rtmp: res.rtmp_url });
       setTitle("");
       setPermanent(false);
       setReplayEnabled(false);
+      setScheduledStart("");
       setOpen(false);
     } catch (err) {
       setError(errorMessage(err, "Could not create the live stream."));
@@ -198,6 +207,9 @@ export function LiveStreamsSection({
         privacy: stream.privacy,
         permanent: stream.permanent,
         replay_enabled: next,
+        // The update is a full replace: omitting the planned start here would
+        // silently clear it every time a creator flips the replay switch.
+        scheduled_start_at: stream.scheduled_start_at ?? null,
       });
       setStreams((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
     } catch {
@@ -266,6 +278,11 @@ export function LiveStreamsSection({
                   {s.permanent ? (
                     <span className="text-fg-muted">· permanent</span>
                   ) : null}
+                  {s.state === "offline" && s.scheduled_start_at ? (
+                    <span className="text-fg-muted">
+                      · starts {formatDateTime(s.scheduled_start_at)}
+                    </span>
+                  ) : null}
                 </div>
                 <label className="mt-1.5 flex items-center gap-1.5 text-xs text-fg-muted">
                   <input
@@ -303,6 +320,16 @@ export function LiveStreamsSection({
                     className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger-surface focus-ring disabled:opacity-60"
                   >
                     {ending === s.id ? "Ending…" : "End stream"}
+                  </button>
+                ) : null}
+                {s.state === "offline" ? (
+                  <button
+                    type="button"
+                    onClick={() => setScheduling(s)}
+                    aria-label={`${s.scheduled_start_at ? "Reschedule" : "Schedule"} ${s.title}`}
+                    className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg focus-ring"
+                  >
+                    {s.scheduled_start_at ? "Reschedule" : "Schedule"}
                   </button>
                 ) : null}
                 <button
@@ -352,6 +379,14 @@ export function LiveStreamsSection({
               <option value="unlisted">Unlisted</option>
               <option value="private">Private</option>
             </Select>
+            <Input
+              type="datetime-local"
+              label="Scheduled start (optional)"
+              aria-label="Scheduled start"
+              value={scheduledStart}
+              onChange={(e) => setScheduledStart(e.target.value)}
+              hint="Announce when you plan to go live. Viewers see it as Upcoming; the stream still starts only when your encoder connects."
+            />
             {/* The design's Go-live create form: Permanent + Save-replay as toggle
                 switches in an iOS-style divider list (no card border of their own). */}
             <div className="flex flex-col">
@@ -400,6 +435,15 @@ export function LiveStreamsSection({
             {error ? <p className="text-sm text-danger">{error}</p> : null}
           </form>
         </Modal>
+      ) : null}
+      {scheduling ? (
+        <LiveScheduleDialog
+          stream={scheduling}
+          onClose={() => setScheduling(null)}
+          onSaved={(updated) =>
+            setStreams((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+          }
+        />
       ) : null}
     </section>
   );

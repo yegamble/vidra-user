@@ -19,6 +19,7 @@ vi.mock("@/lib/use-viewer-moderation", () => ({
 vi.mock("@/components/AccountModerationMenu", () => ({ AccountModerationMenu: () => null }));
 vi.mock("@/components/FollowButton", () => ({ FollowButton: () => null }));
 vi.mock("@/components/ChannelLiveBadge", () => ({ ChannelLiveBadge: () => null }));
+vi.mock("@/components/ChannelUpcomingBadge", () => ({ ChannelUpcomingBadge: () => null }));
 vi.mock("@/components/MessageButton", () => ({ MessageButton: () => null }));
 // A spy, so the wiring of the channel's support text into the button is observable.
 const supportButton = vi.hoisted(() => vi.fn());

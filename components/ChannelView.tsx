@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { AccountModerationMenu } from "@/components/AccountModerationMenu";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
+import { ChannelUpcomingBadge } from "@/components/ChannelUpcomingBadge";
 import { ChannelVideoCard } from "@/components/ChannelVideoCard";
 import { FollowButton } from "@/components/FollowButton";
 import { RemoteInteractionButton } from "@/components/RemoteInteractionButton";
@@ -153,6 +154,7 @@ function ChannelForViewer({ handle }: { handle: string }) {
             </div>
             <div className="order-last flex w-full flex-wrap items-center gap-2 pb-1 sm:order-none sm:w-auto sm:shrink-0">
               <ChannelLiveBadge handle={channel.handle} ownerId={channel.owner_id} />
+              <ChannelUpcomingBadge handle={channel.handle} />
               {isOwner ? null : (
                 <>
                   <FollowButton

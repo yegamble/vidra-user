@@ -11,7 +11,9 @@ import { Button, EmptyState, ErrorState, Spinner } from "@/components/ui";
 import { UserText } from "@/components/UserText";
 import { ApiError, api } from "@/lib/api";
 import type { LiveStream } from "@/lib/api";
+import { formatCountdown, formatDateTime } from "@/lib/format";
 import { terminationHeadline } from "@/lib/live/termination";
+import { useNow } from "@/lib/live/use-now";
 import { useLivePlayback } from "@/lib/use-playback-engine";
 import { useSettledOptionalSession } from "@/lib/use-settled-session";
 
@@ -144,6 +146,13 @@ export function LiveWatchView({ id }: { id: string }) {
   }
 
   const channelName = stream.channel_display_name || stream.channel_handle;
+  // A scheduled start is an ANNOUNCEMENT: only an offline stream shows it, and
+  // it never replaces the real state — when the encoder connects the poll above
+  // flips the page to the player on its own.
+  const upcoming =
+    stream.state === "offline" && !stream.termination && stream.scheduled_start_at
+      ? stream.scheduled_start_at
+      : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -173,6 +182,8 @@ export function LiveWatchView({ id }: { id: string }) {
           message={endedMessage(stream)}
           onRefresh={() => void load()}
         />
+      ) : upcoming ? (
+        <UpcomingState at={upcoming} />
       ) : (
         <StreamState
           title="Not live yet"
@@ -183,6 +194,7 @@ export function LiveWatchView({ id }: { id: string }) {
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {stream.state === "live" ? <LiveBadge /> : null}
+          {upcoming ? <UpcomingBadge /> : null}
           {stream.state === "live" && typeof stream.viewer_count === "number" ? (
             <ViewerCount count={stream.viewer_count} />
           ) : null}
@@ -301,6 +313,29 @@ function StreamState({
         </Button>
       ) : null}
     </div>
+  );
+}
+
+// UpcomingState is the offline watch surface of a stream with a planned start:
+// the start time in the viewer's locale and a coarse countdown. The countdown is
+// a courtesy — the stream starts when the broadcaster connects, so a start time
+// that passes just reads "Starting soon" and the page keeps waiting.
+function UpcomingState({ at }: { at: string }) {
+  const now = useNow(true);
+  const countdown = formatCountdown(at, now);
+  return (
+    <StreamState
+      title="Upcoming live"
+      message={`Scheduled for ${formatDateTime(at)}${countdown ? ` · ${countdown}` : ""}. This page will start playing automatically once the stream goes live.`}
+    />
+  );
+}
+
+function UpcomingBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full bg-surface-strong px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted">
+      Upcoming
+    </span>
   );
 }
 

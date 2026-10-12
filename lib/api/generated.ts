@@ -4415,6 +4415,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/live/upcoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public "Upcoming" listing of scheduled lives
+         * @description Lists PUBLIC streams that are not live yet and carry a planned start, soonest first. A start up to one hour in the past is still listed (a broadcaster a few minutes late reads "starting soon"); older ones drop out without the row being touched. Same visibility as "Live now": unlisted and private streams never appear, and a stream owner the signed-in viewer muted or blocked is omitted for that viewer. The optional `channel` handle narrows it to one channel (the channel page). A public read, not gated on the live feature toggle. Paginated.
+         */
+        get: operations["listUpcomingLiveStreams"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/live/{id}": {
         parameters: {
             query?: never;
@@ -8843,6 +8863,11 @@ export interface components {
              * @description When the current live session began (stamped on the transition into "live", cleared when it ends). Present only while the stream is live.
              */
             started_at?: string;
+            /**
+             * Format: date-time
+             * @description Planned start, present only while the stream is not live. Public to whoever may already read the stream (a private stream is 404 to strangers, so its schedule is too). Announcement metadata only.
+             */
+            scheduled_start_at?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -8905,6 +8930,11 @@ export interface components {
             permanent: boolean;
             /** @description Record sessions and republish them as VODs (see LiveStream.replay_enabled). When OMITTED, the instance default (live_default_save_replay, exposed as the /instance live block's default_save_replay) is seeded; an explicit value always wins. While the instance disallows replay (live.allow_replay=false) the seed is always false and any stored flag produces no replay. */
             replay_enabled?: boolean;
+            /**
+             * Format: date-time
+             * @description Planned start (RFC 3339). Must be in the future and within one year; otherwise 422 on scheduled_start_at. ANNOUNCEMENT ONLY: nothing ever starts a stream because this time passed — going live is still the encoder connecting. Going live clears it.
+             */
+            scheduled_start_at?: string | null;
         };
         UpdateLiveStreamRequest: {
             title: string;
@@ -8918,6 +8948,11 @@ export interface components {
             permanent: boolean;
             /** @default false */
             replay_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description Planned start (RFC 3339). REPLACES the stored value like every field of this body, so omitting it or sending null CLEARS it. An unchanged stored value may be echoed back even after it has passed. Not settable while the stream is live. Must be in the future and within one year; otherwise 422 on scheduled_start_at. ANNOUNCEMENT ONLY: nothing ever starts a stream because this time passed — going live is still the encoder connecting. Going live clears it.
+             */
+            scheduled_start_at?: string | null;
         };
         CreateLiveStreamResponse: {
             live_stream: components["schemas"]["LiveStream"];
@@ -8954,6 +8989,20 @@ export interface components {
         };
         LivePublicListResponse: components["schemas"]["PageMeta"] & {
             live_streams: components["schemas"]["LiveStreamCard"][];
+        };
+        /** @description One entry of the public "Upcoming" listing: a PUBLIC, not-yet-live stream with a planned start. Never carries privacy/state or the key. */
+        LiveStreamUpcomingCard: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            description?: string;
+            channel_handle: string;
+            channel_display_name: string;
+            /** Format: date-time */
+            scheduled_start_at: string;
+        };
+        LiveUpcomingListResponse: components["schemas"]["PageMeta"] & {
+            live_streams: components["schemas"]["LiveStreamUpcomingCard"][];
         };
         LiveStreamKey: {
             /** @description The new stream key, shown ONCE. */
@@ -23655,6 +23704,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LivePublicListResponse"];
+                };
+            };
+        };
+    };
+    listUpcomingLiveStreams: {
+        parameters: {
+            query?: {
+                /** @description Only this channel's upcoming streams (by handle). */
+                channel?: string;
+                limit?: number;
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The upcoming public streams (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveUpcomingListResponse"];
                 };
             };
         };

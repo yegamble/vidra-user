@@ -397,3 +397,53 @@ describe("LiveWatchView description is untrusted user text", () => {
     expect(container.querySelector('a[href^="javascript"]')).toBeNull();
   });
 });
+
+describe("LiveWatchView upcoming (scheduled start)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const offline = (extra: object) =>
+    mocks.getLiveStream.mockResolvedValue({
+      id: "s1",
+      title: "Premiere",
+      state: "offline",
+      privacy: "public",
+      channel_handle: "ada",
+      ...extra,
+    });
+
+  it("shows Upcoming with the start time and a countdown, never the player", async () => {
+    const at = new Date(Date.now() + 3 * 3600_000 + 60_000).toISOString();
+    offline({ scheduled_start_at: at });
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText("Upcoming live")).toBeTruthy();
+    expect(screen.getByText("Upcoming")).toBeTruthy();
+    expect(screen.getByText(/in 3 hours/)).toBeTruthy();
+    expect(screen.queryByText("Not live yet")).toBeNull();
+    expect(document.querySelector("video")).toBeNull();
+  });
+
+  it("an overdue start reads 'Starting soon' and the page keeps waiting", async () => {
+    offline({ scheduled_start_at: new Date(Date.now() - 5 * 60_000).toISOString() });
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText(/Starting soon/)).toBeTruthy();
+    expect(screen.queryByText(/ended/i)).toBeNull();
+  });
+
+  it("an unscheduled offline stream is unchanged: 'Not live yet'", async () => {
+    offline({});
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText("Not live yet")).toBeTruthy();
+    expect(screen.queryByText("Upcoming live")).toBeNull();
+  });
+
+  it("a live stream ignores any schedule field", async () => {
+    mocks.getLiveStream.mockResolvedValue({
+      id: "s1", title: "On air", state: "live", privacy: "public", hls_url: "/x.m3u8",
+      scheduled_start_at: new Date(Date.now() + 3600_000).toISOString(),
+    });
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText("Live")).toBeTruthy();
+    expect(screen.queryByText("Upcoming live")).toBeNull();
+  });
+});
