@@ -2,11 +2,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const giveVideoOwnership = vi.hoisted(() => vi.fn());
+const { giveVideoOwnership, cancelVideoOwnership } = vi.hoisted(() => ({
+  giveVideoOwnership: vi.fn(),
+  cancelVideoOwnership: vi.fn(),
+}));
 
 vi.mock("@/lib/api", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/api")>();
-  return { ...actual, api: { ...actual.api, giveVideoOwnership } };
+  return { ...actual, api: { ...actual.api, giveVideoOwnership, cancelVideoOwnership } };
 });
 
 import { ApiError } from "@/lib/api";
@@ -18,6 +21,7 @@ afterEach(cleanup);
 // mockReset returns the mock itself.
 beforeEach(() => {
   giveVideoOwnership.mockReset();
+  cancelVideoOwnership.mockReset();
 });
 
 function open(onClose = vi.fn()) {
@@ -75,5 +79,34 @@ describe("TransferOwnershipDialog", () => {
 
     expect(await screen.findByText(/already pending/)).toBeTruthy();
     expect(screen.queryByText(/Request sent/)).toBeNull();
+  });
+});
+
+describe("TransferOwnershipDialog — withdrawing", () => {
+  it("withdraws the offer it just sent", async () => {
+    giveVideoOwnership.mockResolvedValue(undefined);
+    cancelVideoOwnership.mockResolvedValue(undefined);
+    open();
+    enter("bob");
+    expect(screen.getByText(/can withdraw the offer while it is pending/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Withdraw offer" }));
+    await waitFor(() => expect(cancelVideoOwnership).toHaveBeenCalledWith("v1"));
+    expect(await screen.findByText(/Offer withdrawn/)).toBeTruthy();
+  });
+
+  it("withdraws an older pending offer that blocks a new one", async () => {
+    giveVideoOwnership.mockRejectedValueOnce(
+      new ApiError({ status: 409, code: "conflict", message: "an ownership change for this video is already pending" }),
+    );
+    cancelVideoOwnership.mockResolvedValue(undefined);
+    open();
+    enter("bob");
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Withdraw the pending offer" }));
+    await waitFor(() => expect(cancelVideoOwnership).toHaveBeenCalledWith("v1"));
+    // Back on the form, free to offer it again.
+    expect(await screen.findByText(/pending offer was withdrawn/)).toBeTruthy();
+    expect(screen.getByLabelText("Recipient's username")).toBeTruthy();
   });
 });

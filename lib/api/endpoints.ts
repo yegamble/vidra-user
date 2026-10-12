@@ -8,6 +8,8 @@ import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  BulkVideosRequest,
+  BulkVideosResponse,
   AdminCreateUserRequest,
   AdminCreateUserResponse,
   BulkRemoveCommentsResponse,
@@ -586,6 +588,43 @@ export const api = {
     ),
 
   /**
+   * GET /api/v1/me/videos — every video on the channels the caller OWNS, with
+   * optional title search (`q`), `privacy`, `state` and `channel_id` filters and
+   * the usual sort / limit / offset. Another account's `channel_id` yields an
+   * empty page, never their videos. Powers the Studio "My videos" list.
+   */
+  listMyVideos: (
+    params: PageParams & {
+      q?: string;
+      privacy?: VideoPrivacy;
+      state?: VideoState;
+      channel_id?: string;
+      sort?: "-published_at" | "published_at";
+    } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<VideoListResponse>("/api/v1/me/videos", {
+      signal,
+      query: {
+        q: params.q,
+        privacy: params.privacy,
+        state: params.state,
+        channel_id: params.channel_id,
+        sort: params.sort,
+        ...pageQuery(params),
+      },
+    }),
+
+  /**
+   * POST /api/v1/me/videos/bulk — delete or change the privacy of up to 100 of
+   * the caller's own videos. One foreign/unknown id is a 404 for the whole
+   * request (nothing changes); otherwise the per-id `results` say which items
+   * failed and why.
+   */
+  bulkMyVideos: (body: BulkVideosRequest) =>
+    apiRequest<BulkVideosResponse>("/api/v1/me/videos/bulk", { method: "POST", body }),
+
+  /**
    * GET /api/v1/videos/{id}/stats — creator statistics for a video (auth, owner
    * only; a non-owner/unknown id is 404 so existence is not leaked).
    */
@@ -627,8 +666,11 @@ export const api = {
     ),
 
   /** GET /api/v1/me/channels — the caller's own channels (auth). */
-  getMyChannels: (signal?: AbortSignal) =>
-    apiRequest<ChannelListResponse>("/api/v1/me/channels", { signal }),
+  getMyChannels: (signal?: AbortSignal, params?: PageParams) =>
+    apiRequest<ChannelListResponse>("/api/v1/me/channels", {
+      signal,
+      ...(params ? { query: pageQuery(params) } : {}),
+    }),
 
   /**
    * GET /api/v1/me/quota — the caller's storage usage + effective quota (auth):
@@ -1358,6 +1400,15 @@ export const api = {
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
       method: "POST",
       body: { username },
+    }),
+
+  /**
+   * DELETE /api/v1/videos/{id}/give-ownership — withdraw the caller's pending
+   * offer of the video (204; 404 when there is none).
+   */
+  cancelVideoOwnership: (videoId: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "DELETE",
     }),
 
   /** POST …/{id}/accept — take the offered video into one of the caller's channels (204). */

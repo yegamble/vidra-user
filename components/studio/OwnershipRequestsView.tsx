@@ -24,17 +24,27 @@ import { useStudio } from "./StudioContext";
 // can receive a video: a channel they edit for someone else belongs to that
 // someone, and the server refuses it.
 export function OwnershipRoute() {
-  const { channels } = useStudio();
+  const { channels, status } = useStudio();
   const { user } = useSession();
   const own = user ? channels.filter((c) => c.owner_id === user.id) : [];
-  return <OwnershipRequestsView channels={own} />;
+  return <OwnershipRequestsView channels={own} channelsStatus={status} />;
 }
+
+type ChannelsStatus = "loading" | "error" | "ready";
 
 // OwnershipRequestsView lists the videos other users on this instance offered
 // the caller (core 0165, PeerTube's "ownership changes"), newest first. A
 // pending one is accepted into a chosen channel or refused; answered ones stay
 // as history.
-export function OwnershipRequestsView({ channels }: { channels: Channel[] }) {
+export function OwnershipRequestsView({
+  channels,
+  channelsStatus = "ready",
+}: {
+  /** The caller's OWN channels — the only valid targets of an accept. */
+  channels: Channel[];
+  /** Load state of `channels`: requests can arrive before the channel list. */
+  channelsStatus?: ChannelsStatus;
+}) {
   const autoLoad = useBrowseAutoLoad();
   const list = useAppendingList<VideoOwnershipChange>({
     queryKey: "video-ownership-changes",
@@ -74,6 +84,7 @@ export function OwnershipRequestsView({ channels }: { channels: Channel[] }) {
               key={c.id}
               change={c}
               channels={channels}
+              channelsStatus={channelsStatus}
               onAnswered={(next) =>
                 list.patch((rows) => rows.map((x) => (x.id === c.id ? { ...x, status: next } : x)))
               }
@@ -107,16 +118,29 @@ function answerError(err: unknown, accepting: boolean): string {
   return errorMessage(err, accepting ? "Could not accept the video." : "Could not refuse the video.");
 }
 
+// What each answered status reads as; pending rows show actions instead.
+const STATUS_BADGE: Partial<Record<VideoOwnershipChange["status"], { label: string; variant?: "success" }>> = {
+  accepted: { label: "Accepted", variant: "success" },
+  refused: { label: "Refused" },
+  cancelled: { label: "Withdrawn" },
+  expired: { label: "Expired" },
+};
+
 function OwnershipRequestRow({
   change,
   channels,
+  channelsStatus,
   onAnswered,
 }: {
   change: VideoOwnershipChange;
   channels: Channel[];
+  channelsStatus: ChannelsStatus;
   onAnswered: (status: "accepted" | "refused") => void;
 }) {
-  const [channelId, setChannelId] = useState(channels[0]?.id ?? "");
+  // The picked channel, else the first one — derived on every render, so a
+  // channel list that arrives after this row mounted is still honoured.
+  const [picked, setChannelId] = useState("");
+  const channelId = channels.some((c) => c.id === picked) ? picked : (channels[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const giver = change.initiator.display_name || change.initiator.username;
@@ -145,10 +169,8 @@ function OwnershipRequestRow({
             Offered by {giver} (@{change.initiator.username}) · {relativeTime(change.created_at)}
           </p>
         </div>
-        {change.status === "accepted" ? (
-          <Badge variant="success">Accepted</Badge>
-        ) : change.status === "refused" ? (
-          <Badge>Refused</Badge>
+        {STATUS_BADGE[change.status] ? (
+          <Badge variant={STATUS_BADGE[change.status]?.variant}>{STATUS_BADGE[change.status]?.label}</Badge>
         ) : null}
       </div>
       {change.status === "pending" ? (
@@ -173,6 +195,12 @@ function OwnershipRequestRow({
                 Accept
               </Button>
             </>
+          ) : channelsStatus === "loading" ? (
+            <p className="text-sm text-fg-muted">Loading your channels…</p>
+          ) : channelsStatus === "error" ? (
+            <p className="text-sm text-fg-muted">
+              Your channels could not be loaded. Reload the page to accept this video.
+            </p>
           ) : (
             <p className="text-sm text-fg-muted">
               <Link href="/studio/channel?create=1" className="focus-ring font-semibold text-accent-text hover:underline">

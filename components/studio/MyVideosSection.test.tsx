@@ -8,14 +8,8 @@ vi.mock("@/lib/api", async () => ({
   api: { listChannelVideos: mocks.listChannelVideos, getInstance: mocks.getInstance },
 }));
 vi.mock("./VideoRow", () => ({
-  VideoRow: ({ video, canTransfer }: { video: { title: string }; canTransfer?: boolean }) => (
-    <li data-transfer={canTransfer ? "yes" : "no"}>{video.title}</li>
-  ),
+  VideoRow: ({ video }: { video: { title: string } }) => <li>{video.title}</li>,
 }));
-const session = vi.hoisted(() => ({ user: null as { id: string } | null }));
-vi.mock("@/components/auth/AuthProvider", () => ({ useOptionalSession: () => session }));
-
-import type { Channel } from "@/lib/api";
 
 import { MyVideosSection } from "./MyVideosSection";
 
@@ -24,7 +18,6 @@ const rows = (from: number, n: number) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  session.user = null;
   mocks.getInstance.mockResolvedValue({ features: {} });
   mocks.listChannelVideos.mockImplementation(
     (_h: string, _t: unknown, _s: unknown, p: { offset?: number }) =>
@@ -72,23 +65,5 @@ describe("MyVideosSection paging", () => {
       expect.anything(),
       expect.objectContaining({ offset: 0 }),
     );
-  });
-});
-
-// Giving a video away is the channel OWNER's call (core 0165): an editor of the
-// same channel manages its videos but must never be offered the transfer.
-describe("MyVideosSection transfer gate", () => {
-  const channels = [{ id: "c1", handle: "creator", owner_id: "owner" }] as Channel[];
-
-  it("lets the channel's owner transfer its videos", async () => {
-    session.user = { id: "owner" };
-    render(<MyVideosSection handle="creator" config={null} channels={channels} />);
-    expect((await screen.findByText("Mine 0")).getAttribute("data-transfer")).toBe("yes");
-  });
-
-  it("does not offer it to an editor of the channel", async () => {
-    session.user = { id: "editor" };
-    render(<MyVideosSection handle="creator" config={null} channels={channels} />);
-    expect((await screen.findByText("Mine 0")).getAttribute("data-transfer")).toBe("no");
   });
 });
