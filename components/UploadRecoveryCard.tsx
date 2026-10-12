@@ -326,7 +326,7 @@ function RecoveryRow({
               ref={inputRef}
               type="file"
               disabled={discarding || sessionDiscarded}
-              accept="video/*"
+              accept="video/*,audio/*"
               tabIndex={-1}
               aria-hidden="true"
               className="hidden"
