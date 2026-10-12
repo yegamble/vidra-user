@@ -391,7 +391,7 @@ test("the populated studio dashboard passes axe (stat links, latest video, distr
       },
     }),
   );
-  await page.route(/\/api\/v1\/channels\/ada_makes\/videos$/, (route) =>
+  await page.route(/\/api\/v1\/channels\/ada_makes\/videos(\?|$)/, (route) =>
     route.fulfill({ json: { videos: [video("v1", "Latest clip", 999)] } }),
   );
   await page.route(/\/api\/v1\/videos\/v1\/stats$/, (route) =>

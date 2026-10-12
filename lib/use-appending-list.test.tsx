@@ -353,6 +353,9 @@ describe("useAppendingList — holding a viewer-scoped list until the session se
 
     rerender(<List queryKey="oldest" pageSize={2} load={load} />);
     expect(moreSignal.aborted).toBe(true);
+    // Immediately, before the new first page resolves: the old list's busy
+    // button must not carry over.
+    expect(text("more-status")).toBe("idle");
     await waitFor(() => expect(text("rows")).toBe("a,b"));
     await act(async () => rejectMore(new Error("aborted")));
     expect(text("more-status")).toBe("idle");
