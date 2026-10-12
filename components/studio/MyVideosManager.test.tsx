@@ -29,6 +29,8 @@ vi.mock("./VideoRow", () => ({
   ),
 }));
 
+import { ApiError } from "@/lib/api";
+
 import { MyVideosManager } from "./MyVideosManager";
 
 const channels = [
@@ -138,6 +140,7 @@ describe("MyVideosManager bulk actions", () => {
     await pick("Clip 0", "Clip 1");
     fireEvent.click(screen.getByRole("button", { name: /Change privacy/ }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Private" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Make private" }));
     await screen.findByText(/Updated 1 of 2\. 1 failed/);
     expect(mocks.bulkMyVideos).toHaveBeenCalledWith({ video_ids: ["v0", "v1"], action: "set_privacy", privacy: "private" });
     const failures = screen.getByRole("list", { name: "Videos that failed" });
@@ -147,13 +150,52 @@ describe("MyVideosManager bulk actions", () => {
     expect((screen.getByLabelText("Select Clip 0") as HTMLInputElement).checked).toBe(false);
   });
 
-  it("reports a refused request (404) as nothing changed", async () => {
-    mocks.bulkMyVideos.mockRejectedValue(new Error("video not found"));
+  it("confirms a privacy change naming the count and target, and warns that public federates", async () => {
+    mocks.bulkMyVideos.mockResolvedValue(ok(["v0", "v1"]));
+    render(<MyVideosManager config={null} channels={channels} />);
+    await pick("Clip 0", "Clip 1");
+    fireEvent.click(screen.getByRole("button", { name: /Change privacy/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Public" }));
+    const dialog = screen.getByRole("dialog", { name: "Make 2 videos public?" });
+    expect(within(dialog).getByText(/federated/)).toBeTruthy();
+    expect(mocks.bulkMyVideos).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Make public" }));
+    await waitFor(() =>
+      expect(mocks.bulkMyVideos).toHaveBeenCalledWith({ video_ids: ["v0", "v1"], action: "set_privacy", privacy: "public" }),
+    );
+  });
+
+  async function failBulk(err: unknown) {
+    mocks.bulkMyVideos.mockRejectedValue(err);
     render(<MyVideosManager config={null} channels={channels} />);
     await pick("Clip 0");
     fireEvent.click(screen.getByRole("button", { name: /Change privacy/ }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Internal" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Make internal" }));
+  }
+
+  it("says nothing changed only when the server refused the request (4xx)", async () => {
+    await failBulk(new ApiError({ status: 404, code: "not_found", message: "video not found" }));
     await screen.findByText(/Nothing was changed/);
+    expect(mocks.listMyVideos).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not claim nothing changed after a network failure, and refreshes the list", async () => {
+    await failBulk(new TypeError("fetch failed"));
+    await screen.findByText(/Couldn't confirm the result/);
+    expect(screen.queryByText(/Nothing was changed/)).toBeNull();
+    await waitFor(() => expect(mocks.listMyVideos).toHaveBeenCalledTimes(2));
+  });
+
+  it("caps selection at 100 with a visible note", async () => {
+    mocks.listMyVideos.mockResolvedValue({ videos: rows(120), total: 120, limit: 120, offset: 0 });
+    render(<MyVideosManager config={null} channels={channels} />);
+    await screen.findByText("Clip 0");
+    fireEvent.click(screen.getByLabelText("Select first 100"));
+    expect(screen.getByText("100 selected")).toBeTruthy();
+    expect(screen.getByText("Selection is limited to 100 videos per action.")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Select Clip 110"));
+    expect(screen.getByText("100 selected")).toBeTruthy();
   });
 
   it("adds each selected video to a playlist with progress and a failure summary", async () => {

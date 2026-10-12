@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PlaylistIcon, SearchIcon, TrashIcon, VideoIcon } from "@/components/icons";
 import { Alert, Button, Dropdown, EmptyState, ErrorState, Input, Modal, Select, Spinner } from "@/components/ui";
 import { ListTail } from "@/components/ui/ListTail";
-import { api, errorMessage } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { Channel, Video, VideoConfigResponse, VideoPrivacy, VideoState } from "@/lib/api";
 import { videoAcceptAttr } from "@/lib/upload-accept";
 import { useAppendingList } from "@/lib/use-appending-list";
@@ -46,6 +46,10 @@ type Summary = {
   message: string;
   failures: { id: string; title: string; error: string }[];
 };
+
+// The bulk endpoint takes at most 100 ids; selection stops there (with a note)
+// rather than letting a "select all" produce a request the server must refuse.
+const MAX_BULK = 100;
 
 const NO_SELECTION: ReadonlySet<string> = new Set();
 
@@ -127,15 +131,17 @@ export function MyVideosManager({
   const toggle = (id: string) => {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
-    else next.add(id);
+    else if (next.size < MAX_BULK) next.add(id);
     setSelected(next);
   };
   const allSelected = videos.length > 0 && videos.every((v) => selected.has(v.id));
+  const atCap = selected.size >= MAX_BULK;
 
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [playlistOpen, setPlaylistOpen] = useState(false);
+  const [pendingPrivacy, setPendingPrivacy] = useState<VideoPrivacy | null>(null);
 
   const titles = useMemo(() => new Map(videos.map((v) => [v.id, v.title])), [videos]);
   const chosen = videos.filter((v) => selected.has(v.id));
@@ -169,14 +175,22 @@ export function MyVideosManager({
       setSelected(new Set(failures.map((f) => f.id)));
       list.reload();
     } catch (err) {
+      // A 4xx is the server refusing the whole request before it touched
+      // anything; a network error, timeout or 5xx is not a statement about what
+      // happened, so do not claim "nothing changed" and re-read the truth.
+      const refused = err instanceof ApiError && err.status >= 400 && err.status < 500;
       setSummary({
         kind: "danger",
-        message: errorMessage(err, "Could not complete the bulk action. Nothing was changed."),
+        message: refused
+          ? `${errorMessage(err, "The request was refused.")} Nothing was changed.`
+          : "Couldn't confirm the result, so the list was refreshed. Check it before retrying.",
         failures: [],
       });
+      if (!refused) list.reload();
     } finally {
       setBusy(false);
       setConfirmDelete(false);
+      setPendingPrivacy(null);
     }
   }
 
@@ -234,9 +248,9 @@ export function MyVideosManager({
               type="checkbox"
               className="h-4 w-4 rounded border-border accent-accent focus-ring"
               checked={allSelected}
-              onChange={() => setSelected(allSelected ? NO_SELECTION : new Set(videos.map((v) => v.id)))}
+              onChange={() => setSelected(allSelected ? NO_SELECTION : new Set(videos.slice(0, MAX_BULK).map((v) => v.id)))}
             />
-            <span>Select all loaded</span>
+            <span>{videos.length > MAX_BULK ? `Select first ${MAX_BULK}` : "Select all loaded"}</span>
           </label>
           <span className="text-sm text-fg-muted" aria-live="polite">
             {selected.size === 0
@@ -245,6 +259,11 @@ export function MyVideosManager({
                 : ""
               : `${selected.size} selected`}
           </span>
+          {atCap ? (
+            <span className="text-sm text-warning" role="status">
+              Selection is limited to {MAX_BULK} videos per action.
+            </span>
+          ) : null}
           {selected.size > 0 ? (
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Dropdown
@@ -253,7 +272,7 @@ export function MyVideosManager({
                 align="end"
                 items={BULK_PRIVACIES.map((p) => ({
                   label: p.label,
-                  onSelect: () => void runBulk({ action: "set_privacy", privacy: p.value }, "Updated"),
+                  onSelect: () => setPendingPrivacy(p.value),
                   disabled: busy,
                 }))}
               />
@@ -352,6 +371,31 @@ export function MyVideosManager({
             </Button>
             <Button variant="danger" onClick={() => void runBulk({ action: "delete" }, "Deleted")} disabled={busy}>
               {busy ? "Deleting..." : `Delete ${chosen.length}`}
+            </Button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {pendingPrivacy ? (
+        <Modal
+          title={`Make ${chosen.length} ${chosen.length === 1 ? "video" : "videos"} ${pendingPrivacy}?`}
+          onClose={() => setPendingPrivacy(null)}
+        >
+          <p className="mb-4 text-sm text-fg-muted">
+            This changes the privacy of {chosen.length} {chosen.length === 1 ? "video" : "videos"} to {pendingPrivacy}.
+            {pendingPrivacy === "public"
+              ? " Public videos are shared with other servers (federated) and appear in search and feeds."
+              : ""}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setPendingPrivacy(null)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void runBulk({ action: "set_privacy", privacy: pendingPrivacy }, "Updated")}
+              disabled={busy}
+            >
+              {busy ? "Updating..." : `Make ${pendingPrivacy}`}
             </Button>
           </div>
         </Modal>
