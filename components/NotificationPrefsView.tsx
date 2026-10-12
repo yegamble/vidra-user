@@ -23,6 +23,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Comments",
     help: "Someone comments on one of your videos.",
   },
+  comment_held: {
+    label: "Comments awaiting approval",
+    help: "A comment on a video you manage needs your approval before it appears.",
+  },
   comment_mention: {
     label: "Mentions",
     help: "Someone @-mentions you in a comment.",
@@ -63,6 +67,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Report outcomes",
     help: "A moderator resolves an abuse report you filed.",
   },
+  report_message: {
+    label: "Report messages",
+    help: "A new message about an abuse report — from a moderator on yours, or from a reporter (staff).",
+  },
   video_rejected: {
     label: "Rejected uploads",
     help: "A moderator rejects one of your held uploads.",
@@ -95,6 +103,7 @@ const TYPE_ORDER = [
   "upload_quarantined",
   "federation_follower_request",
   "report_resolved",
+  "report_message",
   "video_rejected",
   "video_blocked",
   "video_unblocked",
