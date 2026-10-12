@@ -1,4 +1,6 @@
-import { t } from "@/lib/i18n";
+"use client";
+
+import { useT } from "@/components/I18nProvider";
 
 export function ErrorState({
   title,
@@ -9,6 +11,7 @@ export function ErrorState({
   message?: string;
   onRetry?: () => void;
 }) {
+  const t = useT();
   const heading = title ?? t("state.errorTitle");
   return (
     <div

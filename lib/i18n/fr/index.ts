@@ -1,0 +1,19 @@
+import type { Messages } from "../index";
+
+import { a11y } from "./a11y";
+import { common } from "./common";
+import { search } from "./search";
+import { state } from "./state";
+
+/**
+ * French — a SEED proving the pipeline (LOCALES marks it partial, so only a
+ * viewer who picks French sees it); a key missing here renders the English.
+ * Same layout as ../en: one file per surface, merged here.
+ *
+ * REVIEW STATUS: every string under a "machine-drafted" rule was drafted by an
+ * AI model (2026-10-12) and has not been read by a native speaker. A reviewer
+ * moves each string they approve ABOVE that rule.
+ */
+export const FR_NAMESPACES = { a11y, common, search, state };
+
+export const fr = { ...a11y, ...common, ...search, ...state } satisfies Messages;
