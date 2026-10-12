@@ -266,6 +266,8 @@ type VideoOption = { id: string; title: string; channelName: string };
 function VideoStatsSection({ handles, channels }: { handles: string[]; channels: Channel[] }) {
   const [status, setStatus] = useState<Status>("loading");
   const [options, setOptions] = useState<VideoOption[]>([]);
+  // The picker walks at most DEFAULT_MAX_PAGES pages per channel; say so when it stopped short.
+  const [truncated, setTruncated] = useState(false);
   const [videoId, setVideoId] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const multiChannel = handles.length > 1;
@@ -277,15 +279,19 @@ function VideoStatsSection({ handles, channels }: { handles: string[]; channels:
   useEffect(() => {
     const active = handles.filter((h) => h !== "");
     const controller = new AbortController();
+    // Set in the .then below with the options, never synchronously in the effect.
+    let cut = false;
     // An empty scope resolves to an empty option list in the .then below (setState
     // in a callback, not synchronously in the effect body).
     Promise.all(
       active.map((h) =>
         // The picker offers EVERY video, so it walks the paged list to its end.
-        collectPages<Video>((window) =>
-          api
-            .listChannelVideos(h, undefined, controller.signal, window)
-            .then((res) => ({ items: res.videos, total: res.total })),
+        collectPages<Video>(
+          (window) =>
+            api
+              .listChannelVideos(h, undefined, controller.signal, window)
+              .then((res) => ({ items: res.videos, total: res.total })),
+          { signal: controller.signal, onTruncated: () => (cut = true) },
         ).then((videos): VideoOption[] =>
           videos.map((v) => ({
             id: v.id,
@@ -297,6 +303,7 @@ function VideoStatsSection({ handles, channels }: { handles: string[]; channels:
     )
       .then((lists) => {
         setOptions(lists.flat());
+        setTruncated(cut);
         setStatus("ready");
       })
       .catch((err: unknown) => {
@@ -341,6 +348,11 @@ function VideoStatsSection({ handles, channels }: { handles: string[]; channels:
                 </option>
               ))}
             </Select>
+            {truncated ? (
+              <p className="mt-1 text-xs text-fg-muted">
+                Showing your most recent videos only; the full list is too long to load here.
+              </p>
+            ) : null}
           </div>
           {videoId ? <VideoStatsPanel key={videoId} videoId={videoId} /> : null}
         </>
