@@ -1,6 +1,9 @@
-import { t } from "@/lib/i18n";
+"use client";
+
+import { useT } from "@/components/I18nProvider";
 
 export function Spinner({ label, variant = "default" }: { label?: string; variant?: "default" | "media" }) {
+  const t = useT();
   const text = label ?? t("common.loading");
   return (
     <span role="status" aria-label={text} className="inline-flex items-center">
