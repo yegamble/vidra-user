@@ -20,7 +20,14 @@ vi.mock("@/components/AccountModerationMenu", () => ({ AccountModerationMenu: ()
 vi.mock("@/components/FollowButton", () => ({ FollowButton: () => null }));
 vi.mock("@/components/ChannelLiveBadge", () => ({ ChannelLiveBadge: () => null }));
 vi.mock("@/components/MessageButton", () => ({ MessageButton: () => null }));
-vi.mock("@/components/SupportButton", () => ({ SupportButton: () => null }));
+// A spy, so the wiring of the channel's support text into the button is observable.
+const supportButton = vi.hoisted(() => vi.fn());
+vi.mock("@/components/SupportButton", () => ({
+  SupportButton: (props: { text?: string | null }) => {
+    supportButton(props);
+    return null;
+  },
+}));
 vi.mock("@/components/ChannelVideoCard", () => ({
   ChannelVideoCard: ({ video }: { video: { title: string } }) => <span>{video.title}</span>,
 }));
@@ -100,6 +107,19 @@ describe("ChannelView paging", () => {
         expect.anything(),
         expect.objectContaining({ offset: 0, sort: "published_at" }),
       ),
+    );
+  });
+});
+
+// PeerTube's channel "support" message rides the existing Support button.
+describe("ChannelView support text", () => {
+  it("hands the channel's support text to the Support button", async () => {
+    supportButton.mockClear();
+    mocks.getChannel.mockResolvedValue({ ...channel, support: "Ko-fi: creator" });
+    mocks.listChannelVideos.mockResolvedValue({ videos: [], total: 0, limit: 20, offset: 0 });
+    render(<ChannelView handle="creator" />);
+    await waitFor(() =>
+      expect(supportButton).toHaveBeenCalledWith(expect.objectContaining({ text: "Ko-fi: creator" })),
     );
   });
 });

@@ -104,4 +104,20 @@ describe("AnalyticsView channel scope", () => {
     await waitFor(() => expect(screen.getByLabelText("Stats for @beta")).toBeTruthy());
     expect(screen.getAllByTitle("222").length).toBeGreaterThan(0);
   });
+
+  it("offers every video in the per-video picker, not just the first page", async () => {
+    mocks.getChannelStats.mockResolvedValue(statsFor(1));
+    mocks.listChannelVideos.mockImplementation(
+      (_h: string, _t: unknown, _s: unknown, p: { offset?: number; limit?: number }) => {
+        const all = Array.from({ length: 130 }, (_, i) => ({ id: `v${i}`, title: `Video ${i}` }));
+        const offset = p?.offset ?? 0;
+        const limit = p?.limit ?? 20;
+        return Promise.resolve({ videos: all.slice(offset, offset + limit), total: 130, limit, offset });
+      },
+    );
+    render(<AnalyticsView />);
+    const picker = (await screen.findByLabelText("Stats video")) as HTMLSelectElement;
+    expect(picker.querySelectorAll("option")).toHaveLength(131); // 130 + placeholder
+    expect(screen.getByRole("option", { name: "Video 129" })).toBeTruthy();
+  });
 });

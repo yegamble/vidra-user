@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Video } from "@/lib/api";
@@ -29,7 +29,14 @@ vi.mock("@/components/RatingControls", () => ({ RatingControls: () => <div /> })
 vi.mock("@/components/DownloadButton", () => ({ DownloadButton: () => <div /> }));
 vi.mock("@/components/SaveButton", () => ({ SaveButton: () => <div /> }));
 vi.mock("@/components/AddToPlaylistButton", () => ({ AddToPlaylistButton: () => <div /> }));
-vi.mock("@/components/SupportButton", () => ({ SupportButton: () => <div /> }));
+// A spy, so the wiring of the video's own support text into the button is observable.
+const supportButton = vi.hoisted(() => vi.fn());
+vi.mock("@/components/SupportButton", () => ({
+  SupportButton: (props: { text?: string | null }) => {
+    supportButton(props);
+    return <div />;
+  },
+}));
 vi.mock("@/components/VideoActionsMenu", () => ({ VideoActionsMenu: () => <div /> }));
 vi.mock("@/components/ReportButton", () => ({
   ReportButton: () => <div />,
@@ -139,5 +146,49 @@ describe("WatchView session settling", () => {
     await act(async () => {});
     expect(mocks.getChannel).toHaveBeenCalledTimes(1);
     expect(mocks.getChannel).toHaveBeenCalledWith("film-house", expect.any(AbortSignal));
+  });
+});
+
+// An internal video (PeerTube's members-only tier) answers an anonymous read
+// with 401 sign_in_required. The page offers the app's ordinary sign-in prompt
+// — not "not found", which would tell a member the video does not exist, and
+// not the retry surface, which would never succeed.
+describe("WatchView internal video", () => {
+  it("offers an anonymous viewer the sign-in prompt", async () => {
+    mocks.getVideo.mockRejectedValue(Object.assign(new Error("sign in"), { status: 401, code: "sign_in_required" }));
+    render(<WatchView id="v1" />);
+    await act(async () => {});
+    expect(screen.getByText("Sign in to watch this video")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
+    expect(screen.queryByText("Video not found")).toBeNull();
+  });
+
+  it("keeps the generic error for a 401 that is not a sign-in refusal", async () => {
+    mocks.getVideo.mockRejectedValue(Object.assign(new Error("expired"), { status: 401, code: "unauthorized" }));
+    render(<WatchView id="v1" />);
+    await act(async () => {});
+    expect(screen.queryByText("Sign in to watch this video")).toBeNull();
+  });
+});
+
+// PeerTube's free-text "support" message is the VIDEO'S own (a new video
+// snapshots its channel's), and rides the one Support button rather than a
+// second affordance.
+describe("WatchView support text", () => {
+  it("hands the video's support text to the Support button", async () => {
+    supportButton.mockClear();
+    render(<WatchView id="v1" initialVideo={{ ...video(), support: "Liberapay: film-house" }} />);
+    await act(async () => {});
+    expect(supportButton).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Liberapay: film-house" }),
+    );
+  });
+
+  it("passes no text for a video without one", async () => {
+    supportButton.mockClear();
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await act(async () => {});
+    expect(supportButton).toHaveBeenCalled();
+    expect(supportButton.mock.calls.every(([p]) => !p.text)).toBe(true);
   });
 });

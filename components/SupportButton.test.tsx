@@ -130,3 +130,55 @@ describe("SupportButton non-custodial disclaimer", () => {
     expect(dialog.textContent).not.toMatch(/vidra/i);
   });
 });
+
+// The creator's free-text support message (PeerTube "support", markdown) rides
+// the SAME button as the crypto addresses: one affordance, two sections.
+describe("SupportButton support text", () => {
+  const sources = [{ kind: "channel", handle: "grade-house" }] as const;
+
+  it("shows the Support pill for a message alone and renders it sanitised, with no crypto copy", async () => {
+    mockChannel.mockResolvedValue({ addresses: [] });
+    render(
+      <SupportButton
+        sources={[...sources]}
+        name="Grade House"
+        text={"Support me on [Liberapay](https://liberapay.com/ada) <script>alert(1)</script>"}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Support" }));
+    const dialog = screen.getByRole("dialog", { name: "Support Grade House" });
+    const link = screen.getByRole("link", { name: "Liberapay" });
+    expect(link.getAttribute("href")).toBe("https://liberapay.com/ada");
+    expect(link.getAttribute("rel")).toContain("noopener");
+    // Raw HTML is text, never markup.
+    expect(dialog.querySelector("script")).toBeNull();
+    // No address, so no crypto section or disclaimer.
+    expect(dialog.textContent).not.toMatch(/peer-to-peer/i);
+  });
+
+  it("stacks the message above the crypto addresses in one dialog when both exist", async () => {
+    mockChannel.mockResolvedValue({ addresses: [addr()] });
+    render(<SupportButton sources={[...sources]} name="Grade House" text="Thanks for watching!" />);
+    expect(await screen.findAllByRole("button", { name: "Support" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Support" }));
+    const dialog = screen.getByRole("dialog", { name: "Support Grade House" });
+    expect(dialog.textContent).toContain("Thanks for watching!");
+    expect(dialog.textContent).toContain("0x71C7656EC7ab88b098defB751B7401B5f6d8976F");
+    expect(dialog.textContent!.indexOf("Thanks for watching!")).toBeLessThan(
+      dialog.textContent!.indexOf("0x71C7"),
+    );
+  });
+
+  it("treats a blank message as none", async () => {
+    mockChannel.mockResolvedValue({ addresses: [] });
+    const { container } = render(<SupportButton sources={[...sources]} name="Grade House" text="   " />);
+    await waitFor(() => expect(mockChannel).toHaveBeenCalled());
+    await waitFor(() => expect(container.firstChild).toBeNull());
+  });
+
+  it("shows the pill immediately for a message without waiting on the address read", () => {
+    mockChannel.mockReturnValue(new Promise(() => {}));
+    render(<SupportButton sources={[...sources]} name="Grade House" text="Ko-fi: ada" />);
+    expect(screen.getByRole("button", { name: "Support" })).toBeTruthy();
+  });
+});

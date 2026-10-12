@@ -534,6 +534,7 @@ export type CreateRemoteFollowRequest = Schemas["CreateRemoteFollowRequest"];
 export type RemoteFollowState = NonNullable<Schemas["RemoteFollow"]["state"]>;
 export type RemoteFollow = Schemas["RemoteFollow"];
 export type RemoteFollowListResponse = Schemas["RemoteFollowListResponse"];
+export type RemoteInteractionResolution = Schemas["RemoteInteractionResolution"];
 export type RemoteVideoComment = Schemas["RemoteVideoComment"];
 export type RemoteVideoCommentListResponse = Schemas["RemoteVideoCommentListResponse"];
 // A comment a LOCAL user authored on a remote video: hosted + displayed here,

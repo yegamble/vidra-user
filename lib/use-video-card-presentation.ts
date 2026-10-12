@@ -106,6 +106,7 @@ export function useVideoCardPresentation(
     video.state === "published" &&
     video.privacy !== "private" &&
     video.privacy !== "password" &&
+    video.privacy !== "internal" &&
     !blurSensitive;
 
   // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge is

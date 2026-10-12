@@ -29,11 +29,13 @@ import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsSourceBar } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
 import { TranscodingNote } from "@/components/watch/TranscodingNote";
+import { PlaylistPanel } from "@/components/watch/PlaylistPanel";
 import { UpNextQueue } from "@/components/UpNextQueue";
 import { WATCH_CONTENT, WATCH_THEATER_INSET } from "@/components/watch/layout";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { SignInGate } from "@/components/SignInGate";
 import { WatchSkeleton } from "@/components/watch/WatchSkeleton";
 import {
   ApiError,
@@ -64,8 +66,9 @@ import { parseStartTime } from "@/lib/start-time";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 import { useRestrictedMode } from "@/lib/device-preferences";
 import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
+import { isSignInRequired } from "@/lib/video-privacy";
 
-type Status = "loading" | "error" | "notfound" | "locked" | "ready";
+type Status = "loading" | "error" | "notfound" | "locked" | "signin" | "ready";
 
 // How often, at most, playback progress is reported to the backend while watching.
 const PROGRESS_INTERVAL_MS = 10_000;
@@ -212,7 +215,7 @@ export function WatchView({
   const queuedNextVideo = playbackQueue.find(
     (item) => !video || item.id !== video.id || Boolean(item.remote) !== Boolean(video.remote),
   );
-  const playlist = usePlaylistNext(video?.id);
+  const playlist = usePlaylistNext(video ?? undefined);
   const nextVideo = playlist.active ? playlist.next : queuedNextVideo ?? relatedNextVideo;
 
   useEffect(() => {
@@ -240,6 +243,12 @@ export function WatchView({
           // keyed on one. Core puts it on this 401 for exactly that reason.
           if (err.videoId !== undefined) setLockedVideoId(err.videoId);
           setStatus("locked");
+        } else if (isSignInRequired(err)) {
+          // An internal (members-only) video and an anonymous viewer: offer the
+          // ordinary sign-in prompt. Signing in changes viewerKey, which re-runs
+          // this read as the member.
+          setVideo(null);
+          setStatus("signin");
         } else if (err instanceof ApiError && err.status === 404) {
           setVideo(null);
           setStatus("notfound");
@@ -389,6 +398,15 @@ export function WatchView({
           title="Video not found"
           message="This video does not exist, or it is private."
         />
+      </div>
+    );
+  }
+  if (status === "signin") {
+    return (
+      <div className={WATCH_CONTENT}>
+        <SignInGate title="Sign in to watch this video">
+          — it is only visible to people signed in to this instance.
+        </SignInGate>
       </div>
     );
   }
@@ -579,6 +597,7 @@ export function WatchView({
       {stageBlock}
       <div className="watch-body-area flex min-w-0 flex-col gap-8">
       <article className="flex flex-col gap-4">
+        {playlist.active ? <PlaylistPanel queue={playlist} videoId={video.id} /> : null}
         {playlist.active && playlist.status === "error" ? (
           <ErrorState message="Could not load this playlist. Playback continuation is unavailable." onRetry={playlist.retry} />
         ) : null}
@@ -602,6 +621,7 @@ export function WatchView({
               followerCount={channel?.follower_count ?? null}
               isFollowing={channel?.is_following ?? false}
               notificationSetting={channel?.notification_setting}
+              videoId={video.remote ? undefined : video.id}
               onDelta={(d) =>
                 setChannel((c) =>
                   c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c,
@@ -613,7 +633,7 @@ export function WatchView({
             getCurrentTime={() => playerRef.current?.currentTime ?? 0}
             onDeleted={() => window.location.assign("/")} />
           {channelHandle ? <SupportButton sources={supportSources} name={channelName || "this creator"}
-            className="self-start min-h-11" /> : null}
+            text={video.support} className="self-start min-h-11" /> : null}
           {/* Secondary technical/taxonomy chips (duration, dimensions,
               category/language/license) on their own quiet row. */}
           {chips.length > 0 ? (
