@@ -77,7 +77,7 @@ export function CreateUserDialog({
       setError(
         errorMessage(
           err,
-          "Could not create the user. If the account now appears in the list, use its “Create password reset link” action.",
+          "Could not create the user. Nothing was kept; check the details and try again.",
         ),
       );
     } finally {
