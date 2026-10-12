@@ -322,7 +322,7 @@ function AuthoredCommentItem({
             </div>
           </form>
         ) : (
-          <UserText variant="comment" text={comment.body} className="text-sm leading-relaxed text-fg" />
+          <UserText variant="comment" mentions={false} text={comment.body} className="text-sm leading-relaxed text-fg" />
         )}
 
         {/* On a failed delivery, name the reason in words too (not only the

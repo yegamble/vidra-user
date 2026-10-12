@@ -119,7 +119,7 @@ export function RemoteVideoThread({ comments }: { comments: RemoteVideoComment[]
               {comment.replyingTo ? (
                 <p className="text-[13px] text-fg-muted">Replying to {comment.replyingTo}</p>
               ) : null}
-              <UserText variant="comment" text={comment.body} className="text-sm leading-relaxed text-fg" />
+              <UserText variant="comment" mentions={false} text={comment.body} className="text-sm leading-relaxed text-fg" />
             </li>
           ))}
         </ul>
