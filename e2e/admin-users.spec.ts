@@ -95,7 +95,8 @@ test("anonymous viewers are gated out of admin users", async ({ page }) => {
     return route.fulfill({ json: { users: [], total: 0, limit: 20, offset: 0 } });
   });
   await page.goto("/admin/users");
-  await expect(page.getByText("Administrators only")).toBeVisible();
+  // The users page opened to moderators (core MANAGE_USERS), so the gate names them.
+  await expect(page.getByText("Moderators only")).toBeVisible();
   expect(fetched).toBe(false);
 });
 
@@ -112,7 +113,8 @@ test("a regular signed-in user gets no admin nav entry and is gated from admin u
     return route.fulfill({ json: { users: [], total: 0, limit: 20, offset: 0 } });
   });
   await page.goto("/admin/users");
-  await expect(page.getByText("Administrators only")).toBeVisible();
+  // The users page opened to moderators (core MANAGE_USERS), so the gate names them.
+  await expect(page.getByText("Moderators only")).toBeVisible();
   expect(fetched).toBe(false);
 });
 
@@ -278,19 +280,31 @@ test("an admin can deactivate a user", async ({ page }) => {
       },
     }),
   );
-  await page.route(UPDATE, (route) =>
-    route.fulfill({ json: adminUser("u2", "alice", "user", false) }),
-  );
+  let patched: unknown = null;
+  await page.route(UPDATE, (route) => {
+    patched = route.request().postDataJSON();
+    return route.fulfill({
+      json: { ...adminUser("u2", "alice", "user", false), ban_reason: "posting spam links" },
+    });
+  });
 
   const desktop = await openUsers(page);
   await desktop.getByRole("button", { name: "Open alice" }).click();
 
+  // Deactivating is a ban: it needs a stated reason, which core emails to the user.
+  await page.getByRole("button", { name: "Deactivate alice" }).click();
+  const dialog = page.getByRole("dialog");
+  const confirm = dialog.getByRole("button", { name: "Ban alice" });
+  await expect(confirm).toBeDisabled();
+  await dialog.getByLabel("Reason").fill("posting spam links");
   const updated = page.waitForResponse(
     (r) => UPDATE.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
   );
-  await page.getByRole("button", { name: "Deactivate alice" }).click();
+  await confirm.click();
   await updated;
+  expect(patched).toEqual({ is_active: false, ban_reason: "posting spam links" });
   await expect(page.getByRole("button", { name: "Reactivate alice" })).toBeVisible();
+  await expect(page.getByTestId("admin-users-desktop").getByText("posting spam links")).toBeVisible();
 });
 
 test("an admin can permanently delete a user after the double confirm", async ({ page }) => {
