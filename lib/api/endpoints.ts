@@ -2,7 +2,7 @@ import { apiBaseUrl } from "@/lib/config";
 import { clientSearchEventHeaders, searchSessionHeaders } from "@/lib/search-session";
 
 import { getAccessToken } from "./auth-store";
-import { ApiError, apiRequest } from "./client";
+import { ApiError, apiRequest, restoreSession } from "./client";
 import { pageQuery, type PageParams } from "./pagination";
 import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
@@ -1173,6 +1173,33 @@ export const api = {
       `/api/v1/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(language)}`,
       { method: "DELETE" },
     ),
+
+  /**
+   * GET /api/v1/videos/{id}/captions/{lang} — a caption track's raw WebVTT, as
+   * text, with the bearer token so an owner can read a private video's track.
+   * Feeds the cue editor; saving goes back through uploadCaption (replace-by-language).
+   */
+  downloadCaptionText: async (videoId: string, language: string, signal?: AbortSignal) => {
+    const url = `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(language)}`;
+    const get = (bearer: string | null) =>
+      fetch(url, { headers: bearer ? { authorization: `Bearer ${bearer}` } : {}, signal });
+    const stored = getAccessToken();
+    let res = await get(stored);
+    // Same one-shot silent refresh apiRequest does: an expired access token must
+    // not strand an owner who has been editing for a while.
+    if (res.status === 401 && stored) {
+      const restored = await restoreSession();
+      if (restored) res = await get(restored.token);
+    }
+    if (!res.ok) {
+      throw new ApiError({
+        status: res.status,
+        code: "caption_unavailable",
+        message: "could not load this caption track",
+      });
+    }
+    return res.text();
+  },
 
   /**
    * GET /api/v1/videos/{id}/chapters — a video's seek-bar chapters (CORE-15),

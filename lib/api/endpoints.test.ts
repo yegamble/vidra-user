@@ -17,6 +17,7 @@ import {
   videoThumbnailUrl,
   playlistThumbnailUrl,
 } from "./endpoints";
+import { setAccessToken } from "./auth-store";
 
 function okJson(): Response {
   return new Response(JSON.stringify({}), {
@@ -1556,6 +1557,35 @@ describe("api endpoints", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/videos/v1/captions/en");
     expect(init.method).toBe("DELETE");
+  });
+
+  it("downloadCaptionText GETs the WebVTT body with the bearer token, as text", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("WEBVTT\n", { status: 200 }));
+    await expect(api.downloadCaptionText("v1", "pt-BR")).resolves.toBe("WEBVTT\n");
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/captions/pt-BR");
+  });
+
+  it("downloadCaptionText throws an ApiError carrying the status on failure", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 404 }));
+    await expect(api.downloadCaptionText("v1", "en")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("downloadCaptionText retries once with a refreshed token after a 401", async () => {
+    setAccessToken("old");
+    fetchMock
+      .mockResolvedValueOnce(new Response("", { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ token: "fresh", user: {} }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("WEBVTT\n", { status: 200 }));
+    await expect(api.downloadCaptionText("v1", "en")).resolves.toBe("WEBVTT\n");
+    const last = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect((last[1].headers as Record<string, string>).authorization).toBe("Bearer fresh");
+    setAccessToken(null);
   });
 
   it("requestAutoCaption POSTs the auto-caption endpoint with a language hint", async () => {
