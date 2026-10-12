@@ -18,6 +18,17 @@ export type CspOptions = {
   isDev: boolean;
 };
 
+/**
+ * isFrameablePath: the paths any site may iframe. /embed, plus PeerTube's legacy
+ * iframe paths — their redirect response must be frameable too, or the browser
+ * blocks the iframe at the hop.
+ */
+export function isFrameablePath(pathname: string): boolean {
+  return ["/embed", "/videos/embed", "/video-playlists/embed"].some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
 export function buildContentSecurityPolicy({ nonce, apiOrigin, frameable, isDev }: CspOptions) {
   const api = apiOrigin ? ` ${apiOrigin}` : "";
   return [

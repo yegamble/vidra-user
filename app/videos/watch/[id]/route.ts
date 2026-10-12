@@ -1,3 +1,4 @@
+import { legacyWatchSearch } from "@/lib/legacy-redirect";
 import { getPublicVideoByLegacyUUID } from "@/lib/video.server";
 import { watchPath } from "@/lib/watch-path";
 
@@ -33,7 +34,7 @@ export async function GET(
   //
   // A resolved video goes straight to its canonical /v/{code} — one hop, not
   // two via /videos/{uuid}, which now renders rather than redirects.
-  const search = new URL(req.url).search;
+  const search = legacyWatchSearch(new URL(req.url).search);
   const location = video === null ? `/videos/${encodeURIComponent(id)}${search}` : watchPath(video, search);
 
   // Still 302, NOT 301; see app/w/[sid]/route.ts for why.
