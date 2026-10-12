@@ -8,7 +8,7 @@ const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const HISTORY = /\/api\/v1\/me\/history(\?|$)/;
-const PLAYLISTS = /\/api\/v1\/me\/playlists$/;
+const PLAYLISTS = /\/api\/v1\/me\/playlists(\?|$)/;
 const SAVED = /\/api\/v1\/me\/saved(\?|$)/;
 
 function video(id: string, title: string) {

@@ -148,9 +148,15 @@ export interface AppendingList<T> {
   drop: (keep: (item: T) => boolean) => void;
   /** Rewrite the loaded rows in place (an edit whose row is still there; the total is untouched). */
   patch: (update: (items: T[]) => T[]) => void;
+  /** Put a freshly created row at the head and count it in the total (a posted comment). */
+  prepend: (item: T) => void;
+  /** Put a freshly created row at the tail and count it in the total (a posted reply, shown after its siblings). */
+  append: (item: T) => void;
 }
 
 interface Loaded<T> {
+  /** Rows the SERVER has handed over (less real deletes): the next page's offset. Local patch/prepend never move it. */
+  fetched: number;
   key: string;
   attempt: number;
   items: T[];
@@ -204,6 +210,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
   const [loaded, setLoaded] = useState<Loaded<T> | null>(() =>
     initialPage
       ? {
+          fetched: initialPage.items.length,
           key: seedKey ?? queryKey,
           attempt: 0,
           items: initialPage.items,
@@ -244,6 +251,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
       .then((page) => {
         if (controller.signal.aborted) return;
         setLoaded({
+          fetched: page.items.length,
           key: fetchKey,
           attempt,
           items: page.items,
@@ -292,7 +300,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
     // state; this only guards a caller calling it directly.
     if (!current || moreController.current) return;
     setMoreStatus("loading");
-    const offset = current.items.length;
+    const offset = current.fetched;
     const controller = new AbortController();
     moreController.current = controller;
     Promise.resolve()
@@ -308,15 +316,17 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
           const held = getId ? new Set(prev.items.map(getId)) : null;
           const fresh = held && getId ? page.items.filter((it) => !held.has(getId(it))) : page.items;
           const items = [...prev.items, ...fresh];
+          const fetched = prev.fetched + page.items.length;
           return {
             ...prev,
             items,
+            fetched,
             total: page.total ?? prev.total,
             totalIsLowerBound: page.totalIsLowerBound ?? prev.totalIsLowerBound,
             hasMore: resolveHasMore({
               serverHasMore: page.hasMore,
               total: page.total ?? prev.total,
-              loaded: items.length,
+              loaded: fetched,
               pageLength: page.items.length,
               pageSize,
             }),
@@ -344,10 +354,29 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
       return {
         ...prev,
         items,
+        fetched: Math.max(0, prev.fetched - removed),
         total: prev.total === undefined ? undefined : Math.max(0, prev.total - removed),
       };
     });
   }, []);
+
+  // A freshly created row: the server gained a row inside the window we hold, so
+  // the next page starts one later and the total grows. Only WHERE it shows
+  // locally differs (a new comment leads; a reply follows its siblings).
+  const addCreated = useCallback((item: T, at: "head" | "tail") => {
+    setLoaded((prev) =>
+      prev
+        ? {
+            ...prev,
+            items: at === "head" ? [item, ...prev.items] : [...prev.items, item],
+            fetched: prev.fetched + 1,
+            total: prev.total === undefined ? undefined : prev.total + 1,
+          }
+        : prev,
+    );
+  }, []);
+  const prepend = useCallback((item: T) => addCreated(item, "head"), [addCreated]);
+  const append = useCallback((item: T) => addCreated(item, "tail"), [addCreated]);
 
   const patch = useCallback((update: (items: T[]) => T[]) => {
     setLoaded((prev) => (prev ? { ...prev, items: update(prev.items) } : prev));
@@ -367,5 +396,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
     reload,
     drop,
     patch,
+    prepend,
+    append,
   };
 }
