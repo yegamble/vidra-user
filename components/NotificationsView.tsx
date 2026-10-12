@@ -144,14 +144,13 @@ export function describeNotification(n: Notification): {
   }
   if (n.type === "comment_held") {
     // A comment on a requires_approval video the recipient manages is waiting
-    // for them (core 0161); the row opens the video, where a reviewer sees it
-    // with Approve/Reject. A federated commenter has no local account, hence
-    // the "Someone" fallback.
+    // for them (core 0161); the row opens the Studio review queue. A federated
+    // commenter has no local account, hence the "Someone" fallback.
     const where = n.video_title ? ` on “${n.video_title}”` : "";
     return {
       lead: actor,
       rest: `’s comment${where} is awaiting your approval`,
-      href: n.video_id ? `/videos/${n.video_id}` : "/studio/content",
+      href: "/studio/comments",
     };
   }
   if (n.type === "comment_mention") {
