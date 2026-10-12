@@ -1175,6 +1175,27 @@ export const api = {
     ),
 
   /**
+   * GET /api/v1/videos/{id}/captions/{lang} — a caption track's raw WebVTT, as
+   * text, with the bearer token so an owner can read a private video's track.
+   * Feeds the cue editor; saving goes back through uploadCaption (replace-by-language).
+   */
+  downloadCaptionText: async (videoId: string, language: string, signal?: AbortSignal) => {
+    const bearer = getAccessToken();
+    const res = await fetch(
+      `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(language)}`,
+      { headers: bearer ? { authorization: `Bearer ${bearer}` } : {}, signal },
+    );
+    if (!res.ok) {
+      throw new ApiError({
+        status: res.status,
+        code: "caption_unavailable",
+        message: "could not load this caption track",
+      });
+    }
+    return res.text();
+  },
+
+  /**
    * GET /api/v1/videos/{id}/chapters — a video's seek-bar chapters (CORE-15),
    * ascending by start_seconds, empty when none. Same visibility as the detail
    * endpoint (private → owner only); the detail's has_chapters flag gates the
