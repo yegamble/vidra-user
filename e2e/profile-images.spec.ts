@@ -9,7 +9,7 @@ const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const MY_AVATAR = /\/api\/v1\/me\/avatar$/;
 const USER_AVATAR_IMG = /\/api\/v1\/users\/u1\/avatar(\?|$)/;
 const MY_CHANNELS = /\/api\/v1\/me\/channels$/;
-const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
+const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos(\?|$)/;
 const CHANNEL_BANNER = /\/api\/v1\/channels\/ada_makes\/banner(\?|$)/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 
@@ -231,7 +231,7 @@ test("the channel page renders the banner and avatar when set", async ({ page })
       },
     }),
   );
-  await page.route(/\/api\/v1\/channels\/ada\/videos$/, (route) =>
+  await page.route(/\/api\/v1\/channels\/ada\/videos(\?|$)/, (route) =>
     route.fulfill({ json: { videos: [] } }),
   );
   await page.route(/\/api\/v1\/channels\/ada\/(avatar|banner)(\?|$)/, (route) =>

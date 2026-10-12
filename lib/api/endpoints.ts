@@ -8,6 +8,8 @@ import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  AdminCreateUserRequest,
+  AdminCreateUserResponse,
   BulkRemoveCommentsResponse,
   AdminPasswordResetLink,
   AdminStats,
@@ -565,11 +567,20 @@ export const api = {
       { signal },
     ),
 
-  /** GET /api/v1/channels/{handle}/videos — a channel's videos (cards). */
-  listChannelVideos: (handle: string, token?: string, signal?: AbortSignal) =>
+  /**
+   * GET /api/v1/channels/{handle}/videos — a channel's videos (cards). Paginated
+   * (limit 1–100, default 20, plus offset) and sortable server-side: `sort` is
+   * `-published_at` (newest first, the default) or `published_at` (oldest first).
+   */
+  listChannelVideos: (
+    handle: string,
+    token?: string,
+    signal?: AbortSignal,
+    params: PageParams & { sort?: "-published_at" | "published_at" } = {},
+  ) =>
     apiRequest<VideoListResponse>(
       `/api/v1/channels/${encodeURIComponent(handle)}/videos`,
-      { token, signal },
+      { token, signal, query: { sort: params.sort, ...pageQuery(params) } },
     ),
 
   /**
@@ -2135,6 +2146,19 @@ export const api = {
       method: "DELETE",
       body,
     }),
+
+  /**
+   * POST /api/v1/admin/users — create an account on the user's behalf (admin).
+   * No account password: the holder sets one through a one-time link, which is
+   * either emailed (`link_emailed`) or returned ONCE in `reset_url` (no-store).
+   * `password` is the CALLER's own (step-up).
+   *
+   * 403 wrong password, 409 username/email taken (or no origin for the link),
+   * 422 validation, 429 rate limited, 502/503 account created but no link
+   * could be issued (mail failed / audit write failed).
+   */
+  createAdminUser: (body: AdminCreateUserRequest) =>
+    apiRequest<AdminCreateUserResponse>("/api/v1/admin/users", { method: "POST", body }),
 
   /**
    * POST /api/v1/admin/users/{id}/password-reset-link — mint a one-time reset

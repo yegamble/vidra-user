@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 // the persistence round-trip is proven in e2e-backed/history.spec.ts).
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
-const HISTORY = /\/api\/v1\/me\/history$/;
+const HISTORY = /\/api\/v1\/me\/history(\?|$)/;
 const HISTORY_ENTRY = /\/api\/v1\/me\/history\/h1$/;
 const DETAIL = /\/api\/v1\/videos\/v1$/;
 const ORIGINAL = /\/api\/v1\/videos\/v1\/original/;
@@ -58,7 +58,7 @@ const session = {
 async function signIn(page: Page) {
   await page.route(LOGIN, (route) => route.fulfill({ json: session }));
   await page.route(FEED, (route) =>
-    route.fulfill({ json: { videos: [detail], sort: "recent", limit: 20, offset: 0 } }),
+    route.fulfill({ json: { videos: [detail], sort: "recent", total: 1, limit: 20, offset: 0 } }),
   );
   await page.goto("/login");
   await page.getByLabel("Email").fill("ada@example.test");
@@ -78,7 +78,7 @@ test("history lists watched videos with a resume label, progress bar, and durati
   await signIn(page);
   await page.route(HISTORY, (route) =>
     route.fulfill({
-      json: { videos: [historyItem("h1", "Watched Clip", 95, 200)], limit: 20, offset: 0 },
+      json: { videos: [historyItem("h1", "Watched Clip", 95, 200)], total: 1, limit: 20, offset: 0 },
     }),
   );
   await page.getByRole("link", { name: "History" }).click();
@@ -95,7 +95,7 @@ test("history lists watched videos with a resume label, progress bar, and durati
 test("removing an entry takes it out of the history list", async ({ page }) => {
   await signIn(page);
   await page.route(HISTORY, (route) =>
-    route.fulfill({ json: { videos: [historyItem("h1", "Watched Clip", 0)], limit: 20, offset: 0 } }),
+    route.fulfill({ json: { videos: [historyItem("h1", "Watched Clip", 0)], total: 1, limit: 20, offset: 0 } }),
   );
   await page.route(HISTORY_ENTRY, (route) => route.fulfill({ status: 204, body: "" }));
   await page.getByRole("link", { name: "History" }).click();
@@ -107,11 +107,11 @@ test("removing an entry takes it out of the history list", async ({ page }) => {
 test("clearing history empties the list", async ({ page }) => {
   await signIn(page);
   await page.route(HISTORY, (route) =>
-    route.fulfill({ json: { videos: [historyItem("h1", "Watched Clip", 0)], limit: 20, offset: 0 } }),
+    route.fulfill({ json: { videos: [historyItem("h1", "Watched Clip", 0)], total: 1, limit: 20, offset: 0 } }),
   );
-  await page.route(/\/api\/v1\/me\/history$/, (route) => {
+  await page.route(HISTORY, (route) => {
     if (route.request().method() === "DELETE") return route.fulfill({ status: 204, body: "" });
-    return route.fulfill({ json: { videos: [historyItem("h1", "Watched Clip", 0)], limit: 20, offset: 0 } });
+    return route.fulfill({ json: { videos: [historyItem("h1", "Watched Clip", 0)], total: 1, limit: 20, offset: 0 } });
   });
   await page.getByRole("link", { name: "History" }).click();
   await expect(page.getByRole("heading", { name: "Watched Clip" })).toBeVisible();
@@ -123,12 +123,12 @@ test("the watch page offers to resume from the saved position", async ({ page })
   await signIn(page);
   await page.route(DETAIL, (route) => route.fulfill({ json: detail }));
   await page.route(ORIGINAL, (route) => route.abort());
-  await page.route(COMMENTS, (route) => route.fulfill({ json: { comments: [], limit: 20, offset: 0 } }));
+  await page.route(COMMENTS, (route) => route.fulfill({ json: { comments: [], total: 1, limit: 20, offset: 0 } }));
   await page.route(RATING, (route) =>
     route.fulfill({ json: { like_count: 0, dislike_count: 0, my_rating: null } }),
   );
   await page.route(SAVED, (route) =>
-    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+    route.fulfill({ json: { videos: [], sort: "recent", total: 1, limit: 20, offset: 0 } }),
   );
   await page.route(WATCH_PROGRESS, (route) => {
     if (route.request().method() === "PUT") return route.fulfill({ status: 204, body: "" });

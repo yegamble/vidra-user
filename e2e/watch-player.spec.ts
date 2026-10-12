@@ -457,7 +457,7 @@ test("the related rail lists same-channel videos first, then same-category", asy
   );
   // Same-channel videos now come from the channel's own listing (the detail
   // response carries channel_handle → GET /channels/{handle}/videos).
-  await page.route(/\/api\/v1\/channels\/h-c1\/videos$/, (route) =>
+  await page.route(/\/api\/v1\/channels\/h-c1\/videos(\?|$)/, (route) =>
     route.fulfill({
       json: {
         videos: [
