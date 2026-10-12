@@ -19,6 +19,12 @@ vi.mock("@/lib/api", () => ({
   api: { resolveRemoteInteraction: vi.fn() },
 }));
 
+const browserSubscribeUrl = vi.fn();
+vi.mock("@/lib/remote-interaction", async (orig) => ({
+  ...(await orig<typeof import("@/lib/remote-interaction")>()),
+  browserSubscribeUrl: (...a: unknown[]) => browserSubscribeUrl(...a),
+}));
+
 import { ApiError, api } from "@/lib/api";
 
 import { RemoteInteractionButton } from "./RemoteInteractionButton";
@@ -83,6 +89,27 @@ describe("RemoteInteractionButton", () => {
     fireEvent.change(open(), { target: { value: "bob@home.example" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("alert");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the visitor's own server when the instance refuses signed-out lookups (403)", async () => {
+    vi.mocked(api.resolveRemoteInteraction).mockRejectedValue(apiError(403));
+    browserSubscribeUrl.mockResolvedValue("https://home.example/i?uri=x");
+    render(<RemoteInteractionButton kind="channel" id="films" navigate={navigate} />);
+    fireEvent.change(open(), { target: { value: "bob@home.example" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("https://home.example/i?uri=x"));
+    expect(browserSubscribeUrl).toHaveBeenCalledWith("bob@home.example", `${window.location.origin}/video-channels/films`);
+  });
+
+  it("shows the address to search for when the browser lookup is blocked too", async () => {
+    vi.mocked(api.resolveRemoteInteraction).mockRejectedValue(apiError(403));
+    browserSubscribeUrl.mockResolvedValue(null);
+    render(<RemoteInteractionButton kind="channel" id="films" navigate={navigate} />);
+    fireEvent.change(open(), { target: { value: "bob@home.example" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const box = (await screen.findByLabelText("Address to search for on your server")) as HTMLInputElement;
+    expect(box.value).toBe(`${window.location.origin}/video-channels/films`);
     expect(navigate).not.toHaveBeenCalled();
   });
 

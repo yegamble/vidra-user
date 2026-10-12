@@ -47,3 +47,52 @@ export function parseInteractionUri(value: string | null | undefined): string | 
     return null;
   }
 }
+
+/**
+ * browserSubscribeUrl is the fallback for instances that do not let signed-out
+ * visitors trigger a server-side lookup: the visitor's OWN browser asks the
+ * visitor's own server for its WebFinger document (Mastodon, PeerTube and
+ * friends serve it with permissive CORS) and builds the subscribe URL itself.
+ * The result gets the same https-only check as the server-resolved one.
+ * Returns null on any failure (CORS refusal, network error, no template) so the
+ * caller can show the manual instructions.
+ */
+export async function browserSubscribeUrl(
+  handle: string,
+  target: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string | null> {
+  const at = handle.lastIndexOf("@");
+  const host = handle.slice(at + 1);
+  try {
+    // The host must be a bare host[:port]: it is spliced into a URL.
+    const probe = new URL(`https://${host}`);
+    if (probe.host !== host.toLowerCase() || probe.username || probe.password) return null;
+    const res = await fetchImpl(
+      `https://${host}/.well-known/webfinger?resource=${encodeURIComponent(`acct:${handle}`)}`,
+      {
+        headers: { Accept: "application/jrd+json, application/json" },
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        signal: AbortSignal.timeout(8000),
+      },
+    );
+    if (!res.ok) return null;
+    const doc: unknown = await res.json();
+    const links = (doc as { links?: unknown }).links;
+    if (!Array.isArray(links)) return null;
+    for (const l of links) {
+      const link = l as { rel?: unknown; template?: unknown };
+      if (
+        link.rel === "http://ostatus.org/schema/1.0/subscribe" &&
+        typeof link.template === "string" &&
+        link.template.includes("{uri}")
+      ) {
+        return safeSubscribeUrl(link.template.split("{uri}").join(encodeURIComponent(target)));
+      }
+    }
+  } catch {
+    // CORS, DNS, timeout, bad JSON: all mean "ask the visitor to do it by hand".
+  }
+  return null;
+}

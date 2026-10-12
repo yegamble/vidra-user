@@ -4130,7 +4130,7 @@ export interface paths {
         };
         /**
          * Find the subscribe URL on a visitor's home fediverse server
-         * @description The outbound half of remote interaction. A visitor who is not signed in here gives their own fediverse handle (user@host) and an address on THIS instance (a channel or video); the server WebFingers the handle's host through the SSRF-guarded federation fetch and returns that host's subscribe template (rel http://ostatus.org/schema/1.0/subscribe) with {uri} replaced by the escaped target. The client navigates to the returned https URL. Anonymous; rate-limited per client IP on the same budget as remote-URI search resolution. Mounted with the federation service; 503 while federation is disabled.
+         * @description The outbound half of remote interaction. A visitor who is not signed in here gives their own fediverse handle (user@host) and an address on THIS instance (a channel or video); the server WebFingers the handle's host through the SSRF-guarded federation fetch and returns that host's subscribe template (rel http://ostatus.org/schema/1.0/subscribe) with {uri} replaced by the escaped target. The client navigates to the returned https URL. Optional auth; signed-out callers need the operator's search_remote_uri_anonymous setting. Rate-limited (fail closed) on the same budget as remote-URI search resolution. Mounted with the federation service; 503 while federation is disabled.
          */
         get: operations["resolveRemoteInteraction"];
         put?: never;
@@ -22493,6 +22493,15 @@ export interface operations {
                     "application/json": components["schemas"]["RemoteInteractionResolution"];
                 };
             };
+            /** @description The caller is signed out and the operator has not enabled remote lookups for anonymous visitors (search_remote_uri_anonymous). The client may fall back to looking the handle up from the browser. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description The handle's server advertises no usable subscribe template. */
             404: {
                 headers: {
@@ -22502,7 +22511,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Malformed handle, a target that is not on this instance, or a handle whose server this instance refuses to contact (private or blocked address). */
+            /** @description Malformed handle, a target that is not on this instance, or a handle that is a literal non-public address. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -22520,7 +22529,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The handle's server could not be reached. */
+            /** @description The handle's server could not be reached (or may not be contacted; the two are deliberately indistinguishable). */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -22529,7 +22538,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Federation is disabled on this instance. */
+            /** @description Federation is disabled on this instance, or the rate budget is temporarily unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

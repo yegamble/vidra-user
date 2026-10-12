@@ -7,6 +7,7 @@ import { Button, Input } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ApiError, api } from "@/lib/api";
 import {
+  browserSubscribeUrl,
   interactionTarget,
   parseFediverseHandle,
   safeSubscribeUrl,
@@ -42,12 +43,29 @@ export function RemoteInteractionButton({
   const { status } = useSession();
   const [open, setOpen] = useState(false);
   const [handle, setHandle] = useState("");
+  const [manualTarget, setManualTarget] = useState<string | null>(null);
   const { run, busy, error, setError } = useAsyncAction(
     async (parsed: string) => {
-      const res = await api.resolveRemoteInteraction(
-        parsed,
-        interactionTarget(window.location.origin, kind, id),
-      );
+      const target = interactionTarget(window.location.origin, kind, id);
+      setManualTarget(null);
+      let res;
+      try {
+        res = await api.resolveRemoteInteraction(parsed, target);
+      } catch (err) {
+        // The operator keeps server-side lookups for signed-out visitors off:
+        // ask the visitor's own server from their browser instead, and if the
+        // browser is not allowed to (CORS), show them what to search for.
+        if (err instanceof ApiError && err.status === 403) {
+          const direct = await browserSubscribeUrl(parsed, target);
+          if (direct) {
+            navigate(direct);
+            return;
+          }
+          setManualTarget(target);
+          return;
+        }
+        throw err;
+      }
       const url = safeSubscribeUrl(res.url);
       if (!url) throw new Error("unsafe");
       navigate(url);
@@ -103,8 +121,22 @@ export function RemoteInteractionButton({
               onChange={(e) => {
                 setHandle(e.target.value);
                 setError(null);
+                setManualTarget(null);
               }}
             />
+            {manualTarget ? (
+              <div role="status" className="text-sm text-fg-muted">
+                We couldn’t reach your server from here. Search for this{" "}
+                {kind === "channel" ? "channel" : "video"} on your server:
+                <input
+                  readOnly
+                  aria-label="Address to search for on your server"
+                  value={manualTarget}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="focus-ring mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg"
+                />
+              </div>
+            ) : null}
             {error ? (
               <p role="alert" className="text-sm text-danger">
                 {error}

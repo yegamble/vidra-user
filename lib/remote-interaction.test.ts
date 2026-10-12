@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  browserSubscribeUrl,
   interactionTarget,
   parseFediverseHandle,
   parseInteractionUri,
@@ -56,5 +57,38 @@ describe("parseInteractionUri", () => {
     expect(parseInteractionUri("acct:x@y")).toBeNull();
     expect(parseInteractionUri(null)).toBeNull();
     expect(parseInteractionUri("javascript:1")).toBeNull();
+  });
+});
+
+describe("browserSubscribeUrl", () => {
+  const TARGET = "https://v.example/video-channels/films";
+  const jrd = (template: string) =>
+    ({ ok: true, json: async () => ({ links: [{ rel: "http://ostatus.org/schema/1.0/subscribe", template }] }) }) as Response;
+
+  it("asks the visitor's own server and fills the template", async () => {
+    const f = vi.fn().mockResolvedValue(jrd("https://home.example/i?uri={uri}"));
+    const url = await browserSubscribeUrl("bob@home.example", TARGET, f as unknown as typeof fetch);
+    expect(url).toBe(`https://home.example/i?uri=${encodeURIComponent(TARGET)}`);
+    expect(f.mock.calls[0][0]).toBe(
+      "https://home.example/.well-known/webfinger?resource=acct%3Abob%40home.example",
+    );
+    expect(f.mock.calls[0][1]).toMatchObject({ credentials: "omit", referrerPolicy: "no-referrer" });
+  });
+
+  it("applies the https-only check to the template", async () => {
+    for (const t of ["http://home.example/i?uri={uri}", "javascript:alert({uri})", "https://u:p@home.example/?u={uri}"]) {
+      const f = vi.fn().mockResolvedValue(jrd(t));
+      expect(await browserSubscribeUrl("bob@home.example", TARGET, f as unknown as typeof fetch)).toBeNull();
+    }
+  });
+
+  it("returns null on a CORS/network failure, a bad status, or a hostile host", async () => {
+    const boom = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    expect(await browserSubscribeUrl("bob@home.example", TARGET, boom as unknown as typeof fetch)).toBeNull();
+    const notOk = vi.fn().mockResolvedValue({ ok: false } as Response);
+    expect(await browserSubscribeUrl("bob@home.example", TARGET, notOk as unknown as typeof fetch)).toBeNull();
+    const never = vi.fn();
+    expect(await browserSubscribeUrl("bob@evil.example/x", TARGET, never as unknown as typeof fetch)).toBeNull();
+    expect(never).not.toHaveBeenCalled();
   });
 });
