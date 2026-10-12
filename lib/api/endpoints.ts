@@ -73,6 +73,7 @@ import type {
   VerifyDonationAddressRequest,
   Comment,
   CommentListResponse,
+  ManagedCommentListResponse,
   BlockedUserListResponse,
   Conversation,
   ConversationListResponse,
@@ -1336,6 +1337,16 @@ export const api = {
       `/api/v1/videos/${encodeURIComponent(videoId)}/comments/${encodeURIComponent(commentId)}/approve`,
       { method: "POST" },
     ),
+
+  /**
+   * GET /api/v1/me/videos/comments — the review queue: comments on every video
+   * the caller manages, newest first. `held: true` = awaiting approval only.
+   */
+  listManagedComments: (params: PageParams & { held?: boolean } = {}, signal?: AbortSignal) =>
+    apiRequest<ManagedCommentListResponse>("/api/v1/me/videos/comments", {
+      query: { held: params.held, ...pageQuery(params) },
+      signal,
+    }),
 
   /** POST /api/v1/me/mutes/accounts/{id} — mute an account (auth; idempotent 204). */
   muteAccount: (userId: string) =>

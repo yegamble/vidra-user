@@ -755,6 +755,16 @@ describe("api endpoints", () => {
     expect(init.method).toBe("POST");
   });
 
+  it("listManagedComments targets the review queue with the held filter and paging", async () => {
+    await api.listManagedComments({ held: true, limit: 10, offset: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/videos/comments?held=true&limit=10&offset=20");
+  });
+
+  it("listManagedComments omits held when the caller wants every comment", async () => {
+    await api.listManagedComments({ limit: 10 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/videos/comments?limit=10");
+  });
+
   it("reportVideo POSTs the reason to the video report endpoint", async () => {
     await api.reportVideo("v1", "spam");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

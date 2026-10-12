@@ -506,6 +506,9 @@ export type LivePublicListResponse = Schemas["LivePublicListResponse"];
 // --- Comments ---------------------------------------------------------------
 export type Comment = Schemas["Comment"];
 export type CommentListResponse = Schemas["CommentListResponse"];
+// The review queue (core 0161): a comment on a video you manage + its title.
+export type ManagedCommentListResponse = Schemas["ManagedCommentListResponse"];
+export type ManagedComment = ManagedCommentListResponse["comments"][number];
 // A video's comments policy; requires_approval holds comments for review.
 export type CommentsPolicy = NonNullable<Video["comments_policy"]>;
 

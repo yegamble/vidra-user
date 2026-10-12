@@ -211,7 +211,7 @@ describe("describeNotification is exhaustive over the type union", () => {
     follow: { href: "/channels/films", rest: /started following/ },
     comment: { href: "/videos/v-1", rest: /commented on/ },
     comment_reply: { href: "/videos/v-1", rest: /replied to your comment/ },
-    comment_held: { href: "/videos/v-1", rest: /awaiting your approval/ },
+    comment_held: { href: "/studio/comments", rest: /awaiting your approval/ },
     message: { href: "/messages/conv-1", rest: /sent you a message/ },
     new_video: { href: "/videos/v-1", rest: /published/ },
     new_report: { href: "/admin", rest: /reported a/ },
