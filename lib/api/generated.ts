@@ -1229,6 +1229,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{username}/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an account's public videos
+         * @description The profile Videos tab: an account's public, published videos across ALL of its channels, newest first, paginated with a `total`. Gated like GET /users/{username}/profile (a private, inactive or unknown profile is 404; a signed-in owner may preview their own). Carries the same visibility filters as GET /channels/{handle}/videos for a non-manager: no private, unlisted, draft, quarantined or moderator-blocked video, the signed-in viewer's mute/block clause, and the viewer's sensitive-content setting.
+         */
+        get: operations["listUserVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/donation-addresses": {
         parameters: {
             query?: never;
@@ -1531,6 +1551,46 @@ export interface paths {
         get: operations["listSubscriptionVideos"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own videos (studio "My videos")
+         * @description Every video on every channel the caller OWNS, in any state or privacy (drafts and private videos included), newest first by default, with discovery-card data. Optional filters combine with AND: q (case- insensitive title substring; LIKE wildcards are literal), privacy, state, and channel_id (one of the caller's channels; another account's channel id simply matches nothing, so the result is empty with total 0, never that account's videos). Unknown privacy/state values and a malformed channel_id are 422. Paginated via limit (1-100, default 20) and offset, and reports the filtered total.
+         */
+        get: operations["listMyVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk delete or change the privacy of the caller's own videos
+         * @description Applies one action to up to 100 of the caller's own videos. Every id must be a video the caller owns: if any id is foreign OR does not exist the whole request answers 404 "video not found" (identically, so it is no existence oracle) and NOTHING is changed. Each item then runs the same pipeline as the single-video route (DELETE /videos/{id} or PATCH /videos/{id} with `privacy`), so federation, the search outbox, storage cleanup, edge purge and audit all fire per item. Items are independent: one that fails (for example `set_privacy` to `password` on a video with no stored password -> 400, exactly as the single route) is reported in `results` and does not stop the others. `privacy` is validated like the single PATCH, including `internal`. Only the caller's own videos are reachable: staff and channel collaborators get no extra reach here.
+         */
+        post: operations["bulkMyVideos"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7469,6 +7529,30 @@ export interface components {
              * @enum {string|null}
              */
             my_rating: "like" | "dislike" | null;
+        };
+        BulkVideosRequest: {
+            video_ids: string[];
+            /** @enum {string} */
+            action: "delete" | "set_privacy";
+            /**
+             * @description Required when action is set_privacy; ignored otherwise.
+             * @enum {string}
+             */
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+        };
+        BulkVideoResult: {
+            /** Format: uuid */
+            video_id: string;
+            ok: boolean;
+            /** @description The HTTP status the single-video route would have answered. */
+            status: number;
+            /** @description Client-safe reason; present only when ok is false. */
+            error?: string;
+        };
+        BulkVideosResponse: {
+            results: components["schemas"]["BulkVideoResult"][];
+            succeeded: number;
+            failed: number;
         };
         VideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
@@ -13840,6 +13924,44 @@ export interface operations {
             };
         };
     };
+    listUserVideos: {
+        parameters: {
+            query?: {
+                /** @description `-published_at` (newest first, the default) or `published_at` (oldest first). */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's public videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description The profile is private, inactive, or unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listUserDonationAddresses: {
         parameters: {
             query?: never;
@@ -14736,6 +14858,107 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyVideos: {
+        parameters: {
+            query?: {
+                /** @description Title search (at most 200 characters). */
+                q?: string;
+                privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+                state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
+                channel_id?: string;
+                /** @description `-published_at` (newest first, default) or `published_at` (oldest first); same convention as the per-channel list. */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown privacy/state, malformed channel_id, or an over-long q. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bulkMyVideos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkVideosRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-id results (the request itself was accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkVideosResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description At least one id is not a video the caller owns; nothing was changed. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Zero ids, more than 100, a malformed or duplicate id, an unknown action, or an invalid privacy. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
