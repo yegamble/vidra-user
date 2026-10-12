@@ -25,12 +25,12 @@ export function localeDir(locale: string): "ltr" | "rtl" {
   return RTL.has(locale.split("-")[0].toLowerCase()) ? "rtl" : "ltr";
 }
 
-/** The shipped locale for a BCP 47 tag: exact, then shorter prefixes ("fr-CA" → "fr"). */
+/** The shipped locale for a BCP 47 tag (or POSIX "fr_FR"): exact, then shorter prefixes. */
 export function matchLocale(
   tag: string | null | undefined,
   { onlyComplete = false, locales = LOCALES as LocaleRegistry } = {},
 ): Locale | null {
-  const subtags = (tag ?? "").trim().toLowerCase().split("-");
+  const subtags = (tag ?? "").trim().toLowerCase().replace(/_/g, "-").split("-");
   for (let n = subtags.length; n > 0; n--) {
     const code = Object.keys(locales).find((c) => c.toLowerCase() === subtags.slice(0, n).join("-"));
     if (code && (!onlyComplete || locales[code].complete)) return code as Locale;
@@ -44,7 +44,7 @@ export function parseAcceptLanguage(header: string | null | undefined): string[]
     .split(",")
     .map((part, index) => {
       const [tag, ...params] = part.split(";").map((s) => s.trim());
-      const q = params.find((p) => p.startsWith("q="));
+      const q = params.find((p) => p.toLowerCase().startsWith("q="));
       return { tag, index, weight: q ? Number(q.slice(2)) || 0 : 1 };
     })
     .filter(({ tag, weight }) => tag && tag !== "*" && weight > 0)

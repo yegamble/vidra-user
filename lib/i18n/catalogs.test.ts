@@ -4,7 +4,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { CATALOGS } from "./catalogs";
-import { en } from "./en";
+import { en, EN_NAMESPACES } from "./en";
+import { FR_NAMESPACES } from "./fr";
 import { LOCALES } from "./locales";
 
 // Catalog guardrails. The type system already rejects an unknown key in a
@@ -39,6 +40,25 @@ describe("locale catalogs", () => {
         expect(allowed.has(name), `${key} uses {${name}}`).toBe(true);
       }
     }
+  });
+
+  // One file per surface (lib/i18n/<locale>/<surface>.ts) so parallel
+  // extraction PRs touch different files. A key lives in the file named by its
+  // first segment; that also makes the namespaces disjoint, so no spread in
+  // the merged catalog can silently overwrite another surface's key.
+  it.each([
+    ["en", EN_NAMESPACES],
+    ["fr", FR_NAMESPACES],
+  ] as const)("%s: every key lives in the namespace file named by its first segment", (_l, namespaces) => {
+    for (const [surface, messages] of Object.entries(namespaces)) {
+      const stray = Object.keys(messages).filter((key) => key.split(".")[0] !== surface);
+      expect(stray, `${surface}.ts`).toEqual([]);
+    }
+  });
+
+  it("merges every en namespace into the catalog", () => {
+    const total = Object.values(EN_NAMESPACES).reduce((n, ns) => n + Object.keys(ns).length, 0);
+    expect(Object.keys(en)).toHaveLength(total);
   });
 
   it("gives every plural message an `other` form", () => {

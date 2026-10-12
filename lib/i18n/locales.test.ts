@@ -22,6 +22,10 @@ describe("parseAcceptLanguage", () => {
     expect(parseAcceptLanguage("de;q=0.5, fr-CA, en;q=0.8, es")).toEqual(["fr-CA", "es", "en", "de"]);
   });
 
+  it("reads the q parameter case-insensitively", () => {
+    expect(parseAcceptLanguage("de;Q=0.2, fr;Q=0.9")).toEqual(["fr", "de"]);
+  });
+
   it("drops the wildcard, q=0 and malformed weights, and survives empty input", () => {
     expect(parseAcceptLanguage("*, fr;q=0, de;q=abc, it")).toEqual(["it"]);
     expect(parseAcceptLanguage("")).toEqual([]);
@@ -34,6 +38,8 @@ describe("matchLocale", () => {
     expect(matchLocale("fr")).toBe("fr");
     expect(matchLocale("FR-ca")).toBe("fr");
     expect(matchLocale("en-Latn-US")).toBe("en");
+    // POSIX-style separators (fr_FR) show up in hand-set cookies.
+    expect(matchLocale("fr_FR")).toBe("fr");
   });
 
   it("returns null for a locale with no shipped catalog, or no tag at all", () => {

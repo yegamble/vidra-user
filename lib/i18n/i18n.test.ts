@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createTranslator, t } from "./index";
+import { createTranslator, intlFor, t } from "./index";
 
 describe("t", () => {
   it("returns the catalog string for a known key", () => {
@@ -14,15 +14,30 @@ describe("t", () => {
   });
 
   it("leaves an unfilled placeholder as its literal token", () => {
-    // No vars supplied → template returned verbatim.
+    // Both calls are compile errors now (vars are typed from the placeholders);
+    // at runtime an unfilled token still survives rather than throwing.
+    // @ts-expect-error — report.title requires { noun }
     expect(t("report.title")).toBe("Report this {noun}");
-    // Wrong var name → the {noun} token survives rather than throwing.
+    // @ts-expect-error — `other` is not a placeholder of report.title
     expect(t("report.title", { other: "x" })).toBe("Report this {noun}");
   });
 
   it("coerces numeric vars to strings", () => {
     // (uses report.title as a generic interpolation carrier)
     expect(t("report.title", { noun: 42 })).toBe("Report this 42");
+  });
+});
+
+describe("typed vars", () => {
+  it("rejects a missing, extra or misspelled var at compile time", () => {
+    const en = createTranslator("en");
+    // @ts-expect-error — a plural message needs { count } to pick its form
+    en("search.suggestions");
+    // @ts-expect-error — common.close has no placeholders
+    en("common.close", { count: 1 });
+    // @ts-expect-error — the placeholder is {query}, not {q}
+    en("search.removeHistory", { q: "cats" });
+    expect(en("search.removeHistory", { query: "cats" })).toBe("Remove “cats” from your search history");
   });
 });
 
@@ -59,7 +74,16 @@ describe("createTranslator", () => {
     );
   });
 
-  it("formats numeric vars with the locale's number format", () => {
+  it("number-formats only {count}, so a year or an id is not grouped", () => {
+    expect(createTranslator("en")("report.title", { noun: 2024 })).toBe("Report this 2024");
+  });
+
+  it("builds Intl.PluralRules / NumberFormat once per locale, not per translator", () => {
+    expect(intlFor("fr")).toBe(intlFor("fr"));
+    expect(intlFor("fr")).not.toBe(intlFor("en"));
+  });
+
+  it("formats {count} with the locale's number format", () => {
     expect(createTranslator("en")("search.suggestions", { count: 1234 })).toBe(
       "1,234 suggestions available",
     );
