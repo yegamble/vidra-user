@@ -3492,6 +3492,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/comments/bulk-remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove every comment by one account
+         * @description Spam-wave cleanup (PeerTube's bulk/remove-comments-of). Hard-deletes every comment authored by one account, instance-wide, in one set-based statement; the end state per comment is identical to DELETE /api/v1/comments/{id} (replies, reports and notifications under it are removed, a pin on the video clears). `account` is a local username (case-insensitive, deactivated accounts included) or, for federated comments, a remote actor URL starting with http:// or https://. Comments by local authors are federated as a Delete exactly as a single delete is; remote authors' comments are removed locally only. Restricted to moderators/admins. An unknown local username is 404; a remote actor with no comments yields removed=0. Audited as moderation.comment.bulk_remove (actor, target account, count; never comment bodies).
+         */
+        post: operations["bulkRemoveAdminComments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/videos": {
         parameters: {
             query?: never;
@@ -7709,6 +7729,14 @@ export interface components {
         };
         CreateReportRequest: {
             reason: string;
+        };
+        BulkRemoveCommentsRequest: {
+            /** @description A local username, or a remote actor URL (http:// or https://). */
+            account: string;
+        };
+        BulkRemoveCommentsResponse: {
+            /** @description How many comments were removed. */
+            removed: number;
         };
         ResolveReportRequest: {
             /** @enum {string} */
@@ -20390,6 +20418,66 @@ export interface operations {
             };
             /** @description The caller is not a moderator or admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bulkRemoveAdminComments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRemoveCommentsRequest"];
+            };
+        };
+        responses: {
+            /** @description The comments were removed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkRemoveCommentsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such local account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
