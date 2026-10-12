@@ -175,6 +175,17 @@ describe("WatchView comment reviewer controls", () => {
     return commentsProps.last?.canManageComments;
   };
 
+  it("gives the channel owner the controls from the video's own channel alone", async () => {
+    // The owner is known from the channel the page already loaded; their Pin/
+    // Heart (and Approve/Reject) must never wait on, or depend on, /me/channels.
+    mocks.getChannel.mockResolvedValue({ handle: "film-house", display_name: "Film House", owner_id: "u-owner" });
+    mocks.getMyChannels.mockReturnValue(new Promise(() => {}));
+    sessionStatus = "authed";
+    sessionUser = { id: "u-owner" };
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await waitFor(() => expect(commentsProps.last?.canManageComments).toBe(true));
+  });
+
   it("gives a channel editor the reviewer controls", async () => {
     await reviewerFlag({ id: "u-editor" }, ["c1"]);
     await waitFor(() => expect(commentsProps.last?.canManageComments).toBe(true));
