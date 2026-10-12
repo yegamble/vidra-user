@@ -2,7 +2,7 @@ import { apiBaseUrl } from "@/lib/config";
 import { clientSearchEventHeaders, searchSessionHeaders } from "@/lib/search-session";
 
 import { getAccessToken } from "./auth-store";
-import { ApiError, apiRequest } from "./client";
+import { ApiError, apiRequest, restoreSession } from "./client";
 import { pageQuery, type PageParams } from "./pagination";
 import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
@@ -75,6 +75,7 @@ import type {
   VerifyDonationAddressRequest,
   Comment,
   CommentListResponse,
+  ManagedCommentListResponse,
   BlockedUserListResponse,
   Conversation,
   ConversationListResponse,
@@ -1204,6 +1205,33 @@ export const api = {
     ),
 
   /**
+   * GET /api/v1/videos/{id}/captions/{lang} — a caption track's raw WebVTT, as
+   * text, with the bearer token so an owner can read a private video's track.
+   * Feeds the cue editor; saving goes back through uploadCaption (replace-by-language).
+   */
+  downloadCaptionText: async (videoId: string, language: string, signal?: AbortSignal) => {
+    const url = `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(language)}`;
+    const get = (bearer: string | null) =>
+      fetch(url, { headers: bearer ? { authorization: `Bearer ${bearer}` } : {}, signal });
+    const stored = getAccessToken();
+    let res = await get(stored);
+    // Same one-shot silent refresh apiRequest does: an expired access token must
+    // not strand an owner who has been editing for a while.
+    if (res.status === 401 && stored) {
+      const restored = await restoreSession();
+      if (restored) res = await get(restored.token);
+    }
+    if (!res.ok) {
+      throw new ApiError({
+        status: res.status,
+        code: "caption_unavailable",
+        message: "could not load this caption track",
+      });
+    }
+    return res.text();
+  },
+
+  /**
    * GET /api/v1/videos/{id}/chapters — a video's seek-bar chapters (CORE-15),
    * ascending by start_seconds, empty when none. Same visibility as the detail
    * endpoint (private → owner only); the detail's has_chapters flag gates the
@@ -1398,6 +1426,28 @@ export const api = {
    */
   unheartComment: (id: string) =>
     apiRequest<Comment>(`/api/v1/comments/${encodeURIComponent(id)}/heart`, { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/videos/{id}/comments/{commentId}/approve — publish a comment
+   * held for review (auth; the video's owner/editors/staff). `updatedAt` is the
+   * version the reviewer saw: an edit since then answers 409. Idempotent.
+   * Rejecting a held comment is `deleteComment`.
+   */
+  approveComment: (videoId: string, commentId: string, updatedAt: string) =>
+    apiRequest<Comment>(
+      `/api/v1/videos/${encodeURIComponent(videoId)}/comments/${encodeURIComponent(commentId)}/approve`,
+      { method: "POST", body: { updated_at: updatedAt } },
+    ),
+
+  /**
+   * GET /api/v1/me/videos/comments — the review queue: comments on every video
+   * the caller manages, newest first. `held: true` = awaiting approval only.
+   */
+  listManagedComments: (params: PageParams & { held?: boolean } = {}, signal?: AbortSignal) =>
+    apiRequest<ManagedCommentListResponse>("/api/v1/me/videos/comments", {
+      query: { held: params.held, ...pageQuery(params) },
+      signal,
+    }),
 
   /** POST /api/v1/me/mutes/accounts/{id} — mute an account (auth; idempotent 204). */
   muteAccount: (userId: string) =>
