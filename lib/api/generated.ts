@@ -3037,7 +3037,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report type is only ever delivered to admins/moderators, but the switch is visible to everyone.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -7554,10 +7554,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
-            type: "follow" | "comment" | "comment_reply" | "message" | "new_video" | "new_report" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
+            type: "follow" | "comment" | "comment_reply" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -7620,11 +7620,14 @@ export interface components {
              *       "caption_ready": true,
              *       "comment": true,
              *       "comment_reply": true,
+             *       "federation_follower_request": true,
              *       "follow": false,
              *       "message": true,
+             *       "new_registration_request": true,
              *       "new_report": true,
              *       "new_video": true,
              *       "report_resolved": true,
+             *       "upload_quarantined": true,
              *       "video_blocked": true,
              *       "video_rejected": true,
              *       "video_unblocked": true
@@ -7636,7 +7639,7 @@ export interface components {
         };
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }
