@@ -148,9 +148,13 @@ export interface AppendingList<T> {
   drop: (keep: (item: T) => boolean) => void;
   /** Rewrite the loaded rows in place (an edit whose row is still there; the total is untouched). */
   patch: (update: (items: T[]) => T[]) => void;
+  /** Put a freshly created row at the head and count it in the total (a posted comment). */
+  prepend: (item: T) => void;
 }
 
 interface Loaded<T> {
+  /** Rows the SERVER has handed over (less real deletes): the next page's offset. Local patch/prepend never move it. */
+  fetched: number;
   key: string;
   attempt: number;
   items: T[];
@@ -204,6 +208,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
   const [loaded, setLoaded] = useState<Loaded<T> | null>(() =>
     initialPage
       ? {
+          fetched: initialPage.items.length,
           key: seedKey ?? queryKey,
           attempt: 0,
           items: initialPage.items,
@@ -244,6 +249,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
       .then((page) => {
         if (controller.signal.aborted) return;
         setLoaded({
+          fetched: page.items.length,
           key: fetchKey,
           attempt,
           items: page.items,
@@ -292,7 +298,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
     // state; this only guards a caller calling it directly.
     if (!current || moreController.current) return;
     setMoreStatus("loading");
-    const offset = current.items.length;
+    const offset = current.fetched;
     const controller = new AbortController();
     moreController.current = controller;
     Promise.resolve()
@@ -308,15 +314,17 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
           const held = getId ? new Set(prev.items.map(getId)) : null;
           const fresh = held && getId ? page.items.filter((it) => !held.has(getId(it))) : page.items;
           const items = [...prev.items, ...fresh];
+          const fetched = prev.fetched + page.items.length;
           return {
             ...prev,
             items,
+            fetched,
             total: page.total ?? prev.total,
             totalIsLowerBound: page.totalIsLowerBound ?? prev.totalIsLowerBound,
             hasMore: resolveHasMore({
               serverHasMore: page.hasMore,
               total: page.total ?? prev.total,
-              loaded: items.length,
+              loaded: fetched,
               pageLength: page.items.length,
               pageSize,
             }),
@@ -344,9 +352,25 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
       return {
         ...prev,
         items,
+        fetched: Math.max(0, prev.fetched - removed),
         total: prev.total === undefined ? undefined : Math.max(0, prev.total - removed),
       };
     });
+  }, []);
+
+  const prepend = useCallback((item: T) => {
+    setLoaded((prev) =>
+      prev
+        ? {
+            ...prev,
+            items: [item, ...prev.items],
+            // The server gained a row inside the window we hold, so the next page
+            // starts one later.
+            fetched: prev.fetched + 1,
+            total: prev.total === undefined ? undefined : prev.total + 1,
+          }
+        : prev,
+    );
   }, []);
 
   const patch = useCallback((update: (items: T[]) => T[]) => {
@@ -367,5 +391,6 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
     reload,
     drop,
     patch,
+    prepend,
   };
 }

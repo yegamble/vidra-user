@@ -31,6 +31,12 @@ function List(props: UseAppendingListOptions<Row>) {
       <button type="button" onClick={() => list.drop((r) => r.id !== "a")}>
         drop a
       </button>
+      <button type="button" onClick={() => list.patch((rs) => [...rs, { id: "local" }])}>
+        add local
+      </button>
+      <button type="button" onClick={() => list.prepend({ id: "new" })}>
+        prepend
+      </button>
     </div>
   );
 }
@@ -360,5 +366,31 @@ describe("useAppendingList — holding a viewer-scoped list until the session se
     await act(async () => rejectMore(new Error("aborted")));
     expect(text("more-status")).toBe("idle");
     expect(text("rows")).toBe("a,b");
+  });
+
+  it("advances by what the server returned, not by locally added rows", async () => {
+    // A reply appended client-side is not a row of the server's window; counting
+    // it would skip a real row on the next page.
+    const offsets: number[] = [];
+    const load = vi.fn(async (w: { offset: number }) => {
+      offsets.push(w.offset);
+      return { items: w.offset === 0 ? rows("a", "b") : rows("c"), total: 3 } as AppendingPage<Row>;
+    });
+    render(<List queryKey="q" pageSize={2} load={load} />);
+    await waitFor(() => expect(text("rows")).toBe("a,b"));
+    act(() => screen.getByText("add local").click());
+    act(() => screen.getByText("more").click());
+    await waitFor(() => expect(text("rows")).toBe("a,b,local,c"));
+    expect(offsets).toEqual([0, 2]);
+    expect(text("has-more")).toBe("false");
+  });
+
+  it("prepends a created row and counts it in the total", async () => {
+    const load = vi.fn(async () => ({ items: rows("a"), total: 1 }) as AppendingPage<Row>);
+    render(<List queryKey="q" load={load} />);
+    await waitFor(() => expect(text("rows")).toBe("a"));
+    act(() => screen.getByText("prepend").click());
+    expect(text("rows")).toBe("new,a");
+    expect(text("total")).toBe("2");
   });
 });

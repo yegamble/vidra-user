@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
-const MY_PLAYLISTS = /\/api\/v1\/me\/playlists$/;
+const MY_PLAYLISTS = /\/api\/v1\/me\/playlists(\?|$)/;
 const CREATE = /\/api\/v1\/playlists$/;
 const DETAIL = /\/api\/v1\/playlists\/p1$/;
 const ADD = /\/api\/v1\/playlists\/p1\/videos$/;

@@ -9,6 +9,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
+import { collectPages } from "@/lib/collect-pages";
 import type { Channel, ChannelStatsResponse, Video, VideoStatsResponse } from "@/lib/api";
 import { formatCount } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
@@ -280,15 +281,18 @@ function VideoStatsSection({ handles, channels }: { handles: string[]; channels:
     // in a callback, not synchronously in the effect body).
     Promise.all(
       active.map((h) =>
-        api
-          .listChannelVideos(h, undefined, controller.signal)
-          .then((res): VideoOption[] =>
-            res.videos.map((v: Video) => ({
-              id: v.id,
-              title: v.title,
-              channelName: nameByHandle.get(h) ?? `@${h}`,
-            })),
-          ),
+        // The picker offers EVERY video, so it walks the paged list to its end.
+        collectPages<Video>((window) =>
+          api
+            .listChannelVideos(h, undefined, controller.signal, window)
+            .then((res) => ({ items: res.videos, total: res.total })),
+        ).then((videos): VideoOption[] =>
+          videos.map((v) => ({
+            id: v.id,
+            title: v.title,
+            channelName: nameByHandle.get(h) ?? `@${h}`,
+          })),
+        ),
       ),
     )
       .then((lists) => {
