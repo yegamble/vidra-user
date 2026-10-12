@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import type { Channel, QuotaStatus, VideoPrivacy } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
 import {
   MAX_CONCURRENT_UPLOADS,
   allSettled,
@@ -349,9 +350,11 @@ export function BatchUploadQueue({
             aria-label="Batch privacy"
             disabled={started}
           >
-            <option value="public">Public</option>
-            <option value="unlisted">Unlisted</option>
-            <option value="private">Private</option>
+            {VIDEO_PRIVACY_CHOICES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
           </Select>
         </div>
       </div>
