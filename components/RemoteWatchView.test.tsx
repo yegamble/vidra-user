@@ -77,6 +77,7 @@ function remoteVideo(overrides: Partial<RemoteVideo> = {}): RemoteVideo {
     has_thumbnail: true,
     duration_seconds: 367,
     published_at: "2026-08-30T08:00:00Z",
+    is_sensitive: false,
     ...overrides,
   };
 }
