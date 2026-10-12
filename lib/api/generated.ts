@@ -6352,6 +6352,8 @@ export interface components {
             /** @example Ada Makes */
             display_name: string;
             description: string;
+            /** @description PeerTube-style free-text (markdown) "support" message, e.g. "Support me on Liberapay: <link>". Omitted when unset. New videos inherit it unless they supply their own. */
+            support?: string;
             /** Format: date-time */
             created_at: string;
             /** @description Whether an avatar is set (served at GET /channels/{handle}/avatar). */
@@ -6391,6 +6393,8 @@ export interface components {
         UpdateChannelRequest: {
             display_name?: string;
             description?: string;
+            /** @description Markdown support message. An empty string clears it; absent leaves it unchanged. */
+            support?: string;
             /** @description Toggle ActivityPub federation for this channel (owner only). Absent leaves it unchanged. */
             activitypub_enabled?: boolean;
             /** @description Toggle ATProto/Bluesky cross-posting for this channel (owner only). Absent leaves it unchanged. */
@@ -6576,6 +6580,8 @@ export interface components {
             blocked?: boolean;
             /** @description The moderator's reason for that block, on the same owner-only listing and only when non-empty. The A16 ruling made it creator-facing: a creator told only that something was taken down can neither appeal it nor avoid repeating it, so the reason the moderator already writes for the moderation block-list is shown to them. It is moderator prose about a named account and never appears on any public surface, on another viewer's read of the same channel, or on the video detail endpoint (which stays 404 while the block stands). */
             block_reason?: string;
+            /** @description PeerTube-style free-text (markdown) "support" message for this video. Present on the detail and create/update views when set. */
+            support?: string;
             /**
              * Format: date-time
              * @description When the video was FIRST published elsewhere (a PeerTube import's originallyPublishedAt, or a date the creator set). Present on the detail and create/update views when known; omitted for anything first published on this instance, where created_at is the only date.
@@ -6998,6 +7004,8 @@ export interface components {
             language?: string;
             /** @description Optional content-license id (see GET /videos/config); unknown value -> 422. Omitted/empty seeds the instance's default_video_licence setting (0 = no default, left unset). */
             license?: string;
+            /** @description Markdown support message. Omitted/null inherits the channel's support text at create time; an empty string means none. */
+            support?: string;
             /** @description Free-form tags. Lowercased, trimmed, and deduped server-side; at most 5 distinct tags of at most 50 characters each -> 422 otherwise. */
             tags?: string[];
             /**
@@ -7031,6 +7039,8 @@ export interface components {
             language?: string;
             /** @description Set the content-license id (see GET /videos/config). Unknown/empty value -> 422. */
             license?: string;
+            /** @description Set the markdown support message; an empty string clears it, absent leaves it unchanged. */
+            support?: string;
             /** @description Replaces the video's whole tag set (an empty array clears it; omit the field to leave tags unchanged). Same limits as create. */
             tags?: string[];
             /**

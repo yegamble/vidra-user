@@ -24,6 +24,7 @@ import { ROW_ACTION } from "./shared";
 import { ChannelProtocolBadges } from "./ChannelProtocolBadges";
 import { CollaboratorsCard } from "./CollaboratorsCard";
 import { DistributionCard } from "./DistributionCard";
+import { SupportTextField } from "./SupportTextField";
 import { useStudio } from "./StudioContext";
 
 // CreateChannelForm — the shared handle + display-name create form used both for
@@ -162,6 +163,7 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
   const { updateChannel, removeChannel } = useStudio();
   const [displayName, setDisplayName] = useState(channel.display_name);
   const [description, setDescription] = useState(channel.description);
+  const [support, setSupport] = useState(channel.support ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -176,6 +178,7 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
       const updated = await api.updateChannel(channel.handle, {
         display_name: displayName.trim(),
         description: description.trim(),
+        support: support.trim(),
       });
       updateChannel(updated);
     } catch (err) {
@@ -229,6 +232,11 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
             rows={3}
             maxLength={1000}
             className="resize-y"
+          />
+          <SupportTextField
+            value={support}
+            onChange={setSupport}
+            ariaLabel="Edit channel support text"
           />
           <p className="text-[13px] text-fg-muted">@{channel.handle}</p>
           <ProfileImageManager
