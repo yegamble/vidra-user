@@ -88,6 +88,12 @@ describe("AdminBlockedRemoteActorsView", () => {
     expect(await screen.findByText(/Could not load the blocked remote accounts/)).toBeTruthy();
   });
 
+  it("caps the reason at the contract's 500-character maxLength", async () => {
+    render(<AdminBlockedRemoteActorsView />);
+    await screen.findByText("No blocked remote accounts");
+    expect(screen.getByLabelText("Reason for blocking (optional)").getAttribute("maxLength")).toBe("500");
+  });
+
   it("blocks by handle with the optional reason, then reloads", async () => {
     render(<AdminBlockedRemoteActorsView />);
     await screen.findByText("No blocked remote accounts");

@@ -13,7 +13,8 @@ import { relativeTime } from "@/lib/format";
 import { useAsyncAction } from "@/lib/use-async-action";
 import { usePagedList } from "@/lib/use-paged-list";
 
-const MAX_REASON_LEN = 2000;
+// Mirrors AdminRemoteBlockRequest.reason maxLength in the OpenAPI contract.
+const MAX_REASON_LEN = 500;
 
 // AdminBlockedRemoteActorsView is the moderator/admin ACCOUNT-level federation
 // blocklist: block one remote account (handle or actor URL) for every reader on
