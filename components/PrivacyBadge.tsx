@@ -3,6 +3,7 @@ import type { VideoPrivacy } from "@/lib/api";
 const DESCRIPTIONS: Record<Exclude<VideoPrivacy, "public">, string> = {
   private: "Only you can see this",
   unlisted: "Anyone with the link can see this; it is hidden from feeds and search",
+  internal: "Only people signed in to this instance can see this",
   password: "Anyone with the password can watch this",
 };
 

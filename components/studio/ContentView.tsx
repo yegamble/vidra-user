@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { useOptionalSession } from "@/components/auth/AuthProvider";
 import { UploadIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { api } from "@/lib/api";
 import type { VideoConfigResponse } from "@/lib/api";
 
+import { MyVideosManager } from "./MyVideosManager";
 import { MyVideosSection } from "./MyVideosSection";
 import { UploadSection } from "./UploadSection";
 import { useStudio } from "./StudioContext";
@@ -18,7 +20,8 @@ import { useStudio } from "./StudioContext";
 // shared context (the per-section channel <select>s are gone). A `?upload=1` deep
 // link auto-opens the upload sheet (then the param is stripped via router.replace).
 export function ContentView() {
-  const { channels, currentHandle } = useStudio();
+  const { channels, currentHandle, currentChannel } = useStudio();
+  const userId = useOptionalSession()?.user?.id;
   const router = useRouter();
   const params = useSearchParams();
   const autoOpen = params.get("upload") === "1";
@@ -34,6 +37,12 @@ export function ContentView() {
   const consumeAutoOpen = useCallback(() => {
     router.replace("/studio/content", { scroll: false });
   }, [router]);
+
+  // The searchable / bulk-actionable list reads GET /me/videos, which serves the
+  // caller's OWN channels only. A studio scoped to a channel the caller merely
+  // edits for someone else keeps the per-channel list, which still serves them.
+  const ownChannels = userId ? channels.filter((c) => c.owner_id === userId) : [];
+  const useManager = ownChannels.length > 0 && (!currentChannel || currentChannel.owner_id === userId);
 
   if (channels.length === 0) {
     return (
@@ -60,7 +69,11 @@ export function ContentView() {
         autoOpen={autoOpen}
         onAutoOpenConsumed={consumeAutoOpen}
       />
-      <MyVideosSection handle={currentHandle} config={config} channels={channels} />
+      {useManager ? (
+        <MyVideosManager config={config} channels={ownChannels} />
+      ) : (
+        <MyVideosSection handle={currentHandle} config={config} channels={channels} />
+      )}
     </div>
   );
 }

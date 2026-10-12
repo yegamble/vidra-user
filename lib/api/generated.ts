@@ -1537,6 +1537,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own videos (studio "My videos")
+         * @description Every video on every channel the caller OWNS, in any state or privacy (drafts and private videos included), newest first by default, with discovery-card data. Optional filters combine with AND: q (case- insensitive title substring; LIKE wildcards are literal), privacy, state, and channel_id (one of the caller's channels; another account's channel id simply matches nothing, so the result is empty with total 0, never that account's videos). Unknown privacy/state values and a malformed channel_id are 422. Paginated via limit (1-100, default 20) and offset, and reports the filtered total.
+         */
+        get: operations["listMyVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk delete or change the privacy of the caller's own videos
+         * @description Applies one action to up to 100 of the caller's own videos. Every id must be a video the caller owns: if any id is foreign OR does not exist the whole request answers 404 "video not found" (identically, so it is no existence oracle) and NOTHING is changed. Each item then runs the same pipeline as the single-video route (DELETE /videos/{id} or PATCH /videos/{id} with `privacy`), so federation, the search outbox, storage cleanup, edge purge and audit all fire per item. Items are independent: one that fails (for example `set_privacy` to `password` on a video with no stored password -> 400, exactly as the single route) is reported in `results` and does not stop the others. `privacy` is validated like the single PATCH, including `internal`. Only the caller's own videos are reachable: staff and channel collaborators get no extra reach here.
+         */
+        post: operations["bulkMyVideos"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{handle}/videos": {
         parameters: {
             query?: never;
@@ -1767,7 +1807,7 @@ export interface paths {
         };
         /**
          * Get a video by id
-         * @description Public and unlisted videos are returned to anyone with the id. A private or non-public-state local video is returned to its owner and to an authenticated moderator/admin, allowing the Manage view to load metadata for private, scheduled, quarantined, and blocked videos; to ordinary non-owners it is reported as 404 so its existence is not revealed. This moderator/admin exception applies only to this metadata detail endpoint and does not widen media or playback routes. A password-protected video (privacy=password, CORE-17) returns 401 with error code "password_required" to a caller who is neither the owner nor a moderator/admin and is not presenting a valid playback token (a plain unknown id is still 404); the caller then unlocks via POST /videos/{id}/unlock and retries with the token (Bearer or ?pt=). The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
+         * @description Public and unlisted videos are returned to anyone with the id. A private or non-public-state local video is returned to its owner and to an authenticated moderator/admin, allowing the Manage view to load metadata for private, scheduled, quarantined, and blocked videos; to ordinary non-owners it is reported as 404 so its existence is not revealed. This moderator/admin exception applies only to this metadata detail endpoint and does not widen media or playback routes. A password-protected video (privacy=password, CORE-17) returns 401 with error code "password_required" to a caller who is neither the owner nor a moderator/admin and is not presenting a valid playback token (a plain unknown id is still 404); the caller then unlocks via POST /videos/{id}/unlock and retries with the token (Bearer or ?pt=). An internal video (privacy=internal) is returned to any signed-in account and answers 401 with error code "sign_in_required" to an anonymous caller; the same rule gates its media, downloads and embed policy. The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
          */
         get: operations["getVideo"];
         put?: never;
@@ -6372,6 +6412,8 @@ export interface components {
             /** @example Ada Makes */
             display_name: string;
             description: string;
+            /** @description PeerTube-style free-text (markdown) "support" message, e.g. "Support me on Liberapay: <link>". Omitted when unset. New videos inherit it unless they supply their own. */
+            support?: string;
             /** Format: date-time */
             created_at: string;
             /** @description Whether an avatar is set (served at GET /channels/{handle}/avatar). */
@@ -6411,6 +6453,8 @@ export interface components {
         UpdateChannelRequest: {
             display_name?: string;
             description?: string;
+            /** @description Markdown support message. An empty string clears it; absent leaves it unchanged. */
+            support?: string;
             /** @description Toggle ActivityPub federation for this channel (owner only). Absent leaves it unchanged. */
             activitypub_enabled?: boolean;
             /** @description Toggle ATProto/Bluesky cross-posting for this channel (owner only). Absent leaves it unchanged. */
@@ -6563,10 +6607,10 @@ export interface components {
             title: string;
             description: string;
             /**
-             * @description Present on every local video; omitted on remote cards.
+             * @description Present on every local video; omitted on remote cards. "internal" (PeerTube's members-only tier) is visible to any signed-in account of this instance and to no anonymous viewer; it is never federated, indexed for public search, or listed on an anonymous surface.
              * @enum {string}
              */
-            privacy?: "public" | "unlisted" | "private" | "password";
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
             /**
              * @description Publish lifecycle. "scheduled" means the upload finished processing but publish_at lies in the future; public surfaces (feed, search, channel lists) only show "published", while direct links behave like any non-published video. "quarantined" means the instance holds new uploads for moderator review (QUARANTINE_NEW_UPLOADS): only the owner (studio badge) and moderators can see the video until it is approved (published) or rejected (failed). "transcoding" means the video opted into publish_after_transcode and is held off every public surface until its HLS transcode completes; like quarantine, only the owner and moderators can see it meanwhile, and the release publishes it through the normal publish transition. Present on every local video; omitted on remote cards.
              * @enum {string}
@@ -6596,6 +6640,8 @@ export interface components {
             blocked?: boolean;
             /** @description The moderator's reason for that block, on the same owner-only listing and only when non-empty. The A16 ruling made it creator-facing: a creator told only that something was taken down can neither appeal it nor avoid repeating it, so the reason the moderator already writes for the moderation block-list is shown to them. It is moderator prose about a named account and never appears on any public surface, on another viewer's read of the same channel, or on the video detail endpoint (which stays 404 while the block stands). */
             block_reason?: string;
+            /** @description PeerTube-style free-text (markdown) "support" message for this video. Present on the detail and create/update views when set. */
+            support?: string;
             /**
              * Format: date-time
              * @description When the video was FIRST published elsewhere (a PeerTube import's originallyPublishedAt, or a date the creator set). Present on the detail and create/update views when known; omitted for anything first published on this instance, where created_at is the only date.
@@ -7011,13 +7057,15 @@ export interface components {
              * @description Omitted/empty seeds the instance's default_video_privacy setting (registry default "public"). "password" is never seeded (a password video needs a password first).
              * @enum {string}
              */
-            privacy?: "public" | "unlisted" | "private" | "password";
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
             /** @description Optional subject-category id (see GET /videos/config). Unknown value -> 422. */
             category?: string;
             /** @description Optional content language code (see GET /videos/config). Unknown value -> 422. */
             language?: string;
             /** @description Optional content-license id (see GET /videos/config); unknown value -> 422. Omitted/empty seeds the instance's default_video_licence setting (0 = no default, left unset). */
             license?: string;
+            /** @description Markdown support message. Omitted/null inherits the channel's support text at create time; an empty string means none. */
+            support?: string;
             /** @description Free-form tags. Lowercased, trimmed, and deduped server-side; at most 5 distinct tags of at most 50 characters each -> 422 otherwise. */
             tags?: string[];
             /**
@@ -7044,13 +7092,15 @@ export interface components {
             title?: string;
             description?: string;
             /** @enum {string} */
-            privacy?: "public" | "unlisted" | "private" | "password";
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
             /** @description Set the subject-category id (see GET /videos/config). Unknown/empty value -> 422. */
             category?: string;
             /** @description Set the content language code (see GET /videos/config). Unknown/empty value -> 422. */
             language?: string;
             /** @description Set the content-license id (see GET /videos/config). Unknown/empty value -> 422. */
             license?: string;
+            /** @description Set the markdown support message; an empty string clears it, absent leaves it unchanged. */
+            support?: string;
             /** @description Replaces the video's whole tag set (an empty array clears it; omit the field to leave tags unchanged). Same limits as create. */
             tags?: string[];
             /**
@@ -7460,6 +7510,30 @@ export interface components {
              */
             my_rating: "like" | "dislike" | null;
         };
+        BulkVideosRequest: {
+            video_ids: string[];
+            /** @enum {string} */
+            action: "delete" | "set_privacy";
+            /**
+             * @description Required when action is set_privacy; ignored otherwise.
+             * @enum {string}
+             */
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+        };
+        BulkVideoResult: {
+            /** Format: uuid */
+            video_id: string;
+            ok: boolean;
+            /** @description The HTTP status the single-video route would have answered. */
+            status: number;
+            /** @description Client-safe reason; present only when ok is false. */
+            error?: string;
+        };
+        BulkVideosResponse: {
+            results: components["schemas"]["BulkVideoResult"][];
+            succeeded: number;
+            failed: number;
+        };
         VideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
         };
@@ -7868,7 +7942,7 @@ export interface components {
             id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private" | "password";
+            privacy: "public" | "unlisted" | "private" | "password" | "internal";
             /** @enum {string} */
             state: "quarantined";
             channel_handle: string;
@@ -7955,7 +8029,7 @@ export interface components {
             video_id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private" | "password";
+            privacy: "public" | "unlisted" | "private" | "password" | "internal";
             /** @enum {string} */
             state: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
             channel_handle: string;
@@ -7999,7 +8073,7 @@ export interface components {
             id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private" | "password";
+            privacy: "public" | "unlisted" | "private" | "password" | "internal";
             /** @enum {string} */
             state: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
             channel_handle: string;
@@ -14735,6 +14809,107 @@ export interface operations {
             };
         };
     };
+    listMyVideos: {
+        parameters: {
+            query?: {
+                /** @description Title search (at most 200 characters). */
+                q?: string;
+                privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+                state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
+                channel_id?: string;
+                /** @description `-published_at` (newest first, default) or `published_at` (oldest first); same convention as the per-channel list. */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown privacy/state, malformed channel_id, or an over-long q. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bulkMyVideos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkVideosRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-id results (the request itself was accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkVideosResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description At least one id is not a video the caller owns; nothing was changed. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Zero ids, more than 100, a malformed or duplicate id, an unknown action, or an invalid privacy. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listChannelVideos: {
         parameters: {
             query?: {
@@ -15158,7 +15333,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The video is password protected and the caller presented no valid credential. Error code "password_required". */
+            /** @description The video is password protected and the caller presented no valid credential (error code "password_required"), or it is privacy=internal and the caller is not signed in (error code "sign_in_required"). */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -15198,7 +15373,7 @@ export interface operations {
                     "application/json": components["schemas"]["Video"];
                 };
             };
-            /** @description The video is password protected and the caller presented no valid credential (owner/moderator/admin token or playback token). Error code "password_required". */
+            /** @description The video is password protected and the caller presented no valid credential (owner/moderator/admin token or playback token), error code "password_required"; or it is privacy=internal and the caller is not signed in, error code "sign_in_required". */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -20697,7 +20872,7 @@ export interface operations {
                 /** @description Lifecycle states to include. Repeatable and/or comma-separated (`?state=draft&state=failed` and `?state=draft,failed` are equivalent). Absent means all states. */
                 state?: ("draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed")[];
                 /** @description Privacy tiers to include. Repeatable and/or comma-separated. Absent means all tiers. */
-                privacy?: ("public" | "unlisted" | "private" | "password")[];
+                privacy?: ("public" | "unlisted" | "private" | "password" | "internal")[];
                 /** @description Whether to include locally hosted rows, federated rows, or both. */
                 scope?: "local" | "remote" | "all";
                 /** @description Exact channel handle. Federated rows match on their `name@domain` handle. */
