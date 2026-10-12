@@ -112,7 +112,8 @@ export function CommentsSection({
   // or a reply, since the tree is derived, not stored).
   const setComments = list.patch;
   const onPosted = list.prepend;
-  const onReplied = (c: Comment) => setComments((prev) => [...prev, c]);
+  // A reply is a new row too: it counts in the heading total like a top-level post.
+  const onReplied = list.append;
   const onEdited = (updated: Comment) =>
     setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
   const onDeleted = (id: string) => list.drop((x) => x.id !== id);

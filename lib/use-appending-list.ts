@@ -150,6 +150,8 @@ export interface AppendingList<T> {
   patch: (update: (items: T[]) => T[]) => void;
   /** Put a freshly created row at the head and count it in the total (a posted comment). */
   prepend: (item: T) => void;
+  /** Put a freshly created row at the tail and count it in the total (a posted reply, shown after its siblings). */
+  append: (item: T) => void;
 }
 
 interface Loaded<T> {
@@ -358,20 +360,23 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
     });
   }, []);
 
-  const prepend = useCallback((item: T) => {
+  // A freshly created row: the server gained a row inside the window we hold, so
+  // the next page starts one later and the total grows. Only WHERE it shows
+  // locally differs (a new comment leads; a reply follows its siblings).
+  const addCreated = useCallback((item: T, at: "head" | "tail") => {
     setLoaded((prev) =>
       prev
         ? {
             ...prev,
-            items: [item, ...prev.items],
-            // The server gained a row inside the window we hold, so the next page
-            // starts one later.
+            items: at === "head" ? [item, ...prev.items] : [...prev.items, item],
             fetched: prev.fetched + 1,
             total: prev.total === undefined ? undefined : prev.total + 1,
           }
         : prev,
     );
   }, []);
+  const prepend = useCallback((item: T) => addCreated(item, "head"), [addCreated]);
+  const append = useCallback((item: T) => addCreated(item, "tail"), [addCreated]);
 
   const patch = useCallback((update: (items: T[]) => T[]) => {
     setLoaded((prev) => (prev ? { ...prev, items: update(prev.items) } : prev));
@@ -392,5 +397,6 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
     drop,
     patch,
     prepend,
+    append,
   };
 }

@@ -37,6 +37,9 @@ function List(props: UseAppendingListOptions<Row>) {
       <button type="button" onClick={() => list.prepend({ id: "new" })}>
         prepend
       </button>
+      <button type="button" onClick={() => list.append({ id: "reply" })}>
+        append
+      </button>
     </div>
   );
 }
@@ -391,6 +394,15 @@ describe("useAppendingList — holding a viewer-scoped list until the session se
     await waitFor(() => expect(text("rows")).toBe("a"));
     act(() => screen.getByText("prepend").click());
     expect(text("rows")).toBe("new,a");
+    expect(text("total")).toBe("2");
+  });
+
+  it("appends a created row at the tail and still counts it in the total (a posted reply)", async () => {
+    const load = vi.fn(async () => ({ items: rows("a"), total: 1 }) as AppendingPage<Row>);
+    render(<List queryKey="q" load={load} />);
+    await waitFor(() => expect(text("rows")).toBe("a"));
+    act(() => screen.getByText("append").click());
+    expect(text("rows")).toBe("a,reply");
     expect(text("total")).toBe("2");
   });
 });
