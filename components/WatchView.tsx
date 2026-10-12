@@ -20,7 +20,7 @@ import { VideoPlayer, type CaptionTrack } from "@/components/player/VideoPlayer"
 import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { RelatedVideos } from "@/components/RelatedVideos";
 import { SupportButton } from "@/components/SupportButton";
-import { TimestampedText } from "@/components/TimestampedText";
+import { UserText } from "@/components/UserText";
 import { WatchActions } from "@/components/watch/WatchActions";
 import { WatchSignInProvider } from "@/components/watch/WatchSignInPrompt";
 import type { PlaybackDelivery } from "@/lib/use-playback-engine";
@@ -645,14 +645,13 @@ export function WatchView({
             </ul>
           ) : null}
           {video.description ? (
-            <p className="whitespace-pre-wrap rounded-2xl border border-border-subtle bg-surface p-4 text-subhead leading-relaxed text-fg shadow-soft">
-              <TimestampedText
-                text={video.description}
-                durationSeconds={video.duration_seconds ?? null}
-                onSeek={seekToTimestamp}
-                keyPrefix="desc"
-              />
-            </p>
+            <UserText
+              variant="description"
+              text={video.description}
+              durationSeconds={video.duration_seconds ?? null}
+              onSeek={seekToTimestamp}
+              className="rounded-2xl border border-border-subtle bg-surface p-4 text-subhead leading-relaxed text-fg shadow-soft"
+            />
           ) : null}
         </div>
       </article>

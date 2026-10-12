@@ -21,6 +21,7 @@ import { formatCount, formatMonthYear, pluralize } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
 import { useSettledSession } from "@/lib/use-settled-session";
 import { useViewerModeration } from "@/lib/use-viewer-moderation";
+import { UserText } from "@/components/UserText";
 
 type Section = "videos" | "about";
 
@@ -194,9 +195,11 @@ function ChannelForViewer({ handle }: { handle: string }) {
           </div>
         </div>
         {channel.description ? (
-          <p className="whitespace-pre-wrap px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4">
-            {channel.description}
-          </p>
+          <UserText
+            variant="description"
+            text={channel.description}
+            className="px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4"
+          />
         ) : null}
       </header>
 

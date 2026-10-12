@@ -15,7 +15,7 @@ import {
   PinIcon,
 } from "@/components/icons";
 import { ReportDialog, type ReportKind } from "@/components/ReportButton";
-import { TimestampedText } from "@/components/TimestampedText";
+import { UserText } from "@/components/UserText";
 import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -912,21 +912,21 @@ function CommentItem({
               </div>
             </form>
           ) : (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">
+            <div className="text-sm leading-relaxed text-fg">
               {mentionUsername ? (
                 // Leading "@username" naming the replied-to author (YouTube
                 // parity) — plain non-link text in the same <p>, so it is part
                 // of the reply's accessible content. It has no profile route
                 // (username ≠ channel handle), matching the non-link author name.
-                <span className="font-semibold text-fg">@{mentionUsername} </span>
+                <span className="block font-semibold text-fg">@{mentionUsername}</span>
               ) : null}
-              <TimestampedText
+              <UserText
+                variant="comment"
                 text={comment.body}
                 durationSeconds={durationSeconds}
                 onSeek={onSeekToTimestamp}
-                keyPrefix={`c-${comment.id}`}
               />
-            </p>
+            </div>
           )}
         </div>
       </div>
