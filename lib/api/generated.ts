@@ -1229,6 +1229,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{username}/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an account's public videos
+         * @description The profile Videos tab: an account's public, published videos across ALL of its channels, newest first, paginated with a `total`. Gated like GET /users/{username}/profile (a private, inactive or unknown profile is 404; a signed-in owner may preview their own). Carries the same visibility filters as GET /channels/{handle}/videos for a non-manager: no private, unlisted, draft, quarantined or moderator-blocked video, the signed-in viewer's mute/block clause, and the viewer's sensitive-content setting.
+         */
+        get: operations["listUserVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/donation-addresses": {
         parameters: {
             query?: never;
@@ -13891,6 +13911,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicUserProfile"];
+                };
+            };
+            /** @description The profile is private, inactive, or unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listUserVideos: {
+        parameters: {
+            query?: {
+                /** @description `-published_at` (newest first, the default) or `published_at` (oldest first). */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's public videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
                 };
             };
             /** @description The profile is private, inactive, or unknown. */

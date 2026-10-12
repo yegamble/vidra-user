@@ -70,7 +70,7 @@ export function ContentView() {
         onAutoOpenConsumed={consumeAutoOpen}
       />
       {useManager ? (
-        <MyVideosManager config={config} channels={ownChannels} />
+        <MyVideosManager config={config} channels={ownChannels} defaultChannel={currentChannel} />
       ) : (
         <MyVideosSection handle={currentHandle} config={config} channels={channels} />
       )}

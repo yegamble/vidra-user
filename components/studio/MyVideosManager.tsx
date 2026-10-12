@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { PlaylistIcon, SearchIcon, TrashIcon, VideoIcon } from "@/components/icons";
+import { PlaylistIcon, SearchIcon, TrashIcon } from "@/components/icons";
 import { Alert, Button, Dropdown, EmptyState, ErrorState, Input, Modal, Select, Spinner } from "@/components/ui";
 import { ListTail } from "@/components/ui/ListTail";
 import { ApiError, api, errorMessage } from "@/lib/api";
@@ -61,10 +61,17 @@ const NO_SELECTION: ReadonlySet<string> = new Set();
 export function MyVideosManager({
   config,
   channels,
+  defaultChannel = null,
 }: {
   config: VideoConfigResponse | null;
   /** The caller's OWN channels (the channel filter's options). */
   channels: Channel[];
+  /**
+   * The studio's current channel. With no filter in the URL the list is scoped
+   * to it (the Studio's channel model, and what this list did before filters);
+   * the Channel filter's "All channels" option widens it.
+   */
+  defaultChannel?: Channel | null;
 }) {
   const autoLoad = useBrowseAutoLoad();
   const query = useListQuery({ prefix: "mv", filterKeys: FILTER_KEYS });
@@ -74,8 +81,12 @@ export function MyVideosManager({
   // `mv_state=bogus` would otherwise be a 422 on every load.
   const privacy = PRIVACIES.find((p) => p.value === filters.privacy)?.value;
   const state = STATES.find((s) => s.value === filters.state)?.value;
-  const channelId = channels.find((c) => c.id === filters.channel)?.id;
   const q = filters.q ?? "";
+  const allChannels = filters.channel === "all";
+  const scope = allChannels
+    ? null
+    : (channels.find((c) => c.id === filters.channel) ?? defaultChannel ?? null);
+  const channelId = scope?.id;
 
   // The search box edits local text immediately and the URL once typing pauses.
   const [text, setText] = useState(q);
@@ -93,12 +104,21 @@ export function MyVideosManager({
     if (next !== appliedQ.current) setFilterRef.current("q", next);
   }, [debouncedText]);
 
-  const queryKey = JSON.stringify([q, privacy, state, channelId]);
+  // With no search/privacy/state filter, a channel-scoped list is exactly the
+  // per-channel listing this surface always used; the account-wide, filterable
+  // GET /me/videos is only needed once a filter (or "All channels") asks for it.
+  const textFiltered = q !== "" || privacy !== undefined || state !== undefined;
+  const useChannelList = !textFiltered && scope !== null;
+  const queryKey = JSON.stringify([q, privacy, state, channelId, allChannels]);
   const list = useAppendingList<Video>({
     queryKey,
     getId: (v) => v.id,
     load: (window, signal) =>
-      api
+      useChannelList
+        ? api
+            .listChannelVideos(scope.handle, undefined, signal, window)
+            .then((res) => ({ items: res.videos, total: res.total }))
+        : api
         .listMyVideos({ q: q || undefined, privacy, state, channel_id: channelId, ...window }, signal)
         .then((res) => ({ items: res.videos, total: res.total })),
   });
@@ -194,7 +214,7 @@ export function MyVideosManager({
     }
   }
 
-  const filtered = q !== "" || privacy !== undefined || state !== undefined || channelId !== undefined;
+  const filtered = textFiltered || filters.channel !== undefined;
   const clearFilters = () => {
     setText("");
     query.setFilters({ q: undefined, privacy: undefined, state: undefined, channel: undefined });
@@ -212,7 +232,7 @@ export function MyVideosManager({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" role="search" aria-label="Filter your videos">
         <div className="relative">
           <Input
-            label="Search"
+            label="Filter by title"
             type="search"
             placeholder="Search titles"
             value={text}
@@ -221,20 +241,26 @@ export function MyVideosManager({
           />
           <SearchIcon size={16} className="pointer-events-none absolute bottom-3 right-3 text-fg-muted" />
         </div>
-        <Select label="Privacy" value={privacy ?? ""} onChange={(e) => query.setFilter("privacy", e.target.value)}>
+        <Select label="Filter by privacy" value={privacy ?? ""} onChange={(e) => query.setFilter("privacy", e.target.value)}>
           <option value="">Any privacy</option>
           {PRIVACIES.map((p) => (
             <option key={p.value} value={p.value}>{p.label}</option>
           ))}
         </Select>
-        <Select label="State" value={state ?? ""} onChange={(e) => query.setFilter("state", e.target.value)}>
+        <Select label="Filter by state" value={state ?? ""} onChange={(e) => query.setFilter("state", e.target.value)}>
           <option value="">Any state</option>
           {STATES.map((s) => (
             <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </Select>
-        <Select label="Channel" value={channelId ?? ""} onChange={(e) => query.setFilter("channel", e.target.value)}>
-          <option value="">All channels</option>
+        <Select
+          label="Filter by channel"
+          value={allChannels ? "all" : (channelId ?? "all")}
+          onChange={(e) =>
+            query.setFilter("channel", e.target.value === defaultChannel?.id ? undefined : e.target.value)
+          }
+        >
+          <option value="all">All channels</option>
           {channels.map((c) => (
             <option key={c.id} value={c.id}>{c.display_name || c.handle}</option>
           ))}
@@ -316,7 +342,9 @@ export function MyVideosManager({
             message="Try a different search, or clear the filters."
           />
         ) : (
-          <EmptyState icon={<VideoIcon size={24} />} title="No videos yet" message="Upload a video to see it here." />
+          <p className="text-sm text-fg-muted">
+            {scope ? "No videos in this channel yet." : "No videos yet."}
+          </p>
         )
       ) : (
         <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
@@ -331,7 +359,7 @@ export function MyVideosManager({
               leading={
                 <input
                   type="checkbox"
-                  aria-label={`Select ${v.title}`}
+                  aria-label={`Include ${v.title} in bulk actions`}
                   className="h-4 w-4 shrink-0 rounded border-border accent-accent focus-ring"
                   checked={selected.has(v.id)}
                   onChange={() => toggle(v.id)}

@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({
 
 const mocks = vi.hoisted(() => ({
   listMyVideos: vi.fn(),
+  listChannelVideos: vi.fn(),
   bulkMyVideos: vi.fn(),
   getInstance: vi.fn(),
   getMyPlaylists: vi.fn(),
@@ -48,6 +49,7 @@ const ok = (ids: string[]) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   nav.params = new URLSearchParams();
+  mocks.listChannelVideos.mockResolvedValue({ videos: rows(3), total: 3, limit: 20, offset: 0 });
   mocks.getInstance.mockResolvedValue({ features: {} });
   mocks.listMyVideos.mockResolvedValue({ videos: rows(3), total: 3, limit: 20, offset: 0 });
   mocks.getMyPlaylists.mockResolvedValue({ playlists: [{ id: "p1", title: "Faves" }], total: 1 });
@@ -66,7 +68,7 @@ describe("MyVideosManager filters", () => {
       expect.objectContaining({ q: "holiday", privacy: "internal", state: "draft", channel_id: "c2" }),
       expect.anything(),
     );
-    expect((screen.getByLabelText("Search") as HTMLInputElement).value).toBe("holiday");
+    expect((screen.getByLabelText("Filter by title") as HTMLInputElement).value).toBe("holiday");
   });
 
   it("ignores URL values the contract does not know instead of sending a 422", async () => {
@@ -83,7 +85,7 @@ describe("MyVideosManager filters", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     render(<MyVideosManager config={null} channels={channels} />);
     await screen.findByText("Clip 0");
-    const box = screen.getByLabelText("Search");
+    const box = screen.getByLabelText("Filter by title");
     fireEvent.change(box, { target: { value: "h" } });
     fireEvent.change(box, { target: { value: "ho" } });
     fireEvent.change(box, { target: { value: "hol" } });
@@ -100,15 +102,43 @@ describe("MyVideosManager filters", () => {
     mocks.listMyVideos.mockResolvedValue({ videos: [], total: 0, limit: 20, offset: 0 });
     render(<MyVideosManager config={null} channels={channels} />);
     await screen.findByText("No videos match these filters");
-    fireEvent.change(screen.getByLabelText("State"), { target: { value: "failed" } });
+    fireEvent.change(screen.getByLabelText("Filter by state"), { target: { value: "failed" } });
     expect(nav.replace.mock.calls.at(-1)?.[0]).toContain("mv_state=failed");
+  });
+});
+
+describe("MyVideosManager channel scope", () => {
+  const [c1] = channels as unknown as { id: string; handle: string }[];
+
+  it("lists the studio's current channel through the per-channel endpoint until a filter is set", async () => {
+    render(<MyVideosManager config={null} channels={channels} defaultChannel={c1 as never} />);
+    await screen.findByText("Clip 0");
+    expect(mocks.listChannelVideos).toHaveBeenCalledWith("ada", undefined, expect.anything(), expect.anything());
+    expect(mocks.listMyVideos).not.toHaveBeenCalled();
+  });
+
+  it("switches to the account-wide endpoint, scoped to that channel, once a filter is set", async () => {
+    nav.params = new URLSearchParams("mv_privacy=private");
+    render(<MyVideosManager config={null} channels={channels} defaultChannel={c1 as never} />);
+    await screen.findByText("Clip 0");
+    expect(mocks.listMyVideos).toHaveBeenCalledWith(
+      expect.objectContaining({ privacy: "private", channel_id: "c1" }),
+      expect.anything(),
+    );
+  });
+
+  it("'All channels' drops the channel scope", async () => {
+    nav.params = new URLSearchParams("mv_channel=all");
+    render(<MyVideosManager config={null} channels={channels} defaultChannel={c1 as never} />);
+    await screen.findByText("Clip 0");
+    expect(mocks.listMyVideos.mock.calls[0][0].channel_id).toBeUndefined();
   });
 });
 
 describe("MyVideosManager bulk actions", () => {
   async function pick(...titles: string[]) {
     await screen.findByText("Clip 0");
-    for (const t of titles) fireEvent.click(screen.getByLabelText(`Select ${t}`));
+    for (const t of titles) fireEvent.click(screen.getByLabelText(`Include ${t} in bulk actions`));
   }
 
   it("confirms a bulk delete naming the count, then refreshes the list", async () => {
@@ -146,8 +176,8 @@ describe("MyVideosManager bulk actions", () => {
     const failures = screen.getByRole("list", { name: "Videos that failed" });
     expect(within(failures).getByText(/needs at least one password/)).toBeTruthy();
     // The list refreshes after the action; the failed row comes back still selected.
-    expect(((await screen.findByLabelText("Select Clip 1")) as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByLabelText("Select Clip 0") as HTMLInputElement).checked).toBe(false);
+    expect(((await screen.findByLabelText("Include Clip 1 in bulk actions")) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Include Clip 0 in bulk actions") as HTMLInputElement).checked).toBe(false);
   });
 
   it("confirms a privacy change naming the count and target, and warns that public federates", async () => {
@@ -194,7 +224,7 @@ describe("MyVideosManager bulk actions", () => {
     fireEvent.click(screen.getByLabelText("Select first 100"));
     expect(screen.getByText("100 selected")).toBeTruthy();
     expect(screen.getByText("Selection is limited to 100 videos per action.")).toBeTruthy();
-    fireEvent.click(screen.getByLabelText("Select Clip 110"));
+    fireEvent.click(screen.getByLabelText("Include Clip 110 in bulk actions"));
     expect(screen.getByText("100 selected")).toBeTruthy();
   });
 
