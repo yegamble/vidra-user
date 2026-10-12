@@ -77,6 +77,8 @@ vi.mock("@/lib/api", () => ({
     getMyPlaylists: vi.fn(),
     getSavedVideos: vi.fn(),
   },
+  // Read by the instance-defaults store behind the Load more auto-load switch.
+  getInstanceCached: vi.fn(() => new Promise(() => {})),
   isSensitiveVideo: (candidate: { is_sensitive?: boolean }) => candidate.is_sensitive === true,
   videoThumbnailUrl: (id: string) => `/api/v1/videos/${id}/thumbnail`,
   videoOriginalUrl: (id: string) => `/api/v1/videos/${id}/original`,
@@ -355,5 +357,28 @@ describe("LibraryView", () => {
     expect(previewMocks.props.get("private")?.src).toBeNull();
     expect(previewMocks.props.get("sensitive")?.src).toBeNull();
     expect(String(previewMocks.props.get("sensitive")?.posterClassName)).toContain("blur-2xl");
+  });
+
+  it("pages the Saved list: page 2 at offset 20, then no more button at the total", async () => {
+    mockHistory.mockResolvedValue({ total: 0, videos: [], limit: 12, offset: 0 });
+    mockPlaylists.mockResolvedValue({ total: 0, limit: 20, offset: 0, playlists: [] });
+    const rows = (from: number, n: number) =>
+      Array.from({ length: n }, (_, i) => video(`s${from + i}`, `Saved ${from + i}`));
+    mockSaved.mockImplementation((params) =>
+      Promise.resolve(
+        params?.offset
+          ? { total: 23, videos: rows(20, 3), limit: 20, offset: 20 }
+          : { total: 23, videos: rows(0, 20), limit: 20, offset: 0 },
+      ) as never,
+    );
+    render(<LibraryView />);
+    await screen.findByLabelText("Saved 0");
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByLabelText("Saved 22")).toBeTruthy();
+    expect(mockSaved).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 20, offset: 20 }),
+      expect.anything(),
+    );
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
   });
 });

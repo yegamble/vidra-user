@@ -2015,8 +2015,11 @@ export const api = {
     }),
 
   /** GET /api/v1/me/playlists — the caller's playlists, newest first (auth). */
-  getMyPlaylists: (signal?: AbortSignal) =>
-    apiRequest<PlaylistListResponse>("/api/v1/me/playlists", { signal }),
+  getMyPlaylists: (signal?: AbortSignal, params: PageParams = {}) =>
+    apiRequest<PlaylistListResponse>("/api/v1/me/playlists", {
+      query: pageQuery(params),
+      signal,
+    }),
 
   /** POST /api/v1/playlists — create a playlist (auth). */
   createPlaylist: (body: CreatePlaylistRequest) =>
