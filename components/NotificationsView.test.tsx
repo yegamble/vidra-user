@@ -18,6 +18,31 @@ function notif(overrides: Partial<Notification>): Notification {
 }
 
 describe("describeNotification", () => {
+  // report_message has two audiences. The reporter is told by "a moderator" —
+  // the server never names who — and staff are told which reporter wrote,
+  // linked to the queue where the thread lives. Neither carries the body.
+  it("renders report_message for the reporter without naming the moderator", () => {
+    const { lead, rest } = describeNotification(
+      notif({ type: "report_message", report_id: "r-1", report_target_type: "remote_video" }),
+    );
+    expect(lead).toBe("A moderator");
+    expect(rest).toBe(" sent you a message about your remote video report");
+  });
+
+  it("renders report_message for staff as the reporter writing, linking to the queue", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({
+        type: "report_message",
+        actor: { username: "bob", display_name: "" },
+        report_id: "r-1",
+        report_target_type: "video",
+      }),
+    );
+    expect(lead).toBe("bob");
+    expect(rest).toBe(" sent a message about their video report");
+    expect(href).toBe("/moderation");
+  });
+
   it("renders new_report as the reporter filing a report, linking to the admin queue", () => {
     const { lead, rest, href } = describeNotification(
       notif({
@@ -214,6 +239,7 @@ describe("notification pref labels", () => {
       "federation_follower_request",
       "new_video",
       "report_resolved",
+      "report_message",
       "video_rejected",
       "video_blocked",
       "video_unblocked",
@@ -247,6 +273,7 @@ describe("describeNotification is exhaustive over the type union", () => {
       rest: /asked to follow/,
     },
     report_resolved: { href: "#", rest: /your report/ },
+    report_message: { href: "#", rest: /message about your report/ },
     video_rejected: { href: "/studio", rest: /rejected/ },
     video_blocked: { href: "/studio/content", rest: /blocked/ },
     video_unblocked: { href: "/videos/v-1", rest: /restored/ },

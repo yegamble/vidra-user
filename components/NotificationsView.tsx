@@ -36,6 +36,7 @@ export function NotificationTypeIcon({ type }: { type: string }) {
     case "comment_reply":
     case "comment_mention":
     case "message":
+    case "report_message":
       return <MessageCircleIcon size={16} />;
     case "video_rejected":
     case "video_blocked":
@@ -77,6 +78,7 @@ const NOTIF_CHIP: Record<string, string> = {
   // and the same failure class as a missing describeNotification case.
   video_unblocked: "bg-tile-green/12 text-tile-green",
   report_resolved: "bg-tile-orange/12 text-tile-orange",
+  report_message: "bg-tile-orange/12 text-tile-orange",
   new_report: "bg-tile-red/12 text-tile-red",
   new_video: "bg-accent/12 text-accent",
   // Staff approval-queue signals: the amber/orange family reads as "needs a
@@ -202,6 +204,16 @@ export function describeNotification(n: Notification): {
         : "resolved";
     const target = n.report_target_type ? `${n.report_target_type} report` : "report";
     return { lead: "A moderator", rest: ` ${outcome} your ${target}`, href: "#" };
+  }
+  if (n.type === "report_message") {
+    // A new message on a report's thread (core 0163). It has two audiences:
+    // with an actor, the REPORTER wrote and this recipient is staff, so the
+    // row links to the queue that holds the thread; without one, staff wrote
+    // to the reporter, and the server never names which moderator. The body is
+    // never carried — the thread is the only place it is read.
+    const target = n.report_target_type ? `${n.report_target_type.replaceAll("_", " ")} report` : "report";
+    if (n.actor) return { lead: actor, rest: ` sent a message about their ${target}`, href: "/moderation" };
+    return { lead: "A moderator", rest: ` sent you a message about your ${target}`, href: "#" };
   }
   if (n.type === "new_report") {
     // Staff-only: a user filed an abuse report (the moderation queue's push

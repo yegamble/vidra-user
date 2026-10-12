@@ -160,6 +160,8 @@ import type {
   RegistrationRequestListResponse,
   RejectRegistrationRequest,
   ReportListResponse,
+  ReportMessage,
+  ReportMessageListResponse,
   ReportStatusFilter,
   ResolveReportRequest,
   UnreadCountResponse,
@@ -2179,6 +2181,25 @@ export const api = {
    */
   deleteReport: (id: string) =>
     apiRequest<void>(`/api/v1/admin/reports/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /**
+   * GET /api/v1/reports/{id}/messages — a report's reporter↔staff thread, oldest
+   * first. Open to the report's reporter and to staff; anyone else gets the same
+   * 404 as an unknown report. `can_reply` is false for a report another instance
+   * filed (no local reporter to write to).
+   */
+  getReportMessages: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<ReportMessageListResponse>(`/api/v1/reports/${encodeURIComponent(id)}/messages`, {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** POST /api/v1/reports/{id}/messages — add to the thread (1–3000 chars; 409 when read-only). */
+  postReportMessage: (id: string, body: string) =>
+    apiRequest<ReportMessage>(`/api/v1/reports/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      body: { body },
+    }),
 
   /**
    * GET /api/v1/admin/users — accounts newest first (admin only). Optional `q`
