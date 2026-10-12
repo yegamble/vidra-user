@@ -585,6 +585,32 @@ export const api = {
     ),
 
   /**
+   * GET /api/v1/users/{username}/videos — an account's public videos across ALL
+   * its channels (the profile Videos tab). Same paging and sort as
+   * listChannelVideos; 404 when the profile is private or unknown.
+   */
+  listUserVideos: (
+    username: string,
+    signal?: AbortSignal,
+    params: PageParams & { sort?: "-published_at" | "published_at" } = {},
+  ) =>
+    apiRequest<VideoListResponse>(
+      `/api/v1/users/${encodeURIComponent(username)}/videos`,
+      { signal, query: { sort: params.sort, ...pageQuery(params) } },
+    ),
+
+  /**
+   * GET /api/v1/channels/{handle}/playlists — a channel's playlists (the
+   * Playlists tab), newest first, paginated. Public ones for everyone; the
+   * playlist owner also gets their own unlisted/private ones.
+   */
+  listChannelPlaylists: (handle: string, signal?: AbortSignal, params: PageParams = {}) =>
+    apiRequest<PlaylistListResponse>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/playlists`,
+      { signal, query: pageQuery(params) },
+    ),
+
+  /**
    * GET /api/v1/videos/{id}/stats — creator statistics for a video (auth, owner
    * only; a non-owner/unknown id is 404 so existence is not leaked).
    */
