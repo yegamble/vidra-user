@@ -23,6 +23,7 @@ import { useAppendingList } from "@/lib/use-appending-list";
 import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { useSettledSession } from "@/lib/use-settled-session";
 import { useViewerModeration } from "@/lib/use-viewer-moderation";
+import { UserText } from "@/components/UserText";
 
 type Section = "videos" | "about";
 
@@ -193,9 +194,11 @@ function ChannelForViewer({ handle }: { handle: string }) {
           </div>
         </div>
         {channel.description ? (
-          <p className="whitespace-pre-wrap px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4">
-            {channel.description}
-          </p>
+          <UserText
+            variant="description"
+            text={channel.description}
+            className="px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4"
+          />
         ) : null}
       </header>
 
