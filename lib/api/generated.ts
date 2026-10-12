@@ -2745,15 +2745,35 @@ export interface paths {
         };
         /**
          * List a video's comments
-         * @description Returns a public, published video's comments newest-first, each with its author's identity. Auth is optional: an authenticated viewer's muted accounts are hidden from the list (mutes are per-viewer), while an anonymous viewer sees all comments. A non-public/unpublished or unknown video is 404. Paginated via limit (1–100, default 20) and offset.
+         * @description Returns a public, published video's comments newest-first, each with its author's identity. Auth is optional: an authenticated viewer's muted accounts are hidden from the list (mutes are per-viewer), while an anonymous viewer sees all comments. A non-public/unpublished or unknown video is 404. Paginated via limit (1–100, default 20) and offset. Held comments appear only for their author and the video's reviewers (owner, editor members, staff), in both the page and total.
          */
         get: operations["listComments"];
         put?: never;
         /**
          * Post a comment on a video
-         * @description Adds a comment by the authenticated user to a public, published video. Posting requires the instance-wide comments_enabled setting AND the video's comments_policy to be "enabled" (403 feature_disabled otherwise, config-parity W9); reading comments stays open either way. Best-effort notifications follow: the video's owner gets a "comment" notification, and when parent_id names another user's comment its author gets a "comment_reply" one. A user who is both (the owner replying under their own video) receives comment_reply only — one reply, one notification.
+         * @description Adds a comment by the authenticated user to a public, published video. Posting requires the instance-wide comments_enabled setting AND the video's comments_policy to not be "disabled" (403 feature_disabled otherwise, config-parity W9); reading comments stays open either way. Best-effort notifications follow: the video's owner gets a "comment" notification, and when parent_id names another user's comment its author gets a "comment_reply" one. A user who is both (the owner replying under their own video) receives comment_reply only — one reply, one notification. On a "requires_approval" video a non-reviewer's comment is held (held_for_review): seen only by its author and the reviewers, not federated, and announcing nothing (comment, comment_reply, mentions) until approved; a held parent is a 422 like an unknown one.
          */
         post: operations["createComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/comments/{commentId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a comment held for review
+         * @description Publishes a held comment: reviewers only (owner, editor members, staff; else 403), and the comment must be on this video (else 404). Idempotent — only the first approval federates it, raises the comment/comment_reply notifications (only while the video is public; never to an approving owner) and is audited (content.comment.approve). Reject with DELETE /comments/{id}.
+         */
+        post: operations["approveComment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2772,14 +2792,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a comment
-         * @description Deletes a comment. The comment's author may always delete it; a moderator/admin may delete anyone's. An unknown id is 404; a non-author non-moderator is 403.
+         * @description Deletes a comment. The comment's author may always delete it; a moderator/admin may delete anyone's; the video's owner or an editor member may delete a comment held for review (rejecting it, audited as content.comment.reject). An unknown id is 404; anyone else is 403.
          */
         delete: operations["deleteComment"];
         options?: never;
         head?: never;
         /**
          * Edit a comment
-         * @description Edits the caller's own comment body. Only the author may edit (moderators delete, not edit): another user's comment is 403, an unknown id is 404, and a blank or too-long body is 422. Bumps updated_at so `edited` becomes true.
+         * @description Edits the caller's own comment body. Only the author may edit (moderators delete, not edit): another user's comment is 403, an unknown id is 404, and a blank or too-long body is 422. Bumps updated_at so `edited` becomes true. On a requires_approval video, a changed body from anyone but the video's reviewers sends the comment back to held_for_review until re-approved.
          */
         patch: operations["updateComment"];
         trace?: never;
@@ -2794,7 +2814,7 @@ export interface paths {
         get?: never;
         /**
          * Pin a comment
-         * @description Pins a top-level comment as its video's single pinned comment (a YouTube-style creator pin). The caller must be able to manage the comment's video (its channel owner or an editor) or be a moderator/admin. Pinning replaces any existing pin. Only a top-level, non-tombstoned comment can be pinned (422 otherwise). This is local metadata — it never edits the comment body and never federates.
+         * @description Pins a top-level comment as its video's single pinned comment (a YouTube-style creator pin). The caller must be able to manage the comment's video (its channel owner or an editor) or be a moderator/admin. Pinning replaces any existing pin. Only a top-level, non-tombstoned comment that is not held for review can be pinned (422 otherwise). This is local metadata — it never edits the comment body and never federates.
          */
         put: operations["pinComment"];
         post?: never;
@@ -6191,7 +6211,7 @@ export interface components {
                      */
                     licence: number;
                     /** @enum {string} */
-                    comment_policy: "enabled" | "disabled";
+                    comment_policy: "enabled" | "disabled" | "requires_approval";
                     download_enabled: boolean;
                 };
             };
@@ -6732,11 +6752,11 @@ export interface components {
             /** @description Optional content-license id from GET /videos/config; omitted when unset. */
             license?: string;
             /**
-             * @description The per-video comment policy (config-parity W9). Present on the create/update/detail views; omitted on list/feed views and remote cards.
+             * @description The per-video comment policy (config-parity W9; requires_approval holds comments for the video's reviewers to approve). Present on the create/update/detail views; omitted on list/feed views and remote cards.
              * @enum {string}
              */
-            comments_policy?: "enabled" | "disabled";
-            /** @description EFFECTIVE comment availability on the DETAIL view only: the instance-wide comments_enabled setting AND this video's comments_policy. Reading existing comments stays open either way; this reports whether posting is possible. */
+            comments_policy?: "enabled" | "disabled" | "requires_approval";
+            /** @description EFFECTIVE comment availability on the DETAIL view only: the instance-wide comments_enabled setting AND this video's comments_policy (true for requires_approval, which still accepts comments). Reading existing comments stays open either way; this reports whether posting is possible. */
             comments_enabled?: boolean;
             /** @description The per-video download policy (config-parity W9). Present on the create/update/detail views; omitted on list/feed views. Effective availability for regular viewers is this flag AND the instance downloads feature (GET /instance features.downloads); moderators/admins bypass both. */
             download_enabled?: boolean;
@@ -7139,10 +7159,10 @@ export interface components {
             /** @description Optional creator content-warning text, trimmed and capped at 280 characters (-> 422 over the cap). Storable regardless of is_sensitive; the frontend pairs them. */
             sensitive_reason?: string;
             /**
-             * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting. PeerTube's requires_approval tier is deliberately not supported -> 422.
+             * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting.
              * @enum {string}
              */
-            comments_policy?: "enabled" | "disabled";
+            comments_policy?: "enabled" | "disabled" | "requires_approval";
             /** @description Per-video download policy (config-parity W9), layered on the instance-wide downloads_enabled gate (both must be on for regular viewers). Omitted (null) seeds the instance's default_download_enabled setting. */
             download_enabled?: boolean;
             /** @description Opt into publish-after-transcode (default false). When true, the video is held (state "transcoding") off every public surface until its HLS transcode completes, then publishes automatically. Ignored when transcoding is disabled/unavailable (the video publishes immediately) and when publish_at is set (time-gating takes precedence). */
@@ -7179,10 +7199,10 @@ export interface components {
             /** @description Set the creator content-warning text (omit to leave unchanged; an empty string clears it). Trimmed and capped at 280 characters -> 422 over the cap. */
             sensitive_reason?: string;
             /**
-             * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open.
+             * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open; "requires_approval" holds them.
              * @enum {string}
              */
-            comments_policy?: "enabled" | "disabled";
+            comments_policy?: "enabled" | "disabled" | "requires_approval";
             /** @description Set the per-video download policy (omit to leave unchanged), layered on the instance-wide downloads_enabled gate. */
             download_enabled?: boolean;
             /** @description Set the publish-after-transcode opt-in (omit to leave unchanged). Setting it true on an already-published video that has never been publicly visible and still has a live transcode job holds the video (state "transcoding") until that transcode completes; a publicly-visible video is never pulled back to hidden. */
@@ -7239,6 +7259,8 @@ export interface components {
             pinned: boolean;
             /** @description True when the video's creator has hearted this comment (a like from the uploader). */
             hearted: boolean;
+            /** @description True while the comment awaits approval; only its author and the video's reviewers ever receive it. It cannot be pinned or replied to. */
+            held_for_review: boolean;
         };
         CommentListResponse: components["schemas"]["PageMeta"] & {
             comments: components["schemas"]["Comment"][];
@@ -18467,6 +18489,56 @@ export interface operations {
             };
             /** @description Validation failed. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approveComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                commentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The comment, no longer held. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller cannot review this video's comments. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such comment on this video. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

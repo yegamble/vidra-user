@@ -88,6 +88,7 @@ function mk(id: string, overrides: Partial<Comment> = {}): Comment {
     deleted: false,
     pinned: false,
     hearted: false,
+    held_for_review: false,
     ...overrides,
   };
 }

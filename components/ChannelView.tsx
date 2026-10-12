@@ -146,15 +146,22 @@ function ChannelForViewer({ handle }: { handle: string }) {
             />
             <div className="order-last w-full min-w-0 pb-1 sm:order-none sm:w-auto sm:flex-1">
               <h1 className="text-title sm:text-large-title">{name}</h1>
-              <p className="mt-1 text-subhead tabular-nums text-fg-muted">
-                @{channel.handle} · {formatCount(channel.follower_count)}{" "}
-                {pluralize(channel.follower_count, "follower")} ·{" "}
-                {videoCount} {videoCount === 1 ? "video" : "videos"}
-              </p>
+              {/* The feed link lives with the stats (a shrinkable, wrapping
+                  column), NOT in the actions row: at sm that row is
+                  `w-auto shrink-0`, so one more control there overflowed and
+                  clipped the signed-out "Follow from another server" button
+                  at 640px. */}
+              <div className="mt-1 flex flex-wrap items-center gap-x-2">
+                <p className="text-subhead tabular-nums text-fg-muted">
+                  @{channel.handle} · {formatCount(channel.follower_count)}{" "}
+                  {pluralize(channel.follower_count, "follower")} ·{" "}
+                  {videoCount} {videoCount === 1 ? "video" : "videos"}
+                </p>
+                <ChannelFeedLink handle={channel.handle} name={name} />
+              </div>
             </div>
             <div className="order-last flex w-full flex-wrap items-center gap-2 pb-1 sm:order-none sm:w-auto sm:shrink-0">
               <ChannelLiveBadge handle={channel.handle} ownerId={channel.owner_id} />
-              <ChannelFeedLink handle={channel.handle} name={name} />
               {isOwner ? null : (
                 <>
                   <FollowButton
