@@ -8,6 +8,8 @@ import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  AdminCreateUserRequest,
+  AdminCreateUserResponse,
   BulkRemoveCommentsResponse,
   AdminPasswordResetLink,
   AdminStats,
@@ -1974,6 +1976,18 @@ export const api = {
       body: { prefs },
     }),
 
+  /**
+   * PATCH /api/v1/me/notification-prefs with only the `email` map: turn email
+   * delivery on or off per type (auth). Only email-capable types are accepted
+   * (others are 422, nothing written); the in-app map is untouched. Returns
+   * the full updated maps.
+   */
+  updateNotificationEmailPrefs: (email: Record<string, boolean>) =>
+    apiRequest<NotificationPrefsResponse>("/api/v1/me/notification-prefs", {
+      method: "PATCH",
+      body: { email },
+    }),
+
   /** GET /api/v1/me/playlists — the caller's playlists, newest first (auth). */
   getMyPlaylists: (signal?: AbortSignal, params: PageParams = {}) =>
     apiRequest<PlaylistListResponse>("/api/v1/me/playlists", {
@@ -1985,9 +1999,15 @@ export const api = {
   createPlaylist: (body: CreatePlaylistRequest) =>
     apiRequest<Playlist>("/api/v1/playlists", { method: "POST", body }),
 
-  /** GET /api/v1/playlists/{id} — a playlist + its ordered video cards. */
-  getPlaylist: (id: string, signal?: AbortSignal) =>
-    apiRequest<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}`, { signal }),
+  /**
+   * GET /api/v1/playlists/{id} — a playlist + ONE PAGE of its ordered video
+   * cards (backend default 20); total/limit/offset describe the videos.
+   */
+  getPlaylist: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}`, {
+      query: pageQuery(params),
+      signal,
+    }),
 
   /** PATCH /api/v1/playlists/{id} — update a playlist (auth, owner). */
   updatePlaylist: (id: string, body: UpdatePlaylistRequest) =>
@@ -2012,15 +2032,17 @@ export const api = {
     ),
 
   /**
-   * PUT /api/v1/playlists/{id}/videos — reorder items (auth, owner). videoIds must
-   * be exactly the playlist's current video ids in the desired order; a mismatch
-   * (missing/extra/duplicate) is 422.
+   * POST /api/v1/playlists/{id}/videos/{videoId}/move — move one item to
+   * directly after `afterVideoId`, or to the front when it is null (auth,
+   * owner). It needs no copy of the full list, so it works on a playlist the
+   * client has only paged part of — which is why it replaced the full-list PUT
+   * here. 409 when either video is no longer an item (the copy is stale).
    */
-  reorderPlaylist: (id: string, videoIds: string[]) =>
-    apiRequest<void>(`/api/v1/playlists/${encodeURIComponent(id)}/videos`, {
-      method: "PUT",
-      body: { video_ids: videoIds },
-    }),
+  movePlaylistItem: (id: string, videoId: string, afterVideoId: string | null) =>
+    apiRequest<void>(
+      `/api/v1/playlists/${encodeURIComponent(id)}/videos/${encodeURIComponent(videoId)}/move`,
+      { method: "POST", body: { after_video_id: afterVideoId } },
+    ),
 
   // Private playlist covers require bearer-authenticated bytes, like DM attachments.
   fetchPlaylistThumbnail: async (id: string, signal?: AbortSignal): Promise<Blob> => {
@@ -2147,6 +2169,19 @@ export const api = {
       method: "DELETE",
       body,
     }),
+
+  /**
+   * POST /api/v1/admin/users — create an account on the user's behalf (admin).
+   * No account password: the holder sets one through a one-time link, which is
+   * either emailed (`link_emailed`) or returned ONCE in `reset_url` (no-store).
+   * `password` is the CALLER's own (step-up).
+   *
+   * 403 wrong password, 409 username/email taken (or no origin for the link),
+   * 422 validation, 429 rate limited, 502/503 account created but no link
+   * could be issued (mail failed / audit write failed).
+   */
+  createAdminUser: (body: AdminCreateUserRequest) =>
+    apiRequest<AdminCreateUserResponse>("/api/v1/admin/users", { method: "POST", body }),
 
   /**
    * POST /api/v1/admin/users/{id}/password-reset-link — mint a one-time reset

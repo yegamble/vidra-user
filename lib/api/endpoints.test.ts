@@ -129,6 +129,21 @@ describe("api endpoints", () => {
     expect(res.reset_url).toContain("token=t");
   });
 
+  it("createAdminUser POSTs the account and the admin's own password to /admin/users", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ user: { id: "u1" }, link_emailed: false, reset_url: "https://v.example/x?token=t", expires_at: "2026-10-02T13:00:00Z" }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const res = await api.createAdminUser({ username: "nina", email: "n@example.test", role: "user", password: "hunter2" });
+    expect(calledUrl()).toContain("/api/v1/admin/users");
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ username: "nina", email: "n@example.test", role: "user", password: "hunter2" });
+    expect(res.reset_url).toContain("token=t");
+  });
+
   it("contactInstance posts the visitor message", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 202 }));
     await api.contactInstance({
@@ -459,6 +474,11 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/playlists/p1");
   });
 
+  it("getPlaylist pages its items with limit/offset", async () => {
+    await api.getPlaylist("p1", { limit: 20, offset: 40 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/playlists/p1?limit=20&offset=40");
+  });
+
   it("updatePlaylist PATCHes the playlist", async () => {
     await api.updatePlaylist("p1", { title: "Renamed" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -488,12 +508,18 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
-  it("reorderPlaylist PUTs the ordered video ids", async () => {
-    await api.reorderPlaylist("p1", ["v2", "v1"]);
+  it("movePlaylistItem POSTs the anchor the video should follow", async () => {
+    await api.movePlaylistItem("p1", "v2", "v1");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://localhost:8080/api/v1/playlists/p1/videos");
-    expect(init.method).toBe("PUT");
-    expect(JSON.parse(init.body as string)).toEqual({ video_ids: ["v2", "v1"] });
+    expect(url).toBe("http://localhost:8080/api/v1/playlists/p1/videos/v2/move");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ after_video_id: "v1" });
+  });
+
+  it("movePlaylistItem sends a null anchor to move a video to the front", async () => {
+    await api.movePlaylistItem("p1", "v2", null);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ after_video_id: null });
   });
 
   it("getMyChannels targets the channels endpoint", async () => {
@@ -1582,6 +1608,14 @@ describe("api endpoints", () => {
     expect(url).toBe("http://localhost:8080/api/v1/me/notification-prefs");
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(init.body as string)).toEqual({ prefs: { follow: false } });
+  });
+
+  it("updateNotificationEmailPrefs PATCHes only the partial email map", async () => {
+    await api.updateNotificationEmailPrefs({ new_video: true });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/notification-prefs");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ email: { new_video: true } });
   });
 
   it("getPlayerSettings targets the player-settings endpoint", async () => {

@@ -135,6 +135,7 @@ export function VideoPlayer({
   videoRef,
   startAt,
   variant = "watch",
+  controls = true,
   tracks = [],
   poster,
   nextVideo = null,
@@ -152,6 +153,8 @@ export function VideoPlayer({
   videoRef: RefObject<HTMLVideoElement | null>;
   startAt: number | null;
   variant?: "watch" | "embed";
+  /** false hides the control bar (embed `?controls=0`); shortcuts and click-to-play remain. */
+  controls?: boolean;
   tracks?: CaptionTrack[];
   /** Explicit poster override; defaults to the video's own thumbnail when it has one. */
   poster?: string;
@@ -339,6 +342,11 @@ export function VideoPlayer({
   useEffect(() => {
     cbRef.current = { onPlay, onTimeUpdate, onPause };
   }, [onPlay, onTimeUpdate, onPause]);
+  // Read through a ref so the media-event effect keeps its single subscription.
+  const variantRef = useRef(variant);
+  useEffect(() => {
+    variantRef.current = variant;
+  }, [variant]);
 
   // ---- control actions (shared by the buttons and the keyboard shortcuts) ----
 
@@ -651,7 +659,9 @@ export function VideoPlayer({
       setMuted(el.muted);
       // Volume belongs to the device, not the session: a viewer who turned it
       // down should not meet full blast on the next video (A40).
-      storeVolume(el.volume, el.muted);
+      // An embed never writes it: the framing page (?muted=1, API setVolume)
+      // must not be able to change the main site's saved preference.
+      if (variantRef.current === "watch") storeVolume(el.volume, el.muted);
     };
     // Apply the remembered level BEFORE seeding state below, so the first frame
     // of the control bar already shows the level this device chose.
@@ -1101,6 +1111,7 @@ export function VideoPlayer({
             // stage, which is only ~185px tall in total.
             "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0 px-2 pb-1 sm:px-3 sm:pb-1",
             "transition-opacity duration-[250ms] ease-out motion-reduce:transition-none",
+            !controls && "hidden",
             controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
           )}
         >

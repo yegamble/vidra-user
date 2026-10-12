@@ -1,10 +1,11 @@
+import { EMBED_PARAM_KEYS } from "@/lib/embed-params";
+
 // Query-string translation for PeerTube's legacy public URLs.
 //
 // A PeerTube link says `?start=1m30s` where vidra says `?t=1m30s`; both parse
 // with parseStartTime (seconds or h/m/s). Everything else rides along verbatim
-// on watch links, as it always has. The embed is stricter: it understands only
-// `t`, so a PeerTube iframe's autoplay/muted/loop/stop/title/... are dropped
-// rather than forwarded into a URL that ignores them.
+// on watch links, as it always has. The embed carries only the options it
+// understands (lib/embed-params), not arbitrary params.
 
 function mapStart(params: URLSearchParams): void {
   const start = params.get("start");
@@ -26,10 +27,19 @@ export function legacyWatchSearch(search: string): string {
   return toSearch(params);
 }
 
-/** legacyEmbedSearch keeps only what vidra's embed understands: `t`. */
+/**
+ * legacyEmbedSearch maps `start`→`t` and carries PeerTube's embed options
+ * (EMBED_PARAM_KEYS) through. Anything else is dropped, and so is a value that is
+ * not short and word-shaped: the embed re-validates, but a redirect should not
+ * relay arbitrary text into a Location header.
+ */
 export function legacyEmbedSearch(search: string): string {
   const params = new URLSearchParams(search);
   mapStart(params);
-  const t = params.get("t");
-  return t === null ? "" : toSearch(new URLSearchParams({ t }));
+  const out = new URLSearchParams();
+  for (const key of ["t", ...EMBED_PARAM_KEYS]) {
+    const v = params.get(key);
+    if (v !== null && /^[\w-]{1,64}$/.test(v)) out.set(key, v);
+  }
+  return toSearch(out);
 }

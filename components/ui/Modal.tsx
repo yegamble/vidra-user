@@ -4,8 +4,8 @@ import { useId, useRef, type ReactNode } from "react";
 
 import { IconButton } from "@/components/ui/IconButton";
 import { CloseIcon } from "@/components/icons";
+import { useT } from "@/components/I18nProvider";
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
 import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 export type ModalProps = {
@@ -45,6 +45,7 @@ export function Modal({
   variant = "dialog",
   className,
 }: ModalProps) {
+  const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 

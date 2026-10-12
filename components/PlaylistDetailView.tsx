@@ -9,15 +9,22 @@ import { PlaylistThumbnailManager } from "@/components/PlaylistThumbnailManager"
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ListTail } from "@/components/ui/ListTail";
+import { PAGE_SIZE } from "@/components/ui/LoadMoreButton";
 import { Spinner } from "@/components/ui/Spinner";
+import { UserText } from "@/components/UserText";
 import { VideoCard } from "@/components/VideoCard";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { PlaylistDetail, PlaylistVisibility } from "@/lib/api";
 import { useApiResource } from "@/lib/use-api-resource";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 
+type PlaylistVideo = PlaylistDetail["videos"][number];
 
-// PlaylistDetailView shows a playlist and its videos. Owner-only controls (remove
-// item, delete playlist) appear when the playlist is one of the viewer's own.
+// PlaylistDetailView shows a playlist and its videos, paged. Owner-only controls
+// (reorder, remove item, edit, delete playlist) appear when the playlist's
+// owner_id is the signed-in user.
 export function PlaylistDetailView({ id }: { id: string }) {
   const { status, user } = useSession();
   if (status === "restoring") return <Spinner label="Loading playlist" />;
@@ -28,72 +35,24 @@ export function PlaylistDetailView({ id }: { id: string }) {
 function PlaylistForViewer({ id }: { id: string }) {
   const router = useRouter();
   const { status: session, user } = useSession();
+  // The playlist plus its FIRST page of items; later pages are PlaylistItems'.
   const { status, data: playlist, retry, setData: setPlaylist } = useApiResource<PlaylistDetail | null>(async (signal) => {
     if (signal.aborted || session === "restoring") return new Promise(() => {});
     try {
-      return await api.getPlaylist(id, signal);
+      return await api.getPlaylist(id, { limit: PAGE_SIZE, offset: 0 }, signal);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) return null;
       throw err;
     }
   }, [id, session, user?.id]);
-  const { data: owned } = useApiResource<boolean>(async (signal) => {
-    if (signal.aborted || session === "restoring") return new Promise(() => {});
-    if (session !== "authed") return false;
-    try {
-      const res = await api.getMyPlaylists(signal);
-      return res.playlists.some((p) => p.id === id);
-    } catch {
-      return false; // Preserve the owner-control guard when ownership cannot be read.
-    }
-  }, [id, session, user?.id]);
-  const isOwner = owned === true;
+  // From the playlist itself: searching GET /me/playlists only ever saw its
+  // first page, so an owner of more than 20 playlists lost these controls.
+  const isOwner = session === "authed" && user != null && playlist?.owner_id === user.id;
   const [editing, setEditing] = useState(false);
-  const [reordering, setReordering] = useState(false);
   // Deleting a playlist is irreversible and the control sits inches from Edit.
   // Two-step, the same shape the Studio video row uses — one destructive idiom,
   // not three (A11 close-out).
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  async function removeItem(videoId: string) {
-    if (!playlist) return;
-    const prev = playlist;
-    setPlaylist({
-      ...playlist,
-      videos: playlist.videos.filter((v) => v.id !== videoId),
-      video_count: Math.max(0, playlist.video_count - 1),
-    });
-    try {
-      await api.removeFromPlaylist(id, videoId);
-    } catch {
-      setPlaylist(prev); // restore on failure
-    }
-  }
-
-  // moveItem swaps the item at index with its neighbour in the given direction and
-  // persists the whole new order via PUT (the backend expects the full item set).
-  // Optimistic: the list reorders immediately and restores if the request fails
-  // (e.g. a 422 if the visible items diverged from the stored set).
-  async function moveItem(index: number, dir: -1 | 1) {
-    if (!playlist || reordering) return;
-    const target = index + dir;
-    if (target < 0 || target >= playlist.videos.length) return;
-    const prev = playlist;
-    const reordered = [...playlist.videos];
-    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
-    setReordering(true);
-    setPlaylist({ ...playlist, videos: reordered });
-    try {
-      await api.reorderPlaylist(
-        id,
-        reordered.map((v) => v.id),
-      );
-    } catch {
-      setPlaylist(prev); // restore on failure
-    } finally {
-      setReordering(false);
-    }
-  }
 
   async function deletePlaylist() {
     try {
@@ -181,9 +140,7 @@ function PlaylistForViewer({ id }: { id: string }) {
             {playlist.video_count} {playlist.video_count === 1 ? "video" : "videos"} · {playlist.visibility}
           </p>
           {playlist.description ? (
-            <p className="whitespace-pre-wrap text-sm text-fg">
-              {playlist.description}
-            </p>
+            <UserText variant="description" text={playlist.description} className="text-sm text-fg" />
           ) : null}
         </header>
       )}
@@ -196,62 +153,153 @@ function PlaylistForViewer({ id }: { id: string }) {
         />
       ) : null}
 
-      {playlist.videos.length === 0 ? (
-        <EmptyState
-          icon={<PlaylistIcon size={24} />}
-          title="This playlist is empty"
-          message="Add videos to it from any watch page with “Save to playlist”."
-        />
-      ) : (
-        <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {playlist.videos.map((video, index) => (
-            <li key={video.id} className="flex flex-col gap-2">
-              <VideoCard
-                video={video}
-                playlistId={id}
-                onDeleted={() =>
-                  setPlaylist((p) =>
-                    p ? { ...p, videos: p.videos.filter((v) => v.id !== video.id) } : p,
-                  )
-                }
-              />
-              {isOwner ? (
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void moveItem(index, -1)}
-                      disabled={reordering || index === 0}
-                      aria-label={`Move ${video.title} up`}
-                      className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-40"
-                    >
-                      Move up
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void moveItem(index, 1)}
-                      disabled={reordering || index === playlist.videos.length - 1}
-                      aria-label={`Move ${video.title} down`}
-                      className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-40"
-                    >
-                      Move down
-                    </button>
-                  </div>
+      <PlaylistItems
+        playlist={playlist}
+        isOwner={isOwner}
+        onCountChange={(delta) =>
+          setPlaylist((p) => (p ? { ...p, video_count: Math.max(0, p.video_count + delta) } : p))
+        }
+      />
+    </div>
+  );
+}
+
+// placeAfter moves `id` to directly after `afterId`, or to the front when it is
+// null — the rule POST /videos/{id}/move applies server-side.
+function placeAfter(items: PlaylistVideo[], id: string, afterId: string | null): PlaylistVideo[] {
+  const moved = items.find((v) => v.id === id);
+  const rest = items.filter((v) => v.id !== id);
+  const at = afterId === null ? 0 : rest.findIndex((v) => v.id === afterId) + 1;
+  if (!moved || (afterId !== null && at === 0)) return items;
+  return [...rest.slice(0, at), moved, ...rest.slice(at)];
+}
+
+// PlaylistItems pages the playlist's videos ("Load more"), seeded with the first
+// page the header fetch already carried. A move sends only the moved video and
+// its new predecessor, so it works on a playlist the client has partly loaded.
+function PlaylistItems({
+  playlist,
+  isOwner,
+  onCountChange,
+}: {
+  playlist: PlaylistDetail;
+  isOwner: boolean;
+  onCountChange: (delta: number) => void;
+}) {
+  const autoLoad = useBrowseAutoLoad();
+  const list = useAppendingList<PlaylistVideo>({
+    queryKey: `playlist:${playlist.id}`,
+    getId: (v) => v.id,
+    initialPage: { items: playlist.videos, total: playlist.total },
+    load: (window, signal) =>
+      api.getPlaylist(playlist.id, window, signal).then((res) => ({ items: res.videos, total: res.total })),
+  });
+  const { items } = list;
+  const [reordering, setReordering] = useState(false);
+
+  async function removeItem(videoId: string) {
+    list.drop((v) => v.id !== videoId); // optimistic
+    onCountChange(-1);
+    try {
+      await api.removeFromPlaylist(playlist.id, videoId);
+    } catch {
+      onCountChange(1);
+      list.reload(); // re-read the truth rather than guess the page window back
+    }
+  }
+
+  // Optimistic: the list reorders at once and the item goes back if the move fails.
+  // A 409 means our copy is stale (an item was removed elsewhere): re-read it.
+  async function moveItem(index: number, dir: -1 | 1) {
+    const target = index + dir;
+    if (reordering || target < 0 || target >= items.length) return;
+    const videoId = items[index].id;
+    const anchor = dir === -1 ? (items[index - 2]?.id ?? null) : items[index + 1].id;
+    const before = items[index - 1]?.id ?? null;
+    setReordering(true);
+    list.patch((cur) => placeAfter(cur, videoId, anchor));
+    try {
+      await api.movePlaylistItem(playlist.id, videoId, anchor);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) list.reload();
+      else list.patch((cur) => placeAfter(cur, videoId, before));
+    } finally {
+      setReordering(false);
+    }
+  }
+
+  if (list.status === "loading") {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner label="Loading videos" />
+      </div>
+    );
+  }
+  if (list.status === "error") {
+    return <ErrorState message="Could not load this playlist's videos." onRetry={list.reload} />;
+  }
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        icon={<PlaylistIcon size={24} />}
+        title="This playlist is empty"
+        message="Add videos to it from any watch page with “Save to playlist”."
+      />
+    );
+  }
+  return (
+    <>
+      <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {items.map((video, index) => (
+          <li key={video.id} className="flex flex-col gap-2">
+            <VideoCard
+              video={video}
+              playlistId={playlist.id}
+              onDeleted={() => list.drop((v) => v.id !== video.id)}
+            />
+            {isOwner ? (
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => void removeItem(video.id)}
-                    aria-label={`Remove ${video.title} from playlist`}
-                    className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+                    onClick={() => void moveItem(index, -1)}
+                    disabled={reordering || index === 0}
+                    aria-label={`Move ${video.title} up`}
+                    className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-40"
                   >
-                    Remove
+                    Move up
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void moveItem(index, 1)}
+                    disabled={reordering || index === items.length - 1}
+                    aria-label={`Move ${video.title} down`}
+                    className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-40"
+                  >
+                    Move down
                   </button>
                 </div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+                <button
+                  type="button"
+                  onClick={() => void removeItem(video.id)}
+                  aria-label={`Remove ${video.title} from playlist`}
+                  className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      <ListTail
+        hasMore={list.hasMore}
+        autoLoad={autoLoad}
+        busy={list.moreStatus === "loading"}
+        error={list.moreStatus === "error" ? "Could not load more videos." : null}
+        onLoadMore={list.loadMore}
+      />
+    </>
   );
 }
 

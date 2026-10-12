@@ -47,6 +47,10 @@ const SECTIONS: Section[] = [
   },
   { href: "/moderation/instances", label: "Instances", icon: <ServerIcon size={18} /> },
   { href: "/moderation/accounts", label: "Remote accounts", icon: <UserIcon size={18} /> },
+  // Moderators share user listing + ban/unban and the registration queue with
+  // admins (core: MANAGE_USERS over ordinary accounts, MANAGE_REGISTRATIONS).
+  { href: "/admin/users", label: "Users", icon: <UserIcon size={18} /> },
+  { href: "/admin/registration-requests", label: "Registrations", icon: <UserIcon size={18} /> },
   // Autosuggest bans are a MODERATION action, not an instance setting: core
   // gates GET/PUT/DELETE /admin/search/suggestion-bans on moderator-or-admin,
   // while the instance-settings endpoints are admin-only. Hanging this off

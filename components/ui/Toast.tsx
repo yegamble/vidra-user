@@ -12,8 +12,8 @@ import {
 
 import { IconButton } from "@/components/ui/IconButton";
 import { CloseIcon } from "@/components/icons";
+import { useT } from "@/components/I18nProvider";
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
 
 export type ToastVariant = "info" | "success" | "error";
 
@@ -57,6 +57,7 @@ const VARIANT_STYLE: Record<ToastVariant, string> = {
  * success politely. Toasts auto-dismiss and are individually dismissible.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const t = useT();
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
   const nextId = useRef(1);
 

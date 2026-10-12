@@ -62,9 +62,10 @@ export function AdminConsole() {
   // when the count changes) and, via the repo's visibility-aware poll, while the
   // tab stays open. Fetching once on mount left the badge stale for the session.
   useEffect(() => {
-    // GET /admin/registration-requests is requireRole(admin) in vidra-core
-    // (internal/httpapi/server.go), and this console renders for admins only, so
-    // one gate covers both reads; a moderator never draws a 403 per navigation.
+    // GET /admin/registration-requests is admin-or-moderator in vidra-core
+    // (internal/httpapi/server.go), but this console renders for admins only, so
+    // the admin gate below is what keeps a non-staff caller from a 403 per
+    // navigation; moderators reach the queue through the moderation rail.
     if (!isAdmin) return;
     const controller = new AbortController();
     // limit=1 + `total`: the page is irrelevant, only the match count is read.
