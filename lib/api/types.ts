@@ -439,6 +439,7 @@ export type AdminVideoScope = NonNullable<
 >;
 export type AdminComment = Schemas["AdminComment"];
 export type AdminCommentListResponse = Schemas["AdminCommentListResponse"];
+export type BulkRemoveCommentsResponse = Schemas["BulkRemoveCommentsResponse"];
 export type WatchedWord = Schemas["WatchedWord"];
 export type WatchedWordListResponse = Schemas["WatchedWordListResponse"];
 export type CreateWatchedWordRequest = Schemas["CreateWatchedWordRequest"];

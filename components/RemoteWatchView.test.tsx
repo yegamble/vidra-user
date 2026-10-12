@@ -434,3 +434,17 @@ describe("RemoteWatchView account block", () => {
     expect(screen.queryByRole("button", { name: /^Block / })).toBeNull();
   });
 });
+
+describe("RemoteWatchView description is untrusted user text", () => {
+  it("renders a markdown link as a safe anchor and keeps a javascript: link inert", async () => {
+    mocks.getRemoteVideo.mockResolvedValue(
+      remoteVideo({ description: "[ok](https://e.test/a) and [bad](javascript:alert(1))" }),
+    );
+    const { container } = render(<RemoteWatchView id="r1" />);
+    const link = await screen.findByRole("link", { name: "ok" });
+    expect(link.getAttribute("href")).toBe("https://e.test/a");
+    expect(link.getAttribute("rel")).toBe("nofollow noopener noreferrer ugc");
+    expect(screen.queryByRole("link", { name: "bad" })).toBeNull();
+    expect(container.querySelector('a[href^="javascript"]')).toBeNull();
+  });
+});
