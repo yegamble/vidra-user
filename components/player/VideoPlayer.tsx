@@ -342,6 +342,11 @@ export function VideoPlayer({
   useEffect(() => {
     cbRef.current = { onPlay, onTimeUpdate, onPause };
   }, [onPlay, onTimeUpdate, onPause]);
+  // Read through a ref so the media-event effect keeps its single subscription.
+  const variantRef = useRef(variant);
+  useEffect(() => {
+    variantRef.current = variant;
+  }, [variant]);
 
   // ---- control actions (shared by the buttons and the keyboard shortcuts) ----
 
@@ -654,7 +659,9 @@ export function VideoPlayer({
       setMuted(el.muted);
       // Volume belongs to the device, not the session: a viewer who turned it
       // down should not meet full blast on the next video (A40).
-      storeVolume(el.volume, el.muted);
+      // An embed never writes it: the framing page (?muted=1, API setVolume)
+      // must not be able to change the main site's saved preference.
+      if (variantRef.current === "watch") storeVolume(el.volume, el.muted);
     };
     // Apply the remembered level BEFORE seeding state below, so the first frame
     // of the control bar already shows the level this device chose.

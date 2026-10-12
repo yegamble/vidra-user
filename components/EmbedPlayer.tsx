@@ -195,7 +195,12 @@ function EmbedVideo({
     el.loop = params.loop;
     // Autoplay is best-effort: a policy refusal (NotAllowedError) leaves the
     // video paused rather than forcing sound or a muted retry.
-    if (params.autoplay) void el.play().catch(() => {});
+    // Wait for canplay: play() before hls.js attaches the source is aborted.
+    const tryAutoplay = () => void el.play().catch(() => {});
+    if (params.autoplay) {
+      if (el.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) tryAutoplay();
+      else el.addEventListener("canplay", tryAutoplay, { once: true });
+    }
     const { stopAt } = params;
     const onTime = () => {
       if (stopAt !== null && el.currentTime >= stopAt && !el.paused) el.pause();
@@ -213,6 +218,7 @@ function EmbedVideo({
     }
     return () => {
       el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("canplay", tryAutoplay);
       if (onMeta) el.removeEventListener("loadedmetadata", onMeta);
       api?.stop();
     };

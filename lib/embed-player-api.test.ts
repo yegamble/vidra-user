@@ -79,6 +79,31 @@ describe("embed player API", () => {
     api.stop();
   });
 
+  it("treats inherited names as unknown methods", () => {
+    const { posted, send, api } = setup();
+    for (const name of ["constructor", "toString", "valueOf", "__proto__", "hasOwnProperty"]) {
+      send({ id: 1, method: `peertube::${name}` });
+      expect(last(posted)).toEqual({ id: 1, error: "method_not_found", message: `peertube::${name}` });
+    }
+    api.stop();
+  });
+
+  it("validates playback rate range and caption id type", () => {
+    const { video, posted, send, api } = setup();
+    for (const bad of [0, 17, -1, "2", null, Number.NaN]) {
+      send({ id: 2, method: "peertube::setPlaybackRate", params: bad });
+      expect(last(posted)).toEqual({ id: 2, error: "runtime_error", message: "invalid params" });
+    }
+    expect(video.playbackRate).toBe(1);
+    send({ id: 3, method: "peertube::setPlaybackRate", params: 16 });
+    expect(video.playbackRate).toBe(16);
+    send({ id: 4, method: "peertube::setCaption", params: 5 });
+    expect(last(posted)).toEqual({ id: 4, error: "runtime_error", message: "invalid params" });
+    send({ id: 5, method: "peertube::setCaption", params: "en" });
+    expect(last(posted)).toEqual({ id: 5, result: null });
+    api.stop();
+  });
+
   it("emits playbackStatusChange, playbackStatusUpdate and volumeChange", () => {
     const { video, posted, api } = setup();
     video.dispatchEvent(new Event("play"));
