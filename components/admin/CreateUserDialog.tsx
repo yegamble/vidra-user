@@ -77,7 +77,7 @@ export function CreateUserDialog({
       setError(
         errorMessage(
           err,
-          "Could not create the user. Nothing was kept; check the details and try again.",
+          "Could not create the user. If the account was created and then deactivated, its username and email stay taken until you delete it from the users list.",
         ),
       );
     } finally {
