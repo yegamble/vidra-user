@@ -3,7 +3,7 @@
 import { useId } from "react";
 
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
-import { t } from "@/lib/i18n";
+import { useT } from "@/components/I18nProvider";
 import {
   useThemePreference,
   writeThemePreference,
@@ -16,6 +16,7 @@ import {
  * heading names the group (aria-labelledby), so it reads as "Appearance" to AT.
  */
 export function ThemeToggle() {
+  const t = useT();
   const preference = useThemePreference();
   const labelId = useId();
 

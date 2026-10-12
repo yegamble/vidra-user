@@ -3037,7 +3037,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone. Alongside it, `email` maps each type that can ALSO be delivered by email (comment, comment_reply, new_video) to whether it is; email is opt-in, so a type never configured is false.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -3047,7 +3047,7 @@ export interface paths {
         head?: never;
         /**
          * Update the caller's notification preferences
-         * @description Applies a partial preference update: only the types present in the body are changed. Disabling a type suppresses new notifications of that type at creation time (existing notifications are unaffected). An unknown type is 422 and nothing is written. Returns the full updated map.
+         * @description Applies a partial preference update: only the types present in the body are changed, in `prefs` (in-app) and/or `email`. Disabling a type suppresses new notifications of that type at creation time (existing notifications are unaffected). Email rides the in-app notification: it is queued only when that notification is created, so an in-app type that is off sends no email either, and it is delivered in the background, only to a verified address, while the instance has mail configured. An unknown type, or an email switch for a type without email delivery, is 422 and nothing is written. Returns the full updated maps.
          */
         patch: operations["updateNotificationPrefs"];
         trace?: never;
@@ -4121,6 +4121,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/remote-interaction/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the subscribe URL on a visitor's home fediverse server
+         * @description The outbound half of remote interaction. A visitor who is not signed in here gives their own fediverse handle (user@host) and an address on THIS instance (a channel or video); the server WebFingers the handle's host through the SSRF-guarded federation fetch and returns that host's subscribe template (rel http://ostatus.org/schema/1.0/subscribe) with {uri} replaced by the escaped target. The client navigates to the returned https URL. Optional auth; signed-out callers need the operator's search_remote_uri_anonymous setting. Rate-limited (fail closed) on the same budget as remote-URI search resolution. Mounted with the federation service; 503 while federation is disabled.
+         */
+        get: operations["resolveRemoteInteraction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/blocks/remote": {
         parameters: {
             query?: never;
@@ -5033,7 +5053,7 @@ export interface paths {
         head?: never;
         /**
          * Update instance settings (admin)
-         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, channel_sync_interval_minutes (5..10080, default CHANNEL_SYNC_INTERVAL in whole minutes; the re-list cadence and backoff base, read at each reschedule so a change applies without a restart), channel_sync_batch (1..100, default CHANNEL_SYNC_BATCH; the newest uploads one sync pass imports, read at the start of each pass), channel_sync_cooldown_minutes (1..1440, default CHANNEL_SYNC_COOLDOWN in whole minutes; the minimum spacing between manual sync-now triggers, read per request so a change applies without a restart), channel_sync_backoff_max_hours (1..720, default CHANNEL_SYNC_BACKOFF_MAX in whole hours; the cap on the exponential backoff of a failing sync, read at each failure so a change applies without a restart), user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), live_recording_retention_hours (0..8760, default LIVE_RECORDING_RETENTION in whole hours rounded up; 0 = delete a session recording as soon as its replay is published and sweep nothing, else the hourly sweep deletes recordings older than that many hours. This setting DELETES FILES: lowering it, or raising it from 0, makes the next sweep delete every recording older than the new window, including recordings kept as the only copy of a failed or replay-disabled broadcast; read at every use, no restart), audit_log_retention_days (0..36500, default AUDIT_LOG_RETENTION in whole days rounded up; 0 = keep the audit trail forever. The env value is a FLOOR: the effective window is max(setting, env), so this setting can only keep the trail LONGER, and a value below the floor is a 422 naming it. When AUDIT_LOG_RETENTION=0 the trail is already kept forever and only 0 is accepted, so the setting has no effect. Read by every hourly sweep, no restart; changes are audited old -> new), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
+         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, auto_transcribe_new_uploads (default false; on queues the same auto-caption job as POST /videos/{id}/captions/auto for each video as it publishes, only while transcription is effectively available, never duplicating a job or an existing caption), user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, channel_sync_interval_minutes (5..10080, default CHANNEL_SYNC_INTERVAL in whole minutes; the re-list cadence and backoff base, read at each reschedule so a change applies without a restart), channel_sync_batch (1..100, default CHANNEL_SYNC_BATCH; the newest uploads one sync pass imports, read at the start of each pass), channel_sync_cooldown_minutes (1..1440, default CHANNEL_SYNC_COOLDOWN in whole minutes; the minimum spacing between manual sync-now triggers, read per request so a change applies without a restart), channel_sync_backoff_max_hours (1..720, default CHANNEL_SYNC_BACKOFF_MAX in whole hours; the cap on the exponential backoff of a failing sync, read at each failure so a change applies without a restart), user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), live_recording_retention_hours (0..8760, default LIVE_RECORDING_RETENTION in whole hours rounded up; 0 = delete a session recording as soon as its replay is published and sweep nothing, else the hourly sweep deletes recordings older than that many hours. This setting DELETES FILES: lowering it, or raising it from 0, makes the next sweep delete every recording older than the new window, including recordings kept as the only copy of a failed or replay-disabled broadcast; read at every use, no restart), audit_log_retention_days (0..36500, default AUDIT_LOG_RETENTION in whole days rounded up; 0 = keep the audit trail forever. The env value is a FLOOR: the effective window is max(setting, env), so this setting can only keep the trail LONGER, and a value below the floor is a 422 naming it. When AUDIT_LOG_RETENTION=0 the trail is already kept forever and only 0 is accepted, so the setting has no effect. Read by every hourly sweep, no restart; changes are audited old -> new), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
          */
         patch: operations["updateInstanceSettings"];
         trace?: never;
@@ -7395,6 +7415,13 @@ export interface components {
             /** Format: date-time */
             blocked_at: string;
         };
+        RemoteInteractionResolution: {
+            /**
+             * Format: uri
+             * @description https URL on the visitor's home server to navigate to.
+             */
+            url: string;
+        };
         RemoteBlockListResponse: {
             actors: components["schemas"]["RemoteBlockView"][];
             /** Format: int64 */
@@ -7572,7 +7599,7 @@ export interface components {
              * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
-            type: "follow" | "comment" | "comment_reply" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
+            type: "follow" | "comment" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -7583,14 +7610,14 @@ export interface components {
             channel_display_name?: string;
             /**
              * Format: uuid
-             * @description Commented video's id (comment and comment_reply notifications).
+             * @description Commented video's id (comment, comment_reply and comment_mention notifications).
              */
             video_id?: string;
-            /** @description Commented video's title (comment and comment_reply notifications). */
+            /** @description Commented video's title (comment, comment_reply and comment_mention notifications). */
             video_title?: string;
             /**
              * Format: uuid
-             * @description The comment's id — the new comment for comment, the reply for comment_reply.
+             * @description The comment's id — the new comment for comment, the reply for comment_reply, the mentioning comment for comment_mention.
              */
             comment_id?: string;
             /**
@@ -7634,6 +7661,7 @@ export interface components {
              * @example {
              *       "caption_ready": true,
              *       "comment": true,
+             *       "comment_mention": true,
              *       "comment_reply": true,
              *       "federation_follower_request": true,
              *       "follow": false,
@@ -7651,15 +7679,36 @@ export interface components {
             prefs: {
                 [key: string]: boolean;
             };
+            /**
+             * @description Every type that can also be delivered by email (comment, comment_reply, new_video) mapped to whether it is. Email is opt-in, mirroring PeerTube's web-only defaults for these types: a type with no stored choice is false. Types absent from this map have no email delivery.
+             * @example {
+             *       "comment": false,
+             *       "comment_reply": true,
+             *       "new_video": true
+             *     }
+             */
+            email: {
+                [key: string]: boolean;
+            };
         };
+        /** @description At least one type must be named in prefs or email (an update naming none is 422). */
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }
              */
-            prefs: {
+            prefs?: {
+                [key: string]: boolean;
+            };
+            /**
+             * @description Partial map of email-capable type -> emailed. Only the types present are changed. Email types: comment, comment_reply, new_video. Any other type rejects the whole update (422).
+             * @example {
+             *       "new_video": true
+             *     }
+             */
+            email?: {
                 [key: string]: boolean;
             };
         };
@@ -19191,7 +19240,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Empty update or unknown notification type. */
+            /** @description Empty update, unknown notification type, or an email switch for a type without email delivery. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -22423,6 +22472,85 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resolveRemoteInteraction: {
+        parameters: {
+            query: {
+                /** @description The visitor's fediverse handle, user@host (a leading @ is accepted). */
+                handle: string;
+                /** @description The ActivityPub id of the channel or video on this instance the visitor wants to follow or interact with. */
+                target: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The home-server URL to send the visitor to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteInteractionResolution"];
+                };
+            };
+            /** @description The caller is signed out and the operator has not enabled remote lookups for anonymous visitors (search_remote_uri_anonymous). The client may fall back to looking the handle up from the browser. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The handle's server advertises no usable subscribe template. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed handle, a target that is not on this instance, or a handle that is a literal non-public address. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many lookups from this client. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The handle's server could not be reached (or may not be contacted; the two are deliberately indistinguishable). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance, or the rate budget is temporarily unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

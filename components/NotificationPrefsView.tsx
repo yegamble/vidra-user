@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
@@ -9,6 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
+import { useInstanceFeatures } from "@/lib/instance-features";
 import { useApiResource } from "@/lib/use-api-resource";
 import { SignInGate } from "@/components/SignInGate";
 
@@ -20,6 +22,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
   comment: {
     label: "Comments",
     help: "Someone comments on one of your videos.",
+  },
+  comment_mention: {
+    label: "Mentions",
+    help: "Someone @-mentions you in a comment.",
   },
   comment_reply: {
     label: "Replies",
@@ -80,6 +86,7 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
 const TYPE_ORDER = [
   "comment",
   "comment_reply",
+  "comment_mention",
   "follow",
   "new_video",
   "message",
@@ -107,9 +114,11 @@ function orderedTypes(prefs: Record<string, boolean>): string[] {
 
 // NotificationPrefsView is the per-type notification switchboard
 // (/settings/notifications): every known type mapped to whether it is
-// delivered. Toggles PATCH immediately (optimistic, one type per request) and
-// re-sync from the server's full response; a failed PATCH reverts the switch
-// and says so. Session-gated like the other settings surfaces.
+// delivered in the app, and — for the types the server can email (its `email`
+// map) — whether it is also emailed. Switches PATCH immediately (optimistic,
+// one switch per request) and re-sync from the server's full response; a
+// failed PATCH reverts the switch and says so. Session-gated like the other
+// settings surfaces.
 export function NotificationPrefsView() {
   const { status } = useSession();
 
@@ -124,27 +133,39 @@ export function NotificationPrefsView() {
   return <Prefs />;
 }
 
+type Switchboard = { prefs: Record<string, boolean>; email: Record<string, boolean> };
+type Channel = keyof Switchboard;
+
+function fromServer(res: { prefs: Record<string, boolean>; email?: Record<string, boolean> }): Switchboard {
+  // An older backend sends no email map: no email column, rather than a crash.
+  return { prefs: res.prefs, email: res.email ?? {} };
+}
+
 function Prefs() {
-  const {
-    status,
-    data,
-    retry,
-    setData: setPrefs,
-  } = useApiResource<Record<string, boolean>>((signal) =>
-    api.getNotificationPrefs(signal).then((res) => res.prefs),
+  const { user } = useSession();
+  // features.mail is the instance's live "has an outbound mail path" gate.
+  const mailOff = useInstanceFeatures()?.mail === false;
+  const { status, data, retry, setData } = useApiResource<Switchboard>((signal) =>
+    api.getNotificationPrefs(signal).then(fromServer),
   );
-  const prefs = data ?? {};
+  const prefs = data?.prefs ?? {};
+  const email = data?.email ?? {};
   const [error, setError] = useState<string | null>(null);
 
-  async function toggle(type: string) {
-    const next = !prefs[type];
+  async function toggle(channel: Channel, type: string) {
+    const next = !(channel === "prefs" ? prefs : email)[type];
+    const set = (value: boolean) =>
+      setData((d) => (d ? { ...d, [channel]: { ...d[channel], [type]: value } } : d));
     setError(null);
-    setPrefs((p) => ({ ...p, [type]: next })); // optimistic
+    set(next); // optimistic
     try {
-      const res = await api.updateNotificationPrefs({ [type]: next });
-      setPrefs(res.prefs); // the server's full map is the source of truth
+      const res =
+        channel === "prefs"
+          ? await api.updateNotificationPrefs({ [type]: next })
+          : await api.updateNotificationEmailPrefs({ [type]: next });
+      setData(fromServer(res)); // the server's full maps are the source of truth
     } catch (err) {
-      setPrefs((p) => ({ ...p, [type]: !next })); // revert
+      set(!next); // revert
       setError(errorMessage(err, "Could not save that preference. Please try again."));
     }
   }
@@ -174,6 +195,10 @@ function Prefs() {
       />
     );
   }
+  // With no outbound mail nothing is ever emailed, so offering the switches
+  // would be a dead control; the server still keeps the stored choices.
+  const offersEmail = Object.keys(email).length > 0;
+  const hasEmail = offersEmail && !mailOff;
 
   return (
     <div className="flex flex-col gap-3">
@@ -182,25 +207,53 @@ function Prefs() {
           {error}
         </Alert>
       ) : null}
+      {hasEmail && user && !user.email_verified ? (
+        // A hint, not a failure: Alert's tones are all assertive.
+        <p className="rounded-2xl bg-surface-muted px-4 py-3 text-sm text-fg">
+          Notification emails go only to a verified email address.{" "}
+          <Link href="/settings" className="font-medium text-accent-text underline">
+            Verify your address
+          </Link>{" "}
+          to receive them.
+        </p>
+      ) : null}
       <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+        {hasEmail ? (
+          <li aria-hidden="true" className="flex justify-end gap-3 px-4 py-2 text-xs font-medium text-fg-muted">
+            <span className="w-[46px] text-center">App</span>
+            <span className="w-[46px] text-center">Email</span>
+          </li>
+        ) : null}
         {types.map((type) => {
           const meta = TYPE_LABELS[type];
-          const enabled = prefs[type];
+          const label = meta?.label ?? type;
+          const emailable = hasEmail && type in email;
           return (
             <li key={type} className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-fg">
-                  {meta?.label ?? type}
-                </p>
+                <p className="text-sm font-medium text-fg">{label}</p>
                 {meta ? (
                   <p className="text-xs text-fg-muted">{meta.help}</p>
                 ) : null}
               </div>
-              <Toggle
-                checked={enabled}
-                onChange={() => void toggle(type)}
-                label={`${meta?.label ?? type} notifications`}
-              />
+              <div className="flex shrink-0 items-center gap-3">
+                <Toggle
+                  checked={prefs[type]}
+                  onChange={() => void toggle("prefs", type)}
+                  label={`${label} notifications`}
+                />
+                {emailable ? (
+                  <Toggle
+                    checked={email[type]}
+                    // Email rides the in-app notification: with that off, none is sent.
+                    disabled={!prefs[type]}
+                    onChange={() => void toggle("email", type)}
+                    label={`${label} email notifications`}
+                  />
+                ) : hasEmail ? (
+                  <span aria-hidden="true" className="w-[46px]" />
+                ) : null}
+              </div>
             </li>
           );
         })}
@@ -208,6 +261,12 @@ function Prefs() {
       <p className="text-xs text-fg-muted">
         Turning a type off stops new notifications of that kind; ones you already have stay in
         your list.
+        {hasEmail
+          ? " Email is off until you turn it on, and is sent only while the in-app notification is on."
+          : null}
+        {offersEmail && mailOff
+          ? " This instance isn't set up to send email, so notifications are in-app only."
+          : null}
       </p>
     </div>
   );
