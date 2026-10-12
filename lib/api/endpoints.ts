@@ -8,6 +8,7 @@ import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  BulkRemoveCommentsResponse,
   AdminPasswordResetLink,
   AdminStats,
   AdminUser,
@@ -2611,6 +2612,17 @@ export const api = {
     apiRequest<AdminCommentListResponse>("/api/v1/admin/comments", {
       query: { q: params.q, ...pageQuery(params) },
       signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/comments/bulk-remove — hard-delete every comment by one
+   * local username (or remote actor URL), instance-wide (moderator/admin).
+   * Resolves with how many were removed; an unknown username is a 404.
+   */
+  bulkRemoveAdminComments: (account: string) =>
+    apiRequest<BulkRemoveCommentsResponse>("/api/v1/admin/comments/bulk-remove", {
+      method: "POST",
+      body: { account },
     }),
 
   /** GET /api/v1/admin/watched-words — the watched-words list, newest first (moderator/admin). */
