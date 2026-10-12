@@ -123,6 +123,9 @@ function serializeBlock(block: VttBlock): string {
     `${formatVttTime(block.startMs)} --> ${formatVttTime(block.endMs)}` +
     (block.settings ? ` ${block.settings}` : "");
   const body = cleanText(block.text);
+  // "-->" in a payload makes the file re-parse as a different cue. The editor
+  // flags it per row, but the safety lives here so no caller can skip it.
+  if (body.includes("-->")) throw new Error("Cue text cannot contain the sequence -->.");
   return [block.id, timing, body].filter((part, i) => i === 1 || part !== "").join("\n");
 }
 
