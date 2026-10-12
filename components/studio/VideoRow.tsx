@@ -24,7 +24,7 @@ import {
   resumableUpload,
   videoThumbnailUrl,
 } from "@/lib/api";
-import type { Channel, Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
+import type { Channel, CommentsPolicy, Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { watchPath } from "@/lib/watch-path";
 import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
@@ -97,8 +97,8 @@ export function VideoRow({
   const [sensitiveReason, setSensitiveReason] = useState(video.sensitive_reason ?? "");
   // Per-video publish policies (config-parity W9); like tags/sensitive, the
   // authoritative values arrive with the detail fetch (list rows omit them).
-  const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">(
-    video.comments_policy === "disabled" ? "disabled" : "enabled",
+  const [commentsPolicy, setCommentsPolicy] = useState<CommentsPolicy>(
+    video.comments_policy ?? "enabled",
   );
   const [downloadEnabled, setDownloadEnabled] = useState(video.download_enabled !== false);
   // The number of stored passwords (CORE-17), reported up by PasswordManager
@@ -198,7 +198,7 @@ export function VideoRow({
     setPrivacy(video.privacy ?? "private");
     setSensitive(isSensitiveVideo(detail ?? video));
     setSensitiveReason((detail ?? video).sensitive_reason ?? "");
-    setCommentsPolicy((detail ?? video).comments_policy === "disabled" ? "disabled" : "enabled");
+    setCommentsPolicy((detail ?? video).comments_policy ?? "enabled");
     setDownloadEnabled((detail ?? video).download_enabled !== false);
     setPublishAt(toLocalInputValue((detail ?? video).publish_at));
     setChannelId(video.channel_id ?? "");
@@ -223,7 +223,7 @@ export function VideoRow({
       setPrivacy(full.privacy ?? "private");
       setSensitive(isSensitiveVideo(full));
       setSensitiveReason(full.sensitive_reason ?? "");
-      setCommentsPolicy(full.comments_policy === "disabled" ? "disabled" : "enabled");
+      setCommentsPolicy(full.comments_policy ?? "enabled");
       setDownloadEnabled(full.download_enabled !== false);
       setPublishAt(toLocalInputValue(full.publish_at));
     } catch {
@@ -352,15 +352,19 @@ export function VideoRow({
             rule as the sensitive flag. */}
         {detail ? (
           <>
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="font-medium text-fg">Allow comments</span>
-              <Toggle
-                checked={commentsPolicy === "enabled"}
-                onChange={(on) => setCommentsPolicy(on ? "enabled" : "disabled")}
-                label="Edit allow comments"
-                disabled={busy}
-              />
-            </div>
+            {/* Three-way since core 0161: "Require approval" holds each new
+                comment for you (or an editor) to approve in Studio → Comments. */}
+            <Select
+              label="Comments"
+              aria-label="Edit comments"
+              value={commentsPolicy}
+              onChange={(e) => setCommentsPolicy(e.target.value as CommentsPolicy)}
+              disabled={busy}
+            >
+              <option value="enabled">On</option>
+              <option value="requires_approval">Require approval</option>
+              <option value="disabled">Off</option>
+            </Select>
             <div className="flex items-center justify-between gap-4 text-sm">
               <span className="font-medium text-fg">Allow downloads</span>
               <Toggle
