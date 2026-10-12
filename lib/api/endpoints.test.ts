@@ -129,6 +129,21 @@ describe("api endpoints", () => {
     expect(res.reset_url).toContain("token=t");
   });
 
+  it("createAdminUser POSTs the account and the admin's own password to /admin/users", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ user: { id: "u1" }, link_emailed: false, reset_url: "https://v.example/x?token=t", expires_at: "2026-10-02T13:00:00Z" }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const res = await api.createAdminUser({ username: "nina", email: "n@example.test", role: "user", password: "hunter2" });
+    expect(calledUrl()).toContain("/api/v1/admin/users");
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ username: "nina", email: "n@example.test", role: "user", password: "hunter2" });
+    expect(res.reset_url).toContain("token=t");
+  });
+
   it("contactInstance posts the visitor message", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 202 }));
     await api.contactInstance({
