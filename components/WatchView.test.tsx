@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Video } from "@/lib/api";
@@ -139,5 +139,27 @@ describe("WatchView session settling", () => {
     await act(async () => {});
     expect(mocks.getChannel).toHaveBeenCalledTimes(1);
     expect(mocks.getChannel).toHaveBeenCalledWith("film-house", expect.any(AbortSignal));
+  });
+});
+
+// An internal video (PeerTube's members-only tier) answers an anonymous read
+// with 401 sign_in_required. The page offers the app's ordinary sign-in prompt
+// — not "not found", which would tell a member the video does not exist, and
+// not the retry surface, which would never succeed.
+describe("WatchView internal video", () => {
+  it("offers an anonymous viewer the sign-in prompt", async () => {
+    mocks.getVideo.mockRejectedValue(Object.assign(new Error("sign in"), { status: 401, code: "sign_in_required" }));
+    render(<WatchView id="v1" />);
+    await act(async () => {});
+    expect(screen.getByText("Sign in to watch this video")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
+    expect(screen.queryByText("Video not found")).toBeNull();
+  });
+
+  it("keeps the generic error for a 401 that is not a sign-in refusal", async () => {
+    mocks.getVideo.mockRejectedValue(Object.assign(new Error("expired"), { status: 401, code: "unauthorized" }));
+    render(<WatchView id="v1" />);
+    await act(async () => {});
+    expect(screen.queryByText("Sign in to watch this video")).toBeNull();
   });
 });

@@ -27,6 +27,7 @@ import {
 import type { Channel, Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { watchPath } from "@/lib/watch-path";
+import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
 
 import {
   BlockedBadge,
@@ -279,9 +280,11 @@ export function VideoRow({
           onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
           aria-label="Edit privacy"
         >
-          <option value="public">Public</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="private">Private</option>
+          {VIDEO_PRIVACY_CHOICES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
           <option value="password" disabled={basicOnly && video.privacy !== "password"}>
             Password-protected
           </option>

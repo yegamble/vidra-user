@@ -1767,7 +1767,7 @@ export interface paths {
         };
         /**
          * Get a video by id
-         * @description Public and unlisted videos are returned to anyone with the id. A private or non-public-state local video is returned to its owner and to an authenticated moderator/admin, allowing the Manage view to load metadata for private, scheduled, quarantined, and blocked videos; to ordinary non-owners it is reported as 404 so its existence is not revealed. This moderator/admin exception applies only to this metadata detail endpoint and does not widen media or playback routes. A password-protected video (privacy=password, CORE-17) returns 401 with error code "password_required" to a caller who is neither the owner nor a moderator/admin and is not presenting a valid playback token (a plain unknown id is still 404); the caller then unlocks via POST /videos/{id}/unlock and retries with the token (Bearer or ?pt=). The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
+         * @description Public and unlisted videos are returned to anyone with the id. A private or non-public-state local video is returned to its owner and to an authenticated moderator/admin, allowing the Manage view to load metadata for private, scheduled, quarantined, and blocked videos; to ordinary non-owners it is reported as 404 so its existence is not revealed. This moderator/admin exception applies only to this metadata detail endpoint and does not widen media or playback routes. A password-protected video (privacy=password, CORE-17) returns 401 with error code "password_required" to a caller who is neither the owner nor a moderator/admin and is not presenting a valid playback token (a plain unknown id is still 404); the caller then unlocks via POST /videos/{id}/unlock and retries with the token (Bearer or ?pt=). An internal video (privacy=internal) is returned to any signed-in account and answers 401 with error code "sign_in_required" to an anonymous caller; the same rule gates its media, downloads and embed policy. The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
          */
         get: operations["getVideo"];
         put?: never;
@@ -6543,10 +6543,10 @@ export interface components {
             title: string;
             description: string;
             /**
-             * @description Present on every local video; omitted on remote cards.
+             * @description Present on every local video; omitted on remote cards. "internal" (PeerTube's members-only tier) is visible to any signed-in account of this instance and to no anonymous viewer; it is never federated, indexed for public search, or listed on an anonymous surface.
              * @enum {string}
              */
-            privacy?: "public" | "unlisted" | "private" | "password";
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
             /**
              * @description Publish lifecycle. "scheduled" means the upload finished processing but publish_at lies in the future; public surfaces (feed, search, channel lists) only show "published", while direct links behave like any non-published video. "quarantined" means the instance holds new uploads for moderator review (QUARANTINE_NEW_UPLOADS): only the owner (studio badge) and moderators can see the video until it is approved (published) or rejected (failed). "transcoding" means the video opted into publish_after_transcode and is held off every public surface until its HLS transcode completes; like quarantine, only the owner and moderators can see it meanwhile, and the release publishes it through the normal publish transition. Present on every local video; omitted on remote cards.
              * @enum {string}
@@ -6991,7 +6991,7 @@ export interface components {
              * @description Omitted/empty seeds the instance's default_video_privacy setting (registry default "public"). "password" is never seeded (a password video needs a password first).
              * @enum {string}
              */
-            privacy?: "public" | "unlisted" | "private" | "password";
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
             /** @description Optional subject-category id (see GET /videos/config). Unknown value -> 422. */
             category?: string;
             /** @description Optional content language code (see GET /videos/config). Unknown value -> 422. */
@@ -7024,7 +7024,7 @@ export interface components {
             title?: string;
             description?: string;
             /** @enum {string} */
-            privacy?: "public" | "unlisted" | "private" | "password";
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
             /** @description Set the subject-category id (see GET /videos/config). Unknown/empty value -> 422. */
             category?: string;
             /** @description Set the content language code (see GET /videos/config). Unknown/empty value -> 422. */
@@ -7840,7 +7840,7 @@ export interface components {
             id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private" | "password";
+            privacy: "public" | "unlisted" | "private" | "password" | "internal";
             /** @enum {string} */
             state: "quarantined";
             channel_handle: string;
@@ -7927,7 +7927,7 @@ export interface components {
             video_id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private" | "password";
+            privacy: "public" | "unlisted" | "private" | "password" | "internal";
             /** @enum {string} */
             state: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
             channel_handle: string;
@@ -7971,7 +7971,7 @@ export interface components {
             id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private" | "password";
+            privacy: "public" | "unlisted" | "private" | "password" | "internal";
             /** @enum {string} */
             state: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
             channel_handle: string;
@@ -15130,7 +15130,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The video is password protected and the caller presented no valid credential. Error code "password_required". */
+            /** @description The video is password protected and the caller presented no valid credential (error code "password_required"), or it is privacy=internal and the caller is not signed in (error code "sign_in_required"). */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -15170,7 +15170,7 @@ export interface operations {
                     "application/json": components["schemas"]["Video"];
                 };
             };
-            /** @description The video is password protected and the caller presented no valid credential (owner/moderator/admin token or playback token). Error code "password_required". */
+            /** @description The video is password protected and the caller presented no valid credential (owner/moderator/admin token or playback token), error code "password_required"; or it is privacy=internal and the caller is not signed in, error code "sign_in_required". */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -20669,7 +20669,7 @@ export interface operations {
                 /** @description Lifecycle states to include. Repeatable and/or comma-separated (`?state=draft&state=failed` and `?state=draft,failed` are equivalent). Absent means all states. */
                 state?: ("draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed")[];
                 /** @description Privacy tiers to include. Repeatable and/or comma-separated. Absent means all tiers. */
-                privacy?: ("public" | "unlisted" | "private" | "password")[];
+                privacy?: ("public" | "unlisted" | "private" | "password" | "internal")[];
                 /** @description Whether to include locally hosted rows, federated rows, or both. */
                 scope?: "local" | "remote" | "all";
                 /** @description Exact channel handle. Federated rows match on their `name@domain` handle. */

@@ -148,3 +148,26 @@ describe("VideoRow — move to another channel", () => {
     await waitFor(() => expect(onUpdated).toHaveBeenCalled());
   });
 });
+
+// PeerTube's members-only tier: the creator can pick it in the edit form and the
+// row says what it means.
+describe("VideoRow — internal privacy", () => {
+  it("offers Internal in the editor and saves privacy=internal", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ privacy: "internal" }));
+    render(
+      <VideoRow video={row()} config={null} initiallyEditing basicOnly onUpdated={() => {}} onDeleted={() => {}} />,
+    );
+    const select = screen.getByLabelText("Edit privacy") as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.text)).toContain("Internal (signed-in users only)");
+    fireEvent.change(select, { target: { value: "internal" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ privacy: "internal" });
+  });
+
+  it("badges an internal video in the list", () => {
+    renderRow(row({ privacy: "internal" }));
+    expect(screen.getByText("internal")).toBeTruthy();
+  });
+});
