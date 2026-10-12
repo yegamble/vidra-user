@@ -135,7 +135,8 @@ export function formatDateTime(iso: string, locale?: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const opts = { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" } as const;
-  return cached("dt", locale ?? "", opts, () => new Intl.DateTimeFormat(locale, opts)).format(d);
+  const tag = isEnglish(locale) ? undefined : locale; // English follows the viewer, as before
+  return cached("dt", tag ?? "", opts, () => new Intl.DateTimeFormat(tag, opts)).format(d);
 }
 
 /**
@@ -147,7 +148,8 @@ export function formatMonthYear(iso: string, locale?: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const opts = { year: "numeric", month: "long" } as const;
-  return cached("my", locale ?? "", opts, () => new Intl.DateTimeFormat(locale, opts)).format(d);
+  const tag = isEnglish(locale) ? undefined : locale; // English follows the viewer, as before
+  return cached("my", tag ?? "", opts, () => new Intl.DateTimeFormat(tag, opts)).format(d);
 }
 
 /** The four locale-sensitive formatters bound to one locale (see the header note). */

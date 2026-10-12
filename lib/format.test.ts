@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   formatBytes,
@@ -184,5 +184,32 @@ describe("locale-aware formatting", () => {
   it("createFormat binds the locale", () => {
     expect(createFormat("fr").relativeTime(ago(2), now)).toBe("maintenant");
     expect(createFormat("en").formatCount(1234)).toBe("1.2K");
+  });
+});
+
+describe("date formatters and the viewer's own locale", () => {
+  it("English passes no locale (follows the viewer); fr pins fr", async () => {
+    vi.resetModules(); // cold Intl cache, so every construction is observed
+    const Real = Intl.DateTimeFormat;
+    const seen: unknown[] = [];
+    class Spy extends Real {
+      constructor(locale?: Intl.LocalesArgument, opts?: Intl.DateTimeFormatOptions) {
+        super(locale, opts);
+        seen.push(locale);
+      }
+    }
+    Intl.DateTimeFormat = Spy as unknown as typeof Intl.DateTimeFormat;
+    try {
+      const fresh = await import("./format");
+      fresh.formatDateTime("2026-07-10T12:00:00Z", "en");
+      fresh.formatMonthYear("2026-07-10T12:00:00Z", "en-GB");
+      expect(seen).toEqual([undefined, undefined]);
+      seen.length = 0;
+      fresh.formatDateTime("2026-07-10T12:00:00Z", "fr");
+      fresh.formatMonthYear("2026-07-10T12:00:00Z", "fr");
+      expect(seen).toEqual(["fr", "fr"]);
+    } finally {
+      Intl.DateTimeFormat = Real;
+    }
   });
 });
