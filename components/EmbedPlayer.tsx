@@ -12,7 +12,8 @@ import {
   setPlaybackToken as storePlaybackToken,
 } from "@/lib/api/playback-token-store";
 import { decideEmbed, type EmbedContext } from "@/lib/embed-privacy";
-import { parseStartTime } from "@/lib/start-time";
+import { type EmbedParams, parseEmbedParams } from "@/lib/embed-params";
+import { startEmbedApi } from "@/lib/embed-player-api";
 import { watchPath } from "@/lib/watch-path";
 
 // The embed-privacy gate outcome (CORE-17): whether this framing may show the
@@ -61,8 +62,8 @@ export function EmbedPlayer({ id }: { id: string }) {
   // The in-memory playback token for a password-protected embed (never persisted
   // or logged); dropped on unmount / id change.
   const [playbackToken, setPlaybackToken] = useState<string | null>(null);
-  const [startAt] = useState<number | null>(() =>
-    typeof window === "undefined" ? null : parseStartTime(window.location.search),
+  const [params] = useState<EmbedParams>(() =>
+    parseEmbedParams(typeof window === "undefined" ? "" : window.location.search),
   );
 
   // Gate on the embed-privacy policy before revealing anything. A failed policy
@@ -153,41 +154,96 @@ export function EmbedPlayer({ id }: { id: string }) {
     return <EmbedNotice>Could not load this video.</EmbedNotice>;
   }
 
-  return <EmbedVideo video={video} startAt={startAt} playbackToken={playbackToken} />;
+  return <EmbedVideo video={video} params={params} playbackToken={playbackToken} />;
+}
+
+// The parent frame's origin when the browser tells us (Chromium ancestorOrigins,
+// else the referrer's origin); "*" otherwise. Only playback status and public
+// caption metadata ever go out, so "*" is the same exposure PeerTube accepts.
+function parentOrigin(): string {
+  const { ancestorOrigins } = readEmbedContext();
+  if (ancestorOrigins[0]?.startsWith("http")) return ancestorOrigins[0];
+  try {
+    return new URL(document.referrer).origin;
+  } catch {
+    return "*";
+  }
 }
 
 // EmbedVideo is the ready-state frame: the bespoke player shell sized to fill the
 // iframe (variant="embed" — the same custom chrome as the watch page, minus the
 // watch-only theater mode), plus the escape-hatch title link over the video. The
-// videoRef is owned here so the shell can attach the HLS pipeline to it.
+// videoRef is owned here so the shell can attach the HLS pipeline to it. The
+// PeerTube URL options (lib/embed-params) are applied to the element here, and
+// `api=1` starts the postMessage player API (lib/embed-player-api). None of this
+// runs before the privacy gate and password unlock above have let the video load.
 function EmbedVideo({
   video,
-  startAt,
+  params,
   playbackToken,
 }: {
   video: Video;
-  startAt: number | null;
+  params: EmbedParams;
   playbackToken: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (params.muted) el.muted = true;
+    el.loop = params.loop;
+    // Autoplay is best-effort: a policy refusal (NotAllowedError) leaves the
+    // video paused rather than forcing sound or a muted retry.
+    if (params.autoplay) void el.play().catch(() => {});
+    const { stopAt } = params;
+    const onTime = () => {
+      if (stopAt !== null && el.currentTime >= stopAt && !el.paused) el.pause();
+    };
+    el.addEventListener("timeupdate", onTime);
+    let api: ReturnType<typeof startEmbedApi> | null = null;
+    let onMeta: (() => void) | null = null;
+    if (params.api && window.parent !== window) {
+      api = startEmbedApi({ video: el, parent: window.parent, scope: params.scope, targetOrigin: parentOrigin() });
+      if (el.readyState >= HTMLMediaElement.HAVE_METADATA) api.notifyReady();
+      else {
+        onMeta = () => api?.notifyReady();
+        el.addEventListener("loadedmetadata", onMeta, { once: true });
+      }
+    }
+    return () => {
+      el.removeEventListener("timeupdate", onTime);
+      if (onMeta) el.removeEventListener("loadedmetadata", onMeta);
+      api?.stop();
+    };
+  }, [params]);
 
   return (
     <div className="flex h-dvh w-full bg-black">
       <VideoPlayer
         video={video}
         videoRef={videoRef}
-        startAt={startAt}
+        startAt={params.startAt}
         variant="embed"
+        controls={params.controls}
         playbackToken={playbackToken}
       >
-        <Link
-          href={watchPath(video)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute left-0 top-0 z-30 max-w-full truncate rounded-br-lg bg-black/60 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-        >
-          {video.title}
-        </Link>
+        {params.title ? (
+          params.peertubeLink ? (
+            <Link
+              href={watchPath(video)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute left-0 top-0 z-30 max-w-full truncate rounded-br-lg bg-black/60 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              {video.title}
+            </Link>
+          ) : (
+            <span className="pointer-events-none absolute left-0 top-0 z-30 max-w-full truncate rounded-br-lg bg-black/60 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm">
+              {video.title}
+            </span>
+          )
+        ) : null}
       </VideoPlayer>
     </div>
   );

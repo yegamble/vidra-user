@@ -135,6 +135,7 @@ export function VideoPlayer({
   videoRef,
   startAt,
   variant = "watch",
+  controls = true,
   tracks = [],
   poster,
   nextVideo = null,
@@ -152,6 +153,8 @@ export function VideoPlayer({
   videoRef: RefObject<HTMLVideoElement | null>;
   startAt: number | null;
   variant?: "watch" | "embed";
+  /** false hides the control bar (embed `?controls=0`); shortcuts and click-to-play remain. */
+  controls?: boolean;
   tracks?: CaptionTrack[];
   /** Explicit poster override; defaults to the video's own thumbnail when it has one. */
   poster?: string;
@@ -1101,6 +1104,7 @@ export function VideoPlayer({
             // stage, which is only ~185px tall in total.
             "absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0 px-2 pb-1 sm:px-3 sm:pb-1",
             "transition-opacity duration-[250ms] ease-out motion-reduce:transition-none",
+            !controls && "hidden",
             controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
           )}
         >
