@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { CheckIcon } from "@/components/icons";
 import { Button, Input, Modal, Spinner } from "@/components/ui";
+import { ListTail } from "@/components/ui/ListTail";
 import { api, errorMessage, type Playlist } from "@/lib/api";
+import { useAppendingList } from "@/lib/use-appending-list";
 
 /** Playlist picker shared by the video-card menu and future controlled triggers. */
 export function PlaylistPickerDialog({
@@ -14,23 +16,20 @@ export function PlaylistPickerDialog({
   videoId: string;
   onClose: () => void;
 }) {
-  const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
+  // Paged from the server so a user with more than 20 playlists can reach all
+  // of them; the manual "Load more" button is enough inside a small dialog.
+  const list = useAppendingList<Playlist>({
+    queryKey: "my-playlists",
+    getId: (p) => p.id,
+    load: (window, signal) =>
+      api.getMyPlaylists(signal, window).then((res) => ({ items: res.playlists, total: res.total })),
+  });
+  const playlists = list.status === "ready" ? list.items : null;
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getMyPlaylists(controller.signal)
-      .then((res) => setPlaylists(res.playlists))
-      .catch((err: unknown) => {
-        if (!controller.signal.aborted) setError(errorMessage(err, "Could not load your playlists."));
-      });
-    return () => controller.abort();
-  }, []);
 
   function markAdded(id: string) {
     setAdded((current) => new Set(current).add(id));
@@ -59,7 +58,7 @@ export function PlaylistPickerDialog({
     try {
       const playlist = await api.createPlaylist({ title });
       await api.addToPlaylist(playlist.id, videoId);
-      setPlaylists((current) => [playlist, ...(current ?? [])]);
+      list.prepend(playlist);
       markAdded(playlist.id);
       setNewTitle("");
     } catch (err) {
@@ -72,7 +71,9 @@ export function PlaylistPickerDialog({
   return (
     <Modal title="Save to playlist" onClose={onClose}>
       <div className="flex flex-col gap-4">
-        {playlists === null && !error ? (
+        {list.status === "error" ? (
+          <p role="alert" className="text-sm text-danger">Could not load your playlists.</p>
+        ) : playlists === null ? (
           <div className="flex justify-center py-8">
             <Spinner label="Loading your playlists" />
           </div>
@@ -103,6 +104,14 @@ export function PlaylistPickerDialog({
             No playlists yet. Create one below.
           </p>
         ) : null}
+
+        <ListTail
+          hasMore={list.hasMore}
+          autoLoad={false}
+          busy={list.moreStatus === "loading"}
+          error={list.moreStatus === "error" ? "Could not load more playlists." : null}
+          onLoadMore={list.loadMore}
+        />
 
         <form onSubmit={(event) => void createAndAdd(event)} className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
