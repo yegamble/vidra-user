@@ -33,7 +33,7 @@ describe("AdminCommentsView body rendering", () => {
           video_id: "v1",
           video_title: "Clip",
           author_username: "mona",
-          body: "[ok](https://e.test/a) and [bad](javascript:alert(1))",
+          body: "[ok](https://e.test/a) and [bad](javascript:alert(1)) at 1:23",
           created_at: "2026-07-10T14:30:00Z",
         },
       ],
@@ -48,5 +48,7 @@ describe("AdminCommentsView body rendering", () => {
     expect(screen.queryByRole("link", { name: "bad" })).toBeNull();
     expect(container.querySelector('a[href^="javascript"]')).toBeNull();
     expect(container.textContent).toContain("bad");
+    // ?t= links would only reload the admin page.
+    expect(container.querySelector("a[data-timestamp-seconds]")).toBeNull();
   });
 });

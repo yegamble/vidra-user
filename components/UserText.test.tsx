@@ -337,3 +337,28 @@ describe("UserText: budget ignores well-formed URL runs", () => {
     expect(exceedsParseBudget("https://e.test/".concat("<>".repeat(150)))).toBe(true);
   });
 });
+
+describe("UserText: URL exemption is capped and timestamps can be disabled", () => {
+  it("renders URL-adjacent tilde runs within the time budget", () => {
+    const text = "https://a.b/~a ~a ".repeat(Math.floor(2990 / 18));
+    const t0 = performance.now();
+    html(text);
+    html(text, "comment");
+    expect(performance.now() - t0).toBeLessThan(300);
+  });
+
+  it("forgives at most 256 URL-internal delimiters", () => {
+    const urls = Array.from({ length: 60 }, () => "https://e.test/a_b_c_d_e_f_g").join("\n"); // 360 in URLs
+    expect(exceedsParseBudget(urls)).toBe(false);
+    expect(exceedsParseBudget(urls + "\n" + "_a ".repeat(100))).toBe(false); // 104 + 100 counted
+    expect(exceedsParseBudget(urls + "\n" + "_a ".repeat(153))).toBe(true); // 104 + 153 > 256
+  });
+
+  it("timestamps={false} leaves timestamps as plain text in both render paths", () => {
+    for (const text of ["jump to 1:23 now", "jump to 1:23 now " + "~a".repeat(300)]) {
+      const c = render(<UserText text={text} variant="comment" timestamps={false} durationSeconds={600} />).container;
+      expect(c.querySelector("a")).toBeNull();
+      expect(c.textContent).toContain("1:23");
+    }
+  });
+});

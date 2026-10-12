@@ -108,12 +108,21 @@ const DELIMITER_RE = /[*_~`\[\]|<>]/g;
 // not counted as delimiters; anything that breaks the run (any structural
 // character) ends the exemption, and the byte cap and marker-run check above
 // still apply to the whole body.
-const URL_RUN_RE = /https?:\/\/[\w\-.~:/?#@!$&'+,;=%]+/gi;
+// `~` is deliberately NOT a URL character here (it is also a strikethrough
+// delimiter), and the forgiveness is capped so it can only ever discount a
+// bounded number of delimiters.
+const URL_RUN_RE = /https?:\/\/[\w\-.:/?#@!$&'+,;=%]+/gi;
+export const MAX_URL_FORGIVEN = 256;
 const LIST_MARKER_RE = /^[ \t]*(?:[-+]|\d{1,9}[.)])[ \t]/gm;
 
 export function exceedsParseBudget(text: string): boolean {
   if (text.length > MAX_PARSE_BYTES) return true; // UTF-16 units <= UTF-8 bytes; exact check below
   if (new TextEncoder().encode(text).length > MAX_PARSE_BYTES) return true;
-  const delimiters = (text.replace(URL_RUN_RE, "").match(DELIMITER_RE)?.length ?? 0) + (text.match(LIST_MARKER_RE)?.length ?? 0);
+  let inUrls = 0;
+  for (const m of text.matchAll(URL_RUN_RE)) inUrls += m[0].match(DELIMITER_RE)?.length ?? 0;
+  const delimiters =
+    (text.match(DELIMITER_RE)?.length ?? 0) -
+    Math.min(inUrls, MAX_URL_FORGIVEN) +
+    (text.match(LIST_MARKER_RE)?.length ?? 0);
   return delimiters > MAX_DELIMITERS || MARKER_RUN_RE.test(text);
 }

@@ -127,7 +127,9 @@ function PlainText({
   linkify = false,
   durationSeconds,
   onSeek,
+  timestamps = true,
 }: {
+  timestamps?: boolean;
   text: string;
   className?: string;
   linkify?: boolean;
@@ -138,6 +140,10 @@ function PlainText({
   if (linkify) {
     let last = 0;
     const pushText = (chunk: string) => {
+      if (!timestamps) {
+        nodes.push(chunk);
+        return;
+      }
       for (const seg of splitTimestamps(chunk, durationSeconds)) {
         nodes.push(
           typeof seg === "string" ? (
@@ -192,11 +198,13 @@ export interface UserTextProps {
   className?: string;
   /** Known video duration; timestamps beyond it stay plain text. */
   durationSeconds?: number | null;
+  /** false: timestamps stay plain text (surfaces with no player to seek). */
+  timestamps?: boolean;
   /** Watch-page seek handler for timestamp links. */
   onSeek?: (seconds: number) => void;
 }
 
-export function UserText({ text, variant, className, durationSeconds = null, onSeek }: UserTextProps) {
+export function UserText({ text, variant, className, durationSeconds = null, onSeek, timestamps = true }: UserTextProps) {
   const heading = ({ children }: { children?: ReactNode }) => (
     <p className="whitespace-pre-wrap font-semibold">{children}</p>
   );
@@ -252,7 +260,14 @@ export function UserText({ text, variant, className, durationSeconds = null, onS
   };
 
   if (exceedsParseBudget(text)) {
-    return <PlainText linkify text={text} className={className} durationSeconds={durationSeconds} onSeek={onSeek} />;
+    return <PlainText
+        linkify
+        text={text}
+        className={className}
+        durationSeconds={durationSeconds}
+        timestamps={timestamps}
+        onSeek={onSeek}
+      />;
   }
 
   return (
@@ -260,7 +275,7 @@ export function UserText({ text, variant, className, durationSeconds = null, onS
       <div className={cn("flex min-w-0 flex-col gap-2 break-words", className)}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkBoundTree]}
-          rehypePlugins={[[rehypeTimestamps, { durationSeconds, skip: SKIP[variant] }]]}
+          rehypePlugins={timestamps ? [[rehypeTimestamps, { durationSeconds, skip: SKIP[variant] }]] : []}
           allowedElements={ALLOWED[variant]}
           unwrapDisallowed
           urlTransform={safeUserUrl}

@@ -121,7 +121,7 @@ function CommentRow({
         </span>
       </div>
 
-      <UserText variant="comment" text={comment.body} className="mt-2 text-sm text-fg" />
+      <UserText variant="comment" text={comment.body} timestamps={false} className="mt-2 text-sm text-fg" />
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
 
