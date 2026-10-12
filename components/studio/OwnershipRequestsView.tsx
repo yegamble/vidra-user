@@ -119,11 +119,13 @@ function answerError(err: unknown, accepting: boolean): string {
 }
 
 // What each answered status reads as; pending rows show actions instead.
+// Core reports a withdrawn, timed-out or no-longer-honourable offer alike as
+// "expired" — the recipient is deliberately not told which — so it reads as
+// "No longer available", not as a claim about time.
 const STATUS_BADGE: Partial<Record<VideoOwnershipChange["status"], { label: string; variant?: "success" }>> = {
   accepted: { label: "Accepted", variant: "success" },
   refused: { label: "Refused" },
-  cancelled: { label: "Withdrawn" },
-  expired: { label: "Expired" },
+  expired: { label: "No longer available" },
 };
 
 function OwnershipRequestRow({
