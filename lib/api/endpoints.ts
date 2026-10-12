@@ -651,9 +651,12 @@ export const api = {
       { method: "PUT", body: { notification_setting: notificationSetting } },
     ),
 
-  /** GET /api/v1/me/channels — the caller's own channels (auth). */
-  getMyChannels: (signal?: AbortSignal) =>
-    apiRequest<ChannelListResponse>("/api/v1/me/channels", { signal }),
+  /**
+   * GET /api/v1/me/channels — the caller's channels (owned + editor-shared),
+   * paginated by core (default 20); pass a window to read past the first page.
+   */
+  getMyChannels: (signal?: AbortSignal, params: PageParams = {}) =>
+    apiRequest<ChannelListResponse>("/api/v1/me/channels", { signal, query: pageQuery(params) }),
 
   /**
    * GET /api/v1/me/quota — the caller's storage usage + effective quota (auth):

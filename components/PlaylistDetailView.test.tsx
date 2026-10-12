@@ -50,7 +50,7 @@ beforeEach(() => {
   mocks.getMyPlaylists.mockResolvedValue({ playlists: [playlist] });
   mocks.deletePlaylist.mockResolvedValue(undefined);
   mocks.updatePlaylist.mockResolvedValue(undefined);
-  mocks.getMyChannels.mockResolvedValue({ channels: [{ id: "c1", handle: "ada", display_name: "Ada TV" }] });
+  mocks.getMyChannels.mockResolvedValue({ channels: [{ id: "c1", handle: "ada", display_name: "Ada TV", role: "owner" }], total: 1 });
   mocks.movePlaylistItem.mockResolvedValue(undefined);
   mocks.removeFromPlaylist.mockResolvedValue(undefined);
   mocks.session.status = "authed";

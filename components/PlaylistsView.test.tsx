@@ -19,7 +19,7 @@ const rows = (from: number, n: number) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getMyChannels.mockResolvedValue({ channels: [{ id: "c1", handle: "ada", display_name: "Ada TV" }] });
+  mocks.getMyChannels.mockResolvedValue({ channels: [{ id: "c1", handle: "ada", display_name: "Ada TV", role: "owner" }], total: 1 });
   mocks.getMyPlaylists.mockImplementation((_signal: unknown, p: { offset?: number }) =>
     Promise.resolve(
       p?.offset

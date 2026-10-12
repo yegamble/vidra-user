@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { Channel } from "@/lib/api";
+import { collectPages } from "@/lib/collect-pages";
 
 // PlaylistChannelSelect is the optional "Channel" picker on playlist create and
 // edit: the caller's own channels, or "None". Core only accepts a channel the
@@ -21,9 +22,14 @@ export function PlaylistChannelSelect({
   const [channels, setChannels] = useState<Channel[]>([]);
   useEffect(() => {
     const controller = new AbortController();
-    api
-      .getMyChannels(controller.signal)
-      .then((res) => setChannels(res.channels))
+    // Every page, and only channels the caller OWNS: /me/channels also lists
+    // editor-shared channels, which core refuses for a playlist (404).
+    collectPages<Channel>(
+      (window) =>
+        api.getMyChannels(controller.signal, window).then((res) => ({ items: res.channels, total: res.total })),
+      { signal: controller.signal },
+    )
+      .then((all) => setChannels(all.filter((c) => c.role === "owner")))
       .catch(() => {
         // The picker is optional: without the list it offers only "None".
       });
