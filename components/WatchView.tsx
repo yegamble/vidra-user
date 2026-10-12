@@ -29,6 +29,7 @@ import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsSourceBar } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
 import { TranscodingNote } from "@/components/watch/TranscodingNote";
+import { PlaylistPanel } from "@/components/watch/PlaylistPanel";
 import { UpNextQueue } from "@/components/UpNextQueue";
 import { WATCH_CONTENT, WATCH_THEATER_INSET } from "@/components/watch/layout";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
@@ -214,7 +215,7 @@ export function WatchView({
   const queuedNextVideo = playbackQueue.find(
     (item) => !video || item.id !== video.id || Boolean(item.remote) !== Boolean(video.remote),
   );
-  const playlist = usePlaylistNext(video?.id);
+  const playlist = usePlaylistNext(video ?? undefined);
   const nextVideo = playlist.active ? playlist.next : queuedNextVideo ?? relatedNextVideo;
 
   useEffect(() => {
@@ -596,6 +597,7 @@ export function WatchView({
       {stageBlock}
       <div className="watch-body-area flex min-w-0 flex-col gap-8">
       <article className="flex flex-col gap-4">
+        {playlist.active ? <PlaylistPanel queue={playlist} videoId={video.id} /> : null}
         {playlist.active && playlist.status === "error" ? (
           <ErrorState message="Could not load this playlist. Playback continuation is unavailable." onRetry={playlist.retry} />
         ) : null}
@@ -631,7 +633,7 @@ export function WatchView({
             getCurrentTime={() => playerRef.current?.currentTime ?? 0}
             onDeleted={() => window.location.assign("/")} />
           {channelHandle ? <SupportButton sources={supportSources} name={channelName || "this creator"}
-            className="self-start min-h-11" /> : null}
+            text={video.support} className="self-start min-h-11" /> : null}
           {/* Secondary technical/taxonomy chips (duration, dimensions,
               category/language/license) on their own quiet row. */}
           {chips.length > 0 ? (

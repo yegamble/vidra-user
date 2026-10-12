@@ -29,7 +29,14 @@ vi.mock("@/components/RatingControls", () => ({ RatingControls: () => <div /> })
 vi.mock("@/components/DownloadButton", () => ({ DownloadButton: () => <div /> }));
 vi.mock("@/components/SaveButton", () => ({ SaveButton: () => <div /> }));
 vi.mock("@/components/AddToPlaylistButton", () => ({ AddToPlaylistButton: () => <div /> }));
-vi.mock("@/components/SupportButton", () => ({ SupportButton: () => <div /> }));
+// A spy, so the wiring of the video's own support text into the button is observable.
+const supportButton = vi.hoisted(() => vi.fn());
+vi.mock("@/components/SupportButton", () => ({
+  SupportButton: (props: { text?: string | null }) => {
+    supportButton(props);
+    return <div />;
+  },
+}));
 vi.mock("@/components/VideoActionsMenu", () => ({ VideoActionsMenu: () => <div /> }));
 vi.mock("@/components/ReportButton", () => ({
   ReportButton: () => <div />,
@@ -161,5 +168,27 @@ describe("WatchView internal video", () => {
     render(<WatchView id="v1" />);
     await act(async () => {});
     expect(screen.queryByText("Sign in to watch this video")).toBeNull();
+  });
+});
+
+// PeerTube's free-text "support" message is the VIDEO'S own (a new video
+// snapshots its channel's), and rides the one Support button rather than a
+// second affordance.
+describe("WatchView support text", () => {
+  it("hands the video's support text to the Support button", async () => {
+    supportButton.mockClear();
+    render(<WatchView id="v1" initialVideo={{ ...video(), support: "Liberapay: film-house" }} />);
+    await act(async () => {});
+    expect(supportButton).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Liberapay: film-house" }),
+    );
+  });
+
+  it("passes no text for a video without one", async () => {
+    supportButton.mockClear();
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await act(async () => {});
+    expect(supportButton).toHaveBeenCalled();
+    expect(supportButton.mock.calls.every(([p]) => !p.text)).toBe(true);
   });
 });
