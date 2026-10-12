@@ -304,7 +304,7 @@ test("an admin can deactivate a user", async ({ page }) => {
   await updated;
   expect(patched).toEqual({ is_active: false, ban_reason: "posting spam links" });
   await expect(page.getByRole("button", { name: "Reactivate alice" })).toBeVisible();
-  await expect(page.getByText("posting spam links")).toBeVisible();
+  await expect(page.getByTestId("admin-users-desktop").getByText("posting spam links")).toBeVisible();
 });
 
 test("an admin can permanently delete a user after the double confirm", async ({ page }) => {
