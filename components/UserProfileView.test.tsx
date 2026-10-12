@@ -10,7 +10,7 @@ vi.mock("next/link", () => ({
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
-  api: { getUserProfile: vi.fn() },
+  api: { getUserProfile: vi.fn(), listUserVideos: vi.fn() },
   channelAvatarUrl: () => "",
   userAvatarUrl: () => "",
   userBannerUrl: () => "",
@@ -23,6 +23,12 @@ let optionalSession: { status: string; user: { id: string } | null } | null = nu
 vi.mock("@/components/auth/AuthProvider", () => ({
   useOptionalSession: () => optionalSession,
 }));
+
+vi.mock("@/components/ChannelVideoCard", () => ({
+  ChannelVideoCard: ({ video }: { video: { title: string } }) => <span>{video.title}</span>,
+}));
+
+vi.mock("@/lib/use-browse-auto-load", () => ({ useBrowseAutoLoad: () => false }));
 
 vi.mock("@/lib/format", () => ({
   formatCount: (n: number) => String(n),
@@ -100,5 +106,23 @@ describe("UserProfileLoader session settling", () => {
     rerender(<UserProfileLoader username="ada" />);
     expect(await screen.findByText("Ada")).toBeTruthy();
     expect(getUserProfile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("UserProfileView Videos tab", () => {
+  it("lists the account's videos from every channel once the tab is opened", async () => {
+    const listUserVideos = vi.mocked(api.listUserVideos);
+    listUserVideos.mockResolvedValue({
+      videos: [{ id: "v1", title: "From channel two" }],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    } as never);
+    render(<UserProfileView profile={profile()} />);
+    expect(listUserVideos).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Videos" }));
+    expect(await screen.findByText("From channel two")).toBeTruthy();
+    expect(listUserVideos).toHaveBeenCalledWith("ada", expect.anything(), expect.objectContaining({ limit: 20 }));
   });
 });

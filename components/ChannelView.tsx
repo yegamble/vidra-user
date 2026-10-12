@@ -5,7 +5,8 @@ import { useMemo, useState } from "react";
 import { AccountModerationMenu } from "@/components/AccountModerationMenu";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
-import { ChannelVideoCard } from "@/components/ChannelVideoCard";
+import { ChannelPlaylistsTab } from "@/components/ChannelPlaylistsTab";
+import { ChannelVideoGrid } from "@/components/ChannelVideoGrid";
 import { FollowButton } from "@/components/FollowButton";
 import { RemoteInteractionButton } from "@/components/RemoteInteractionButton";
 import { MessageButton } from "@/components/MessageButton";
@@ -26,7 +27,7 @@ import { useSettledSession } from "@/lib/use-settled-session";
 import { useViewerModeration } from "@/lib/use-viewer-moderation";
 import { UserText } from "@/components/UserText";
 
-type Section = "videos" | "about";
+type Section = "videos" | "playlists" | "about";
 
 // Channel-grid sort. Both chips are SERVER sorts: `GET /channels/{handle}/videos`
 // takes `sort=-published_at` (newest first, its default) or `sort=published_at`
@@ -214,6 +215,7 @@ function ChannelForViewer({ handle }: { handle: string }) {
           onChange={setSection}
           options={[
             { value: "videos", label: "Videos" },
+            { value: "playlists", label: "Playlists" },
             { value: "about", label: "About" },
           ]}
         />
@@ -246,16 +248,11 @@ function ChannelForViewer({ handle }: { handle: string }) {
                 </div>
               ) : (
                 <>
-                  <ul
-                    aria-label={`Videos by ${name}`}
-                    className="grid grid-cols-2 gap-x-4 gap-y-6 lg:grid-cols-4 lg:gap-x-[18px]"
-                  >
-                    {videos.map((video) => (
-                      <li key={video.id}>
-                        <ChannelVideoCard video={video} onDeleted={() => list.drop((v) => v.id !== video.id)} />
-                      </li>
-                    ))}
-                  </ul>
+                  <ChannelVideoGrid
+                    videos={videos}
+                    label={`Videos by ${name}`}
+                    onDeleted={(video) => list.drop((v) => v.id !== video.id)}
+                  />
                   <ListTail
                     hasMore={list.hasMore}
                     autoLoad={autoLoad}
@@ -267,6 +264,8 @@ function ChannelForViewer({ handle }: { handle: string }) {
               )}
             </div>
           )
+        ) : section === "playlists" ? (
+          <ChannelPlaylistsTab handle={channel.handle} name={name} />
         ) : (
           <ChannelAbout channel={channel} videoCount={videoCount} />
         )}
@@ -277,9 +276,7 @@ function ChannelForViewer({ handle }: { handle: string }) {
 
 // ChannelAbout is the About tab: the channel's own facts, all real fields on the
 // public Channel payload (join date, follower count) plus the listed-video count.
-// A "Playlists" tab is intentionally absent — no contract lists a channel's public
-// playlists (only /me/playlists + create/get-by-id exist), so it is a backend
-// dependency, not stubbed here.
+// Playlists have their own tab (ChannelPlaylistsTab).
 function ChannelAbout({ channel, videoCount }: { channel: Channel; videoCount: number }) {
   const joined = formatMonthYear(channel.created_at);
   const facts: { label: string; value: string }[] = [

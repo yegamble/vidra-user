@@ -470,6 +470,19 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ title: "Faves", visibility: "public" });
   });
 
+  it("listChannelPlaylists pages a channel's playlists", async () => {
+    await api.listChannelPlaylists("ada", undefined, { limit: 20, offset: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/channels/ada/playlists?limit=20&offset=20");
+  });
+
+  it("listUserVideos pages and sorts an account's videos", async () => {
+    await api.listUserVideos("ada", undefined, { limit: 20, offset: 0, sort: "published_at" });
+    const url = calledUrl();
+    expect(url).toContain("http://localhost:8080/api/v1/users/ada/videos?");
+    expect(url).toContain("sort=published_at");
+    expect(url).toContain("limit=20");
+  });
+
   it("getPlaylist targets the detail endpoint", async () => {
     await api.getPlaylist("p1");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/playlists/p1");
