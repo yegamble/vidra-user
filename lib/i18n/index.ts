@@ -24,6 +24,10 @@ type VarNames<M> = M extends string ? Placeholders<M> : Placeholders<M[keyof M]>
 type VarsArgs<K extends MessageKey> = [VarNames<(typeof en)[K]>] extends [never]
   ? []
   : [vars: Record<VarNames<(typeof en)[K]>, string | number>];
+/** Keys whose message takes no vars — safe to store in data and render with `t(key)`. */
+export type PlainMessageKey = {
+  [K in MessageKey]: [VarNames<(typeof en)[K]>] extends [never] ? K : never;
+}[MessageKey];
 export type Translate = <K extends MessageKey>(key: K, ...vars: VarsArgs<K>) => string;
 
 const PLACEHOLDER = /\{(\w+)\}/g;

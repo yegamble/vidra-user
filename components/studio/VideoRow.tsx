@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import { CaptionsManager } from "@/components/CaptionsManager";
 import { ChaptersManager } from "@/components/ChaptersManager";
@@ -27,6 +27,7 @@ import {
 import type { Channel, Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { watchPath } from "@/lib/watch-path";
+import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
 
 import { SupportTextField } from "./SupportTextField";
 
@@ -55,6 +56,7 @@ export function VideoRow({
   basicOnly = false,
   replaceEnabled = false,
   replaceAccept = "video/*,audio/*",
+  leading,
 }: {
   video: Video;
   config: VideoConfigResponse | null;
@@ -70,6 +72,8 @@ export function VideoRow({
   replaceEnabled?: boolean;
   /** File-picker accept list for the replace flow (extension gate, W10). */
   replaceAccept?: string;
+  /** Rendered before the thumbnail in the resting row (the bulk-select checkbox). */
+  leading?: ReactNode;
 }) {
   const [mode, setMode] = useState<RowMode>(initiallyEditing ? "edit" : "view");
   const [title, setTitle] = useState(video.title);
@@ -290,9 +294,11 @@ export function VideoRow({
           onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
           aria-label="Edit privacy"
         >
-          <option value="public">Public</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="private">Private</option>
+          {VIDEO_PRIVACY_CHOICES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
           <option value="password" disabled={basicOnly && video.privacy !== "password"}>
             Password-protected
           </option>
@@ -421,6 +427,7 @@ export function VideoRow({
 
   return (
     <li className="flex items-center gap-3 px-4 py-3">
+      {leading}
       {/* Design row thumbnail: poster when ready, else a plain surface tile; a
           spinner overlays while the backend is still transcoding. */}
       <div className="relative aspect-video w-[92px] shrink-0 overflow-hidden rounded-lg bg-surface-strong sm:w-28">
