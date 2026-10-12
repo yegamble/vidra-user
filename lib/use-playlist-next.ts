@@ -19,7 +19,7 @@ export function usePlaylistNext(videoId: string | undefined) {
   const { status: session, user } = useSession();
   const resource = useApiResource<PlaylistDetail | null>(signal => {
     if (!playlistId || session === "restoring") return Promise.resolve(null);
-    return api.getPlaylist(playlistId, signal);
+    return api.getPlaylist(playlistId, {}, signal);
   }, [playlistId, session, user?.id]);
   const videos = resource.data?.videos ?? [];
   const index = videos.findIndex(video => video.id === videoId);

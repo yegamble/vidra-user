@@ -15,7 +15,7 @@ const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const MY_CHANNELS = /\/api\/v1\/me\/channels$/;
-const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
+const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos(\?|$)/;
 const VIDEO_CONFIG = /\/api\/v1\/videos\/config$/;
 const INSTANCE = /\/api\/v1\/instance$/;
 // GET lists + POST creates on the same path; the mock branches on method.

@@ -8,6 +8,9 @@ import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  AdminCreateUserRequest,
+  AdminCreateUserResponse,
+  BulkRemoveCommentsResponse,
   AdminPasswordResetLink,
   AdminStats,
   AdminUser,
@@ -564,11 +567,20 @@ export const api = {
       { signal },
     ),
 
-  /** GET /api/v1/channels/{handle}/videos — a channel's videos (cards). */
-  listChannelVideos: (handle: string, token?: string, signal?: AbortSignal) =>
+  /**
+   * GET /api/v1/channels/{handle}/videos — a channel's videos (cards). Paginated
+   * (limit 1–100, default 20, plus offset) and sortable server-side: `sort` is
+   * `-published_at` (newest first, the default) or `published_at` (oldest first).
+   */
+  listChannelVideos: (
+    handle: string,
+    token?: string,
+    signal?: AbortSignal,
+    params: PageParams & { sort?: "-published_at" | "published_at" } = {},
+  ) =>
     apiRequest<VideoListResponse>(
       `/api/v1/channels/${encodeURIComponent(handle)}/videos`,
-      { token, signal },
+      { token, signal, query: { sort: params.sort, ...pageQuery(params) } },
     ),
 
   /**
@@ -1972,9 +1984,15 @@ export const api = {
   createPlaylist: (body: CreatePlaylistRequest) =>
     apiRequest<Playlist>("/api/v1/playlists", { method: "POST", body }),
 
-  /** GET /api/v1/playlists/{id} — a playlist + its ordered video cards. */
-  getPlaylist: (id: string, signal?: AbortSignal) =>
-    apiRequest<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}`, { signal }),
+  /**
+   * GET /api/v1/playlists/{id} — a playlist + ONE PAGE of its ordered video
+   * cards (backend default 20); total/limit/offset describe the videos.
+   */
+  getPlaylist: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}`, {
+      query: pageQuery(params),
+      signal,
+    }),
 
   /** PATCH /api/v1/playlists/{id} — update a playlist (auth, owner). */
   updatePlaylist: (id: string, body: UpdatePlaylistRequest) =>
@@ -1999,15 +2017,17 @@ export const api = {
     ),
 
   /**
-   * PUT /api/v1/playlists/{id}/videos — reorder items (auth, owner). videoIds must
-   * be exactly the playlist's current video ids in the desired order; a mismatch
-   * (missing/extra/duplicate) is 422.
+   * POST /api/v1/playlists/{id}/videos/{videoId}/move — move one item to
+   * directly after `afterVideoId`, or to the front when it is null (auth,
+   * owner). It needs no copy of the full list, so it works on a playlist the
+   * client has only paged part of — which is why it replaced the full-list PUT
+   * here. 409 when either video is no longer an item (the copy is stale).
    */
-  reorderPlaylist: (id: string, videoIds: string[]) =>
-    apiRequest<void>(`/api/v1/playlists/${encodeURIComponent(id)}/videos`, {
-      method: "PUT",
-      body: { video_ids: videoIds },
-    }),
+  movePlaylistItem: (id: string, videoId: string, afterVideoId: string | null) =>
+    apiRequest<void>(
+      `/api/v1/playlists/${encodeURIComponent(id)}/videos/${encodeURIComponent(videoId)}/move`,
+      { method: "POST", body: { after_video_id: afterVideoId } },
+    ),
 
   // Private playlist covers require bearer-authenticated bytes, like DM attachments.
   fetchPlaylistThumbnail: async (id: string, signal?: AbortSignal): Promise<Blob> => {
@@ -2134,6 +2154,19 @@ export const api = {
       method: "DELETE",
       body,
     }),
+
+  /**
+   * POST /api/v1/admin/users — create an account on the user's behalf (admin).
+   * No account password: the holder sets one through a one-time link, which is
+   * either emailed (`link_emailed`) or returned ONCE in `reset_url` (no-store).
+   * `password` is the CALLER's own (step-up).
+   *
+   * 403 wrong password, 409 username/email taken (or no origin for the link),
+   * 422 validation, 429 rate limited, 502/503 account created but no link
+   * could be issued (mail failed / audit write failed).
+   */
+  createAdminUser: (body: AdminCreateUserRequest) =>
+    apiRequest<AdminCreateUserResponse>("/api/v1/admin/users", { method: "POST", body }),
 
   /**
    * POST /api/v1/admin/users/{id}/password-reset-link — mint a one-time reset
@@ -2611,6 +2644,17 @@ export const api = {
     apiRequest<AdminCommentListResponse>("/api/v1/admin/comments", {
       query: { q: params.q, ...pageQuery(params) },
       signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/comments/bulk-remove — hard-delete every comment by one
+   * local username (or remote actor URL), instance-wide (moderator/admin).
+   * Resolves with how many were removed; an unknown username is a 404.
+   */
+  bulkRemoveAdminComments: (account: string) =>
+    apiRequest<BulkRemoveCommentsResponse>("/api/v1/admin/comments/bulk-remove", {
+      method: "POST",
+      body: { account },
     }),
 
   /** GET /api/v1/admin/watched-words — the watched-words list, newest first (moderator/admin). */

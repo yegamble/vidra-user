@@ -130,8 +130,8 @@ test("an owner can edit a playlist's title and visibility, and it persists", asy
 
 // Proves the playlist REORDER round trip against a real vidra-core + PostgreSQL:
 // an owner reorders two items via the UI and the new order survives a fresh
-// refetch (a real backend GET) AND a direct API read — confirming PUT
-// /playlists/:id/videos rewrote the positions in the DB.
+// refetch (a real backend GET) AND a direct API read — confirming POST
+// /playlists/:id/videos/:videoId/move rewrote the positions in the DB.
 test("an owner can reorder playlist items, and the order persists", async ({ page, request }) => {
   // Seed one channel with two published videos (A, then B).
   const { handle, videoId: aId, videoTitle: aTitle, token: ownerToken } = await seedPublishedChannel(request);
@@ -175,9 +175,9 @@ test("an owner can reorder playlist items, and the order persists", async ({ pag
   await expect(page.getByRole("heading", { name: aTitle })).toBeVisible();
   await expect(page.getByRole("heading", { name: bTitle })).toBeVisible();
 
-  // Move B up → PUT → 204.
+  // Move B up → POST move (B to the front) → 204.
   const reordered = page.waitForResponse(
-    (r) => /\/playlists\/[^/]+\/videos$/.test(r.url()) && r.request().method() === "PUT" && r.ok(),
+    (r) => /\/playlists\/[^/]+\/videos\/[^/]+\/move$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   await page.getByRole("button", { name: `Move ${bTitle} up` }).click();
   await reordered;
