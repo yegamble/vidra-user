@@ -79,7 +79,8 @@ test("anonymous viewers are gated out of registration requests", async ({ page }
     return route.fulfill({ json: { requests: [], limit: 20, offset: 0 } });
   });
   await page.goto("/admin/registration-requests");
-  await expect(page.getByText("Administrators only")).toBeVisible();
+  // The queue opened to moderators (core MANAGE_REGISTRATIONS), so the gate names them.
+  await expect(page.getByText("Moderators only")).toBeVisible();
   expect(fetched).toBe(false);
 });
 
@@ -94,7 +95,8 @@ test("regular users are gated out and see no Admin nav entry", async ({ page }) 
   // effectively signed out) shows the permission gate and never fetches.
   await expect(page.getByRole("link", { name: "Admin", exact: true })).toHaveCount(0);
   await page.goto("/admin/registration-requests");
-  await expect(page.getByText("Administrators only")).toBeVisible();
+  // The queue opened to moderators (core MANAGE_REGISTRATIONS), so the gate names them.
+  await expect(page.getByText("Moderators only")).toBeVisible();
   expect(fetched).toBe(false);
 });
 

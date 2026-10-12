@@ -60,7 +60,7 @@ export function ContentView() {
         autoOpen={autoOpen}
         onAutoOpenConsumed={consumeAutoOpen}
       />
-      <MyVideosSection handle={currentHandle} config={config} />
+      <MyVideosSection handle={currentHandle} config={config} channels={channels} />
     </div>
   );
 }

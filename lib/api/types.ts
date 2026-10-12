@@ -150,6 +150,8 @@ export interface SearchEventInput {
 export type UserRole = NonNullable<Schemas["User"]["role"]>;
 export type AdminUser = Schemas["AdminUser"];
 export type AdminPasswordResetLink = Schemas["AdminPasswordResetLink"];
+export type AdminCreateUserRequest = Schemas["AdminCreateUserRequest"];
+export type AdminCreateUserResponse = Schemas["AdminCreateUserResponse"];
 export type AdminUserListResponse = Schemas["AdminUserListResponse"];
 export type AuditLogEntry = Schemas["AuditLogEntry"];
 export type AuditLogListResponse = Schemas["AuditLogListResponse"];
@@ -437,6 +439,7 @@ export type AdminVideoScope = NonNullable<
 >;
 export type AdminComment = Schemas["AdminComment"];
 export type AdminCommentListResponse = Schemas["AdminCommentListResponse"];
+export type BulkRemoveCommentsResponse = Schemas["BulkRemoveCommentsResponse"];
 export type WatchedWord = Schemas["WatchedWord"];
 export type WatchedWordListResponse = Schemas["WatchedWordListResponse"];
 export type CreateWatchedWordRequest = Schemas["CreateWatchedWordRequest"];
