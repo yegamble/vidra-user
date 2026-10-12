@@ -7,6 +7,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
 import { ChannelVideoCard } from "@/components/ChannelVideoCard";
 import { FollowButton } from "@/components/FollowButton";
+import { RemoteInteractionButton } from "@/components/RemoteInteractionButton";
 import { MessageButton } from "@/components/MessageButton";
 import { SupportButton } from "@/components/SupportButton";
 import { Avatar } from "@/components/ui/Avatar";
@@ -166,6 +167,7 @@ function ChannelForViewer({ handle }: { handle: string }) {
                       } : current)
                     }
                   />
+                  <RemoteInteractionButton kind="channel" id={channel.handle} />
                   <SupportButton
                     sources={[
                       { kind: "channel", handle: channel.handle },

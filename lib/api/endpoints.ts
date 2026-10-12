@@ -178,6 +178,7 @@ import type {
   VideoRating,
   VideoStatsResponse,
   VideoSearchResponse,
+  RemoteInteractionResolution,
   AccountSearchResponse,
   ChannelSearchResponse,
   SearchSuggestionsResponse,
@@ -1476,6 +1477,31 @@ export const api = {
    */
   createRemoteFollow: (body: CreateRemoteFollowRequest) =>
     apiRequest<RemoteFollow>("/api/v1/me/remote-follows", { method: "POST", body }),
+
+  /**
+   * GET /api/v1/remote-interaction/resolve — anonymous. WebFingers the
+   * visitor's own server for its subscribe template and returns the URL to
+   * send them to for `target` (an id on this instance). Malformed handle or a
+   * server we refuse to contact → 422; no subscribe support → 404; server
+   * unreachable → 502; federation disabled → 503; throttled → 429.
+   */
+  resolveRemoteInteraction: (handle: string, target: string) =>
+    apiRequest<RemoteInteractionResolution>("/api/v1/remote-interaction/resolve", {
+      query: { handle, target },
+    }),
+
+  /**
+   * GET /api/v1/videos/search?q=<uri> — resolve a remote URI (the inbound
+   * /remote-interaction page). The same route searchVideos uses, WITHOUT the
+   * client-emits-its-own-event header: this is a lookup, not a results page,
+   * so nothing client-side follows it with a search.submitted of its own and
+   * core should not be told to expect one.
+   */
+  lookupRemoteUri: (uri: string, signal?: AbortSignal) =>
+    apiRequest<VideoSearchResponse>("/api/v1/videos/search", {
+      query: { q: uri, limit: 1 },
+      signal,
+    }),
 
   /** GET /api/v1/me/remote-follows — the caller's remote-channel follows, newest first (auth). */
   listRemoteFollows: (params: PageParams = {}, signal?: AbortSignal) =>

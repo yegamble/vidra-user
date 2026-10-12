@@ -602,6 +602,7 @@ export function WatchView({
               followerCount={channel?.follower_count ?? null}
               isFollowing={channel?.is_following ?? false}
               notificationSetting={channel?.notification_setting}
+              videoId={video.remote ? undefined : video.id}
               onDelta={(d) =>
                 setChannel((c) =>
                   c ? { ...c, follower_count: Math.max(0, c.follower_count + d) } : c,
