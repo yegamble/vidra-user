@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
+import { useInstanceFeatures } from "@/lib/instance-features";
 import { useApiResource } from "@/lib/use-api-resource";
 import { SignInGate } from "@/components/SignInGate";
 
@@ -122,6 +123,8 @@ function fromServer(res: { prefs: Record<string, boolean>; email?: Record<string
 
 function Prefs() {
   const { user } = useSession();
+  // features.mail is the instance's live "has an outbound mail path" gate.
+  const mailOff = useInstanceFeatures()?.mail === false;
   const { status, data, retry, setData } = useApiResource<Switchboard>((signal) =>
     api.getNotificationPrefs(signal).then(fromServer),
   );
@@ -172,7 +175,10 @@ function Prefs() {
       />
     );
   }
-  const hasEmail = Object.keys(email).length > 0;
+  // With no outbound mail nothing is ever emailed, so offering the switches
+  // would be a dead control; the server still keeps the stored choices.
+  const offersEmail = Object.keys(email).length > 0;
+  const hasEmail = offersEmail && !mailOff;
 
   return (
     <div className="flex flex-col gap-3">
@@ -201,7 +207,7 @@ function Prefs() {
         {types.map((type) => {
           const meta = TYPE_LABELS[type];
           const label = meta?.label ?? type;
-          const emailable = type in email;
+          const emailable = hasEmail && type in email;
           return (
             <li key={type} className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
@@ -237,6 +243,9 @@ function Prefs() {
         your list.
         {hasEmail
           ? " Email is off until you turn it on, and is sent only while the in-app notification is on."
+          : null}
+        {offersEmail && mailOff
+          ? " This instance isn't set up to send email, so notifications are in-app only."
           : null}
       </p>
     </div>

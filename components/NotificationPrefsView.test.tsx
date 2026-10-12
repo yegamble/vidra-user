@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   updateNotificationPrefs: vi.fn(),
   updateNotificationEmailPrefs: vi.fn(),
   session: { status: "authed", user: { id: "u1", email_verified: true } as { id: string; email_verified: boolean } },
+  features: { mail: true } as { mail: boolean } | null,
 }));
 
 vi.mock("@/lib/api", async (importActual) => {
@@ -28,6 +29,10 @@ vi.mock("@/components/auth/AuthProvider", () => ({
   useSession: () => mocks.session,
 }));
 
+vi.mock("@/lib/instance-features", () => ({
+  useInstanceFeatures: () => mocks.features,
+}));
+
 import { NotificationPrefsView } from "./NotificationPrefsView";
 
 const ALL_ON = { comment: true, comment_reply: true, follow: true, new_video: true };
@@ -39,6 +44,7 @@ function emailSwitch(label: string) {
 
 beforeEach(() => {
   mocks.session.user = { id: "u1", email_verified: true };
+  mocks.features = { mail: true };
   mocks.getNotificationPrefs.mockResolvedValue({ prefs: ALL_ON, email: EMAIL_OFF });
 });
 
@@ -118,5 +124,17 @@ describe("NotificationPrefsView email column", () => {
     render(<NotificationPrefsView />);
     await screen.findByRole("switch", { name: "Comments notifications" });
     expect(screen.queryByRole("switch", { name: /email notifications/ })).toBeNull();
+  });
+
+  it("hides the email column on an instance with no outbound mail, and says why", async () => {
+    mocks.features = { mail: false };
+    mocks.session.user = { id: "u1", email_verified: false };
+    render(<NotificationPrefsView />);
+    await screen.findByRole("switch", { name: "Comments notifications" });
+
+    expect(screen.queryByRole("switch", { name: /email notifications/ })).toBeNull();
+    expect(screen.getByText(/isn.t set up to send email/i)).toBeTruthy();
+    // No verification nag either: there is no email to verify for.
+    expect(screen.queryByRole("link", { name: /verify your address/i })).toBeNull();
   });
 });
