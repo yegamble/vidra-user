@@ -148,7 +148,7 @@ describe("ModerationQueue — the report's message thread", () => {
     const thread = await screen.findByRole("region", { name: "Messages about this report" });
     expect(thread.textContent).toContain("bob · Reporter");
     expect(thread.textContent).toContain("It is a re-upload of my video");
-    expect(mocks.getReportMessages).toHaveBeenCalledWith("r-1", { limit: 100 }, expect.anything());
+    expect(mocks.getReportMessages).toHaveBeenCalledWith("r-1", { limit: 100, offset: 0 }, expect.anything());
 
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Thanks, looking now" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));

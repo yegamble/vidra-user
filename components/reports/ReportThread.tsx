@@ -7,9 +7,9 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { api, errorMessage } from "@/lib/api";
-import type { ReportMessage, ReportMessageListResponse } from "@/lib/api";
-import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
+import type { ReportMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { collectPages } from "@/lib/collect-pages";
 import { relativeTime } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
 
@@ -28,10 +28,20 @@ function authorLabel(m: ReportMessage, viewer: "reporter" | "staff"): string {
 // HTML. A thread the server marks read-only (a report another instance filed)
 // shows why instead of a composer.
 export function ReportThread({ reportId, viewer }: { reportId: string; viewer: "reporter" | "staff" }) {
-  const thread = useApiResource<ReportMessageListResponse>(
-    (signal) => api.getReportMessages(reportId, { limit: FULL_LIST_LIMIT }, signal),
-    [reportId],
-  );
+  // Oldest first, so EVERY page is walked: stopping at one would hide exactly
+  // the newest messages.
+  const thread = useApiResource<{ messages: ReportMessage[]; can_reply: boolean }>(async (signal) => {
+    let canReply = true;
+    const messages = await collectPages(
+      (window) =>
+        api.getReportMessages(reportId, window, signal).then((res) => {
+          canReply = res.can_reply;
+          return { items: res.messages, total: res.total };
+        }),
+      { signal },
+    );
+    return { messages, can_reply: canReply };
+  }, [reportId]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +54,7 @@ export function ReportThread({ reportId, viewer }: { reportId: string; viewer: "
     setError(null);
     try {
       const sent = await api.postReportMessage(reportId, body);
-      thread.setData((t) => (t ? { ...t, messages: [...t.messages, sent], total: t.total + 1 } : t));
+      thread.setData((t) => (t ? { ...t, messages: [...t.messages, sent] } : t));
       setDraft("");
     } catch (err) {
       setError(errorMessage(err, "Could not send your message."));
