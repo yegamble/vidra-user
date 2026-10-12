@@ -53,7 +53,7 @@
     "sharp": "^0.35.5",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.3"
   },
   "overrides": {
     "@next/eslint-plugin-next": {
