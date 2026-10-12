@@ -10,6 +10,7 @@ import {
   formatVersion,
   pluralize,
   relativeTime,
+  createFormat,
 } from "./format";
 
 describe("formatVersion", () => {
@@ -149,5 +150,39 @@ describe("formatMonthYear", () => {
 
   it("returns empty for an unparseable timestamp", () => {
     expect(formatMonthYear("not-a-date")).toBe("");
+  });
+});
+
+describe("locale-aware formatting", () => {
+  const now = new Date("2026-10-12T12:00:00Z");
+  const ago = (secs: number) => new Date(now.getTime() - secs * 1000).toISOString();
+
+  it("en output is pinned: explicit en, en-GB and no locale agree", () => {
+    for (const l of [undefined, "en", "en-GB"]) {
+      expect(formatCount(942, l)).toBe("942");
+      expect(formatCount(1234, l)).toBe("1.2K");
+      expect(formatCount(3_400_000, l)).toBe("3.4M");
+      expect(relativeTime(ago(2), now, l)).toBe("just now");
+      expect(relativeTime(ago(300), now, l)).toBe("5m ago");
+      expect(relativeTime(ago(86400 * 3), now, l)).toBe("3d ago");
+      expect(relativeTime(ago(31557600 * 2), now, l)).toBe("2y ago");
+    }
+    expect(formatMonthYear("2026-07-10T00:00:00Z", "en")).toBe("July 2026");
+    expect(formatDateTime("2026-07-10T14:30:00Z", "en-US")).toMatch(/^Jul 10, 2026, \d+:30\s?[AP]M$/);
+  });
+
+  it("fr output uses fr words and separators", () => {
+    expect(formatCount(1234, "fr")).toMatch(/^1,2\s?k$/);
+    expect(formatCount(942, "fr")).toBe("942");
+    expect(relativeTime(ago(2), now, "fr")).toBe("maintenant");
+    expect(relativeTime(ago(300), now, "fr")).toMatch(/^il y a 5\s?min/);
+    expect(relativeTime(ago(86400 * 3), now, "fr")).toMatch(/^il y a 3\s?j/);
+    expect(formatMonthYear("2026-07-10T12:00:00Z", "fr")).toBe("juillet 2026");
+    expect(formatDateTime("2026-07-10T12:00:00Z", "fr")).toMatch(/^10 juil\.? 2026/);
+  });
+
+  it("createFormat binds the locale", () => {
+    expect(createFormat("fr").relativeTime(ago(2), now)).toBe("maintenant");
+    expect(createFormat("en").formatCount(1234)).toBe("1.2K");
   });
 });

@@ -24,7 +24,8 @@ vi.mock("@/components/auth/AuthProvider", () => ({
   useOptionalSession: () => optionalSession,
 }));
 
-vi.mock("@/lib/format", () => ({
+vi.mock("@/lib/format", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/format")>()),
   formatCount: (n: number) => String(n),
   formatMonthYear: () => "Jul 2026",
   pluralize: (_n: number, word: string) => word,
