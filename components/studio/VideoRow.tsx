@@ -27,6 +27,9 @@ import {
 import type { Channel, Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { watchPath } from "@/lib/watch-path";
+import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
+
+import { SupportTextField } from "./SupportTextField";
 
 import {
   BlockedBadge,
@@ -75,6 +78,9 @@ export function VideoRow({
   const [mode, setMode] = useState<RowMode>(initiallyEditing ? "edit" : "view");
   const [title, setTitle] = useState(video.title);
   const [description, setDescription] = useState(video.description);
+  // Markdown support message (PeerTube "support"); like tags, the authoritative
+  // value arrives with the detail fetch (list rows omit it).
+  const [support, setSupport] = useState(video.support ?? "");
   const [category, setCategory] = useState(video.category ?? "");
   const [language, setLanguage] = useState(video.language ?? "");
   const [license, setLicense] = useState(video.license ?? "");
@@ -151,6 +157,9 @@ export function VideoRow({
         // the detail fetch supplied the real current set to edit from — never
         // from list-row data, which omits tags entirely.
         ...(detail ? { tags } : {}),
+        // Same rule for the support text: sent only once the detail supplied the
+        // real current value, so a list-row edit can never clear it.
+        ...(detail ? { support: support.trim() } : {}),
         // Same rule for the sensitive flag: only sent once the detail supplied
         // the real current value (list rows omit it). The paired content-warning
         // rides with it — cleared (empty string) when the flag is off.
@@ -181,6 +190,7 @@ export function VideoRow({
     setMode("view");
     setTitle(video.title);
     setDescription(video.description);
+    setSupport((detail ?? video).support ?? "");
     setCategory(video.category ?? "");
     setLanguage(video.language ?? "");
     setLicense(video.license ?? "");
@@ -205,6 +215,7 @@ export function VideoRow({
       setDetail(full);
       setTitle(full.title);
       setDescription(full.description);
+      setSupport(full.support ?? "");
       setCategory(full.category ?? "");
       setLanguage(full.language ?? "");
       setLicense(full.license ?? "");
@@ -252,6 +263,7 @@ export function VideoRow({
           maxLength={5000}
           className="resize-y"
         />
+        <SupportTextField value={support} onChange={setSupport} ariaLabel="Edit support text" />
         <TaxonomySelect
           label="Category"
           ariaLabel="Edit category"
@@ -282,9 +294,11 @@ export function VideoRow({
           onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
           aria-label="Edit privacy"
         >
-          <option value="public">Public</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="private">Private</option>
+          {VIDEO_PRIVACY_CHOICES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
           <option value="password" disabled={basicOnly && video.privacy !== "password"}>
             Password-protected
           </option>

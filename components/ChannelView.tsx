@@ -176,6 +176,7 @@ function ChannelForViewer({ handle }: { handle: string }) {
                     name={name}
                     variant="outline"
                     compact
+                    text={channel.support}
                   />
                   {sessionStatus === "authed" ? (
                     <MessageButton recipientId={channel.owner_id} variant="pill" compact />

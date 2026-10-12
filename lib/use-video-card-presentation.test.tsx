@@ -179,9 +179,12 @@ describe("hover-preview eligibility", () => {
     expect(p.previewSrc).toBeNull();
   });
 
-  it("private and password media never preview — a card holds no credential", () => {
+  it("private, password and internal media never preview — a card holds no credential", () => {
     expect(presentation({ privacy: "private" }).previewEligible).toBe(false);
     expect(presentation({ privacy: "password" }).previewEligible).toBe(false);
+    // Internal (members-only) cards reach signed-in feeds, but the bytes still
+    // need the viewer's credential.
+    expect(presentation({ privacy: "internal" }).previewEligible).toBe(false);
     expect(presentation({ privacy: "unlisted" }).previewEligible).toBe(true);
   });
 
