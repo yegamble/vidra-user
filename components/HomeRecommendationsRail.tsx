@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { VideoCard } from "@/components/VideoCard";
+import { useT } from "@/components/I18nProvider";
 import { api } from "@/lib/api";
 import type { RecommendationItem } from "@/lib/api/types";
-import { t } from "@/lib/i18n";
 import { trackSearchEvent } from "@/lib/search-events";
 import { RAIL_TILE, RAIL_TRACK } from "@/lib/rail";
 import { useSettledSession } from "@/lib/use-settled-session";
@@ -24,6 +24,7 @@ import { useSettledSession } from "@/lib/use-settled-session";
 // heading is chosen from the `personalized` flag the server reports, never
 // guessed client-side.
 export function HomeRecommendationsRail() {
+  const t = useT();
   const [items, setItems] = useState<RecommendationItem[]>([]);
   const [personalized, setPersonalized] = useState(false);
   // Wait for the session to settle before asking. On a hard load the refresh

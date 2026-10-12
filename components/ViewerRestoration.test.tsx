@@ -27,7 +27,9 @@ import { ChannelView } from "./ChannelView";
 import { PlaylistDetailView } from "./PlaylistDetailView";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/components/PlaylistThumbnailManager", () => ({ PlaylistThumbnailManager: () => null }));
-const playlist = { id: "p1", title: "Private mix", description: "", visibility: "private",
+// owner_id is how the view decides owner controls (it no longer searches the
+// first page of GET /me/playlists), so the fixture carries the real field.
+const playlist = { id: "p1", owner_id: "owner", title: "Private mix", description: "", visibility: "private",
   video_count: 0, has_thumbnail: false, videos: [] };
 
 const channel = { id: "c1", owner_id: "creator", handle: "creator", display_name: "Creator",

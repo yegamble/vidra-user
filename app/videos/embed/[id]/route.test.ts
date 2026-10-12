@@ -21,12 +21,12 @@ const call = (id: string, qs = "") =>
 describe("GET /videos/embed/[id]", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("resolves a PeerTube uuid and redirects to /embed/{id}, mapping start to t", async () => {
+  it("resolves a PeerTube uuid and redirects to /embed/{id}, mapping start to t and carrying options", async () => {
     mocks.getPublicVideoByLegacyUUID.mockResolvedValue({ id: VIDRA_ID } as Video);
     const res = await call(PT_UUID, "?start=90&autoplay=1&muted=1");
     expect(mocks.getPublicVideoByLegacyUUID).toHaveBeenCalledWith(PT_UUID);
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe(`/embed/${VIDRA_ID}?t=90`);
+    expect(res.headers.get("location")).toBe(`/embed/${VIDRA_ID}?t=90&autoplay=1&muted=1`);
   });
 
   it("also accepts a PeerTube shortUUID", async () => {

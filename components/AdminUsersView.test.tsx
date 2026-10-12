@@ -765,6 +765,54 @@ describe("AdminUsersView password reset link", () => {
   });
 });
 
+describe("AdminUsersView as a moderator", () => {
+  function twoAccounts() {
+    return {
+      users: [
+        account(1, { username: "uma" }),
+        account(2, { username: "staffer", role: "moderator" }),
+        account(3, { username: "banned", is_active: false, ban_reason: "spam links", banned_at: "2026-10-01T00:00:00Z" }),
+      ],
+      total: 3,
+      limit: PAGE,
+      offset: 0,
+    };
+  }
+
+  beforeEach(() => {
+    mocks.session = { user: { id: "mod-1", role: "moderator" } };
+    mocks.getAdminUsers.mockResolvedValue(twoAccounts());
+  });
+
+  it("keeps the admin-only controls away", async () => {
+    render(<AdminUsersView />);
+    await screen.findAllByText("uma");
+    expect(screen.queryByRole("button", { name: "Create user" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /delete uma permanently/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /role for uma/i })).toBeNull();
+  });
+
+  it("bans an ordinary account with a required reason", async () => {
+    mocks.updateAdminUser.mockResolvedValue(account(1, { username: "uma", is_active: false, ban_reason: "spam" }));
+    render(<AdminUsersView />);
+    await screen.findAllByText("uma");
+    fireEvent.click(screen.getByRole("button", { name: "Deactivate uma" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/reason/i), { target: { value: "spam" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^ban uma$/i }));
+    await waitFor(() =>
+      expect(mocks.updateAdminUser).toHaveBeenCalledWith("user-1", { is_active: false, ban_reason: "spam" }),
+    );
+  });
+
+  it("cannot ban staff and shows a banned user's reason", async () => {
+    render(<AdminUsersView />);
+    await screen.findAllByText("staffer");
+    expect((screen.getByRole("button", { name: "Deactivate staffer" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/spam links/)).toBeTruthy();
+  });
+});
+
 describe("AdminUsersView create user", () => {
   it("creates an account from the toolbar and refetches the list", async () => {
     mocks.getAdminUsers.mockResolvedValue(page(0, PAGE));

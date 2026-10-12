@@ -4,7 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { FlagIcon, MessageCircleIcon, ShieldIcon, UserIcon, VideoIcon } from "@/components/icons";
+import {
+  FlagIcon,
+  GlobeIcon,
+  MessageCircleIcon,
+  ShieldIcon,
+  UserIcon,
+  UsersIcon,
+  VideoIcon,
+} from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -35,6 +43,12 @@ export function NotificationTypeIcon({ type }: { type: string }) {
       return <ShieldIcon size={16} />;
     case "new_report":
       return <FlagIcon size={16} />;
+    case "new_registration_request":
+      return <UsersIcon size={16} />;
+    case "upload_quarantined":
+      return <ShieldIcon size={16} />;
+    case "federation_follower_request":
+      return <GlobeIcon size={16} />;
     case "new_video":
       return <VideoIcon size={16} />;
     default:
@@ -64,6 +78,11 @@ const NOTIF_CHIP: Record<string, string> = {
   report_resolved: "bg-tile-orange/12 text-tile-orange",
   new_report: "bg-tile-red/12 text-tile-red",
   new_video: "bg-accent/12 text-accent",
+  // Staff approval-queue signals: the amber/orange family reads as "needs a
+  // decision", distinct from a report's red.
+  new_registration_request: "bg-tile-orange/12 text-tile-orange",
+  upload_quarantined: "bg-tile-orange/12 text-tile-orange",
+  federation_follower_request: "bg-tile-orange/12 text-tile-orange",
 };
 const NOTIF_CHIP_DEFAULT = "bg-surface-muted text-fg-muted";
 
@@ -191,6 +210,41 @@ export function describeNotification(n: Notification): {
       ? n.report_target_type.replaceAll("_", " ")
       : "piece of content";
     return { lead: actor, rest: ` reported a ${target}`, href: "/admin" };
+  }
+  // The three staff approval-queue signals (core migration 0157). Each links
+  // straight to the queue it announces.
+  if (n.type === "new_registration_request") {
+    return {
+      lead: "A new sign-up request",
+      rest: " is waiting for approval",
+      href: "/admin/registration-requests",
+    };
+  }
+  if (n.type === "upload_quarantined") {
+    const title = n.video_title ? `“${n.video_title}”` : "an upload";
+    return {
+      lead: actor,
+      rest: ` uploaded ${title} — it is waiting in the quarantine queue`,
+      href: "/moderation/quarantine",
+    };
+  }
+  if (n.type === "federation_follower_request") {
+    const channel = n.channel_display_name || n.channel_handle || "a channel";
+    return {
+      lead: "A remote account",
+      rest: ` asked to follow ${channel} — it needs your approval`,
+      href: "/admin/federation/follower-requests",
+    };
+  }
+  if (n.type === "caption_ready") {
+    // Previously unhandled, so it fell through to the follow copy below — the
+    // same failure class as new_video once rendering "started following".
+    const what = n.video_title ? `“${n.video_title}”` : "your video";
+    return {
+      lead: "Captions",
+      rest: ` are ready for ${what}`,
+      href: n.video_id ? `/videos/${n.video_id}` : "#",
+    };
   }
   if (n.type === "new_video") {
     // A channel the recipient follows published a new public video.

@@ -22,6 +22,28 @@ const eslintConfig = defineConfig([
       "no-console": "error",
     },
   },
+  // i18n: UI code translates through useT() (client) or getI18n() (server),
+  // which follow the viewer's locale. The bare translator ignores it, and the
+  // catalog registry would bundle every language into the client.
+  {
+    files: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
+    ignores: ["components/I18nProvider.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/i18n",
+              importNames: ["t", "createTranslator"],
+              message: "Use useT() from @/components/I18nProvider (client) or getI18n() from @/lib/i18n/locale.server (server).",
+            },
+            { name: "@/lib/i18n/catalogs", message: "Server-only: getI18n() hands out the active catalog." },
+          ],
+        },
+      ],
+    },
+  },
   // Dev/CI Node scripts (run via `node`, never shipped to the browser) — console
   // output is their entire purpose, so no-console does not apply to them.
   {

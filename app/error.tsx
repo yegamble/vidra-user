@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { t } from "@/lib/i18n";
+import { useT } from "@/components/I18nProvider";
 import { logger } from "@/lib/logger";
 
 // Route-level error boundary: the last line of defence for render/runtime
@@ -16,6 +16,7 @@ export default function RouteError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useT();
   useEffect(() => {
     logger.error("route error boundary caught", {
       message: error.message,

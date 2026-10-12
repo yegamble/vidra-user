@@ -15,11 +15,11 @@ describe("legacyWatchSearch", () => {
 });
 
 describe("legacyEmbedSearch", () => {
-  it("keeps only t, mapping start", () => {
-    expect(legacyEmbedSearch("?start=90&stop=120&autoplay=1&muted=1&loop=1&title=0")).toBe("?t=90");
+  it("maps start to t", () => {
+    expect(legacyEmbedSearch("?start=90&playlistPosition=2")).toBe("?t=90");
   });
-  it("drops everything when there is no start time", () => {
-    expect(legacyEmbedSearch("?autoplay=1&playlistPosition=3")).toBe("");
+  it("drops everything unknown when there is no start time", () => {
+    expect(legacyEmbedSearch("?playlistPosition=3")).toBe("");
   });
 });
 
@@ -27,5 +27,20 @@ describe("empty t", () => {
   it("is treated as absent, so start still maps", () => {
     expect(legacyWatchSearch("?start=1m30s&t=")).toBe("?t=1m30s");
     expect(legacyEmbedSearch("?start=90&t=")).toBe("?t=90");
+  });
+});
+
+describe("legacyEmbedSearch carries PeerTube embed options", () => {
+  it("keeps the supported options and maps start", () => {
+    const out = new URLSearchParams(
+      legacyEmbedSearch("?start=90&stop=120&autoplay=1&muted=1&loop=1&title=0&controls=0&warningTitle=0&peertubeLink=0&api=1&scope=x"),
+    );
+    expect(Object.fromEntries(out)).toEqual({
+      t: "90", stop: "120", autoplay: "1", muted: "1", loop: "1", title: "0",
+      controls: "0", warningTitle: "0", peertubeLink: "0", api: "1", scope: "x",
+    });
+  });
+  it("still drops unknown params and unsafe values", () => {
+    expect(legacyEmbedSearch("?playlistPosition=3&autoplay=<script>")).toBe("");
   });
 });

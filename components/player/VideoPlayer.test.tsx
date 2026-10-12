@@ -105,6 +105,21 @@ describe("VideoPlayer shell", () => {
     expect(localStorage.getItem("vidra.player.volume")).toBe("0.6");
   });
 
+  it("an embed reads the stored volume but never writes it (a framing page must not change the main site's preference)", async () => {
+    localStorage.clear(); // earlier tests leave the muted key behind
+    localStorage.setItem("vidra.player.volume", "0.3");
+    const { container } = render(<Harness variant="embed" />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    await waitFor(() => expect(video.volume).toBeCloseTo(0.3, 3));
+    await act(async () => {
+      video.muted = true;
+      video.volume = 0;
+      video.dispatchEvent(new Event("volumechange"));
+    });
+    expect(localStorage.getItem("vidra.player.volume")).toBe("0.3");
+    expect(localStorage.getItem("vidra.player.muted")).toBeNull();
+  });
+
   // A32/A33 carry-in: with the object store down every source 503s, the last
   // engine's media element errors, and the stage used to render a dead
   // 0:00/0:00 with no message anywhere in the DOM. The viewer is told now.

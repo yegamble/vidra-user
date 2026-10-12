@@ -209,6 +209,9 @@ describe("notification pref labels", () => {
       "follow",
       "message",
       "new_report",
+      "new_registration_request",
+      "upload_quarantined",
+      "federation_follower_request",
       "new_video",
       "report_resolved",
       "video_rejected",
@@ -218,4 +221,54 @@ describe("notification pref labels", () => {
       expect(TYPE_LABELS[type], `missing TYPE_LABELS entry for ${type}`).toBeDefined();
     }
   });
+});
+
+// The failure class this guards: a notification type with no case in
+// describeNotification falls through to the trailing "follow" copy, which once
+// rendered new_video as "started following". Typing the table as a Record over
+// the generated union makes a NEW backend type a compile error here until it is
+// given copy, and the loop proves no non-follow type reaches the follow branch.
+describe("describeNotification is exhaustive over the type union", () => {
+  const expected: Record<Notification["type"], { href: string; rest: RegExp }> = {
+    follow: { href: "/channels/films", rest: /started following/ },
+    comment: { href: "/videos/v-1", rest: /commented on/ },
+    comment_reply: { href: "/videos/v-1", rest: /replied to your comment/ },
+    comment_mention: { href: "/videos/v-1", rest: /mentioned you/ },
+    message: { href: "/messages/conv-1", rest: /sent you a message/ },
+    new_video: { href: "/videos/v-1", rest: /published/ },
+    new_report: { href: "/admin", rest: /reported a/ },
+    new_registration_request: {
+      href: "/admin/registration-requests",
+      rest: /waiting for approval/,
+    },
+    upload_quarantined: { href: "/moderation/quarantine", rest: /quarantine queue/ },
+    federation_follower_request: {
+      href: "/admin/federation/follower-requests",
+      rest: /asked to follow/,
+    },
+    report_resolved: { href: "#", rest: /your report/ },
+    video_rejected: { href: "/studio", rest: /rejected/ },
+    video_blocked: { href: "/studio/content", rest: /blocked/ },
+    video_unblocked: { href: "/videos/v-1", rest: /restored/ },
+    caption_ready: { href: "/videos/v-1", rest: /are ready for/ },
+  };
+
+  for (const [type, want] of Object.entries(expected)) {
+    it(`renders ${type} with its own copy and link`, () => {
+      const { rest, href } = describeNotification(
+        notif({
+          type: type as Notification["type"],
+          video_id: "v-1",
+          video_title: "Clip",
+          channel_handle: "films",
+          conversation_id: "conv-1",
+        }),
+      );
+      expect(href).toBe(want.href);
+      expect(rest).toMatch(want.rest);
+      if (type !== "follow") {
+        expect(rest).not.toMatch(/started following/);
+      }
+    });
+  }
 });

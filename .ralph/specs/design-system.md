@@ -873,6 +873,8 @@ sign-in. Public sharing and creator support remain available without a session.
 
 ## i18n readiness (`lib/i18n`)
 
-Unchanged seam: externalized strings go through `t()` + `lib/i18n/en.ts`
-(includes `theme.*` keys). Feature copy is still inline English by design;
-new shared-primitive strings must use the catalog.
+Strings live in `lib/i18n/en.ts` (other locales translate a subset; a missing
+key renders the English). Client components read `useT()`
+(`components/I18nProvider`), server components `(await getI18n()).t`
+(`lib/i18n/locale.server`) — never the English-only `t` export, which ignores
+the viewer's locale. New shared-primitive strings must use the catalog.
