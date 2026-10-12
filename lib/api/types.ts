@@ -506,6 +506,8 @@ export type LivePublicListResponse = Schemas["LivePublicListResponse"];
 // --- Comments ---------------------------------------------------------------
 export type Comment = Schemas["Comment"];
 export type CommentListResponse = Schemas["CommentListResponse"];
+// A video's comments policy; requires_approval holds comments for review.
+export type CommentsPolicy = NonNullable<Video["comments_policy"]>;
 
 // --- Captions ---------------------------------------------------------------
 export type Caption = Schemas["Caption"];

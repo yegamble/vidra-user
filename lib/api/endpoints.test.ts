@@ -748,6 +748,13 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("approveComment POSTs to the video-scoped approve endpoint (encoding both ids)", async () => {
+    await api.approveComment("v/1", "c 1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v%2F1/comments/c%201/approve");
+    expect(init.method).toBe("POST");
+  });
+
   it("reportVideo POSTs the reason to the video report endpoint", async () => {
     await api.reportVideo("v1", "spam");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

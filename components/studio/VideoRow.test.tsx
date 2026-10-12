@@ -148,3 +148,45 @@ describe("VideoRow — move to another channel", () => {
     await waitFor(() => expect(onUpdated).toHaveBeenCalled());
   });
 });
+
+// Comment approval (core 0161): the edit form's comments control is a three-way
+// policy — on, held for the creator's approval, or off — and round-trips the
+// value the server sent rather than collapsing approval into "on".
+describe("VideoRow — comments policy", () => {
+  function renderPolicy(policy: Video["comments_policy"]) {
+    render(
+      <VideoRow
+        video={row({ comments_policy: policy })}
+        config={null}
+        initiallyEditing
+        basicOnly
+        onUpdated={() => {}}
+        onDeleted={() => {}}
+      />,
+    );
+    return screen.getByLabelText("Edit comments") as HTMLSelectElement;
+  }
+
+  it("offers Require approval and saves it", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ comments_policy: "requires_approval" }));
+    const select = renderPolicy("enabled");
+    expect(Array.from(select.options).map((o) => [o.value, o.textContent])).toEqual([
+      ["enabled", "On"],
+      ["requires_approval", "Require approval"],
+      ["disabled", "Off"],
+    ]);
+    fireEvent.change(select, { target: { value: "requires_approval" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ comments_policy: "requires_approval" });
+  });
+
+  it("prefills each stored policy, defaulting an absent one to On", () => {
+    expect(renderPolicy("requires_approval").value).toBe("requires_approval");
+    cleanup();
+    expect(renderPolicy("disabled").value).toBe("disabled");
+    cleanup();
+    expect(renderPolicy(undefined).value).toBe("enabled");
+  });
+});

@@ -18,6 +18,7 @@ import { ReportDialog, type ReportKind } from "@/components/ReportButton";
 import { UserText } from "@/components/UserText";
 import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -434,6 +435,7 @@ function CommentItem({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
   const [heartBusy, setHeartBusy] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [muting, setMuting] = useState(false);
   const [blocking, setBlocking] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -449,6 +451,9 @@ function CommentItem({
   // reply is visible.
   const [repliesOpen, setRepliesOpen] = useState(false);
   const isRemote = comment.remote === true;
+  // Held for review (core 0161): only its author and the video's reviewers ever
+  // receive one, and nobody may reply to or pin it until it is approved.
+  const held = comment.held_for_review === true;
   // Only a top-level comment can be pinned (server rule); a reply carries a
   // parent_id, so it never offers the Pin action.
   const isTopLevel = !comment.parent_id;
@@ -522,6 +527,20 @@ function CommentItem({
       });
     } finally {
       setPinBusy(false);
+    }
+  }
+
+  // A reviewer publishes a held comment; the endpoint returns it unheld, so it
+  // maps in place like an edit. Rejecting is the plain delete (remove()).
+  async function approve() {
+    if (approving) return;
+    setApproving(true);
+    try {
+      onEdited(await api.approveComment(videoId, comment.id));
+    } catch (err) {
+      toast({ message: errorMessage(err, "Could not approve this comment."), variant: "error" });
+    } finally {
+      setApproving(false);
     }
   }
 
@@ -712,7 +731,7 @@ function CommentItem({
   if (canManageComments) {
     // Pin only a top-level comment (server rule); heart works at any depth,
     // replies and remote-authored comments included.
-    if (isTopLevel) {
+    if (isTopLevel && !held) {
       actionItems.push(
         comment.pinned
           ? {
@@ -825,6 +844,7 @@ function CommentItem({
             {comment.edited ? (
               <span className="text-xs text-fg-muted">(edited)</span>
             ) : null}
+            {held ? <Badge variant="warning">Pending approval</Badge> : null}
             {/* Creator-heart marker: a filled heart carrying its own accessible
                 name (role=img + title), so the meaning survives without adjacent
                 text. Suppressed on tombstones via the early return above. */}
@@ -836,7 +856,29 @@ function CommentItem({
               />
             ) : null}
             <span className="ml-auto flex items-center gap-3">
-              {!editing ? (
+              {held && canManageComments ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={approving}
+                    onClick={() => void approve()}
+                    className="focus-ring rounded text-xs font-semibold text-accent-text transition-colors hover:text-fg disabled:opacity-60"
+                  >
+                    Approve
+                  </button>
+                  {!isAuthor ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void remove()}
+                      className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-danger disabled:opacity-60"
+                    >
+                      Reject
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              {!editing && !held ? (
                 <button
                   type="button"
                   aria-expanded={replying}

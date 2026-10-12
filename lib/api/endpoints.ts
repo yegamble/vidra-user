@@ -1326,6 +1326,17 @@ export const api = {
   unheartComment: (id: string) =>
     apiRequest<Comment>(`/api/v1/comments/${encodeURIComponent(id)}/heart`, { method: "DELETE" }),
 
+  /**
+   * POST /api/v1/videos/{id}/comments/{commentId}/approve — publish a comment
+   * held for review (auth; the video's owner/editors/staff). Idempotent.
+   * Rejecting a held comment is `deleteComment`.
+   */
+  approveComment: (videoId: string, commentId: string) =>
+    apiRequest<Comment>(
+      `/api/v1/videos/${encodeURIComponent(videoId)}/comments/${encodeURIComponent(commentId)}/approve`,
+      { method: "POST" },
+    ),
+
   /** POST /api/v1/me/mutes/accounts/{id} — mute an account (auth; idempotent 204). */
   muteAccount: (userId: string) =>
     apiRequest<void>(`/api/v1/me/mutes/accounts/${encodeURIComponent(userId)}`, {

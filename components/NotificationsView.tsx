@@ -32,6 +32,7 @@ type Status = "loading" | "error" | "ready";
 export function NotificationTypeIcon({ type }: { type: string }) {
   switch (type) {
     case "comment":
+    case "comment_held":
     case "comment_reply":
     case "message":
       return <MessageCircleIcon size={16} />;
@@ -81,6 +82,7 @@ const NOTIF_CHIP: Record<string, string> = {
   new_registration_request: "bg-tile-orange/12 text-tile-orange",
   upload_quarantined: "bg-tile-orange/12 text-tile-orange",
   federation_follower_request: "bg-tile-orange/12 text-tile-orange",
+  comment_held: "bg-tile-orange/12 text-tile-orange",
 };
 const NOTIF_CHIP_DEFAULT = "bg-surface-muted text-fg-muted";
 
@@ -127,6 +129,18 @@ export function describeNotification(n: Notification): {
       lead: actor,
       rest: ` replied to your comment${where}`,
       href: n.video_id ? `/videos/${n.video_id}` : "#",
+    };
+  }
+  if (n.type === "comment_held") {
+    // A comment on a requires_approval video the recipient manages is waiting
+    // for them (core 0161); the row opens the video, where a reviewer sees it
+    // with Approve/Reject. A federated commenter has no local account, hence
+    // the "Someone" fallback.
+    const where = n.video_title ? ` on “${n.video_title}”` : "";
+    return {
+      lead: actor,
+      rest: `’s comment${where} is awaiting your approval`,
+      href: n.video_id ? `/videos/${n.video_id}` : "/studio/content",
     };
   }
   if (n.type === "message") {

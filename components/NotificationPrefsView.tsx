@@ -23,6 +23,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Comments",
     help: "Someone comments on one of your videos.",
   },
+  comment_held: {
+    label: "Comments awaiting approval",
+    help: "A comment on a video you manage needs your approval before it appears.",
+  },
   comment_reply: {
     label: "Replies",
     help: "Someone replies to a comment you wrote (on any video).",
