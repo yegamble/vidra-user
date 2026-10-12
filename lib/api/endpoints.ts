@@ -1982,9 +1982,15 @@ export const api = {
   createPlaylist: (body: CreatePlaylistRequest) =>
     apiRequest<Playlist>("/api/v1/playlists", { method: "POST", body }),
 
-  /** GET /api/v1/playlists/{id} — a playlist + its ordered video cards. */
-  getPlaylist: (id: string, signal?: AbortSignal) =>
-    apiRequest<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}`, { signal }),
+  /**
+   * GET /api/v1/playlists/{id} — a playlist + ONE PAGE of its ordered video
+   * cards (backend default 20); total/limit/offset describe the videos.
+   */
+  getPlaylist: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}`, {
+      query: pageQuery(params),
+      signal,
+    }),
 
   /** PATCH /api/v1/playlists/{id} — update a playlist (auth, owner). */
   updatePlaylist: (id: string, body: UpdatePlaylistRequest) =>
@@ -2009,15 +2015,17 @@ export const api = {
     ),
 
   /**
-   * PUT /api/v1/playlists/{id}/videos — reorder items (auth, owner). videoIds must
-   * be exactly the playlist's current video ids in the desired order; a mismatch
-   * (missing/extra/duplicate) is 422.
+   * POST /api/v1/playlists/{id}/videos/{videoId}/move — move one item to
+   * directly after `afterVideoId`, or to the front when it is null (auth,
+   * owner). It needs no copy of the full list, so it works on a playlist the
+   * client has only paged part of — which is why it replaced the full-list PUT
+   * here. 409 when either video is no longer an item (the copy is stale).
    */
-  reorderPlaylist: (id: string, videoIds: string[]) =>
-    apiRequest<void>(`/api/v1/playlists/${encodeURIComponent(id)}/videos`, {
-      method: "PUT",
-      body: { video_ids: videoIds },
-    }),
+  movePlaylistItem: (id: string, videoId: string, afterVideoId: string | null) =>
+    apiRequest<void>(
+      `/api/v1/playlists/${encodeURIComponent(id)}/videos/${encodeURIComponent(videoId)}/move`,
+      { method: "POST", body: { after_video_id: afterVideoId } },
+    ),
 
   // Private playlist covers require bearer-authenticated bytes, like DM attachments.
   fetchPlaylistThumbnail: async (id: string, signal?: AbortSignal): Promise<Blob> => {

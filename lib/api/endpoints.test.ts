@@ -459,6 +459,11 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/playlists/p1");
   });
 
+  it("getPlaylist pages its items with limit/offset", async () => {
+    await api.getPlaylist("p1", { limit: 20, offset: 40 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/playlists/p1?limit=20&offset=40");
+  });
+
   it("updatePlaylist PATCHes the playlist", async () => {
     await api.updatePlaylist("p1", { title: "Renamed" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -488,12 +493,18 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
-  it("reorderPlaylist PUTs the ordered video ids", async () => {
-    await api.reorderPlaylist("p1", ["v2", "v1"]);
+  it("movePlaylistItem POSTs the anchor the video should follow", async () => {
+    await api.movePlaylistItem("p1", "v2", "v1");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://localhost:8080/api/v1/playlists/p1/videos");
-    expect(init.method).toBe("PUT");
-    expect(JSON.parse(init.body as string)).toEqual({ video_ids: ["v2", "v1"] });
+    expect(url).toBe("http://localhost:8080/api/v1/playlists/p1/videos/v2/move");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ after_video_id: "v1" });
+  });
+
+  it("movePlaylistItem sends a null anchor to move a video to the front", async () => {
+    await api.movePlaylistItem("p1", "v2", null);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ after_video_id: null });
   });
 
   it("getMyChannels targets the channels endpoint", async () => {
