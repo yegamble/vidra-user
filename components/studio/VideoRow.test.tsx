@@ -3,9 +3,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const updateVideo = vi.hoisted(() => vi.fn());
+const getVideo = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api", () => ({
-  api: { updateVideo },
+  api: { updateVideo, getVideo },
   errorMessage: (_error: unknown, fallback: string) => fallback,
   isSensitiveVideo: () => false,
   isUploadCancelled: () => false,
@@ -188,5 +189,81 @@ describe("VideoRow — comments policy", () => {
     expect(renderPolicy("disabled").value).toBe("disabled");
     cleanup();
     expect(renderPolicy(undefined).value).toBe("enabled");
+  });
+});
+
+// PeerTube's members-only tier: the creator can pick it in the edit form and the
+// row says what it means.
+describe("VideoRow — internal privacy", () => {
+  it("offers Internal in the editor and saves privacy=internal", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ privacy: "internal" }));
+    render(
+      <VideoRow video={row()} config={null} initiallyEditing basicOnly onUpdated={() => {}} onDeleted={() => {}} />,
+    );
+    const select = screen.getByLabelText("Edit privacy") as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.text)).toContain("Internal (signed-in users only)");
+    fireEvent.change(select, { target: { value: "internal" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ privacy: "internal" });
+  });
+
+  it("badges an internal video in the list", () => {
+    renderRow(row({ privacy: "internal" }));
+    expect(screen.getByText("internal")).toBeTruthy();
+  });
+});
+
+// PeerTube's support text (migration 0160). Like tags, the authoritative value
+// only arrives with the detail fetch, so a save made without it must never send
+// `support` (an empty list-row field would otherwise clear the real one).
+describe("VideoRow — support text", () => {
+  // basicOnly keeps the owner-only media panels (captions, chapters, passwords)
+  // out of the tree, so this exercises the metadata form alone.
+  function renderBasic(video: Video) {
+    render(<VideoRow video={video} config={null} basicOnly onUpdated={() => {}} onDeleted={() => {}} />);
+  }
+
+  it("prefills from the detail, sends the edited text trimmed, and counts characters", async () => {
+    getVideo.mockReset();
+    getVideo.mockResolvedValue(row({ support: "Ko-fi: ada" }));
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ support: "Liberapay: ada" }));
+    renderBasic(row());
+    fireEvent.click(screen.getByRole("button", { name: /^edit/i }));
+    const field = (await screen.findByLabelText("Edit support text")) as HTMLTextAreaElement;
+    expect(field.value).toBe("Ko-fi: ada");
+    expect(screen.getByText(/10\/1000/)).toBeTruthy();
+    fireEvent.change(field, { target: { value: "  Liberapay: ada  " } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ support: "Liberapay: ada" });
+  });
+
+  it("clears the text with an empty string when the creator empties the field", async () => {
+    getVideo.mockReset();
+    getVideo.mockResolvedValue(row({ support: "Ko-fi: ada" }));
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row());
+    renderBasic(row());
+    fireEvent.click(screen.getByRole("button", { name: /^edit/i }));
+    fireEvent.change(await screen.findByLabelText("Edit support text"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ support: "" });
+  });
+
+  it("never sends support when the detail fetch failed (list rows omit it)", async () => {
+    getVideo.mockReset();
+    getVideo.mockRejectedValue(new Error("offline"));
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row());
+    renderBasic(row());
+    fireEvent.click(screen.getByRole("button", { name: /^edit/i }));
+    await screen.findByLabelText("Edit support text");
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).not.toHaveProperty("support");
   });
 });

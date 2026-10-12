@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
+import { ReportThread } from "@/components/reports/ReportThread";
 import { RoleGate } from "@/components/RoleGate";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronLeftIcon, FlagIcon } from "@/components/icons";
@@ -452,6 +453,12 @@ function ReportDetail({
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {blockError ? <p className="text-sm text-danger">{blockError}</p> : null}
         {deleteError ? <p className="text-sm text-danger">{deleteError}</p> : null}
+
+        {/* The conversation with the reporter (core 0163); keyed so a draft
+            never carries over to the next report. */}
+        <div className="border-t border-border-subtle pt-3">
+          <ReportThread key={report.id} reportId={report.id} viewer="staff" />
+        </div>
       </div>
 
       {/* Action bar — sticky to the viewport bottom while the report scrolls. */}

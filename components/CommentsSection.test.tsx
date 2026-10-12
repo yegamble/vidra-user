@@ -515,6 +515,31 @@ describe("CommentsSection block removes the author's comments at once", () => {
     await waitFor(() => expect(blockUser).toHaveBeenCalled());
     expect(screen.getByText("bob first")).toBeTruthy();
   });
+
+  it("loads the next 100 comments under a Load more button and hides it at the total", async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => mk(`c${i}`, { body: `body-c${i}` }));
+    const page2 = [mk("c100", { body: "the hundred-and-first" })];
+    getVideoComments.mockImplementation((_id: string, params: { offset?: number }) =>
+      Promise.resolve(
+        params.offset
+          ? { comments: page2, total: 101, limit: 100, offset: 100 }
+          : { comments: page1, total: 101, limit: 100, offset: 0 },
+      ),
+    );
+    session = { status: "anon" };
+    render(<CommentsSection videoId="v1" />);
+    await screen.findByText("body-c0");
+    expect(screen.queryByText("the hundred-and-first")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("the hundred-and-first")).toBeTruthy();
+    expect(getVideoComments).toHaveBeenLastCalledWith(
+      "v1",
+      expect.objectContaining({ limit: 100, offset: 100 }),
+      expect.anything(),
+    );
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+    // A hundred full comment rows mount here; allow for a loaded CI machine.
+  }, 30_000);
 });
 
 // Comment approval (core 0161): a held comment reaches only its author and the

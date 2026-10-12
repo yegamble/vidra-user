@@ -3,10 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { ListTail } from "@/components/ui/ListTail";
+
 import { useSession } from "@/components/auth/AuthProvider";
 import { CheckIcon, PlusIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { Playlist } from "@/lib/api";
+import { useAppendingList } from "@/lib/use-appending-list";
 
 // AddToPlaylistButton lets a signed-in viewer add the current video to one of
 // their playlists (or a new one) from the watch page. The playlist list loads
@@ -14,11 +17,7 @@ import type { Playlist } from "@/lib/api";
 export function AddToPlaylistButton({ videoId }: { videoId: string }) {
   const { status } = useSession();
   const [open, setOpen] = useState(false);
-  const [playlists, setPlaylists] = useState<Playlist[] | null>(null); // null = not loaded
   const [added, setAdded] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState<string | null>(null);
-  const [newTitle, setNewTitle] = useState("");
-  const [creating, setCreating] = useState(false);
 
   if (status !== "authed") {
     return (
@@ -31,26 +30,50 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
     );
   }
 
-  async function toggle() {
-    const next = !open;
-    setOpen(next);
-    if (next && playlists === null) {
-      try {
-        const res = await api.getMyPlaylists();
-        setPlaylists(res.playlists);
-      } catch {
-        setPlaylists([]);
-      }
-    }
+  function markAdded(plId: string) {
+    setAdded((s) => new Set(s).add(plId));
   }
 
-  function markAdded(plId: string) {
-    setAdded((s) => {
-      const next = new Set(s);
-      next.add(plId);
-      return next;
-    });
-  }
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
+      >
+        <PlusIcon size={16} />
+        <span>Save to playlist</span>
+      </button>
+      {open ? (
+        <PlaylistMenu videoId={videoId} added={added} markAdded={markAdded} />
+      ) : null}
+    </div>
+  );
+}
+
+// PlaylistMenu is the open dropdown. It mounts only while the menu is open, so
+// the (paged) playlist list loads the first time it opens, as before.
+function PlaylistMenu({
+  videoId,
+  added,
+  markAdded,
+}: {
+  videoId: string;
+  added: Set<string>;
+  markAdded: (plId: string) => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [newTitle, setNewTitle] = useState("");
+  const [creating, setCreating] = useState(false);
+  // Paged from the server so a user with more than 20 playlists can reach them all.
+  const list = useAppendingList<Playlist>({
+    queryKey: "my-playlists",
+    getId: (p) => p.id,
+    load: (window, signal) =>
+      api.getMyPlaylists(signal, window).then((res) => ({ items: res.playlists, total: res.total })),
+  });
+  const playlists = list.status === "loading" ? null : list.items;
 
   async function add(plId: string) {
     if (busy) return;
@@ -73,7 +96,7 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
     try {
       const pl = await api.createPlaylist({ title: t });
       await api.addToPlaylist(pl.id, videoId);
-      setPlaylists((list) => [pl, ...(list ?? [])]);
+      list.prepend(pl);
       markAdded(pl.id);
       setNewTitle("");
     } catch {
@@ -84,17 +107,6 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
   }
 
   return (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => void toggle()}
-        className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
-      >
-        <PlusIcon size={16} />
-        <span>Save to playlist</span>
-      </button>
-      {open ? (
         <div className="absolute left-0 z-20 mt-2 w-64 rounded-xl border border-border-subtle bg-surface-raised p-2 shadow-soft-strong">
           {playlists === null ? (
             <p className="px-2 py-1.5 text-sm text-fg-muted">Loading…</p>
@@ -120,6 +132,13 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
               ))}
             </ul>
           )}
+          <ListTail
+            hasMore={list.hasMore}
+            autoLoad={false}
+            busy={list.moreStatus === "loading"}
+            error={list.moreStatus === "error" ? "Could not load more playlists." : null}
+            onLoadMore={list.loadMore}
+          />
           <form
             onSubmit={(e) => void createAndAdd(e)}
             className="mt-2 flex items-center gap-2 border-t border-border-subtle pt-2"
@@ -141,7 +160,5 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
             </button>
           </form>
         </div>
-      ) : null}
-    </div>
   );
 }

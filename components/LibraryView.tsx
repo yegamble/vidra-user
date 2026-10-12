@@ -8,6 +8,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronRightIcon, LibraryIcon, PlaylistIcon, PlusIcon } from "@/components/icons";
 import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ListTail } from "@/components/ui/ListTail";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
@@ -15,6 +16,8 @@ import { api } from "@/lib/api";
 import type { HistoryItem, Playlist, Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { resumeFraction } from "@/lib/resume-progress";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
 import { SignInGate } from "@/components/SignInGate";
 
@@ -323,24 +326,16 @@ function PlaylistRow({ playlist }: { playlist: Playlist }) {
 // The design's Saved list: rows with a 112px thumbnail, a two-line title, and
 // the channel. This is the Library page's home for saved videos ("watch later").
 function SavedSection() {
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [videos, setVideos] = useState<Video[]>([]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getSavedVideos({}, controller.signal)
-      .then((res) => {
-        setVideos(res.videos);
-        setState("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setState("error");
-      });
-    return () => controller.abort();
-  }, []);
+  const autoLoad = useBrowseAutoLoad();
+  // Paged from the server: the list used to stop at the first 20 saved videos.
+  const list = useAppendingList<Video>({
+    queryKey: "saved",
+    getId: (v) => v.id,
+    load: (window, signal) =>
+      api.getSavedVideos(window, signal).then((res) => ({ items: res.videos, total: res.total })),
+  });
+  const state = list.status;
+  const videos = list.items;
 
   return (
     <section aria-labelledby="library-saved">
@@ -367,14 +362,21 @@ function SavedSection() {
             <li key={video.id}>
               <SavedRow
                 video={video}
-                onDeleted={() =>
-                  setVideos((current) => current.filter((item) => item.id !== video.id))
-                }
+                onDeleted={() => list.drop((item) => item.id !== video.id)}
               />
             </li>
           ))}
         </ul>
       )}
+      {state === "ready" ? (
+        <ListTail
+          hasMore={list.hasMore}
+          autoLoad={autoLoad}
+          busy={list.moreStatus === "loading"}
+          error={list.moreStatus === "error" ? "Could not load more saved videos." : null}
+          onLoadMore={list.loadMore}
+        />
+      ) : null}
     </section>
   );
 }
