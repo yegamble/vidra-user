@@ -11,15 +11,23 @@ import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/locales";
 // resolve a locale themselves. The default (no provider) is en with no
 // catalog — today's strings — so a component test without it is unchanged.
 
-const I18nContext = createContext<Translate>(createTranslator(DEFAULT_LOCALE));
+const I18nContext = createContext<{ t: Translate; locale: Locale }>({
+  t: createTranslator(DEFAULT_LOCALE),
+  locale: DEFAULT_LOCALE,
+});
 
 type Props = { locale: Locale; messages: Messages; children: React.ReactNode };
 
 export function I18nProvider({ locale, messages, children }: Props) {
-  const t = useMemo(() => createTranslator(locale, messages), [locale, messages]);
-  return <I18nContext.Provider value={t}>{children}</I18nContext.Provider>;
+  const value = useMemo(() => ({ t: createTranslator(locale, messages), locale }), [locale, messages]);
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
 export function useT(): Translate {
-  return useContext(I18nContext);
+  return useContext(I18nContext).t;
+}
+
+/** The active (resolved) locale — for the language picker; text goes through useT(). */
+export function useLocale(): Locale {
+  return useContext(I18nContext).locale;
 }

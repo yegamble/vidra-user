@@ -1,4 +1,5 @@
 import { SettingsView } from "@/components/auth/SettingsView";
+import { LanguagePicker } from "@/components/LanguagePicker";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function SettingsPage() {
@@ -12,6 +13,9 @@ export default function SettingsPage() {
         className="mt-6 max-w-xl rounded-2xl border border-border-subtle bg-surface p-4"
       >
         <ThemeToggle />
+        <div className="mt-4">
+          <LanguagePicker />
+        </div>
       </section>
     </main>
   );
