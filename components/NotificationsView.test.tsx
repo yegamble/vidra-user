@@ -54,6 +54,28 @@ describe("describeNotification", () => {
     expect(href).toBe("/videos/v-1");
   });
 
+  it("renders comment_mention as being mentioned, linking to the video", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({
+        type: "comment_mention",
+        actor: { username: "cara", display_name: "Cara" },
+        video_id: "v-1",
+        video_title: "Clip",
+        comment_id: "c-2",
+      }),
+    );
+    expect(lead).toBe("Cara");
+    expect(rest).toContain("mentioned you");
+    expect(rest).toContain("Clip");
+    expect(href).toBe("/videos/v-1");
+  });
+
+  it("names a mention from another instance (no actor) without a person", () => {
+    const { lead, rest } = describeNotification(notif({ type: "comment_mention", video_id: "v-1" }));
+    expect(lead).toBe("Someone");
+    expect(rest).toContain("mentioned you");
+  });
+
   it("still renders comment as a comment on YOUR video, distinct from a reply", () => {
     const comment = describeNotification(
       notif({ type: "comment", actor: { username: "bob", display_name: "" }, video_id: "v-1", video_title: "Clip" }),
@@ -182,6 +204,7 @@ describe("notification pref labels", () => {
     for (const type of [
       "caption_ready",
       "comment",
+      "comment_mention",
       "comment_reply",
       "follow",
       "message",

@@ -21,6 +21,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Comments",
     help: "Someone comments on one of your videos.",
   },
+  comment_mention: {
+    label: "Mentions",
+    help: "Someone @-mentions you in a comment.",
+  },
   comment_reply: {
     label: "Replies",
     help: "Someone replies to a comment you wrote (on any video).",
@@ -68,6 +72,7 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
 const TYPE_ORDER = [
   "comment",
   "comment_reply",
+  "comment_mention",
   "follow",
   "new_video",
   "message",

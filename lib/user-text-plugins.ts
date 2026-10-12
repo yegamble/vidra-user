@@ -91,6 +91,57 @@ export function rehypeTimestamps(options: { durationSeconds?: number | null; ski
   return (tree: Node) => walk(tree);
 }
 
+// A mention starts at the start of a text node or after whitespace / an opening
+// bracket or quote, so emails and mid-word @ never match (the same rule as
+// vidra-core's internal/mention). The name is the username charset; a trailing
+// "." or "-" is sentence punctuation. A name followed by "@" is `@user@host` —
+// a remote account with no profile route here — and is deliberately left as text.
+const MENTION_RE = /(^|[\s([{"'])@([A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)(?![A-Za-z0-9_@-])/g;
+const MAX_MENTION_LINKS = 10;
+
+/**
+ * rehype: turn `@user` in text nodes into `a` elements tagged with
+ * `dataMentionUsername` (no href — the renderer builds `/users/<name>` from the
+ * regex-validated name, so the URL allowlist never sees user input). Same
+ * shape and skip rules as rehypeTimestamps; capped like the server's parser.
+ */
+export function rehypeMentions(options: { skip: string[] }) {
+  let linked = 0;
+  const split = (value: string): Node[] => {
+    const out: Node[] = [];
+    let last = 0;
+    for (const m of value.matchAll(MENTION_RE)) {
+      if (linked >= MAX_MENTION_LINKS) break;
+      const start = (m.index ?? 0) + m[1].length;
+      if (start > last) out.push({ type: "text", value: value.slice(last, start) });
+      out.push({
+        type: "element",
+        tagName: "a",
+        properties: { dataMentionUsername: m[2] },
+        children: [{ type: "text", value: `@${m[2]}` }],
+      });
+      linked++;
+      last = start + 1 + m[2].length;
+    }
+    if (last < value.length) out.push({ type: "text", value: value.slice(last) });
+    return out;
+  };
+  const walk = (node: Node) => {
+    if (!node.children) return;
+    if (node.type === "element" && options.skip.includes(node.tagName ?? "")) return;
+    const next: Node[] = [];
+    for (const child of node.children) {
+      if (child.type === "text" && typeof child.value === "string") next.push(...split(child.value));
+      else {
+        walk(child);
+        next.push(child);
+      }
+    }
+    node.children = next;
+  };
+  return (tree: Node) => walk(tree);
+}
+
 // Markdown parsing cost is superlinear in delimiter structure, and the watch
 // description is rendered on the server on every uncached view. So parse cost is
 // bounded up front: a body above ANY budget below skips the parser and renders as

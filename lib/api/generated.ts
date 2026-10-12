@@ -1781,7 +1781,7 @@ export interface paths {
         head?: never;
         /**
          * Update a video
-         * @description Partial update of a video's metadata (title, description, privacy and the other fields in UpdateVideoRequest). The owner may update their own video; moderators and admins may manage any local video. An ordinary non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The handle is immutable.
+         * @description Partial update of a video's metadata (title, description, privacy and the other fields in UpdateVideoRequest). The owner may update their own video; moderators and admins may manage any local video. An ordinary non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The handle is immutable. Setting channel_id moves the video to another channel with the same owner that the caller manages; a missing, unmanaged or differently-owned target is reported as 404 (these are indistinguishable).
          */
         patch: operations["updateVideo"];
         trace?: never;
@@ -3037,7 +3037,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report type is only ever delivered to admins/moderators, but the switch is visible to everyone.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_mention, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report type is only ever delivered to admins/moderators, but the switch is visible to everyone.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -5568,7 +5568,7 @@ export interface paths {
         };
         /**
          * List the registration approval queue
-         * @description Returns registration requests, newest first, with the reviewing admin's username, plus a `total` counting the requests that match the same status filter. Restricted to admins. The stored password hash is never exposed.
+         * @description Returns registration requests, newest first, with the reviewing admin's username, plus a `total` counting the requests that match the same status filter. Admins and moderators. The stored password hash is never exposed.
          */
         get: operations["listRegistrationRequests"];
         put?: never;
@@ -5590,7 +5590,7 @@ export interface paths {
         put?: never;
         /**
          * Approve a registration request
-         * @description Approves a pending request, creating the account from the stored credentials (atomically). Admin only. An unknown/already-resolved id is 404; a username/email taken since the request was filed is 409.
+         * @description Approves a pending request, creating the account from the stored credentials (atomically). Admins and moderators. An unknown/already-resolved id is 404; a username/email taken since the request was filed is 409.
          */
         post: operations["approveRegistrationRequest"];
         delete?: never;
@@ -5610,7 +5610,7 @@ export interface paths {
         put?: never;
         /**
          * Reject a registration request
-         * @description Rejects a pending request with an optional internal moderator note. Admin only. An unknown/already-resolved id is 404.
+         * @description Rejects a pending request with an optional internal moderator note. Admins and moderators. An unknown/already-resolved id is 404.
          */
         post: operations["rejectRegistrationRequest"];
         delete?: never;
@@ -5688,7 +5688,7 @@ export interface paths {
         };
         /**
          * List accounts (admin)
-         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Restricted to admins. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
+         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Admins and moderators. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
          */
         get: operations["listUsers"];
         put?: never;
@@ -5722,7 +5722,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a user's role / active flag / storage quota (admin)
-         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited).
+         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited). Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -7056,6 +7056,11 @@ export interface components {
             download_enabled?: boolean;
             /** @description Set the publish-after-transcode opt-in (omit to leave unchanged). Setting it true on an already-published video that has never been publicly visible and still has a live transcode job holds the video (state "transcoding") until that transcode completes; a publicly-visible video is never pulled back to hidden. */
             publish_after_transcode?: boolean;
+            /**
+             * Format: uuid
+             * @description Move the video to this channel (omit to leave it where it is). Both channels must have the SAME owner and the caller must manage both (owner or editor member); no role is exempt. The channel the video is already on is a no-op. Allowed in any video state, including mid-transcode. Search is reindexed; federation sends an Update naming the target channel and a Delete to followers of the old channel.
+             */
+            channel_id?: string;
         };
         /** @description A WebVTT caption track's metadata (the file is fetched separately). */
         Caption: {
@@ -7554,10 +7559,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; comment_mention = a comment @-mentioned you (a local @username in its body; actor = the commenter, absent when the comment came from another instance; video_id/video_title = the video, comment_id = the mentioning comment). Never sent in addition to a comment or comment_reply for the same comment, and at most once per comment; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
-            type: "follow" | "comment" | "comment_reply" | "message" | "new_video" | "new_report" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
+            type: "follow" | "comment" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -7568,14 +7573,14 @@ export interface components {
             channel_display_name?: string;
             /**
              * Format: uuid
-             * @description Commented video's id (comment and comment_reply notifications).
+             * @description Commented video's id (comment, comment_reply and comment_mention notifications).
              */
             video_id?: string;
-            /** @description Commented video's title (comment and comment_reply notifications). */
+            /** @description Commented video's title (comment, comment_reply and comment_mention notifications). */
             video_title?: string;
             /**
              * Format: uuid
-             * @description The comment's id — the new comment for comment, the reply for comment_reply.
+             * @description The comment's id — the new comment for comment, the reply for comment_reply, the mentioning comment for comment_mention.
              */
             comment_id?: string;
             /**
@@ -7619,6 +7624,7 @@ export interface components {
              * @example {
              *       "caption_ready": true,
              *       "comment": true,
+             *       "comment_mention": true,
              *       "comment_reply": true,
              *       "follow": false,
              *       "message": true,
@@ -7636,7 +7642,7 @@ export interface components {
         };
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_mention, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }
@@ -8190,6 +8196,15 @@ export interface components {
              * @description When this account was hard-deleted, or null for a live account. A deleted account stays listed as an anonymised tombstone (`deleted-<suffix>`) so an admin can see it, but deletion is permanent: PATCH with `is_active: true` on such a row is refused with 422, and the console offers no reactivate action for it. Every other admin write to a tombstone is refused the same way.
              */
             deleted_at: string | null;
+            /** @description Why the account was banned; null when not banned. */
+            ban_reason: string | null;
+            /** Format: date-time */
+            banned_at: string | null;
+            /**
+             * Format: uuid
+             * @description The staff account that banned it.
+             */
+            banned_by: string | null;
             /** @description Whether this account is THE instance owner — the account that redeemed the first-run setup token. There is no owner ROLE: the owner holds `admin` like any other administrator, so this flag is the only thing that identifies it. Another administrator cannot demote, deactivate or delete it (422 `owner_protected`), and nobody can remove the last active administrator (422 `last_admin`). False for every account on an instance claimed before the marker existed whose owner could not be determined. */
             is_owner: boolean;
             /** @description Whether this account has a CONFIRMED second factor (TOTP). A pending enrollment reads false, exactly as the account's own GET /api/v1/auth/mfa reports it. It is a boolean and nothing more: no admin route ever returns the shared secret or a recovery code. An admin can remove the factor with DELETE /api/v1/admin/users/{id}/mfa, which is the only operator answer to a user who has lost both their authenticator and their recovery codes. */
@@ -10131,6 +10146,8 @@ export interface components {
             /** @enum {string} */
             role?: "user" | "moderator" | "admin";
             is_active?: boolean;
+            /** @description Why the account is being banned; only valid with `is_active=false`. Required from a moderator, optional from an admin. */
+            ban_reason?: string;
             /** @description Admin-set email verification state: true marks the address confirmed without the token round-trip; false revokes the confirmation. Omit to leave unchanged. */
             email_verified?: boolean;
             /** @description Exempts the account from the QUARANTINE_NEW_UPLOADS gate (its uploads publish directly); false re-subjects it. Omit to leave unchanged. */
@@ -15221,7 +15238,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No such video, or the caller is neither its owner nor a moderator/admin. */
+            /** @description No such video, or the caller is neither its owner nor a moderator/admin; or channel_id names a channel that does not exist or that the caller does not manage, or whose owner differs from the current channel's. */
             404: {
                 headers: {
                     [name: string]: unknown;

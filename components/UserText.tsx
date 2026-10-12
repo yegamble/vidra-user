@@ -1,10 +1,12 @@
+import Link from "next/link";
 import { Component, type MouseEvent, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { Pluggable } from "unified";
 
 import { cn } from "@/lib/cn";
 import { splitTimestamps } from "@/lib/timestamp-links";
-import { exceedsParseBudget, remarkBoundTree, rehypeTimestamps } from "@/lib/user-text-plugins";
+import { exceedsParseBudget, remarkBoundTree, rehypeMentions, rehypeTimestamps } from "@/lib/user-text-plugins";
 
 /*
  * UserText — the ONE renderer for UNTRUSTED user-authored text: video and
@@ -35,6 +37,10 @@ import { exceedsParseBudget, remarkBoundTree, rehypeTimestamps } from "@/lib/use
  * Timestamps: (h:)mm:ss tokens become seek links via a hast plugin (existing
  * lib/timestamp-links grammar + duration clamp); text inside links (and, for
  * descriptions, code) is skipped so an anchor never nests an anchor.
+ * Mentions (comments): `@user` text becomes a link to the local profile via
+ * the same kind of hast plugin (rehypeMentions); the href is built by the
+ * renderer from the regex-validated name, never taken from user text, and
+ * `@user@host` stays text. It runs inside the same parse budget as everything else.
  * Line breaks: `whitespace-pre-wrap` is the only mechanism (hard-break <br> is
  * not allowed, or the break would double).
  */
@@ -202,9 +208,23 @@ export interface UserTextProps {
   timestamps?: boolean;
   /** Watch-page seek handler for timestamp links. */
   onSeek?: (seconds: number) => void;
+  /**
+   * `@user` becomes a link to /users/<user>. Defaults to on for comments only;
+   * pass false where the text comes from another instance (a bare @name there
+   * does not name OUR user). `@user@host` is never linked.
+   */
+  mentions?: boolean;
 }
 
-export function UserText({ text, variant, className, durationSeconds = null, onSeek, timestamps = true }: UserTextProps) {
+export function UserText({
+  text,
+  variant,
+  className,
+  durationSeconds = null,
+  onSeek,
+  timestamps = true,
+  mentions = variant === "comment",
+}: UserTextProps) {
   const heading = ({ children }: { children?: ReactNode }) => (
     <p className="whitespace-pre-wrap font-semibold">{children}</p>
   );
@@ -235,6 +255,14 @@ export function UserText({ text, variant, className, durationSeconds = null, onS
       </pre>
     ),
     a: ({ node, href, children }) => {
+      const mentioned = node?.properties?.dataMentionUsername;
+      if (typeof mentioned === "string") {
+        return (
+          <Link href={`/users/${encodeURIComponent(mentioned)}`} className={LINK_CLASS}>
+            {children}
+          </Link>
+        );
+      }
       const seconds = node?.properties?.dataTimestampSeconds;
       if (typeof seconds === "number") {
         return (
@@ -259,6 +287,10 @@ export function UserText({ text, variant, className, durationSeconds = null, onS
     },
   };
 
+  const rehypePlugins: Pluggable[] = [];
+  if (mentions) rehypePlugins.push([rehypeMentions, { skip: SKIP[variant] }]);
+  if (timestamps) rehypePlugins.push([rehypeTimestamps, { durationSeconds, skip: SKIP[variant] }]);
+
   if (exceedsParseBudget(text)) {
     return <PlainText
         linkify
@@ -275,7 +307,7 @@ export function UserText({ text, variant, className, durationSeconds = null, onS
       <div className={cn("flex min-w-0 flex-col gap-2 break-words", className)}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkBoundTree]}
-          rehypePlugins={timestamps ? [[rehypeTimestamps, { durationSeconds, skip: SKIP[variant] }]] : []}
+          rehypePlugins={rehypePlugins}
           allowedElements={ALLOWED[variant]}
           unwrapDisallowed
           urlTransform={safeUserUrl}
