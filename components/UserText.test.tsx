@@ -362,3 +362,75 @@ describe("UserText: URL exemption is capped and timestamps can be disabled", () 
     }
   });
 });
+
+describe("UserText: @mentions in comments", () => {
+  const comment = (text: string, mentions?: boolean) =>
+    render(<UserText text={text} variant="comment" mentions={mentions} />).container;
+
+  it("links @user to the local profile route", () => {
+    const a = comment("thanks @Ada_1!").querySelector("a")!;
+    expect(a.getAttribute("href")).toBe("/users/Ada_1");
+    expect(a.textContent).toBe("@Ada_1");
+    expect(a.getAttribute("target")).toBeNull();
+  });
+
+  it("links several mentions, after punctuation and on new lines", () => {
+    const links = comment("(@a) and\n@b.c, ok").querySelectorAll("a");
+    expect([...links].map((l) => l.getAttribute("href"))).toEqual(["/users/a", "/users/b.c"]);
+  });
+
+  it("leaves @user@host as plain text (no remote-profile route)", () => {
+    const c = comment("hi @bob@example.test and @cara@x.org");
+    // (remark-gfm may autolink the host part as an email; that is not a profile link.)
+    expect([...c.querySelectorAll("a")].some((a) => a.getAttribute("href")?.startsWith("/users/"))).toBe(false);
+    expect(c.textContent).toContain("@bob@example.test");
+  });
+
+  it("does not link emails, URL paths, or mid-word @", () => {
+    const c = comment("joe@example.test https://example.test/@ada foo@bar");
+    const hrefs = [...c.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    expect(hrefs.some((h) => h?.startsWith("/users/"))).toBe(false);
+  });
+
+  it("does not nest anchors: a mention inside a markdown link stays text", () => {
+    const c = comment("[ping @ada](https://example.test/x)");
+    expect(c.querySelectorAll("a")).toHaveLength(1);
+    expect(c.querySelector("a")!.getAttribute("href")).toBe("https://example.test/x");
+  });
+
+  it("never turns a hostile name into an unsafe href", () => {
+    const c = comment("@<script> @javascript:alert(1) @../etc");
+    for (const a of c.querySelectorAll("a")) expect(a.getAttribute("href")).toMatch(/^\/users\/[\w.-]+$/);
+    expect(c.querySelector("script")).toBeNull();
+  });
+
+  it("caps rendered mention links at 10", () => {
+    const text = Array.from({ length: 25 }, (_, i) => `@u${i}`).join(" ");
+    const links = [...comment(text).querySelectorAll("a")].filter((a) => a.getAttribute("href")?.startsWith("/users/"));
+    expect(links).toHaveLength(10);
+  });
+
+  it("does not link inside inline code", () => {
+    const c = comment("run `@ada` now");
+    expect(c.querySelector("a")).toBeNull();
+    expect(c.textContent).toContain("@ada");
+  });
+
+  it("agrees with the server parser on edge shapes", () => {
+    // A host needs a dot, so @bob@localhost is a mention of bob; a trailing "-" is punctuation.
+    const hrefs = (t: string) => [...comment(t).querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    expect(hrefs("@bob@localhost")).toEqual(["/users/bob"]);
+    expect(hrefs("hey @ada- ok")).toEqual(["/users/ada"]);
+  });
+
+  it("is comment-only by default and can be switched off", () => {
+    expect(html("hi @ada", "description").querySelector("a")).toBeNull();
+    expect(comment("hi @ada", false).querySelector("a")).toBeNull();
+  });
+
+  it("keeps the parse budget: an oversized body stays plain text", () => {
+    const big = `@ada ${"x ".repeat(2000)}`;
+    expect(exceedsParseBudget(big)).toBe(true);
+    expect(comment(big).querySelector("a")).toBeNull();
+  });
+});
