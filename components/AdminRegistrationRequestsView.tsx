@@ -62,7 +62,7 @@ export function AdminRegistrationRequestsView() {
   const { user } = useSession();
 
   return (
-    <RoleGate minRole="admin" action="review registration requests">
+    <RoleGate minRole="moderator" action="review registration requests">
       {user ? (
         <ListBoundary label="registration requests">
           <RequestQueue reviewerUsername={user.username} />

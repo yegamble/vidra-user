@@ -3512,6 +3512,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/comments/bulk-remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove every comment by one account
+         * @description Spam-wave cleanup (PeerTube's bulk/remove-comments-of). Hard-deletes every comment authored by one account, instance-wide, in one set-based statement; the end state per comment is identical to DELETE /api/v1/comments/{id} (replies, reports and notifications under it are removed, a pin on the video clears). `account` is a local username (case-insensitive, deactivated accounts included) or, for federated comments, a remote actor URL starting with http:// or https://. Comments by local authors are federated as a Delete exactly as a single delete is; remote authors' comments are removed locally only. Restricted to moderators/admins. An unknown local username is 404; a remote actor with no comments yields removed=0. Audited as moderation.comment.bulk_remove (actor, target account, count; never comment bodies).
+         */
+        post: operations["bulkRemoveAdminComments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/videos": {
         parameters: {
             query?: never;
@@ -5548,7 +5568,7 @@ export interface paths {
         };
         /**
          * List the registration approval queue
-         * @description Returns registration requests, newest first, with the reviewing admin's username, plus a `total` counting the requests that match the same status filter. Restricted to admins. The stored password hash is never exposed.
+         * @description Returns registration requests, newest first, with the reviewing admin's username, plus a `total` counting the requests that match the same status filter. Admins and moderators. The stored password hash is never exposed.
          */
         get: operations["listRegistrationRequests"];
         put?: never;
@@ -5570,7 +5590,7 @@ export interface paths {
         put?: never;
         /**
          * Approve a registration request
-         * @description Approves a pending request, creating the account from the stored credentials (atomically). Admin only. An unknown/already-resolved id is 404; a username/email taken since the request was filed is 409.
+         * @description Approves a pending request, creating the account from the stored credentials (atomically). Admins and moderators. An unknown/already-resolved id is 404; a username/email taken since the request was filed is 409.
          */
         post: operations["approveRegistrationRequest"];
         delete?: never;
@@ -5590,7 +5610,7 @@ export interface paths {
         put?: never;
         /**
          * Reject a registration request
-         * @description Rejects a pending request with an optional internal moderator note. Admin only. An unknown/already-resolved id is 404.
+         * @description Rejects a pending request with an optional internal moderator note. Admins and moderators. An unknown/already-resolved id is 404.
          */
         post: operations["rejectRegistrationRequest"];
         delete?: never;
@@ -5668,11 +5688,15 @@ export interface paths {
         };
         /**
          * List accounts (admin)
-         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Restricted to admins. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
+         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Admins and moderators. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
          */
         get: operations["listUsers"];
         put?: never;
-        post?: never;
+        /**
+         * Create an account on behalf of the user (admin)
+         * @description PeerTube `POST /users` parity, for instances with registration closed. Admin-only; the CALLER re-confirms their OWN password (same step-up and strict limiter as `POST /api/v1/admin/users/{id}/password-reset-link`). There is no admin-chosen password: the account starts password-less and the holder sets the first one with a one-time link (the ordinary reset token, 1 hour). The address is marked verified (the admin vouches for it). Signup creates no default channel, so neither does this. When a mail path is configured the link is emailed and `link_emailed` is true with no `reset_url`; otherwise `reset_url` is returned once (no-store), only after the audit row `admin.user.create` is written. The row is required on both delivery paths: if it, the update or the delivery fails after the account was made, the account is DEACTIVATED (it cannot sign in and does not count as an active admin) and 502/503 is returned; the username and email stay reserved until an admin deletes it. The audit payload never carries the address, a password or the token.
+         */
+        post: operations["adminCreateUser"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5698,7 +5722,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a user's role / active flag / storage quota (admin)
-         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited).
+         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited). Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -7744,6 +7768,14 @@ export interface components {
         CreateReportRequest: {
             reason: string;
         };
+        BulkRemoveCommentsRequest: {
+            /** @description A local username, or a remote actor URL (http:// or https://). */
+            account: string;
+        };
+        BulkRemoveCommentsResponse: {
+            /** @description How many comments were removed. */
+            removed: number;
+        };
         ResolveReportRequest: {
             /** @enum {string} */
             status: "accepted" | "rejected";
@@ -8096,6 +8128,30 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
         };
+        AdminCreateUserRequest: {
+            /** @description Same rules as signup: no '@' or whitespace. */
+            username: string;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "user" | "moderator" | "admin";
+            /** @description Per-user override (0 = unlimited); absent or null = the instance default. */
+            storage_quota_bytes?: number | null;
+            /** @description The CALLING administrator's own current password (step-up), never the new account's. */
+            password: string;
+        };
+        AdminCreateUserResponse: {
+            user: components["schemas"]["AdminUser"];
+            /** @description True when the set-password link was emailed; reset_url is then absent. */
+            link_emailed: boolean;
+            /**
+             * Format: uri
+             * @description PUBLIC_BASE_URL + /reset-password/confirm?token=..., shown once; absent when emailed.
+             */
+            reset_url?: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
         /** @description Admin projection of an account (never includes the password hash). */
         AdminUser: {
             /** Format: uuid */
@@ -8126,6 +8182,15 @@ export interface components {
              * @description When this account was hard-deleted, or null for a live account. A deleted account stays listed as an anonymised tombstone (`deleted-<suffix>`) so an admin can see it, but deletion is permanent: PATCH with `is_active: true` on such a row is refused with 422, and the console offers no reactivate action for it. Every other admin write to a tombstone is refused the same way.
              */
             deleted_at: string | null;
+            /** @description Why the account was banned; null when not banned. */
+            ban_reason: string | null;
+            /** Format: date-time */
+            banned_at: string | null;
+            /**
+             * Format: uuid
+             * @description The staff account that banned it.
+             */
+            banned_by: string | null;
             /** @description Whether this account is THE instance owner — the account that redeemed the first-run setup token. There is no owner ROLE: the owner holds `admin` like any other administrator, so this flag is the only thing that identifies it. Another administrator cannot demote, deactivate or delete it (422 `owner_protected`), and nobody can remove the last active administrator (422 `last_admin`). False for every account on an instance claimed before the marker existed whose owner could not be determined. */
             is_owner: boolean;
             /** @description Whether this account has a CONFIRMED second factor (TOTP). A pending enrollment reads false, exactly as the account's own GET /api/v1/auth/mfa reports it. It is a boolean and nothing more: no admin route ever returns the shared secret or a recovery code. An admin can remove the factor with DELETE /api/v1/admin/users/{id}/mfa, which is the only operator answer to a user who has lost both their authenticator and their recovery codes. */
@@ -10067,6 +10132,8 @@ export interface components {
             /** @enum {string} */
             role?: "user" | "moderator" | "admin";
             is_active?: boolean;
+            /** @description Why the account is being banned; only valid with `is_active=false`. Required from a moderator, optional from an admin. */
+            ban_reason?: string;
             /** @description Admin-set email verification state: true marks the address confirmed without the token round-trip; false revokes the confirmation. Omit to leave unchanged. */
             email_verified?: boolean;
             /** @description Exempts the account from the QUARANTINE_NEW_UPLOADS gate (its uploads publish directly); false re-subjects it. Omit to leave unchanged. */
@@ -20495,6 +20562,66 @@ export interface operations {
             };
         };
     };
+    bulkRemoveAdminComments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRemoveCommentsRequest"];
+            };
+        };
+        responses: {
+            /** @description The comments were removed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkRemoveCommentsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such local account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listAdminVideos: {
         parameters: {
             query?: {
@@ -27109,6 +27236,94 @@ export interface operations {
             };
             /** @description The caller is not an admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminCreateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description The created account and how the set-password link was delivered. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCreateUserResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not an admin, or the caller's password is wrong. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Username or email already taken (or reserved by a channel); the caller has no password; or PUBLIC_BASE_URL is unset and no mail path exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (username, email, role, storage_quota_bytes or password). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts (strict auth limiter). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The set-password email failed and there is no origin to return a link on; the account was deactivated. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The audit write failed; the account was deactivated and no link was issued. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
