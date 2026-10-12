@@ -1610,6 +1610,14 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ prefs: { follow: false } });
   });
 
+  it("updateNotificationEmailPrefs PATCHes only the partial email map", async () => {
+    await api.updateNotificationEmailPrefs({ new_video: true });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/notification-prefs");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ email: { new_video: true } });
+  });
+
   it("getPlayerSettings targets the player-settings endpoint", async () => {
     await api.getPlayerSettings();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/player-settings");

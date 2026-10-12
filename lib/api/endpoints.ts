@@ -1976,6 +1976,18 @@ export const api = {
       body: { prefs },
     }),
 
+  /**
+   * PATCH /api/v1/me/notification-prefs with only the `email` map: turn email
+   * delivery on or off per type (auth). Only email-capable types are accepted
+   * (others are 422, nothing written); the in-app map is untouched. Returns
+   * the full updated maps.
+   */
+  updateNotificationEmailPrefs: (email: Record<string, boolean>) =>
+    apiRequest<NotificationPrefsResponse>("/api/v1/me/notification-prefs", {
+      method: "PATCH",
+      body: { email },
+    }),
+
   /** GET /api/v1/me/playlists — the caller's playlists, newest first (auth). */
   getMyPlaylists: (signal?: AbortSignal) =>
     apiRequest<PlaylistListResponse>("/api/v1/me/playlists", { signal }),
