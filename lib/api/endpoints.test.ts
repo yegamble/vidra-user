@@ -1810,6 +1810,33 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("getBlockedRemoteActors targets the instance-wide actor blocklist", async () => {
+    await api.getBlockedRemoteActors({ limit: 10, offset: 20 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/federation/blocked-actors?limit=10&offset=20",
+    );
+  });
+
+  it("blockRemoteActorInstanceWide POSTs the actor + reason", async () => {
+    await api.blockRemoteActorInstanceWide({ actor: "@kaisa@peer.example", reason: "harassment" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/federation/blocked-actors");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      actor: "@kaisa@peer.example",
+      reason: "harassment",
+    });
+  });
+
+  it("unblockRemoteActorInstanceWide DELETEs with the actor URL as a query param", async () => {
+    await api.unblockRemoteActorInstanceWide("https://peer.example/accounts/kaisa");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "http://localhost:8080/api/v1/admin/federation/blocked-actors?actor=https%3A%2F%2Fpeer.example%2Faccounts%2Fkaisa",
+    );
+    expect(init.method).toBe("DELETE");
+  });
+
   it("getInstanceSettings targets the admin instance-settings endpoint", async () => {
     await api.getInstanceSettings();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/instance-settings");

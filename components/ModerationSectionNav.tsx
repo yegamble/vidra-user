@@ -16,6 +16,7 @@ import {
   ServerIcon,
   ShieldIcon,
   SlashCircleIcon,
+  UserIcon,
   VideoIcon,
 } from "@/components/icons";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -45,6 +46,7 @@ const SECTIONS: Section[] = [
     icon: <HashIcon size={18} />,
   },
   { href: "/moderation/instances", label: "Instances", icon: <ServerIcon size={18} /> },
+  { href: "/moderation/accounts", label: "Remote accounts", icon: <UserIcon size={18} /> },
   // Autosuggest bans are a MODERATION action, not an instance setting: core
   // gates GET/PUT/DELETE /admin/search/suggestion-bans on moderator-or-admin,
   // while the instance-settings endpoints are admin-only. Hanging this off
