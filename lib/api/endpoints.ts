@@ -65,6 +65,9 @@ import type {
   ChannelSyncResponse,
   CreateChannelSyncRequest,
   FederationFollowerRequestListResponse,
+  InstanceFollow,
+  InstanceFollowListResponse,
+  InstanceFollowState,
   FollowedChannelsResponse,
   FollowNotificationsResponse,
   NotificationSetting,
@@ -2353,6 +2356,65 @@ export const api = {
       `/api/v1/admin/federation/follower-requests/${encodeURIComponent(id)}/reject`,
       { method: "POST" },
     ),
+
+  /**
+   * GET /api/v1/admin/federation/instance-followers — remote instances that
+   * follow this instance's actor, newest first, optionally one state (admin).
+   */
+  getInstanceFollowers: (
+    params: PageParams & { state?: InstanceFollowState } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<InstanceFollowListResponse>("/api/v1/admin/federation/instance-followers", {
+      query: { state: params.state, ...pageQuery(params) },
+      signal,
+    }),
+
+  /** POST …/instance-followers/{id}/accept — accept a pending instance follower (admin, 204). */
+  acceptInstanceFollower: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}/accept`,
+      { method: "POST" },
+    ),
+
+  /** POST …/instance-followers/{id}/reject — reject an instance follower; it stays rejected (admin, 204). */
+  rejectInstanceFollower: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}/reject`,
+      { method: "POST" },
+    ),
+
+  /** DELETE …/instance-followers/{id} — remove an instance follower in any state (admin, 204). */
+  removeInstanceFollower: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /** GET /api/v1/admin/federation/instance-following — instances this one follows (admin). */
+  getInstanceFollowing: (
+    params: PageParams & { state?: InstanceFollowState } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<InstanceFollowListResponse>("/api/v1/admin/federation/instance-following", {
+      query: { state: params.state, ...pageQuery(params) },
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/federation/instance-following — follow a remote instance
+   * by host as this instance's actor (admin; 201, pending until it Accepts).
+   */
+  followInstance: (host: string) =>
+    apiRequest<InstanceFollow>("/api/v1/admin/federation/instance-following", {
+      method: "POST",
+      body: { host },
+    }),
+
+  /** DELETE …/instance-following/{id} — stop following a remote instance (admin, 204). */
+  unfollowInstance: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/federation/instance-following/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 
   /** GET /api/v1/admin/audit-log — the security audit trail, newest first (admin). */
   getAuditLog: (

@@ -5708,7 +5708,7 @@ export interface paths {
         };
         /**
          * List the federation follower-approval queue
-         * @description Returns pending inbound ActivityPub channel Follows awaiting an admin decision, newest first, while federation_follower_approval is on (config-parity W12). Modeled on the registration-requests queue. Restricted to admins. Paginated via limit (1–100, default 20) and offset. A vidra deviation from PeerTube recorded in the parity ledger: approval applies to CHANNEL followers because vidra has no instance-level AP actor. Governs the ActivityPub inbox only — the ATProto integration is outbound cross-posting with no inbound path.
+         * @description Returns pending inbound ActivityPub channel Follows awaiting an admin decision, newest first, while federation_follower_approval is on (config-parity W12). Modeled on the registration-requests queue. Restricted to admins. Paginated via limit (1–100, default 20) and offset. The same setting holds INSTANCE followers for approval too; those are decided at /admin/federation/instance-followers. Governs the ActivityPub inbox only — the ATProto integration is outbound cross-posting with no inbound path.
          */
         get: operations["listFederationFollowerRequests"];
         put?: never;
@@ -5754,6 +5754,130 @@ export interface paths {
          */
         post: operations["rejectFederationFollowerRequest"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-followers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the instances following this one
+         * @description Remote instance actors (PeerTube's `Application` actor) that follow this instance's actor (/accounts/peertube), newest first — PeerTube's /server/followers. A pending follower waits for an admin while federation_follower_approval is on; a rejected one stays rejected until removed. Admin only. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listInstanceFollowers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-followers/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a pending instance follower
+         * @description Accepts one pending instance follower: the instance actor's Accept is queued to its inbox, followed by Announces of the newest public videos (at most 50). Admin only; audited (admin.federation.instance_follower_accept, safe row id only).
+         */
+        post: operations["acceptInstanceFollower"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-followers/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject an instance follower
+         * @description Rejects a pending or accepted instance follower: a Reject is queued to its inbox and the row stays `rejected`, so its next Follow is refused too (as on PeerTube). Admin only; audited (admin.federation.instance_follower_reject, safe row id only).
+         */
+        post: operations["rejectInstanceFollower"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-followers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an instance follower
+         * @description Removes an instance follower in any state. A pending or accepted one is told with a Reject; a removed instance may follow again. Admin only; audited (admin.federation.instance_follower_remove, safe row id only).
+         */
+        delete: operations["removeInstanceFollower"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-following": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the instances this one follows
+         * @description Remote instance actors this instance's actor follows, newest first — PeerTube's /server/following. `pending` until the remote Accepts; `rejected` when it refused. Admin only. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listInstanceFollowing"];
+        put?: never;
+        /**
+         * Follow a remote instance
+         * @description Follows the instance at `host` as this instance's actor (/accounts/peertube), as PeerTube's POST /server/following does. The remote instance actor is found through its NodeInfo `Application` link, else WebFinger acct:peertube@host (every fetch SSRF-guarded), and must live on that host. A signed Follow is queued to it; once it Accepts, the public videos it announces are ingested like those of a followed remote channel. Idempotent: an existing follow is returned unchanged, and one the remote rejected is re-armed. Admin only; audited (admin.federation.instance_follow, safe row id only).
+         */
+        post: operations["followInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-following/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unfollow a remote instance
+         * @description Stops following: the follow is removed at once and an Undo{Follow} is queued to the remote instance actor (also through an instance block, since it only ends contact). Admin only; audited (admin.federation.instance_unfollow, safe row id only).
+         */
+        delete: operations["unfollowInstance"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7680,7 +7804,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel) — or, with no channel, a remote INSTANCE asked to follow this instance (at most one unread such notice per admin; decided at /admin/federation/instance-followers); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
             type: "follow" | "comment" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
@@ -10642,6 +10766,24 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        /** @description One instance follow (migration 0166): a remote instance actor following this instance's actor, or this instance's actor following one. */
+        InstanceFollow: {
+            /** Format: uuid */
+            id: string;
+            /** @description The remote instance actor's ActivityPub id. */
+            actor_url: string;
+            /** @description The remote instance's host. */
+            host: string;
+            /** @description The remote instance actor's preferred_username@host. */
+            handle: string;
+            /** @enum {string} */
+            state: "pending" | "accepted" | "rejected";
+            /** Format: date-time */
+            created_at: string;
+        };
+        InstanceFollowListResponse: components["schemas"]["PageMeta"] & {
+            follows: components["schemas"]["InstanceFollow"][];
+        };
         FederationFollowerRequestListResponse: components["schemas"]["PageMeta"] & {
             requests: components["schemas"]["FederationFollowerRequest"][];
         };
@@ -10848,6 +10990,10 @@ export interface components {
     };
     responses: never;
     parameters: {
+        /** @description The instance follow's id. */
+        InstanceFollowID: string;
+        /** @description Only follows in this state. */
+        InstanceFollowState: "pending" | "accepted" | "rejected";
         /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
         PageLimit: number;
         /** @description Rows to skip. Negative values are clamped to 0. */
@@ -27568,6 +27714,381 @@ export interface operations {
                 };
             };
             /** @description No such pending follower request. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listInstanceFollowers: {
+        parameters: {
+            query?: {
+                /** @description Only follows in this state. */
+                state?: components["parameters"]["InstanceFollowState"];
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of instance followers (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceFollowListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description state is not pending, accepted or rejected. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    acceptInstanceFollower: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The instance follow's id. */
+                id: components["parameters"]["InstanceFollowID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted; the Accept is queued. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such pending instance follower. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rejectInstanceFollower: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The instance follow's id. */
+                id: components["parameters"]["InstanceFollowID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rejected; the Reject is queued. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such pending or accepted instance follower. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    removeInstanceFollower: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The instance follow's id. */
+                id: components["parameters"]["InstanceFollowID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such instance follower. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listInstanceFollowing: {
+        parameters: {
+            query?: {
+                /** @description Only follows in this state. */
+                state?: components["parameters"]["InstanceFollowState"];
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of followed instances (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceFollowListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description state is not pending, accepted or rejected. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    followInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description The remote instance's host (and port, if any).
+                     * @example videos.example
+                     */
+                    host: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The follow (pending until the remote Accepts). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceFollow"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The instance (or its actor) is blocked here, or this instance does not serve its instance actor. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description host is malformed, is this instance, or has no reachable instance actor. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unfollowInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The instance follow's id. */
+                id: components["parameters"]["InstanceFollowID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unfollowed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such followed instance. */
             404: {
                 headers: {
                     [name: string]: unknown;
