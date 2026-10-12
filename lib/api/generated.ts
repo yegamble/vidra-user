@@ -5692,7 +5692,11 @@ export interface paths {
          */
         get: operations["listUsers"];
         put?: never;
-        post?: never;
+        /**
+         * Create an account on behalf of the user (admin)
+         * @description PeerTube `POST /users` parity, for instances with registration closed. Admin-only; the CALLER re-confirms their OWN password (same step-up and strict limiter as `POST /api/v1/admin/users/{id}/password-reset-link`). There is no admin-chosen password: the account starts password-less and the holder sets the first one with a one-time link (the ordinary reset token, 1 hour). The address is marked verified (the admin vouches for it). Signup creates no default channel, so neither does this. When a mail path is configured the link is emailed and `link_emailed` is true with no `reset_url`; otherwise `reset_url` is returned once (no-store), only after the audit row `admin.user.create` is written. The row is required on both delivery paths: if it, the update or the delivery fails after the account was made, the account is DEACTIVATED (it cannot sign in and does not count as an active admin) and 502/503 is returned; the username and email stay reserved until an admin deletes it. The audit payload never carries the address, a password or the token.
+         */
+        post: operations["adminCreateUser"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8121,6 +8125,30 @@ export interface components {
              * @description PUBLIC_BASE_URL + /reset-password/confirm?token=..., shown once.
              */
             reset_url: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        AdminCreateUserRequest: {
+            /** @description Same rules as signup: no '@' or whitespace. */
+            username: string;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "user" | "moderator" | "admin";
+            /** @description Per-user override (0 = unlimited); absent or null = the instance default. */
+            storage_quota_bytes?: number | null;
+            /** @description The CALLING administrator's own current password (step-up), never the new account's. */
+            password: string;
+        };
+        AdminCreateUserResponse: {
+            user: components["schemas"]["AdminUser"];
+            /** @description True when the set-password link was emailed; reset_url is then absent. */
+            link_emailed: boolean;
+            /**
+             * Format: uri
+             * @description PUBLIC_BASE_URL + /reset-password/confirm?token=..., shown once; absent when emailed.
+             */
+            reset_url?: string;
             /** Format: date-time */
             expires_at: string;
         };
@@ -27197,6 +27225,94 @@ export interface operations {
             };
             /** @description The caller is not an admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminCreateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description The created account and how the set-password link was delivered. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCreateUserResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not an admin, or the caller's password is wrong. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Username or email already taken (or reserved by a channel); the caller has no password; or PUBLIC_BASE_URL is unset and no mail path exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (username, email, role, storage_quota_bytes or password). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts (strict auth limiter). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The set-password email failed and there is no origin to return a link on; the account was deactivated. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The audit write failed; the account was deactivated and no link was issued. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
