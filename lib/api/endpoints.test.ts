@@ -1227,6 +1227,14 @@ describe("api endpoints", () => {
     );
   });
 
+  it("giveVideoOwnership POSTs the recipient's username", async () => {
+    await api.giveVideoOwnership("v1", "bob");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/give-ownership");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ username: "bob" });
+  });
+
   it("acceptVideoOwnershipChange POSTs the chosen channel", async () => {
     await api.acceptVideoOwnershipChange("oc1", "c2");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

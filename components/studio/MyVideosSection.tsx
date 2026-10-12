@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useOptionalSession } from "@/components/auth/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ListTail } from "@/components/ui/ListTail";
@@ -31,6 +32,10 @@ export function MyVideosSection({
   channels?: Channel[];
 }) {
   const autoLoad = useBrowseAutoLoad();
+  // Giving a video away is the OWNER's call (core 0165): an editor of this
+  // channel manages its videos but is never offered a transfer.
+  const me = useOptionalSession()?.user?.id;
+  const ownsChannel = me != null && channels?.find((c) => c.handle === handle)?.owner_id === me;
   // Paged from the server: the owner view used to fetch once, so a creator with
   // more than 20 videos could never reach (or manage) the older ones.
   const list = useAppendingList<Video>({
@@ -92,6 +97,7 @@ export function MyVideosSection({
               channels={channels}
               replaceEnabled={replaceEnabled}
               replaceAccept={videoAcceptAttr(additionalExts)}
+              canTransfer={ownsChannel}
               onUpdated={(u) =>
                 u.channel_id && u.channel_id !== v.channel_id
                   ? // A moved video leaves this channel's list (T20).

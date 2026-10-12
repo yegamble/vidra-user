@@ -30,6 +30,7 @@ import { watchPath } from "@/lib/watch-path";
 import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
 
 import { SupportTextField } from "./SupportTextField";
+import { TransferOwnershipDialog } from "./TransferOwnershipDialog";
 
 import {
   BlockedBadge,
@@ -56,6 +57,7 @@ export function VideoRow({
   basicOnly = false,
   replaceEnabled = false,
   replaceAccept = "video/*,audio/*",
+  canTransfer = false,
 }: {
   video: Video;
   config: VideoConfigResponse | null;
@@ -71,6 +73,8 @@ export function VideoRow({
   replaceEnabled?: boolean;
   /** File-picker accept list for the replace flow (extension gate, W10). */
   replaceAccept?: string;
+  /** The caller OWNS this video's channel: only the owner may give it away (core 0165). */
+  canTransfer?: boolean;
 }) {
   const [mode, setMode] = useState<RowMode>(initiallyEditing ? "edit" : "view");
   const [title, setTitle] = useState(video.title);
@@ -114,6 +118,10 @@ export function VideoRow({
   const canMove = moveTargets.length > 1;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState(false);
+  // A draft or processing video cannot be given yet (the server answers 409):
+  // its final size, which the recipient's quota is checked against, is unknown.
+  const transferable = canTransfer && video.state !== "draft" && video.state !== "processing";
   // The full detail fetched when Edit opens — the only view carrying hls_url/
   // renditions (list rows omit them per the contract), so the streaming-status
   // note can be honest. null until (unless) the detail fetch succeeds.
@@ -509,6 +517,15 @@ export function VideoRow({
           >
             Edit
           </button>
+          {transferable ? (
+            <button
+              type="button"
+              onClick={() => setTransferring(true)}
+              className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
+            >
+              Transfer
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setMode("confirm-delete")}
@@ -518,6 +535,13 @@ export function VideoRow({
           </button>
         </div>
       )}
+      {transferring ? (
+        <TransferOwnershipDialog
+          videoId={video.id}
+          videoTitle={video.title}
+          onClose={() => setTransferring(false)}
+        />
+      ) : null}
     </li>
   );
 }
