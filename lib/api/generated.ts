@@ -3192,6 +3192,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/playlists/{id}/videos/{videoId}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move one video within a playlist
+         * @description Moves one item of a playlist owned by the caller to directly after another item (`after_video_id`), or to the front when `after_video_id` is null or omitted, and renumbers the playlist in one atomic step. Unlike PUT /playlists/{id}/videos it needs no copy of the full item list, so a client holding one page of a long playlist can reorder it. The anchor is an item, not an index, so it stays correct when items the client cannot see (a video that went private or unpublished) sit between the visible ones. Concurrent moves are serialized, never lost.
+         */
+        post: operations["movePlaylistItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/playlists/{id}/thumbnail": {
         parameters: {
             query?: never;
@@ -7142,6 +7162,8 @@ export interface components {
             published_at?: string;
             /** @description Whether a locally cached thumbnail is available. */
             has_thumbnail: boolean;
+            /** @description The origin flagged this video sensitive (ActivityStreams `sensitive`). The viewer's sensitive-content policy applies as to a local video's is_sensitive: under "hide" it is excluded from search. */
+            is_sensitive: boolean;
         };
         /** @description Credentials for linking a Bluesky account. app_password must be a Bluesky APP PASSWORD (Settings → App Passwords), never the account's main password — the backend never returns it. */
         ATProtoLinkRequest: {
@@ -7663,6 +7685,11 @@ export interface components {
         Playlist: {
             /** Format: uuid */
             id: string;
+            /**
+             * Format: uuid
+             * @description The owning user. Compare it with the signed-in user to decide owner controls; GET /me/playlists is paged and cannot answer that.
+             */
+            owner_id: string;
             /** @example Watch later picks */
             title: string;
             description: string;
@@ -7706,6 +7733,13 @@ export interface components {
         AddPlaylistItemRequest: {
             /** Format: uuid */
             video_id: string;
+        };
+        MovePlaylistItemRequest: {
+            /**
+             * Format: uuid
+             * @description The item the moved video should directly follow. null or omitted moves it to the front.
+             */
+            after_video_id?: string | null;
         };
         ReorderPlaylistItemsRequest: {
             /** @description The playlist's video ids in the desired order. Must be exactly the playlist's current items — each id once, none missing or extra. */
@@ -19509,6 +19543,68 @@ export interface operations {
             };
             /** @description No such playlist owned by the caller. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    movePlaylistItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                /** @description The item to move. */
+                videoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MovePlaylistItemRequest"];
+            };
+        };
+        responses: {
+            /** @description The video is in its new place. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such playlist owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The video, or after_video_id, is not an item of this playlist (the client's copy is stale — reload it). Nothing moved. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description after_video_id is malformed or names the moved video itself. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

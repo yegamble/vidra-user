@@ -541,6 +541,11 @@ export type AuthoredRemoteCommentRequest = Schemas["AuthoredRemoteCommentRequest
 export type RemoteCommentDeliveryState = AuthoredRemoteComment["delivery_state"];
 export type RemoteBlock = Schemas["RemoteBlockView"];
 export type RemoteBlockListResponse = Schemas["RemoteBlockListResponse"];
+// The INSTANCE-WIDE remote-account blocklist (moderator surface), distinct from
+// the viewer's personal RemoteBlock above.
+export type BlockedRemoteActor = Schemas["BlockedRemoteActorView"];
+export type BlockedRemoteActorListResponse = Schemas["BlockedRemoteActorListResponse"];
+export type AdminRemoteBlockRequest = Schemas["AdminRemoteBlockRequest"];
 export type BlockedUser = Schemas["BlockedUser"];
 export type BlockedUserListResponse = Schemas["BlockedUserListResponse"];
 

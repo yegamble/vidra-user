@@ -111,6 +111,8 @@ import type {
   ATProtoLinkRequest,
   ATProtoStatus,
   RemoteBlockListResponse,
+  BlockedRemoteActorListResponse,
+  AdminRemoteBlockRequest,
   RemoteVideo,
   RemoteVideoCommentListResponse,
   AuthoredRemoteComment,
@@ -1538,6 +1540,35 @@ export const api = {
   unblockInstance: (domain: string) =>
     apiRequest<void>(`/api/v1/admin/instances/blocked/${encodeURIComponent(domain)}`, {
       method: "DELETE",
+    }),
+
+  /**
+   * GET /api/v1/admin/federation/blocked-actors — the REMOTE accounts blocked
+   * for everyone on this instance, newest first (admin/moderator).
+   */
+  getBlockedRemoteActors: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<BlockedRemoteActorListResponse>("/api/v1/admin/federation/blocked-actors", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/federation/blocked-actors — block one remote account
+   * instance-wide by handle or actor URL (admin/moderator; idempotent 204;
+   * local or unresolvable identity → 422).
+   */
+  blockRemoteActorInstanceWide: (body: AdminRemoteBlockRequest) =>
+    apiRequest<void>("/api/v1/admin/federation/blocked-actors", { method: "POST", body }),
+
+  /**
+   * DELETE /api/v1/admin/federation/blocked-actors?actor= — lift the block. The
+   * actor is the actor_url exactly as the list returned it (matched verbatim,
+   * no handle resolution; idempotent 204).
+   */
+  unblockRemoteActorInstanceWide: (actorUrl: string) =>
+    apiRequest<void>("/api/v1/admin/federation/blocked-actors", {
+      method: "DELETE",
+      query: { actor: actorUrl },
     }),
 
   /**
