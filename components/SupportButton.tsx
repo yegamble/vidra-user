@@ -6,6 +6,7 @@ import { CheckIcon, HeartIcon } from "@/components/icons";
 import { usePlatformLabel } from "@/components/SoftwareBrandProvider";
 import { Badge, Modal } from "@/components/ui";
 import { QrCode } from "@/components/QrCode";
+import { UserText } from "@/components/UserText";
 import { api } from "@/lib/api";
 import type { DonationAddress } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -36,6 +37,11 @@ function fetchSource(source: DonateSource, signal: AbortSignal): Promise<Donatio
 //
 // `variant` picks the trigger skin: "accent" (default — the watch action row's
 // accent-filled lead) or "outline" (the channel header cluster's hairline pill).
+// `text` is the creator's own free-text support message (PeerTube's "support"
+// field — markdown, e.g. "Support me on Liberapay: <link>"). It is the SAME
+// affordance, not a second button: when `text` is set the pill shows even with no
+// crypto address, and the dialog stacks the message (rendered through the
+// sanitising UserText) above the crypto section when both exist.
 // `compact` renders the channel's responsive icon-circle: a 34px heart-only circle
 // on phones (the label supplies the accessible name), a labelled pill from sm up.
 export function SupportButton({
@@ -44,6 +50,7 @@ export function SupportButton({
   label = "Support",
   variant = "accent",
   compact = false,
+  text,
   className,
 }: {
   sources: DonateSource[];
@@ -51,8 +58,10 @@ export function SupportButton({
   label?: string;
   variant?: "accent" | "outline";
   compact?: boolean;
+  text?: string | null;
   className?: string;
 }) {
+  const message = text?.trim() ?? "";
   const [addresses, setAddresses] = useState<DonationAddress[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -74,7 +83,7 @@ export function SupportButton({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(sources)]);
 
-  if (addresses.length === 0) return null;
+  if (addresses.length === 0 && message === "") return null;
 
   return (
     <>
@@ -97,7 +106,12 @@ export function SupportButton({
         <span className={compact ? "hidden sm:inline" : undefined}>{label}</span>
       </button>
       {open ? (
-        <SupportDialog addresses={addresses} name={name} onClose={() => setOpen(false)} />
+        <SupportDialog
+          addresses={addresses}
+          message={message}
+          name={name}
+          onClose={() => setOpen(false)}
+        />
       ) : null}
     </>
   );
@@ -105,10 +119,12 @@ export function SupportButton({
 
 function SupportDialog({
   addresses,
+  message,
   name,
   onClose,
 }: {
   addresses: DonationAddress[];
+  message: string;
   name: string;
   onClose: () => void;
 }) {
@@ -149,6 +165,16 @@ function SupportDialog({
       variant={sheet ? "sheet" : "dialog"}
       className="max-h-[85vh] overflow-y-auto"
     >
+      {message ? (
+        <UserText
+          variant="description"
+          text={message}
+          timestamps={false}
+          className={cn("text-[14px] leading-relaxed text-fg", addresses.length > 0 && "mb-5")}
+        />
+      ) : null}
+      {addresses.length > 0 ? (
+        <>
       <p className="mb-4 text-[12.5px] leading-relaxed text-fg-muted">
         Send crypto directly to the creator. {platformLabel} never holds or processes funds.
       </p>
@@ -214,6 +240,8 @@ function SupportDialog({
       <p className="mt-3.5 text-center text-[11.5px] leading-relaxed text-fg-muted">
         Payments are peer-to-peer and irreversible. Double-check the address before sending.
       </p>
+        </>
+      ) : null}
     </Modal>
   );
 }

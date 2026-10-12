@@ -614,7 +614,7 @@ export function WatchView({
             getCurrentTime={() => playerRef.current?.currentTime ?? 0}
             onDeleted={() => window.location.assign("/")} />
           {channelHandle ? <SupportButton sources={supportSources} name={channelName || "this creator"}
-            className="self-start min-h-11" /> : null}
+            text={video.support} className="self-start min-h-11" /> : null}
           {/* Secondary technical/taxonomy chips (duration, dimensions,
               category/language/license) on their own quiet row. */}
           {chips.length > 0 ? (
