@@ -9,7 +9,7 @@ import { UserText } from "@/components/UserText";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { api, errorMessage } from "@/lib/api";
+import { ApiError, api, errorMessage } from "@/lib/api";
 import type { ManagedComment } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import { usePagedList } from "@/lib/use-paged-list";
@@ -44,22 +44,31 @@ function Queue() {
         .then((res) => ({ items: res.comments, total: res.total, limit: res.limit, offset: res.offset })),
   });
   const view: View = list.filters.view === "all" ? "all" : "held";
+  // Outlives the reload a stale approval (409) triggers, which remounts rows.
+  const [notice, setNotice] = useState<string | null>(null);
 
   return (
     <PagedListShell
       list={list}
       noun="comment"
       toolbar={
-        <SegmentedControl<View>
-          label="Show"
-          size="sm"
-          value={view}
-          onChange={(next) => list.setFilter("view", next === "all" ? "all" : undefined)}
-          options={[
-            { value: "held", label: "Awaiting approval" },
-            { value: "all", label: "All comments" },
-          ]}
-        />
+        <>
+          <SegmentedControl<View>
+            label="Show"
+            size="sm"
+            value={view}
+            onChange={(next) => list.setFilter("view", next === "all" ? "all" : undefined)}
+            options={[
+              { value: "held", label: "Awaiting approval" },
+              { value: "all", label: "All comments" },
+            ]}
+          />
+          {notice ? (
+            <p role="status" className="text-sm text-fg">
+              {notice}
+            </p>
+          ) : null}
+        </>
       }
       errorMessage="Could not load comments."
       emptyTitle={view === "held" ? "Nothing awaiting approval" : "No comments yet"}
@@ -82,6 +91,10 @@ function Queue() {
                   : list.patch((items) => items.map((x) => (x.id === c.id ? { ...x, ...updated } : x)))
               }
               onRejected={() => list.drop((x) => x.id !== c.id)}
+              onChanged={() => {
+                setNotice("A comment changed since you loaded it. Review it again.");
+                list.reload();
+              }}
             />
           </li>
         ))}
@@ -94,10 +107,13 @@ function QueueRow({
   comment,
   onApproved,
   onRejected,
+  onChanged,
 }: {
   comment: ManagedComment;
   onApproved: (updated: Partial<ManagedComment>) => void;
   onRejected: () => void;
+  // The comment was edited since the queue loaded (409): reload it.
+  onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -110,7 +126,8 @@ function QueueRow({
     try {
       await action();
     } catch (err) {
-      setError(errorMessage(err, fallback));
+      if (err instanceof ApiError && err.status === 409) onChanged();
+      else setError(errorMessage(err, fallback));
       setBusy(false);
       setConfirming(false);
     }
@@ -169,7 +186,8 @@ function QueueRow({
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
-                    onApproved(await api.approveComment(comment.video_id, comment.id));
+                    // Approve exactly the version shown (409 if edited since).
+                    onApproved(await api.approveComment(comment.video_id, comment.id, comment.updated_at));
                     setBusy(false);
                   }, "Could not approve this comment.")
                 }

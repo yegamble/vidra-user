@@ -11,11 +11,15 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", async () => (await import("@/lib/test-navigation")).navigationMock);
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    status = 0;
+  },
   api: mocks,
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
 import { CommentsQueueView } from "@/components/studio/CommentsQueueView";
+import { ApiError } from "@/lib/api";
 import { navigation } from "@/lib/test-navigation";
 
 function entry(id: string, held: boolean) {
@@ -65,7 +69,9 @@ describe("CommentsQueueView", () => {
     render(<CommentsQueueView />);
     await screen.findByText("body a");
     fireEvent.click(screen.getAllByRole("button", { name: "Approve" })[0]);
-    await waitFor(() => expect(mocks.approveComment).toHaveBeenCalledWith("v-a", "a"));
+    await waitFor(() =>
+      expect(mocks.approveComment).toHaveBeenCalledWith("v-a", "a", "2026-10-01T10:00:00Z"),
+    );
     await waitFor(() => expect(screen.queryByText("body a")).toBeNull());
     expect(screen.getByText("body b")).toBeTruthy();
   });
@@ -93,5 +99,19 @@ describe("CommentsQueueView", () => {
     expect(last).not.toHaveProperty("held", true);
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(screen.queryByText("Pending approval")).toBeNull();
+  });
+});
+
+describe("CommentsQueueView approve of a changed comment", () => {
+  it("on 409 says it changed and reloads the queue instead of dropping the row", async () => {
+    mocks.listManagedComments.mockResolvedValue(page([entry("a", true)]));
+    mocks.approveComment.mockRejectedValue(Object.assign(Object.create(ApiError.prototype), { status: 409 }));
+    render(<CommentsQueueView />);
+    await screen.findByText("body a");
+    const loads = mocks.listManagedComments.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText(/changed since you loaded it/)).toBeTruthy();
+    await waitFor(() => expect(mocks.listManagedComments.mock.calls.length).toBeGreaterThan(loads));
+    expect(screen.getByText("body a")).toBeTruthy();
   });
 });
