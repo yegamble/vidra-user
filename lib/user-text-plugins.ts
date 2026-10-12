@@ -102,11 +102,18 @@ export const MAX_DELIMITERS = 256;
 // thread for seconds) — also catches long runs of characters not counted below.
 const MARKER_RUN_RE = /(?:[>*_~`+\-\[\]()!<\\#]\s*|\d{1,3}[.)]\s+){100}/;
 const DELIMITER_RE = /[*_~`\[\]|<>]/g;
+// Well-formed bare http(s) URL runs only: scheme + characters legal in a URL
+// (no brackets, parens, `*`, backtick, `|`, `<`, `>`, whitespace). Imported
+// PeerTube text is URL-heavy and `_` is legal in URLs, so these runs are
+// not counted as delimiters; anything that breaks the run (any structural
+// character) ends the exemption, and the byte cap and marker-run check above
+// still apply to the whole body.
+const URL_RUN_RE = /https?:\/\/[\w\-.~:/?#@!$&'+,;=%]+/gi;
 const LIST_MARKER_RE = /^[ \t]*(?:[-+]|\d{1,9}[.)])[ \t]/gm;
 
 export function exceedsParseBudget(text: string): boolean {
   if (text.length > MAX_PARSE_BYTES) return true; // UTF-16 units <= UTF-8 bytes; exact check below
   if (new TextEncoder().encode(text).length > MAX_PARSE_BYTES) return true;
-  const delimiters = (text.match(DELIMITER_RE)?.length ?? 0) + (text.match(LIST_MARKER_RE)?.length ?? 0);
+  const delimiters = (text.replace(URL_RUN_RE, "").match(DELIMITER_RE)?.length ?? 0) + (text.match(LIST_MARKER_RE)?.length ?? 0);
   return delimiters > MAX_DELIMITERS || MARKER_RUN_RE.test(text);
 }

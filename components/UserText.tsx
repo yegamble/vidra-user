@@ -69,7 +69,9 @@ const LINK_CLASS =
 const TS_CLASS =
   "focus-ring rounded-sm font-semibold text-accent-text underline underline-offset-2 tabular-nums";
 
-const BARE_URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+// A match must not follow a letter or digit, so `xwww.evil.test` and
+// `hhttps://e.test` are not linkified mid-word.
+const BARE_URL_RE = /(?<![\p{L}\p{N}])(?:https?:\/\/|www\.)[^\s<>"']+/giu;
 
 // Drop sentence punctuation and unbalanced closers from the end of a bare URL.
 function trimUrl(url: string): string {

@@ -9,6 +9,7 @@ import { ExternalLinkIcon, InfoIcon } from "@/components/icons";
 import { RemoteVideoComments } from "@/components/RemoteVideoComments";
 import { ReportButton } from "@/components/ReportButton";
 import { Button, EmptyState, ErrorState, Spinner, buttonClasses } from "@/components/ui";
+import { UserText } from "@/components/UserText";
 import { ApiError, api, errorMessage, remoteVideoThumbnailUrl } from "@/lib/api";
 import type { RemoteVideo } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
@@ -142,9 +143,11 @@ export function RemoteWatchView({ id }: { id: string }) {
           </p>
         </div>
         {video.description ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
-            {video.description}
-          </p>
+          <UserText
+            variant="description"
+            text={video.description}
+            className="text-sm leading-relaxed text-fg-muted"
+          />
         ) : null}
       </div>
 

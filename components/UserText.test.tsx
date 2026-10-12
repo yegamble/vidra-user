@@ -303,3 +303,37 @@ describe("UserText: parse budget", () => {
     expect(c.querySelector("a")!.getAttribute("rel")).toBe("nofollow noopener noreferrer ugc");
   });
 });
+
+describe("UserText: plain-text linkify word boundary", () => {
+  const overBudget = " " + "~a".repeat(300);
+  const hrefs = (text: string) =>
+    Array.from(html(text + overBudget).querySelectorAll("a")).map((a) => a.getAttribute("href"));
+
+  it("does not linkify a URL that starts mid-word", () => {
+    expect(hrefs("xwww.evil.test")).toEqual([]);
+    expect(hrefs("hhttps://e.test")).toEqual([]);
+    expect(hrefs("9www.evil.test")).toEqual([]);
+  });
+
+  it("still linkifies after whitespace or punctuation", () => {
+    expect(hrefs("see www.e.test and (https://e.test/p)")).toEqual(["http://www.e.test", "https://e.test/p"]);
+  });
+});
+
+describe("UserText: budget ignores well-formed URL runs", () => {
+  it("renders markdown for a description with 300 URL underscores", () => {
+    const urls = Array.from({ length: 60 }, (_, i) => `https://e.test/a_b_c_d_e_f/x_${i}`).join("\n");
+    expect((urls.match(/_/g) ?? []).length).toBeGreaterThanOrEqual(300);
+    expect(exceedsParseBudget(urls)).toBe(false);
+    const c = html("**bold**\n" + urls);
+    expect(c.querySelector("strong")).toBeTruthy();
+  });
+
+  it("still trips on delimiters stuffed into fake URL-ish text", () => {
+    expect(exceedsParseBudget("http//_a ".repeat(300))).toBe(true);
+    expect(exceedsParseBudget("http:/_a ".repeat(300))).toBe(true);
+    expect(exceedsParseBudget("https://e.test/_*_*".repeat(150))).toBe(true);
+    expect(exceedsParseBudget("https://e.test/[a]".repeat(150))).toBe(true);
+    expect(exceedsParseBudget("https://e.test/".concat("<>".repeat(150)))).toBe(true);
+  });
+});

@@ -7,6 +7,7 @@ import { ListBoundary } from "@/components/admin/ListBoundary";
 import { ListSearch } from "@/components/admin/ListToolbar";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { RoleGate } from "@/components/RoleGate";
+import { UserText } from "@/components/UserText";
 import { Button } from "@/components/ui/Button";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminComment } from "@/lib/api";
@@ -120,7 +121,7 @@ function CommentRow({
         </span>
       </div>
 
-      <p className="mt-2 text-sm whitespace-pre-wrap text-fg">{comment.body}</p>
+      <UserText variant="comment" text={comment.body} className="mt-2 text-sm text-fg" />
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
 
