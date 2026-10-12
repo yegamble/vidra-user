@@ -182,6 +182,8 @@ import type {
   ChannelSearchResponse,
   SearchSuggestionsResponse,
   RecommendationsResponse,
+  FeedTokenIssued,
+  FeedTokenStatus,
   SearchHistoryResponse,
   SuggestionBanListResponse,
   SuggestionBanResponse,
@@ -545,6 +547,18 @@ export const api = {
   /** DELETE /api/v1/me/search-history — clear the caller's entire history (auth). */
   clearSearchHistory: () =>
     apiRequest<void>("/api/v1/me/search-history", { method: "DELETE" }),
+
+  /** GET /api/v1/me/feed-token — whether a private subscriptions-feed token exists (auth). */
+  getFeedToken: () => apiRequest<FeedTokenStatus>("/api/v1/me/feed-token"),
+
+  /**
+   * POST /api/v1/me/feed-token — create or rotate the token. The raw token and
+   * ready-made feed URL are returned ONCE; the old URL dies immediately (auth).
+   */
+  rotateFeedToken: () => apiRequest<FeedTokenIssued>("/api/v1/me/feed-token", { method: "POST" }),
+
+  /** DELETE /api/v1/me/feed-token — revoke the token (auth). */
+  revokeFeedToken: () => apiRequest<void>("/api/v1/me/feed-token", { method: "DELETE" }),
 
   /**
    * DELETE /api/v1/me/search-history/{query} — remove one normalized query from

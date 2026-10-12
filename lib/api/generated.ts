@@ -1517,6 +1517,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/feed-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the caller has a private subscriptions-feed token
+         * @description Reports whether a private feed token exists and when it was issued. The token itself is stored only as a hash and is never returned here; it is shown once, by POST.
+         */
+        get: operations["getFeedToken"];
+        put?: never;
+        /**
+         * Create or rotate the private subscriptions-feed token
+         * @description Mints a fresh random token, replacing any previous one (the old feed URL stops working immediately), and returns it together with the ready-made feed URL (GET /feeds/subscriptions.xml?token=…). This is the only time the raw token is visible. The token grants read access to that one feed and nothing else.
+         */
+        post: operations["rotateFeedToken"];
+        /**
+         * Revoke the private subscriptions-feed token
+         * @description Deletes the token (idempotent); the feed URL then answers 404.
+         */
+        delete: operations["revokeFeedToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/subscriptions/videos": {
         parameters: {
             query?: never;
@@ -4121,6 +4149,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/remote-interaction/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the subscribe URL on a visitor's home fediverse server
+         * @description The outbound half of remote interaction. A visitor who is not signed in here gives their own fediverse handle (user@host) and an address on THIS instance (a channel or video); the server WebFingers the handle's host through the SSRF-guarded federation fetch and returns that host's subscribe template (rel http://ostatus.org/schema/1.0/subscribe) with {uri} replaced by the escaped target. The client navigates to the returned https URL. Optional auth; signed-out callers need the operator's search_remote_uri_anonymous setting. Rate-limited (fail closed) on the same budget as remote-URI search resolution. Mounted with the federation service; 503 while federation is disabled.
+         */
+        get: operations["resolveRemoteInteraction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/blocks/remote": {
         parameters: {
             query?: never;
@@ -5857,6 +5905,19 @@ export interface components {
             /** @description Present only when the ledger could not be read for some reason other than "not migrated yet". The response is still 200. */
             error?: string;
         };
+        FeedTokenStatus: {
+            configured: boolean;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        FeedTokenIssued: {
+            /** @description The raw token; shown only once. */
+            token: string;
+            /** @description Ready-to-paste feed URL; absent when the instance has no public origin configured. */
+            url?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
         /** @description The single, consistent error envelope returned by every endpoint for non-2xx responses (except the readiness probe, which returns ReadinessResponse on 503). */
         ErrorResponse: {
             error: {
@@ -7384,6 +7445,13 @@ export interface components {
             domain: string;
             /** Format: date-time */
             blocked_at: string;
+        };
+        RemoteInteractionResolution: {
+            /**
+             * Format: uri
+             * @description https URL on the visitor's home server to navigate to.
+             */
+            url: string;
         };
         RemoteBlockListResponse: {
             actors: components["schemas"]["RemoteBlockView"][];
@@ -14662,6 +14730,91 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FollowedChannelsResponse"];
                 };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getFeedToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedTokenStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rotateFeedToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new token. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedTokenIssued"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revokeFeedToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked (or none existed). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Missing, invalid, or expired token. */
             401: {
@@ -22435,6 +22588,85 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resolveRemoteInteraction: {
+        parameters: {
+            query: {
+                /** @description The visitor's fediverse handle, user@host (a leading @ is accepted). */
+                handle: string;
+                /** @description The ActivityPub id of the channel or video on this instance the visitor wants to follow or interact with. */
+                target: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The home-server URL to send the visitor to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteInteractionResolution"];
+                };
+            };
+            /** @description The caller is signed out and the operator has not enabled remote lookups for anonymous visitors (search_remote_uri_anonymous). The client may fall back to looking the handle up from the browser. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The handle's server advertises no usable subscribe template. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed handle, a target that is not on this instance, or a handle that is a literal non-public address. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many lookups from this client. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The handle's server could not be reached (or may not be contacted; the two are deliberately indistinguishable). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance, or the rate budget is temporarily unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

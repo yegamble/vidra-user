@@ -90,6 +90,10 @@ export type QoEErrorClass = NonNullable<QoEEventInput["error_class"]>;
 // beacon that writes these events and the rollups that read them, so they are
 // declared once — in the admin block below, projected off the rollup schema.
 
+// --- Private subscriptions feed ----------------------------------------------
+export type FeedTokenStatus = Schemas["FeedTokenStatus"];
+export type FeedTokenIssued = Schemas["FeedTokenIssued"];
+
 // --- Search & discovery (search-service W4) ---------------------------------
 // Autocomplete suggestions. The response is inline in the spec (not a named
 // component), so it is derived from the operation. `type` is a string in the
