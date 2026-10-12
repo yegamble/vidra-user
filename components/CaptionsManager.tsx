@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { CaptionCueEditor } from "@/components/CaptionCueEditor";
 import { Button } from "@/components/ui/Button";
 import { ApiError, api, errorMessage, getInstanceCached } from "@/lib/api";
 import type { Caption, VideoConfigOption } from "@/lib/api";
@@ -28,6 +29,8 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
   const [label, setLabel] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // The language whose cue editor is open (null = closed).
+  const [editing, setEditing] = useState<Caption | null>(null);
 
   const { run, busy, error } = useAsyncAction(
     async (chosen: File) => {
@@ -205,6 +208,15 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
                 <span className="font-semibold">{c.language}</span>
                 {c.label ? <span className="text-fg-muted"> · {c.label}</span> : null}
               </span>
+              <span className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label={`Open ${c.language} cue editor`}
+                onClick={() => setEditing(c)}
+                className="rounded-full px-2.5 py-1 text-xs font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-ring"
+              >
+                Cues
+              </button>
               <button
                 type="button"
                 aria-label={`Remove ${c.language} caption`}
@@ -213,11 +225,22 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
               >
                 Remove
               </button>
+              </span>
             </li>
           ))}
         </ul>
       ) : loaded ? (
         <p className="text-xs text-fg-muted">No captions yet.</p>
+      ) : null}
+
+      {editing ? (
+        <CaptionCueEditor
+          videoId={videoId}
+          language={editing.language}
+          label={editing.label}
+          onClose={() => setEditing(null)}
+          onSaved={() => setEditing(null)}
+        />
       ) : null}
 
       <form className="flex flex-col gap-2" onSubmit={upload}>
