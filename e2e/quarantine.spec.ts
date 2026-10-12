@@ -10,7 +10,7 @@ const QUEUE = /\/api\/v1\/admin\/videos\/quarantined(\?|$)/;
 const APPROVE = /\/api\/v1\/admin\/videos\/[^/]+\/approve$/;
 const REJECT = /\/api\/v1\/admin\/videos\/[^/]+\/reject$/;
 const MY_CHANNELS = /\/api\/v1\/me\/channels$/;
-const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
+const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos(\?|$)/;
 // Resumable (chunked) upload protocol endpoints.
 const UPLOAD_SESSION = /\/api\/v1\/videos\/v1\/upload-session$/;
 const CHUNK = /\/api\/v1\/uploads\/up1\/chunks\/\d+$/;

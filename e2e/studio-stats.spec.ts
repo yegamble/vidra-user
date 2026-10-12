@@ -7,11 +7,11 @@ const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
 const MY_CHANNELS = /\/api\/v1\/me\/channels$/;
 const CHANNEL_STATS = /\/api\/v1\/channels\/ada_makes\/stats$/;
-const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
+const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos(\?|$)/;
 const VIDEO_STATS = /\/api\/v1\/videos\/v1\/stats$/;
 const ME_STATS = /\/api\/v1\/me\/stats$/;
 const ANY_CHANNEL_STATS = /\/api\/v1\/channels\/[^/]+\/stats$/;
-const ANY_CHANNEL_VIDEOS = /\/api\/v1\/channels\/[^/]+\/videos$/;
+const ANY_CHANNEL_VIDEOS = /\/api\/v1\/channels\/[^/]+\/videos(\?|$)/;
 const ATPROTO = /\/api\/v1\/me\/atproto$/;
 
 // A dense 30-day series, oldest first, matching the contract's shape.

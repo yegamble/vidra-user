@@ -211,7 +211,7 @@ test("deleting an address removes it from the list", async ({ page }) => {
 // --- Public "Donate" affordance on a channel page ---------------------------
 
 const CH_DETAIL = /\/api\/v1\/channels\/ada$/;
-const CH_VIDEOS = /\/api\/v1\/channels\/ada\/videos$/;
+const CH_VIDEOS = /\/api\/v1\/channels\/ada\/videos(\?|$)/;
 const CH_DONATIONS = /\/api\/v1\/channels\/ada\/donation-addresses$/;
 const USER_DONATIONS = /\/api\/v1\/users\/u1\/donation-addresses$/;
 

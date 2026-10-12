@@ -565,11 +565,20 @@ export const api = {
       { signal },
     ),
 
-  /** GET /api/v1/channels/{handle}/videos — a channel's videos (cards). */
-  listChannelVideos: (handle: string, token?: string, signal?: AbortSignal) =>
+  /**
+   * GET /api/v1/channels/{handle}/videos — a channel's videos (cards). Paginated
+   * (limit 1–100, default 20, plus offset) and sortable server-side: `sort` is
+   * `-published_at` (newest first, the default) or `published_at` (oldest first).
+   */
+  listChannelVideos: (
+    handle: string,
+    token?: string,
+    signal?: AbortSignal,
+    params: PageParams & { sort?: "-published_at" | "published_at" } = {},
+  ) =>
     apiRequest<VideoListResponse>(
       `/api/v1/channels/${encodeURIComponent(handle)}/videos`,
-      { token, signal },
+      { token, signal, query: { sort: params.sort, ...pageQuery(params) } },
     ),
 
   /**
