@@ -279,11 +279,7 @@ function useSearchCombobox({
       const shouldOpen = focusedRef.current && ordered.length > 0;
       setOpen(shouldOpen);
       if (shouldOpen) {
-        setLiveMessage(
-          ordered.length === 1
-            ? t("search.suggestionsOne")
-            : t("search.suggestionsMany", { count: ordered.length }),
-        );
+        setLiveMessage(t("search.suggestions", { count: ordered.length }));
         if (shownForRef.current !== prefix) {
           shownForRef.current = prefix;
           trackSearchEvent({
