@@ -8,8 +8,8 @@ import { FlagIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
+import { useT } from "@/components/I18nProvider";
 import { api, errorMessage } from "@/lib/api";
-import { t } from "@/lib/i18n";
 
 const MAX_REASON_LEN = 2000;
 
@@ -90,6 +90,7 @@ export function ReportDialog({
   targetId: string;
   onClose: () => void;
 }) {
+  const t = useT();
   const [reason, setReason] = useState("");
   const [state, setState] = useState<DialogState>("idle");
   const [error, setError] = useState<string | null>(null);

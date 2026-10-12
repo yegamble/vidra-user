@@ -64,7 +64,4 @@ export function createTranslator(locale: Locale, messages: Messages = {}): Trans
   return translate as Translate;
 }
 
-/** English-only, for code outside React. Components use useT() / getI18n(). */
-export const t: Translate = createTranslator(DEFAULT_LOCALE);
-
 export type { MessageKey };
