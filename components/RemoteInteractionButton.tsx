@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { ExternalLinkIcon } from "@/components/icons";
 import { Button, Input } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ApiError, api } from "@/lib/api";
@@ -95,8 +96,20 @@ export function RemoteInteractionButton({
 
   return (
     <>
-      <Button variant="tonal" size="sm" className={className} onClick={() => setOpen(true)}>
-        {LABEL[kind]}
+      {/* Icon-only between the phone stack and the md breakpoint: the channel
+          header row stops wrapping at sm, and a long text pill there pushes the
+          action cluster past the content edge. The accessible name is always
+          the full label. */}
+      <Button
+        variant="tonal"
+        size="sm"
+        className={className}
+        aria-label={LABEL[kind]}
+        title={LABEL[kind]}
+        onClick={() => setOpen(true)}
+      >
+        <ExternalLinkIcon size={16} strokeWidth={2} />
+        <span className="hidden max-sm:inline md:inline">{LABEL[kind]}</span>
       </Button>
       {open ? (
         <Modal title={LABEL[kind]} onClose={() => setOpen(false)}>
