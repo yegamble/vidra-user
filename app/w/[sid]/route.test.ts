@@ -84,3 +84,13 @@ describe("GET /w/[sid]", () => {
     expect(res.headers.get("location")).toBe(`/videos/${VIDRA_ID}`);
   });
 });
+
+describe("GET /w/[sid] start param", () => {
+  it("maps PeerTube's ?start= to vidra's ?t=", async () => {
+    mocks.getPublicVideoByLegacyUUID.mockResolvedValue({ id: VIDRA_ID, short_code: CODE } as Video);
+    const res = await GET(req(`https://tube.example/w/${PT_SID}?start=90`), {
+      params: Promise.resolve({ sid: PT_SID }),
+    });
+    expect(res.headers.get("location")).toBe(`/v/${CODE}?t=90`);
+  });
+});

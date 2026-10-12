@@ -4,6 +4,7 @@ import {
   SECURITY_HEADERS,
   STRICT_TRANSPORT_SECURITY,
   apiOriginOf,
+  isFrameablePath,
   buildContentSecurityPolicy,
   shouldSendHsts,
 } from "./security-headers";
@@ -94,5 +95,12 @@ describe("shouldSendHsts", () => {
     ["garbage", "not a url at all", true],
   ])("%s → %s", (_label, value, expected) => {
     expect(shouldSendHsts(value)).toBe(expected);
+  });
+});
+
+describe("isFrameablePath", () => {
+  it("frames /embed and PeerTube's legacy embed paths only", () => {
+    for (const p of ["/embed/x", "/videos/embed/x", "/video-playlists/embed/x"]) expect(isFrameablePath(p)).toBe(true);
+    for (const p of ["/embedded", "/videos/watch/x", "/videos/embedx", "/"]) expect(isFrameablePath(p)).toBe(false);
   });
 });
