@@ -43,6 +43,18 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "New abuse reports",
     help: "A user files an abuse report (delivered to admins and moderators only).",
   },
+  new_registration_request: {
+    label: "New registration requests",
+    help: "Someone requests an account while sign-ups need approval (admins and moderators only).",
+  },
+  upload_quarantined: {
+    label: "Uploads awaiting review",
+    help: "An upload enters the quarantine queue (admins and moderators only).",
+  },
+  federation_follower_request: {
+    label: "Remote follower requests",
+    help: "A remote account asks to follow a channel while follower approval is on (admins only).",
+  },
   report_resolved: {
     label: "Report outcomes",
     help: "A moderator resolves an abuse report you filed.",
@@ -74,6 +86,9 @@ const TYPE_ORDER = [
   "new_video",
   "message",
   "new_report",
+  "new_registration_request",
+  "upload_quarantined",
+  "federation_follower_request",
   "report_resolved",
   "video_rejected",
   "video_blocked",
