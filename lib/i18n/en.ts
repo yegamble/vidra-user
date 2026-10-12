@@ -1,13 +1,13 @@
+import type { Message } from "./index";
+
 /**
- * Default-locale (en) string catalog. This is the single source of truth for
- * user-visible strings that have been externalized so far. It proves the app's
- * strings are *externalizable* (i18n readiness, P12) — it is NOT a full
- * translation effort. New translatable strings get a stable dotted key here;
- * `t()` (lib/i18n) reads from this catalog.
+ * Default-locale (en) string catalog: the source of truth for every message
+ * key. Other catalogs (./fr.ts, …) translate a subset; a key they lack renders
+ * this text. Read through `useT()` / `getI18n()` (lib/i18n).
  *
  * Interpolation: `{name}` placeholders are filled from the `vars` passed to
- * `t()`. Keep values plain strings (no JSX) so a future message loader can swap
- * the whole catalog per locale.
+ * `t()`. Plurals: an object of CLDR forms picked by `vars.count`. Keep values
+ * plain text (no JSX).
  */
 export const en = {
   // Generic primitive affordances.
@@ -64,8 +64,7 @@ export const en = {
   "search.close": "Close search",
   "search.clear": "Clear search",
   "search.suggestionsLabel": "Search suggestions",
-  "search.suggestionsOne": "1 suggestion available",
-  "search.suggestionsMany": "{count} suggestions available",
+  "search.suggestions": { one: "{count} suggestion available", other: "{count} suggestions available" },
   "search.removeHistory": "Remove “{query}” from your search history",
   // Grouped-section headers and per-row type labels in the suggestion panel.
   "search.groupVideos": "Videos",
@@ -78,7 +77,7 @@ export const en = {
   "search.personalizedManage": "Manage",
   "home.forYou": "For you",
   "home.trendingNow": "Trending now",
-} as const;
+} as const satisfies Record<string, Message>;
 
 /** A valid message key — every key present in the default catalog. */
 export type MessageKey = keyof typeof en;
