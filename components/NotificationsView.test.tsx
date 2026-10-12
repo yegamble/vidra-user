@@ -228,6 +228,15 @@ describe("notification pref labels", () => {
 // rendered new_video as "started following". Typing the table as a Record over
 // the generated union makes a NEW backend type a compile error here until it is
 // given copy, and the loop proves no non-follow type reaches the follow branch.
+describe("an instance follower request", () => {
+  it("has no channel and points at the instances page", () => {
+    const { lead, rest, href } = describeNotification(notif({ type: "federation_follower_request" }));
+    expect(lead).toBe("A remote instance");
+    expect(rest).toMatch(/follow this instance/);
+    expect(href).toBe("/admin/federation/instances");
+  });
+});
+
 describe("describeNotification is exhaustive over the type union", () => {
   const expected: Record<Notification["type"], { href: string; rest: RegExp }> = {
     follow: { href: "/channels/films", rest: /started following/ },

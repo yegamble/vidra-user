@@ -229,6 +229,15 @@ export function describeNotification(n: Notification): {
       href: "/moderation/quarantine",
     };
   }
+  if (n.type === "federation_follower_request" && !n.channel_handle) {
+    // No channel: a remote INSTANCE asked to follow this one (one unread
+    // notice per admin however many wait — it points at the queue).
+    return {
+      lead: "A remote instance",
+      rest: " asked to follow this instance — it needs your approval",
+      href: "/admin/federation/instances",
+    };
+  }
   if (n.type === "federation_follower_request") {
     const channel = n.channel_display_name || n.channel_handle || "a channel";
     return {
