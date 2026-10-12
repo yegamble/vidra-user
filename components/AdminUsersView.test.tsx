@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   transferInstanceOwnership: vi.fn(),
   removeAdminUserMFA: vi.fn(),
   createAdminUserPasswordResetLink: vi.fn(),
+  createAdminUser: vi.fn(),
   reloadUser: vi.fn(),
   // The signed-in viewer, mutable so a test can be the OWNER rather than just
   // an admin — the ownership-transfer control turns on exactly that difference.
@@ -34,6 +35,7 @@ vi.mock("@/lib/api", () => ({
     transferInstanceOwnership: mocks.transferInstanceOwnership,
     removeAdminUserMFA: mocks.removeAdminUserMFA,
     createAdminUserPasswordResetLink: mocks.createAdminUserPasswordResetLink,
+    createAdminUser: mocks.createAdminUser,
   },
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
@@ -808,5 +810,32 @@ describe("AdminUsersView as a moderator", () => {
     await screen.findAllByText("staffer");
     expect((screen.getByRole("button", { name: "Deactivate staffer" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/spam links/)).toBeTruthy();
+  });
+});
+
+describe("AdminUsersView create user", () => {
+  it("creates an account from the toolbar and refetches the list", async () => {
+    mocks.getAdminUsers.mockResolvedValue(page(0, PAGE));
+    mocks.createAdminUser.mockResolvedValue({
+      user: account(99, { username: "nina" }),
+      link_emailed: true,
+      expires_at: "2026-10-02T14:30:00Z",
+    });
+    render(<AdminUsersView />);
+    await screen.findByText("1–10 of 4649");
+    expect(mocks.getAdminUsers).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create user" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/^username/i), { target: { value: "nina" } });
+    fireEvent.change(within(dialog).getByLabelText(/^email/i), { target: { value: "nina@example.test" } });
+    fireEvent.change(within(dialog).getByLabelText(/your password/i), { target: { value: "fixture-typed-value" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^create user$/i }));
+
+    await screen.findByText(/was created/i);
+    expect(mocks.createAdminUser).toHaveBeenCalledWith(
+      expect.objectContaining({ username: "nina", role: "user" }),
+    );
+    await waitFor(() => expect(mocks.getAdminUsers).toHaveBeenCalledTimes(2));
   });
 });

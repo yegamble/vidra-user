@@ -150,6 +150,8 @@ export interface SearchEventInput {
 export type UserRole = NonNullable<Schemas["User"]["role"]>;
 export type AdminUser = Schemas["AdminUser"];
 export type AdminPasswordResetLink = Schemas["AdminPasswordResetLink"];
+export type AdminCreateUserRequest = Schemas["AdminCreateUserRequest"];
+export type AdminCreateUserResponse = Schemas["AdminCreateUserResponse"];
 export type AdminUserListResponse = Schemas["AdminUserListResponse"];
 export type AuditLogEntry = Schemas["AuditLogEntry"];
 export type AuditLogListResponse = Schemas["AuditLogListResponse"];

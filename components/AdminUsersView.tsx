@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { AdminPagination, RolePill } from "@/components/admin/AdminControls";
 import { BanUserDialog } from "@/components/admin/BanUserDialog";
+import { CreateUserDialog } from "@/components/admin/CreateUserDialog";
 import { PasswordResetLinkCard } from "@/components/admin/PasswordResetLinkCard";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { ListSearch } from "@/components/admin/ListToolbar";
@@ -191,6 +192,7 @@ function UsersList({
   // cards, so it stays null there.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<QuotaFilter>("all");
+  const [creating, setCreating] = useState(false);
 
   const list = usePagedList<AdminUser>({
     filterKeys: ["q"],
@@ -295,9 +297,23 @@ function UsersList({
 
   return (
     <div className="flex flex-col gap-4">
+      {creating ? (
+        <CreateUserDialog
+          onClose={() => setCreating(false)}
+          // The new account sorts first (newest first), so refetch from page one.
+          onCreated={() => (pageOffset > 0 ? list.setOffset(0) : list.reload())}
+        />
+      ) : null}
       {/* Toolbar: always on mobile; on desktop it hides while a user detail is
           open (the detail is its own full screen in the design). */}
       <div className={cn("flex flex-col gap-4", selected && "lg:hidden")}>
+        <div className="flex items-center justify-between gap-3">
+          {viewerIsAdmin ? (
+            <Button size="sm" onClick={() => setCreating(true)}>
+              Create user
+            </Button>
+          ) : null}
+        </div>
         <ListSearch
           label="Search users"
           placeholder="Search by username or email"
