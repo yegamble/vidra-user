@@ -136,17 +136,19 @@ export function serializeVtt(doc: VttDocument): string {
 
 export type CueIssue = { error?: string; warning?: string };
 
+/** One cue's validation given the previous cue's end (null for the first). */
+export function cueIssue(cue: VttCue, prevEndMs: number | null): CueIssue {
+  if (cue.startMs < 0 || cue.endMs < 0) return { error: "Times cannot be negative." };
+  if (cue.startMs >= cue.endMs) return { error: "Start must be before the end." };
+  if (cue.text.includes("-->")) return { error: "Text cannot contain the sequence -->." };
+  if (cue.text.trim() === "") return { error: "Text is required." };
+  if (prevEndMs !== null && cue.startMs < prevEndMs) {
+    return { warning: "Overlaps the previous cue." };
+  }
+  return {};
+}
+
 /** Per-cue validation, index-aligned with `cues`. Errors block saving. */
 export function cueIssues(cues: VttCue[]): CueIssue[] {
-  return cues.map((cue, i) => {
-    if (cue.startMs < 0 || cue.endMs < 0) return { error: "Times cannot be negative." };
-    if (cue.startMs >= cue.endMs) return { error: "Start must be before the end." };
-    if (cue.text.includes("-->")) return { error: "Text cannot contain the sequence -->." };
-    if (cue.text.trim() === "") return { error: "Text is required." };
-    const prev = i > 0 ? cues[i - 1] : undefined;
-    if (prev && cue.startMs < prev.endMs) {
-      return { warning: "Overlaps the previous cue." };
-    }
-    return {};
-  });
+  return cues.map((cue, i) => cueIssue(cue, i > 0 ? cues[i - 1].endMs : null));
 }

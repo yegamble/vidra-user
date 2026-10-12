@@ -1,19 +1,19 @@
 "use client";
 
-import { memo, useEffect, useMemo, useReducer, useState, type Dispatch } from "react";
+import { memo, useCallback, useEffect, useMemo, useReducer, useState, type Dispatch } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import {
+  cueIssue,
   cueIssues,
   formatVttTime,
   nextCueKey,
   parseVtt,
   parseVttTime,
   serializeVtt,
-  type CueIssue,
   type VttBlock,
   type VttCue,
 } from "@/lib/vtt";
@@ -47,58 +47,82 @@ function reducer(blocks: VttBlock[], action: Action): VttBlock[] {
 }
 
 // TimeField keeps its own draft so typing "1:0" never gets reformatted under the
-// caret; the cue only changes once the draft parses, and blur snaps back to the
-// canonical form.
+// caret. The cue only changes once the draft parses; an unparsable draft stays on
+// screen with an inline error and is reported upward so Save is blocked (a draft
+// is never silently discarded on blur).
 function TimeField({
+  id,
   label,
   valueMs,
   onCommit,
+  onValidity,
 }: {
+  id: string;
   label: string;
   valueMs: number;
   onCommit: (ms: number) => void;
+  onValidity: (id: string, invalid: boolean) => void;
 }) {
   const [draft, setDraft] = useState(() => formatVttTime(valueMs));
   const [seen, setSeen] = useState(valueMs);
-  const parsed = parseVttTime(draft);
+  const invalid = parseVttTime(draft) === null;
   // Resync when the cue changes from outside (not from our own commit).
   if (seen !== valueMs) {
     setSeen(valueMs);
-    if (parsed !== valueMs) setDraft(formatVttTime(valueMs));
+    if (parseVttTime(draft) !== valueMs) setDraft(formatVttTime(valueMs));
   }
   return (
-    <input
-      aria-label={label}
-      aria-invalid={parsed === null}
-      inputMode="decimal"
-      spellCheck={false}
-      value={draft}
-      onChange={(e) => {
-        setDraft(e.target.value);
-        const ms = parseVttTime(e.target.value);
-        if (ms !== null) onCommit(ms);
-      }}
-      onBlur={() => setDraft(formatVttTime(valueMs))}
-      className={`w-28 font-mono ${FIELD}`}
-    />
+    <span className="flex flex-col gap-0.5">
+      <input
+        aria-label={label}
+        aria-invalid={invalid}
+        aria-describedby={invalid ? `${id}-err` : undefined}
+        inputMode="decimal"
+        spellCheck={false}
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          const ms = parseVttTime(e.target.value);
+          onValidity(id, ms === null);
+          if (ms !== null) onCommit(ms);
+        }}
+        onBlur={() => {
+          if (!invalid) setDraft(formatVttTime(valueMs));
+        }}
+        className={`w-28 font-mono ${FIELD}`}
+      />
+      {invalid ? (
+        <span id={`${id}-err`} className="text-xs text-danger">
+          Use mm:ss.mmm
+        </span>
+      ) : null}
+    </span>
   );
 }
+
+/** Test seam: called with the cue key each time a row renders. */
+export const cueRowRenderProbe: { onRender?: (key: string) => void } = {};
 
 const CueRow = memo(function CueRow({
   cue,
   n,
-  issue,
+  prevEndMs,
   dispatch,
   autoFocus,
   onAdded,
+  onValidity,
 }: {
   cue: VttCue;
   n: number;
-  issue: CueIssue;
+  prevEndMs: number | null;
   dispatch: Dispatch<Action>;
   autoFocus: boolean;
   onAdded: (key: string) => void;
+  onValidity: (id: string, invalid: boolean) => void;
 }) {
+  cueRowRenderProbe.onRender?.(cue.key);
+  // Computed from this row's own inputs (primitives), so memo() holds.
+  const issue = cueIssue(cue, prevEndMs);
   return (
     <li
       className="flex flex-col gap-1.5 border-b border-border-subtle py-2 [contain-intrinsic-size:auto_110px] [content-visibility:auto]"
@@ -106,6 +130,8 @@ const CueRow = memo(function CueRow({
       <div className="flex flex-wrap items-center gap-2">
         <span className="w-8 text-xs tabular-nums text-fg-muted">{n}</span>
         <TimeField
+          id={`${cue.key}-s`}
+          onValidity={onValidity}
           label={`Cue ${n} start`}
           valueMs={cue.startMs}
           onCommit={(startMs) => dispatch({ type: "patch", key: cue.key, patch: { startMs } })}
@@ -114,6 +140,8 @@ const CueRow = memo(function CueRow({
           →
         </span>
         <TimeField
+          id={`${cue.key}-e`}
+          onValidity={onValidity}
           label={`Cue ${n} end`}
           valueMs={cue.endMs}
           onCommit={(endMs) => dispatch({ type: "patch", key: cue.key, patch: { endMs } })}
@@ -192,6 +220,18 @@ export function CaptionCueEditor({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  // Ids ("<cueKey>-s" / "-e") of time inputs whose draft does not parse.
+  const [badDrafts, setBadDrafts] = useState<ReadonlySet<string>>(new Set());
+  const onValidity = useCallback((id: string, invalid: boolean) => {
+    setBadDrafts((prev) => {
+      if (prev.has(id) === invalid) return prev;
+      const next = new Set(prev);
+      if (invalid) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -209,11 +249,16 @@ export function CaptionCueEditor({
         setPhase("failed");
       });
     return () => controller.abort();
-  }, [videoId, language]);
+  }, [videoId, language, attempt]);
 
   const cues = useMemo(() => blocks.filter((b): b is VttCue => b.kind === "cue"), [blocks]);
   const issues = useMemo(() => cueIssues(cues), [cues]);
-  const errorCount = issues.filter((i) => i.error).length;
+  // A removed row can leave a stale id behind; only count drafts of live cues.
+  const badCount = cues.reduce(
+    (n, c) => n + (badDrafts.has(`${c.key}-s`) ? 1 : 0) + (badDrafts.has(`${c.key}-e`) ? 1 : 0),
+    0,
+  );
+  const errorCount = issues.filter((i) => i.error).length + badCount;
   const warnCount = issues.filter((i) => i.warning).length;
 
   const act: Dispatch<Action> = useMemo(
@@ -255,9 +300,17 @@ export function CaptionCueEditor({
           <Spinner />
         </div>
       ) : phase === "failed" ? (
-        <p role="alert" className="text-sm text-danger">
-          {loadError}
-        </p>
+        <div className="flex flex-col items-start gap-2">
+          <p role="alert" className="text-sm text-danger">
+            {loadError}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => {
+              setPhase("loading");
+              setAttempt((a) => a + 1);
+            }}>
+            Retry
+          </Button>
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
           {cues.length === 0 ? <p className="text-sm text-fg-muted">This track has no cues yet.</p> : null}
@@ -267,13 +320,17 @@ export function CaptionCueEditor({
                 key={cue.key}
                 cue={cue}
                 n={i + 1}
-                issue={issues[i]}
+                prevEndMs={i > 0 ? cues[i - 1].endMs : null}
                 dispatch={act}
                 autoFocus={cue.key === justAdded}
                 onAdded={setJustAdded}
+                onValidity={onValidity}
               />
             ))}
           </ul>
+          <p className="text-xs text-fg-muted">
+            Blank lines inside a cue are removed when you save.
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"

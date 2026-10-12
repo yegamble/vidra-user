@@ -209,22 +209,22 @@ export function CaptionsManager({ videoId }: { videoId: string }) {
                 {c.label ? <span className="text-fg-muted"> · {c.label}</span> : null}
               </span>
               <span className="flex items-center gap-1">
-              <button
-                type="button"
-                aria-label={`Open ${c.language} cue editor`}
-                onClick={() => setEditing(c)}
-                className="rounded-full px-2.5 py-1 text-xs font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-ring"
-              >
-                Cues
-              </button>
-              <button
-                type="button"
-                aria-label={`Remove ${c.language} caption`}
-                onClick={() => void remove(c.language)}
-                className="rounded-full px-2.5 py-1 text-xs font-semibold text-fg-muted transition-colors hover:bg-danger-surface hover:text-danger focus-ring"
-              >
-                Remove
-              </button>
+                <button
+                  type="button"
+                  aria-label={`Open ${c.language} cue editor`}
+                  onClick={() => setEditing(c)}
+                  className="rounded-full px-2.5 py-1 text-xs font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-ring"
+                >
+                  Cues
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remove ${c.language} caption`}
+                  onClick={() => void remove(c.language)}
+                  className="rounded-full px-2.5 py-1 text-xs font-semibold text-fg-muted transition-colors hover:bg-danger-surface hover:text-danger focus-ring"
+                >
+                  Remove
+                </button>
               </span>
             </li>
           ))}

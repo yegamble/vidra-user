@@ -12,7 +12,7 @@ vi.mock("@/lib/api", () => ({
   errorMessage: (_e: unknown, fallback: string) => fallback,
 }));
 
-import { CaptionCueEditor } from "@/components/CaptionCueEditor";
+import { CaptionCueEditor, cueRowRenderProbe } from "@/components/CaptionCueEditor";
 
 const VTT = `WEBVTT
 
@@ -116,5 +116,71 @@ describe("CaptionCueEditor", () => {
     mount();
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("2000 cues"), { timeout: 20000 });
     expect(document.querySelectorAll("textarea")).toHaveLength(2000);
+  });
+
+  it("re-renders only the edited row (and its successor) on a keystroke", async () => {
+    const lines = ["WEBVTT", ""];
+    for (let i = 0; i < 5; i++) lines.push(`00:0${i}.000 --> 00:0${i}.500`, `t${i}`, "");
+    mocks.downloadCaptionText.mockResolvedValue(lines.join("\n"));
+    mount();
+    const box = await screen.findByLabelText("Cue 1 text");
+    const renders: string[] = [];
+    cueRowRenderProbe.onRender = (key) => renders.push(key);
+    fireEvent.change(box, { target: { value: "edited" } });
+    cueRowRenderProbe.onRender = undefined;
+    expect(renders).toHaveLength(1);
+  });
+
+  it("shows an inline error for an unparsable time and blocks save until fixed", async () => {
+    mount();
+    const start = await screen.findByLabelText("Cue 2 start");
+    fireEvent.change(screen.getByLabelText("Cue 2 text"), { target: { value: "x" } });
+    fireEvent.change(start, { target: { value: "1:7x" } });
+    fireEvent.blur(start);
+    expect(screen.getByText("Use mm:ss.mmm")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save cues" })).toHaveProperty("disabled", true);
+    fireEvent.change(start, { target: { value: "00:03.500" } });
+    expect(screen.queryByText("Use mm:ss.mmm")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save cues" })).toHaveProperty("disabled", false);
+  });
+
+  it("offers Retry when the track fails to load", async () => {
+    mocks.downloadCaptionText.mockRejectedValueOnce(new Error("nope"));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    expect(await screen.findByLabelText("Cue 1 text")).toBeTruthy();
+  });
+
+  it("confirms before closing with unsaved edits, and not when clean", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    const { onClose } = mount();
+    await screen.findByLabelText("Cue 1 text");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText("Cue 1 text"), { target: { value: "dirty" } });
+    confirm.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    confirm.mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(2);
+    confirm.mockRestore();
+  });
+
+  it("refuses to upload a caption over the 4 MiB cap", async () => {
+    mount();
+    fireEvent.change(await screen.findByLabelText("Cue 2 text"), {
+      target: { value: "x".repeat(4 * 1024 * 1024 + 1) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save cues" }));
+    expect(await screen.findByText("This caption is larger than the 4 MiB limit.")).toBeTruthy();
+    expect(mocks.uploadCaption).not.toHaveBeenCalled();
+  });
+
+  it("explains that blank lines are removed on save", async () => {
+    mount();
+    expect(await screen.findByText(/Blank lines inside a cue are removed/)).toBeTruthy();
   });
 });
