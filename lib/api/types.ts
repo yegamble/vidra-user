@@ -421,6 +421,9 @@ export type ResolveReportRequest = Schemas["ResolveReportRequest"];
 /** One message in a report's reporter↔staff thread (core 0163). */
 export type ReportMessage = Schemas["ReportMessage"];
 export type ReportMessageListResponse = Schemas["ReportMessageListResponse"];
+/** One of the caller's own reports ("My reports") — never the moderator's note. */
+export type MyReport = Schemas["MyReport"];
+export type MyReportListResponse = Schemas["MyReportListResponse"];
 export type BlockVideoRequest = Schemas["BlockVideoRequest"];
 export type BlockedVideo = Schemas["BlockedVideo"];
 export type BlockedVideoListResponse = Schemas["BlockedVideoListResponse"];

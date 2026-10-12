@@ -103,6 +103,12 @@ export function NotificationIconChip({ type }: { type: string }) {
   );
 }
 
+// The reporter's page for a report (My reports), or nowhere when the row
+// carries no report id.
+function myReportHref(n: Notification): string {
+  return n.report_id ? `/settings/reports/${encodeURIComponent(n.report_id)}` : "#";
+}
+
 // describeNotification renders a notification as a human message plus the link
 // to its target. `lead` is the bold opening (actor / "A moderator") and `rest`
 // the remainder — concatenated they read exactly as before. Shared with the
@@ -203,7 +209,7 @@ export function describeNotification(n: Notification): {
         ? n.report_status
         : "resolved";
     const target = n.report_target_type ? `${n.report_target_type} report` : "report";
-    return { lead: "A moderator", rest: ` ${outcome} your ${target}`, href: "#" };
+    return { lead: "A moderator", rest: ` ${outcome} your ${target}`, href: myReportHref(n) };
   }
   if (n.type === "report_message") {
     // A new message on a report's thread (core 0163). It has two audiences:
@@ -213,7 +219,7 @@ export function describeNotification(n: Notification): {
     // never carried — the thread is the only place it is read.
     const target = n.report_target_type ? `${n.report_target_type.replaceAll("_", " ")} report` : "report";
     if (n.actor) return { lead: actor, rest: ` sent a message about their ${target}`, href: "/moderation" };
-    return { lead: "A moderator", rest: ` sent you a message about your ${target}`, href: "#" };
+    return { lead: "A moderator", rest: ` sent you a message about your ${target}`, href: myReportHref(n) };
   }
   if (n.type === "new_report") {
     // Staff-only: a user filed an abuse report (the moderation queue's push
