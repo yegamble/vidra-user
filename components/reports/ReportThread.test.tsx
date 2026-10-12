@@ -50,7 +50,7 @@ describe("ReportThread", () => {
     expect(items).toHaveLength(2);
     expect(items[0].textContent).toContain("You");
     expect(items[1].textContent).toContain("Moderator");
-    expect(mocks.getReportMessages).toHaveBeenCalledWith("r-1", { limit: 100 }, expect.anything());
+    expect(mocks.getReportMessages).toHaveBeenCalledWith("r-1", { limit: 100, offset: 0 }, expect.anything());
   });
 
   it("names authors for staff", async () => {
@@ -101,6 +101,19 @@ describe("ReportThread", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByText("Could not send your message.")).toBeTruthy();
     expect((box as HTMLTextAreaElement).value).toBe("draft");
+  });
+
+  // The thread is oldest first, so stopping at one page would hide exactly the
+  // NEWEST messages — the ones a reply is about. It walks every page.
+  it("loads every page of a long thread, so the newest messages are shown", async () => {
+    const all = Array.from({ length: 150 }, (_, i) => msg({ id: `m-${i}`, body: `message ${i + 1}` }));
+    mocks.getReportMessages.mockImplementation((_id: string, w: { limit: number; offset: number }) =>
+      Promise.resolve({ ...thread(all.slice(w.offset, w.offset + w.limit)), total: all.length }),
+    );
+    render(<ReportThread reportId="r-1" viewer="staff" />);
+    expect(await screen.findByText("message 150")).toBeTruthy();
+    expect(screen.getAllByRole("listitem")).toHaveLength(150);
+    expect(mocks.getReportMessages).toHaveBeenCalledWith("r-1", { limit: 100, offset: 100 }, expect.anything());
   });
 
   it("explains a read-only thread instead of offering a composer", async () => {
