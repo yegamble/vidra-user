@@ -6,6 +6,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { CopyIcon, RotateCwIcon } from "@/components/icons";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { api, errorMessage } from "@/lib/api";
 import type { FeedTokenStatus } from "@/lib/api";
 
@@ -20,6 +21,10 @@ export function PrivateFeedSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Rotating or turning off breaks every reader already subscribed to the old
+  // URL, instantly and silently, so both ask first.
+  const [confirm, setConfirm] = useState<"rotate" | "off" | null>(null);
+  const [noUrl, setNoUrl] = useState(false);
 
   useEffect(() => {
     if (status !== "authed") return;
@@ -37,9 +42,13 @@ export function PrivateFeedSection() {
     setBusy(true);
     setError(null);
     setCopied(false);
+    setNoUrl(false);
     try {
       const issued = await api.rotateFeedToken();
       setIssuedUrl(issued.url ?? null);
+      // No PUBLIC_BASE_URL on the server: a token exists but no URL can be
+      // built. Say so instead of leaving a "configured" feed nobody can reach.
+      setNoUrl(!issued.url);
       setToken({ configured: true, created_at: issued.created_at });
     } catch (e) {
       setError(errorMessage(e, "Couldn't generate a private feed URL."));
@@ -54,6 +63,7 @@ export function PrivateFeedSection() {
     try {
       await api.revokeFeedToken();
       setIssuedUrl(null);
+      setNoUrl(false);
       setToken({ configured: false });
     } catch (e) {
       setError(errorMessage(e, "Couldn't turn off your private feed."));
@@ -91,6 +101,13 @@ export function PrivateFeedSection() {
           {error}
         </Alert>
       ) : null}
+      {noUrl ? (
+        <Alert variant="warning" className="mt-3">
+          A private feed was created, but this site has no public address configured, so a
+          ready-made URL can&rsquo;t be built. Ask the administrator to set the site&rsquo;s public
+          URL, then rotate to get a usable link.
+        </Alert>
+      ) : null}
       {issuedUrl ? (
         <div className="mt-3 flex items-center gap-2">
           <input
@@ -115,15 +132,43 @@ export function PrivateFeedSection() {
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={rotate}>
+        <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => (configured ? setConfirm("rotate") : void rotate())}>
           <RotateCwIcon size={16} /> {configured ? "Rotate URL" : "Generate URL"}
         </Button>
         {configured ? (
-          <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={revoke}>
+          <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setConfirm("off")}>
             Turn off
           </Button>
         ) : null}
       </div>
+      {confirm ? (
+        <Modal
+          title={confirm === "rotate" ? "Rotate your private feed URL?" : "Turn off your private feed?"}
+          onClose={() => setConfirm(null)}
+        >
+          <p className="text-sm text-fg-muted">
+            The current URL stops working immediately, so any feed reader subscribed to it will stop
+            updating{confirm === "rotate" ? " until you give it the new URL" : ""}.
+          </p>
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                const which = confirm;
+                setConfirm(null);
+                void (which === "rotate" ? rotate() : revoke());
+              }}
+            >
+              {confirm === "rotate" ? "Rotate URL" : "Turn off"}
+            </Button>
+          </div>
+        </Modal>
+      ) : null}
     </section>
   );
 }
