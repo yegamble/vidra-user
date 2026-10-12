@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { BASE_VIDEO_ACCEPT } from "@/lib/upload-accept";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -187,18 +188,16 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
     render(<UploadSection channels={[channel]} config={null} />);
     openSheet();
     await waitFor(() => {
-      expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe(
-        ".mp4,.webm,.ogv,.ogg,video/mp4,video/webm,video/ogg",
-      );
+      expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe(BASE_VIDEO_ACCEPT);
     });
   });
 
   it("keeps the permissive accept while the flag is on or unknown", async () => {
     render(<UploadSection channels={[channel]} config={null} />);
     openSheet();
-    expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*");
+    expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*,audio/*");
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
-    expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*");
+    expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*,audio/*");
   });
 
   it("keeps completed bytes in draft until scheduling metadata saves, including retry", async () => {
