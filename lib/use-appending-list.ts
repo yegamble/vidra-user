@@ -87,6 +87,13 @@ export interface UseAppendingListOptions<T> {
   queryKey: string;
   pageSize?: number;
   /**
+   * Row identity. When given, an appended page drops rows whose id is already
+   * held: a row inserted or removed server-side between two "Load more" clicks
+   * shifts the offset window, and without this the seam row shows twice. The
+   * page's own `total`/`hasMore` still decide whether another page exists.
+   */
+  getId?: (item: T) => string;
+  /**
    * A first page already fetched server-side. When present the list starts
    * `ready` on these rows and no browser request is made for page one — the
    * SSR-seeded home feed. It is read once, at mount.
@@ -139,6 +146,8 @@ export interface AppendingList<T> {
   reload: () => void;
   /** Drop the rows failing `keep` AND take them off the total (a real delete). */
   drop: (keep: (item: T) => boolean) => void;
+  /** Rewrite the loaded rows in place (an edit whose row is still there; the total is untouched). */
+  patch: (update: (items: T[]) => T[]) => void;
 }
 
 interface Loaded<T> {
@@ -168,7 +177,7 @@ const NO_ITEMS: unknown[] = [];
  * callers stop remounting themselves on a filter key.
  */
 export function useAppendingList<T>(options: UseAppendingListOptions<T>): AppendingList<T> {
-  const { queryKey, pageSize = PAGE_SIZE, initialPage, viewer, load } = options;
+  const { queryKey, pageSize = PAGE_SIZE, getId, initialPage, viewer, load } = options;
   // The query signature the fetch effect actually keys on: the caller's, plus
   // WHO is asking when that changes the answer. NUL joins them because it
   // cannot occur in either half.
@@ -281,7 +290,9 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
           // is looking at any more; dropping it is what stops results for the
           // previous search appending under the new one.
           if (!prev || prev.key !== fetchKey || prev.attempt !== attempt) return prev;
-          const items = [...prev.items, ...page.items];
+          const held = getId ? new Set(prev.items.map(getId)) : null;
+          const fresh = held && getId ? page.items.filter((it) => !held.has(getId(it))) : page.items;
+          const items = [...prev.items, ...fresh];
           return {
             ...prev,
             items,
@@ -299,7 +310,7 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
         setMoreStatus("idle");
       })
       .catch(() => setMoreStatus("error"));
-  }, [attempt, current, fetchKey, pageSize]);
+  }, [attempt, current, fetchKey, getId, pageSize]);
 
   const reload = useCallback(() => {
     setMoreStatus("idle");
@@ -319,6 +330,10 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
     });
   }, []);
 
+  const patch = useCallback((update: (items: T[]) => T[]) => {
+    setLoaded((prev) => (prev ? { ...prev, items: update(prev.items) } : prev));
+  }, []);
+
   return {
     status,
     items: current?.items ?? (NO_ITEMS as T[]),
@@ -332,5 +347,6 @@ export function useAppendingList<T>(options: UseAppendingListOptions<T>): Append
     loadMore,
     reload,
     drop,
+    patch,
   };
 }

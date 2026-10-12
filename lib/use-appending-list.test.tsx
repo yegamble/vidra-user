@@ -301,4 +301,18 @@ describe("useAppendingList — holding a viewer-scoped list until the session se
     await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("a"));
     expect(load).toHaveBeenCalledTimes(1);
   });
+
+  it("drops a row an appended page repeats when the caller supplies getId", async () => {
+    // A row removed server-side between two clicks shifts the offset window, so
+    // page two re-sends the last row of page one.
+    const load = vi.fn(async (w: { offset: number }) =>
+      (w.offset === 0
+        ? { items: rows("a", "b"), total: 4 }
+        : { items: rows("b", "c"), total: 4 }) as AppendingPage<Row>,
+    );
+    render(<List queryKey="q" pageSize={2} getId={(r) => r.id} load={load} />);
+    await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("a,b"));
+    act(() => screen.getByText("more").click());
+    await waitFor(() => expect(screen.getByTestId("rows").textContent).toBe("a,b,c"));
+  });
 });
