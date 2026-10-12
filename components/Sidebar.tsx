@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { InfoIcon } from "@/components/icons";
 import {
   ADMIN_LINK,
@@ -59,6 +60,7 @@ import {
 // this component renders; the header is the sole collapse/expand control.
 export function Sidebar() {
   const pathname = usePathname();
+  const t = useT();
   const { user } = useSession();
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, serverCollapsed);
   const immersive = useSyncExternalStore(subscribeImmersive, readImmersive, serverImmersive);
@@ -110,7 +112,7 @@ export function Sidebar() {
     // box a fixed height, and keeps the scrollbar out of the rounded corner.
     <nav
       id={SIDEBAR_ID}
-      aria-label="Primary"
+      aria-label={t("nav.primary")}
       className={cn(
         "glass-chrome flex-col justify-between gap-2 rounded-sheet p-2 transition-[width] duration-200 motion-reduce:transition-none",
         immersive
@@ -141,7 +143,7 @@ export function Sidebar() {
       </div>
       <div className="flex flex-col gap-0.5">
         <SidebarLink
-          item={{ href: "/about/instance/home", label: "About", Icon: InfoIcon }}
+          item={{ href: "/about/instance/home", labelKey: "nav.about", Icon: InfoIcon }}
           collapsed={railCollapsed(collapsed, immersive)}
           active={pathname === "/about" || pathname?.startsWith("/about/") === true}
         />
@@ -168,6 +170,7 @@ export function Sidebar() {
  * is passed in — one panel, two placements; the link list is never forked.
  */
 function SidebarDrawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const t = useT();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   useDialogFocus(wrapperRef, onClose);
 
@@ -210,7 +213,7 @@ function SidebarDrawer({ onClose, children }: { onClose: () => void; children: R
       ref={wrapperRef}
       role="dialog"
       aria-modal="true"
-      aria-label="Primary navigation"
+      aria-label={t("nav.primaryNavigation")}
       className="fixed inset-x-0 bottom-0 z-20 top-[calc(3.5rem+env(safe-area-inset-top))]"
     >
       {/* Scrim: dismiss-on-click, and the visual separation an overlay owes the
@@ -244,12 +247,14 @@ function SidebarLink({
   collapsed: boolean;
   active: boolean;
 }) {
+  const t = useT();
   const { Icon } = item;
+  const label = t(item.labelKey);
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      title={collapsed ? item.label : undefined}
+      title={collapsed ? label : undefined}
       className={`focus-ring flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2 text-sm transition-colors ${
         active
           ? "bg-accent/12 font-semibold text-accent-text"
@@ -257,7 +262,7 @@ function SidebarLink({
       }`}
     >
       <Icon size={18} strokeWidth={1.9} className="shrink-0" />
-      <span className={collapsed ? "sr-only" : "truncate"}>{item.label}</span>
+      <span className={collapsed ? "sr-only" : "truncate"}>{label}</span>
     </Link>
   );
 }

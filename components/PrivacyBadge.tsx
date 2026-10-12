@@ -8,14 +8,14 @@ const DESCRIPTIONS: Record<Exclude<VideoPrivacy, "public">, string> = {
 };
 
 // PrivacyBadge marks non-public content (videos, playlists) with an
-// owner-facing "Private"/"Unlisted" badge; public content renders nothing.
+// owner-facing "Private"/"Unlisted"/"Internal" badge; public content renders nothing.
 // The one-line explanation travels as a title tooltip and as sr-only text so
 // screen-reader users hear it too.
 export function PrivacyBadge({ privacy }: { privacy: VideoPrivacy }) {
   if (privacy === "public") return null;
-  // Gated modes (private, password) read as a warning-tinted lock; unlisted is a
-  // quieter muted link (discoverable by anyone with the URL).
-  const gated = privacy === "private" || privacy === "password";
+  // Gated modes (private, password, internal) read as a warning-tinted lock;
+  // unlisted is a quieter muted link (discoverable by anyone with the URL).
+  const gated = privacy === "private" || privacy === "password" || privacy === "internal";
   const styles = gated ? "bg-warning/15 text-warning" : "bg-surface-muted text-fg-muted";
   return (
     <span
