@@ -1,6 +1,5 @@
 "use client";
 
-import { useSession } from "@/components/auth/AuthProvider";
 import { SignInGate } from "@/components/SignInGate";
 import { Badge } from "@/components/ui/Badge";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -9,6 +8,7 @@ import { api } from "@/lib/api";
 import type { MyReport } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
+import { useSettledSession } from "@/lib/use-settled-session";
 
 import { REPORT_STATUS, reportSubject } from "./MyReportsView";
 import { ReportThread } from "./ReportThread";
@@ -16,12 +16,15 @@ import { ReportThread } from "./ReportThread";
 // MyReportDetail is one of the caller's own reports: its state, what it was
 // about, their own reason, and the conversation with the moderators. The
 // moderator's internal note is never part of it — the server does not send it.
+// Viewer-scoped like MyReportsView: nothing is fetched until the session
+// settles, and a switch of account remounts the view for the new viewer.
 export function MyReportDetail({ reportId }: { reportId: string }) {
-  const { status } = useSession();
-  if (status !== "authed") {
+  const viewer = useSettledSession();
+  if (!viewer.settled) return <Spinner label="Loading the report" />;
+  if (!viewer.authed) {
     return <SignInGate title="Sign in to see this report">to follow up on reports you filed.</SignInGate>;
   }
-  return <Detail reportId={reportId} />;
+  return <Detail key={viewer.viewerKey} reportId={reportId} />;
 }
 
 function Detail({ reportId }: { reportId: string }) {

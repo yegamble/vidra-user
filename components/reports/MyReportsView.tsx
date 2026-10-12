@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 
-import { useSession } from "@/components/auth/AuthProvider";
 import { FlagIcon } from "@/components/icons";
 import { SignInGate } from "@/components/SignInGate";
 import { Badge, type BadgeVariant } from "@/components/ui/Badge";
@@ -15,6 +14,7 @@ import type { MyReport } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import { useAppendingList } from "@/lib/use-appending-list";
 import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
+import { useSettledSession, type SettledSession } from "@/lib/use-settled-session";
 
 export const REPORT_STATUS: Record<MyReport["status"], { label: string; variant: BadgeVariant }> = {
   open: { label: "Open", variant: "warning" },
@@ -41,18 +41,21 @@ export function reportSubject(r: MyReport): string {
 // MyReportsView is the reporter's own list of abuse reports (PeerTube's "My
 // abuse reports"): each one's state, what it was about and its thread
 // activity, most recently active first, linking to the report's page.
+// Viewer-scoped: the list waits for the session to settle (no sign-in flash on
+// restore) and asks again when the account changes.
 export function MyReportsView() {
-  const { status } = useSession();
-  if (status !== "authed") {
+  const viewer = useSettledSession();
+  if (viewer.settled && !viewer.authed) {
     return <SignInGate title="Sign in to see your reports">to follow up on reports you filed.</SignInGate>;
   }
-  return <Reports />;
+  return <Reports viewer={viewer} />;
 }
 
-function Reports() {
+function Reports({ viewer }: { viewer: SettledSession }) {
   const autoLoad = useBrowseAutoLoad();
   const list = useAppendingList<MyReport>({
     queryKey: "my-reports",
+    viewer,
     getId: (r) => r.id,
     load: (window, signal) =>
       api.getMyReports(window, signal).then((res) => ({ items: res.reports, total: res.total })),

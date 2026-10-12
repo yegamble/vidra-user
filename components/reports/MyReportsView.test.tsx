@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MyReport } from "@/lib/api";
@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   getMyReports: vi.fn(),
   getMyReport: vi.fn(),
   getReportMessages: vi.fn(),
-  session: { status: "authed" as string },
+  session: { status: "authed" as string, userId: "u-1" },
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -23,7 +23,7 @@ vi.mock("@/lib/api", () => ({
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 vi.mock("@/components/auth/AuthProvider", () => ({
-  useSession: () => ({ status: mocks.session.status, user: { id: "u-1", username: "bob" } }),
+  useSession: () => ({ status: mocks.session.status, user: { id: mocks.session.userId, username: "bob" } }),
 }));
 vi.mock("@/lib/use-browse-auto-load", () => ({ useBrowseAutoLoad: () => false }));
 
@@ -43,6 +43,7 @@ function report(over: Partial<MyReport>): MyReport {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.session.status = "authed";
+  mocks.session.userId = "u-1";
   mocks.getReportMessages.mockResolvedValue({ messages: [], can_reply: true, total: 0, limit: 100, offset: 0 });
 });
 afterEach(cleanup);
@@ -81,6 +82,26 @@ describe("MyReportsView", () => {
     expect(await screen.findByText("No reports yet")).toBeTruthy();
   });
 
+  // Viewer-scoped reads go through useSettledSession: nothing is asked (and no
+  // sign-in prompt flashes) while the session is still restoring, and a switch
+  // to another account asks again for THAT account's reports.
+  it("waits for the session to settle, then refetches when the account changes", async () => {
+    mocks.session.status = "restoring";
+    mocks.getMyReports.mockResolvedValue({ reports: [], total: 0, limit: 20, offset: 0 });
+    const { rerender } = render(<MyReportsView />);
+    expect(screen.queryByText(/sign in/i)).toBeNull();
+    expect(mocks.getMyReports).not.toHaveBeenCalled();
+
+    mocks.session.status = "authed";
+    rerender(<MyReportsView />);
+    await screen.findByText("No reports yet");
+    expect(mocks.getMyReports).toHaveBeenCalledTimes(1);
+
+    mocks.session.userId = "u-2";
+    rerender(<MyReportsView />);
+    await waitFor(() => expect(mocks.getMyReports).toHaveBeenCalledTimes(2));
+  });
+
   it("asks a signed-out visitor to sign in and fetches nothing", async () => {
     mocks.session.status = "anon";
     render(<MyReportsView />);
@@ -97,7 +118,22 @@ describe("MyReportDetail", () => {
     expect(await screen.findByText("it is spam")).toBeTruthy();
     expect(screen.getByText("Rejected")).toBeTruthy();
     expect(await screen.findByRole("region", { name: "Messages about this report" })).toBeTruthy();
-    expect(mocks.getReportMessages).toHaveBeenCalledWith("r-9", { limit: 100 }, expect.anything());
+    expect(mocks.getReportMessages).toHaveBeenCalledWith("r-9", { limit: 100, offset: 0 }, expect.anything());
+  });
+
+  it("fetches nothing while the session restores, and refetches for another account", async () => {
+    mocks.session.status = "restoring";
+    mocks.getMyReport.mockResolvedValue(report({ id: "r-9" }));
+    const { rerender } = render(<MyReportDetail reportId="r-9" />);
+    expect(screen.queryByText(/sign in/i)).toBeNull();
+    expect(mocks.getMyReport).not.toHaveBeenCalled();
+
+    mocks.session.status = "authed";
+    rerender(<MyReportDetail reportId="r-9" />);
+    await waitFor(() => expect(mocks.getMyReport).toHaveBeenCalledTimes(1));
+    mocks.session.userId = "u-2";
+    rerender(<MyReportDetail reportId="r-9" />);
+    await waitFor(() => expect(mocks.getMyReport).toHaveBeenCalledTimes(2));
   });
 
   it("shows an error, not a thread, when the report cannot be loaded", async () => {
