@@ -159,6 +159,8 @@ import type {
   RegistrationRequestFilter,
   RegistrationRequestListResponse,
   RejectRegistrationRequest,
+  MyReport,
+  MyReportListResponse,
   ReportListResponse,
   ReportMessage,
   ReportMessageListResponse,
@@ -2193,6 +2195,14 @@ export const api = {
       query: pageQuery(params),
       signal,
     }),
+
+  /** GET /api/v1/me/reports — the caller's own reports, most recently active first. */
+  getMyReports: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<MyReportListResponse>("/api/v1/me/reports", { query: pageQuery(params), signal }),
+
+  /** GET /api/v1/me/reports/{id} — one of the caller's own reports (anyone else's is 404). */
+  getMyReport: (id: string, signal?: AbortSignal) =>
+    apiRequest<MyReport>(`/api/v1/me/reports/${encodeURIComponent(id)}`, { signal }),
 
   /** POST /api/v1/reports/{id}/messages — add to the thread (1–3000 chars; 409 when read-only). */
   postReportMessage: (id: string, body: string) =>

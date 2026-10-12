@@ -29,6 +29,13 @@ describe("describeNotification", () => {
     expect(rest).toBe(" sent you a message about your remote video report");
   });
 
+  it("links the reporter's report notifications to that report's page", () => {
+    for (const type of ["report_message", "report_resolved"] as const) {
+      const { href } = describeNotification(notif({ type, report_id: "r-1", report_status: "accepted" }));
+      expect(href).toBe("/settings/reports/r-1");
+    }
+  });
+
   it("renders report_message for staff as the reporter writing, linking to the queue", () => {
     const { lead, rest, href } = describeNotification(
       notif({
