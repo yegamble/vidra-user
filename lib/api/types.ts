@@ -68,6 +68,11 @@ export type FeedSort = NonNullable<Schemas["VideoFeedResponse"]["sort"]>;
 export type FeedScope = NonNullable<Schemas["VideoFeedResponse"]["scope"]>;
 export type VideoFeedResponse = Schemas["VideoFeedResponse"];
 export type VideoListResponse = Schemas["VideoListResponse"];
+// Studio "My videos": the account-wide owner list filters and the bulk
+// delete / set-privacy request + per-id results (POST /me/videos/bulk).
+export type BulkVideosRequest = Schemas["BulkVideosRequest"];
+export type BulkVideosResponse = Schemas["BulkVideosResponse"];
+export type BulkVideoResult = Schemas["BulkVideoResult"];
 export type VideoSearchResponse = Schemas["VideoSearchResponse"];
 export type VideoDownloadFile = Schemas["VideoDownloadFile"];
 export type VideoDownloadResponse = Schemas["VideoDownloadResponse"];
