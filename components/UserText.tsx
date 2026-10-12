@@ -288,7 +288,7 @@ export function UserText({
   };
 
   const rehypePlugins: Pluggable[] = [];
-  if (mentions) rehypePlugins.push([rehypeMentions, { skip: SKIP[variant] }]);
+  if (mentions) rehypePlugins.push([rehypeMentions, { skip: [...SKIP[variant], "code", "pre"] }]);
   if (timestamps) rehypePlugins.push([rehypeTimestamps, { durationSeconds, skip: SKIP[variant] }]);
 
   if (exceedsParseBudget(text)) {

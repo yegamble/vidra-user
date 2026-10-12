@@ -404,6 +404,25 @@ describe("UserText: @mentions in comments", () => {
     expect(c.querySelector("script")).toBeNull();
   });
 
+  it("caps rendered mention links at 10", () => {
+    const text = Array.from({ length: 25 }, (_, i) => `@u${i}`).join(" ");
+    const links = [...comment(text).querySelectorAll("a")].filter((a) => a.getAttribute("href")?.startsWith("/users/"));
+    expect(links).toHaveLength(10);
+  });
+
+  it("does not link inside inline code", () => {
+    const c = comment("run `@ada` now");
+    expect(c.querySelector("a")).toBeNull();
+    expect(c.textContent).toContain("@ada");
+  });
+
+  it("agrees with the server parser on edge shapes", () => {
+    // A host needs a dot, so @bob@localhost is a mention of bob; a trailing "-" is punctuation.
+    const hrefs = (t: string) => [...comment(t).querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    expect(hrefs("@bob@localhost")).toEqual(["/users/bob"]);
+    expect(hrefs("hey @ada- ok")).toEqual(["/users/ada"]);
+  });
+
   it("is comment-only by default and can be switched off", () => {
     expect(html("hi @ada", "description").querySelector("a")).toBeNull();
     expect(comment("hi @ada", false).querySelector("a")).toBeNull();

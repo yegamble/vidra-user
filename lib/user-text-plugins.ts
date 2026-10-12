@@ -96,7 +96,8 @@ export function rehypeTimestamps(options: { durationSeconds?: number | null; ski
 // vidra-core's internal/mention). The name is the username charset; a trailing
 // "." or "-" is sentence punctuation. A name followed by "@" is `@user@host` —
 // a remote account with no profile route here — and is deliberately left as text.
-const MENTION_RE = /(^|[\s([{"'])@([A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)(?![A-Za-z0-9_@-])/g;
+// Like the server's parser, a host needs a dot: `@bob@localhost` is just `@bob`.
+const MENTION_RE = /(^|[\s([{"'])@([A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)(?![A-Za-z0-9_]|@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/g;
 const MAX_MENTION_LINKS = 10;
 
 /**
