@@ -86,10 +86,12 @@ describe("VideoRow — moderation state", () => {
 // carries channel_id only when the choice actually changed (a plain title edit
 // must not look like a move to the server).
 describe("VideoRow — move to another channel", () => {
-  const channel = (id: string, handle: string): Channel =>
-    ({ id, handle, display_name: `Name ${handle}` }) as Channel;
+  const channel = (id: string, handle: string, owner = "owner-1"): Channel =>
+    ({ id, handle, display_name: `Name ${handle}`, owner_id: owner }) as Channel;
   const A = channel("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "alpha");
   const B = channel("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "beta");
+  // A channel the caller edits for SOMEONE ELSE: never a move target.
+  const C = channel("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "gamma", "owner-2");
 
   function renderEditing(channels: Channel[] | undefined, onUpdated = vi.fn()) {
     render(
@@ -111,6 +113,17 @@ describe("VideoRow — move to another channel", () => {
     expect(screen.queryByLabelText("Edit channel")).toBeNull();
     cleanup();
     renderEditing(undefined);
+    expect(screen.queryByLabelText("Edit channel")).toBeNull();
+  });
+
+  it("offers only channels with the same owner, and hides the select when none remain", () => {
+    renderEditing([A, B, C]);
+    const opts = Array.from(
+      (screen.getByLabelText("Edit channel") as HTMLSelectElement).options,
+    ).map((o) => o.value);
+    expect(opts).toEqual([A.id, B.id]);
+    cleanup();
+    renderEditing([A, C]);
     expect(screen.queryByLabelText("Edit channel")).toBeNull();
   });
 

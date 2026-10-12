@@ -101,7 +101,11 @@ export function VideoRow({
   const [publishAt, setPublishAt] = useState(toLocalInputValue(video.publish_at));
   // The channel the video lives on, edited via the Channel select (T20).
   const [channelId, setChannelId] = useState(video.channel_id ?? "");
-  const canMove = (channels?.length ?? 0) > 1 && !!video.channel_id;
+  // Moves stay within ONE owner's channels (the server refuses anything else),
+  // so a channel the caller merely edits for someone else is never offered.
+  const currentOwner = channels?.find((c) => c.id === video.channel_id)?.owner_id;
+  const moveTargets = currentOwner ? (channels ?? []).filter((c) => c.owner_id === currentOwner) : [];
+  const canMove = moveTargets.length > 1;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The full detail fetched when Edit opens — the only view carrying hls_url/
@@ -289,7 +293,7 @@ export function VideoRow({
             onChange={(e) => setChannelId(e.target.value)}
             aria-label="Edit channel"
           >
-            {channels?.map((c) => (
+            {moveTargets.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.display_name || c.handle} (@{c.handle})
               </option>
