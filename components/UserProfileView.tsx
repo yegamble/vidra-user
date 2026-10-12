@@ -13,6 +13,7 @@ import { ApiError, api, userAvatarUrl, userBannerUrl } from "@/lib/api";
 import type { PublicUserProfile } from "@/lib/api";
 import { formatMonthYear } from "@/lib/format";
 import { useSettledOptionalSession } from "@/lib/use-settled-session";
+import { UserText } from "@/components/UserText";
 
 export function UserProfileLoader({ username }: { username: string }) {
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
@@ -94,7 +95,13 @@ export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
             </div>
           </div>
         </div>
-        {profile.bio ? <p className="whitespace-pre-wrap px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4">{profile.bio}</p> : null}
+        {profile.bio ? (
+          <UserText
+            variant="description"
+            text={profile.bio}
+            className="px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4"
+          />
+        ) : null}
       </header>
 
       {/* Section switcher in the segmented-control language (not a tab strip);

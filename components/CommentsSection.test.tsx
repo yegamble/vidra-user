@@ -152,9 +152,9 @@ describe("CommentsSection reply attribution", () => {
     fireEvent.click(toggle);
     const replies = screen.getByRole("list", { name: "Replies" });
 
-    // r2 answers r1, so it leads with "@ada" (r1's author) in the same paragraph.
+    // r2 answers r1, so its body block leads with "@ada" (r1's author).
     const nested = within(replies).getByText("nested reply");
-    expect(nested.textContent).toBe("@ada nested reply");
+    expect(nested.closest("div.text-sm")?.textContent).toBe("@adanested reply");
     // r1 answers the top-level comment directly → no mention (would be redundant).
     const direct = within(replies).getByText("first reply");
     expect(direct.textContent).toBe("first reply");
