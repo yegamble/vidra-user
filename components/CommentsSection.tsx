@@ -530,15 +530,25 @@ function CommentItem({
     }
   }
 
-  // A reviewer publishes a held comment; the endpoint returns it unheld, so it
-  // maps in place like an edit. Rejecting is the plain delete (remove()).
+  // A reviewer publishes the held comment AS SHOWN (its updated_at); the
+  // endpoint returns it unheld, so it maps in place like an edit. A 409 means
+  // it was edited since this page loaded: show what is there now, still held,
+  // for another look. Rejecting is the plain delete (remove()).
   async function approve() {
     if (approving) return;
     setApproving(true);
     try {
-      onEdited(await api.approveComment(videoId, comment.id));
+      onEdited(await api.approveComment(videoId, comment.id, comment.updated_at));
     } catch (err) {
-      toast({ message: errorMessage(err, "Could not approve this comment."), variant: "error" });
+      if (err instanceof ApiError && err.status === 409) {
+        toast({ message: "This comment changed since you loaded it. Review it again.", variant: "error" });
+        const res = await api.getVideoComments(videoId, { limit: FULL_LIST_LIMIT }).catch(() => null);
+        const fresh = res?.comments.find((c) => c.id === comment.id);
+        if (fresh) onEdited(fresh);
+        else if (res) onDeleted(comment.id);
+      } else {
+        toast({ message: errorMessage(err, "Could not approve this comment."), variant: "error" });
+      }
     } finally {
       setApproving(false);
     }

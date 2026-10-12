@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Comment } from "@/lib/api";
+import { ApiError, type Comment } from "@/lib/api";
 
 // Minimal shims so CommentsSection mounts in jsdom without its heavy leaf deps.
 vi.mock("next/link", () => ({
@@ -535,7 +535,7 @@ describe("CommentsSection held comments", () => {
     approveComment.mockResolvedValue(mk("h1", { author_username: "eve", held_for_review: false }));
     render(<CommentsSection videoId="v1" canManageComments />);
     fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
-    await waitFor(() => expect(approveComment).toHaveBeenCalledWith("v1", "h1"));
+    await waitFor(() => expect(approveComment).toHaveBeenCalledWith("v1", "h1", "2026-01-01T00:00:00.000Z"));
     await waitFor(() => expect(screen.queryByText("Pending approval")).toBeNull());
     expect(screen.getByRole("button", { name: "Reply" })).toBeTruthy();
   });
@@ -547,5 +547,24 @@ describe("CommentsSection held comments", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Reject" }));
     await waitFor(() => expect(deleteComment).toHaveBeenCalledWith("h1"));
     await waitFor(() => expect(screen.queryByText("spam")).toBeNull());
+  });
+});
+
+describe("CommentsSection approve of a changed comment", () => {
+  it("on 409 keeps it held and shows the version that is there now", async () => {
+    resolveComments([mk("h1", { author_username: "eve", held_for_review: true, body: "as loaded" })]);
+    // An ApiError instance with status 409 (the mocked class takes no args).
+    const stale: unknown = Object.assign(Object.create(ApiError.prototype), { status: 409 });
+    approveComment.mockRejectedValue(stale);
+    render(<CommentsSection videoId="v1" canManageComments />);
+    await screen.findByText("as loaded");
+    getVideoComments.mockResolvedValue({
+      comments: [mk("h1", { author_username: "eve", held_for_review: true, body: "changed since" })],
+      limit: 100,
+      offset: 0,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("changed since")).toBeTruthy();
+    expect(screen.getByText("Pending approval")).toBeTruthy();
   });
 });

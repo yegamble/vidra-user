@@ -1328,13 +1328,14 @@ export const api = {
 
   /**
    * POST /api/v1/videos/{id}/comments/{commentId}/approve — publish a comment
-   * held for review (auth; the video's owner/editors/staff). Idempotent.
+   * held for review (auth; the video's owner/editors/staff). `updatedAt` is the
+   * version the reviewer saw: an edit since then answers 409. Idempotent.
    * Rejecting a held comment is `deleteComment`.
    */
-  approveComment: (videoId: string, commentId: string) =>
+  approveComment: (videoId: string, commentId: string, updatedAt: string) =>
     apiRequest<Comment>(
       `/api/v1/videos/${encodeURIComponent(videoId)}/comments/${encodeURIComponent(commentId)}/approve`,
-      { method: "POST" },
+      { method: "POST", body: { updated_at: updatedAt } },
     ),
 
   /** POST /api/v1/me/mutes/accounts/{id} — mute an account (auth; idempotent 204). */
