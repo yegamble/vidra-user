@@ -748,11 +748,12 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
-  it("approveComment POSTs to the video-scoped approve endpoint (encoding both ids)", async () => {
-    await api.approveComment("v/1", "c 1");
+  it("approveComment POSTs the reviewed version to the video-scoped approve endpoint", async () => {
+    await api.approveComment("v/1", "c 1", "2026-10-12T10:00:00.123456Z");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/videos/v%2F1/comments/c%201/approve");
     expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ updated_at: "2026-10-12T10:00:00.123456Z" });
   });
 
   it("listManagedComments targets the review queue with the held filter and paging", async () => {

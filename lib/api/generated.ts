@@ -2677,13 +2677,13 @@ export interface paths {
         };
         /**
          * List a video's comments
-         * @description Returns a public, published video's comments newest-first, each with its author's identity. Auth is optional: an authenticated viewer's muted accounts are hidden from the list (mutes are per-viewer), while an anonymous viewer sees all comments. A non-public/unpublished or unknown video is 404. Paginated via limit (1–100, default 20) and offset. Comments held for review (held_for_review, a requires_approval video) appear only for their author and for the video's reviewers — its owner, editor members and staff; for everyone else they are absent from both the page and total.
+         * @description Returns a public, published video's comments newest-first, each with its author's identity. Auth is optional: an authenticated viewer's muted accounts are hidden from the list (mutes are per-viewer), while an anonymous viewer sees all comments. A non-public/unpublished or unknown video is 404. Paginated via limit (1–100, default 20) and offset. Held comments appear only for their author and the video's reviewers (owner, editor members, staff), in both the page and total.
          */
         get: operations["listComments"];
         put?: never;
         /**
          * Post a comment on a video
-         * @description Adds a comment by the authenticated user to a public, published video. Posting requires the instance-wide comments_enabled setting AND the video's comments_policy to not be "disabled" (403 feature_disabled otherwise, config-parity W9); reading comments stays open either way. On a "requires_approval" video a comment from anyone but the video's reviewers (owner, editor members, staff) is created with held_for_review true: visible only to its author and the reviewers, never federated, and announced only to the video's managers (a "comment_held" notification) until approved (POST /videos/{id}/comments/{commentId}/approve). A held comment cannot be replied to (422 on parent_id). Best-effort notifications follow a PUBLISHED comment: the video's owner gets a "comment" notification, and when parent_id names another user's comment its author gets a "comment_reply" one. A user who is both (the owner replying under their own video) receives comment_reply only — one reply, one notification. A held comment raises them only when it is approved.
+         * @description Adds a comment by the authenticated user to a public, published video. Posting requires the instance-wide comments_enabled setting AND the video's comments_policy to not be "disabled" (403 feature_disabled otherwise, config-parity W9); reading comments stays open either way. On a "requires_approval" video a comment from anyone but the video's reviewers (owner, editor members, staff) is held (held_for_review): visible only to its author and the reviewers, not federated, and announced only to the video's managers (a "comment_held" notification) until approved; a held parent is a 422 like an unknown one. Best-effort notifications follow a PUBLISHED comment: the video's owner gets "comment", and when parent_id names another user's comment its author gets "comment_reply" (an owner who is both gets comment_reply only).
          */
         post: operations["createComment"];
         delete?: never;
@@ -2703,7 +2703,7 @@ export interface paths {
         put?: never;
         /**
          * Approve a comment held for review
-         * @description Releases a comment held for review on a requires_approval video. The caller must be one of the video's reviewers — its channel owner, an editor member, or staff (403 otherwise); the comment must be on this video (404 otherwise). Idempotent: approving a comment that is no longer held answers 200 with no side effects. The first approval publishes the comment — it becomes visible to every reader, is federated, and raises the comment/comment_reply notifications it would have raised when posted (the owner's own approval does not notify the owner) — and is audited as content.comment.approve. Reject with DELETE /comments/{id}.
+         * @description Publishes a held comment: reviewers only (owner, editor members, staff; else 403), and the comment must be on this video (else 404). Idempotent — only the first approval federates it, raises the comment/comment_reply notifications (only while the video is public; never to an approving owner) and is audited (content.comment.approve). Reject with DELETE /comments/{id}. updated_at names the version the reviewer saw: a held comment edited since answers 409, unpublished.
          */
         post: operations["approveComment"];
         delete?: never;
@@ -2724,14 +2724,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a comment
-         * @description Deletes a comment. The comment's author may always delete it; a moderator/admin may delete anyone's; the video's owner or an editor member may delete a comment held for review (rejecting it). An unknown id is 404; anyone else is 403.
+         * @description Deletes a comment. The comment's author may always delete it; a moderator/admin may delete anyone's; the video's owner or an editor member may delete a comment held for review (rejecting it, audited as content.comment.reject). An unknown id is 404; anyone else is 403.
          */
         delete: operations["deleteComment"];
         options?: never;
         head?: never;
         /**
          * Edit a comment
-         * @description Edits the caller's own comment body. Only the author may edit (moderators delete, not edit): another user's comment is 403, an unknown id is 404, and a blank or too-long body is 422. Bumps updated_at so `edited` becomes true.
+         * @description Edits the caller's own comment body. Only the author may edit (moderators delete, not edit): another user's comment is 403, an unknown id is 404, and a blank or too-long body is 422. Bumps updated_at so `edited` becomes true. On a requires_approval video, a changed body from anyone but the video's reviewers sends the comment back to held_for_review until re-approved.
          */
         patch: operations["updateComment"];
         trace?: never;
@@ -7050,7 +7050,7 @@ export interface components {
             /** @description Optional creator content-warning text, trimmed and capped at 280 characters (-> 422 over the cap). Storable regardless of is_sensitive; the frontend pairs them. */
             sensitive_reason?: string;
             /**
-             * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting. requires_approval holds comments from anyone but the video's reviewers until one of them approves it.
+             * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting.
              * @enum {string}
              */
             comments_policy?: "enabled" | "disabled" | "requires_approval";
@@ -7088,7 +7088,7 @@ export interface components {
             /** @description Set the creator content-warning text (omit to leave unchanged; an empty string clears it). Trimmed and capped at 280 characters -> 422 over the cap. */
             sensitive_reason?: string;
             /**
-             * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open; "requires_approval" holds new comments for review. Comments already held stay held if the policy is changed away from requires_approval.
+             * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open; "requires_approval" holds them.
              * @enum {string}
              */
             comments_policy?: "enabled" | "disabled" | "requires_approval";
@@ -7148,7 +7148,7 @@ export interface components {
             pinned: boolean;
             /** @description True when the video's creator has hearted this comment (a like from the uploader). */
             hearted: boolean;
-            /** @description True while the comment awaits approval on a requires_approval video. Only its author and the video's reviewers (owner, editor members, staff) ever receive a held comment; it cannot be pinned or replied to until approved. */
+            /** @description True while the comment awaits approval; only its author and the video's reviewers ever receive it. It cannot be pinned or replied to. */
             held_for_review: boolean;
         };
         ManagedCommentListResponse: components["schemas"]["PageMeta"] & {
@@ -7607,7 +7607,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_held = a comment on a requires_approval video you manage (as its channel owner or an editor) awaits your approval (actor = the commenter, absent for a federated one; video_id/video_title/comment_id carry which; delivered once per comment); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_held = a comment on a requires_approval video you manage (as its channel owner or an editor) awaits your approval (actor = the commenter, absent for a federated one; video_id/video_title/comment_id carry which; one per comment, re-surfaced unread when an edit sends an approved comment back for review); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
             type: "follow" | "comment" | "comment_held" | "comment_reply" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
@@ -18192,7 +18192,17 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: date-time
+                     * @description The comment's updated_at as the reviewer saw it.
+                     */
+                    updated_at: string;
+                };
+            };
+        };
         responses: {
             /** @description The comment, no longer held. */
             200: {
@@ -18223,6 +18233,24 @@ export interface operations {
             };
             /** @description No such comment on this video. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The held comment changed since that version; review it again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description updated_at is missing. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
