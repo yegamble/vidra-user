@@ -38,6 +38,10 @@ const OFFLINE_POLL_MS = 15_000;
 // not the video, and the video is what has to be timely.
 const LIVE_POLL_MS = 10_000;
 
+// How long past its planned start a stream still reads as upcoming (core's
+// Upcoming listing uses the same one-hour window).
+const UPCOMING_GRACE_MS = 3_600_000;
+
 // LiveWatchView is the /live/[id] watch surface. It loads a single live stream
 // and, when it is live with an HLS playlist available, plays it via the shared
 // HLS util (hls.js over MSE / native HLS). Offline and ended states are shown
@@ -194,7 +198,7 @@ export function LiveWatchView({ id }: { id: string }) {
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {stream.state === "live" ? <LiveBadge /> : null}
-          {upcoming ? <UpcomingBadge /> : null}
+          {upcoming ? <UpcomingBadge at={upcoming} /> : null}
           {stream.state === "live" && typeof stream.viewer_count === "number" ? (
             <ViewerCount count={stream.viewer_count} />
           ) : null}
@@ -322,6 +326,17 @@ function StreamState({
 // that passes just reads "Starting soon" and the page keeps waiting.
 function UpcomingState({ at }: { at: string }) {
   const now = useNow(true);
+  // Core stops listing a start once it is more than an hour stale; match that
+  // window here, then fall back to the plain not-live state instead of reading
+  // "Starting soon" for days.
+  if (now.getTime() - new Date(at).getTime() > UPCOMING_GRACE_MS) {
+    return (
+      <StreamState
+        title="Not live yet"
+        message="This stream hasn't started. It will begin playing here automatically once it goes live."
+      />
+    );
+  }
   const countdown = formatCountdown(at, now);
   return (
     <StreamState
@@ -331,7 +346,9 @@ function UpcomingState({ at }: { at: string }) {
   );
 }
 
-function UpcomingBadge() {
+function UpcomingBadge({ at }: { at: string }) {
+  const now = useNow(true);
+  if (now.getTime() - new Date(at).getTime() > UPCOMING_GRACE_MS) return null;
   return (
     <span className="inline-flex items-center rounded-full bg-surface-strong px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted">
       Upcoming

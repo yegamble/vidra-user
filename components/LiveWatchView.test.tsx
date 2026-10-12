@@ -430,6 +430,14 @@ describe("LiveWatchView upcoming (scheduled start)", () => {
     expect(screen.queryByText(/ended/i)).toBeNull();
   });
 
+  it("a start more than an hour stale falls back to 'Not live yet'", async () => {
+    offline({ scheduled_start_at: new Date(Date.now() - 2 * 3600_000).toISOString() });
+    render(<LiveWatchView id="s1" />);
+    expect(await screen.findByText("Not live yet")).toBeTruthy();
+    expect(screen.queryByText("Upcoming")).toBeNull();
+    expect(screen.queryByText(/Starting soon/)).toBeNull();
+  });
+
   it("an unscheduled offline stream is unchanged: 'Not live yet'", async () => {
     offline({});
     render(<LiveWatchView id="s1" />);

@@ -385,7 +385,11 @@ export function LiveStreamsSection({
               aria-label="Scheduled start"
               value={scheduledStart}
               onChange={(e) => setScheduledStart(e.target.value)}
-              hint="Announce when you plan to go live. Viewers see it as Upcoming; the stream still starts only when your encoder connects."
+              hint={
+                privacy === "public"
+                  ? "Announce when you plan to go live. Shown as Upcoming; the stream still starts only when your encoder connects."
+                  : "Public streams are announced as Upcoming. Unlisted and private streams are not listed anywhere; the stream still starts only when your encoder connects."
+              }
             />
             {/* The design's Go-live create form: Permanent + Save-replay as toggle
                 switches in an iOS-style divider list (no card border of their own). */}
