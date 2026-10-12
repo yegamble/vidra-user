@@ -64,7 +64,10 @@ export function TransferOwnershipDialog({
     try {
       await api.cancelVideoOwnership(videoId);
       setPendingConflict(false);
-      if (after === "form") setNotice("The pending offer was withdrawn. You can offer the video again.");
+      if (after === "form")
+        setNotice(
+          "The pending offer was withdrawn. You can offer the video to someone else now, or to the same person again after a day.",
+        );
       setStep(after);
     } catch (err) {
       setError(errorMessage(err, "Could not withdraw the offer."));
